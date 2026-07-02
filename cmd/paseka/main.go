@@ -21,6 +21,7 @@ func newRoot() *cobra.Command {
 		Short: "Queen Shell — manage your hive",
 	}
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newBeeCmd())
 	return root
 }
 
@@ -60,5 +61,6 @@ func printInitResult(res colony.InitResult) {
 	}
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. agent login   # or set CURSOR_API_KEY")
-	fmt.Println("  2. paseka run    # start hive runtime (coming soon)")
+	fmt.Println("  2. paseka bee run scout --task \"your task\"")
+	fmt.Println("  3. paseka run    # start hive runtime (coming soon)")
 }

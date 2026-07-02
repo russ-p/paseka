@@ -33,15 +33,6 @@ func PasekaPath(colonyRoot string, parts ...string) string {
 	return filepath.Join(all...)
 }
 
-type homeConfig struct {
-	ColonyRoot string `yaml:"colony_root"`
-	Slug       string `yaml:"slug"`
-	NATS       struct {
-		URL string `yaml:"url"`
-	} `yaml:"nats"`
-	Adapters map[string]any `yaml:"adapters"`
-}
-
 func writeFileIfMissing(path string, content []byte, perm os.FileMode) (created bool, err error) {
 	if _, err := os.Stat(path); err == nil {
 		return false, nil

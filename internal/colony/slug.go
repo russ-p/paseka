@@ -106,7 +106,7 @@ func readColonyRootFromHome(cfgPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var cfg homeConfig
+	var cfg HomeConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return "", fmt.Errorf("colony: parse home config: %w", err)
 	}

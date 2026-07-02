@@ -24,6 +24,7 @@ type DispatchRequest struct {
 	Insights     []string
 	InlinePrompt string
 	Workspace    string
+	AdapterExtra adapters.RunParams
 }
 
 // Dispatcher renders prompts and runs adapters.
@@ -132,12 +133,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, fmt.Errorf("runtime: adapter %q not registered", adapterName)
 	}
 
+	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
+
 	return adapter.Run(ctx, adapters.RunRequest{
 		Bee:        bee.Role,
 		Prompt:     rendered,
 		ColonyRoot: colonyRoot,
 		Workspace:  workspace,
-		Params:     colony.RunParamsFromBee(bee),
+		Params:     params,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
 	})

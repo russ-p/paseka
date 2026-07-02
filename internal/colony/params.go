@@ -6,6 +6,32 @@ import (
 	"github.com/paseka/paseka/internal/adapters"
 )
 
+// MergeRunParams overlays non-zero/explicit fields from over onto base.
+func MergeRunParams(base, over adapters.RunParams) adapters.RunParams {
+	if over.Binary != "" {
+		base.Binary = over.Binary
+	}
+	if over.APIKey != "" {
+		base.APIKey = over.APIKey
+	}
+	if over.Model != "" {
+		base.Model = over.Model
+	}
+	if over.OutputFormat != "" {
+		base.OutputFormat = over.OutputFormat
+	}
+	if over.Trust {
+		base.Trust = true
+	}
+	if over.Force {
+		base.Force = true
+	}
+	if over.Plan {
+		base.Plan = true
+	}
+	return base
+}
+
 // RunParamsFromBee maps bee YAML params to adapter RunParams.
 func RunParamsFromBee(b Bee) adapters.RunParams {
 	p := adapters.RunParams{
