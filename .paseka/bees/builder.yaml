@@ -1,0 +1,9 @@
+role: builder
+adapter: cursor
+prompt_template: builder.md
+params:
+  model: composer-2.5
+  output_format: stream-json
+  trust: true
+  force: true
+worktree: true

@@ -1,0 +1,1 @@
+When emitting bus events, use valid JSON with fields traceId, type (SIGNAL|INSIGHT|MUTATION|VERIFICATION), and payload.

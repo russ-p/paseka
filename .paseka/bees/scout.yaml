@@ -1,0 +1,9 @@
+role: scout
+adapter: cursor
+prompt_template: scout.md
+params:
+  output_format: stream-json
+  trust: true
+  force: true
+  plan: true
+worktree: false
