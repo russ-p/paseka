@@ -63,6 +63,7 @@ func TestRequestEventsResultProtocol(t *testing.T) {
 		Adapter:         "cursor",
 		Workspace:       root,
 		ColonyRoot:      root,
+		TaskID:          "task-1",
 		Task:            "ship feature",
 		ResultPath:      d.ResultPath(),
 		EventLogPath:    d.EventsPath(),
@@ -77,6 +78,9 @@ func TestRequestEventsResultProtocol(t *testing.T) {
 	}
 	if gotReq.Task != "ship feature" {
 		t.Fatalf("task = %q", gotReq.Task)
+	}
+	if gotReq.TaskID != "task-1" {
+		t.Fatalf("taskId = %q", gotReq.TaskID)
 	}
 
 	ev, err := protocol.NewEvent("t1", "a1", 0, protocol.EventLog, map[string]string{"line": "start"})

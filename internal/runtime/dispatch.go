@@ -23,6 +23,7 @@ type DispatchRequest struct {
 	TraceID      string
 	AgentID      string
 	Task         string
+	TaskID       string
 	Insights     []string
 	InlinePrompt string
 	Workspace    string
@@ -116,6 +117,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Bee:        bee.Role,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
+		TaskID:     req.TaskID,
 		ColonyRoot: colonyRoot,
 		Workspace:  workspace,
 		Task:       req.Task,
@@ -150,6 +152,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Adapter:         adapterName,
 		Workspace:       workspace,
 		ColonyRoot:      colonyRoot,
+		TaskID:          req.TaskID,
 		Task:            req.Task,
 		Insights:        req.Insights,
 		ResultPath:      resultFile,
@@ -174,6 +177,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Params:     params,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
+		TaskID:     req.TaskID,
 		Task:       req.Task,
 		Insights:   req.Insights,
 	})

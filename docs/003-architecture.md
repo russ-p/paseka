@@ -333,6 +333,8 @@ Commands (later): `paseka worktree list`, `paseka worktree clean`.
 
 ## 7. End-to-end flow
 
+A single `traceId` may contain multiple tasks (`taskId`) managed by the Task Ledger. See [005-task-ledger.md](005-task-ledger.md) for the `task.plan → task.ready → task.completed` protocol.
+
 ```mermaid
 flowchart LR
   subgraph repo [Colony — git repo]

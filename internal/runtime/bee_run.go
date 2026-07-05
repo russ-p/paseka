@@ -19,6 +19,7 @@ type BeeRunRequest struct {
 	Bee          string
 	TraceID      string
 	Task         string
+	TaskID       string
 	Insights     []string
 	InlinePrompt string
 }
@@ -88,6 +89,7 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		Bee:          req.Bee,
 		TraceID:      traceID,
 		AgentID:      agentID,
+		TaskID:       req.TaskID,
 		Task:         req.Task,
 		Insights:     req.Insights,
 		InlinePrompt: req.InlinePrompt,

@@ -59,6 +59,39 @@ Trail: {{.TraceID}}
 	}
 }
 
+func TestDispatchTaskIDPassthrough(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-abc",
+		TaskID:     "task-1",
+		Task:       "implement auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rec.lastReq.TaskID != "task-1" {
+		t.Fatalf("adapter taskId = %q", rec.lastReq.TaskID)
+	}
+
+	requestPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "request.json")
+	data, err := os.ReadFile(requestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"taskId": "task-1"`) {
+		t.Fatalf("request.json missing taskId: %s", data)
+	}
+}
+
 func TestDispatchRendersPromptBeforeAdapter(t *testing.T) {
 	root := t.TempDir()
 	writeColony(t, root)

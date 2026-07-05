@@ -265,11 +265,19 @@ Write your final summary to {{.ResultFile}} when done.
 
 Each line must be valid JSON with fields:
 - traceId — current flight trail id
+- taskId — optional; current task id when working on a queued subtask
 - type — one of SIGNAL, INSIGHT, MUTATION, VERIFICATION
-- payload — event-specific object
+- payload — event-specific object; use payload.kind for task lifecycle events
 
-Example:
-{"traceId":"{{.TraceID}}","type":"INSIGHT","payload":{"summary":"found auth gap"}}`
+Task lifecycle examples (payload.kind):
+- task.plan — INSIGHT: Scout publishes a breakdown of tasks
+- task.ready — SIGNAL: runtime or reactor marks a task ready to run
+- task.completed — VERIFICATION: task passed review/commit gate
+
+Examples:
+{"traceId":"{{.TraceID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder"}]}}
+{"traceId":"{{.TraceID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder"}}
+{"traceId":"{{.TraceID}}","type":"VERIFICATION","payload":{"kind":"task.completed","taskId":"task-1","status":"completed","summary":"Endpoint implemented and committed"}}`
 	cursorAdapterYAML = `binary: agent
 api_key_env: CURSOR_API_KEY
 `

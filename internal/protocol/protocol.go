@@ -52,6 +52,7 @@ type Request struct {
 	Adapter         string    `json:"adapter"`
 	Workspace       string    `json:"workspace"`
 	ColonyRoot      string    `json:"colonyRoot"`
+	TaskID          string    `json:"taskId,omitempty"`
 	Task            string    `json:"task,omitempty"`
 	Insights        []string  `json:"insights,omitempty"`
 	ResultPath      string    `json:"resultPath"`
@@ -97,6 +98,7 @@ type StatusSnapshot struct {
 // BusEvent is the minimal JSON shape agents may emit in stdout or events.ndjson.
 type BusEvent struct {
 	TraceID string          `json:"traceId"`
+	TaskID  string          `json:"taskId,omitempty"`
 	Type    EventType       `json:"type"`
 	Payload json.RawMessage `json:"payload"`
 }
