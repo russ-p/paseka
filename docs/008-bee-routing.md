@@ -114,6 +114,7 @@ When a domain event arrives, reactor finds all bees with `dispatch: direct` subs
 | ----- | ----------- | ------------ |
 | `MUTATION/code.proposal` | `guard` | diff + summary for review |
 | `VERIFICATION/verification.failed` | `builder` | failure summary for fix-up |
+| `VERIFICATION/verification.success` | `receiver` | approval summary for commit gate |
 
 Duplicate runs are suppressed per `traceId + taskId + bee + type + kind`.
 

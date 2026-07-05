@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -72,6 +73,38 @@ func TestReactorSkipsDuplicateDirectEvent(t *testing.T) {
 	}
 	if rec.calls != 1 {
 		t.Fatalf("adapter calls = %d, want 1 (duplicate bus delivery should be skipped)", rec.calls)
+	}
+}
+
+func TestReactorDirectDispatchVerificationSuccess(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "guard-1", 0, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationSuccess,
+		TaskID:  "task-3",
+		Summary: "all checks passed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{
+		"receiver": {Role: "receiver", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: "verification.success"}, Dispatch: colony.DispatchDirect},
+		}},
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if rec.lastReq.Bee != "receiver" {
+		t.Fatalf("bee = %q, want receiver", rec.lastReq.Bee)
+	}
+	if rec.lastReq.TaskID != "task-3" {
+		t.Fatalf("taskId = %q", rec.lastReq.TaskID)
+	}
+	if !strings.Contains(rec.lastReq.Task, "commit") {
+		t.Fatalf("task body = %q, want commit instructions", rec.lastReq.Task)
 	}
 }
 

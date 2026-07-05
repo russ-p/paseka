@@ -28,6 +28,13 @@ func eventDispatchContext(ev protocol.Event) (taskID, taskBody string, err error
 
 	case protocol.EventVerification:
 		switch kind {
+		case string(protocol.VerificationSuccess):
+			var payload protocol.VerificationPayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				return "", "", fmt.Errorf("runtime: parse verification payload: %w", err)
+			}
+			taskID = payload.TaskID
+			taskBody = formatVerificationSuccessTask(payload)
 		case string(protocol.VerificationFailed):
 			var payload protocol.VerificationPayload
 			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
@@ -72,6 +79,16 @@ func formatMutationTask(p protocol.MutationPayload) string {
 func formatVerificationFailedTask(p protocol.VerificationPayload) string {
 	var b strings.Builder
 	b.WriteString("Address the failed verification")
+	if p.Summary != "" {
+		b.WriteString(": ")
+		b.WriteString(p.Summary)
+	}
+	return b.String()
+}
+
+func formatVerificationSuccessTask(p protocol.VerificationPayload) string {
+	var b strings.Builder
+	b.WriteString("Verification passed — commit the approved changes")
 	if p.Summary != "" {
 		b.WriteString(": ")
 		b.WriteString(p.Summary)

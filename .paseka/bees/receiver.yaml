@@ -10,6 +10,7 @@ worktree: false
 subscribes:
   - type: VERIFICATION
     kind: verification.success
+    dispatch: direct
 publishes:
   - type: VERIFICATION
     kind: task.completed
