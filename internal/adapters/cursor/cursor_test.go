@@ -45,16 +45,21 @@ func TestBuildArgs(t *testing.T) {
 
 func TestAugmentPromptUsesAbsolutePath(t *testing.T) {
 	resultPath := filepath.Join("/colony", ".paseka", "runs", "t1", "a1", "result.txt")
-	got := augmentPrompt("Do work.", resultPath)
+	eventsPath := filepath.Join("/colony", ".paseka", "runs", "t1", "a1", "events.ndjson")
+	got := augmentPrompt("Do work.", resultPath, eventsPath)
 	if !strings.Contains(got, "/colony/.paseka/runs/t1/a1/result.txt") {
 		t.Fatalf("expected absolute result path in prompt, got: %q", got)
 	}
+	if !strings.Contains(got, "/colony/.paseka/runs/t1/a1/events.ndjson") {
+		t.Fatalf("expected events path in prompt, got: %q", got)
+	}
 
 	unchanged := augmentPrompt(
-		"Write summary to /colony/.paseka/runs/t1/a1/result.txt.",
+		"Write summary to /colony/.paseka/runs/t1/a1/result.txt. Optional: append protocol events as NDJSON lines to /colony/.paseka/runs/t1/a1/events.ndjson.",
 		resultPath,
+		eventsPath,
 	)
-	if unchanged != "Write summary to /colony/.paseka/runs/t1/a1/result.txt." {
-		t.Fatalf("prompt should not be duplicated: %q", unchanged)
+	if unchanged != "Write summary to /colony/.paseka/runs/t1/a1/result.txt. Optional: append protocol events as NDJSON lines to /colony/.paseka/runs/t1/a1/events.ndjson." {
+		t.Fatalf("prompt should not duplicate paths: %q", unchanged)
 	}
 }

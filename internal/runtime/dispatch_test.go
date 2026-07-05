@@ -77,6 +77,11 @@ func TestDispatchRendersPromptBeforeAdapter(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	requestPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "request.json")
+	if _, err := os.Stat(requestPath); err != nil {
+		t.Fatalf("request.json missing: %v", err)
+	}
+
 	prompt := rec.lastReq.Prompt
 	if !strings.Contains(prompt, "implement auth") {
 		t.Fatalf("prompt missing task: %q", prompt)

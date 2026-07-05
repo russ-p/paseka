@@ -102,13 +102,13 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
 	}
 
 	files := map[string]string{
-		PasekaPath(root, ".gitignore"):                               gitignoreContent,
-		PasekaPath(root, "bees", "scout.yaml"):                       scoutBeeYAML,
-		PasekaPath(root, "bees", "builder.yaml"):                     builderBeeYAML,
-		PasekaPath(root, "prompts", "default.md"):                    defaultPrompt,
-		PasekaPath(root, "prompts", "scout.md"):                      scoutPrompt,
-		PasekaPath(root, "prompts", "builder.md"):                    builderPrompt,
-		PasekaPath(root, "prompts", "_partials", "json-events.md"):   jsonEventsPartial,
+		PasekaPath(root, ".gitignore"):                             gitignoreContent,
+		PasekaPath(root, "bees", "scout.yaml"):                     scoutBeeYAML,
+		PasekaPath(root, "bees", "builder.yaml"):                   builderBeeYAML,
+		PasekaPath(root, "prompts", "default.md"):                  defaultPrompt,
+		PasekaPath(root, "prompts", "scout.md"):                    scoutPrompt,
+		PasekaPath(root, "prompts", "builder.md"):                  builderPrompt,
+		PasekaPath(root, "prompts", "_partials", "json-events.md"): jsonEventsPartial,
 	}
 
 	for path, content := range files {
@@ -124,7 +124,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	path := PasekaPath(root, "colony.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		c := Colony{
-			Slug: slug,
+			Slug:     slug,
 			Defaults: Defaults{PromptTemplate: "default.md"},
 		}
 		data, err := yaml.Marshal(c)
@@ -261,7 +261,15 @@ Workspace: {{.Workspace}}
 
 Write your final summary to {{.ResultFile}} when done.
 `
-	jsonEventsPartial = `When emitting bus events, use valid JSON with fields traceId, type (SIGNAL|INSIGHT|MUTATION|VERIFICATION), and payload.`
+	jsonEventsPartial = `When emitting bus events during a run, append one JSON object per line (NDJSON) to the event log or stdout.
+
+Each line must be valid JSON with fields:
+- traceId — current flight trail id
+- type — one of SIGNAL, INSIGHT, MUTATION, VERIFICATION
+- payload — event-specific object
+
+Example:
+{"traceId":"{{.TraceID}}","type":"INSIGHT","payload":{"summary":"found auth gap"}}`
 	cursorAdapterYAML = `binary: agent
 api_key_env: CURSOR_API_KEY
 `

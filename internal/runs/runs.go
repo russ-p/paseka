@@ -1,18 +1,25 @@
 package runs
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/paseka/paseka/internal/protocol"
 )
 
 const (
-	ResultFileName = "result.txt"
-	PromptFileName = "prompt.txt"
-	MetaFileName   = "meta.json"
-	StatusFileName = "status.json"
+	ResultFileName     = "result.txt"
+	PromptFileName     = "prompt.txt"
+	MetaFileName       = "meta.json"
+	StatusFileName     = "status.json"
+	RequestFileName    = "request.json"
+	EventsFileName     = "events.ndjson"
+	ResultJSONFileName = "result.json"
 )
 
 // Dir holds paths for one spawned agent run.
@@ -27,12 +34,15 @@ func (d Dir) Root() string {
 	return filepath.Join(d.ColonyRoot, ".paseka", "runs", d.TraceID, d.AgentID)
 }
 
-func (d Dir) ResultPath() string  { return filepath.Join(d.Root(), ResultFileName) }
-func (d Dir) PromptPath() string  { return filepath.Join(d.Root(), PromptFileName) }
-func (d Dir) MetaPath() string    { return filepath.Join(d.Root(), MetaFileName) }
-func (d Dir) StatusPath() string  { return filepath.Join(d.Root(), StatusFileName) }
+func (d Dir) ResultPath() string     { return filepath.Join(d.Root(), ResultFileName) }
+func (d Dir) PromptPath() string     { return filepath.Join(d.Root(), PromptFileName) }
+func (d Dir) MetaPath() string       { return filepath.Join(d.Root(), MetaFileName) }
+func (d Dir) StatusPath() string     { return filepath.Join(d.Root(), StatusFileName) }
+func (d Dir) RequestPath() string    { return filepath.Join(d.Root(), RequestFileName) }
+func (d Dir) EventsPath() string     { return filepath.Join(d.Root(), EventsFileName) }
+func (d Dir) ResultJSONPath() string { return filepath.Join(d.Root(), ResultJSONFileName) }
 
-// Meta is written by the runtime before launching an agent.
+// Meta is written by the runtime before launching an agent (legacy observers).
 type Meta struct {
 	TraceID   string    `json:"traceId"`
 	AgentID   string    `json:"agentId"`
@@ -42,15 +52,7 @@ type Meta struct {
 	StartedAt time.Time `json:"startedAt"`
 }
 
-// Status is written by the runtime after the agent exits.
-type Status struct {
-	State      string    `json:"state"` // completed | failed
-	ExitCode   int       `json:"exitCode"`
-	FinishedAt time.Time `json:"finishedAt"`
-	Error      string    `json:"error,omitempty"`
-}
-
-// Prepare creates the run directory and removes a stale result from a previous attempt.
+// Prepare creates the run directory and removes stale outputs from a previous attempt.
 func (d Dir) Prepare() error {
 	if d.ColonyRoot == "" || d.TraceID == "" || d.AgentID == "" {
 		return fmt.Errorf("runs: colony root, traceId, and agentId are required")
@@ -59,7 +61,9 @@ func (d Dir) Prepare() error {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return fmt.Errorf("runs: mkdir %s: %w", root, err)
 	}
-	_ = os.Remove(d.ResultPath())
+	for _, path := range []string{d.ResultPath(), d.ResultJSONPath(), d.EventsPath()} {
+		_ = os.Remove(path)
+	}
 	return nil
 }
 
@@ -75,12 +79,148 @@ func (d Dir) WriteMeta(meta Meta) error {
 	return os.WriteFile(d.MetaPath(), data, 0o644)
 }
 
-func (d Dir) WriteStatus(status Status) error {
-	data, err := json.MarshalIndent(status, "", "  ")
+func (d Dir) WriteRequest(req protocol.Request) error {
+	if req.ProtocolVersion == "" {
+		req.ProtocolVersion = protocol.Version
+	}
+	data, err := json.MarshalIndent(req, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(d.RequestPath(), data, 0o644)
+}
+
+func (d Dir) ReadRequest() (protocol.Request, error) {
+	data, err := os.ReadFile(d.RequestPath())
+	if err != nil {
+		return protocol.Request{}, err
+	}
+	var req protocol.Request
+	if err := json.Unmarshal(data, &req); err != nil {
+		return protocol.Request{}, err
+	}
+	return req, nil
+}
+
+func (d Dir) WriteStatusSnapshot(snap protocol.StatusSnapshot) error {
+	if snap.ProtocolVersion == "" {
+		snap.ProtocolVersion = protocol.Version
+	}
+	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(d.StatusPath(), data, 0o644)
+}
+
+// WriteStatus is a convenience wrapper for the final completed/failed snapshot.
+func (d Dir) WriteStatus(state protocol.RunStatus, exitCode int, startedAt, finishedAt time.Time, errMsg string) error {
+	return d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           state,
+		ExitCode:        exitCode,
+		StartedAt:       startedAt,
+		FinishedAt:      finishedAt,
+		Error:           errMsg,
+	})
+}
+
+func (d Dir) ReadStatus() (protocol.StatusSnapshot, error) {
+	data, err := os.ReadFile(d.StatusPath())
+	if err != nil {
+		return protocol.StatusSnapshot{}, err
+	}
+	var snap protocol.StatusSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return protocol.StatusSnapshot{}, err
+	}
+	return snap, nil
+}
+
+func (d Dir) AppendEvent(ev protocol.Event) error {
+	if ev.ProtocolVersion == "" {
+		ev.ProtocolVersion = protocol.Version
+	}
+	if ev.Seq == 0 {
+		seq, err := d.nextEventSeq()
+		if err != nil {
+			return err
+		}
+		ev.Seq = seq
+	}
+	data, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(d.EventsPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d Dir) nextEventSeq() (int, error) {
+	events, err := d.ReadEvents()
+	if err != nil {
+		return 0, err
+	}
+	return len(events) + 1, nil
+}
+
+func (d Dir) ReadEvents() ([]protocol.Event, error) {
+	f, err := os.Open(d.EventsPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var events []protocol.Event
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var ev protocol.Event
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			return nil, fmt.Errorf("runs: parse event: %w", err)
+		}
+		events = append(events, ev)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (d Dir) WriteResult(res protocol.Result) error {
+	if res.ProtocolVersion == "" {
+		res.ProtocolVersion = protocol.Version
+	}
+	data, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(d.ResultJSONPath(), data, 0o644)
+}
+
+func (d Dir) ReadResultJSON() (protocol.Result, error) {
+	data, err := os.ReadFile(d.ResultJSONPath())
+	if err != nil {
+		return protocol.Result{}, err
+	}
+	var res protocol.Result
+	if err := json.Unmarshal(data, &res); err != nil {
+		return protocol.Result{}, err
+	}
+	return res, nil
 }
 
 func (d Dir) ReadResult() (string, error) {

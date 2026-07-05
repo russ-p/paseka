@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
 
@@ -32,7 +33,6 @@ func (a *Adapter) Name() string {
 }
 
 // Run invokes `agent` in non-interactive mode.
-// Port of fizman-parent/scripts/ai-tasks-run.sh without tmux.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {
 		return nil, errors.New("cursor: workspace is required")
@@ -64,7 +64,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, err
 	}
 
-	prompt := augmentPrompt(req.Prompt, runDir.ResultPath())
+	startedAt := time.Now().UTC()
+	prompt := augmentPrompt(req.Prompt, runDir.ResultPath(), runDir.EventsPath())
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("cursor: write prompt: %w", err)
 	}
@@ -74,9 +75,16 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		Bee:       req.Bee,
 		Adapter:   adapterName,
 		Workspace: req.Workspace,
-		StartedAt: time.Now().UTC(),
+		StartedAt: startedAt,
 	}); err != nil {
 		return nil, fmt.Errorf("cursor: write meta: %w", err)
+	}
+	if err := runDir.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusRunning,
+		StartedAt:       startedAt,
+	}); err != nil {
+		return nil, fmt.Errorf("cursor: write status: %w", err)
 	}
 
 	args := buildArgs(req, prompt)
@@ -100,14 +108,29 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		}
 	}
 
-	summary, _ := runDir.ReadResult()
-	summary = strings.TrimSpace(summary)
+	stdoutStr := stdout.String()
+	stderrStr := stderr.String()
+
+	var events []protocol.Event
+	var streamSummary string
+	if isStreamFormat(req.Params.OutputFormat) {
+		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
+		events = parsed.Events
+		streamSummary = strings.TrimSpace(parsed.Summary)
+		for _, ev := range events {
+			_ = runDir.AppendEvent(ev)
+		}
+	}
+
+	fileSummary, readErr := runDir.ReadResult()
+	fileSummary = strings.TrimSpace(fileSummary)
+	summary := pickSummary(fileSummary, streamSummary)
 
 	artifacts := []adapters.Artifact{
-		{Kind: "stdout", Content: stdout.String()},
+		{Kind: "stdout", Content: stdoutStr},
 	}
-	if stderr.Len() > 0 {
-		artifacts = append(artifacts, adapters.Artifact{Kind: "stderr", Content: stderr.String()})
+	if stderrStr != "" {
+		artifacts = append(artifacts, adapters.Artifact{Kind: "stderr", Content: stderrStr})
 	}
 	if summary != "" {
 		artifacts = append(artifacts, adapters.Artifact{
@@ -120,33 +143,91 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status := "completed"
-	var statusErr string
-	if runErr != nil && summary == "" {
-		status = "failed"
-		statusErr = runErr.Error()
+	status, statusErr := resolveStatus(ctx.Err(), runErr, readErr, summary)
+	finishedAt := time.Now().UTC()
+
+	artifactRefs := make([]protocol.ArtifactRef, 0, len(artifacts))
+	for _, a := range artifacts {
+		artifactRefs = append(artifactRefs, protocol.ArtifactRef{Kind: a.Kind, Path: a.Path})
 	}
 
-	_ = runDir.WriteStatus(runs.Status{
-		State:      status,
-		ExitCode:   exitCode,
-		FinishedAt: time.Now().UTC(),
-		Error:      statusErr,
-	})
+	protoResult := protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         req.TraceID,
+		AgentID:         req.AgentID,
+		Status:          status,
+		Summary:         summary,
+		Artifacts:       artifactRefs,
+		Diagnostics: protocol.Diagnostics{
+			ExitCode: exitCode,
+			Error:    statusErr,
+			Stderr:   stderrStr,
+		},
+		FinishedAt: finishedAt,
+	}
+	if err := runDir.WriteResult(protoResult); err != nil {
+		return nil, fmt.Errorf("cursor: write result: %w", err)
+	}
+
+	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
-		Status:    status,
-		Output:    pickOutput(summary, stdout.String()),
+		Status:    string(status),
+		Summary:   summary,
+		Output:    pickOutput(summary, stdoutStr),
+		Events:    events,
 		Artifacts: artifacts,
 		ExitCode:  exitCode,
 	}
-	if status == "failed" {
-		result.Err = fmt.Errorf("cursor: agent exited with code %d: %w", exitCode, runErr)
-		if stderr.Len() > 0 {
-			result.Err = fmt.Errorf("%w\nstderr: %s", result.Err, stderr.String())
-		}
+	if status == protocol.StatusFailed {
+		result.Err = buildRunError(exitCode, runErr, stderrStr, statusErr)
 	}
 	return result, nil
+}
+
+func resolveStatus(ctxErr, runErr error, readErr error, summary string) (protocol.RunStatus, string) {
+	if ctxErr != nil {
+		if errors.Is(ctxErr, context.Canceled) {
+			return protocol.StatusCancelled, ctxErr.Error()
+		}
+		return protocol.StatusFailed, ctxErr.Error()
+	}
+	if summary != "" {
+		return protocol.StatusCompleted, ""
+	}
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return protocol.StatusFailed, readErr.Error()
+	}
+	if runErr != nil {
+		return protocol.StatusFailed, runErr.Error()
+	}
+	return protocol.StatusFailed, "missing final summary (result.txt or stream result event)"
+}
+
+func buildRunError(exitCode int, runErr error, stderr, statusErr string) error {
+	msg := statusErr
+	if msg == "" && runErr != nil {
+		msg = runErr.Error()
+	}
+	err := fmt.Errorf("cursor: agent run failed (exit %d): %s", exitCode, msg)
+	if stderr != "" {
+		err = fmt.Errorf("%w\nstderr: %s", err, stderr)
+	}
+	return err
+}
+
+func isStreamFormat(format string) bool {
+	if format == "" {
+		return true
+	}
+	return format == "stream-json"
+}
+
+func pickSummary(fileSummary, streamSummary string) string {
+	if fileSummary != "" {
+		return fileSummary
+	}
+	return streamSummary
 }
 
 func buildArgs(req adapters.RunRequest, prompt string) []string {
@@ -182,17 +263,25 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	return args
 }
 
-// augmentPrompt adds a result-file contract. Uses absolute path so agents in
-// worktrees still write results under colony .paseka/runs/.
-func augmentPrompt(base, resultPath string) string {
-	abs, err := filepath.Abs(resultPath)
+// augmentPrompt adds file-contract instructions for agent-runtime.v1.
+func augmentPrompt(base, resultPath, eventsPath string) string {
+	resultAbs, err := filepath.Abs(resultPath)
 	if err != nil {
-		abs = resultPath
+		resultAbs = resultPath
 	}
-	if strings.Contains(base, abs) || strings.Contains(base, runs.ResultFileName) {
-		return base
+	eventsAbs, err := filepath.Abs(eventsPath)
+	if err != nil {
+		eventsAbs = eventsPath
 	}
-	return base + fmt.Sprintf(" Write your final summary to file %s.", abs)
+
+	out := base
+	if !strings.Contains(base, resultAbs) && !strings.Contains(base, runs.ResultFileName) {
+		out += fmt.Sprintf(" Write your final summary to file %s.", resultAbs)
+	}
+	if !strings.Contains(base, eventsAbs) && !strings.Contains(base, runs.EventsFileName) {
+		out += fmt.Sprintf(" Optional: append protocol events as NDJSON lines to %s.", eventsAbs)
+	}
+	return out
 }
 
 func gitDiff(ctx context.Context, workspace string) (string, error) {

@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/prompts"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
 
@@ -135,6 +137,35 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
 
+	if err := runDir.Prepare(); err != nil {
+		return nil, fmt.Errorf("runtime: prepare run dir: %w", err)
+	}
+
+	createdAt := time.Now().UTC()
+	if err := runDir.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         req.TraceID,
+		AgentID:         agentID,
+		Bee:             bee.Role,
+		Adapter:         adapterName,
+		Workspace:       workspace,
+		ColonyRoot:      colonyRoot,
+		Task:            req.Task,
+		Insights:        req.Insights,
+		ResultPath:      resultFile,
+		EventLogPath:    runDir.EventsPath(),
+		CreatedAt:       createdAt,
+	}); err != nil {
+		return nil, fmt.Errorf("runtime: write request: %w", err)
+	}
+	if err := runDir.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusQueued,
+		StartedAt:       createdAt,
+	}); err != nil {
+		return nil, fmt.Errorf("runtime: write status: %w", err)
+	}
+
 	return adapter.Run(ctx, adapters.RunRequest{
 		Bee:        bee.Role,
 		Prompt:     rendered,
@@ -143,6 +174,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Params:     params,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
+		Task:       req.Task,
+		Insights:   req.Insights,
 	})
 }
 

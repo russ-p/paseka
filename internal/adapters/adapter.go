@@ -1,6 +1,10 @@
 package adapters
 
-import "context"
+import (
+	"context"
+
+	"github.com/paseka/paseka/internal/protocol"
+)
 
 // Artifact is a normalized output from an adapter run.
 type Artifact struct {
@@ -18,6 +22,8 @@ type RunRequest struct {
 	Params     RunParams
 	TraceID    string
 	AgentID    string // unique id per spawned agent invocation
+	Task       string
+	Insights   []string
 }
 
 // RunParams holds Cursor CLI flags and other adapter options.
@@ -33,8 +39,10 @@ type RunParams struct {
 
 // RunResult is the normalized adapter output.
 type RunResult struct {
-	Status    string // completed | failed
-	Output    string // agent stdout
+	Status    string // completed | failed | cancelled
+	Summary   string // final summary from result.txt/result.json
+	Output    string // preferred display text (summary or stdout)
+	Events    []protocol.Event
 	Artifacts []Artifact
 	ExitCode  int
 	Err       error
