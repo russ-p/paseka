@@ -7,3 +7,9 @@ params:
   trust: true
   force: true
 worktree: false
+subscribes:
+  - type: VERIFICATION
+    kind: verification.success
+publishes:
+  - type: VERIFICATION
+    kind: task.completed

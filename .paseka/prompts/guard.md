@@ -20,3 +20,15 @@ Success criteria (must confirm all to approve):
 - **Scope Isolation**: No unrelated files or code lines are modified. No leftovers or debug code.
 - **Code Style**: Code adheres to the project's formatting rules, and linting passes without errors.
 - **Local Integrity**: Changes don't break existing local syntax, and relevant atomic tests pass.
+
+## Report results
+
+{{template "json-events" .}}
+
+For APPROVED changes:
+
+{"traceId":"{{.TraceID}}","type":"VERIFICATION","payload":{"kind": "verification.success", "summary":"All requirements met"}}
+
+For REJECTED changes:
+
+{"traceId":"{{.TraceID}}","type":"VERIFICATION","payload":{"kind": "verification.failed", "summary":"Requirement(s) not met: There are incomplete use cases"}}

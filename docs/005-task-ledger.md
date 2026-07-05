@@ -161,7 +161,7 @@ type Ledger interface {
 }
 ```
 
-**Current scope:** protocol types and a pure in-memory reducer (`taskledger.ApplyEvent`) for tests and future implementations. No NATS/KV storage yet.
+**Current scope:** protocol types, pure reducer (`taskledger.ApplyEvent`), in-memory ledger for tests, and JetStream KV ledger (`taskledger.KVLedger`) used by `paseka run`. See [008-bee-routing.md](008-bee-routing.md) for declarative bee subscriptions.
 
 `ApplyResult.Ready` lists tasks that newly transitioned to `ready` after applying an event — the hook for a future scheduler to dispatch the next bee.
 

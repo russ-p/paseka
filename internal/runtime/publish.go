@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -18,6 +19,7 @@ func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest,
 		if !protocol.IsDomainEvent(ev.Type) {
 			continue
 		}
+		d.advisePublish(req.Bee, ev, result)
 		if err := d.publisher.PublishEvent(ctx, ev); err != nil {
 			return err
 		}
@@ -26,12 +28,34 @@ func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest,
 	if err != nil {
 		return err
 	}
-	if mutation != nil {
+	if mutation != nil && d.shouldAutoPublishMutation(req.Bee) {
+		d.advisePublish(req.Bee, *mutation, result)
 		if err := d.publisher.PublishEvent(ctx, *mutation); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (d *Dispatcher) shouldAutoPublishMutation(beeRole string) bool {
+	if d.registry == nil {
+		return true
+	}
+	return d.registry.ShouldAutoPublishMutation(beeRole)
+}
+
+func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *adapters.RunResult) {
+	if d.registry == nil {
+		return
+	}
+	warning, ok := d.registry.ValidatePublish(beeRole, ev)
+	if ok {
+		return
+	}
+	log.Printf("runtime: advisory: %s", warning)
+	if result != nil {
+		result.Warnings = append(result.Warnings, warning)
+	}
 }
 
 func mutationFromResult(pub bus.Publisher, req DispatchRequest, result *adapters.RunResult) (*protocol.Event, error) {

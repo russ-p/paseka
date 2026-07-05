@@ -7,3 +7,13 @@ params:
   trust: true
   force: true
 worktree: true
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+  - type: VERIFICATION
+    kind: verification.failed
+    dispatch: direct
+publishes:
+  - type: MUTATION
+    kind: code.proposal

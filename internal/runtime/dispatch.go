@@ -36,6 +36,7 @@ type Dispatcher struct {
 	adapters    map[string]adapters.Adapter
 	publisher   bus.Publisher
 	busRequired bool
+	registry    *BeeRegistry
 }
 
 // NewDispatcher creates a dispatcher with default adapters.
@@ -56,6 +57,11 @@ func (d *Dispatcher) RegisterAdapter(name string, a adapters.Adapter) {
 func (d *Dispatcher) SetPublisher(pub bus.Publisher, required bool) {
 	d.publisher = pub
 	d.busRequired = required
+}
+
+// SetBeeRegistry configures advisory publish validation against bee YAML contracts.
+func (d *Dispatcher) SetBeeRegistry(reg *BeeRegistry) {
+	d.registry = reg
 }
 
 // Dispatch loads bee config, renders prompt, and runs the adapter.

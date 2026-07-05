@@ -16,11 +16,13 @@ type recordingAdapter struct {
 	lastReq adapters.RunRequest
 	events  []protocol.Event
 	result  *adapters.RunResult
+	calls   int
 }
 
 func (r *recordingAdapter) Name() string { return "cursor" }
 
 func (r *recordingAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
+	r.calls++
 	r.lastReq = req
 	if r.result != nil {
 		out := *r.result

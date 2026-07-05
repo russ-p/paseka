@@ -47,6 +47,7 @@ type RunResult struct {
 	Artifacts []Artifact
 	ExitCode  int
 	Err       error
+	Warnings  []string // advisory runtime notices (e.g. undeclared publishes)
 }
 
 // Adapter launches an external agent and returns normalized results.

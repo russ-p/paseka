@@ -59,9 +59,18 @@ params:
   force: true
 prompt_template: builder.md   # relative to .paseka/prompts/
 worktree: true                  # run inside .paseka/worktrees/<traceId>/
+subscribes:                     # optional — see docs/008-bee-routing.md
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+publishes:
+  - type: MUTATION
+    kind: code.proposal
 ```
 
 Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
+
+Bee event routing (`subscribes` / `publishes`) is documented in [008-bee-routing.md](008-bee-routing.md).
 
 ### 2.1 Prompt templates
 

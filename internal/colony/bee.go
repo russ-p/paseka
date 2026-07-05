@@ -30,11 +30,13 @@ type Defaults struct {
 
 // Bee binds a role to an adapter and prompt template.
 type Bee struct {
-	Role           string         `yaml:"role"`
-	Adapter        string         `yaml:"adapter"`
-	PromptTemplate string         `yaml:"prompt_template"`
-	Worktree       bool           `yaml:"worktree"`
-	Params         map[string]any `yaml:"params"`
+	Role           string             `yaml:"role"`
+	Adapter        string             `yaml:"adapter"`
+	PromptTemplate string             `yaml:"prompt_template"`
+	Worktree       bool               `yaml:"worktree"`
+	Params         map[string]any     `yaml:"params"`
+	Subscribes     []SubscriptionRule `yaml:"subscribes,omitempty"`
+	Publishes      []PublicationRule  `yaml:"publishes,omitempty"`
 }
 
 // LoadColony reads .paseka/colony.yaml. Missing file yields zero values.
@@ -70,6 +72,9 @@ func LoadBee(colonyRoot, role string) (Bee, string, error) {
 	}
 	if bee.Role == "" {
 		bee.Role = role
+	}
+	if err := bee.ValidateEventRules(); err != nil {
+		return Bee{}, "", err
 	}
 
 	localTemplate := ""

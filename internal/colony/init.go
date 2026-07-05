@@ -214,6 +214,9 @@ params:
   force: true
   plan: true
 worktree: false
+publishes:
+  - type: INSIGHT
+    kind: task.plan
 `
 	builderBeeYAML = `role: builder
 adapter: cursor
@@ -224,6 +227,18 @@ params:
   trust: true
   force: true
 worktree: true
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+  - type: VERIFICATION
+    kind: verification.failed
+    dispatch: direct
+publishes:
+  - type: MUTATION
+    kind: code.proposal
+  - type: VERIFICATION
+    kind: task.completed
 `
 	defaultPrompt = `You are a Worker Bee in colony {{.ColonyRoot}}.
 
