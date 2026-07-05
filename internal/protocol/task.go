@@ -15,13 +15,13 @@ const (
 type TaskStatus string
 
 const (
-	TaskStatusPlanned        TaskStatus = "planned"
-	TaskStatusReady          TaskStatus = "ready"
-	TaskStatusRunning        TaskStatus = "running"
-	TaskStatusWaitingReview  TaskStatus = "waiting_review"
-	TaskStatusCompleted      TaskStatus = "completed"
-	TaskStatusFailed         TaskStatus = "failed"
-	TaskStatusBlocked        TaskStatus = "blocked"
+	TaskStatusPlanned       TaskStatus = "planned"
+	TaskStatusReady         TaskStatus = "ready"
+	TaskStatusRunning       TaskStatus = "running"
+	TaskStatusWaitingReview TaskStatus = "waiting_review"
+	TaskStatusCompleted     TaskStatus = "completed"
+	TaskStatusFailed        TaskStatus = "failed"
+	TaskStatusBlocked       TaskStatus = "blocked"
 )
 
 // TaskSpec describes one planned task inside a trace.
