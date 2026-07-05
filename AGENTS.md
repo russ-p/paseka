@@ -35,3 +35,14 @@ Read these before making architectural or naming decisions:
 - [docs/002-paseka-glossary.md](docs/002-paseka-glossary.md) — Bee glossary: branding, user-facing terms, agent roles, architecture metaphors, and domain model vocabulary (technical ↔ bee language).
 - [docs/003-architecture.md](docs/003-architecture.md) — Colony config layout, `paseka init`, adapter contract, worktree flow, package layout.
 - [docs/006-interactive-sessions.md](docs/006-interactive-sessions.md) — Interactive agent sessions (HITL), `bee chat`, session registry, Ghostty attach.
+
+## After Go changes
+
+After editing Go code, run formatting and a full build before finishing:
+
+```bash
+gofmt -w .
+go build -o paseka ./cmd/paseka
+```
+
+Fix any compilation errors reported by `go build`.
