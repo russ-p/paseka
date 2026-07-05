@@ -88,12 +88,12 @@ func TestResolvePrecedence(t *testing.T) {
 	}{
 		{
 			name: "inline",
-			in: prompts.ResolveInput{InlinePrompt: "hi", BeeTemplate: "builder.md"},
+			in:   prompts.ResolveInput{InlinePrompt: "hi", BeeTemplate: "builder.md"},
 			body: "hi",
 		},
 		{
 			name: "bee local",
-			in: prompts.ResolveInput{BeeLocalTemplate: "local.md", BeeTemplate: "builder.md"},
+			in:   prompts.ResolveInput{BeeLocalTemplate: "local.md", BeeTemplate: "builder.md"},
 			file: "local.md",
 		},
 		{
