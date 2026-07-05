@@ -14,6 +14,8 @@ Implementation: [`internal/protocol/task.go`](../internal/protocol/task.go), [`i
 | `taskId` | One subtask within a trace | A unit of work in the task queue (nectar) |
 | `agentId` | One adapter invocation | A single bee run (Cursor CLI process) |
 
+Auto-generated `traceId` values use a compact time-ordered format: `trace-` + 16 lowercase hex chars (48-bit UTC ms + 16-bit random). Lexicographic sort matches creation order. Manual ids via `--trace` (e.g. `trace-auth-01`) are allowed and need not follow this layout. See [`internal/colony/traceid.go`](../internal/colony/traceid.go).
+
 Relationship:
 
 ```text

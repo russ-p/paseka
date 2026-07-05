@@ -2,8 +2,6 @@ package runtime
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"path/filepath"
 
@@ -49,7 +47,7 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 
 	traceID := req.TraceID
 	if traceID == "" {
-		id, err := newTraceID()
+		id, err := colony.NewTraceID()
 		if err != nil {
 			return nil, err
 		}
@@ -113,14 +111,6 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		RunDir:    runDir.Root(),
 		Result:    result,
 	}, nil
-}
-
-func newTraceID() (string, error) {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("runtime: trace id: %w", err)
-	}
-	return "trace-" + hex.EncodeToString(b[:]), nil
 }
 
 // RelRunDir returns a path relative to colony root when possible.

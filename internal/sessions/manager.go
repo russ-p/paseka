@@ -124,7 +124,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 
 	traceID := req.TraceID
 	if traceID == "" {
-		id, err := newTraceID()
+		id, err := colony.NewTraceID()
 		if err != nil {
 			return nil, err
 		}
@@ -529,14 +529,6 @@ func LaunchInGhostty(cfg colony.TerminalConfig, runArgs []string) error {
 		GhosttyBinary: cfg.GhosttyBinary,
 	}
 	return LaunchAttach(termCfg, attachCmd)
-}
-
-func newTraceID() (string, error) {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("sessions: trace id: %w", err)
-	}
-	return "trace-" + hex.EncodeToString(b[:]), nil
 }
 
 func newAgentID() (string, error) {
