@@ -10,6 +10,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
@@ -32,7 +33,9 @@ type DispatchRequest struct {
 
 // Dispatcher renders prompts and runs adapters.
 type Dispatcher struct {
-	adapters map[string]adapters.Adapter
+	adapters    map[string]adapters.Adapter
+	publisher   bus.Publisher
+	busRequired bool
 }
 
 // NewDispatcher creates a dispatcher with default adapters.
@@ -47,6 +50,12 @@ func NewDispatcher() *Dispatcher {
 // RegisterAdapter adds or replaces an adapter by name (for tests).
 func (d *Dispatcher) RegisterAdapter(name string, a adapters.Adapter) {
 	d.adapters[name] = a
+}
+
+// SetPublisher configures optional NATS event publishing after adapter runs.
+func (d *Dispatcher) SetPublisher(pub bus.Publisher, required bool) {
+	d.publisher = pub
+	d.busRequired = required
 }
 
 // Dispatch loads bee config, renders prompt, and runs the adapter.
@@ -169,7 +178,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, fmt.Errorf("runtime: write status: %w", err)
 	}
 
-	return adapter.Run(ctx, adapters.RunRequest{
+	result, err := adapter.Run(ctx, adapters.RunRequest{
 		Bee:        bee.Role,
 		Prompt:     rendered,
 		ColonyRoot: colonyRoot,
@@ -181,6 +190,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Task:       req.Task,
 		Insights:   req.Insights,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
+		ColonyRoot: colonyRoot,
+		Bee:        req.Bee,
+		TraceID:    req.TraceID,
+		AgentID:    agentID,
+		TaskID:     req.TaskID,
+	}, result); pubErr != nil {
+		if d.busRequired {
+			return result, pubErr
+		}
+	}
+	return result, nil
 }
 
 func newAgentID() (string, error) {

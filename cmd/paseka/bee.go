@@ -27,6 +27,7 @@ func newBeeRunCmd() *cobra.Command {
 		task         string
 		traceID      string
 		inlinePrompt string
+		noBus        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "run <role>",
@@ -43,6 +44,7 @@ func newBeeRunCmd() *cobra.Command {
 				TraceID:      traceID,
 				Task:         task,
 				InlinePrompt: inlinePrompt,
+				NoBus:        noBus,
 			})
 			if err != nil {
 				return err
@@ -61,6 +63,7 @@ func newBeeRunCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
+	cmd.Flags().BoolVar(&noBus, "no-bus", false, "skip NATS publish (file-only run)")
 	return cmd
 }
 

@@ -13,8 +13,14 @@ const pasekaDir = ".paseka"
 
 // Colony is the project-local manifest under .paseka/colony.yaml.
 type Colony struct {
-	Slug     string   `yaml:"slug"`
-	Defaults Defaults `yaml:"defaults"`
+	Slug     string     `yaml:"slug"`
+	Defaults Defaults   `yaml:"defaults"`
+	NATS     ColonyNATS `yaml:"nats"`
+}
+
+// ColonyNATS holds project-local NATS overrides.
+type ColonyNATS struct {
+	SubjectPrefix string `yaml:"subject_prefix"`
 }
 
 // Defaults holds colony-wide fallbacks.

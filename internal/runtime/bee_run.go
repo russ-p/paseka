@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/worktree"
@@ -20,6 +21,8 @@ type BeeRunRequest struct {
 	TaskID       string
 	Insights     []string
 	InlinePrompt string
+	NoBus        bool
+	BusRequired  bool
 }
 
 // BeeRunResult summarizes a completed bee run.
@@ -43,6 +46,18 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 	ctxColony, err := colony.ResolveContext(req.StartDir)
 	if err != nil {
 		return nil, err
+	}
+
+	if !req.NoBus {
+		busClient, busErr := bus.ConnectColony(ctxColony, false)
+		if busErr != nil {
+			if req.BusRequired {
+				return nil, busErr
+			}
+		} else if busClient != nil {
+			d.SetPublisher(busClient, req.BusRequired)
+			defer busClient.Close()
+		}
 	}
 
 	traceID := req.TraceID

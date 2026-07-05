@@ -8,18 +8,28 @@ import (
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runtime"
 )
 
 type recordingAdapter struct {
 	lastReq adapters.RunRequest
+	events  []protocol.Event
+	result  *adapters.RunResult
 }
 
 func (r *recordingAdapter) Name() string { return "cursor" }
 
 func (r *recordingAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	r.lastReq = req
-	return &adapters.RunResult{Status: "completed", Output: "ok"}, nil
+	if r.result != nil {
+		out := *r.result
+		if len(r.events) > 0 {
+			out.Events = r.events
+		}
+		return &out, nil
+	}
+	return &adapters.RunResult{Status: "completed", Output: "ok", Events: r.events}, nil
 }
 
 func writeColony(t *testing.T, root string) {
