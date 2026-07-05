@@ -1,0 +1,6 @@
+role: drone
+adapter: cursor
+prompt_template: drone.md
+params:
+  yolo: true
+worktree: false
