@@ -147,3 +147,33 @@ func LoadCursorAdapter(slug string) (CursorAdapterConfig, error) {
 func (c CursorAdapterConfig) APIKey() string {
 	return os.Getenv(c.APIKeyEnv)
 }
+
+// TerminalConfig is ~/.config/paseka/<slug>/terminal.yaml.
+type TerminalConfig struct {
+	Terminal      string `yaml:"terminal"`       // default | ghostty
+	GhosttyBinary string `yaml:"ghostty_binary"` // default: ghostty
+}
+
+// LoadTerminalConfig reads terminal preferences for session attach.
+func LoadTerminalConfig(slug string) TerminalConfig {
+	homeDir, err := HomeDir(slug)
+	if err != nil {
+		return TerminalConfig{Terminal: "default", GhosttyBinary: "ghostty"}
+	}
+	path := filepath.Join(homeDir, "terminal.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return TerminalConfig{Terminal: "default", GhosttyBinary: "ghostty"}
+	}
+	var cfg TerminalConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return TerminalConfig{Terminal: "default", GhosttyBinary: "ghostty"}
+	}
+	if cfg.Terminal == "" {
+		cfg.Terminal = "default"
+	}
+	if cfg.GhosttyBinary == "" {
+		cfg.GhosttyBinary = "ghostty"
+	}
+	return cfg
+}

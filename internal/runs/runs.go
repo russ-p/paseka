@@ -20,6 +20,8 @@ const (
 	RequestFileName    = "request.json"
 	EventsFileName     = "events.ndjson"
 	ResultJSONFileName = "result.json"
+	SessionFileName    = "session.json"
+	TranscriptFileName = "transcript.ndjson"
 )
 
 // Dir holds paths for one spawned agent run.
@@ -41,6 +43,8 @@ func (d Dir) StatusPath() string     { return filepath.Join(d.Root(), StatusFile
 func (d Dir) RequestPath() string    { return filepath.Join(d.Root(), RequestFileName) }
 func (d Dir) EventsPath() string     { return filepath.Join(d.Root(), EventsFileName) }
 func (d Dir) ResultJSONPath() string { return filepath.Join(d.Root(), ResultJSONFileName) }
+func (d Dir) SessionPath() string    { return filepath.Join(d.Root(), SessionFileName) }
+func (d Dir) TranscriptPath() string { return filepath.Join(d.Root(), TranscriptFileName) }
 
 // Meta is written by the runtime before launching an agent (legacy observers).
 type Meta struct {
@@ -229,4 +233,96 @@ func (d Dir) ReadResult() (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// SessionMeta is written to session.json for interactive agent sessions.
+type SessionMeta struct {
+	ProtocolVersion string    `json:"protocolVersion"`
+	SessionID       string    `json:"sessionId"`
+	TraceID         string    `json:"traceId"`
+	AgentID         string    `json:"agentId"`
+	Bee             string    `json:"bee"`
+	Adapter         string    `json:"adapter"`
+	Workspace       string    `json:"workspace"`
+	ColonyRoot      string    `json:"colonyRoot"`
+	PID             int       `json:"pid,omitempty"`
+	State           string    `json:"state"`
+	StartedAt       time.Time `json:"startedAt"`
+	FinishedAt      time.Time `json:"finishedAt,omitempty"`
+}
+
+// TranscriptEntry is one NDJSON line in transcript.ndjson.
+type TranscriptEntry struct {
+	At      time.Time `json:"at"`
+	Role    string    `json:"role"` // user | agent | system
+	Content string    `json:"content"`
+}
+
+func (d Dir) WriteSession(meta SessionMeta) error {
+	if meta.ProtocolVersion == "" {
+		meta.ProtocolVersion = protocol.Version
+	}
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(d.SessionPath(), data, 0o644)
+}
+
+func (d Dir) ReadSession() (SessionMeta, error) {
+	data, err := os.ReadFile(d.SessionPath())
+	if err != nil {
+		return SessionMeta{}, err
+	}
+	var meta SessionMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return SessionMeta{}, err
+	}
+	return meta, nil
+}
+
+func (d Dir) AppendTranscript(entry TranscriptEntry) error {
+	if entry.At.IsZero() {
+		entry.At = time.Now().UTC()
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(d.TranscriptPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(data, '\n'))
+	return err
+}
+
+func (d Dir) ReadTranscript() ([]TranscriptEntry, error) {
+	f, err := os.Open(d.TranscriptPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var entries []TranscriptEntry
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry TranscriptEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			return nil, fmt.Errorf("runs: parse transcript: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }

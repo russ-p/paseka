@@ -154,6 +154,11 @@ paseka hive list
 paseka hive create
 paseka bee list
 paseka bee inspect
+paseka bee run
+paseka bee chat
+paseka session list
+paseka session attach
+paseka session stop
 paseka queen
 ```
 

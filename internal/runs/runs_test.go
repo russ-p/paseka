@@ -26,6 +26,12 @@ func TestDirPaths(t *testing.T) {
 	if d.EventsPath() != filepath.Join(wantRoot, "events.ndjson") {
 		t.Fatal("unexpected EventsPath")
 	}
+	if d.SessionPath() != filepath.Join(wantRoot, "session.json") {
+		t.Fatal("unexpected SessionPath")
+	}
+	if d.TranscriptPath() != filepath.Join(wantRoot, "transcript.ndjson") {
+		t.Fatal("unexpected TranscriptPath")
+	}
 }
 
 func TestPrepareAndResult(t *testing.T) {

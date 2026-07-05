@@ -21,7 +21,7 @@ Work centers on a **git repository**. Configuration is split:
 
 ## Adapters
 
-Bees do not embed LLM logic. An **adapter** launches external agents via **Cursor Agent CLI** (`agent`); each invocation gets `.paseka/runs/<traceId>/<agentId>/` for file IPC (`prompt.txt`, `result.txt`, `meta.json`, `status.json`). Worktrees under `.paseka/worktrees/<traceId>/` isolate code mutations until review.
+Bees do not embed LLM logic. An **adapter** launches external agents via **Cursor Agent CLI** (`agent`); each invocation gets `.paseka/runs/<traceId>/<agentId>/` for file IPC (`prompt.txt`, `result.txt`, `meta.json`, `status.json`). AFK runs use `Adapter.Run()` (`paseka bee run`); interactive HITL sessions use `SessionAdapter` + PTY (`paseka bee chat`) — see [docs/006-interactive-sessions.md](docs/006-interactive-sessions.md). Worktrees under `.paseka/worktrees/<traceId>/` isolate code mutations until review.
 
 ## Prompt templates
 
@@ -34,3 +34,4 @@ Read these before making architectural or naming decisions:
 - [docs/001-brief.md](docs/001-brief.md) — Product brief: core concepts, architecture (EDA, traceId, energyToken), tech stack (NATS + JetStream), human-in-the-loop gateway, and MVP next steps.
 - [docs/002-paseka-glossary.md](docs/002-paseka-glossary.md) — Bee glossary: branding, user-facing terms, agent roles, architecture metaphors, and domain model vocabulary (technical ↔ bee language).
 - [docs/003-architecture.md](docs/003-architecture.md) — Colony config layout, `paseka init`, adapter contract, worktree flow, package layout.
+- [docs/006-interactive-sessions.md](docs/006-interactive-sessions.md) — Interactive agent sessions (HITL), `bee chat`, session registry, Ghostty attach.

@@ -22,6 +22,7 @@ func newRoot() *cobra.Command {
 	}
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newBeeCmd())
+	root.AddCommand(newSessionCmd())
 	root.AddCommand(newPurgeCmd())
 	return root
 }
@@ -63,5 +64,6 @@ func printInitResult(res colony.InitResult) {
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. agent login   # or set CURSOR_API_KEY")
 	fmt.Println("  2. paseka bee run scout --task \"your task\"")
-	fmt.Println("  3. paseka run    # start hive runtime (coming soon)")
+	fmt.Println("  3. paseka bee chat scout \"discuss a feature\"  # interactive HITL")
+	fmt.Println("  4. paseka run    # start hive runtime (coming soon)")
 }
