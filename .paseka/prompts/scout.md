@@ -11,3 +11,4 @@ Flight trail: {{.TraceID}}
 {{end}}
 
 {{template "json-events" .}}
+{{template "task-events" .}}

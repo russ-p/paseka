@@ -173,7 +173,7 @@ type Ledger interface {
 | ----- | ----- | ----- |
 | `taskId` | `protocol.Request`, `adapters.RunRequest`, `prompts.Context` | Optional; empty for one-shot CLI runs |
 | `{{.TaskID}}` | Prompt templates | Available when dispatch includes a task id |
-| Task events | `events.ndjson` / stdout NDJSON | Parsed by Cursor adapter stream parser |
+| Task events | `paseka event emit --stdin` | Validated CLI publish with machine-readable feedback |
 
 CLI behavior is unchanged when `taskId` is omitted.
 

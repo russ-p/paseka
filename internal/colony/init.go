@@ -109,6 +109,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
 		PasekaPath(root, "prompts", "scout.md"):                    scoutPrompt,
 		PasekaPath(root, "prompts", "builder.md"):                  builderPrompt,
 		PasekaPath(root, "prompts", "_partials", "json-events.md"): jsonEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "task-events.md"): taskEventsPartial,
 	}
 
 	for path, content := range files {
@@ -260,6 +261,7 @@ Flight trail: {{.TraceID}}
 {{end}}
 
 {{template "json-events" .}}
+{{template "task-events" .}}
 `
 	builderPrompt = `You are Builder Bee. Implement the task in the workspace.
 
@@ -276,23 +278,50 @@ Workspace: {{.Workspace}}
 
 Write your final summary to {{.ResultFile}} when done.
 `
-	jsonEventsPartial = `When emitting bus events during a run, append one JSON object per line (NDJSON) to the event log or stdout.
+	jsonEventsPartial = `When you need to publish a bus event during a run:
 
-Each line must be valid JSON with fields:
-- traceId — current flight trail id
-- taskId — optional; current task id when working on a queued subtask
+1. Build one valid JSON object for the event.
+2. Validate and publish it with Paseka CLI via stdin.
+3. If validation fails, inspect the returned JSON error, fix the event, and retry once.
+4. After successful publish, continue with a normal human-readable summary.
+
+Do not print raw event JSON in the final answer.
+Do not write event JSON directly to files.
+
+Use this command form:
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
+EOF
+
+Each event JSON object must include:
+- traceId — current flight trail id ({{.TraceID}})
+- agentId — current agent run id ({{.AgentID}})
 - type — one of SIGNAL, INSIGHT, MUTATION, VERIFICATION
-- payload — event-specific object; use payload.kind for task lifecycle events
+- payload — event-specific object with required payload.kind
 
-Task lifecycle examples (payload.kind):
-- task.plan — INSIGHT: Scout publishes a breakdown of tasks
-- task.ready — SIGNAL: runtime or reactor marks a task ready to run
-- task.completed — VERIFICATION: task passed review/commit gate
+If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing.`
+	taskEventsPartial = `## Task lifecycle events
+
+Use these payload.kind values when publishing task queue events:
+
+- task.plan — INSIGHT: publish a breakdown of tasks
+- task.ready — SIGNAL: mark a task ready to run
+- task.completed — VERIFICATION: report that a task passed review/commit gate
 
 Examples:
-{"traceId":"{{.TraceID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder"}]}}
-{"traceId":"{{.TraceID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder"}}
-{"traceId":"{{.TraceID}}","type":"VERIFICATION","payload":{"kind":"task.completed","taskId":"task-1","status":"completed","summary":"Endpoint implemented and committed"}}`
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder"}]}}
+EOF
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder"}}
+EOF
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"task.completed","taskId":"task-1","status":"completed","summary":"Endpoint implemented and committed"}}
+EOF`
 	cursorAdapterYAML = `binary: agent
 api_key_env: CURSOR_API_KEY
 `

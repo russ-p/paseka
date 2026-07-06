@@ -1,0 +1,285 @@
+package protocol
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+// ValidationDetail describes one schema validation failure.
+type ValidationDetail struct {
+	Path    string `json:"path"`
+	Message string `json:"message"`
+}
+
+// ValidationError is returned when event input fails validation.
+type ValidationError struct {
+	Code    string
+	Details []ValidationDetail
+}
+
+func (e *ValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Code
+}
+
+// EventInput is the JSON shape agents send to `paseka event emit` / `validate`.
+type EventInput struct {
+	TraceID string          `json:"traceId"`
+	TaskID  string          `json:"taskId,omitempty"`
+	AgentID string          `json:"agentId,omitempty"`
+	Type    EventType       `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// EventCLIResult is the machine-readable response from emit/validate commands.
+type EventCLIResult struct {
+	OK           bool               `json:"ok"`
+	TraceID      string             `json:"traceId,omitempty"`
+	Type         EventType          `json:"type,omitempty"`
+	Kind         string             `json:"kind,omitempty"`
+	Subject      string             `json:"subject,omitempty"`
+	EventLogPath string             `json:"eventLogPath,omitempty"`
+	Error        string             `json:"error,omitempty"`
+	Details      []ValidationDetail `json:"details,omitempty"`
+}
+
+// ParseEventInput decodes one event JSON object from raw bytes.
+func ParseEventInput(raw []byte) (EventInput, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return EventInput{}, &ValidationError{
+			Code: "invalid_json",
+			Details: []ValidationDetail{{
+				Path:    "",
+				Message: "input must be a single JSON object",
+			}},
+		}
+	}
+	if !json.Valid([]byte(trimmed)) {
+		return EventInput{}, &ValidationError{
+			Code: "invalid_json",
+			Details: []ValidationDetail{{
+				Path:    "",
+				Message: "input must be valid JSON",
+			}},
+		}
+	}
+	var in EventInput
+	if err := json.Unmarshal([]byte(trimmed), &in); err != nil {
+		return EventInput{}, &ValidationError{
+			Code: "invalid_json",
+			Details: []ValidationDetail{{
+				Path:    "",
+				Message: err.Error(),
+			}},
+		}
+	}
+	return in, nil
+}
+
+// Validate checks envelope and payload-specific requirements.
+func (in EventInput) Validate() []ValidationDetail {
+	var details []ValidationDetail
+
+	if strings.TrimSpace(in.TraceID) == "" {
+		details = append(details, ValidationDetail{Path: "traceId", Message: "required"})
+	}
+	if strings.TrimSpace(string(in.Type)) == "" {
+		details = append(details, ValidationDetail{Path: "type", Message: "required"})
+	} else if !IsDomainEvent(in.Type) {
+		details = append(details, ValidationDetail{
+			Path:    "type",
+			Message: fmt.Sprintf("must be one of SIGNAL, INSIGHT, MUTATION, VERIFICATION (got %q)", in.Type),
+		})
+	}
+	if len(in.Payload) == 0 {
+		details = append(details, ValidationDetail{Path: "payload", Message: "required"})
+		return details
+	}
+	if !json.Valid(in.Payload) {
+		details = append(details, ValidationDetail{Path: "payload", Message: "must be valid JSON"})
+		return details
+	}
+
+	kind := PayloadKind(in.Payload)
+	if kind == "" {
+		details = append(details, ValidationDetail{Path: "payload.kind", Message: "required"})
+		return details
+	}
+
+	details = append(details, validatePayloadKind(in.Type, kind, in.Payload)...)
+	return details
+}
+
+func validatePayloadKind(eventType EventType, kind string, payload json.RawMessage) []ValidationDetail {
+	if mismatch := expectedEventType(kind); mismatch != "" && mismatch != eventType {
+		return []ValidationDetail{{
+			Path:    "type",
+			Message: fmt.Sprintf("payload.kind %q requires type %s", kind, mismatch),
+		}}
+	}
+
+	switch TaskEventKind(kind) {
+	case TaskEventPlan:
+		return validateTaskPlan(payload)
+	case TaskEventReady:
+		return validateTaskReady(payload)
+	case TaskEventCompleted:
+		return validateTaskCompleted(payload)
+	}
+
+	switch VerificationKind(kind) {
+	case VerificationSuccess, VerificationFailed:
+		return validateVerification(payload)
+	}
+
+	switch MutationKind(kind) {
+	case MutationCodeProposal:
+		return validateCodeProposal(payload)
+	}
+
+	switch kind {
+	case "human.feedback":
+		return validateHumanFeedback(payload)
+	case "feature.requested":
+		return nil
+	default:
+		return nil
+	}
+}
+
+func expectedEventType(kind string) EventType {
+	switch TaskEventKind(kind) {
+	case TaskEventPlan:
+		return EventInsight
+	case TaskEventReady:
+		return EventSignal
+	case TaskEventCompleted:
+		return EventVerification
+	}
+	switch VerificationKind(kind) {
+	case VerificationSuccess, VerificationFailed:
+		return EventVerification
+	}
+	switch MutationKind(kind) {
+	case MutationCodeProposal:
+		return EventMutation
+	}
+	switch kind {
+	case "human.feedback":
+		return EventInsight
+	default:
+		return ""
+	}
+}
+
+func validateTaskPlan(payload json.RawMessage) []ValidationDetail {
+	var p TaskPlanPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid task.plan payload"}}
+	}
+	if len(p.Tasks) == 0 {
+		return []ValidationDetail{{Path: "payload.tasks", Message: "required"}}
+	}
+	var details []ValidationDetail
+	for i, task := range p.Tasks {
+		if strings.TrimSpace(task.TaskID) == "" {
+			details = append(details, ValidationDetail{
+				Path:    fmt.Sprintf("payload.tasks[%d].taskId", i),
+				Message: "required",
+			})
+		}
+		if strings.TrimSpace(task.Title) == "" {
+			details = append(details, ValidationDetail{
+				Path:    fmt.Sprintf("payload.tasks[%d].title", i),
+				Message: "required",
+			})
+		}
+	}
+	return details
+}
+
+func validateTaskReady(payload json.RawMessage) []ValidationDetail {
+	var p TaskReadyPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid task.ready payload"}}
+	}
+	if strings.TrimSpace(p.TaskID) == "" {
+		return []ValidationDetail{{Path: "payload.taskId", Message: "required"}}
+	}
+	return nil
+}
+
+func validateTaskCompleted(payload json.RawMessage) []ValidationDetail {
+	var p TaskCompletedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid task.completed payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.TaskID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.taskId", Message: "required"})
+	}
+	if strings.TrimSpace(string(p.Status)) == "" {
+		details = append(details, ValidationDetail{Path: "payload.status", Message: "required"})
+	}
+	return details
+}
+
+func validateVerification(payload json.RawMessage) []ValidationDetail {
+	var p VerificationPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid verification payload"}}
+	}
+	if strings.TrimSpace(p.Summary) == "" {
+		return []ValidationDetail{{Path: "payload.summary", Message: "required"}}
+	}
+	return nil
+}
+
+func validateCodeProposal(payload json.RawMessage) []ValidationDetail {
+	var p MutationPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid code.proposal payload"}}
+	}
+	if strings.TrimSpace(p.Diff) == "" && strings.TrimSpace(p.Ref) == "" && strings.TrimSpace(p.Summary) == "" {
+		return []ValidationDetail{{Path: "payload", Message: "at least one of diff, ref, or summary is required"}}
+	}
+	return nil
+}
+
+func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
+	var p struct {
+		TaskID  string `json:"taskId"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid human.feedback payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.TaskID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.taskId", Message: "required"})
+	}
+	if strings.TrimSpace(p.Message) == "" {
+		details = append(details, ValidationDetail{Path: "payload.message", Message: "required"})
+	}
+	return details
+}
+
+// ToEvent validates input and builds a canonical protocol.Event.
+func (in EventInput) ToEvent(defaultAgentID string) (Event, error) {
+	if details := in.Validate(); len(details) > 0 {
+		return Event{}, &ValidationError{Code: "schema_validation_failed", Details: details}
+	}
+	agentID := strings.TrimSpace(in.AgentID)
+	if agentID == "" {
+		agentID = defaultAgentID
+	}
+	var payload any
+	if err := json.Unmarshal(in.Payload, &payload); err != nil {
+		return Event{}, fmt.Errorf("protocol: unmarshal payload: %w", err)
+	}
+	return NewEvent(in.TraceID, agentID, 0, in.Type, payload)
+}

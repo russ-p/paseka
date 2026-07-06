@@ -27,6 +27,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newReplayCmd())
 	root.AddCommand(newSignalCmd())
+	root.AddCommand(newEventCmd())
 	root.AddCommand(newProposalCmd())
 	root.AddCommand(newPurgeCmd())
 	return root

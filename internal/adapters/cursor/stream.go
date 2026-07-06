@@ -70,9 +70,6 @@ func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
 				out.Events = append(out.Events, ev)
 				seq++
 			}
-			for _, bus := range extractBusEvents(text, traceID, agentID, &seq) {
-				out.Events = append(out.Events, bus)
-			}
 		case "tool_call":
 			if raw.Subtype != "started" {
 				continue
@@ -128,44 +125,4 @@ func toolCallPayload(line cliStreamLine) map[string]any {
 		}
 	}
 	return nil
-}
-
-func extractBusEvents(text, traceID, agentID string, seq *int) []protocol.Event {
-	var events []protocol.Event
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || line[0] != '{' {
-			continue
-		}
-		var bus protocol.BusEvent
-		if err := json.Unmarshal([]byte(line), &bus); err != nil {
-			continue
-		}
-		if bus.Type == "" || !isBusEventType(bus.Type) {
-			continue
-		}
-		if bus.TraceID != "" && bus.TraceID != traceID {
-			continue
-		}
-		ev := protocol.Event{
-			ProtocolVersion: protocol.Version,
-			TraceID:         traceID,
-			AgentID:         agentID,
-			Seq:             *seq,
-			Type:            bus.Type,
-			Payload:         bus.Payload,
-		}
-		events = append(events, ev)
-		*seq++
-	}
-	return events
-}
-
-func isBusEventType(t protocol.EventType) bool {
-	switch t {
-	case protocol.EventSignal, protocol.EventInsight, protocol.EventMutation, protocol.EventVerification:
-		return true
-	default:
-		return false
-	}
 }

@@ -27,8 +27,16 @@ Success criteria (must confirm all to approve):
 
 For APPROVED changes:
 
-{"traceId":"{{.TraceID}}","type":"VERIFICATION","payload":{"kind": "verification.success", "summary":"All requirements met"}}
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
+EOF
+```
 
 For REJECTED changes:
 
-{"traceId":"{{.TraceID}}","type":"VERIFICATION","payload":{"kind": "verification.failed", "summary":"Requirement(s) not met: There are incomplete use cases"}}
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.failed","summary":"Requirement(s) not met: There are incomplete use cases"}}
+EOF
+```

@@ -267,7 +267,17 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 
 Entire `runs/` tree is **gitignored** — ephemeral, machine-local artifacts.
 
-Implementation: `internal/runs/` prepares directories and files; adapters read `result.txt` after exit and publish to NATS.
+Implementation: `internal/runs/` prepares directories and files; adapters read `result.txt` after exit. Domain events are published by agents through `paseka event emit --stdin`, not by parsing assistant stdout.
+
+**Event publish path (MVP):**
+
+```text
+agent -> paseka event emit --stdin -> validation -> NATS/JetStream
+```
+
+Agents build one JSON object per event, pass it on stdin, and receive machine-readable validation/publish feedback. `events.ndjson` is the per-run audit log under `.paseka/runs/<traceId>/<agentId>/`; `paseka event emit` appends there after a successful publish when the event includes the correct `traceId` and `agentId`.
+
+**Optional MCP layer:** a future MCP tool may wrap the same validation/publish backend used by `paseka event emit`. MCP is not required for the base contract.
 
 ### Example: Cursor adapter (CLI)
 
@@ -297,7 +307,7 @@ agent -p --trust --force \
 
 1. **File contract** — runtime writes `prompt.txt` + `meta.json`, augments prompt with absolute path to `result.txt`; agent writes summary there.
 2. **Git diff** — after `agent` exits, capture `git diff` in the **workspace** (worktree or repo root).
-3. **Stream JSON** — stdout when `output_format: stream-json` (optional parse → artifact).
+3. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text).
 4. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandContext` (no tmux — process wait replaces the shell's `tmux wait-for` pattern).

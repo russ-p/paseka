@@ -7,6 +7,7 @@ Decompose the big feature into small, atomic, independent micro-tasks.
 Plan feature implementation (flight trail).
 
 {{template "json-events" .}}
+{{template "task-events" .}}
 
 Flight trail: {{.TraceID}}
 

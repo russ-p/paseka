@@ -1,7 +1,6 @@
 package cursor
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/paseka/paseka/internal/protocol"
@@ -46,24 +45,5 @@ func TestParseStreamJSONToolCall(t *testing.T) {
 	}
 	if got.Events[0].Type != protocol.EventToolCall {
 		t.Fatalf("type = %q", got.Events[0].Type)
-	}
-}
-
-func TestExtractBusEventsFromAssistantText(t *testing.T) {
-	text := "analysis\n" + `{"traceId":"t","type":"INSIGHT","payload":{"note":"x"}}`
-	seq := 1
-	events := extractBusEvents(text, "t", "a", &seq)
-	if len(events) != 1 {
-		t.Fatalf("events = %d", len(events))
-	}
-	if events[0].Type != protocol.EventInsight {
-		t.Fatalf("type = %q", events[0].Type)
-	}
-	var payload map[string]string
-	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["note"] != "x" {
-		t.Fatalf("payload = %v", payload)
 	}
 }

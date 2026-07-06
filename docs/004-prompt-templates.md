@@ -11,7 +11,8 @@ Implementation: [`internal/prompts`](../internal/prompts/prompts.go).
 ```
 .paseka/prompts/
 ├── _partials/           # shared snippets (not used as top-level bee templates)
-│   └── json-events.md
+│   ├── json-events.md
+│   └── task-events.md
 ├── default.md           # colony-wide fallback
 ├── scout.md
 └── builder.md
@@ -76,9 +77,10 @@ The runtime passes a single context object (`prompts.Context`) to every template
 
 Variables **not** available in templates today:
 
-- Event log path (`events.ndjson`) — injected by the Cursor adapter into the final prompt if missing; not a template field.
 - Bee adapter params (`model`, `trust`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
 - Arbitrary bus event fields — only `Task` and `Insights` are surfaced in MVP.
+
+Bus event publishing is instructed through the `json-events` partial, which teaches agents to call `paseka event emit --stdin`.
 
 ---
 
@@ -121,12 +123,15 @@ Partials live in `.paseka/prompts/_partials/`. The file name without `.md` is th
 
 ```
 _partials/json-events.md  →  {{template "json-events" .}}
+{{template "task-events" .}}
+_partials/task-events.md  →  {{template "task-events" .}}
 ```
 
 Include a partial and pass the full context:
 
 ```markdown
 {{template "json-events" .}}
+{{template "task-events" .}}
 ```
 
 Partials are loaded before the main template and can use the same variables (`{{.TraceID}}`, etc.).
@@ -168,7 +173,7 @@ bee config + CLI flags
   Write .paseka/runs/<traceId>/<agentId>/prompt.txt
         │
         ▼
-  Adapter augments prompt (result file contract, optional event log hint)
+  Adapter augments prompt (result file contract)
         │
         ▼
   External agent (e.g. Cursor CLI)
@@ -177,9 +182,10 @@ bee config + CLI flags
 The adapter may append instructions that are not part of the template, for example:
 
 - «Write your final summary to file `<absolute-path>/result.txt`.»
-- «Optional: append protocol events as NDJSON lines to `<absolute-path>/events.ndjson`.»
 
-If the rendered prompt already mentions `result.txt` or `events.ndjson`, the adapter does not duplicate those lines.
+If the rendered prompt already mentions `result.txt`, the adapter does not duplicate that line.
+
+Bus events are published separately through `paseka event emit --stdin` as described in the `json-events` partial.
 
 ---
 
@@ -222,6 +228,7 @@ Flight trail: {{.TraceID}}
 {{end}}
 
 {{template "json-events" .}}
+{{template "task-events" .}}
 ```
 
 ### Inline one-shot prompt
@@ -254,15 +261,24 @@ paseka bee run builder --task "add OAuth login" --trace trace-auth-01
 
 ---
 
-## 9. Starter partial: `json-events`
+## 9. Starter partials: `json-events` and `task-events`
 
-Shipped by `paseka init` as `.paseka/prompts/_partials/json-events.md`. Instructs the agent to emit bus-compatible NDJSON lines, including task lifecycle events (`task.plan`, `task.ready`, `task.completed`). See [005-task-ledger.md](005-task-ledger.md).
+Shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
-```json
-{"traceId":"<traceId>","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"..."}]}}
+| Partial | Role |
+| ------- | ---- |
+| `json-events` | General bus event publish contract via `paseka event emit --stdin` |
+| `task-events` | Task lifecycle events (`task.plan`, `task.ready`, `task.completed`) |
+
+Bees that plan or manage tasks (e.g. scout, drone) include both partials. Bees that emit only domain-specific events (e.g. guard) include `json-events` only.
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"<traceId>","agentId":"<agentId>","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"..."}]}}
+EOF
 ```
 
-Use `{{.TraceID}}` inside the partial so examples match the current run.
+Use `{{.TraceID}}` and `{{.AgentID}}` inside partials so examples match the current run. See [005-task-ledger.md](005-task-ledger.md).
 
 ---
 

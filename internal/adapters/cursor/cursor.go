@@ -65,7 +65,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	startedAt := time.Now().UTC()
-	prompt := augmentPrompt(req.Prompt, runDir.ResultPath(), runDir.EventsPath())
+	prompt := augmentPrompt(req.Prompt, runDir.ResultPath())
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("cursor: write prompt: %w", err)
 	}
@@ -264,22 +264,15 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 }
 
 // augmentPrompt adds file-contract instructions for agent-runtime.v1.
-func augmentPrompt(base, resultPath, eventsPath string) string {
+func augmentPrompt(base, resultPath string) string {
 	resultAbs, err := filepath.Abs(resultPath)
 	if err != nil {
 		resultAbs = resultPath
-	}
-	eventsAbs, err := filepath.Abs(eventsPath)
-	if err != nil {
-		eventsAbs = eventsPath
 	}
 
 	out := base
 	if !strings.Contains(base, resultAbs) && !strings.Contains(base, runs.ResultFileName) {
 		out += fmt.Sprintf(" Write your final summary to file %s.", resultAbs)
-	}
-	if !strings.Contains(base, eventsAbs) && !strings.Contains(base, runs.EventsFileName) {
-		out += fmt.Sprintf(" Optional: append protocol events as NDJSON lines to %s.", eventsAbs)
 	}
 	return out
 }

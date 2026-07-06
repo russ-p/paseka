@@ -95,7 +95,7 @@ type StatusSnapshot struct {
 	Error           string    `json:"error,omitempty"`
 }
 
-// BusEvent is the minimal JSON shape agents may emit in stdout or events.ndjson.
+// BusEvent is the minimal JSON shape agents send to `paseka event emit --stdin`.
 type BusEvent struct {
 	TraceID string          `json:"traceId"`
 	TaskID  string          `json:"taskId,omitempty"`
