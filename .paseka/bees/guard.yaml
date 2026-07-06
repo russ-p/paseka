@@ -16,3 +16,10 @@ publishes:
     kind: verification.success
   - type: VERIFICATION
     kind: verification.failed
+completion_contract:
+  required:
+    - type: VERIFICATION
+      kind_one_of:
+        - verification.success
+        - verification.failed
+      count: 1

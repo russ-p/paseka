@@ -63,7 +63,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.ColonyRoot}}` | `string` | Absolute path to the git repository root. |
 | `{{.Workspace}}` | `string` | Absolute cwd for the adapter: colony root, or `.paseka/worktrees/<traceId>/` when `worktree: true`. |
 | `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or future bus event payload. |
-| `{{.Insights}}` | `[]string` | Prior discovery strings on the trace. Empty slice when none. Use `{{range .Insights}}`. |
+| `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [009-insight-kinds.md](009-insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to `result.txt` for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 
 ### Field sources (MVP)
@@ -72,7 +72,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | -------- | ------ |
 | `Bee`, `TraceID`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Insights`, `ResultFile` | `internal/runtime.Dispatcher` at dispatch time |
 | `Task` | `paseka bee run --task` (required unless using inline prompt) |
-| `Insights` | `DispatchRequest.Insights` (CLI does not expose yet; reserved for bus replay) |
+| `Insights` | Runtime projection from prior narrative `INSIGHT` events on the trace, merged with any manual `DispatchRequest.Insights` |
 | `ResultFile` | Computed from colony root + trace + agent ids |
 
 Variables **not** available in templates today:
@@ -123,7 +123,7 @@ Partials live in `.paseka/prompts/_partials/`. The file name without `.md` is th
 
 ```
 _partials/json-events.md  →  {{template "json-events" .}}
-{{template "task-events" .}}
+_partials/insight-events.md  →  {{template "insight-events" .}}
 _partials/task-events.md  →  {{template "task-events" .}}
 ```
 
@@ -261,16 +261,19 @@ paseka bee run builder --task "add OAuth login" --trace trace-auth-01
 
 ---
 
-## 9. Starter partials: `json-events` and `task-events`
+## 9. Starter partials: `json-events`, `insight-events`, and `task-events`
 
 Shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
 | Partial | Role |
 | ------- | ---- |
 | `json-events` | General bus event publish contract via `paseka event emit --stdin` |
+| `insight-events` | Narrative `INSIGHT` kinds for prompt memory (`run.summary`, `review.note`, etc.) |
 | `task-events` | Task lifecycle events (`task.plan`, `task.ready`, `task.completed`) |
 
-Bees that plan or manage tasks (e.g. scout, drone) include both partials. Bees that emit only domain-specific events (e.g. guard) include `json-events` only.
+Bees that plan or manage tasks (e.g. scout, drone) include `json-events`, `insight-events`, and `task-events`. Reviewer bees (e.g. guard) include `json-events` and `insight-events`.
+
+See [009-insight-kinds.md](009-insight-kinds.md) for the full INSIGHT taxonomy and prompt-memory rules.
 
 ```bash
 paseka event emit --stdin <<'EOF'

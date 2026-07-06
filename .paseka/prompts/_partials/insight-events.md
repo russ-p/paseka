@@ -1,0 +1,39 @@
+## Narrative INSIGHT events
+
+Use `INSIGHT` for context, audit, and dashboard narrative. INSIGHT events do **not** drive workflow routing — use `VERIFICATION` for gate decisions.
+
+Runtime automatically projects selected narrative INSIGHT kinds into `{{.Insights}}` for subsequent bees on the same trace.
+
+| `payload.kind` | Role | Included in prompt memory |
+| -------------- | ---- | ------------------------- |
+| `run.summary` | Short run outcome for the next bee | yes |
+| `review.note` | Reviewer observation (non-gate) | yes |
+| `context.note` | Trace/task context fact | yes |
+| `human.feedback` | Beekeeper HITL feedback | yes |
+| `task.plan` | Task ledger planning | no (operational) |
+
+### `run.summary` — optional narrative after work
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Implemented OAuth callback and added focused tests","taskId":"{{.TaskID}}"}}
+EOF
+```
+
+### `review.note` — optional reviewer context
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Token refresh path still lacks retry handling","taskId":"{{.TaskID}}","severity":"medium"}}
+EOF
+```
+
+### `context.note` — optional trace context
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"NATS KV is the source of truth for task ledger state"}}
+EOF
+```
+
+Workflow routing uses `VERIFICATION` (`verification.success`, `verification.failed`, `task.completed`). Publish exactly one final `VERIFICATION` when your bee role requires a gate decision.

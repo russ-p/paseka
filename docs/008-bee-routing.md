@@ -132,8 +132,28 @@ Auto-generated `MUTATION/code.proposal` from workspace diffs is published **only
 
 ---
 
-## 6. Related docs
+## 6. Completion contracts
+
+Bees may declare required post-run domain events via `completion_contract` in `bees/<role>.yaml`. Runtime validates `events.ndjson` after the adapter exits and marks the run **failed** when the contract is violated, even if the process completed successfully.
+
+Example for `guard`:
+
+```yaml
+completion_contract:
+  required:
+    - type: VERIFICATION
+      kind_one_of:
+        - verification.success
+        - verification.failed
+      count: 1
+```
+
+Narrative `INSIGHT` events are optional and do not satisfy completion contracts. See [009-insight-kinds.md](009-insight-kinds.md).
+
+---
+
+## 7. Related docs
 
 - [005-task-ledger.md](005-task-ledger.md) — task lifecycle events
 - [003-architecture.md](003-architecture.md) — colony layout and adapters
-- [007-cli.md](007-cli.md) — `paseka run`, `paseka signal`
+- [009-insight-kinds.md](009-insight-kinds.md) — INSIGHT taxonomy and prompt memory projection

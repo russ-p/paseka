@@ -110,7 +110,7 @@ Available template fields (MVP):
 | `{{.ColonyRoot}}` | git repo root |
 | `{{.Workspace}}` | worktree or repo root (adapter cwd) |
 | `{{.Task}}` | nectar / task body from event |
-| `{{.Insights}}` | prior INSIGHT messages on trace |
+| `{{.Insights}}` | narrative INSIGHT events projected from prior runs on the trace (see [009-insight-kinds.md](009-insight-kinds.md)) |
 | `{{.ResultFile}}` | absolute path to `result.txt` (runtime may also append via adapter) |
 
 Example template:

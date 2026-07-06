@@ -59,3 +59,13 @@ type VerificationPayload struct {
 	TaskID  string           `json:"taskId,omitempty"`
 	Summary string           `json:"summary,omitempty"`
 }
+
+// InsightKindForEventType returns the expected top-level event type for an insight kind string.
+func InsightKindForEventType(kind string) EventType {
+	switch InsightKind(kind) {
+	case InsightRunSummary, InsightReviewNote, InsightContextNote, InsightHumanFeedback:
+		return EventInsight
+	default:
+		return ""
+	}
+}

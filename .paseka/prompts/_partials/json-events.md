@@ -22,4 +22,8 @@ Each event JSON object must include:
 - `type` — one of `SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`
 - `payload` — event-specific object with required `payload.kind`
 
+**Routing vs narrative:**
+- `VERIFICATION` — gate outcomes that drive workflow routing (`verification.success`, `verification.failed`, `task.completed`)
+- `INSIGHT` — narrative context for audit and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`)
+
 If the command returns `"ok": false`, treat it as a failed publish and correct the payload before continuing.

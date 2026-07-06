@@ -123,6 +123,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, err
 	}
 
+	projectedInsights, err := GatherPromptInsights(colonyRoot, req.TraceID, req.TaskID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: gather insights: %w", err)
+	}
+	insights := MergeInsights(req.Insights, projectedInsights)
+
 	rendered, err := loader.RenderResolved(prompts.ResolveInput{
 		InlinePrompt:     req.InlinePrompt,
 		BeeLocalTemplate: beeLocalTemplate,
@@ -136,7 +142,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		ColonyRoot: colonyRoot,
 		Workspace:  workspace,
 		Task:       req.Task,
-		Insights:   req.Insights,
+		Insights:   insights,
 		ResultFile: resultFile,
 	})
 	if err != nil {
@@ -169,7 +175,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		ColonyRoot:      colonyRoot,
 		TaskID:          req.TaskID,
 		Task:            req.Task,
-		Insights:        req.Insights,
+		Insights:        insights,
 		ResultPath:      resultFile,
 		EventLogPath:    runDir.EventsPath(),
 		CreatedAt:       createdAt,
@@ -194,11 +200,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		AgentID:    agentID,
 		TaskID:     req.TaskID,
 		Task:       req.Task,
-		Insights:   req.Insights,
+		Insights:   insights,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	runEvents, readErr := runDir.ReadEvents()
+	if readErr == nil {
+		d.enforceCompletionContract(bee, runEvents, result)
+	}
+
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
 		ColonyRoot: colonyRoot,
 		Bee:        req.Bee,

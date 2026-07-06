@@ -141,9 +141,14 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateCodeProposal(payload)
 	}
 
-	switch kind {
-	case "human.feedback":
+	switch InsightKind(kind) {
+	case InsightRunSummary, InsightReviewNote, InsightContextNote:
+		return validateNarrativeInsight(payload)
+	case InsightHumanFeedback:
 		return validateHumanFeedback(payload)
+	}
+
+	switch kind {
 	case "feature.requested":
 		return nil
 	default:
@@ -168,12 +173,10 @@ func expectedEventType(kind string) EventType {
 	case MutationCodeProposal:
 		return EventMutation
 	}
-	switch kind {
-	case "human.feedback":
-		return EventInsight
-	default:
-		return ""
+	if t := InsightKindForEventType(kind); t != "" {
+		return t
 	}
+	return ""
 }
 
 func validateTaskPlan(payload json.RawMessage) []ValidationDetail {
@@ -250,11 +253,19 @@ func validateCodeProposal(payload json.RawMessage) []ValidationDetail {
 	return nil
 }
 
-func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
-	var p struct {
-		TaskID  string `json:"taskId"`
-		Message string `json:"message"`
+func validateNarrativeInsight(payload json.RawMessage) []ValidationDetail {
+	var p NarrativeInsightPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid narrative insight payload"}}
 	}
+	if strings.TrimSpace(p.Summary) == "" {
+		return []ValidationDetail{{Path: "payload.summary", Message: "required"}}
+	}
+	return nil
+}
+
+func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
+	var p HumanFeedbackPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return []ValidationDetail{{Path: "payload", Message: "invalid human.feedback payload"}}
 	}

@@ -126,7 +126,7 @@ func (b Bee) ValidateEventRules() error {
 			return fmt.Errorf("colony: bee %q publishes[%d]: %w", b.Role, i, err)
 		}
 	}
-	return nil
+	return b.CompletionContract.ValidateCompletionContract(b.Role)
 }
 
 // CanHandleTaskReady reports whether a bee is allowed to execute task.ready dispatches.

@@ -102,14 +102,15 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
 	}
 
 	files := map[string]string{
-		PasekaPath(root, ".gitignore"):                             gitignoreContent,
-		PasekaPath(root, "bees", "scout.yaml"):                     scoutBeeYAML,
-		PasekaPath(root, "bees", "builder.yaml"):                   builderBeeYAML,
-		PasekaPath(root, "prompts", "default.md"):                  defaultPrompt,
-		PasekaPath(root, "prompts", "scout.md"):                    scoutPrompt,
-		PasekaPath(root, "prompts", "builder.md"):                  builderPrompt,
-		PasekaPath(root, "prompts", "_partials", "json-events.md"): jsonEventsPartial,
-		PasekaPath(root, "prompts", "_partials", "task-events.md"): taskEventsPartial,
+		PasekaPath(root, ".gitignore"):                                gitignoreContent,
+		PasekaPath(root, "bees", "scout.yaml"):                        scoutBeeYAML,
+		PasekaPath(root, "bees", "builder.yaml"):                      builderBeeYAML,
+		PasekaPath(root, "prompts", "default.md"):                     defaultPrompt,
+		PasekaPath(root, "prompts", "scout.md"):                       scoutPrompt,
+		PasekaPath(root, "prompts", "builder.md"):                     builderPrompt,
+		PasekaPath(root, "prompts", "_partials", "json-events.md"):    jsonEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "task-events.md"):    taskEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "insight-events.md"): insightEventsPartial,
 	}
 
 	for path, content := range files {
@@ -276,6 +277,9 @@ Workspace: {{.Workspace}}
 {{range .Insights}}- {{.}}
 {{end}}
 
+{{template "json-events" .}}
+{{template "insight-events" .}}
+
 Write your final summary to {{.ResultFile}} when done.
 `
 	jsonEventsPartial = `When you need to publish a bus event during a run:
@@ -300,7 +304,26 @@ Each event JSON object must include:
 - type — one of SIGNAL, INSIGHT, MUTATION, VERIFICATION
 - payload — event-specific object with required payload.kind
 
+Routing vs narrative:
+- VERIFICATION — gate outcomes that drive workflow routing
+- INSIGHT — narrative context for audit and prompt memory
+
 If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing.`
+	insightEventsPartial = `## Narrative INSIGHT events
+
+Use INSIGHT for context and audit. INSIGHT does not drive workflow routing — use VERIFICATION for gate decisions.
+
+Runtime projects run.summary, review.note, context.note, and human.feedback into {{.Insights}} for subsequent bees.
+
+Examples:
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Implemented the requested change","taskId":"{{.TaskID}}"}}
+EOF
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing error handling in token refresh","taskId":"{{.TaskID}}","severity":"medium"}}
+EOF`
 	taskEventsPartial = `## Task lifecycle events
 
 Use these payload.kind values when publishing task queue events:
