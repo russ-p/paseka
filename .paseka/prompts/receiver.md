@@ -11,4 +11,4 @@ Workspace: {{.Workspace}}
 2. Check `rtk git diff --staged` to see the exact changes that are being committed.
 3. Generate a clean, conventional commit message based on the task description and the actual changes.
 4. Execute the git commit command using the generated message.
-5. Write a final summary to file {{.ResultFile}}.
+5. Optionally publish `INSIGHT/run.summary` for downstream bees. Runtime also writes a human-readable log to {{.ResultFile}}.

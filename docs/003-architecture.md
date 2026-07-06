@@ -111,7 +111,7 @@ Available template fields (MVP):
 | `{{.Workspace}}` | worktree or repo root (adapter cwd) |
 | `{{.Task}}` | nectar / task body from event |
 | `{{.Insights}}` | narrative INSIGHT events projected from prior runs on the trace (see [009-insight-kinds.md](009-insight-kinds.md)) |
-| `{{.ResultFile}}` | absolute path to `result.txt` (runtime may also append via adapter) |
+| `{{.ResultFile}}` | absolute path to `result.txt` log artifact (runtime may write after the run) |
 
 Example template:
 
@@ -251,7 +251,7 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 ```
 .paseka/runs/<traceId>/<agentId>/
 ├── prompt.txt         # runtime → agent: rendered prompt (audit / replay)
-├── result.txt         # agent → runtime: final summary (mandatory contract)
+├── result.txt         # runtime log: human-readable summary (not a success contract)
 ├── meta.json          # runtime → observers: bee, adapter, workspace, startedAt
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
 ├── session.json       # interactive only: pid, state, session metadata
@@ -267,7 +267,7 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 
 Entire `runs/` tree is **gitignored** — ephemeral, machine-local artifacts.
 
-Implementation: `internal/runs/` prepares directories and files; adapters read `result.txt` after exit. Domain events are published by agents through `paseka event emit --stdin`, not by parsing assistant stdout.
+Implementation: `internal/runs/` prepares directories and files; adapters may still read legacy `result.txt` content for summary normalization, but run success no longer depends on it. Runtime auto-synthesizes `INSIGHT/run.summary` when policy allows. Domain events are published by agents through `paseka event emit --stdin`, not by parsing assistant stdout.
 
 **Event publish path (MVP):**
 
@@ -305,10 +305,12 @@ agent -p --trust --force \
 
 **Result collection:**
 
-1. **File contract** — runtime writes `prompt.txt` + `meta.json`, augments prompt with absolute path to `result.txt`; agent writes summary there.
-2. **Git diff** — after `agent` exits, capture `git diff` in the **workspace** (worktree or repo root).
-3. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text).
-4. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
+1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
+2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
+3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
+4. **Git diff** — after `agent` exits, capture `git diff` in the **workspace** (worktree or repo root).
+5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text).
+6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandContext` (no tmux — process wait replaces the shell's `tmux wait-for` pattern).
 

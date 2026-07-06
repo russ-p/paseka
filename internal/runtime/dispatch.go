@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -206,7 +207,28 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, err
 	}
 
+	if summary := strings.TrimSpace(result.Summary); summary != "" {
+		_ = runDir.WriteResultText(summary)
+	}
+
 	runEvents, readErr := runDir.ReadEvents()
+	if readErr != nil {
+		runEvents = nil
+	}
+
+	var synthesized []protocol.Event
+	updatedEvents, synthesizedEvent, synthErr := d.synthesizeRunSummary(
+		runDir, bee, req.TraceID, agentID, req.TaskID, result, runEvents,
+	)
+	if synthErr != nil {
+		return result, synthErr
+	}
+	runEvents = updatedEvents
+	if synthesizedEvent != nil {
+		synthesized = append(synthesized, *synthesizedEvent)
+	}
+
+	d.enforceRunSummaryRequired(bee, agentID, result, runEvents)
 	if readErr == nil {
 		d.enforceCompletionContract(bee, runEvents, result)
 	}
@@ -217,7 +239,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
 		TaskID:     req.TaskID,
-	}, result); pubErr != nil {
+	}, result, synthesized); pubErr != nil {
 		if d.busRequired {
 			return result, pubErr
 		}

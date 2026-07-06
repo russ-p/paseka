@@ -280,7 +280,7 @@ Workspace: {{.Workspace}}
 {{template "json-events" .}}
 {{template "insight-events" .}}
 
-Write your final summary to {{.ResultFile}} when done.
+Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
 `
 	jsonEventsPartial = `When you need to publish a bus event during a run:
 
@@ -313,7 +313,7 @@ If the command returns "ok": false, treat it as a failed publish and correct the
 
 Use INSIGHT for context and audit. INSIGHT does not drive workflow routing — use VERIFICATION for gate decisions.
 
-Runtime projects run.summary, review.note, context.note, and human.feedback into {{.Insights}} for subsequent bees.
+Runtime projects run.summary, review.note, context.note, and human.feedback into {{.Insights}} for subsequent bees. Runtime may auto-synthesize run.summary after successful AFK runs when the bee policy allows.
 
 Examples:
 

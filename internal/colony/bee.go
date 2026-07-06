@@ -38,6 +38,7 @@ type Bee struct {
 	Subscribes         []SubscriptionRule `yaml:"subscribes,omitempty"`
 	Publishes          []PublicationRule  `yaml:"publishes,omitempty"`
 	CompletionContract CompletionContract `yaml:"completion_contract,omitempty"`
+	RunSummary         RunSummaryPolicy   `yaml:"run_summary,omitempty"`
 }
 
 // LoadColony reads .paseka/colony.yaml. Missing file yields zero values.
@@ -75,6 +76,9 @@ func LoadBee(colonyRoot, role string) (Bee, string, error) {
 		bee.Role = role
 	}
 	if err := bee.ValidateEventRules(); err != nil {
+		return Bee{}, "", err
+	}
+	if err := bee.ValidateRunSummaryPolicy(); err != nil {
 		return Bee{}, "", err
 	}
 

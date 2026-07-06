@@ -31,7 +31,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 
 | `payload.kind` | Required fields | Optional fields | Typical producer |
 | -------------- | --------------- | --------------- | ---------------- |
-| `run.summary` | `summary` | `taskId` | builder, scout |
+| `run.summary` | `summary` | `taskId` | builder, scout; runtime may auto-synthesize after AFK runs |
 | `review.note` | `summary` | `taskId`, `severity` | guard |
 | `context.note` | `summary` | `taskId` | any bee |
 | `human.feedback` | `taskId`, `message` | — | beekeeper via CLI |
@@ -119,7 +119,7 @@ completion_contract:
       count: 1
 ```
 
-Runtime validates emitted domain events in `events.ndjson` after the adapter exits. A process-level success (e.g. `result.txt` present) is downgraded to **failed** when the completion contract is violated.
+Runtime validates emitted domain events in `events.ndjson` after the adapter exits. A process-level success is downgraded to **failed** when the completion contract is violated or when `run_summary: required` is set and no `INSIGHT/run.summary` is present.
 
 The `guard` bee requires exactly one `VERIFICATION` gate decision per run.
 

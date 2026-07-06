@@ -130,6 +130,13 @@ After an adapter run, `Dispatcher.publishRunOutcome` compares emitted domain eve
 
 Auto-generated `MUTATION/code.proposal` from workspace diffs is published **only** when the bee declares it in `publishes` (typically `builder`). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
 
+Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present.
+
+```yaml
+# .paseka/bees/builder.yaml
+run_summary: auto   # auto | required | disabled
+```
+
 ---
 
 ## 6. Completion contracts

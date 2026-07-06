@@ -235,6 +235,15 @@ func (d Dir) ReadResult() (string, error) {
 	return string(data), nil
 }
 
+// WriteResultText persists a human-readable run summary log artifact.
+func (d Dir) WriteResultText(summary string) error {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return nil
+	}
+	return os.WriteFile(d.ResultPath(), []byte(summary), 0o644)
+}
+
 // SessionMeta is written to session.json for interactive agent sessions.
 type SessionMeta struct {
 	ProtocolVersion string    `json:"protocolVersion"`

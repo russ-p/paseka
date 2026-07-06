@@ -4,7 +4,7 @@ Paseka supports two ways to run a bee:
 
 | Mode | CLI | Use case |
 | ---- | --- | -------- |
-| **AFK (one-shot)** | `paseka bee run <role> --task "…"` | Background work; runtime waits for exit and collects `result.txt` / diff |
+| **AFK (one-shot)** | `paseka bee run <role> --task "…"` | Background work; runtime waits for exit, normalizes summary, and may auto-publish `INSIGHT/run.summary` |
 | **Interactive (session)** | `paseka bee chat <role> "…"` | Human-in-the-loop dialogue in one long-lived agent process |
 
 Interactive sessions are a **parallel runtime path**. They do not change the existing `Adapter.Run()` contract used for AFK runs.

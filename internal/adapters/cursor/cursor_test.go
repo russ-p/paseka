@@ -1,11 +1,12 @@
 package cursor
 
 import (
-	"path/filepath"
-	"strings"
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/protocol"
 )
 
 func TestAdapterName(t *testing.T) {
@@ -43,21 +44,24 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
-func TestAugmentPromptUsesAbsolutePath(t *testing.T) {
-	resultPath := filepath.Join("/colony", ".paseka", "runs", "t1", "a1", "result.txt")
-	got := augmentPrompt("Do work.", resultPath)
-	if !strings.Contains(got, "/colony/.paseka/runs/t1/a1/result.txt") {
-		t.Fatalf("expected absolute result path in prompt, got: %q", got)
-	}
-	if strings.Contains(got, "events.ndjson") {
-		t.Fatalf("prompt should not mention events.ndjson, got: %q", got)
-	}
-
-	unchanged := augmentPrompt(
-		"Write summary to /colony/.paseka/runs/t1/a1/result.txt.",
-		resultPath,
-	)
-	if unchanged != "Write summary to /colony/.paseka/runs/t1/a1/result.txt." {
-		t.Fatalf("prompt should not duplicate paths: %q", unchanged)
-	}
+func TestResolveStatusProcessOutcome(t *testing.T) {
+	t.Run("completed on clean exit", func(t *testing.T) {
+		status, msg := resolveStatus(nil, nil)
+		if status != protocol.StatusCompleted || msg != "" {
+			t.Fatalf("status=%q msg=%q", status, msg)
+		}
+	})
+	t.Run("failed on run error", func(t *testing.T) {
+		runErr := errors.New("exit 1")
+		status, _ := resolveStatus(nil, runErr)
+		if status != protocol.StatusFailed {
+			t.Fatalf("status=%q", status)
+		}
+	})
+	t.Run("cancelled on context cancel", func(t *testing.T) {
+		status, _ := resolveStatus(context.Canceled, nil)
+		if status != protocol.StatusCancelled {
+			t.Fatalf("status=%q", status)
+		}
+	})
 }

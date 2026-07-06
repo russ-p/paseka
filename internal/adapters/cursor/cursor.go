@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -65,7 +64,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	startedAt := time.Now().UTC()
-	prompt := augmentPrompt(req.Prompt, runDir.ResultPath())
+	prompt := req.Prompt
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("cursor: write prompt: %w", err)
 	}
@@ -122,7 +121,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		}
 	}
 
-	fileSummary, readErr := runDir.ReadResult()
+	fileSummary, _ := runDir.ReadResult()
 	fileSummary = strings.TrimSpace(fileSummary)
 	summary := pickSummary(fileSummary, streamSummary)
 
@@ -143,7 +142,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := resolveStatus(ctx.Err(), runErr, readErr, summary)
+	status, statusErr := resolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 
 	artifactRefs := make([]protocol.ArtifactRef, 0, len(artifacts))
@@ -185,23 +184,17 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	return result, nil
 }
 
-func resolveStatus(ctxErr, runErr error, readErr error, summary string) (protocol.RunStatus, string) {
+func resolveStatus(ctxErr, runErr error) (protocol.RunStatus, string) {
 	if ctxErr != nil {
 		if errors.Is(ctxErr, context.Canceled) {
 			return protocol.StatusCancelled, ctxErr.Error()
 		}
 		return protocol.StatusFailed, ctxErr.Error()
 	}
-	if summary != "" {
-		return protocol.StatusCompleted, ""
-	}
-	if readErr != nil && !os.IsNotExist(readErr) {
-		return protocol.StatusFailed, readErr.Error()
-	}
 	if runErr != nil {
 		return protocol.StatusFailed, runErr.Error()
 	}
-	return protocol.StatusFailed, "missing final summary (result.txt or stream result event)"
+	return protocol.StatusCompleted, ""
 }
 
 func buildRunError(exitCode int, runErr error, stderr, statusErr string) error {
@@ -261,20 +254,6 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 
 	args = append(args, prompt)
 	return args
-}
-
-// augmentPrompt adds file-contract instructions for agent-runtime.v1.
-func augmentPrompt(base, resultPath string) string {
-	resultAbs, err := filepath.Abs(resultPath)
-	if err != nil {
-		resultAbs = resultPath
-	}
-
-	out := base
-	if !strings.Contains(base, resultAbs) && !strings.Contains(base, runs.ResultFileName) {
-		out += fmt.Sprintf(" Write your final summary to file %s.", resultAbs)
-	}
-	return out
 }
 
 func gitDiff(ctx context.Context, workspace string) (string, error) {

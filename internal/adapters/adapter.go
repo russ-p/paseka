@@ -41,7 +41,7 @@ type RunParams struct {
 // RunResult is the normalized adapter output.
 type RunResult struct {
 	Status    string // completed | failed | cancelled
-	Summary   string // final summary from result.txt/result.json
+	Summary   string // normalized run summary (legacy result.txt, stream-json, or empty)
 	Output    string // preferred display text (summary or stdout)
 	Events    []protocol.Event
 	Artifacts []Artifact

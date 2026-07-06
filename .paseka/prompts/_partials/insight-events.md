@@ -12,7 +12,9 @@ Runtime automatically projects selected narrative INSIGHT kinds into `{{.Insight
 | `human.feedback` | Beekeeper HITL feedback | yes |
 | `task.plan` | Task ledger planning | no (operational) |
 
-### `run.summary` — optional narrative after work
+### `run.summary` — narrative after work (runtime may auto-synthesize)
+
+Runtime auto-publishes `INSIGHT/run.summary` after a successful AFK run when the bee policy allows and no summary was emitted during the run. You may still publish one explicitly:
 
 ```bash
 paseka event emit --stdin <<'EOF'

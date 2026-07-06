@@ -11,7 +11,7 @@ import (
 	"github.com/paseka/paseka/internal/protocol"
 )
 
-func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest, result *adapters.RunResult) error {
+func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest, result *adapters.RunResult, synthesized []protocol.Event) error {
 	if d.publisher == nil || result == nil {
 		return nil
 	}
@@ -19,6 +19,12 @@ func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest,
 		if !protocol.IsDomainEvent(ev.Type) {
 			continue
 		}
+		d.advisePublish(req.Bee, ev, result)
+		if err := d.publisher.PublishEvent(ctx, ev); err != nil {
+			return err
+		}
+	}
+	for _, ev := range synthesized {
 		d.advisePublish(req.Bee, ev, result)
 		if err := d.publisher.PublishEvent(ctx, ev); err != nil {
 			return err

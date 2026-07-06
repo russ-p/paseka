@@ -64,7 +64,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.Workspace}}` | `string` | Absolute cwd for the adapter: colony root, or `.paseka/worktrees/<traceId>/` when `worktree: true`. |
 | `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or future bus event payload. |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [009-insight-kinds.md](009-insight-kinds.md). |
-| `{{.ResultFile}}` | `string` | Absolute path to `result.txt` for this run under `.paseka/runs/<traceId>/<agentId>/`. |
+| `{{.ResultFile}}` | `string` | Absolute path to the human-readable `result.txt` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 
 ### Field sources (MVP)
 
@@ -174,19 +174,13 @@ bee config + CLI flags
   Write .paseka/runs/<traceId>/<agentId>/prompt.txt
         │
         ▼
-  Adapter augments prompt (result file contract)
+  Adapter runs external agent (e.g. Cursor CLI)
         │
         ▼
-  External agent (e.g. Cursor CLI)
+  Runtime normalizes summary, writes log artifact, may auto-publish `INSIGHT/run.summary`
 ```
 
-The adapter may append instructions that are not part of the template, for example:
-
-- «Write your final summary to file `<absolute-path>/result.txt`.»
-
-If the rendered prompt already mentions `result.txt`, the adapter does not duplicate that line.
-
-Bus events are published separately through `paseka event emit --stdin` as described in the `json-events` partial.
+Bus events are published separately through `paseka event emit --stdin` as described in the `json-events` partial. Runtime may also synthesize `INSIGHT/run.summary` after a successful AFK run when the bee policy allows.
 
 ---
 
@@ -209,7 +203,7 @@ Workspace: {{.Workspace}}
 {{range .Insights}}- {{.}}
 {{end}}
 
-Write your final summary to {{.ResultFile}} when done.
+Runtime persists a human-readable run log at {{.ResultFile}}. Optionally emit `INSIGHT/run.summary` for downstream bees.
 ```
 
 ### Scout bee with bus-event partial

@@ -72,3 +72,23 @@ func (r *BeeRegistry) ShouldAutoPublishMutation(role string) bool {
 	}
 	return bee.DeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposal))
 }
+
+// ShouldAutoPublishRunSummary reports whether runtime may synthesize INSIGHT/run.summary.
+// Bees with run_summary=disabled never auto-publish. Bees with a non-empty publishes list
+// must declare the insight kind; empty list keeps backward compatibility.
+func (r *BeeRegistry) ShouldAutoPublishRunSummary(role string) bool {
+	if r == nil {
+		return true
+	}
+	bee, ok := r.bees[role]
+	if !ok {
+		return true
+	}
+	if bee.ResolvedRunSummaryPolicy() == colony.RunSummaryDisabled {
+		return false
+	}
+	if len(bee.Publishes) == 0 {
+		return true
+	}
+	return bee.DeclaresPublish(protocol.EventInsight, string(protocol.InsightRunSummary))
+}

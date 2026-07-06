@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -51,6 +52,146 @@ func TestDispatchPublishesDomainEvents(t *testing.T) {
 	}
 	if pub.events[0].Type != protocol.EventInsight {
 		t.Fatalf("type = %q", pub.events[0].Type)
+	}
+}
+
+func TestDispatchAutoPublishesRunSummary(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+
+	rec := &recordingAdapter{
+		result: &adapters.RunResult{
+			Status:  "completed",
+			Summary: "implemented auth",
+		},
+	}
+	pub := &recordingPublisher{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+	d.SetPublisher(pub, false)
+
+	res, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-abc",
+		TaskID:     "task-1",
+		Task:       "implement auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "completed" {
+		t.Fatalf("status = %q", res.Status)
+	}
+
+	found := false
+	for _, ev := range pub.events {
+		if ev.Type == protocol.EventInsight && protocol.PayloadKind(ev.Payload) == string(protocol.InsightRunSummary) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected auto INSIGHT/run.summary, got %+v", pub.events)
+	}
+
+	eventsPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "events.ndjson")
+	data, err := os.ReadFile(eventsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"kind":"run.summary"`) {
+		t.Fatalf("events.ndjson missing run.summary: %s", data)
+	}
+
+	resultPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "result.txt")
+	resultData, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(resultData) != "implemented auth" {
+		t.Fatalf("result.txt = %q", resultData)
+	}
+}
+
+func TestDispatchSkipsAutoRunSummaryWhenDisabled(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	builderYAML := `role: builder
+adapter: cursor
+prompt_template: builder.md
+run_summary: disabled
+params:
+  model: composer-2.5
+  trust: true
+  force: true
+`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(builderYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{
+		result: &adapters.RunResult{
+			Status:  "completed",
+			Summary: "done",
+		},
+	}
+	pub := &recordingPublisher{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+	d.SetPublisher(pub, false)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-abc",
+		Task:       "implement auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range pub.events {
+		if ev.Type == protocol.EventInsight && protocol.PayloadKind(ev.Payload) == string(protocol.InsightRunSummary) {
+			t.Fatalf("expected no auto run.summary, got %+v", pub.events)
+		}
+	}
+}
+
+func TestDispatchRequiredRunSummaryFailsWhenMissing(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	builderYAML := `role: builder
+adapter: cursor
+prompt_template: builder.md
+run_summary: required
+params:
+  model: composer-2.5
+  trust: true
+  force: true
+`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(builderYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{
+		result: &adapters.RunResult{
+			Status:  "completed",
+			Summary: "",
+		},
+	}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	res, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-abc",
+		Task:       "implement auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "failed" {
+		t.Fatalf("status = %q, want failed", res.Status)
 	}
 }
 
