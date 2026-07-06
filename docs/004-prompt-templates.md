@@ -125,6 +125,7 @@ Partials live in `.paseka/prompts/_partials/`. The file name without `.md` is th
 _partials/json-events.md  →  {{template "json-events" .}}
 _partials/insight-events.md  →  {{template "insight-events" .}}
 _partials/task-events.md  →  {{template "task-events" .}}
+_partials/verification-events.md  →  {{template "verification-events" .}}
 ```
 
 Include a partial and pass the full context:
@@ -261,9 +262,9 @@ paseka bee run builder --task "add OAuth login" --trace trace-auth-01
 
 ---
 
-## 9. Starter partials: `json-events`, `insight-events`, and `task-events`
+## 9. Shared partials
 
-Shipped by `paseka init` under `.paseka/prompts/_partials/`:
+Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
 | Partial | Role |
 | ------- | ---- |
@@ -271,7 +272,9 @@ Shipped by `paseka init` under `.paseka/prompts/_partials/`:
 | `insight-events` | Narrative `INSIGHT` kinds for prompt memory (`run.summary`, `review.note`, etc.) |
 | `task-events` | Task lifecycle events (`task.plan`, `task.ready`, `task.completed`) |
 
-Bees that plan or manage tasks (e.g. scout, drone) include `json-events`, `insight-events`, and `task-events`. Reviewer bees (e.g. guard) include `json-events` and `insight-events`.
+Project prompts may also define role-specific partials for tighter instructions. For example, `verification-events` compresses reviewer guidance into a single `VERIFICATION` contract plus an optional `INSIGHT/review.note`.
+
+Bees that plan or manage tasks (e.g. scout, drone) typically include `json-events`, `insight-events`, and `task-events`. Reviewer bees can use a smaller role-specific partial instead of repeating the full generic event guidance plus reviewer-specific examples.
 
 See [009-insight-kinds.md](009-insight-kinds.md) for the full INSIGHT taxonomy and prompt-memory rules.
 

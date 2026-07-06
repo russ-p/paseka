@@ -16,6 +16,8 @@ publishes:
     kind: verification.success
   - type: VERIFICATION
     kind: verification.failed
+  - type: INSIGHT
+    kind: review.note
 completion_contract:
   required:
     - type: VERIFICATION

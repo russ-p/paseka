@@ -23,31 +23,4 @@ Success criteria (must confirm all to approve):
 
 ## Report results (emit only once)
 
-{{template "json-events" .}}
-{{template "insight-events" .}}
-
-You **must** publish exactly one final `VERIFICATION` gate decision. Optional `INSIGHT/review.note` events may add narrative context for downstream bees.
-
-For APPROVED changes:
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
-EOF
-```
-
-For REJECTED changes:
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.failed","summary":"Requirement(s) not met: There are incomplete use cases"}}
-EOF
-```
-
-Optional reviewer note (does not replace the required VERIFICATION):
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing error handling in token refresh path","taskId":"{{.TaskID}}","severity":"medium"}}
-EOF
-```
+{{template "verification-events" .}}
