@@ -21,7 +21,7 @@ Success criteria (must confirm all to approve):
 - **Code Style**: Code adheres to the project's formatting rules, and linting passes without errors.
 - **Local Integrity**: Changes don't break existing local syntax, and relevant atomic tests pass.
 
-## Report results
+## Report results (emit only once)
 
 {{template "json-events" .}}
 
