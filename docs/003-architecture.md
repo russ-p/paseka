@@ -12,7 +12,7 @@ Paseka treats a **git repository** as the center of work. Every colony (project)
 | **Apiary** | Developer machine | Hosts Hive Runtime, NATS, and local adapter credentials |
 | **Bee** | Config + runtime | A role (Scout, Guard, Builder…) bound to an **adapter** that drives an external agent |
 
-The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — primarily the **Cursor Agent CLI** (`agent`) — reads their output, and publishes results to the NATS bus as contract events.
+The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — the **Cursor Agent CLI** (`agent`) and the **Pi CLI** (`pi`) — reads their output, and publishes results to the NATS bus as contract events.
 
 ---
 
@@ -163,7 +163,8 @@ Per-colony state on this machine. Not committed.
 ├── config.yaml          # secrets refs, NATS URL, adapter env
 ├── state.json           # runtime: active worktrees, last traceId, hive status
 ├── adapters/            # adapter-specific local overrides
-│   └── cursor.yaml      # CLI binary path, extra flags
+│   ├── cursor.yaml      # CLI binary path, API key env
+│   └── pi.yaml          # Pi CLI binary path, API key env
 ```
 
 **Split rule:**
@@ -328,6 +329,78 @@ Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandCo
 
 Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.paseka/worktrees/<traceId>/`** under colony control for HITL merge/reject.
 
+### Example: Pi adapter (CLI)
+
+**Decision:** invoke the **Pi CLI** (`pi`) for bees configured with `adapter: pi`. AFK runs use `pi -p`; interactive sessions use `pi` under a Paseka-owned PTY (see [006-interactive-sessions.md](006-interactive-sessions.md)).
+
+| Input (bee config + event) | Maps to `pi` flag |
+| ---------------------------- | ----------------- |
+| `Workspace` | process cwd |
+| `Prompt` | positional prompt argument |
+| `params.model` | `--model <pattern>` |
+| `params.provider` | `--provider <name>` |
+| `params.thinking` | `--thinking <level>` |
+| `params.output_format` | `--mode <mode>` (AFK only; see below) |
+| `params.plan` | `--plan` |
+| `params.binary` | CLI binary name (default `pi`) |
+| API key | `api_key_env` from `~/.config/paseka/<slug>/adapters/pi.yaml` → `--api-key` |
+
+**`output_format` → `--mode` (AFK only):**
+
+| `params.output_format` | Pi `--mode` |
+| ---------------------- | ----------- |
+| `text` | `text` |
+| `json` | `json` |
+| `rpc` | `rpc` |
+| empty or any other value | `json` (default) |
+
+Default non-interactive invocation:
+
+```bash
+pi -p --mode json \
+  --model "$MODEL" \
+  --provider "$PROVIDER" \
+  "$PROMPT"
+```
+
+**Ignored params:** Pi does not map Paseka `trust` or `force` (no equivalent flags).
+
+**Result collection:**
+
+1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
+2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
+3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
+4. **Git diff** — after `pi` exits, capture `git diff` in the **workspace** (worktree or repo root).
+5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `result.txt` only.
+6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
+
+**Event publishing boundary:** Pi stdout/JSON is **not** parsed into domain bus events (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`). Agents must publish domain events explicitly via `paseka event emit --stdin` — same contract as Cursor.
+
+**Machine-local config** (`~/.config/paseka/<slug>/adapters/pi.yaml`):
+
+```yaml
+binary: pi
+api_key_env: GEMINI_API_KEY   # optional; passed as --api-key when set in env
+```
+
+If the file is missing, defaults are `binary: pi` and no API key injection.
+
+Example bee config:
+
+```yaml
+# .paseka/bees/scout.yaml
+role: scout
+adapter: pi
+params:
+  model: gemini-2.5-pro
+  provider: google
+  thinking: high
+  output_format: json
+prompt_template: scout.md
+```
+
+Go implementation: `internal/adapters/pi/`.
+
 Future adapters (same contract): `claude-code`, `aider`, custom shell.
 
 ### 5.2 Interactive sessions (HITL)
@@ -336,8 +409,8 @@ For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongsid
 
 | Mode | CLI | Adapter API |
 | ---- | --- | ----------- |
-| AFK | `paseka bee run <role>` | `Adapter.Run()` — `agent -p` |
-| Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — `agent` without `-p`, PTY-owned by runtime |
+| AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p` |
+| Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`, PTY-owned by runtime |
 
 Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
 
@@ -403,6 +476,7 @@ flowchart LR
 
   subgraph external [External agents]
     CR[Cursor Agent CLI]
+    PI[Pi CLI]
   end
 
   QS --> PC
@@ -411,7 +485,9 @@ flowchart LR
   AD --> WM
   WM --> WT
   AD --> CR
+  AD --> PI
   CR --> WT
+  PI --> WT
   AD --> BUS
 ```
 
@@ -425,7 +501,7 @@ internal/
   colony/                   # load .paseka + home config, slug resolution
   prompts/                  # load + render .paseka/prompts/*.md templates
   runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
-  adapters/                 # adapter registry + cursor/, …
+  adapters/                 # adapter registry + cursor/, pi/, …
   sessions/                 # interactive PTY sessions, terminal attach
   worktree/                 # create, diff, merge, cleanup
   bus/                      # NATS, message contracts
@@ -440,6 +516,8 @@ internal/
 | ----- | -------- |
 | Worktree path | `.paseka/worktrees/<traceId>/` — colony-managed; registry in home `state.json` |
 | Cursor invocation | Cursor Agent CLI (`agent`) — port of `ai-tasks-run.sh` pattern |
+| Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §5.1 Pi adapter |
+| Supported adapters | `cursor` (default), `pi` — selected per bee via `adapter:` in `bees/*.yaml` |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |
 | Prompt templates | `.paseka/prompts/` — committed; bee YAML references by filename |
 | Commit `.paseka/` | yes by default; `.gitignore` covers `worktrees/`, `runs/`, `*.local.yaml`, `cache/` |

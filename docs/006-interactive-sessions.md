@@ -39,6 +39,7 @@ flowchart LR
 | ------- | ---- |
 | `internal/adapters` | `SessionAdapter`, `SessionRequest`, `SessionHandle` |
 | `internal/adapters/cursor` | Interactive `agent` invocation (no `-p`) |
+| `internal/adapters/pi` | Interactive `pi` invocation (no `-p`, run-local session storage) |
 | `internal/sessions` | PTY process, attach, registry, Ghostty launcher |
 | `internal/runs` | `session.json`, `transcript.ndjson` |
 | `internal/colony` | Session registry in `state.json`, `terminal.yaml` |
@@ -210,7 +211,40 @@ Worktrees: if the bee has `worktree: true`, the session cwd is `.paseka/worktree
 
 ---
 
-## 8. Lifecycle
+## 8. Pi adapter (interactive)
+
+Bees with `adapter: pi` launch the Pi CLI in its normal interactive UI (no `-p`, no `--mode`).
+
+| Input | Maps to `pi` |
+| ----- | ------------ |
+| `Workspace` | process cwd |
+| `InitialPrompt` | positional prompt |
+| `params.model` | `--model <pattern>` |
+| `params.provider` | `--provider <name>` |
+| `params.thinking` | `--thinking <level>` |
+| `params.plan` | `--plan` |
+| `params.binary` | CLI binary name (default `pi`) |
+| API key | `api_key_env` from `~/.config/paseka/<slug>/adapters/pi.yaml` → `--api-key` |
+| `agentId` | `--session-id <agentId>` |
+| run directory | `--session-dir <runDir>/pi-sessions` |
+
+Interactive invocation:
+
+```bash
+pi --session-dir "$RUN_DIR/pi-sessions" \
+  --session-id "$AGENT_ID" \
+  --model gemini-2.5-pro \
+  --provider google \
+  "$PROMPT"
+```
+
+Pi session artifacts stay under `.paseka/runs/<traceId>/<agentId>/pi-sessions/`, tied to the current `agentId`.
+
+**Event publishing boundary:** interactive Pi output is not parsed into domain bus events. Use `paseka event emit --stdin` during the session when the bee prompt requires bus events.
+
+---
+
+## 9. Lifecycle
 
 ```
 paseka bee chat <role> [prompt]
@@ -248,7 +282,7 @@ paseka bee chat <role> [prompt]
 
 ---
 
-## 9. MVP limitations and next steps
+## 10. MVP limitations and next steps
 
 | Topic | MVP | Later |
 | ----- | --- | ----- |
@@ -259,7 +293,7 @@ paseka bee chat <role> [prompt]
 
 ---
 
-## 10. Decisions (locked)
+## 11. Decisions (locked)
 
 | Topic | Decision |
 | ----- | -------- |
