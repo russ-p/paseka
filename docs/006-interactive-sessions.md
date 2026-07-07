@@ -191,6 +191,7 @@ If Ghostty is not installed, set `terminal: default` or omit `terminal.yaml`.
 
 | Input | Maps to `agent` |
 | ----- | --------------- |
+| `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
 | `Workspace` | `--workspace <path>` |
 | `InitialPrompt` | positional prompt (no `-p`) |
 | `params.model` | `--model <id>` |
@@ -217,6 +218,7 @@ Bees with `adapter: pi` launch the Pi CLI in its normal interactive UI (no `-p`,
 
 | Input | Maps to `pi` |
 | ----- | ------------ |
+| `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
 | `Workspace` | process cwd |
 | `InitialPrompt` | positional prompt |
 | `params.model` | `--model <pattern>` |

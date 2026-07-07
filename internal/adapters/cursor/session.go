@@ -29,18 +29,21 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		return adapters.SessionCommand{}, errors.New("cursor: initial prompt is required")
 	}
 
-	binary := req.Params.Binary
-	if binary == "" {
-		binary = defaultBinary
-	}
+	prompt := req.InitialPrompt
+	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
+		b := req.Params.Binary
+		if b == "" {
+			b = defaultBinary
+		}
+		if req.Detached {
+			return b, buildDetachedArgs(req, prompt)
+		}
+		return b, buildInteractiveArgs(req, prompt)
+	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
 	}
 
-	args := buildInteractiveArgs(req, req.InitialPrompt)
-	if req.Detached {
-		args = buildDetachedArgs(req, req.InitialPrompt)
-	}
 	env := os.Environ()
 	if req.Params.APIKey != "" {
 		env = append(env, "CURSOR_API_KEY="+req.Params.APIKey)

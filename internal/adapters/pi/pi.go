@@ -46,10 +46,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, errors.New("pi: prompt is required")
 	}
 
-	binary := req.Params.Binary
-	if binary == "" {
-		binary = defaultBinary
-	}
+	prompt := req.Prompt
+	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
+		b := req.Params.Binary
+		if b == "" {
+			b = defaultBinary
+		}
+		mode := piMode(req.Params.OutputFormat)
+		return b, buildArgs(req, prompt, mode)
+	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
 	}
@@ -64,7 +69,6 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	startedAt := time.Now().UTC()
-	prompt := req.Prompt
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("pi: write prompt: %w", err)
 	}
@@ -87,7 +91,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	mode := piMode(req.Params.OutputFormat)
-	args := buildArgs(req, prompt, mode)
+	if len(req.Command) > 0 {
+		mode = adapters.FlagValue(args, "--mode")
+		if mode == "" {
+			mode = piMode("")
+		}
+	}
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = req.Workspace

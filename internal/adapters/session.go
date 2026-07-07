@@ -23,6 +23,7 @@ type SessionRequest struct {
 	ColonyRoot    string
 	Workspace     string
 	Params        RunParams
+	Command       []string // optional full argv; overrides Params-based arg building when set
 	TraceID       string
 	AgentID       string
 	TaskID        string

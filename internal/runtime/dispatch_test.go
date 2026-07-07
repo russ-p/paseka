@@ -230,3 +230,44 @@ func TestDispatchBeeLocalTemplate(t *testing.T) {
 		t.Fatalf("got %q", rec.lastReq.Prompt)
 	}
 }
+
+func TestDispatchCustomCommand(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	beeYAML := `role: builder
+adapter: cursor
+prompt_template: builder.md
+command: agent -p --yolo $PROMPT
+`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-cmd",
+		Task:       "ship feature",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"agent", "-p", "--yolo"}
+	got := rec.lastReq.Command
+	if len(got) < len(want) {
+		t.Fatalf("command = %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("command[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+	if !strings.Contains(rec.lastReq.Command[len(rec.lastReq.Command)-1], "ship feature") {
+		t.Fatalf("prompt not in command tail: %v", rec.lastReq.Command)
+	}
+}

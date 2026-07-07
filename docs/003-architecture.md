@@ -74,6 +74,8 @@ params:
   output_format: stream-json
   trust: true
   force: true
+# Optional: override adapter flag mapping (docker-compose style).
+# command: agent -p --yolo --workspace $WORKSPACE $PROMPT
 prompt_template: builder.md   # relative to .paseka/prompts/
 worktree: true                  # run inside .paseka/worktrees/<traceId>/
 subscribes:                     # optional — see docs/008-bee-routing.md
@@ -84,6 +86,16 @@ publishes:
   - type: MUTATION
     kind: code.proposal
 ```
+
+**`command` (optional):** full agent invocation as a shell-like string or YAML list. When set, it **replaces** `params`-based CLI flag mapping for that bee; runtime logs a warning if both are present. Substitute runtime values with `$PROMPT` / `${PROMPT}` and `$WORKSPACE` / `${WORKSPACE}`:
+
+```yaml
+command: agent -p --trust --workspace $WORKSPACE $PROMPT
+# or
+command: ["agent", "-p", "--model", "composer-2.5", "$PROMPT"]
+```
+
+`adapter` still selects which adapter implementation runs (result parsing, session PTY, etc.). Machine-local credentials from `~/.config/paseka/<slug>/adapters/*.yaml` (e.g. API keys via env) still apply when the custom command does not pass them explicitly.
 
 Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
 
@@ -313,6 +325,7 @@ Agents build one JSON object per event, pass it on stdin, and receive machine-re
 
 | Input (bee config + event) | Maps to `agent` flag |
 | ---------------------------- | -------------------- |
+| `command` (optional) | full argv; overrides `params` mapping (see bees section above) |
 | `Workspace` | `--workspace <path>` (repo root or `.paseka/worktrees/<traceId>/`) |
 | `Prompt` | positional prompt argument |
 | `params.model` | `--model <id>` |
@@ -350,6 +363,7 @@ Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.pase
 
 | Input (bee config + event) | Maps to `pi` flag |
 | ---------------------------- | ----------------- |
+| `command` (optional) | full argv; overrides `params` mapping (see bees section above) |
 | `Workspace` | process cwd |
 | `Prompt` | positional prompt argument |
 | `params.model` | `--model <pattern>` |

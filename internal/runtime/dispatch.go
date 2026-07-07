@@ -168,6 +168,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
 
+	var command []string
+	if bee.Command.IsSet() {
+		if bee.HasParams() {
+			runtimeLog.Warn("bee command overrides params",
+				logging.F("bee", bee.Role),
+				logging.F("trace", req.TraceID),
+				logging.F("agent", agentID),
+			)
+		}
+		command, err = bee.Command.RenderCommand(colony.CommandVars{
+			Prompt:    rendered,
+			Workspace: workspace,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("runtime: render command: %w", err)
+		}
+	}
+
 	if err := runDir.Prepare(); err != nil {
 		return nil, fmt.Errorf("runtime: prepare run dir: %w", err)
 	}
@@ -217,6 +235,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Sector:     req.Sector,
 		SectorPath: req.SectorPath,
 		Params:     params,
+		Command:    command,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
 		TaskID:     req.TaskID,
