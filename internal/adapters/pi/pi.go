@@ -88,6 +88,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	mode := piMode(req.Params.OutputFormat)
 	args := buildArgs(req, prompt, mode)
+	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = req.Workspace
 	cmd.Env = os.Environ()
@@ -131,6 +132,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	status, statusErr := resolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
+	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr)
 
 	artifactRefs := make([]protocol.ArtifactRef, 0, len(artifacts))
 	for _, art := range artifacts {

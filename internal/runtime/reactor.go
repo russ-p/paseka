@@ -3,13 +3,13 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/taskledger"
@@ -80,7 +80,10 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 // Run blocks until ctx is cancelled, consuming bus events and dispatching ready tasks.
 func (r *Reactor) Run(ctx context.Context) error {
 	subject := bus.EventsWildcard(r.bus.Config().SubjectPrefix)
-	log.Printf("runtime: listening subject=%s colony=%s", subject, r.colony.Slug)
+	runtimeLog.Info("listening",
+		logging.F("subject", subject),
+		logging.F("colony", r.colony.Slug),
+	)
 	sub, err := r.bus.SubscribeEvents("", r.handleEvent)
 	if err != nil {
 		return err
@@ -152,7 +155,7 @@ func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
 	if r.asyncDispatch {
 		go func() {
 			if err := fn(); err != nil {
-				log.Printf("runtime: dispatch error: %v", err)
+				runtimeLog.Error("dispatch error", logging.F("error", err.Error()))
 			}
 		}()
 		return nil
@@ -253,7 +256,10 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {
 	taskID, taskBody, err := eventDispatchContext(ev)
 	if err != nil {
-		log.Printf("runtime: direct dispatch skipped for bee %q: %v", beeRole, err)
+		runtimeLog.Warn("direct dispatch skipped",
+			logging.F("bee", beeRole),
+			logging.F("error", err.Error()),
+		)
 		return nil
 	}
 
@@ -359,7 +365,7 @@ func (r *Reactor) syncTaskProjection(trace taskledger.TraceSnapshot) {
 		return
 	}
 	if err := runs.SyncTraceTasks(r.colony.ColonyRoot, trace); err != nil {
-		log.Printf("runtime: task projection sync: %v", err)
+		runtimeLog.Warn("task projection sync failed", logging.F("error", err.Error()))
 	}
 }
 
@@ -374,7 +380,7 @@ func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunRes
 		StartedAt: startedAt,
 		RunStatus: "running",
 	}); err != nil {
-		log.Printf("runtime: task run projection: %v", err)
+		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
 	}
 }
 
@@ -383,6 +389,6 @@ func (r *Reactor) recordTaskRunFinish(traceID, taskID, agentID, runStatus string
 		return
 	}
 	if err := runs.UpdateTaskRunStatus(r.colony.ColonyRoot, traceID, taskID, agentID, runStatus, finishedAt); err != nil {
-		log.Printf("runtime: task run projection: %v", err)
+		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
 	}
 }

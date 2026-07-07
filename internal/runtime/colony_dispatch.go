@@ -3,10 +3,10 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/worktree"
 )
@@ -65,16 +65,19 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, err
 	}
 
-	taskPart := ""
+	fields := []logging.Field{
+		logging.F("mode", string(mode)),
+		logging.F("bee", req.Bee),
+		logging.F("trace", req.TraceID),
+		logging.F("agent", agentID),
+	}
 	if req.TaskID != "" {
-		taskPart = fmt.Sprintf(" task=%s", req.TaskID)
+		fields = append(fields, logging.F("task", req.TaskID))
 	}
-	sectorPart := ""
 	if effectiveSector != "" {
-		sectorPart = fmt.Sprintf(" sector=%s", effectiveSector)
+		fields = append(fields, logging.F("sector", effectiveSector))
 	}
-	log.Printf("runtime: dispatching %s bee=%s trace=%s%s%s agent=%s",
-		mode, req.Bee, req.TraceID, taskPart, sectorPart, agentID)
+	runtimeLog.Info("dispatching", fields...)
 
 	adapterName, err := bee.ResolveAdapter()
 	if err != nil {

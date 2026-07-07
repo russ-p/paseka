@@ -27,6 +27,7 @@ func (c *Client) SubscribeEvents(durable string, handler EventHandler) (*nats.Su
 			_ = msg.Ack()
 			return
 		}
+		logDomainEvent("receive", msg.Subject, ev)
 		if err := handler(ev); err != nil {
 			_ = msg.Nak()
 			return

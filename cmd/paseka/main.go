@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +17,26 @@ func main() {
 }
 
 func newRoot() *cobra.Command {
+	var logLevel string
+	var noColor bool
+
 	root := &cobra.Command{
 		Use:   "paseka",
 		Short: "Queen Shell — manage your hive",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			level, err := logging.ParseLevel(logLevel)
+			if err != nil {
+				return err
+			}
+			logging.SetDefault(logging.New(logging.Options{
+				Level:   level,
+				NoColor: noColor,
+			}))
+			return nil
+		},
 	}
+	root.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: error, warn, info, debug")
+	root.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable ANSI colors in logs")
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newBeeCmd())
 	root.AddCommand(newSessionCmd())

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/spf13/cobra"
 )
@@ -23,8 +23,9 @@ func newRunCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			fmt.Println("Hive runtime started. Listening on NATS for colony events...")
-			fmt.Println("Press Ctrl+C to stop.")
+			log := logging.Component("runtime")
+			log.Info("hive runtime started")
+			log.Info("press Ctrl+C to stop")
 			return reactor.Run(ctx)
 		},
 	}

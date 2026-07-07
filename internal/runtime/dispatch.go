@@ -12,6 +12,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
@@ -197,6 +198,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	}); err != nil {
 		return nil, fmt.Errorf("runtime: write status: %w", err)
 	}
+
+	runDirPath := runDir.Root()
+	runtimeLog.Info("adapter run",
+		logging.F("adapter", adapterName),
+		logging.F("bee", bee.Role),
+		logging.F("trace", req.TraceID),
+		logging.F("agent", agentID),
+		logging.F("workspace", workspace),
+		logging.F("run_dir", RelRunDir(colonyRoot, runDirPath)),
+	)
 
 	result, err := adapter.Run(ctx, adapters.RunRequest{
 		Bee:        bee.Role,

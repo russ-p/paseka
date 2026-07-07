@@ -3,11 +3,11 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/bus"
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
@@ -58,7 +58,7 @@ func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *ad
 	if ok {
 		return
 	}
-	log.Printf("runtime: advisory: %s", warning)
+	runtimeLog.Warn("advisory publish", logging.F("warning", warning))
 	if result != nil {
 		result.Warnings = append(result.Warnings, warning)
 	}

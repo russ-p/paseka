@@ -116,6 +116,7 @@ func (c *Client) PublishEvent(_ context.Context, event protocol.Event) error {
 	if _, err := c.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("bus: publish %s: %w", subject, err)
 	}
+	logDomainEvent("publish", subject, event)
 	return nil
 }
 
