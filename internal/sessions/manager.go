@@ -14,6 +14,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
@@ -72,6 +73,7 @@ func NewManager() *Manager {
 		sessions: map[string]*activeSession{},
 		adapters: map[string]adapters.SessionAdapter{
 			"cursor": cursor.NewSession(),
+			"pi":     pi.NewSession(),
 		},
 	}
 }

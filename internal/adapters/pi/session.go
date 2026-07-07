@@ -1,0 +1,85 @@
+package pi
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+
+	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/runs"
+)
+
+// SessionAdapter builds commands for interactive Pi CLI sessions.
+type SessionAdapter struct{}
+
+func NewSession() *SessionAdapter {
+	return &SessionAdapter{}
+}
+
+func (a *SessionAdapter) Name() string {
+	return adapterName
+}
+
+// SessionCommand builds an interactive Pi invocation (no -p or --mode).
+func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
+	if req.Workspace == "" {
+		return adapters.SessionCommand{}, errors.New("pi: workspace is required")
+	}
+	if req.InitialPrompt == "" {
+		return adapters.SessionCommand{}, errors.New("pi: initial prompt is required")
+	}
+	if req.ColonyRoot == "" || req.TraceID == "" || req.AgentID == "" {
+		return adapters.SessionCommand{}, errors.New("pi: colony root, traceId, and agentId are required")
+	}
+
+	binary := req.Params.Binary
+	if binary == "" {
+		binary = defaultBinary
+	}
+	if _, err := exec.LookPath(binary); err != nil {
+		return adapters.SessionCommand{}, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
+	}
+
+	runDir := runs.Dir{
+		ColonyRoot: req.ColonyRoot,
+		TraceID:    req.TraceID,
+		AgentID:    req.AgentID,
+	}
+	sessionDir := filepath.Join(runDir.Root(), "pi-sessions")
+
+	args := buildInteractiveArgs(req, sessionDir, req.InitialPrompt)
+
+	return adapters.SessionCommand{
+		Binary: binary,
+		Args:   args,
+		Env:    os.Environ(),
+		Dir:    req.Workspace,
+	}, nil
+}
+
+func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt string) []string {
+	p := req.Params
+	args := []string{
+		"--session-dir", sessionDir,
+		"--session-id", req.AgentID,
+	}
+	if p.Model != "" {
+		args = append(args, "--model", p.Model)
+	}
+	if p.Provider != "" {
+		args = append(args, "--provider", p.Provider)
+	}
+	if p.Thinking != "" {
+		args = append(args, "--thinking", p.Thinking)
+	}
+	if p.Plan {
+		args = append(args, "--plan")
+	}
+	if p.APIKey != "" {
+		args = append(args, "--api-key", p.APIKey)
+	}
+	args = append(args, prompt)
+	return args
+}
