@@ -12,6 +12,17 @@ import (
 type State struct {
 	Worktrees []WorktreeEntry `json:"worktrees,omitempty"`
 	Sessions  []SessionEntry  `json:"sessions,omitempty"`
+	Runtime   *RuntimeEntry   `json:"runtime,omitempty"`
+}
+
+// RuntimeEntry tracks the hive runtime (`paseka run`) for this colony on this machine.
+type RuntimeEntry struct {
+	PID             int       `json:"pid"`
+	StartedAt       time.Time `json:"startedAt"`
+	ColonyRoot      string    `json:"colonyRoot"`
+	SubjectPrefix   string    `json:"subjectPrefix,omitempty"`
+	Status          string    `json:"status"`
+	LastHeartbeatAt time.Time `json:"lastHeartbeatAt,omitempty"`
 }
 
 // SessionEntry tracks one interactive agent session.
@@ -122,6 +133,67 @@ func ListSessions(slug string) ([]SessionEntry, error) {
 		return nil, err
 	}
 	return st.Sessions, nil
+}
+
+// RegisterRuntime records the active hive runtime process.
+func RegisterRuntime(slug string, entry RuntimeEntry) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	st.Runtime = &entry
+	return SaveState(slug, st)
+}
+
+// TouchRuntimeHeartbeat updates lastHeartbeatAt for the registered runtime when pid matches.
+func TouchRuntimeHeartbeat(slug string, pid int, at time.Time) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	if st.Runtime == nil || st.Runtime.PID != pid {
+		return nil
+	}
+	st.Runtime.LastHeartbeatAt = at
+	if st.Runtime.Status == "" {
+		st.Runtime.Status = "running"
+	}
+	return SaveState(slug, st)
+}
+
+// UnregisterRuntimeIfPID clears the runtime registry when the stored pid matches.
+func UnregisterRuntimeIfPID(slug string, pid int) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	if st.Runtime == nil || st.Runtime.PID != pid {
+		return nil
+	}
+	st.Runtime = nil
+	return SaveState(slug, st)
+}
+
+// ClearRuntime removes any runtime registry entry.
+func ClearRuntime(slug string) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	if st.Runtime == nil {
+		return nil
+	}
+	st.Runtime = nil
+	return SaveState(slug, st)
+}
+
+// RuntimeRegistry returns the persisted runtime entry, if any.
+func RuntimeRegistry(slug string) (*RuntimeEntry, error) {
+	st, err := LoadState(slug)
+	if err != nil {
+		return nil, err
+	}
+	return st.Runtime, nil
 }
 
 // FindSession returns a session entry by ID.

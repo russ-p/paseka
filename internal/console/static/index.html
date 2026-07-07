@@ -8,8 +8,23 @@
 </head>
 <body>
   <header>
-    <h1>Queen Console</h1>
-    <p class="subtitle" id="subtitle">Sessions — launch and observe interactive bees</p>
+    <div class="header-row">
+      <div>
+        <h1>Queen Console</h1>
+        <p class="subtitle" id="subtitle">Sessions — launch and observe interactive bees</p>
+      </div>
+      <section class="runtime-panel" id="runtime-panel" aria-label="Hive runtime">
+        <div class="runtime-status">
+          <span class="runtime-label">Hive runtime</span>
+          <span id="runtime-badge" class="badge">stopped</span>
+        </div>
+        <div class="runtime-meta muted" id="runtime-meta">Not running</div>
+        <div class="runtime-actions">
+          <button type="button" id="runtime-start-btn" class="secondary">Start</button>
+          <button type="button" id="runtime-stop-btn" class="danger hidden">Stop</button>
+        </div>
+      </section>
+    </div>
     <nav class="tabs" role="tablist">
       <button type="button" id="tab-sessions" class="tab active" role="tab" aria-selected="true">Sessions</button>
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>

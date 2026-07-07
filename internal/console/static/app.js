@@ -3,6 +3,8 @@ const state = {
   bees: [],
   sessions: [],
   runs: [],
+  runtime: null,
+  runtimeBusy: false,
   selectedId: null,
   selectedRunKey: null,
   transcriptCursor: 0,
@@ -10,6 +12,7 @@ const state = {
   eventsCursor: 0,
   eventLines: [],
   pollTimer: null,
+  runtimePollTimer: null,
 };
 
 const el = {
@@ -44,6 +47,10 @@ const el = {
   runSummary: document.getElementById('run-summary'),
   runEventsWrap: document.getElementById('run-events-wrap'),
   runEvents: document.getElementById('run-events'),
+  runtimeBadge: document.getElementById('runtime-badge'),
+  runtimeMeta: document.getElementById('runtime-meta'),
+  runtimeStartBtn: document.getElementById('runtime-start-btn'),
+  runtimeStopBtn: document.getElementById('runtime-stop-btn'),
 };
 
 async function api(path, options = {}) {
@@ -77,7 +84,41 @@ function badgeClass(itemState) {
   if (s === 'active' || s === 'running' || s === 'queued') return 'active';
   if (s === 'completed') return 'completed';
   if (s === 'failed' || s === 'cancelled') return 'failed';
+  if (s === 'stale' || s === 'stopping') return 'failed';
   return '';
+}
+
+function renderRuntime() {
+  const rt = state.runtime || { status: 'stopped', alive: false };
+  const status = (rt.status || 'stopped').toLowerCase();
+  el.runtimeBadge.textContent = status;
+  el.runtimeBadge.className = `badge ${status}`;
+
+  const parts = [];
+  if (rt.pid) parts.push(`pid ${rt.pid}`);
+  if (rt.startedAt) parts.push(`started ${formatTime(rt.startedAt)}`);
+  if (rt.lastHeartbeatAt) parts.push(`heartbeat ${formatTime(rt.lastHeartbeatAt)}`);
+  el.runtimeMeta.textContent = parts.length ? parts.join(' · ') : (rt.alive ? 'Running' : 'Not running');
+
+  const canStart = !state.runtimeBusy && status !== 'running' && status !== 'stopping' && status !== 'starting';
+  const canStop = !state.runtimeBusy && (rt.alive || status === 'running' || status === 'stopping');
+
+  el.runtimeStartBtn.classList.toggle('hidden', !canStart);
+  el.runtimeStopBtn.classList.toggle('hidden', !canStop);
+  el.runtimeStartBtn.disabled = state.runtimeBusy;
+  el.runtimeStopBtn.disabled = state.runtimeBusy;
+}
+
+async function loadRuntime() {
+  state.runtime = await api('/api/runtime');
+  renderRuntime();
+}
+
+function startRuntimePolling() {
+  if (state.runtimePollTimer) return;
+  state.runtimePollTimer = setInterval(() => {
+    loadRuntime().catch(console.error);
+  }, 3000);
 }
 
 function escapeHtml(str) {
@@ -453,8 +494,42 @@ el.stopBtn.addEventListener('click', async () => {
   }
 });
 
+el.runtimeStartBtn.addEventListener('click', async () => {
+  state.runtimeBusy = true;
+  renderRuntime();
+  try {
+    state.runtime = await api('/api/runtime/start', { method: 'POST' });
+    renderRuntime();
+    startRuntimePolling();
+  } catch (err) {
+    alert(err.message);
+    await loadRuntime();
+  } finally {
+    state.runtimeBusy = false;
+    renderRuntime();
+  }
+});
+
+el.runtimeStopBtn.addEventListener('click', async () => {
+  if (!confirm('Stop the hive runtime? In-flight dispatches may be interrupted.')) return;
+  state.runtimeBusy = true;
+  renderRuntime();
+  try {
+    state.runtime = await api('/api/runtime/stop', { method: 'POST' });
+    renderRuntime();
+  } catch (err) {
+    alert(err.message);
+    await loadRuntime();
+  } finally {
+    state.runtimeBusy = false;
+    renderRuntime();
+  }
+});
+
 async function init() {
   try {
+    await loadRuntime();
+    startRuntimePolling();
     await loadBees();
     await loadSessions();
     await loadRuns();

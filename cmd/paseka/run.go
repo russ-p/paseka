@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/paseka/paseka/internal/logging"
@@ -20,11 +22,21 @@ func newRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			ctxColony := reactor.Colony()
+			if err := runtime.RegisterSelf(ctxColony); err != nil {
+				logging.Component("runtime").Warn("runtime registry failed", logging.F("error", err.Error()))
+			}
+			defer func() { _ = runtime.UnregisterSelf(ctxColony) }()
+
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
+			hbCtx, hbCancel := context.WithCancel(ctx)
+			defer hbCancel()
+			go runtime.RunHeartbeat(hbCtx, ctxColony)
+
 			log := logging.Component("runtime")
-			log.Info("hive runtime started")
+			log.Info("hive runtime started", logging.F("pid", strconv.Itoa(os.Getpid())))
 			log.Info("press Ctrl+C to stop")
 			return reactor.Run(ctx)
 		},

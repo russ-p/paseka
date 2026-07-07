@@ -8,6 +8,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/runs"
+	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
 )
 
@@ -23,6 +24,47 @@ type createSessionRequest struct {
 type api struct {
 	ctx      colony.Context
 	sessions *sessions.Manager
+	runtime  *runtime.Supervisor
+}
+
+func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		view, err := GetRuntime(a.ctx, a.runtime)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, view)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (a *api) handleRuntimeStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := StartRuntime(a.ctx, a.runtime)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
+}
+
+func (a *api) handleRuntimeStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := StopRuntime(a.ctx, a.runtime)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
 }
 
 func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {

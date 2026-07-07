@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
 	"golang.org/x/term"
 )
@@ -20,6 +21,7 @@ type Options struct {
 	Addr     string
 	Colony   colony.Context
 	Sessions *sessions.Manager
+	Runtime  *runtime.Supervisor
 }
 
 // Server serves the Queen Console sessions UI and JSON API.
@@ -27,6 +29,7 @@ type Server struct {
 	addr     string
 	ctx      colony.Context
 	sessions *sessions.Manager
+	runtime  *runtime.Supervisor
 	http     *http.Server
 }
 
@@ -40,13 +43,21 @@ func NewServer(opts Options) *Server {
 	if mgr == nil {
 		mgr = sessions.NewManager()
 	}
+	runtimeSup := opts.Runtime
+	if runtimeSup == nil {
+		runtimeSup = runtime.DefaultSupervisor()
+	}
 	s := &Server{
 		addr:     addr,
 		ctx:      opts.Colony,
 		sessions: mgr,
+		runtime:  runtimeSup,
 	}
 	mux := http.NewServeMux()
-	apiHandler := &api{ctx: opts.Colony, sessions: mgr}
+	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup}
+	mux.HandleFunc("/api/runtime", apiHandler.handleRuntime)
+	mux.HandleFunc("/api/runtime/start", apiHandler.handleRuntimeStart)
+	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
 	mux.HandleFunc("/api/bees", apiHandler.handleBees)
 	mux.HandleFunc("/api/sessions", apiHandler.handleSessions)
 	mux.HandleFunc("/api/sessions/", apiHandler.handleSessionByID)

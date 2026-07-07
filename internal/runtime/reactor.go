@@ -328,6 +328,11 @@ func (r *Reactor) ColonyRoot() string {
 	return r.colony.ColonyRoot
 }
 
+// Colony returns the resolved colony context for this reactor.
+func (r *Reactor) Colony() colony.Context {
+	return r.colony
+}
+
 // ProcessEvent applies routing for one bus event (for tests).
 func (r *Reactor) ProcessEvent(ctx context.Context, ev protocol.Event) error {
 	return r.processEvent(ctx, ev)

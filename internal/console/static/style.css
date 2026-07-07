@@ -27,6 +27,57 @@ header {
   border-bottom: 1px solid var(--border);
 }
 
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.runtime-panel {
+  min-width: 220px;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.runtime-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.runtime-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.runtime-meta {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.runtime-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+.runtime-actions button {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+#runtime-badge.stopped { background: #2a3040; color: var(--muted); }
+#runtime-badge.running { background: #1f3d2e; color: var(--ok); }
+#runtime-badge.stale { background: #3d3318; color: var(--warn); }
+#runtime-badge.stopping { background: #3d2a18; color: var(--warn); }
+#runtime-badge.starting { background: #1a2a3d; color: var(--accent); }
+
 header h1 {
   margin: 0;
   font-size: 1.35rem;

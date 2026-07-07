@@ -16,8 +16,97 @@ import (
 	"github.com/paseka/paseka/internal/console"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
+	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
 )
+
+func TestRuntimeAPIHandlers(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	var child *exec.Cmd
+	sup := &runtime.Supervisor{
+		Spawn: func(exe, colonyRoot string) (int, error) {
+			child = exec.Command("sleep", "300")
+			if err := child.Start(); err != nil {
+				return 0, err
+			}
+			go func() { _ = child.Wait() }()
+			pid := child.Process.Pid
+			if err := colony.RegisterRuntime(ctxColony.Slug, colony.RuntimeEntry{
+				PID:        pid,
+				StartedAt:  time.Now().UTC(),
+				ColonyRoot: colonyRoot,
+				Status:     runtime.RuntimeStatusRunning,
+			}); err != nil {
+				_ = child.Process.Kill()
+				return 0, err
+			}
+			return pid, nil
+		},
+	}
+	t.Cleanup(func() {
+		_ = colony.ClearRuntime(ctxColony.Slug)
+		if child != nil && child.Process != nil {
+			_ = child.Process.Kill()
+		}
+	})
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+		Runtime:  sup,
+	})
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/runtime", nil)
+	statusRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(statusRec, statusReq)
+	if statusRec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", statusRec.Code, statusRec.Body.String())
+	}
+	var stopped console.RuntimeView
+	if err := json.NewDecoder(statusRec.Body).Decode(&stopped); err != nil {
+		t.Fatal(err)
+	}
+	if stopped.Status != runtime.RuntimeStatusStopped {
+		t.Fatalf("stopped view = %+v", stopped)
+	}
+
+	startReq := httptest.NewRequest(http.MethodPost, "/api/runtime/start", nil)
+	startRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(startRec, startReq)
+	if startRec.Code != http.StatusOK {
+		t.Fatalf("start status = %d body=%s", startRec.Code, startRec.Body.String())
+	}
+	var started console.RuntimeView
+	if err := json.NewDecoder(startRec.Body).Decode(&started); err != nil {
+		t.Fatal(err)
+	}
+	if started.Status != runtime.RuntimeStatusRunning || !started.Alive {
+		t.Fatalf("started view = %+v", started)
+	}
+
+	startAgainRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(startAgainRec, startReq)
+	if startAgainRec.Code != http.StatusOK {
+		t.Fatalf("start again status = %d body=%s", startAgainRec.Code, startAgainRec.Body.String())
+	}
+
+	stopReq := httptest.NewRequest(http.MethodPost, "/api/runtime/stop", nil)
+	stopRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(stopRec, stopReq)
+	if stopRec.Code != http.StatusOK {
+		t.Fatalf("stop status = %d body=%s", stopRec.Code, stopRec.Body.String())
+	}
+	var stoppedAgain console.RuntimeView
+	if err := json.NewDecoder(stopRec.Body).Decode(&stoppedAgain); err != nil {
+		t.Fatal(err)
+	}
+	if stoppedAgain.Status != runtime.RuntimeStatusStopped {
+		t.Fatalf("stopped again view = %+v", stoppedAgain)
+	}
+}
 
 func TestConsoleAPIHandlers(t *testing.T) {
 	repo := initConsoleRepo(t)
