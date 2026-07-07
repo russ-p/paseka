@@ -2,8 +2,6 @@ package runtime
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -83,7 +81,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 
 	agentID := req.AgentID
 	if agentID == "" {
-		id, err := newAgentID()
+		id, err := colony.NewAgentID()
 		if err != nil {
 			return nil, err
 		}
@@ -245,12 +243,4 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		}
 	}
 	return result, nil
-}
-
-func newAgentID() (string, error) {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("runtime: agent id: %w", err)
-	}
-	return hex.EncodeToString(b[:]), nil
 }

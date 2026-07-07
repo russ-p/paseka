@@ -53,7 +53,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, err
 	}
 
-	agentID, err := newAgentID()
+	agentID, err := colony.NewAgentID()
 	if err != nil {
 		return nil, err
 	}

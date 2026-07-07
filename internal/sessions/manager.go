@@ -2,8 +2,6 @@ package sessions
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -153,7 +151,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		workspace = entry.Path
 	}
 
-	agentID, err := newAgentID()
+	agentID, err := colony.NewAgentID()
 	if err != nil {
 		return nil, err
 	}
@@ -529,14 +527,6 @@ func LaunchInGhostty(cfg colony.TerminalConfig, runArgs []string) error {
 		GhosttyBinary: cfg.GhosttyBinary,
 	}
 	return LaunchAttach(termCfg, attachCmd)
-}
-
-func newAgentID() (string, error) {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("sessions: agent id: %w", err)
-	}
-	return hex.EncodeToString(b[:]), nil
 }
 
 // DefaultManager is the process-wide session manager for CLI attach/stop.

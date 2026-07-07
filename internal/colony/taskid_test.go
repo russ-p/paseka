@@ -15,7 +15,7 @@ func TestNewTaskIDFormat(t *testing.T) {
 	if !strings.HasPrefix(id, "task-") {
 		t.Fatalf("id = %q, want task- prefix", id)
 	}
-	if len(id) != len("task-")+8 {
-		t.Fatalf("id = %q, want 8 hex chars after prefix", id)
+	if len(id) != len("task-")+16 {
+		t.Fatalf("id = %q, want 16 hex chars after prefix", id)
 	}
 }

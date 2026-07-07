@@ -1,19 +1,13 @@
 package colony
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
+	"github.com/paseka/paseka/internal/ids"
 )
 
 const taskIDPrefix = "task-"
 
-// NewTaskID returns a unique task identifier for a trace-local subtask.
-// Layout: task- + 8 lowercase hex chars.
+// NewTaskID returns a lexicographically sortable task identifier for a trace-local subtask.
+// Layout: task- + 16 lowercase hex chars (48-bit UTC ms + 16-bit random).
 func NewTaskID() (string, error) {
-	var rnd [4]byte
-	if _, err := rand.Read(rnd[:]); err != nil {
-		return "", fmt.Errorf("colony: task id: %w", err)
-	}
-	return taskIDPrefix + hex.EncodeToString(rnd[:]), nil
+	return ids.Prefixed(taskIDPrefix)
 }
