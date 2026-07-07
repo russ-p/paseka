@@ -7,6 +7,55 @@ import (
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
+func TestApplyEventTaskPlanPreservesSector(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
+
+	ev, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Frontend", Bee: "builder", Sector: "frontend"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-1"].Sector != "frontend" {
+		t.Fatalf("sector = %q", res.Trace.Tasks["task-1"].Sector)
+	}
+}
+
+func TestApplyEventTaskReadyUpdatesSector(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Title: "Backend", Status: protocol.TaskStatusPlanned},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "reactor", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-1",
+		Bee:    "builder",
+		Sector: "backend-users",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-1"].Sector != "backend-users" {
+		t.Fatalf("sector = %q", res.Trace.Tasks["task-1"].Sector)
+	}
+}
+
 func TestApplyEventTaskPlanPreservesIntent(t *testing.T) {
 	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
 

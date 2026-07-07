@@ -117,7 +117,7 @@ func TestSyncTraceTasksAndLoadFromFS(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",
 		Tasks: map[string]taskledger.TaskSnapshot{
-			"task-1": {TaskID: "task-1", Title: "first", Status: protocol.TaskStatusPlanned, Intent: "feature"},
+			"task-1": {TaskID: "task-1", Title: "first", Status: protocol.TaskStatusPlanned, Intent: "feature", Sector: "frontend"},
 			"task-2": {TaskID: "task-2", Title: "second", Status: protocol.TaskStatusPlanned, DependsOn: []string{"task-1"}},
 		},
 	}
@@ -133,6 +133,9 @@ func TestSyncTraceTasksAndLoadFromFS(t *testing.T) {
 	}
 	if got.Tasks["task-1"].Intent != "feature" {
 		t.Fatalf("intent = %q", got.Tasks["task-1"].Intent)
+	}
+	if got.Tasks["task-1"].Sector != "frontend" {
+		t.Fatalf("sector = %q", got.Tasks["task-1"].Sector)
 	}
 }
 

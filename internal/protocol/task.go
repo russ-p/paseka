@@ -30,6 +30,7 @@ type TaskSpec struct {
 	Title     string   `json:"title"`
 	Body      string   `json:"body,omitempty"`
 	Bee       string   `json:"bee,omitempty"`
+	Sector    string   `json:"sector,omitempty"`
 	Intent    string   `json:"intent,omitempty"`
 	DependsOn []string `json:"dependsOn,omitempty"`
 }
@@ -47,6 +48,7 @@ type TaskReadyPayload struct {
 	Title  string        `json:"title,omitempty"`
 	Body   string        `json:"body,omitempty"`
 	Bee    string        `json:"bee,omitempty"`
+	Sector string        `json:"sector,omitempty"`
 	Intent string        `json:"intent,omitempty"`
 }
 

@@ -26,6 +26,7 @@ type ColonyDispatchRequest struct {
 	TraceID      string
 	Task         string
 	TaskID       string
+	Sector       string
 	Intent       string
 	Insights     []string
 	InlinePrompt string
@@ -48,7 +49,13 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, err
 	}
 
-	workspace, err := workspaceForBee(ctxColony, bee, req.TraceID)
+	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	effectiveSector := colony.EffectiveSector(req.Sector, bee.Sector)
+	workspace, sectorRel, err := workspaceForBee(ctxColony, manifest, bee, req.TraceID, effectiveSector)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +69,12 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if req.TaskID != "" {
 		taskPart = fmt.Sprintf(" task=%s", req.TaskID)
 	}
-	log.Printf("runtime: dispatching %s bee=%s trace=%s%s agent=%s",
-		mode, req.Bee, req.TraceID, taskPart, agentID)
+	sectorPart := ""
+	if effectiveSector != "" {
+		sectorPart = fmt.Sprintf(" sector=%s", effectiveSector)
+	}
+	log.Printf("runtime: dispatching %s bee=%s trace=%s%s%s agent=%s",
+		mode, req.Bee, req.TraceID, taskPart, sectorPart, agentID)
 
 	adapterName, err := bee.ResolveAdapter()
 	if err != nil {
@@ -78,6 +89,8 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		AgentID:      agentID,
 		TaskID:       req.TaskID,
 		Task:         req.Task,
+		Sector:       effectiveSector,
+		SectorPath:   sectorRel,
 		Intent:       req.Intent,
 		Insights:     req.Insights,
 		InlinePrompt: req.InlinePrompt,
@@ -103,20 +116,34 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}, nil
 }
 
-func workspaceForBee(ctxColony colony.Context, bee colony.Bee, traceID string) (string, error) {
-	workspace := ctxColony.ColonyRoot
-	if !bee.Worktree {
-		return workspace, nil
+func workspaceForBee(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName string) (workspace string, sectorRel string, err error) {
+	base := ctxColony.ColonyRoot
+	if bee.Worktree {
+		entry, err := worktree.Ensure(worktree.EnsureOptions{
+			ColonyRoot: ctxColony.ColonyRoot,
+			TraceID:    traceID,
+			Slug:       ctxColony.Slug,
+		})
+		if err != nil {
+			return "", "", fmt.Errorf("runtime: worktree: %w", err)
+		}
+		base = entry.Path
 	}
-	entry, err := worktree.Ensure(worktree.EnsureOptions{
-		ColonyRoot: ctxColony.ColonyRoot,
-		TraceID:    traceID,
-		Slug:       ctxColony.Slug,
-	})
+
+	sectorRel, err = manifest.SectorRelPath(sectorName)
 	if err != nil {
-		return "", fmt.Errorf("runtime: worktree: %w", err)
+		return "", "", err
 	}
-	return entry.Path, nil
+	workspace, err = colony.JoinSectorPath(base, sectorRel)
+	if err != nil {
+		return "", "", fmt.Errorf("runtime: sector: %w", err)
+	}
+	if sectorRel != "" {
+		if err := colony.EnsureSectorDirExists(workspace); err != nil {
+			return "", "", fmt.Errorf("runtime: %w", err)
+		}
+	}
+	return workspace, sectorRel, nil
 }
 
 // RelRunDir returns a path relative to colony root when possible.

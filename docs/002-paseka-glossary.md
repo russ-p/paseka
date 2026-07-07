@@ -77,6 +77,7 @@
 | Goal         | Bloom         |
 | Context      | Hive Memory   |
 | Artifact     | Wax Cell      |
+| Sector       | Comb Sector   |
 
 Идея проходит естественный жизненный цикл:
 

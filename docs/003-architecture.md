@@ -48,7 +48,19 @@ Version-controlled colony definition. Safe to commit; no secrets.
     └── <traceId>/
 ```
 
-**`colony.yaml`** — colony identity, default branch, bee registry, NATS subject prefixes (optional overrides).
+**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides).
+
+Example sectors for monorepos or git-submodule layouts:
+
+```yaml
+sectors:
+  frontend:
+    path: frontend
+  backend-users:
+    path: backend/users
+```
+
+A **sector** is a named path inside the colony. Tasks may optionally set `sector`; bees may declare a default `sector` in `bees/*.yaml`. Runtime resolves the adapter workspace as `colonyRoot/<sector.path>` or `.paseka/worktrees/<traceId>/<sector.path>` when `worktree: true`. The colony root remains the audit boundary for `.paseka/runs/`.
 
 **`bees/*.yaml`** — maps a bee role to an adapter and parameters:
 
@@ -56,6 +68,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 # .paseka/bees/builder.yaml
 role: builder
 adapter: cursor
+sector: frontend
 params:
   model: composer-2.5
   output_format: stream-json
@@ -113,6 +126,8 @@ Available template fields (MVP):
 | `{{.AgentID}}` | this invocation |
 | `{{.ColonyRoot}}` | git repo root |
 | `{{.Workspace}}` | worktree or repo root (adapter cwd) |
+| `{{.Sector}}` | resolved sector name, if any |
+| `{{.SectorPath}}` | relative sector path within colony/worktree |
 | `{{.Task}}` | nectar / task body from event |
 | `{{.Insights}}` | narrative INSIGHT events projected from prior runs on the trace (see [009-insight-kinds.md](009-insight-kinds.md)) |
 | `{{.ResultFile}}` | absolute path to `result.txt` log artifact (runtime may write after the run) |

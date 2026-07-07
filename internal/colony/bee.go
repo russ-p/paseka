@@ -13,9 +13,10 @@ const pasekaDir = ".paseka"
 
 // Colony is the project-local manifest under .paseka/colony.yaml.
 type Colony struct {
-	Slug     string     `yaml:"slug"`
-	Defaults Defaults   `yaml:"defaults"`
-	NATS     ColonyNATS `yaml:"nats"`
+	Slug     string            `yaml:"slug"`
+	Defaults Defaults          `yaml:"defaults"`
+	NATS     ColonyNATS        `yaml:"nats"`
+	Sectors  map[string]Sector `yaml:"sectors,omitempty"`
 }
 
 // ColonyNATS holds project-local NATS overrides.
@@ -33,6 +34,7 @@ type Bee struct {
 	Role               string             `yaml:"role"`
 	Adapter            string             `yaml:"adapter"`
 	PromptTemplate     string             `yaml:"prompt_template"`
+	Sector             string             `yaml:"sector,omitempty"`
 	Worktree           bool               `yaml:"worktree"`
 	Params             map[string]any     `yaml:"params"`
 	Subscribes         []SubscriptionRule `yaml:"subscribes,omitempty"`

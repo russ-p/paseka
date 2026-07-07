@@ -26,6 +26,7 @@ type TaskFrontmatter struct {
 	TaskID    string              `yaml:"taskId"`
 	Title     string              `yaml:"title,omitempty"`
 	Bee       string              `yaml:"bee,omitempty"`
+	Sector    string              `yaml:"sector,omitempty"`
 	Intent    string              `yaml:"intent,omitempty"`
 	Status    protocol.TaskStatus `yaml:"status"`
 	DependsOn []string            `yaml:"dependsOn,omitempty"`
@@ -88,6 +89,7 @@ func WriteTaskSnapshot(colonyRoot string, traceID string, task taskledger.TaskSn
 		TaskID:    task.TaskID,
 		Title:     task.Title,
 		Bee:       task.Bee,
+		Sector:    task.Sector,
 		Intent:    task.Intent,
 		Status:    task.Status,
 		DependsOn: append([]string(nil), task.DependsOn...),
@@ -262,6 +264,7 @@ func LoadTraceTasksFromFS(colonyRoot, traceID string) (taskledger.TraceSnapshot,
 			Title:     fm.Title,
 			Body:      body,
 			Bee:       fm.Bee,
+			Sector:    fm.Sector,
 			Intent:    fm.Intent,
 			Status:    fm.Status,
 			DependsOn: append([]string(nil), fm.DependsOn...),

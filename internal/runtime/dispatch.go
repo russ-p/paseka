@@ -25,6 +25,8 @@ type DispatchRequest struct {
 	AgentID      string
 	Task         string
 	TaskID       string
+	Sector       string
+	SectorPath   string
 	Intent       string
 	Insights     []string
 	InlinePrompt string
@@ -143,6 +145,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		TaskID:     req.TaskID,
 		ColonyRoot: colonyRoot,
 		Workspace:  workspace,
+		Sector:     req.Sector,
+		SectorPath: req.SectorPath,
 		Task:       req.Task,
 		IntentRaw:  req.Intent,
 		Insights:   insights,
@@ -199,6 +203,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		Prompt:     rendered,
 		ColonyRoot: colonyRoot,
 		Workspace:  workspace,
+		Sector:     req.Sector,
+		SectorPath: req.SectorPath,
 		Params:     params,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,

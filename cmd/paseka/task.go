@@ -51,14 +51,14 @@ func newTaskListCmd() *cobra.Command {
 			}
 			ids := sortedTaskIDs(snap)
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintf(w, "TASK\tSTATUS\tBEE\tTITLE\n")
+			fmt.Fprintf(w, "TASK\tSTATUS\tBEE\tSECTOR\tTITLE\n")
 			for _, id := range ids {
 				task := snap.Tasks[id]
 				title := task.Title
 				if title == "" {
 					title = task.TaskID
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", task.TaskID, task.Status, task.Bee, title)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", task.TaskID, task.Status, task.Bee, task.Sector, title)
 			}
 			_ = w.Flush()
 			fmt.Printf("\nSource: %s (%s)\n", source, ctxColony.ColonyRoot)
@@ -101,6 +101,9 @@ func newTaskShowCmd() *cobra.Command {
 			fmt.Printf("  status:    %s\n", task.Status)
 			if task.Bee != "" {
 				fmt.Printf("  bee:       %s\n", task.Bee)
+			}
+			if task.Sector != "" {
+				fmt.Printf("  sector:    %s\n", task.Sector)
 			}
 			if task.Title != "" {
 				fmt.Printf("  title:     %s\n", task.Title)
@@ -166,6 +169,7 @@ func newTaskCreateCmd() *cobra.Command {
 		bodyFile  string
 		fromStdin bool
 		bee       string
+		sector    string
 		intent    string
 		dependsOn []string
 		autorun   bool
@@ -202,7 +206,7 @@ func newTaskCreateCmd() *cobra.Command {
 				bee = "builder"
 			}
 
-			_, client, _, cleanup, err := openTaskLedger(startDir)
+			ctxColony, client, _, cleanup, err := openTaskLedger(startDir)
 			if err != nil {
 				return err
 			}
@@ -210,12 +214,22 @@ func newTaskCreateCmd() *cobra.Command {
 			if client == nil {
 				return fmt.Errorf("nats url not configured (task create requires NATS)")
 			}
+			if sector != "" {
+				manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
+				if err != nil {
+					return err
+				}
+				if _, err := manifest.ResolveSector(sector); err != nil {
+					return err
+				}
+			}
 
 			spec := protocol.TaskSpec{
 				TaskID:    taskID,
 				Title:     resolvedTitle,
 				Body:      strings.TrimSpace(resolvedBody),
 				Bee:       bee,
+				Sector:    sector,
 				Intent:    intent,
 				DependsOn: parseDependsOn(dependsOn),
 			}
@@ -233,6 +247,7 @@ func newTaskCreateCmd() *cobra.Command {
 					Title:  resolvedTitle,
 					Body:   strings.TrimSpace(resolvedBody),
 					Bee:    bee,
+					Sector: sector,
 					Intent: intent,
 				})
 				if err != nil {
@@ -255,6 +270,7 @@ func newTaskCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bodyFile, "file", "", "read task body from file")
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read task body from stdin")
 	cmd.Flags().StringVar(&bee, "bee", "", "bee role (default: builder)")
+	cmd.Flags().StringVar(&sector, "sector", "", "colony sector name (from colony.yaml sectors)")
 	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
 	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "task dependencies (repeatable or comma-separated)")
 	cmd.Flags().BoolVar(&autorun, "autorun", false, "publish task.ready immediately after task.plan")
@@ -398,6 +414,7 @@ func taskReadyEvent(traceID string, task taskledger.TaskSnapshot) (protocol.Even
 		Title:  task.Title,
 		Body:   task.Body,
 		Bee:    bee,
+		Sector: task.Sector,
 		Intent: task.Intent,
 	})
 }

@@ -19,6 +19,8 @@ type RunRequest struct {
 	Prompt     string // rendered prompt
 	ColonyRoot string // git repo root — .paseka/runs/ always lives here
 	Workspace  string // absolute path: repo root or worktree (adapter cwd)
+	Sector     string // resolved sector name, if any
+	SectorPath string // relative sector path within colony/worktree
 	Params     RunParams
 	TraceID    string
 	AgentID    string // unique id per spawned agent invocation

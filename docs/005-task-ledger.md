@@ -74,6 +74,7 @@ Scout (or planner bee) publishes a breakdown after analyzing the initial signal.
         "title": "Add backend endpoint",
         "body": "POST /api/auth/login with JWT",
         "bee": "builder",
+        "sector": "backend-users",
         "intent": "feature",
         "dependsOn": []
       },
@@ -106,10 +107,13 @@ Runtime or Task Reactor marks a task as ready for dispatch. Emitted when:
     "title": "Add backend endpoint",
     "body": "POST /api/auth/login with JWT",
     "bee": "builder",
+    "sector": "backend-users",
     "intent": "feature"
   }
 }
 ```
+
+`sector` is optional. When set, it must match a name from `.paseka/colony.yaml` `sectors`. Runtime uses it to choose the adapter workspace (module/subfolder cwd). When omitted, the bee's default `sector` applies; otherwise the colony root (or trace worktree root) is used.
 
 `intent` is optional. When omitted, Builder Bee renders with the `general` mission partial.
 

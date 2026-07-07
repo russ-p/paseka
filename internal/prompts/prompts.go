@@ -19,6 +19,8 @@ type Context struct {
 	TaskID     string
 	ColonyRoot string
 	Workspace  string
+	Sector     string
+	SectorPath string
 	Task       string
 	Intent     string // normalized intent for partial routing
 	IntentRaw  string // caller-supplied intent before normalization
