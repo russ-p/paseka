@@ -15,6 +15,60 @@ import (
 	"github.com/paseka/paseka/internal/sessions"
 )
 
+func TestManagerLaunchRoutesAdapterLocalConfig(t *testing.T) {
+	repo := initMixedSessionRepo(t)
+	setupMixedSessionHome(t, repo)
+	t.Setenv("CURSOR_API_KEY", "cursor-secret")
+	t.Setenv("GEMINI_API_KEY", "pi-secret")
+
+	cursorSess := &instantSessionAdapter{name: "cursor"}
+	piSess := &instantSessionAdapter{name: "pi"}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", cursorSess)
+	mgr.RegisterSessionAdapter("pi", piSess)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	runSession := func(bee string) error {
+		done := make(chan error, 1)
+		go func() {
+			_, err := mgr.RunInteractive(ctx, sessions.RunRequest{
+				StartDir: repo,
+				Bee:      bee,
+				Task:     "hello " + bee,
+			})
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(3 * time.Second):
+			return fmt.Errorf("timeout waiting for %s session", bee)
+		}
+	}
+
+	if err := runSession("scout"); err != nil {
+		t.Fatal(err)
+	}
+	if cursorSess.lastReq.Params.Binary != "cursor-agent" {
+		t.Fatalf("cursor binary = %q, want cursor-agent", cursorSess.lastReq.Params.Binary)
+	}
+	if cursorSess.lastReq.Params.APIKey != "cursor-secret" {
+		t.Fatalf("cursor api key = %q, want cursor-secret", cursorSess.lastReq.Params.APIKey)
+	}
+
+	if err := runSession("analyst"); err != nil {
+		t.Fatal(err)
+	}
+	if piSess.lastReq.Params.Binary != "custom-pi" {
+		t.Fatalf("pi binary = %q, want custom-pi", piSess.lastReq.Params.Binary)
+	}
+	if piSess.lastReq.Params.APIKey != "pi-secret" {
+		t.Fatalf("pi api key = %q, want pi-secret", piSess.lastReq.Params.APIKey)
+	}
+}
+
 func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 	repo := initSessionRepo(t)
 	slug := setupSessionHome(t, repo)
@@ -84,10 +138,16 @@ func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 }
 
 type instantSessionAdapter struct {
+	name    string
 	lastReq adapters.SessionRequest
 }
 
-func (f *instantSessionAdapter) Name() string { return "cursor" }
+func (f *instantSessionAdapter) Name() string {
+	if f.name != "" {
+		return f.name
+	}
+	return "cursor"
+}
 
 func (f *instantSessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
 	f.lastReq = req
@@ -145,6 +205,78 @@ func TestColonySessionRegistry(t *testing.T) {
 	list, _ = colony.ListSessions(slug)
 	if len(list) != 0 {
 		t.Fatalf("expected empty list, got %+v", list)
+	}
+}
+
+func initMixedSessionRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@test.com")
+	runGit(t, dir, "config", "user.name", "test")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
+
+	paseka := filepath.Join(dir, ".paseka")
+	for _, sub := range []string{"bees", "prompts"} {
+		if err := os.MkdirAll(filepath.Join(paseka, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	slug := "session-test"
+	if err := os.WriteFile(filepath.Join(paseka, "colony.yaml"), []byte("slug: "+slug+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bees := map[string]string{
+		"scout.yaml": `role: scout
+adapter: cursor
+prompt_template: scout.md
+`,
+		"analyst.yaml": `role: analyst
+adapter: pi
+prompt_template: analyst.md
+`,
+	}
+	for name, content := range bees {
+		if err := os.WriteFile(filepath.Join(paseka, "bees", name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, prompt := range []struct {
+		file, body string
+	}{
+		{"scout.md", "Scout {{.Task}}\n"},
+		{"analyst.md", "Analyst {{.Task}}\n"},
+	} {
+		if err := os.WriteFile(filepath.Join(paseka, "prompts", prompt.file), []byte(prompt.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func setupMixedSessionHome(t *testing.T, repo string) {
+	t.Helper()
+	slug := "session-test"
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	homeDir := filepath.Join(home, "paseka", slug)
+	if err := os.MkdirAll(filepath.Join(homeDir, "adapters"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := fmt.Sprintf("colony_root: %s\nslug: %s\n", repo, slug)
+	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, "state.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cursorYAML := "binary: cursor-agent\napi_key_env: CURSOR_API_KEY\n"
+	if err := os.WriteFile(filepath.Join(homeDir, "adapters", "cursor.yaml"), []byte(cursorYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	piYAML := "binary: custom-pi\napi_key_env: GEMINI_API_KEY\n"
+	if err := os.WriteFile(filepath.Join(homeDir, "adapters", "pi.yaml"), []byte(piYAML), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
