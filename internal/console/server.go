@@ -50,6 +50,8 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/bees", apiHandler.handleBees)
 	mux.HandleFunc("/api/sessions", apiHandler.handleSessions)
 	mux.HandleFunc("/api/sessions/", apiHandler.handleSessionByID)
+	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
+	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
 
 	staticFS, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("/", spaHandler(staticFS))

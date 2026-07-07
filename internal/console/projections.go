@@ -8,11 +8,15 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
 )
 
-const recentSessionLimit = 50
+const (
+	recentSessionLimit = 50
+	recentRunLimit     = 50
+)
 
 var interactiveAdapters = map[string]bool{
 	"cursor": true,
@@ -48,6 +52,32 @@ type SessionView struct {
 type TranscriptPage struct {
 	Entries    []runs.TranscriptEntry `json:"entries"`
 	NextCursor int                    `json:"nextCursor"`
+}
+
+// RunView is a console projection of one headless adapter run.
+type RunView struct {
+	TraceID    string     `json:"traceId"`
+	AgentID    string     `json:"agentId"`
+	Bee        string     `json:"bee"`
+	Adapter    string     `json:"adapter"`
+	Workspace  string     `json:"workspace"`
+	ColonyRoot string     `json:"colonyRoot,omitempty"`
+	TaskID     string     `json:"taskId,omitempty"`
+	Task       string     `json:"task,omitempty"`
+	Intent     string     `json:"intent,omitempty"`
+	State      string     `json:"state"`
+	Summary    string     `json:"summary,omitempty"`
+	RunDir     string     `json:"runDir"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	HasEvents  bool       `json:"hasEvents"`
+	HasSession bool       `json:"hasSession"`
+}
+
+// EventsPage is a cursor-based events.ndjson slice.
+type EventsPage struct {
+	Entries    []protocol.Event `json:"entries"`
+	NextCursor int              `json:"nextCursor"`
 }
 
 // ListInteractiveBees returns bees whose adapters support interactive sessions.
@@ -156,6 +186,57 @@ func GetSession(ctx colony.Context, mgr *sessions.Manager, sessionID string) (Se
 	return SessionView{}, false, nil
 }
 
+// ListRuns returns recent headless adapter runs from the filesystem.
+func ListRuns(ctx colony.Context) ([]RunView, error) {
+	metas, err := runs.ScanRecentRuns(ctx.ColonyRoot, recentRunLimit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RunView, 0, len(metas))
+	for _, meta := range metas {
+		out = append(out, runViewFromMeta(meta))
+	}
+	sortRuns(out)
+	return out, nil
+}
+
+// GetRun returns one run by trace and agent identifiers.
+func GetRun(ctx colony.Context, traceID, agentID string) (RunView, bool, error) {
+	meta, ok, err := runs.FindRun(ctx.ColonyRoot, traceID, agentID)
+	if err != nil {
+		return RunView{}, false, err
+	}
+	if !ok {
+		return RunView{}, false, nil
+	}
+	return runViewFromMeta(meta), true, nil
+}
+
+func runViewFromMeta(meta runs.RunMeta) RunView {
+	view := RunView{
+		TraceID:    meta.TraceID,
+		AgentID:    meta.AgentID,
+		Bee:        meta.Bee,
+		Adapter:    meta.Adapter,
+		Workspace:  meta.Workspace,
+		ColonyRoot: meta.ColonyRoot,
+		TaskID:     meta.TaskID,
+		Task:       meta.Task,
+		Intent:     meta.Intent,
+		State:      meta.State,
+		Summary:    meta.Summary,
+		RunDir:     meta.RunDir,
+		StartedAt:  meta.StartedAt,
+		HasEvents:  meta.HasEvents,
+		HasSession: meta.HasSession,
+	}
+	if !meta.FinishedAt.IsZero() {
+		finished := meta.FinishedAt
+		view.FinishedAt = &finished
+	}
+	return view
+}
+
 func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView {
 	state := string(h.State)
 	if state == "" {
@@ -227,6 +308,12 @@ func sortSessions(out []SessionView) {
 		if out[i].Active != out[j].Active {
 			return out[i].Active
 		}
+		return out[i].StartedAt.After(out[j].StartedAt)
+	})
+}
+
+func sortRuns(out []RunView) {
+	sort.Slice(out, func(i, j int) bool {
 		return out[i].StartedAt.After(out[j].StartedAt)
 	})
 }

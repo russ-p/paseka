@@ -14,6 +14,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
 )
@@ -141,6 +142,139 @@ func TestListSessionsProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(list) != 1 || list[0].SessionID != "agent-hist" {
+		t.Fatalf("list = %+v", list)
+	}
+}
+
+func TestRunsAPIHandlers(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-20 * time.Minute)
+	d := runs.Dir{ColonyRoot: repo, TraceID: "trace-run", AgentID: "agent-run"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-run",
+		AgentID:         "agent-run",
+		Bee:             "scout",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		TaskID:          "task-1",
+		Task:            "headless task",
+		Intent:          "feature",
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusCompleted,
+		StartedAt:       started,
+		FinishedAt:      started.Add(2 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-run",
+		AgentID:         "agent-run",
+		Status:          protocol.StatusCompleted,
+		Summary:         "run done",
+		FinishedAt:      started.Add(2 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := protocol.NewEvent("trace-run", "agent-run", 0, protocol.EventLog, map[string]string{"line": "ok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(ev); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/runs", nil)
+	listRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var list []console.RunView
+	if err := json.NewDecoder(listRec.Body).Decode(&list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].AgentID != "agent-run" {
+		t.Fatalf("list = %+v", list)
+	}
+	if list[0].Summary != "run done" || !list[0].HasEvents {
+		t.Fatalf("list item = %+v", list[0])
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/runs/trace-run/agent-run", nil)
+	detailRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(detailRec, detailReq)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
+	}
+	var detail console.RunView
+	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Task != "headless task" || detail.Intent != "feature" {
+		t.Fatalf("detail = %+v", detail)
+	}
+
+	eventsReq := httptest.NewRequest(http.MethodGet, "/api/runs/trace-run/agent-run/events?after=0", nil)
+	eventsRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(eventsRec, eventsReq)
+	if eventsRec.Code != http.StatusOK {
+		t.Fatalf("events status = %d body=%s", eventsRec.Code, eventsRec.Body.String())
+	}
+	var page console.EventsPage
+	if err := json.NewDecoder(eventsRec.Body).Decode(&page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Entries) != 1 || page.NextCursor != 1 {
+		t.Fatalf("events page = %+v", page)
+	}
+}
+
+func TestListRunsProjection(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: repo, TraceID: "trace-proj", AgentID: "agent-proj"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-proj",
+		AgentID:         "agent-proj",
+		Bee:             "scout",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := console.ListRuns(ctxColony)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].AgentID != "agent-proj" {
 		t.Fatalf("list = %+v", list)
 	}
 }

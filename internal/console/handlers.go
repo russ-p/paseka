@@ -38,6 +38,102 @@ func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, bees)
 }
 
+func (a *api) handleRuns(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	list, err := ListRuns(a.ctx)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, list)
+}
+
+func (a *api) handleRunByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/runs/")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		http.NotFound(w, r)
+		return
+	}
+	traceID := parts[0]
+	agentID := parts[1]
+	suffix := ""
+	if len(parts) > 2 {
+		suffix = parts[2]
+	}
+
+	if suffix == "events" {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.handleRunEvents(w, r, traceID, agentID)
+		return
+	}
+	if suffix != "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, ok, err := GetRun(a.ctx, traceID, agentID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, view)
+}
+
+func (a *api) handleRunEvents(w http.ResponseWriter, r *http.Request, traceID, agentID string) {
+	view, ok, err := GetRun(a.ctx, traceID, agentID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	after := 0
+	if raw := r.URL.Query().Get("after"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			http.Error(w, "invalid after cursor", http.StatusBadRequest)
+			return
+		}
+		after = n
+	}
+
+	d := runs.Dir{
+		ColonyRoot: a.ctx.ColonyRoot,
+		TraceID:    view.TraceID,
+		AgentID:    view.AgentID,
+	}
+	entries, next, err := d.ReadEventsAfter(after)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, EventsPage{Entries: entries, NextCursor: next})
+}
+
 func (a *api) handleSessions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

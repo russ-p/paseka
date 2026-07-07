@@ -3,16 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Queen Console 🐝 — Sessions</title>
+  <title>Queen Console 🐝</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header>
     <h1>Queen Console</h1>
-    <p class="subtitle">Sessions — launch and observe interactive bees</p>
+    <p class="subtitle" id="subtitle">Sessions — launch and observe interactive bees</p>
+    <nav class="tabs" role="tablist">
+      <button type="button" id="tab-sessions" class="tab active" role="tab" aria-selected="true">Sessions</button>
+      <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
+    </nav>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="sessions-layout">
     <section class="panel launch-panel">
       <h2>Launch session</h2>
       <form id="launch-form">
@@ -72,6 +76,33 @@
       <div id="transcript-wrap" class="hidden">
         <h3>Transcript</h3>
         <pre id="transcript" class="transcript"></pre>
+      </div>
+    </section>
+  </main>
+
+  <main class="layout hidden" id="runs-layout">
+    <section class="panel list-panel runs-list-panel">
+      <div class="panel-header">
+        <h2>Runs</h2>
+        <button type="button" id="runs-refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <p class="muted runs-hint">Headless adapter runs from <code>paseka run</code> and spawned bees.</p>
+      <ul id="run-list" class="session-list"></ul>
+    </section>
+
+    <section class="panel detail-panel runs-detail-panel">
+      <div class="panel-header">
+        <h2>Run detail</h2>
+      </div>
+      <div id="run-detail-empty" class="muted">Select a run to inspect metadata, summary, and events.</div>
+      <dl id="run-detail-meta" class="meta hidden"></dl>
+      <div id="run-summary-wrap" class="hidden">
+        <h3>Summary</h3>
+        <pre id="run-summary" class="transcript"></pre>
+      </div>
+      <div id="run-events-wrap" class="hidden">
+        <h3>Events</h3>
+        <pre id="run-events" class="transcript"></pre>
       </div>
     </section>
   </main>

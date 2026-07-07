@@ -38,6 +38,41 @@ header h1 {
   font-size: 0.95rem;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.tab {
+  width: auto;
+  padding: 0.35rem 0.85rem;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+.tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: #12151d;
+}
+
+.runs-hint {
+  margin: -0.25rem 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.runs-hint code {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+#runs-layout {
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr);
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(240px, 0.9fr) minmax(320px, 1.2fr);

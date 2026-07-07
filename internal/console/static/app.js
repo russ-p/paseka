@@ -1,13 +1,23 @@
 const state = {
+  tab: 'sessions',
   bees: [],
   sessions: [],
+  runs: [],
   selectedId: null,
+  selectedRunKey: null,
   transcriptCursor: 0,
   transcriptLines: [],
+  eventsCursor: 0,
+  eventLines: [],
   pollTimer: null,
 };
 
 const el = {
+  subtitle: document.getElementById('subtitle'),
+  tabSessions: document.getElementById('tab-sessions'),
+  tabRuns: document.getElementById('tab-runs'),
+  sessionsLayout: document.getElementById('sessions-layout'),
+  runsLayout: document.getElementById('runs-layout'),
   beeSelect: document.getElementById('bee-select'),
   taskInput: document.getElementById('task-input'),
   rawToggle: document.getElementById('raw-prompt-toggle'),
@@ -26,6 +36,14 @@ const el = {
   transcriptWrap: document.getElementById('transcript-wrap'),
   transcript: document.getElementById('transcript'),
   stopBtn: document.getElementById('stop-btn'),
+  runList: document.getElementById('run-list'),
+  runsRefreshBtn: document.getElementById('runs-refresh-btn'),
+  runDetailEmpty: document.getElementById('run-detail-empty'),
+  runDetailMeta: document.getElementById('run-detail-meta'),
+  runSummaryWrap: document.getElementById('run-summary-wrap'),
+  runSummary: document.getElementById('run-summary'),
+  runEventsWrap: document.getElementById('run-events-wrap'),
+  runEvents: document.getElementById('run-events'),
 };
 
 async function api(path, options = {}) {
@@ -50,12 +68,44 @@ function formatTime(iso) {
   }
 }
 
-function badgeClass(sessionState) {
-  const s = (sessionState || '').toLowerCase();
-  if (s === 'active') return 'active';
+function runKey(run) {
+  return `${run.traceId}/${run.agentId}`;
+}
+
+function badgeClass(itemState) {
+  const s = (itemState || '').toLowerCase();
+  if (s === 'active' || s === 'running' || s === 'queued') return 'active';
   if (s === 'completed') return 'completed';
   if (s === 'failed' || s === 'cancelled') return 'failed';
   return '';
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function setTab(tab) {
+  state.tab = tab;
+  const isSessions = tab === 'sessions';
+  el.tabSessions.classList.toggle('active', isSessions);
+  el.tabRuns.classList.toggle('active', !isSessions);
+  el.tabSessions.setAttribute('aria-selected', String(isSessions));
+  el.tabRuns.setAttribute('aria-selected', String(!isSessions));
+  el.sessionsLayout.classList.toggle('hidden', !isSessions);
+  el.runsLayout.classList.toggle('hidden', isSessions);
+  el.subtitle.textContent = isSessions
+    ? 'Sessions — launch and observe interactive bees'
+    : 'Runs — observe headless adapter invocations';
+  stopPolling();
+  if (isSessions && state.selectedId) {
+    startSessionPolling();
+  } else if (!isSessions && state.selectedRunKey) {
+    startRunPolling();
+  }
 }
 
 function renderBees() {
@@ -103,12 +153,32 @@ function renderSessions() {
   }
 }
 
-function escapeHtml(str) {
-  return String(str)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+function renderRuns() {
+  el.runList.innerHTML = '';
+  if (!state.runs.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No runs yet.';
+    el.runList.appendChild(li);
+    return;
+  }
+  for (const run of state.runs) {
+    const key = runKey(run);
+    const li = document.createElement('li');
+    li.className = 'session-item' + (key === state.selectedRunKey ? ' selected' : '');
+    li.dataset.key = key;
+    const sessionNote = run.hasSession ? ' · session' : '';
+    li.innerHTML = `
+      <div class="top">
+        <span class="bee">${escapeHtml(run.bee)}</span>
+        <span class="badge ${badgeClass(run.state)}">${escapeHtml(run.state || 'unknown')}</span>
+      </div>
+      <div class="id">${escapeHtml(run.traceId)} / ${escapeHtml(run.agentId)}</div>
+      <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(run.startedAt)}${escapeHtml(sessionNote)}</div>
+    `;
+    li.addEventListener('click', () => selectRun(run.traceId, run.agentId));
+    el.runList.appendChild(li);
+  }
 }
 
 function renderTranscript() {
@@ -118,7 +188,17 @@ function renderTranscript() {
   el.transcript.scrollTop = el.transcript.scrollHeight;
 }
 
-function renderDetail(session) {
+function renderEvents() {
+  el.runEvents.innerHTML = state.eventLines
+    .map((ev) => {
+      const payload = ev.payload ? ` ${JSON.stringify(ev.payload)}` : '';
+      return `<div class="line-agent">[${escapeHtml(ev.type)} #${ev.seq}]${escapeHtml(payload)}</div>`;
+    })
+    .join('');
+  el.runEvents.scrollTop = el.runEvents.scrollHeight;
+}
+
+function renderSessionDetail(session) {
   if (!session) {
     el.detailEmpty.classList.remove('hidden');
     el.detailMeta.classList.add('hidden');
@@ -154,6 +234,58 @@ function renderDetail(session) {
   }
 }
 
+function renderRunDetail(run) {
+  if (!run) {
+    el.runDetailEmpty.classList.remove('hidden');
+    el.runDetailMeta.classList.add('hidden');
+    el.runSummaryWrap.classList.add('hidden');
+    el.runEventsWrap.classList.add('hidden');
+    return;
+  }
+  el.runDetailEmpty.classList.add('hidden');
+  el.runDetailMeta.classList.remove('hidden');
+
+  const rows = [
+    ['State', run.state],
+    ['Trace ID', run.traceId],
+    ['Agent ID', run.agentId],
+    ['Bee', run.bee],
+    ['Adapter', run.adapter],
+    ['Task ID', run.taskId],
+    ['Intent', run.intent],
+    ['Workspace', run.workspace],
+    ['Run dir', run.runDir],
+    ['Started', formatTime(run.startedAt)],
+    ['Finished', formatTime(run.finishedAt)],
+    ['Has session', run.hasSession ? 'yes' : 'no'],
+    ['Has events', run.hasEvents ? 'yes' : 'no'],
+  ];
+
+  el.runDetailMeta.innerHTML = rows
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
+    .join('');
+
+  if (run.task) {
+    el.runDetailMeta.innerHTML += `<dt>Task</dt><dd>${escapeHtml(run.task)}</dd>`;
+  }
+
+  if (run.summary) {
+    el.runSummaryWrap.classList.remove('hidden');
+    el.runSummary.textContent = run.summary;
+  } else {
+    el.runSummaryWrap.classList.add('hidden');
+    el.runSummary.textContent = '';
+  }
+
+  if (run.hasEvents) {
+    el.runEventsWrap.classList.remove('hidden');
+    renderEvents();
+  } else {
+    el.runEventsWrap.classList.add('hidden');
+    el.runEvents.textContent = '';
+  }
+}
+
 async function loadBees() {
   state.bees = await api('/api/bees');
   renderBees();
@@ -164,7 +296,16 @@ async function loadSessions() {
   renderSessions();
   if (state.selectedId) {
     const still = state.sessions.find((s) => s.sessionId === state.selectedId);
-    if (still) renderDetail(still);
+    if (still) renderSessionDetail(still);
+  }
+}
+
+async function loadRuns() {
+  state.runs = await api('/api/runs');
+  renderRuns();
+  if (state.selectedRunKey) {
+    const still = state.runs.find((r) => runKey(r) === state.selectedRunKey);
+    if (still) renderRunDetail(still);
   }
 }
 
@@ -174,9 +315,23 @@ async function selectSession(id) {
   state.transcriptLines = [];
   renderSessions();
   const session = await api(`/api/sessions/${encodeURIComponent(id)}`);
-  renderDetail(session);
+  renderSessionDetail(session);
   renderTranscript();
-  startPolling();
+  if (state.tab === 'sessions') {
+    startSessionPolling();
+  }
+}
+
+async function selectRun(traceId, agentId) {
+  state.selectedRunKey = `${traceId}/${agentId}`;
+  state.eventsCursor = 0;
+  state.eventLines = [];
+  renderRuns();
+  const run = await api(`/api/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}`);
+  renderRunDetail(run);
+  if (state.tab === 'runs') {
+    startRunPolling();
+  }
 }
 
 async function pollTranscript() {
@@ -197,11 +352,51 @@ async function pollTranscript() {
   }
 }
 
-function startPolling() {
-  if (state.pollTimer) clearInterval(state.pollTimer);
+async function pollRunEvents() {
+  if (!state.selectedRunKey) return;
+  const [traceId, agentId] = state.selectedRunKey.split('/');
+  try {
+    const page = await api(`/api/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}/events?after=${state.eventsCursor}`);
+    if (page.entries && page.entries.length) {
+      state.eventLines.push(...page.entries);
+      state.eventsCursor = page.nextCursor;
+      renderEvents();
+    }
+    const run = state.runs.find((r) => runKey(r) === state.selectedRunKey);
+    if (run && (run.state === 'running' || run.state === 'queued')) {
+      await loadRuns();
+      const refreshed = await api(`/api/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}`);
+      renderRunDetail(refreshed);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function stopPolling() {
+  if (state.pollTimer) {
+    clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+}
+
+function startSessionPolling() {
+  stopPolling();
   state.pollTimer = setInterval(pollTranscript, 1500);
   pollTranscript();
 }
+
+function startRunPolling() {
+  stopPolling();
+  state.pollTimer = setInterval(pollRunEvents, 1500);
+  pollRunEvents();
+}
+
+el.tabSessions.addEventListener('click', () => setTab('sessions'));
+el.tabRuns.addEventListener('click', () => {
+  setTab('runs');
+  loadRuns().catch(console.error);
+});
 
 el.rawToggle.addEventListener('change', () => {
   const on = el.rawToggle.checked;
@@ -240,6 +435,10 @@ el.refreshBtn.addEventListener('click', () => {
   loadSessions().catch(console.error);
 });
 
+el.runsRefreshBtn.addEventListener('click', () => {
+  loadRuns().catch(console.error);
+});
+
 el.stopBtn.addEventListener('click', async () => {
   if (!state.selectedId) return;
   el.stopBtn.disabled = true;
@@ -258,6 +457,7 @@ async function init() {
   try {
     await loadBees();
     await loadSessions();
+    await loadRuns();
   } catch (err) {
     console.error(err);
   }
