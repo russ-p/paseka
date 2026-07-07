@@ -100,6 +100,56 @@ func TestSplitCommandLineQuotes(t *testing.T) {
 	}
 }
 
+func TestCommandRenderPostExecVars(t *testing.T) {
+	var cmd colony.Command
+	if err := yaml.Unmarshal([]byte(`notify.sh --result $RESULT --meta $META --dir $RUN_DIR`), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	argv, err := cmd.RenderCommand(colony.CommandVars{
+		Prompt:     "do work",
+		Workspace:  "/tmp/wt",
+		Result:     "all done",
+		ResultFile: "/tmp/runs/result.txt",
+		Meta:       "/tmp/runs/meta.json",
+		RunDir:     "/tmp/runs",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"notify.sh", "--result", "all done", "--meta", "/tmp/runs/meta.json", "--dir", "/tmp/runs"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q", i, argv[i], want[i])
+		}
+	}
+}
+
+func TestLoadBeeWithPostExec(t *testing.T) {
+	root := t.TempDir()
+	beesDir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(beesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yamlBody := `role: builder
+adapter: cursor
+post_exec: notify.sh $RESULT
+prompt_template: builder.md
+`
+	if err := os.WriteFile(filepath.Join(beesDir, "builder.yaml"), []byte(yamlBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bee, _, err := colony.LoadBee(root, "builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bee.PostExec.IsSet() {
+		t.Fatal("expected post_exec to be set")
+	}
+}
+
 func TestLoadBeeWithCommand(t *testing.T) {
 	root := t.TempDir()
 	beesDir := filepath.Join(root, ".paseka", "bees")
