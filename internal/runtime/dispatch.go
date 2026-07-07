@@ -9,6 +9,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/prompts"
@@ -44,6 +45,7 @@ func NewDispatcher() *Dispatcher {
 	return &Dispatcher{
 		adapters: map[string]adapters.Adapter{
 			"cursor": cursor.New(),
+			"pi":     pi.New(),
 		},
 	}
 }
