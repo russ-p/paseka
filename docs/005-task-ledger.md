@@ -197,6 +197,8 @@ The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/
 
 The hive runtime updates this projection after `ledger.Apply(...)` and when task-queue dispatches start or finish.
 
+For human-friendly task injection from the CLI, use `paseka task create` to publish `task.plan` (and optionally `task.ready` with `--autorun`). See [007-cli.md](007-cli.md).
+
 ---
 
 ## 7. Related docs

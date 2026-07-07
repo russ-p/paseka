@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -22,6 +23,7 @@ func newTaskCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newTaskListCmd())
 	cmd.AddCommand(newTaskShowCmd())
+	cmd.AddCommand(newTaskCreateCmd())
 	cmd.AddCommand(newTaskStartCmd())
 	return cmd
 }
@@ -151,6 +153,107 @@ func newTaskShowCmd() *cobra.Command {
 	cmd.Flags().String("task", "", "task id")
 	_ = cmd.MarkFlagRequired("trace")
 	_ = cmd.MarkFlagRequired("task")
+	return cmd
+}
+
+func newTaskCreateCmd() *cobra.Command {
+	var (
+		startDir  string
+		traceID   string
+		taskID    string
+		title     string
+		body      string
+		bodyFile  string
+		fromStdin bool
+		bee       string
+		dependsOn []string
+		autorun   bool
+	)
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new task and publish task.plan",
+		Long:  "Creates a trace and task when omitted, publishes task.plan, and optionally publishes task.ready with --autorun. Execution requires a separate paseka run process.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedBody, err := resolveTaskCreateBody(body, bodyFile, fromStdin, os.Stdin)
+			if err != nil {
+				return err
+			}
+			resolvedTitle := deriveTaskTitle(title, resolvedBody)
+			if resolvedTitle == "" && strings.TrimSpace(resolvedBody) == "" {
+				return fmt.Errorf("provide --title and/or task body via --body, --file, or --stdin")
+			}
+
+			if traceID == "" {
+				id, err := colony.NewTraceID()
+				if err != nil {
+					return err
+				}
+				traceID = id
+			}
+			if taskID == "" {
+				id, err := colony.NewTaskID()
+				if err != nil {
+					return err
+				}
+				taskID = id
+			}
+			if bee == "" {
+				bee = "builder"
+			}
+
+			_, client, _, cleanup, err := openTaskLedger(startDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			if client == nil {
+				return fmt.Errorf("nats url not configured (task create requires NATS)")
+			}
+
+			spec := protocol.TaskSpec{
+				TaskID:    taskID,
+				Title:     resolvedTitle,
+				Body:      strings.TrimSpace(resolvedBody),
+				Bee:       bee,
+				DependsOn: parseDependsOn(dependsOn),
+			}
+			planEv, err := taskPlanEvent(traceID, spec)
+			if err != nil {
+				return err
+			}
+			if err := client.PublishEvent(cmd.Context(), planEv); err != nil {
+				return err
+			}
+
+			if autorun {
+				readyEv, err := taskReadyEvent(traceID, taskledger.TaskSnapshot{
+					TaskID: taskID,
+					Title:  resolvedTitle,
+					Body:   strings.TrimSpace(resolvedBody),
+					Bee:    bee,
+				})
+				if err != nil {
+					return err
+				}
+				if err := client.PublishEvent(cmd.Context(), readyEv); err != nil {
+					return err
+				}
+			}
+
+			printTaskCreateResult(traceID, taskID, bee, autorun)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated when omitted)")
+	cmd.Flags().StringVar(&taskID, "task", "", "task id (generated when omitted)")
+	cmd.Flags().StringVar(&title, "title", "", "task title")
+	cmd.Flags().StringVar(&body, "body", "", "task body text")
+	cmd.Flags().StringVar(&bodyFile, "file", "", "read task body from file")
+	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read task body from stdin")
+	cmd.Flags().StringVar(&bee, "bee", "", "bee role (default: builder)")
+	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "task dependencies (repeatable or comma-separated)")
+	cmd.Flags().BoolVar(&autorun, "autorun", false, "publish task.ready immediately after task.plan")
 	return cmd
 }
 
@@ -292,6 +395,89 @@ func taskReadyEvent(traceID string, task taskledger.TaskSnapshot) (protocol.Even
 		Body:   task.Body,
 		Bee:    bee,
 	})
+}
+
+func taskPlanEvent(traceID string, spec protocol.TaskSpec) (protocol.Event, error) {
+	return protocol.NewEvent(traceID, "cli", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind:  protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{spec},
+	})
+}
+
+func resolveTaskCreateBody(body, filePath string, fromStdin bool, stdin io.Reader) (string, error) {
+	sources := 0
+	if strings.TrimSpace(body) != "" {
+		sources++
+	}
+	if filePath != "" {
+		sources++
+	}
+	if fromStdin {
+		sources++
+	}
+	if sources > 1 {
+		return "", fmt.Errorf("use only one body source: --body, --file, or --stdin")
+	}
+	if body != "" {
+		return body, nil
+	}
+	if filePath != "" {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("read task body file: %w", err)
+		}
+		return string(data), nil
+	}
+	if fromStdin {
+		data, err := io.ReadAll(stdin)
+		if err != nil {
+			return "", fmt.Errorf("read task body from stdin: %w", err)
+		}
+		return string(data), nil
+	}
+	return "", nil
+}
+
+func deriveTaskTitle(title, body string) string {
+	if strings.TrimSpace(title) != "" {
+		return strings.TrimSpace(title)
+	}
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			if len(line) > 120 {
+				return line[:120]
+			}
+			return line
+		}
+	}
+	return ""
+}
+
+func parseDependsOn(values []string) []string {
+	var out []string
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
+}
+
+func printTaskCreateResult(traceID, taskID, bee string, autorun bool) {
+	fmt.Println("Created task")
+	fmt.Printf("  trace: %s\n", traceID)
+	fmt.Printf("  task:  %s\n", taskID)
+	fmt.Printf("  bee:   %s\n", bee)
+	if autorun {
+		fmt.Println("\nPublished task.ready. Ensure paseka run is active to dispatch the task.")
+	} else {
+		fmt.Printf("\nStart:\n  paseka task start --trace %s --task %s\n", traceID, taskID)
+	}
+	fmt.Printf("\nInspect:\n  paseka task show --trace %s --task %s\n", traceID, taskID)
 }
 
 func sortedTaskIDs(snap taskledger.TraceSnapshot) []string {
