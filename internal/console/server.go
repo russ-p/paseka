@@ -77,7 +77,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if strings.HasPrefix(host, ":") {
 		host = "127.0.0.1" + host
 	}
-	fmt.Printf("%s listening at http://%s\n", boldYellow("Queen Console"), host)
+	fmt.Printf("%s listening at http://%s\n", boldYellow("Queen Console 🐝"), host)
 
 	errCh := make(chan error, 1)
 	go func() {
