@@ -16,8 +16,12 @@ type Command struct {
 
 // CommandVars are substituted into bee command templates at dispatch time.
 type CommandVars struct {
-	Prompt    string
-	Workspace string
+	Prompt     string
+	Workspace  string
+	Result     string // human-readable run summary text
+	ResultFile string // path to result.txt
+	Meta       string // path to meta.json
+	RunDir     string // .paseka/runs/<traceId>/<agentId>/
 }
 
 // IsSet reports whether the bee declares a custom command.
@@ -89,8 +93,12 @@ func (b Bee) HasParams() bool {
 
 func substituteCommandVars(s string, vars CommandVars) string {
 	replacements := map[string]string{
-		"PROMPT":    vars.Prompt,
-		"WORKSPACE": vars.Workspace,
+		"PROMPT":      vars.Prompt,
+		"WORKSPACE":   vars.Workspace,
+		"RESULT":      vars.Result,
+		"RESULT_FILE": vars.ResultFile,
+		"META":        vars.Meta,
+		"RUN_DIR":     vars.RunDir,
 	}
 	for name, val := range replacements {
 		s = strings.ReplaceAll(s, "${"+name+"}", val)

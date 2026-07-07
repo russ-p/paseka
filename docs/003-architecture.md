@@ -97,6 +97,23 @@ command: ["agent", "-p", "--model", "composer-2.5", "$PROMPT"]
 
 `adapter` still selects which adapter implementation runs (result parsing, session PTY, etc.). Machine-local credentials from `~/.config/paseka/<slug>/adapters/*.yaml` (e.g. API keys via env) still apply when the custom command does not pass them explicitly.
 
+**`post_exec` (optional):** shell-like command or YAML list run after the agent finishes (AFK `bee run` and interactive `bee chat` sessions). Use the same variable syntax as `command`. Post-exec failures are logged but do not fail the bee run.
+
+| Variable | When set | Value |
+| -------- | -------- | ----- |
+| `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered prompt |
+| `$WORKSPACE` / `${WORKSPACE}` | dispatch + post_exec | agent working directory |
+| `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
+| `$RESULT_FILE` / `${RESULT_FILE}` | post_exec only | path to `result.txt` |
+| `$META` / `${META}` | post_exec only | path to `meta.json` |
+| `$RUN_DIR` / `${RUN_DIR}` | post_exec only | `.paseka/runs/<traceId>/<agentId>/` |
+
+```yaml
+post_exec: notify.sh --bee builder --status ok --summary "$RESULT"
+# or
+post_exec: ["curl", "-fsS", "-d", "@$META", "https://hooks.example.com/paseka"]
+```
+
 Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
 
 Bee event routing (`subscribes` / `publishes`) is documented in [008-bee-routing.md](008-bee-routing.md).

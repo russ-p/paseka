@@ -273,6 +273,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		d.enforceCompletionContract(bee, runEvents, result)
 	}
 
+	d.runPostExec(ctx, bee, rendered, workspace, runDir, result)
+
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
 		ColonyRoot: colonyRoot,
 		Bee:        req.Bee,

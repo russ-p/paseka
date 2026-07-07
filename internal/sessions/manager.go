@@ -480,7 +480,28 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		Content: fmt.Sprintf("session %s", state),
 	})
 
-	_ = active.entry.RunDir.WriteResultText(buildSessionResultText(active.entry.RunDir))
+	resultText := buildSessionResultText(active.entry.RunDir)
+	_ = active.entry.RunDir.WriteResultText(resultText)
+
+	if bee, _, beeErr := colony.LoadBee(active.entry.Handle.ColonyRoot, active.entry.Handle.Bee); beeErr == nil {
+		prompt, _ := os.ReadFile(active.entry.RunDir.PromptPath())
+		vars := colony.CommandVars{
+			Prompt:     string(prompt),
+			Workspace:  active.entry.Handle.Workspace,
+			Result:     strings.TrimSpace(resultText),
+			ResultFile: active.entry.RunDir.ResultPath(),
+			Meta:       active.entry.RunDir.MetaPath(),
+			RunDir:     active.entry.RunDir.Root(),
+		}
+		if err := colony.RunPostExec(context.Background(), bee.PostExec, vars, active.entry.Handle.Workspace); err != nil {
+			logging.Component("sessions").Warn("post_exec failed",
+				logging.F("bee", active.entry.Handle.Bee),
+				logging.F("trace", active.entry.Handle.TraceID),
+				logging.F("agent", active.entry.Handle.AgentID),
+				logging.F("error", err.Error()),
+			)
+		}
+	}
 
 	_ = colony.UnregisterSession(active.entry.Slug, sessionID)
 	close(active.done)

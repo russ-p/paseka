@@ -37,6 +37,7 @@ type Bee struct {
 	Sector             string             `yaml:"sector,omitempty"`
 	Worktree           bool               `yaml:"worktree"`
 	Command            Command            `yaml:"command,omitempty"`
+	PostExec           Command            `yaml:"post_exec,omitempty"`
 	Params             map[string]any     `yaml:"params"`
 	Subscribes         []SubscriptionRule `yaml:"subscribes,omitempty"`
 	Publishes          []PublicationRule  `yaml:"publishes,omitempty"`

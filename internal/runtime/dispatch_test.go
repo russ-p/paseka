@@ -271,3 +271,44 @@ command: agent -p --yolo $PROMPT
 		t.Fatalf("prompt not in command tail: %v", rec.lastReq.Command)
 	}
 }
+
+func TestDispatchPostExec(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	hookOut := filepath.Join(root, "hook.out")
+	beeYAML := `role: builder
+adapter: cursor
+prompt_template: builder.md
+post_exec: ["sh", "-c", "echo $RESULT > ` + hookOut + `"]
+`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{
+		result: &adapters.RunResult{
+			Status:  "completed",
+			Summary: "hooked summary",
+		},
+	}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-hook",
+		Task:       "notify me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(hookOut)
+	if err != nil {
+		t.Fatalf("hook output missing: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "hooked summary" {
+		t.Fatalf("hook output = %q, want %q", data, "hooked summary")
+	}
+}
