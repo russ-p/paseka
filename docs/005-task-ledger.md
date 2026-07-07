@@ -179,6 +179,26 @@ CLI behavior is unchanged when `taskId` is omitted.
 
 ---
 
+## 6.1 Filesystem task projection
+
+The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/` as a **projection** of JetStream KV state (not a second source of truth).
+
+```text
+.paseka/runs/<traceId>/
+  tasks/
+    <taskId>/
+      task.md        # markdown + YAML frontmatter snapshot
+      runs.ndjson    # agent run history for this task
+```
+
+`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `dependsOn`, `summary`, `commit`, `updatedAt`). The markdown body stores the human-readable task description (`body`).
+
+`runs.ndjson` links task executions to existing agent run directories (`agentId`, `bee`, `runDir`, `startedAt`, `finishedAt`, `runStatus`).
+
+The hive runtime updates this projection after `ledger.Apply(...)` and when task-queue dispatches start or finish.
+
+---
+
 ## 7. Related docs
 
 - [003-architecture.md](003-architecture.md) — colony layout, adapter contract, worktrees

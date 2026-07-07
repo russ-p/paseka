@@ -6,10 +6,12 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
+	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
@@ -101,6 +103,9 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	if err != nil {
 		return err
 	}
+	if res.Changed {
+		r.syncTaskProjection(res.Trace)
+	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
 	return r.executeDispatches(ctx, ev, res.Ready)
 }
@@ -188,6 +193,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		body = fmt.Sprintf("Execute task %s", task.TaskID)
 	}
 
+	startedAt := time.Now().UTC()
 	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
 		Bee:     bee,
 		TraceID: traceID,
@@ -197,7 +203,11 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	if err != nil {
 		return err
 	}
+	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt)
 	if res.Result == nil || res.Result.Status != string(protocol.StatusCompleted) {
+		if res.Result != nil {
+			r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, res.Result.Status, time.Now().UTC())
+		}
 		status := "unknown"
 		if res.Result != nil {
 			status = res.Result.Status
@@ -206,6 +216,8 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 	logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted))
+	finishedAt := time.Now().UTC()
+	r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted), finishedAt)
 
 	completed, err := protocol.NewEvent(traceID, res.AgentID, 0, protocol.EventVerification, protocol.TaskCompletedPayload{
 		Kind:    protocol.TaskEventCompleted,
@@ -224,6 +236,9 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	applyRes, err := r.ledger.Apply(completed)
 	if err != nil {
 		return err
+	}
+	if applyRes.Changed {
+		r.syncTaskProjection(applyRes.Trace)
 	}
 	for _, t := range applyRes.Ready {
 		if err := r.dispatchReady(ctx, traceID, t); err != nil {
@@ -300,6 +315,11 @@ func (r *Reactor) Registry() *BeeRegistry {
 	return r.registry
 }
 
+// ColonyRoot returns the resolved colony root for this reactor.
+func (r *Reactor) ColonyRoot() string {
+	return r.colony.ColonyRoot
+}
+
 // ProcessEvent applies routing for one bus event (for tests).
 func (r *Reactor) ProcessEvent(ctx context.Context, ev protocol.Event) error {
 	return r.processEvent(ctx, ev)
@@ -330,4 +350,37 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 // Dispatcher returns the reactor dispatcher (for tests).
 func (r *Reactor) Dispatcher() *Dispatcher {
 	return r.dispatcher
+}
+
+func (r *Reactor) syncTaskProjection(trace taskledger.TraceSnapshot) {
+	if r.colony.ColonyRoot == "" || trace.TraceID == "" {
+		return
+	}
+	if err := runs.SyncTraceTasks(r.colony.ColonyRoot, trace); err != nil {
+		log.Printf("runtime: task projection sync: %v", err)
+	}
+}
+
+func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time) {
+	if res == nil || taskID == "" {
+		return
+	}
+	if err := runs.AppendTaskRun(r.colony.ColonyRoot, traceID, taskID, runs.TaskRunEntry{
+		AgentID:   res.AgentID,
+		Bee:       bee,
+		RunDir:    res.RunDir,
+		StartedAt: startedAt,
+		RunStatus: "running",
+	}); err != nil {
+		log.Printf("runtime: task run projection: %v", err)
+	}
+}
+
+func (r *Reactor) recordTaskRunFinish(traceID, taskID, agentID, runStatus string, finishedAt time.Time) {
+	if taskID == "" || agentID == "" {
+		return
+	}
+	if err := runs.UpdateTaskRunStatus(r.colony.ColonyRoot, traceID, taskID, agentID, runStatus, finishedAt); err != nil {
+		log.Printf("runtime: task run projection: %v", err)
+	}
 }

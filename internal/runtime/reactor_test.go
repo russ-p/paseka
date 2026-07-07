@@ -10,6 +10,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
+	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/taskledger"
 )
@@ -212,6 +213,35 @@ func TestReactorTaskReadyDispatchWithSubscribe(t *testing.T) {
 	}
 	if rec.lastReq.Bee != "builder" {
 		t.Fatalf("bee = %q, want builder", rec.lastReq.Bee)
+	}
+}
+
+func TestReactorSyncsTaskProjection(t *testing.T) {
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "implement",
+			Body:   "do work",
+			Bee:    "builder",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{})
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := runs.LoadTraceTasksFromFS(r.ColonyRoot(), "trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := got.Tasks["task-1"]
+	if task.Status != protocol.TaskStatusPlanned || task.Body != "do work" {
+		t.Fatalf("task = %+v", task)
 	}
 }
 
