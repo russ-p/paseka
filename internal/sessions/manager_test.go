@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,6 +159,95 @@ func (f *instantSessionAdapter) SessionCommand(req adapters.SessionRequest) (ada
 	return adapters.SessionCommand{
 		Binary: shell,
 		Args:   []string{"-c", "exit 0"},
+		Env:    os.Environ(),
+		Dir:    req.Workspace,
+	}, nil
+}
+
+func TestManagerStartDetachedCapturesOutput(t *testing.T) {
+	repo := initSessionRepo(t)
+	slug := setupSessionHome(t, repo)
+
+	output := &outputSessionAdapter{}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", output)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res, err := mgr.StartDetached(ctx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		Task:     "hello detached",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.SessionID == "" || res.State != adapters.SessionActive {
+		t.Fatalf("result = %+v", res)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(mgr.ListActive()) == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	d := runs.Dir{
+		ColonyRoot: repo,
+		TraceID:    res.TraceID,
+		AgentID:    res.AgentID,
+	}
+	meta, err := d.ReadSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.State != string(adapters.SessionCompleted) {
+		t.Fatalf("state = %q", meta.State)
+	}
+
+	entries, err := d.ReadTranscript()
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundAgent := false
+	for _, e := range entries {
+		if e.Role == "agent" && strings.Contains(e.Content, "hello-detached") {
+			foundAgent = true
+		}
+	}
+	if !foundAgent {
+		t.Fatalf("expected agent transcript output, got %+v", entries)
+	}
+
+	result, err := d.ReadResult()
+	if err != nil || result == "" {
+		t.Fatalf("result.txt = %q err=%v", result, err)
+	}
+
+	st, err := colony.LoadState(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Sessions) != 0 {
+		t.Fatalf("expected no active sessions, got %+v", st.Sessions)
+	}
+}
+
+type outputSessionAdapter struct{}
+
+func (o *outputSessionAdapter) Name() string { return "cursor" }
+
+func (o *outputSessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		return adapters.SessionCommand{}, err
+	}
+	return adapters.SessionCommand{
+		Binary: shell,
+		Args:   []string{"-c", `printf '\033[31mhello-detached\033[0m\n'; exit 0`},
 		Env:    os.Environ(),
 		Dir:    req.Workspace,
 	}, nil

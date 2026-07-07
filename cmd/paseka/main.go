@@ -48,6 +48,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newEventCmd())
 	root.AddCommand(newProposalCmd())
 	root.AddCommand(newPurgeCmd())
+	root.AddCommand(newConsoleCmd())
 	return root
 }
 

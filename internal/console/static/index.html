@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Queen Console — Sessions</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Queen Console</h1>
+    <p class="subtitle">Sessions — launch and observe interactive bees</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel launch-panel">
+      <h2>Launch session</h2>
+      <form id="launch-form">
+        <label>
+          Bee
+          <select id="bee-select" required></select>
+        </label>
+        <label id="task-label">
+          Task
+          <textarea id="task-input" rows="4" placeholder="Describe what the bee should do…"></textarea>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="raw-prompt-toggle">
+          Advanced: raw prompt override
+        </label>
+        <label id="raw-label" class="hidden">
+          Raw prompt
+          <textarea id="raw-prompt-input" rows="6"></textarea>
+        </label>
+        <div class="row">
+          <label>
+            Trace ID <span class="hint">(optional)</span>
+            <input type="text" id="trace-input" placeholder="auto-generated">
+          </label>
+          <label>
+            Intent
+            <select id="intent-select">
+              <option value="">—</option>
+              <option value="general">general</option>
+              <option value="feature">feature</option>
+              <option value="bugfix">bugfix</option>
+              <option value="test-fix">test-fix</option>
+              <option value="refactor">refactor</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit" id="launch-btn">Launch session</button>
+        <p id="launch-error" class="error hidden"></p>
+      </form>
+    </section>
+
+    <section class="panel list-panel">
+      <div class="panel-header">
+        <h2>Sessions</h2>
+        <button type="button" id="refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <ul id="session-list" class="session-list"></ul>
+    </section>
+
+    <section class="panel detail-panel" id="detail-panel">
+      <div class="panel-header">
+        <h2>Session detail</h2>
+        <button type="button" id="stop-btn" class="danger hidden">Stop</button>
+      </div>
+      <div id="detail-empty" class="muted">Select a session to inspect metadata and transcript.</div>
+      <dl id="detail-meta" class="meta hidden"></dl>
+      <div id="transcript-wrap" class="hidden">
+        <h3>Transcript</h3>
+        <pre id="transcript" class="transcript"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

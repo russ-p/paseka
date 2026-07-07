@@ -1,0 +1,213 @@
+:root {
+  --bg: #0f1117;
+  --panel: #171a22;
+  --border: #2a3040;
+  --text: #e8ecf4;
+  --muted: #8b95a8;
+  --accent: #6ea8ff;
+  --danger: #ff6b6b;
+  --ok: #5fd38d;
+  --warn: #f0c14b;
+  --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+header {
+  padding: 1.25rem 1.5rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(240px, 0.9fr) minmax(320px, 1.2fr);
+  gap: 1rem;
+  padding: 1rem 1.5rem 2rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem 1.2rem;
+}
+
+.panel h2, .panel h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel-header h2 { margin: 0; }
+
+label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input, select, textarea, button {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  font: inherit;
+}
+
+input, select, textarea {
+  background: #0c0e14;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+}
+
+textarea { resize: vertical; min-height: 4rem; }
+
+button {
+  border: none;
+  border-radius: 6px;
+  padding: 0.55rem 0.8rem;
+  background: var(--accent);
+  color: #081018;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.secondary {
+  width: auto;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.danger {
+  width: auto;
+  background: var(--danger);
+  color: #1a0505;
+}
+
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+}
+
+.checkbox-row input { width: auto; margin: 0; }
+
+.hint { color: var(--muted); font-weight: normal; }
+.muted { color: var(--muted); }
+.hidden { display: none !important; }
+.error { color: var(--danger); font-size: 0.9rem; }
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.session-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  background: #12151d;
+}
+
+.session-item:hover { border-color: var(--accent); }
+.session-item.selected { outline: 1px solid var(--accent); }
+
+.session-item .top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.session-item .bee { font-weight: 600; color: var(--text); }
+.session-item .id { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.badge.active { color: var(--ok); border-color: #2f6b4a; }
+.badge.completed { color: var(--accent); }
+.badge.failed, .badge.cancelled { color: var(--danger); }
+
+.meta {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+}
+
+.meta dt { color: var(--muted); margin: 0; }
+.meta dd { margin: 0; font-family: var(--mono); word-break: break-all; }
+
+.transcript {
+  margin: 0;
+  padding: 0.75rem;
+  background: #0c0e14;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 12rem;
+  max-height: 28rem;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+}
+
+.transcript .line-system { color: var(--muted); }
+.transcript .line-agent { color: var(--text); }
+.transcript .line-user { color: var(--warn); }

@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/paseka/paseka/internal/protocol"
 )
+
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[PX^_][^\x1b]*\x1b\\`)
 
 const (
 	ResultFileName     = "result.txt"
@@ -308,6 +312,20 @@ func (d Dir) AppendTranscript(entry TranscriptEntry) error {
 }
 
 func (d Dir) ReadTranscript() ([]TranscriptEntry, error) {
+	return d.readTranscriptFrom(0)
+}
+
+// ReadTranscriptAfter returns transcript entries with index > after and the next cursor.
+func (d Dir) ReadTranscriptAfter(after int) ([]TranscriptEntry, int, error) {
+	entries, err := d.readTranscriptFrom(after)
+	if err != nil {
+		return nil, after, err
+	}
+	next := after + len(entries)
+	return entries, next, nil
+}
+
+func (d Dir) readTranscriptFrom(skip int) ([]TranscriptEntry, error) {
 	f, err := os.Open(d.TranscriptPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -319,9 +337,14 @@ func (d Dir) ReadTranscript() ([]TranscriptEntry, error) {
 
 	var entries []TranscriptEntry
 	scanner := bufio.NewScanner(f)
+	idx := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
+			continue
+		}
+		if idx < skip {
+			idx++
 			continue
 		}
 		var entry TranscriptEntry
@@ -329,9 +352,124 @@ func (d Dir) ReadTranscript() ([]TranscriptEntry, error) {
 			return nil, fmt.Errorf("runs: parse transcript: %w", err)
 		}
 		entries = append(entries, entry)
+		idx++
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return entries, nil
+}
+
+// NormalizePTYOutput strips ANSI escape sequences and non-printable control bytes.
+func NormalizePTYOutput(data []byte) string {
+	s := ansiEscapeRE.ReplaceAllString(string(data), "")
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\n' || r == '\r' || r == '\t' || !unicode.IsControl(r) {
+			b.WriteRune(r)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// ScanRecentSessions walks .paseka/runs and returns up to limit session.json records,
+// newest first by StartedAt.
+func ScanRecentSessions(colonyRoot string, limit int) ([]SessionMeta, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs")
+	traceDirs, err := os.ReadDir(runsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var metas []SessionMeta
+	for _, traceEntry := range traceDirs {
+		if !traceEntry.IsDir() {
+			continue
+		}
+		tracePath := filepath.Join(runsRoot, traceEntry.Name())
+		agentDirs, err := os.ReadDir(tracePath)
+		if err != nil {
+			continue
+		}
+		for _, agentEntry := range agentDirs {
+			if !agentEntry.IsDir() {
+				continue
+			}
+			d := Dir{
+				ColonyRoot: colonyRoot,
+				TraceID:    traceEntry.Name(),
+				AgentID:    agentEntry.Name(),
+			}
+			meta, err := d.ReadSession()
+			if err != nil {
+				continue
+			}
+			metas = append(metas, meta)
+		}
+	}
+
+	sortSessionsByStartedAt(metas)
+	if len(metas) > limit {
+		metas = metas[:limit]
+	}
+	return metas, nil
+}
+
+// FindSessionMeta locates session.json by sessionId anywhere under .paseka/runs.
+func FindSessionMeta(colonyRoot, sessionID string) (SessionMeta, bool, error) {
+	if sessionID == "" {
+		return SessionMeta{}, false, nil
+	}
+	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs")
+	traceDirs, err := os.ReadDir(runsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return SessionMeta{}, false, nil
+		}
+		return SessionMeta{}, false, err
+	}
+	for _, traceEntry := range traceDirs {
+		if !traceEntry.IsDir() {
+			continue
+		}
+		tracePath := filepath.Join(runsRoot, traceEntry.Name())
+		agentDirs, err := os.ReadDir(tracePath)
+		if err != nil {
+			continue
+		}
+		for _, agentEntry := range agentDirs {
+			if !agentEntry.IsDir() {
+				continue
+			}
+			d := Dir{
+				ColonyRoot: colonyRoot,
+				TraceID:    traceEntry.Name(),
+				AgentID:    agentEntry.Name(),
+			}
+			meta, err := d.ReadSession()
+			if err != nil {
+				continue
+			}
+			if meta.SessionID == sessionID {
+				return meta, true, nil
+			}
+		}
+	}
+	return SessionMeta{}, false, nil
+}
+
+func sortSessionsByStartedAt(metas []SessionMeta) {
+	for i := 0; i < len(metas); i++ {
+		for j := i + 1; j < len(metas); j++ {
+			if metas[j].StartedAt.After(metas[i].StartedAt) {
+				metas[i], metas[j] = metas[j], metas[i]
+			}
+		}
+	}
 }

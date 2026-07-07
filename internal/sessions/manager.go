@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -99,15 +100,56 @@ func (m *Manager) RunInteractive(ctx context.Context, req RunRequest) (*RunResul
 
 	<-active.done
 
-	state := active.entry.Handle.State
+	return m.runResult(active), nil
+}
+
+// StartDetached launches an interactive session, captures PTY output in the background,
+// and returns immediately without attaching the current terminal.
+func (m *Manager) StartDetached(ctx context.Context, req RunRequest) (*RunResult, error) {
+	active, err := m.launch(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	go m.capturePTYOutput(active)
+	return m.runResult(active), nil
+}
+
+func (m *Manager) runResult(active *activeSession) *RunResult {
 	return &RunResult{
 		SessionID: active.entry.Handle.SessionID,
 		TraceID:   active.entry.Handle.TraceID,
 		AgentID:   active.entry.Handle.AgentID,
 		Workspace: active.entry.Handle.Workspace,
 		RunDir:    active.entry.RunDir.Root(),
-		State:     state,
-	}, nil
+		State:     active.entry.Handle.State,
+	}
+}
+
+func (m *Manager) capturePTYOutput(active *activeSession) {
+	buf := make([]byte, 4096)
+	for {
+		n, err := active.process.ReadWriteCloser().Read(buf)
+		if n > 0 {
+			text := runs.NormalizePTYOutput(buf[:n])
+			if text != "" {
+				_ = active.entry.RunDir.AppendTranscript(runs.TranscriptEntry{
+					At:      time.Now().UTC(),
+					Role:    "agent",
+					Content: text,
+				})
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				_ = active.entry.RunDir.AppendTranscript(runs.TranscriptEntry{
+					At:      time.Now().UTC(),
+					Role:    "system",
+					Content: fmt.Sprintf("pty read error: %v", err),
+				})
+			}
+			return
+		}
+	}
 }
 
 func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, error) {
@@ -413,8 +455,29 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		Content: fmt.Sprintf("session %s", state),
 	})
 
+	_ = active.entry.RunDir.WriteResultText(buildSessionResultText(active.entry.RunDir))
+
 	_ = colony.UnregisterSession(active.entry.Slug, sessionID)
 	close(active.done)
+}
+
+func buildSessionResultText(runDir runs.Dir) string {
+	entries, err := runDir.ReadTranscript()
+	if err != nil || len(entries) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		line := strings.TrimSpace(e.Content)
+		if line == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "[%s] %s", e.Role, line)
+	}
+	return b.String()
 }
 
 func (m *Manager) stopSession(sessionID string) error {
@@ -435,6 +498,30 @@ func (m *Manager) stopSession(sessionID string) error {
 // Stop terminates an active session in this process.
 func (m *Manager) Stop(sessionID string) error {
 	return m.stopSession(sessionID)
+}
+
+// StopAll terminates every session owned by this manager.
+func (m *Manager) StopAll() {
+	m.mu.RLock()
+	ids := make([]string, 0, len(m.sessions))
+	for id := range m.sessions {
+		ids = append(ids, id)
+	}
+	m.mu.RUnlock()
+	for _, id := range ids {
+		_ = m.Stop(id)
+	}
+}
+
+// Get returns an active session entry when owned by this process.
+func (m *Manager) Get(sessionID string) (Entry, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	active, ok := m.sessions[sessionID]
+	if !ok {
+		return Entry{}, false
+	}
+	return active.entry, true
 }
 
 // StopRemote sends SIGTERM to a session PID from the colony registry.
