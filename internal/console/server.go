@@ -6,11 +6,13 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/sessions"
+	"golang.org/x/term"
 )
 
 // Options configures the Queen Console HTTP server.
@@ -75,7 +77,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if strings.HasPrefix(host, ":") {
 		host = "127.0.0.1" + host
 	}
-	fmt.Printf("Queen Console listening at http://%s\n", host)
+	fmt.Printf("%s listening at http://%s\n", boldYellow("Queen Console"), host)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -95,6 +97,16 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+func boldYellow(s string) string {
+	if os.Getenv("NO_COLOR") != "" {
+		return s
+	}
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return s
+	}
+	return "\033[1;33m" + s + "\033[0m"
 }
 
 func spaHandler(staticFS fs.FS) http.Handler {
