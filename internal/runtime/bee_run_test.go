@@ -50,6 +50,49 @@ func TestBeeRunUsesWorktreeForBuilder(t *testing.T) {
 	}
 }
 
+func TestBeeRunRoutesAdapterLocalConfig(t *testing.T) {
+	repo := initMixedAdapterRepo(t)
+	setupMixedAdapterHome(t, repo)
+	t.Setenv("CURSOR_API_KEY", "cursor-secret")
+	t.Setenv("GEMINI_API_KEY", "pi-secret")
+
+	cursorRec := &recordingAdapter{}
+	piRec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", cursorRec)
+	d.RegisterAdapter("pi", piRec)
+
+	_, err := d.BeeRun(context.Background(), runtime.BeeRunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		Task:     "cursor task",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursorRec.lastReq.Params.Binary != "cursor-agent" {
+		t.Fatalf("cursor binary = %q, want cursor-agent", cursorRec.lastReq.Params.Binary)
+	}
+	if cursorRec.lastReq.Params.APIKey != "cursor-secret" {
+		t.Fatalf("cursor api key = %q, want cursor-secret", cursorRec.lastReq.Params.APIKey)
+	}
+
+	_, err = d.BeeRun(context.Background(), runtime.BeeRunRequest{
+		StartDir: repo,
+		Bee:      "worker",
+		Task:     "pi task",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if piRec.lastReq.Params.Binary != "custom-pi" {
+		t.Fatalf("pi binary = %q, want custom-pi", piRec.lastReq.Params.Binary)
+	}
+	if piRec.lastReq.Params.APIKey != "pi-secret" {
+		t.Fatalf("pi api key = %q, want pi-secret", piRec.lastReq.Params.APIKey)
+	}
+}
+
 func TestBeeRunScoutUsesColonyRoot(t *testing.T) {
 	repo := initBeeRunRepo(t)
 	setupBeeRunHome(t, repo)
@@ -116,6 +159,80 @@ worktree: true
 	runGit(t, dir, "add", ".")
 	runGit(t, dir, "commit", "-m", "init")
 	return dir
+}
+
+func initMixedAdapterRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@test.com")
+	runGit(t, dir, "config", "user.name", "test")
+
+	colonyFiles := map[string]string{
+		".paseka/colony.yaml": `slug: test-colony
+defaults:
+  prompt_template: default.md
+`,
+		".paseka/bees/scout.yaml": `role: scout
+adapter: cursor
+prompt_template: scout.md
+worktree: false
+`,
+		".paseka/bees/worker.yaml": `role: worker
+adapter: pi
+prompt_template: worker.md
+worktree: false
+`,
+		".paseka/prompts/scout.md":   `Scout: {{.Task}}`,
+		".paseka/prompts/worker.md":  `Worker: {{.Task}}`,
+		".paseka/prompts/default.md": `Default: {{.Task}}`,
+	}
+	for path, content := range colonyFiles {
+		full := filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+	return dir
+}
+
+func setupMixedAdapterHome(t *testing.T, repo string) {
+	t.Helper()
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+	slug := "test-colony"
+
+	homeDir, err := colony.HomeDir(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(homeDir, "adapters"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := fmt.Sprintf("colony_root: %q\nslug: %q\n", repo, slug)
+	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cursorYAML := "binary: cursor-agent\napi_key_env: CURSOR_API_KEY\n"
+	if err := os.WriteFile(filepath.Join(homeDir, "adapters", "cursor.yaml"), []byte(cursorYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	piYAML := "binary: custom-pi\napi_key_env: GEMINI_API_KEY\n"
+	if err := os.WriteFile(filepath.Join(homeDir, "adapters", "pi.yaml"), []byte(piYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, "state.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func setupBeeRunHome(t *testing.T, repo string) string {

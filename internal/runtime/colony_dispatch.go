@@ -6,7 +6,6 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/worktree"
@@ -66,10 +65,11 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	log.Printf("runtime: dispatching %s bee=%s trace=%s%s agent=%s",
 		mode, req.Bee, req.TraceID, taskPart, agentID)
 
-	adapterExtra := adapters.RunParams{
-		Binary: ctxColony.Cursor.Binary,
-		APIKey: ctxColony.Cursor.APIKey(),
+	adapterName, err := bee.ResolveAdapter()
+	if err != nil {
+		return nil, err
 	}
+	adapterExtra := colony.AdapterExtra(ctxColony, adapterName)
 
 	result, err := d.Dispatch(ctx, DispatchRequest{
 		ColonyRoot:   ctxColony.ColonyRoot,
