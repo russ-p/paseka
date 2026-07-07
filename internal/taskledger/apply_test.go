@@ -148,6 +148,131 @@ func TestApplyEventTaskCompletedUnlocksDependent(t *testing.T) {
 	}
 }
 
+func TestApplyEventTaskCompletedPromotesOnlyFirstEligible(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-a": {TaskID: "task-a", Status: protocol.TaskStatusReady},
+			"task-b": {TaskID: "task-b", Status: protocol.TaskStatusPlanned},
+			"task-c": {TaskID: "task-c", Status: protocol.TaskStatusPlanned},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "guard", 1, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:    protocol.TaskEventCompleted,
+		TaskID:  "task-a",
+		Status:  protocol.TaskStatusCompleted,
+		Summary: "done",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-b"].Status != protocol.TaskStatusReady {
+		t.Fatalf("task-b status = %q, want ready", res.Trace.Tasks["task-b"].Status)
+	}
+	if res.Trace.Tasks["task-c"].Status != protocol.TaskStatusPlanned {
+		t.Fatalf("task-c status = %q, want planned", res.Trace.Tasks["task-c"].Status)
+	}
+	if len(res.Ready) != 1 || res.Ready[0].TaskID != "task-b" {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+}
+
+func TestApplyEventTaskCompletedPromotesNextAfterFirstCompletes(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-b": {TaskID: "task-b", Status: protocol.TaskStatusReady},
+			"task-c": {TaskID: "task-c", Status: protocol.TaskStatusPlanned},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "guard", 1, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: "task-b",
+		Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-c"].Status != protocol.TaskStatusReady {
+		t.Fatalf("task-c status = %q, want ready", res.Trace.Tasks["task-c"].Status)
+	}
+	if len(res.Ready) != 1 || res.Ready[0].TaskID != "task-c" {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+}
+
+func TestApplyEventTaskReadyRejectsNonFirstEligible(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-a": {TaskID: "task-a", Status: protocol.TaskStatusPlanned},
+			"task-b": {TaskID: "task-b", Status: protocol.TaskStatusPlanned},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "reactor", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-b",
+		Bee:    "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-b"].Status != protocol.TaskStatusPlanned {
+		t.Fatalf("task-b status = %q, want planned", res.Trace.Tasks["task-b"].Status)
+	}
+	if len(res.Ready) != 0 {
+		t.Fatalf("ready = %+v, want none", res.Ready)
+	}
+}
+
+func TestApplyEventTaskReadyRejectsWhenAnotherReady(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-a": {TaskID: "task-a", Status: protocol.TaskStatusReady},
+			"task-b": {TaskID: "task-b", Status: protocol.TaskStatusPlanned},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "reactor", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-b",
+		Bee:    "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-b"].Status != protocol.TaskStatusPlanned {
+		t.Fatalf("task-b status = %q, want planned", res.Trace.Tasks["task-b"].Status)
+	}
+	if len(res.Ready) != 0 {
+		t.Fatalf("ready = %+v, want none", res.Ready)
+	}
+}
+
 func TestApplyEventsSequence(t *testing.T) {
 	events := []protocol.Event{}
 	plan, _ := protocol.NewEvent("trace-1", "scout", 1, protocol.EventInsight, protocol.TaskPlanPayload{

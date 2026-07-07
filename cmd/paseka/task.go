@@ -384,7 +384,7 @@ func tasksToStart(snap taskledger.TraceSnapshot, taskID string) ([]taskledger.Ta
 	if len(eligible) == 0 {
 		return nil, taskledger.ErrNoEligibleTasks
 	}
-	return eligible, nil
+	return []taskledger.TaskSnapshot{eligible[0]}, nil
 }
 
 func taskReadyEvent(traceID string, task taskledger.TaskSnapshot) (protocol.Event, error) {

@@ -7,6 +7,35 @@ import (
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
+func TestFirstEligiblePlanned(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-c": {TaskID: "task-c", Status: protocol.TaskStatusPlanned},
+			"task-a": {TaskID: "task-a", Status: protocol.TaskStatusPlanned},
+			"task-b": {TaskID: "task-b", Status: protocol.TaskStatusPlanned},
+		},
+	}
+	first, ok := taskledger.FirstEligiblePlanned(trace)
+	if !ok || first.TaskID != "task-a" {
+		t.Fatalf("first = %+v, ok = %v", first, ok)
+	}
+}
+
+func TestPromoteFirstEligibleSkipsWhenReadyExists(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-a": {TaskID: "task-a", Status: protocol.TaskStatusReady},
+			"task-b": {TaskID: "task-b", Status: protocol.TaskStatusPlanned},
+		},
+	}
+	_, _, ok := taskledger.PromoteFirstEligible(trace, trace.Tasks["task-a"].UpdatedAt)
+	if ok {
+		t.Fatal("expected no promotion when a task is already ready")
+	}
+}
+
 func TestEligiblePlanned(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

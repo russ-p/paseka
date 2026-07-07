@@ -86,10 +86,17 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		if payload.Intent != "" {
 			task.Intent = payload.Intent
 		}
-		if task.Status != protocol.TaskStatusReady {
-			task.Status = protocol.TaskStatusReady
-			ready = append(ready, task)
-			changed = true
+		if task.Status == protocol.TaskStatusReady {
+			task.UpdatedAt = now
+			trace.Tasks[payload.TaskID] = task
+			break
+		}
+		if !HasReadyTask(trace) {
+			if first, ok := FirstEligiblePlanned(trace); ok && first.TaskID == payload.TaskID {
+				task.Status = protocol.TaskStatusReady
+				ready = append(ready, task)
+				changed = true
+			}
 		}
 		task.UpdatedAt = now
 		trace.Tasks[payload.TaskID] = task
@@ -127,18 +134,12 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		trace.Tasks[payload.TaskID] = task
 		changed = true
 
-		// Unlock dependents whose prerequisites are now completed.
-		for id, t := range trace.Tasks {
-			if t.Status != protocol.TaskStatusPlanned {
-				continue
-			}
-			if !allDepsCompleted(trace, t.DependsOn) {
-				continue
-			}
-			t.Status = protocol.TaskStatusReady
-			t.UpdatedAt = now
-			trace.Tasks[id] = t
-			ready = append(ready, t)
+		// Promote at most one eligible planned task to ready.
+		var candidate TaskSnapshot
+		var promoted bool
+		trace, candidate, promoted = PromoteFirstEligible(trace, now)
+		if promoted {
+			ready = append(ready, candidate)
 			changed = true
 		}
 	}
