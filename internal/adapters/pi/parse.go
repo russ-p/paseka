@@ -50,7 +50,7 @@ func summaryFromJSON(data string) string {
 	if err := json.Unmarshal([]byte(data), &raw); err != nil {
 		return ""
 	}
-	for _, key := range []string{"summary", "output", "text", "content", "message", "result"} {
+	for _, key := range []string{"summary", "output", "text", "content", "message", "result", "assistant"} {
 		value, ok := raw[key]
 		if !ok {
 			continue
@@ -81,7 +81,7 @@ func stringFromJSONValue(raw json.RawMessage) string {
 	if err := json.Unmarshal(raw, &nested); err != nil {
 		return ""
 	}
-	for _, key := range []string{"summary", "output", "text", "content", "message", "result"} {
+	for _, key := range []string{"summary", "output", "text", "content", "message", "result", "assistant"} {
 		value, ok := nested[key]
 		if !ok {
 			continue

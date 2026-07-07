@@ -56,14 +56,23 @@ func TestBuildArgs(t *testing.T) {
 }
 
 func TestPiModeDefaultsInvalidToJSON(t *testing.T) {
-	if got := piMode(""); got != "json" {
-		t.Fatalf("piMode(\"\") = %q, want json", got)
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "", want: "json"},
+		{in: "stream-json", want: "json"},
+		{in: "unknown", want: "json"},
+		{in: "text", want: "text"},
+		{in: "json", want: "json"},
+		{in: "rpc", want: "rpc"},
 	}
-	if got := piMode("stream-json"); got != "json" {
-		t.Fatalf("piMode(stream-json) = %q, want json", got)
-	}
-	if got := piMode("text"); got != "text" {
-		t.Fatalf("piMode(text) = %q", got)
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := piMode(tc.in); got != tc.want {
+				t.Fatalf("piMode(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -76,6 +85,8 @@ func TestParseJSONSummary(t *testing.T) {
 		{name: "summary field", in: `{"summary":"done"}`, want: "done"},
 		{name: "output field", in: `{"output":"hello"}`, want: "hello"},
 		{name: "nested response", in: `{"response":{"text":"nested"}}`, want: "nested"},
+		{name: "assistant field", in: `{"assistant":"from assistant"}`, want: "from assistant"},
+		{name: "unrecognized json", in: `{"status":"ok"}`, want: ""},
 		{name: "ndjson last line", in: "{\"progress\":1}\n{\"result\":\"final\"}", want: "final"},
 		{name: "plain text mode", in: "plain output", want: "plain output"},
 	}
@@ -209,10 +220,16 @@ func initPiRepo(t *testing.T) string {
 }
 
 func writeFakePi(t *testing.T, stdout string) string {
+	return writeFakePiWithTrace(t, "trace-pi-1", "agent-pi-1", stdout)
+}
+
+func writeFakePiWithTrace(t *testing.T, traceID, agentID, stdout string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "fake-pi")
+	logRel := filepath.Join(".paseka", "runs", traceID, agentID, "pi-invocation.log")
 	script := "#!/bin/sh\n" +
-		"echo \"$@\" >\"$PWD/.paseka/runs/trace-pi-1/agent-pi-1/pi-invocation.log\" 2>/dev/null || " +
+		"mkdir -p \"$(dirname \"$PWD/" + logRel + "\")\" 2>/dev/null || true\n" +
+		"echo \"$@\" >\"$PWD/" + logRel + "\" 2>/dev/null || " +
 		"echo \"$@\" >\"$PWD/pi-invocation.log\"\n" +
 		"printf '%s\\n' " + shellQuote(stdout) + "\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
@@ -291,6 +308,111 @@ func TestAdapterRunStderrArtifact(t *testing.T) {
 	}
 	if !stderrFound {
 		t.Fatalf("stderr artifact missing: %+v", result.Artifacts)
+	}
+}
+
+func TestAdapterRunDefaultModeJSON(t *testing.T) {
+	repo := initPiRepo(t)
+	fakePi := writeFakePiWithTrace(t, "trace-pi-default", "agent-pi-default", `{"summary":"default ok"}`)
+
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Prompt:     "default mode",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-pi-default",
+		AgentID:    "agent-pi-default",
+		Params:     adapters.RunParams{Binary: fakePi},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("status = %q", result.Status)
+	}
+
+	logPath := filepath.Join(repo, ".paseka", "runs", "trace-pi-default", "agent-pi-default", "pi-invocation.log")
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(log), "--mode json") {
+		t.Fatalf("expected default json mode in invocation: %q", log)
+	}
+}
+
+func TestAdapterRunExplicitModes(t *testing.T) {
+	modes := []string{"text", "json", "rpc"}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			traceID := "trace-pi-" + mode
+			agentID := "agent-pi-" + mode
+			repo := initPiRepo(t)
+			fakePi := writeFakePiWithTrace(t, traceID, agentID, "mode output")
+
+			_, err := New().Run(context.Background(), adapters.RunRequest{
+				Prompt:     "mode test",
+				ColonyRoot: repo,
+				Workspace:  repo,
+				TraceID:    traceID,
+				AgentID:    agentID,
+				Params: adapters.RunParams{
+					Binary:       fakePi,
+					OutputFormat: mode,
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			logPath := filepath.Join(repo, ".paseka", "runs", traceID, agentID, "pi-invocation.log")
+			log, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(log), "--mode "+mode) {
+				t.Fatalf("expected --mode %s in invocation: %q", mode, log)
+			}
+		})
+	}
+}
+
+func TestAdapterRunUnrecognizedJSONPreservesStdout(t *testing.T) {
+	repo := initPiRepo(t)
+	raw := `{"status":"ok","meta":{"tokens":42}}`
+	fakePi := writeFakePiWithTrace(t, "trace-pi-fallback", "agent-pi-fallback", raw)
+
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Prompt:     "fallback",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-pi-fallback",
+		AgentID:    "agent-pi-fallback",
+		Params: adapters.RunParams{
+			Binary:       fakePi,
+			OutputFormat: "json",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("status = %q, want completed", result.Status)
+	}
+	if result.Summary != "" {
+		t.Fatalf("summary = %q, want empty for unrecognized JSON", result.Summary)
+	}
+	if strings.TrimSpace(result.Output) != raw {
+		t.Fatalf("output = %q, want raw stdout", result.Output)
+	}
+
+	var stdoutFound bool
+	for _, art := range result.Artifacts {
+		if art.Kind == "stdout" && strings.TrimSpace(art.Content) == raw {
+			stdoutFound = true
+		}
+	}
+	if !stdoutFound {
+		t.Fatalf("stdout artifact missing raw output: %+v", result.Artifacts)
 	}
 }
 
