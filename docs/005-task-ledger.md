@@ -74,6 +74,7 @@ Scout (or planner bee) publishes a breakdown after analyzing the initial signal.
         "title": "Add backend endpoint",
         "body": "POST /api/auth/login with JWT",
         "bee": "builder",
+        "intent": "feature",
         "dependsOn": []
       },
       {
@@ -104,10 +105,13 @@ Runtime or Task Reactor marks a task as ready for dispatch. Emitted when:
     "taskId": "task-1",
     "title": "Add backend endpoint",
     "body": "POST /api/auth/login with JWT",
-    "bee": "builder"
+    "bee": "builder",
+    "intent": "feature"
   }
 }
 ```
+
+`intent` is optional. When omitted, Builder Bee renders with the `general` mission partial.
 
 ### `task.completed` — VERIFICATION
 
@@ -173,6 +177,7 @@ type Ledger interface {
 | ----- | ----- | ----- |
 | `taskId` | `protocol.Request`, `adapters.RunRequest`, `prompts.Context` | Optional; empty for one-shot CLI runs |
 | `{{.TaskID}}` | Prompt templates | Available when dispatch includes a task id |
+| `intent` | `task.plan`, `task.ready`, CLI `--intent` | Optional builder mission hint; normalized at prompt render time |
 | Task events | `paseka event emit --stdin` | Validated CLI publish with machine-readable feedback |
 
 CLI behavior is unchanged when `taskId` is omitted.

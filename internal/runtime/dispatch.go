@@ -24,6 +24,7 @@ type DispatchRequest struct {
 	AgentID      string
 	Task         string
 	TaskID       string
+	Intent       string
 	Insights     []string
 	InlinePrompt string
 	Workspace    string
@@ -133,7 +134,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		BeeLocalTemplate: beeLocalTemplate,
 		BeeTemplate:      bee.PromptTemplate,
 		DefaultTemplate:  manifest.Defaults.PromptTemplate,
-	}, prompts.Context{
+	}, prompts.PromptContext(prompts.Context{
 		Bee:        bee.Role,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
@@ -141,9 +142,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		ColonyRoot: colonyRoot,
 		Workspace:  workspace,
 		Task:       req.Task,
+		IntentRaw:  req.Intent,
 		Insights:   insights,
 		ResultFile: resultFile,
-	})
+	}))
 	if err != nil {
 		return nil, fmt.Errorf("runtime: render prompt: %w", err)
 	}
@@ -174,6 +176,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		ColonyRoot:      colonyRoot,
 		TaskID:          req.TaskID,
 		Task:            req.Task,
+		Intent:          req.Intent,
 		Insights:        insights,
 		ResultPath:      resultFile,
 		EventLogPath:    runDir.EventsPath(),
@@ -199,6 +202,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		AgentID:    agentID,
 		TaskID:     req.TaskID,
 		Task:       req.Task,
+		Intent:     req.Intent,
 		Insights:   insights,
 	})
 	if err != nil {

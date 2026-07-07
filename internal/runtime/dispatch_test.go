@@ -71,6 +71,39 @@ Trail: {{.TraceID}}
 	}
 }
 
+func TestDispatchIntentPassthrough(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-abc",
+		Task:       "fix flaky test",
+		Intent:     "test-fix",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rec.lastReq.Intent != "test-fix" {
+		t.Fatalf("adapter intent = %q", rec.lastReq.Intent)
+	}
+
+	requestPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "request.json")
+	data, err := os.ReadFile(requestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"intent": "test-fix"`) {
+		t.Fatalf("request.json missing intent: %s", data)
+	}
+}
+
 func TestDispatchTaskIDPassthrough(t *testing.T) {
 	root := t.TempDir()
 	writeColony(t, root)

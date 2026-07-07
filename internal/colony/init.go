@@ -102,15 +102,20 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
 	}
 
 	files := map[string]string{
-		PasekaPath(root, ".gitignore"):                                gitignoreContent,
-		PasekaPath(root, "bees", "scout.yaml"):                        scoutBeeYAML,
-		PasekaPath(root, "bees", "builder.yaml"):                      builderBeeYAML,
-		PasekaPath(root, "prompts", "default.md"):                     defaultPrompt,
-		PasekaPath(root, "prompts", "scout.md"):                       scoutPrompt,
-		PasekaPath(root, "prompts", "builder.md"):                     builderPrompt,
-		PasekaPath(root, "prompts", "_partials", "json-events.md"):    jsonEventsPartial,
-		PasekaPath(root, "prompts", "_partials", "task-events.md"):    taskEventsPartial,
-		PasekaPath(root, "prompts", "_partials", "insight-events.md"): insightEventsPartial,
+		PasekaPath(root, ".gitignore"):                                         gitignoreContent,
+		PasekaPath(root, "bees", "scout.yaml"):                                 scoutBeeYAML,
+		PasekaPath(root, "bees", "builder.yaml"):                               builderBeeYAML,
+		PasekaPath(root, "prompts", "default.md"):                              defaultPrompt,
+		PasekaPath(root, "prompts", "scout.md"):                                scoutPrompt,
+		PasekaPath(root, "prompts", "builder.md"):                              builderPrompt,
+		PasekaPath(root, "prompts", "_partials", "json-events.md"):             jsonEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "task-events.md"):             taskEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "insight-events.md"):          insightEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):  builderIntentGeneralPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):  builderIntentFeaturePartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):   builderIntentBugfixPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"): builderIntentTestFixPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"): builderIntentRefactorPartial,
 	}
 
 	for path, content := range files {
@@ -269,6 +274,8 @@ Flight trail: {{.TraceID}}
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
 Workspace: {{.Workspace}}
+Intent: {{.Intent}}{{if and .IntentRaw (ne .IntentRaw .Intent)}}
+Requested intent: {{.IntentRaw}}{{end}}
 
 ## Task
 {{.Task}}
@@ -277,10 +284,33 @@ Workspace: {{.Workspace}}
 {{range .Insights}}- {{.}}
 {{end}}
 
+## Mission guidance
+{{if eq .Intent "feature"}}
+{{template "builder-intent-feature" .}}
+{{else if eq .Intent "bugfix"}}
+{{template "builder-intent-bugfix" .}}
+{{else if eq .Intent "test-fix"}}
+{{template "builder-intent-test-fix" .}}
+{{else if eq .Intent "refactor"}}
+{{template "builder-intent-refactor" .}}
+{{else}}
+{{template "builder-intent-general" .}}
+{{end}}
+
 {{template "json-events" .}}
 {{template "insight-events" .}}
 
 Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
+`
+	builderIntentGeneralPartial = `Implement or fix the requested change with minimal scope. Follow existing code conventions, run relevant tests when practical, and prefer small focused diffs over broad rewrites.
+`
+	builderIntentFeaturePartial = `You are adding new capability. Implement the feature end-to-end in the workspace, match surrounding patterns, and include tests when the codebase already tests similar behavior.
+`
+	builderIntentBugfixPartial = `You are fixing incorrect behavior. Reproduce or reason about the failure, change only what is needed to correct it, and add or update a regression test when feasible.
+`
+	builderIntentTestFixPartial = `You are repairing failing or missing tests. Preserve intended product behavior unless the task explicitly asks to change it. Focus on making the test suite pass without unrelated refactors.
+`
+	builderIntentRefactorPartial = `You are restructuring code without changing behavior. Keep the diff focused, avoid feature creep, and run tests to confirm behavior is unchanged.
 `
 	jsonEventsPartial = `When you need to publish a bus event during a run:
 

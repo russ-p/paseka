@@ -27,6 +27,7 @@ type ColonyDispatchRequest struct {
 	TraceID      string
 	Task         string
 	TaskID       string
+	Intent       string
 	Insights     []string
 	InlinePrompt string
 }
@@ -77,6 +78,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		AgentID:      agentID,
 		TaskID:       req.TaskID,
 		Task:         req.Task,
+		Intent:       req.Intent,
 		Insights:     req.Insights,
 		InlinePrompt: req.InlinePrompt,
 		Workspace:    workspace,

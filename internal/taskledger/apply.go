@@ -51,6 +51,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				Title:     spec.Title,
 				Body:      spec.Body,
 				Bee:       spec.Bee,
+				Intent:    spec.Intent,
 				Status:    protocol.TaskStatusPlanned,
 				DependsOn: append([]string(nil), spec.DependsOn...),
 				UpdatedAt: now,
@@ -81,6 +82,9 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		}
 		if payload.Bee != "" {
 			task.Bee = payload.Bee
+		}
+		if payload.Intent != "" {
+			task.Intent = payload.Intent
 		}
 		if task.Status != protocol.TaskStatusReady {
 			task.Status = protocol.TaskStatusReady

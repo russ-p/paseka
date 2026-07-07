@@ -29,6 +29,7 @@ type RunRequest struct {
 	TraceID      string
 	Task         string
 	TaskID       string
+	Intent       string
 	Insights     []string
 	InlinePrompt string
 }
@@ -180,7 +181,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		BeeLocalTemplate: beeLocalTemplate,
 		BeeTemplate:      bee.PromptTemplate,
 		DefaultTemplate:  manifest.Defaults.PromptTemplate,
-	}, prompts.Context{
+	}, prompts.PromptContext(prompts.Context{
 		Bee:        bee.Role,
 		TraceID:    traceID,
 		AgentID:    agentID,
@@ -188,9 +189,10 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		ColonyRoot: ctxColony.ColonyRoot,
 		Workspace:  workspace,
 		Task:       req.Task,
+		IntentRaw:  req.Intent,
 		Insights:   req.Insights,
 		ResultFile: resultFile,
-	})
+	}))
 	if err != nil {
 		return nil, fmt.Errorf("sessions: render prompt: %w", err)
 	}
@@ -233,6 +235,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		ColonyRoot:      ctxColony.ColonyRoot,
 		TaskID:          req.TaskID,
 		Task:            req.Task,
+		Intent:          req.Intent,
 		Insights:        req.Insights,
 		ResultPath:      resultFile,
 		EventLogPath:    runDir.EventsPath(),
@@ -258,6 +261,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		AgentID:       agentID,
 		TaskID:        req.TaskID,
 		Task:          req.Task,
+		Intent:        req.Intent,
 		Insights:      req.Insights,
 	}
 

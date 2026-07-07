@@ -12,6 +12,7 @@ type TaskSnapshot struct {
 	Title     string              `json:"title,omitempty"`
 	Body      string              `json:"body,omitempty"`
 	Bee       string              `json:"bee,omitempty"`
+	Intent    string              `json:"intent,omitempty"`
 	Status    protocol.TaskStatus `json:"status"`
 	DependsOn []string            `json:"dependsOn,omitempty"`
 	Summary   string              `json:"summary,omitempty"`

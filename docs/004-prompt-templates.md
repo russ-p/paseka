@@ -62,7 +62,9 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.TaskID}}` | `string` | Optional task id within the trace. From `DispatchRequest.TaskID` when dispatching a queued subtask. |
 | `{{.ColonyRoot}}` | `string` | Absolute path to the git repository root. |
 | `{{.Workspace}}` | `string` | Absolute cwd for the adapter: colony root, or `.paseka/worktrees/<traceId>/` when `worktree: true`. |
-| `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or future bus event payload. |
+| `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or bus event payload. |
+| `{{.Intent}}` | `string` | Normalized builder task intent for partial routing (`general`, `feature`, `bugfix`, `test-fix`, `refactor`). Empty caller input becomes `general`. |
+| `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [009-insight-kinds.md](009-insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `result.txt` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 
@@ -70,15 +72,16 @@ The runtime passes a single context object (`prompts.Context`) to every template
 
 | Variable | Set by |
 | -------- | ------ |
-| `Bee`, `TraceID`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Insights`, `ResultFile` | `internal/runtime.Dispatcher` at dispatch time |
+| `Bee`, `TraceID`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile` | `internal/runtime.Dispatcher` at dispatch time |
 | `Task` | `paseka bee run --task` (required unless using inline prompt) |
+| `Intent` / `IntentRaw` | `paseka bee run --intent`, `paseka task create --intent`, or `intent` on `task.plan` / `task.ready` payloads |
 | `Insights` | Runtime projection from prior narrative `INSIGHT` events on the trace, merged with any manual `DispatchRequest.Insights` |
 | `ResultFile` | Computed from colony root + trace + agent ids |
 
 Variables **not** available in templates today:
 
 - Bee adapter params (`model`, `trust`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
-- Arbitrary bus event fields — only `Task` and `Insights` are surfaced in MVP.
+- Arbitrary bus event fields — only `Task`, `Intent`, and `Insights` are surfaced in MVP.
 
 Bus event publishing is instructed through the `json-events` partial, which teaches agents to call `paseka event emit --stdin`.
 
@@ -126,7 +129,10 @@ _partials/json-events.md  →  {{template "json-events" .}}
 _partials/insight-events.md  →  {{template "insight-events" .}}
 _partials/task-events.md  →  {{template "task-events" .}}
 _partials/verification-events.md  →  {{template "verification-events" .}}
+_partials/builder-intent-feature.md  →  {{template "builder-intent-feature" .}}
 ```
+
+Builder Bee uses intent partials for mission-specific guidance while keeping one stable role prompt. The top-level `builder.md` routes by `{{.Intent}}` and falls back to `builder-intent-general`.
 
 Include a partial and pass the full context:
 
@@ -192,19 +198,19 @@ Bus events are published separately through `paseka event emit --stdin` as descr
 # .paseka/prompts/builder.md
 You are Builder Bee. Implement the task in the workspace.
 
-Colony: {{.ColonyRoot}}
-Flight trail: {{.TraceID}}
-Workspace: {{.Workspace}}
+Intent: {{.Intent}}
 
 ## Task
 {{.Task}}
 
-## Prior discoveries
-{{range .Insights}}- {{.}}
+{{if eq .Intent "bugfix"}}
+{{template "builder-intent-bugfix" .}}
+{{else}}
+{{template "builder-intent-general" .}}
 {{end}}
-
-Runtime persists a human-readable run log at {{.ResultFile}}. Optionally emit `INSIGHT/run.summary` for downstream bees.
 ```
+
+Known intents: `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Unknown values normalize to `general`; the raw requested value remains in `{{.IntentRaw}}` when it differs.
 
 ### Scout bee with bus-event partial
 

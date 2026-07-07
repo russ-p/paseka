@@ -166,6 +166,7 @@ func newTaskCreateCmd() *cobra.Command {
 		bodyFile  string
 		fromStdin bool
 		bee       string
+		intent    string
 		dependsOn []string
 		autorun   bool
 	)
@@ -215,6 +216,7 @@ func newTaskCreateCmd() *cobra.Command {
 				Title:     resolvedTitle,
 				Body:      strings.TrimSpace(resolvedBody),
 				Bee:       bee,
+				Intent:    intent,
 				DependsOn: parseDependsOn(dependsOn),
 			}
 			planEv, err := taskPlanEvent(traceID, spec)
@@ -231,6 +233,7 @@ func newTaskCreateCmd() *cobra.Command {
 					Title:  resolvedTitle,
 					Body:   strings.TrimSpace(resolvedBody),
 					Bee:    bee,
+					Intent: intent,
 				})
 				if err != nil {
 					return err
@@ -252,6 +255,7 @@ func newTaskCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bodyFile, "file", "", "read task body from file")
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read task body from stdin")
 	cmd.Flags().StringVar(&bee, "bee", "", "bee role (default: builder)")
+	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
 	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "task dependencies (repeatable or comma-separated)")
 	cmd.Flags().BoolVar(&autorun, "autorun", false, "publish task.ready immediately after task.plan")
 	return cmd
@@ -394,6 +398,7 @@ func taskReadyEvent(traceID string, task taskledger.TaskSnapshot) (protocol.Even
 		Title:  task.Title,
 		Body:   task.Body,
 		Bee:    bee,
+		Intent: task.Intent,
 	})
 }
 

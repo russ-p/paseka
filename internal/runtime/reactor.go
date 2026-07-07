@@ -199,6 +199,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		TraceID: traceID,
 		TaskID:  task.TaskID,
 		Task:    body,
+		Intent:  task.Intent,
 	}, DispatchModeTask)
 	if err != nil {
 		return err

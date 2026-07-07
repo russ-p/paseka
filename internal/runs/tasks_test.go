@@ -11,6 +11,25 @@ import (
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
+func TestTaskMarkdownRoundTripPreservesIntent(t *testing.T) {
+	fm := runs.TaskFrontmatter{
+		TraceID: "trace-1",
+		TaskID:  "task-1",
+		Title:   "Fix login",
+		Bee:     "builder",
+		Intent:  "bugfix",
+		Status:  protocol.TaskStatusPlanned,
+	}
+	content := runs.MarshalTaskMarkdown(fm, "fix null pointer")
+	gotFM, _, err := runs.ParseTaskMarkdown(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotFM.Intent != "bugfix" {
+		t.Fatalf("intent = %q", gotFM.Intent)
+	}
+}
+
 func TestTaskMarkdownRoundTrip(t *testing.T) {
 	fm := runs.TaskFrontmatter{
 		TraceID:   "trace-1",
@@ -98,7 +117,7 @@ func TestSyncTraceTasksAndLoadFromFS(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",
 		Tasks: map[string]taskledger.TaskSnapshot{
-			"task-1": {TaskID: "task-1", Title: "first", Status: protocol.TaskStatusPlanned},
+			"task-1": {TaskID: "task-1", Title: "first", Status: protocol.TaskStatusPlanned, Intent: "feature"},
 			"task-2": {TaskID: "task-2", Title: "second", Status: protocol.TaskStatusPlanned, DependsOn: []string{"task-1"}},
 		},
 	}
@@ -111,6 +130,9 @@ func TestSyncTraceTasksAndLoadFromFS(t *testing.T) {
 	}
 	if len(got.Tasks) != 2 {
 		t.Fatalf("tasks = %d", len(got.Tasks))
+	}
+	if got.Tasks["task-1"].Intent != "feature" {
+		t.Fatalf("intent = %q", got.Tasks["task-1"].Intent)
 	}
 }
 

@@ -42,6 +42,8 @@ func TestInitScaffold(t *testing.T) {
 		".paseka/bees/scout.yaml",
 		".paseka/prompts/builder.md",
 		".paseka/prompts/scout.md",
+		".paseka/prompts/_partials/builder-intent-general.md",
+		".paseka/prompts/_partials/builder-intent-feature.md",
 	} {
 		if _, err := os.Stat(filepath.Join(repo, rel)); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)

@@ -24,6 +24,7 @@ type RunRequest struct {
 	AgentID    string // unique id per spawned agent invocation
 	TaskID     string
 	Task       string
+	Intent     string
 	Insights   []string
 }
 

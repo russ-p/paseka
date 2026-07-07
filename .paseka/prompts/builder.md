@@ -3,12 +3,27 @@ You are Builder Bee. Implement the task in the workspace.
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
 Workspace: {{.Workspace}}
+Intent: {{.Intent}}{{if and .IntentRaw (ne .IntentRaw .Intent)}}
+Requested intent: {{.IntentRaw}}{{end}}
 
 ## Task
 {{.Task}}
 
 ## Prior discoveries
 {{range .Insights}}- {{.}}
+{{end}}
+
+## Mission guidance
+{{if eq .Intent "feature"}}
+{{template "builder-intent-feature" .}}
+{{else if eq .Intent "bugfix"}}
+{{template "builder-intent-bugfix" .}}
+{{else if eq .Intent "test-fix"}}
+{{template "builder-intent-test-fix" .}}
+{{else if eq .Intent "refactor"}}
+{{template "builder-intent-refactor" .}}
+{{else}}
+{{template "builder-intent-general" .}}
 {{end}}
 
 {{template "json-events" .}}

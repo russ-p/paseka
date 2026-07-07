@@ -27,6 +27,7 @@ type SessionRequest struct {
 	AgentID       string
 	TaskID        string
 	Task          string
+	Intent        string
 	Insights      []string
 }
 

@@ -94,6 +94,7 @@ func newSessionRunCmd() *cobra.Command {
 		startDir     string
 		task         string
 		traceID      string
+		intent       string
 		inlinePrompt string
 	)
 	cmd := &cobra.Command{
@@ -110,6 +111,7 @@ func newSessionRunCmd() *cobra.Command {
 				Bee:          args[0],
 				TraceID:      traceID,
 				Task:         task,
+				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 			})
 			if err != nil {
@@ -125,6 +127,7 @@ func newSessionRunCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
+	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override")
 	return cmd
 }

@@ -16,6 +16,7 @@ type BeeRunRequest struct {
 	TraceID      string
 	Task         string
 	TaskID       string
+	Intent       string
 	Insights     []string
 	InlinePrompt string
 	NoBus        bool
@@ -75,6 +76,7 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		TraceID:      traceID,
 		Task:         req.Task,
 		TaskID:       req.TaskID,
+		Intent:       req.Intent,
 		Insights:     req.Insights,
 		InlinePrompt: req.InlinePrompt,
 	}, DispatchModeCLI)

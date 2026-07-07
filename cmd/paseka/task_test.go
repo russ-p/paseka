@@ -47,6 +47,36 @@ func TestParseDependsOn(t *testing.T) {
 	}
 }
 
+func TestTaskReadyEventIncludesIntent(t *testing.T) {
+	ev, err := taskReadyEvent("trace-1", taskledger.TaskSnapshot{
+		TaskID: "task-1",
+		Title:  "Fix bug",
+		Bee:    "builder",
+		Intent: "bugfix",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ev.Payload), `"intent":"bugfix"`) {
+		t.Fatalf("payload = %s", ev.Payload)
+	}
+}
+
+func TestTaskPlanEventIncludesIntent(t *testing.T) {
+	ev, err := taskPlanEvent("trace-1", protocol.TaskSpec{
+		TaskID: "task-1",
+		Title:  "Add endpoint",
+		Bee:    "builder",
+		Intent: "feature",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ev.Payload), `"intent":"feature"`) {
+		t.Fatalf("payload = %s", ev.Payload)
+	}
+}
+
 func TestTaskPlanEvent(t *testing.T) {
 	ev, err := taskPlanEvent("trace-1", protocol.TaskSpec{
 		TaskID: "task-1",

@@ -26,6 +26,7 @@ func newBeeRunCmd() *cobra.Command {
 		startDir     string
 		task         string
 		traceID      string
+		intent       string
 		inlinePrompt string
 		noBus        bool
 	)
@@ -43,6 +44,7 @@ func newBeeRunCmd() *cobra.Command {
 				Bee:          args[0],
 				TraceID:      traceID,
 				Task:         task,
+				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 				NoBus:        noBus,
 			})
@@ -62,6 +64,7 @@ func newBeeRunCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository (default: current directory)")
 	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
+	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().BoolVar(&noBus, "no-bus", false, "skip NATS publish (file-only run)")
 	return cmd
@@ -72,6 +75,7 @@ func newBeeChatCmd() *cobra.Command {
 		startDir     string
 		task         string
 		traceID      string
+		intent       string
 		inlinePrompt string
 		terminal     string
 	)
@@ -97,6 +101,9 @@ func newBeeChatCmd() *cobra.Command {
 			}
 			if traceID != "" {
 				runArgs = append(runArgs, "--trace", traceID)
+			}
+			if intent != "" {
+				runArgs = append(runArgs, "--intent", intent)
 			}
 			if inlinePrompt != "" {
 				runArgs = append(runArgs, "--prompt", inlinePrompt)
@@ -133,6 +140,7 @@ func newBeeChatCmd() *cobra.Command {
 				Bee:          bee,
 				TraceID:      traceID,
 				Task:         task,
+				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 			})
 			if err != nil {
@@ -148,6 +156,7 @@ func newBeeChatCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
+	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().StringVar(&terminal, "terminal", "", "terminal UI: default or ghostty (overrides ~/.config/paseka/<slug>/terminal.yaml)")
 	return cmd

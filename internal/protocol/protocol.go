@@ -54,6 +54,7 @@ type Request struct {
 	ColonyRoot      string    `json:"colonyRoot"`
 	TaskID          string    `json:"taskId,omitempty"`
 	Task            string    `json:"task,omitempty"`
+	Intent          string    `json:"intent,omitempty"`
 	Insights        []string  `json:"insights,omitempty"`
 	ResultPath      string    `json:"resultPath"`
 	EventLogPath    string    `json:"eventLogPath"`
