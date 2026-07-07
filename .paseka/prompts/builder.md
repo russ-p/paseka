@@ -26,6 +26,14 @@ Requested intent: {{.IntentRaw}}{{end}}
 {{template "builder-intent-general" .}}
 {{end}}
 
+Stage the changes, DON'T commit them yet.
+
+Success criteria (must confirm all):
+- All acceptance criteria in the task are met
+- Build passes (module-level build succeeds)
+- No new compiler errors or warnings that are not explicitly accepted
+- Related tests (if any) pass
+
 {{template "json-events" .}}
 {{template "insight-events" .}}
 

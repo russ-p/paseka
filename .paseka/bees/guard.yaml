@@ -6,7 +6,7 @@ params:
   output_format: stream-json
   trust: true
   force: true
-worktree: false
+worktree: true
 subscribes:
   - type: MUTATION
     kind: code.proposal
