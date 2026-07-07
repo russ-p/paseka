@@ -68,6 +68,50 @@ func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {
 	}
 }
 
+func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
+	fakePi := writeFakePiBinary(t)
+	a := NewSession()
+
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		ColonyRoot:    "/colony",
+		Workspace:     "/tmp/ws",
+		TraceID:       "trace-1",
+		AgentID:       "agent-1",
+		InitialPrompt: "implement feature",
+		Detached:      true,
+		Params: adapters.RunParams{
+			Binary:   fakePi,
+			Model:    "gpt-4",
+			Provider: "gemini",
+			Thinking: "high",
+			Plan:     true,
+			APIKey:   "secret",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if containsArg(cmd.Args, "--session-dir") || containsArg(cmd.Args, "--session-id") {
+		t.Fatalf("detached session must not include interactive session flags, args=%v", cmd.Args)
+	}
+	if !containsArg(cmd.Args, "-p") {
+		t.Fatalf("expected print mode in args=%v", cmd.Args)
+	}
+	assertArgPair(t, cmd.Args, "--mode", "text")
+	assertArgPair(t, cmd.Args, "--model", "gpt-4")
+	assertArgPair(t, cmd.Args, "--provider", "gemini")
+	assertArgPair(t, cmd.Args, "--thinking", "high")
+	if !containsArg(cmd.Args, "--plan") {
+		t.Fatalf("expected --plan in args=%v", cmd.Args)
+	}
+	assertArgPair(t, cmd.Args, "--api-key", "secret")
+	last := cmd.Args[len(cmd.Args)-1]
+	if last != "implement feature" {
+		t.Fatalf("prompt arg = %q", last)
+	}
+}
+
 func TestSessionCommandRequiresFields(t *testing.T) {
 	fakePi := writeFakePiBinary(t)
 	a := NewSession()

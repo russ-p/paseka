@@ -29,6 +29,7 @@ type SessionRequest struct {
 	Task          string
 	Intent        string
 	Insights      []string
+	Detached      bool
 }
 
 // SessionCommand describes how to launch the external agent process.

@@ -12,10 +12,10 @@ func TestSessionCommandInteractiveNoPrintFlag(t *testing.T) {
 	cmd, err := a.SessionCommand(adapters.SessionRequest{
 		Workspace:     "/tmp/ws",
 		InitialPrompt: "discuss feature",
-		Params:        adapters.RunParams{Trust: true, Force: true, Model: "composer-2.5"},
+		Params:        adapters.RunParams{Binary: "sh", Trust: true, Force: true, Model: "composer-2.5"},
 	})
 	if err != nil {
-		t.Skip("agent binary not in PATH:", err)
+		t.Fatal(err)
 	}
 
 	for _, arg := range cmd.Args {
@@ -32,5 +32,34 @@ func TestSessionCommandInteractiveNoPrintFlag(t *testing.T) {
 	last := cmd.Args[len(cmd.Args)-1]
 	if last != "discuss feature" {
 		t.Fatalf("prompt arg = %q", last)
+	}
+}
+
+func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
+	a := cursor.NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		Workspace:     "/tmp/ws",
+		InitialPrompt: "implement feature",
+		Detached:      true,
+		Params:        adapters.RunParams{Binary: "sh", Trust: true, Force: true, Model: "composer-2.5"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"-p", "--workspace", "/tmp/ws",
+		"--output-format", "text",
+		"--trust", "--force",
+		"--model", "composer-2.5",
+		"implement feature",
+	}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("got %d args, want %d: %v", len(cmd.Args), len(want), cmd.Args)
+	}
+	for i := range want {
+		if cmd.Args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], want[i], cmd.Args)
+		}
 	}
 }

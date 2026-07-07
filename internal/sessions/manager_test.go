@@ -186,6 +186,9 @@ func TestManagerStartDetachedCapturesOutput(t *testing.T) {
 	if res.SessionID == "" || res.State != adapters.SessionActive {
 		t.Fatalf("result = %+v", res)
 	}
+	if !output.lastReq.Detached {
+		t.Fatal("expected detached session request")
+	}
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -236,18 +239,76 @@ func TestManagerStartDetachedCapturesOutput(t *testing.T) {
 	}
 }
 
-type outputSessionAdapter struct{}
+func TestManagerStartDetachedIgnoresParentContextCancel(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+
+	output := &outputSessionAdapter{script: `sleep 0.1; printf 'parent-cancel\n'; exit 0`}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", output)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	res, err := mgr.StartDetached(ctx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		Task:     "hello detached",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(mgr.ListActive()) == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	d := runs.Dir{
+		ColonyRoot: repo,
+		TraceID:    res.TraceID,
+		AgentID:    res.AgentID,
+	}
+	meta, err := d.ReadSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.State != string(adapters.SessionCompleted) {
+		t.Fatalf("state = %q", meta.State)
+	}
+	entries, err := d.ReadTranscript()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Content, "pty read error") || strings.Contains(e.Content, "session cancelled") {
+			t.Fatalf("unexpected transcript entry after clean exit: %+v", e)
+		}
+	}
+}
+
+type outputSessionAdapter struct {
+	lastReq adapters.SessionRequest
+	script  string
+}
 
 func (o *outputSessionAdapter) Name() string { return "cursor" }
 
 func (o *outputSessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
+	o.lastReq = req
 	shell, err := exec.LookPath("sh")
 	if err != nil {
 		return adapters.SessionCommand{}, err
 	}
+	script := o.script
+	if script == "" {
+		script = `printf '\033[31mhello-detached\033[0m\n'; exit 0`
+	}
 	return adapters.SessionCommand{
 		Binary: shell,
-		Args:   []string{"-c", `printf '\033[31mhello-detached\033[0m\n'; exit 0`},
+		Args:   []string{"-c", script},
 		Env:    os.Environ(),
 		Dir:    req.Workspace,
 	}, nil

@@ -20,7 +20,7 @@ func (a *SessionAdapter) Name() string {
 	return adapterName
 }
 
-// SessionCommand builds an interactive agent invocation (no -p flag).
+// SessionCommand builds an agent invocation for interactive or detached sessions.
 func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("cursor: workspace is required")
@@ -38,6 +38,9 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 
 	args := buildInteractiveArgs(req, req.InitialPrompt)
+	if req.Detached {
+		args = buildDetachedArgs(req, req.InitialPrompt)
+	}
 	env := os.Environ()
 	if req.Params.APIKey != "" {
 		env = append(env, "CURSOR_API_KEY="+req.Params.APIKey)
@@ -58,6 +61,34 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
 	}
 
 	// --trust is headless-only (-p); interactive sessions prompt in the TUI instead.
+	if p.Force {
+		args = append(args, "--force")
+	}
+	if p.Plan {
+		args = append(args, "--plan")
+	}
+	if p.Model != "" {
+		args = append(args, "--model", p.Model)
+	}
+	if p.APIKey != "" {
+		args = append(args, "--api-key", p.APIKey)
+	}
+
+	args = append(args, prompt)
+	return args
+}
+
+func buildDetachedArgs(req adapters.SessionRequest, prompt string) []string {
+	p := req.Params
+	args := []string{
+		"-p",
+		"--workspace", req.Workspace,
+		"--output-format", "text",
+	}
+
+	if p.Trust {
+		args = append(args, "--trust")
+	}
 	if p.Force {
 		args = append(args, "--force")
 	}

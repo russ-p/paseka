@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -88,7 +89,7 @@ func (m *Manager) RegisterSessionAdapter(name string, a adapters.SessionAdapter)
 
 // RunInteractive starts a session, attaches the current terminal, and blocks until exit.
 func (m *Manager) RunInteractive(ctx context.Context, req RunRequest) (*RunResult, error) {
-	active, err := m.launch(ctx, req)
+	active, err := m.launch(ctx, req, false)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +107,7 @@ func (m *Manager) RunInteractive(ctx context.Context, req RunRequest) (*RunResul
 // StartDetached launches an interactive session, captures PTY output in the background,
 // and returns immediately without attaching the current terminal.
 func (m *Manager) StartDetached(ctx context.Context, req RunRequest) (*RunResult, error) {
-	active, err := m.launch(ctx, req)
+	active, err := m.launch(ctx, req, true)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (m *Manager) capturePTYOutput(active *activeSession) {
 			}
 		}
 		if err != nil {
-			if err != io.EOF {
+			if err != io.EOF && !errors.Is(err, syscall.EIO) {
 				_ = active.entry.RunDir.AppendTranscript(runs.TranscriptEntry{
 					At:      time.Now().UTC(),
 					Role:    "system",
@@ -152,7 +153,7 @@ func (m *Manager) capturePTYOutput(active *activeSession) {
 	}
 }
 
-func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, error) {
+func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*activeSession, error) {
 	if req.Bee == "" {
 		return nil, fmt.Errorf("sessions: bee role is required")
 	}
@@ -304,6 +305,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		Task:          req.Task,
 		Intent:        req.Intent,
 		Insights:      req.Insights,
+		Detached:      detached,
 	}
 
 	cmd, err := sessAdapter.SessionCommand(sessReq)
@@ -352,6 +354,9 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 	})
 
 	sessCtx, cancel := context.WithCancel(ctx)
+	if detached {
+		sessCtx, cancel = context.WithCancel(context.Background())
+	}
 	active := &activeSession{
 		entry: Entry{
 			Handle:     handle,
