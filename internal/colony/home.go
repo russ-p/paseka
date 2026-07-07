@@ -28,12 +28,19 @@ type CursorAdapterConfig struct {
 	APIKeyEnv string `yaml:"api_key_env"`
 }
 
+// PiAdapterConfig is ~/.config/paseka/<slug>/adapters/pi.yaml.
+type PiAdapterConfig struct {
+	Binary    string `yaml:"binary"`
+	APIKeyEnv string `yaml:"api_key_env"`
+}
+
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
 	ColonyRoot string
 	Slug       string
 	Home       HomeConfig
 	Cursor     CursorAdapterConfig
+	Pi         PiAdapterConfig
 }
 
 // ResolveContext finds the git repo, loads colony + home config.
@@ -84,11 +91,17 @@ func ResolveContext(startDir string) (Context, error) {
 		return Context{}, err
 	}
 
+	pi, err := LoadPiAdapter(slug)
+	if err != nil {
+		return Context{}, err
+	}
+
 	return Context{
 		ColonyRoot: colonyRoot,
 		Slug:       slug,
 		Home:       home,
 		Cursor:     cursor,
+		Pi:         pi,
 	}, nil
 }
 
@@ -145,6 +158,38 @@ func LoadCursorAdapter(slug string) (CursorAdapterConfig, error) {
 
 // APIKey returns the Cursor API key from the configured environment variable.
 func (c CursorAdapterConfig) APIKey() string {
+	return os.Getenv(c.APIKeyEnv)
+}
+
+// LoadPiAdapter reads ~/.config/paseka/<slug>/adapters/pi.yaml.
+func LoadPiAdapter(slug string) (PiAdapterConfig, error) {
+	homeDir, err := HomeDir(slug)
+	if err != nil {
+		return PiAdapterConfig{}, err
+	}
+	path := filepath.Join(homeDir, "adapters", "pi.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return PiAdapterConfig{Binary: "pi"}, nil
+		}
+		return PiAdapterConfig{}, err
+	}
+	var cfg PiAdapterConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return PiAdapterConfig{}, fmt.Errorf("parse pi adapter config: %w", err)
+	}
+	if cfg.Binary == "" {
+		cfg.Binary = "pi"
+	}
+	return cfg, nil
+}
+
+// APIKey returns the Pi API key when api_key_env is configured and set in the environment.
+func (c PiAdapterConfig) APIKey() string {
+	if c.APIKeyEnv == "" {
+		return ""
+	}
 	return os.Getenv(c.APIKeyEnv)
 }
 

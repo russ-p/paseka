@@ -28,15 +28,17 @@ type RunRequest struct {
 	Insights   []string
 }
 
-// RunParams holds Cursor CLI flags and other adapter options.
+// RunParams holds adapter CLI flags and shared bee params.
 type RunParams struct {
 	Model        string
-	OutputFormat string // text | json | stream-json
+	OutputFormat string // text | json | stream-json | rpc
 	Trust        bool
 	Force        bool
 	Plan         bool
-	Binary       string // default: agent
-	APIKey       string // optional; falls back to CURSOR_API_KEY
+	Binary       string // adapter binary override
+	APIKey       string // optional; from machine-local api_key_env when set
+	Provider     string
+	Thinking     string
 }
 
 // RunResult is the normalized adapter output.

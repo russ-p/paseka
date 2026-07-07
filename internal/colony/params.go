@@ -29,6 +29,12 @@ func MergeRunParams(base, over adapters.RunParams) adapters.RunParams {
 	if over.Plan {
 		base.Plan = true
 	}
+	if over.Provider != "" {
+		base.Provider = over.Provider
+	}
+	if over.Thinking != "" {
+		base.Thinking = over.Thinking
+	}
 	return base
 }
 
@@ -59,7 +65,29 @@ func RunParamsFromBee(b Bee) adapters.RunParams {
 	if v, ok := stringParam(b.Params, "binary"); ok {
 		p.Binary = v
 	}
+	if v, ok := stringParam(b.Params, "provider"); ok {
+		p.Provider = v
+	}
+	if v, ok := stringParam(b.Params, "thinking"); ok {
+		p.Thinking = v
+	}
 	return p
+}
+
+// AdapterExtra returns machine-local binary and API key for the resolved adapter.
+func AdapterExtra(ctx Context, adapterName string) adapters.RunParams {
+	switch adapterName {
+	case "pi":
+		return adapters.RunParams{
+			Binary: ctx.Pi.Binary,
+			APIKey: ctx.Pi.APIKey(),
+		}
+	default:
+		return adapters.RunParams{
+			Binary: ctx.Cursor.Binary,
+			APIKey: ctx.Cursor.APIKey(),
+		}
+	}
 }
 
 func stringParam(m map[string]any, key string) (string, bool) {
@@ -87,7 +115,7 @@ func (b Bee) ResolveAdapter() (string, error) {
 		name = "cursor"
 	}
 	switch name {
-	case "cursor":
+	case "cursor", "pi":
 		return name, nil
 	default:
 		return "", fmt.Errorf("colony: unknown adapter %q for bee %q", name, b.Role)

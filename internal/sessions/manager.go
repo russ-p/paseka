@@ -206,10 +206,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest) (*activeSession, e
 		return nil, fmt.Errorf("sessions: adapter %q does not support interactive sessions", adapterName)
 	}
 
-	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), adapters.RunParams{
-		Binary: ctxColony.Cursor.Binary,
-		APIKey: ctxColony.Cursor.APIKey(),
-	})
+	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), colony.AdapterExtra(ctxColony, adapterName))
 
 	startedAt := time.Now().UTC()
 	if err := runDir.WritePrompt(rendered); err != nil {
