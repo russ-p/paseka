@@ -18,6 +18,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
@@ -253,6 +254,24 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), colony.AdapterExtra(ctxColony, adapterName))
 
+	var command []string
+	if bee.Command.IsSet() {
+		if bee.HasParams() {
+			logging.Component("sessions").Warn("bee command overrides params",
+				logging.F("bee", bee.Role),
+				logging.F("trace", traceID),
+				logging.F("agent", agentID),
+			)
+		}
+		command, err = bee.Command.RenderCommand(colony.CommandVars{
+			Prompt:    rendered,
+			Workspace: workspace,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sessions: render command: %w", err)
+		}
+	}
+
 	startedAt := time.Now().UTC()
 	if err := runDir.WritePrompt(rendered); err != nil {
 		return nil, err
@@ -299,6 +318,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ColonyRoot:    ctxColony.ColonyRoot,
 		Workspace:     workspace,
 		Params:        params,
+		Command:       command,
 		TraceID:       traceID,
 		AgentID:       agentID,
 		TaskID:        req.TaskID,

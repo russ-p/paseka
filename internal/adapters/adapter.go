@@ -22,6 +22,7 @@ type RunRequest struct {
 	Sector     string // resolved sector name, if any
 	SectorPath string // relative sector path within colony/worktree
 	Params     RunParams
+	Command    []string // optional full argv; overrides Params-based arg building when set
 	TraceID    string
 	AgentID    string // unique id per spawned agent invocation
 	TaskID     string

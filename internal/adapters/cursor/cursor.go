@@ -46,10 +46,14 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, errors.New("cursor: prompt is required")
 	}
 
-	binary := req.Params.Binary
-	if binary == "" {
-		binary = defaultBinary
-	}
+	prompt := req.Prompt
+	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
+		b := req.Params.Binary
+		if b == "" {
+			b = defaultBinary
+		}
+		return b, buildArgs(req, prompt)
+	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
 	}
@@ -64,7 +68,6 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	startedAt := time.Now().UTC()
-	prompt := req.Prompt
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("cursor: write prompt: %w", err)
 	}
@@ -86,10 +89,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("cursor: write status: %w", err)
 	}
 
-	args := buildArgs(req, prompt)
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = req.Workspace
 	cmd.Env = os.Environ()
 	if req.Params.APIKey != "" {
 		cmd.Env = append(cmd.Env, "CURSOR_API_KEY="+req.Params.APIKey)
@@ -113,7 +114,11 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	var events []protocol.Event
 	var streamSummary string
-	if isStreamFormat(req.Params.OutputFormat) {
+	outputFormat := req.Params.OutputFormat
+	if len(req.Command) > 0 {
+		outputFormat = adapters.FlagValue(args, "--output-format")
+	}
+	if isStreamFormat(outputFormat) {
 		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
 		events = parsed.Events
 		streamSummary = strings.TrimSpace(parsed.Summary)

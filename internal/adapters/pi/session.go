@@ -34,14 +34,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		return adapters.SessionCommand{}, errors.New("pi: colony root, traceId, and agentId are required")
 	}
 
-	binary := req.Params.Binary
-	if binary == "" {
-		binary = defaultBinary
-	}
-	if _, err := exec.LookPath(binary); err != nil {
-		return adapters.SessionCommand{}, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
-	}
-
+	prompt := req.InitialPrompt
 	runDir := runs.Dir{
 		ColonyRoot: req.ColonyRoot,
 		TraceID:    req.TraceID,
@@ -49,9 +42,18 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 	sessionDir := filepath.Join(runDir.Root(), "pi-sessions")
 
-	args := buildInteractiveArgs(req, sessionDir, req.InitialPrompt)
-	if req.Detached {
-		args = buildDetachedArgs(req, req.InitialPrompt)
+	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
+		b := req.Params.Binary
+		if b == "" {
+			b = defaultBinary
+		}
+		if req.Detached {
+			return b, buildDetachedArgs(req, prompt)
+		}
+		return b, buildInteractiveArgs(req, sessionDir, prompt)
+	})
+	if _, err := exec.LookPath(binary); err != nil {
+		return adapters.SessionCommand{}, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
 	}
 
 	return adapters.SessionCommand{

@@ -36,6 +36,7 @@ type Bee struct {
 	PromptTemplate     string             `yaml:"prompt_template"`
 	Sector             string             `yaml:"sector,omitempty"`
 	Worktree           bool               `yaml:"worktree"`
+	Command            Command            `yaml:"command,omitempty"`
 	Params             map[string]any     `yaml:"params"`
 	Subscribes         []SubscriptionRule `yaml:"subscribes,omitempty"`
 	Publishes          []PublicationRule  `yaml:"publishes,omitempty"`
