@@ -26,12 +26,86 @@
       </section>
     </div>
     <nav class="tabs" role="tablist">
-      <button type="button" id="tab-sessions" class="tab active" role="tab" aria-selected="true">Sessions</button>
+      <button type="button" id="tab-dashboard" class="tab active" role="tab" aria-selected="true">Dashboard</button>
+      <button type="button" id="tab-timeline" class="tab" role="tab" aria-selected="false">Timeline</button>
+      <button type="button" id="tab-sessions" class="tab" role="tab" aria-selected="false">Sessions</button>
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
     </nav>
   </header>
 
-  <main class="layout" id="sessions-layout">
+  <main class="layout dashboard-layout" id="dashboard-layout">
+    <section class="panel dashboard-panel">
+      <div class="panel-header">
+        <h2>Colony snapshot</h2>
+        <button type="button" id="dashboard-refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <div class="stat-grid" id="dashboard-stats"></div>
+      <div class="dashboard-sections">
+        <section>
+          <h3>Recent traces</h3>
+          <ul id="dashboard-traces" class="session-list compact-list"></ul>
+        </section>
+        <section>
+          <h3>Failed runs</h3>
+          <ul id="dashboard-failed-runs" class="session-list compact-list"></ul>
+        </section>
+        <section>
+          <h3>Recent insights</h3>
+          <ul id="dashboard-insights" class="session-list compact-list"></ul>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <main class="layout timeline-layout hidden" id="timeline-layout">
+    <section class="panel timeline-panel">
+      <div class="panel-header">
+        <h2>Event feed</h2>
+        <button type="button" id="timeline-refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <form id="timeline-filters" class="filter-bar">
+        <label>
+          Trace
+          <input type="text" id="filter-trace" placeholder="trace id">
+        </label>
+        <label>
+          Task
+          <input type="text" id="filter-task" placeholder="task id">
+        </label>
+        <label>
+          Bee
+          <input type="text" id="filter-bee" placeholder="bee role">
+        </label>
+        <label>
+          Type
+          <select id="filter-type">
+            <option value="">—</option>
+            <option value="SIGNAL">SIGNAL</option>
+            <option value="INSIGHT">INSIGHT</option>
+            <option value="MUTATION">MUTATION</option>
+            <option value="VERIFICATION">VERIFICATION</option>
+          </select>
+        </label>
+        <label>
+          Kind
+          <input type="text" id="filter-kind" placeholder="payload.kind">
+        </label>
+        <label>
+          Severity
+          <input type="text" id="filter-severity" placeholder="severity">
+        </label>
+        <button type="submit" class="secondary filter-apply">Apply</button>
+      </form>
+      <label class="checkbox-row timeline-raw-toggle">
+        <input type="checkbox" id="timeline-raw-toggle">
+        Show raw JSON per event
+      </label>
+      <ul id="timeline-feed" class="timeline-feed"></ul>
+      <button type="button" id="timeline-more-btn" class="secondary hidden">Load more</button>
+    </section>
+  </main>
+
+  <main class="layout hidden" id="sessions-layout">
     <section class="panel launch-panel">
       <h2>Launch session</h2>
       <form id="launch-form">

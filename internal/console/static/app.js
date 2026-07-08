@@ -1,8 +1,14 @@
 const state = {
-  tab: 'sessions',
+  tab: 'dashboard',
   bees: [],
   sessions: [],
   runs: [],
+  dashboard: null,
+  timelineItems: [],
+  timelineCursor: '',
+  timelineHasMore: false,
+  timelineShowRaw: false,
+  timelineFilters: {},
   runtime: null,
   runtimeBusy: false,
   selectedId: null,
@@ -13,12 +19,33 @@ const state = {
   eventLines: [],
   pollTimer: null,
   runtimePollTimer: null,
+  dashboardPollTimer: null,
 };
 
 const el = {
   subtitle: document.getElementById('subtitle'),
+  tabDashboard: document.getElementById('tab-dashboard'),
+  tabTimeline: document.getElementById('tab-timeline'),
   tabSessions: document.getElementById('tab-sessions'),
   tabRuns: document.getElementById('tab-runs'),
+  dashboardLayout: document.getElementById('dashboard-layout'),
+  timelineLayout: document.getElementById('timeline-layout'),
+  dashboardStats: document.getElementById('dashboard-stats'),
+  dashboardTraces: document.getElementById('dashboard-traces'),
+  dashboardFailedRuns: document.getElementById('dashboard-failed-runs'),
+  dashboardInsights: document.getElementById('dashboard-insights'),
+  dashboardRefreshBtn: document.getElementById('dashboard-refresh-btn'),
+  timelineRefreshBtn: document.getElementById('timeline-refresh-btn'),
+  timelineFilters: document.getElementById('timeline-filters'),
+  filterTrace: document.getElementById('filter-trace'),
+  filterTask: document.getElementById('filter-task'),
+  filterBee: document.getElementById('filter-bee'),
+  filterType: document.getElementById('filter-type'),
+  filterKind: document.getElementById('filter-kind'),
+  filterSeverity: document.getElementById('filter-severity'),
+  timelineRawToggle: document.getElementById('timeline-raw-toggle'),
+  timelineFeed: document.getElementById('timeline-feed'),
+  timelineMoreBtn: document.getElementById('timeline-more-btn'),
   sessionsLayout: document.getElementById('sessions-layout'),
   runsLayout: document.getElementById('runs-layout'),
   beeSelect: document.getElementById('bee-select'),
@@ -131,21 +158,43 @@ function escapeHtml(str) {
 
 function setTab(tab) {
   state.tab = tab;
-  const isSessions = tab === 'sessions';
-  el.tabSessions.classList.toggle('active', isSessions);
-  el.tabRuns.classList.toggle('active', !isSessions);
-  el.tabSessions.setAttribute('aria-selected', String(isSessions));
-  el.tabRuns.setAttribute('aria-selected', String(!isSessions));
-  el.sessionsLayout.classList.toggle('hidden', !isSessions);
-  el.runsLayout.classList.toggle('hidden', isSessions);
-  el.subtitle.textContent = isSessions
-    ? 'Sessions — launch and observe interactive bees'
-    : 'Runs — observe headless adapter invocations';
+  const tabs = ['dashboard', 'timeline', 'sessions', 'runs'];
+  const layouts = {
+    dashboard: el.dashboardLayout,
+    timeline: el.timelineLayout,
+    sessions: el.sessionsLayout,
+    runs: el.runsLayout,
+  };
+  for (const name of tabs) {
+    const active = tab === name;
+    const btn = el[`tab${name.charAt(0).toUpperCase()}${name.slice(1)}`];
+    if (btn) {
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', String(active));
+    }
+    if (layouts[name]) {
+      layouts[name].classList.toggle('hidden', !active);
+    }
+  }
+
+  const subtitles = {
+    dashboard: 'Dashboard — colony-wide snapshot and recent activity',
+    timeline: 'Timeline — filterable event feed across the colony',
+    sessions: 'Sessions — launch and observe interactive bees',
+    runs: 'Runs — observe headless adapter invocations',
+  };
+  el.subtitle.textContent = subtitles[tab] || '';
+
   stopPolling();
-  if (isSessions && state.selectedId) {
+  stopDashboardPolling();
+  if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
-  } else if (!isSessions && state.selectedRunKey) {
+  } else if (tab === 'runs' && state.selectedRunKey) {
     startRunPolling();
+  } else if (tab === 'dashboard') {
+    startDashboardPolling();
+  } else if (tab === 'timeline') {
+    loadTimeline(true).catch(console.error);
   }
 }
 
@@ -327,6 +376,210 @@ function renderRunDetail(run) {
   }
 }
 
+function renderDashboard() {
+  const d = state.dashboard;
+  if (!d) {
+    el.dashboardStats.innerHTML = '<p class="muted">Loading…</p>';
+    return;
+  }
+
+  const taskCounts = d.taskCounts || {};
+  const taskParts = Object.entries(taskCounts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([status, count]) => `<span class="task-count"><strong>${escapeHtml(status)}</strong> ${count}</span>`)
+    .join('');
+
+  const natsClass = d.nats?.ok ? 'ok' : (d.nats?.configured ? 'warn' : 'muted');
+  el.dashboardStats.innerHTML = `
+    <div class="stat-card">
+      <span class="stat-label">Runtime</span>
+      <span class="stat-value badge ${badgeClass(d.runtime?.status)}">${escapeHtml(d.runtime?.status || 'unknown')}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">NATS</span>
+      <span class="stat-value badge ${natsClass}">${d.nats?.ok ? 'ok' : (d.nats?.configured ? 'degraded' : 'not configured')}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Active sessions</span>
+      <span class="stat-value">${d.activeSessions ?? 0}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Active worktrees</span>
+      <span class="stat-value">${d.activeWorktrees ?? 0}</span>
+    </div>
+    <div class="stat-card stat-wide">
+      <span class="stat-label">Task counts</span>
+      <div class="task-counts">${taskParts || '<span class="muted">none</span>'}</div>
+    </div>
+  `;
+
+  renderDashboardList(el.dashboardTraces, d.recentTraces, (trace) => `
+    <div class="top">
+      <span class="bee">${escapeHtml(trace.traceId)}</span>
+      <span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span>
+    </div>
+    <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks</div>
+  `, 'No recent traces.', (trace) => {
+    navigateToTrace(trace.traceId).catch(console.error);
+  });
+
+  renderDashboardList(el.dashboardFailedRuns, d.failedRuns, (run) => `
+    <div class="top">
+      <span class="bee">${escapeHtml(run.bee)}</span>
+      <span class="badge failed">${escapeHtml(run.state)}</span>
+    </div>
+    <div class="id">${escapeHtml(run.traceId)} / ${escapeHtml(run.agentId)}</div>
+  `, 'No failed runs.', (run) => {
+    navigateToRun(run.traceId, run.agentId).catch(console.error);
+  });
+
+  renderDashboardList(el.dashboardInsights, d.recentInsights, (insight) => `
+    <div class="top">
+      <span class="bee">${escapeHtml(insight.payloadKind)}</span>
+      <span class="muted" style="font-size:0.78rem">${formatTime(insight.createdAt)}</span>
+    </div>
+    <div>${escapeHtml(insight.summary)}</div>
+    <div class="id">${escapeHtml(insight.traceId)}</div>
+  `, 'No recent insights.', (insight) => {
+    if (insight.agentId) {
+      navigateToRun(insight.traceId, insight.agentId).catch(console.error);
+    } else {
+      navigateToTrace(insight.traceId).catch(console.error);
+    }
+  });
+}
+
+function renderDashboardList(container, items, renderItem, emptyText, onClick) {
+  container.innerHTML = '';
+  if (!items || !items.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = emptyText;
+    container.appendChild(li);
+    return;
+  }
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.className = 'session-item compact-item';
+    li.innerHTML = renderItem(item);
+    if (onClick) {
+      li.addEventListener('click', () => onClick(item));
+    }
+    container.appendChild(li);
+  }
+}
+
+async function navigateToRun(traceId, agentId) {
+  if (!traceId || !agentId) return;
+  setTab('runs');
+  await loadRuns();
+  await selectRun(traceId, agentId);
+}
+
+async function navigateToTrace(traceId) {
+  if (!traceId) return;
+  setTab('runs');
+  await loadRuns();
+  const match = state.runs.find((r) => r.traceId === traceId);
+  if (match) {
+    await selectRun(match.traceId, match.agentId);
+  }
+}
+
+function timelineQueryParams(appendCursor) {
+  const f = state.timelineFilters;
+  const params = new URLSearchParams();
+  if (f.traceId) params.set('traceId', f.traceId);
+  if (f.taskId) params.set('taskId', f.taskId);
+  if (f.bee) params.set('bee', f.bee);
+  if (f.type) params.set('type', f.type);
+  if (f.kind) params.set('kind', f.kind);
+  if (f.severity) params.set('severity', f.severity);
+  params.set('limit', '50');
+  if (appendCursor && state.timelineCursor) {
+    params.set('after', state.timelineCursor);
+  }
+  return params.toString();
+}
+
+function renderTimeline() {
+  el.timelineFeed.innerHTML = '';
+  if (!state.timelineItems.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No events match the current filters.';
+    el.timelineFeed.appendChild(li);
+    return;
+  }
+  for (const item of state.timelineItems) {
+    const li = document.createElement('li');
+    li.className = 'timeline-item';
+    const kind = item.payloadKind ? ` · ${item.payloadKind}` : '';
+    const severity = item.severity ? ` · ${item.severity}` : '';
+    const bee = item.bee ? ` · ${item.bee}` : '';
+    li.innerHTML = `
+      <div class="timeline-top">
+        <span class="timeline-type">${escapeHtml(item.type)}${escapeHtml(kind)}</span>
+        <span class="muted timeline-time">${formatTime(item.createdAt)}</span>
+      </div>
+      <div class="timeline-summary">${escapeHtml(item.summary)}</div>
+      <div class="timeline-meta muted">${escapeHtml(item.traceId)} / ${escapeHtml(item.agentId)}${escapeHtml(bee)}${escapeHtml(severity)}</div>
+      ${state.timelineShowRaw ? `<pre class="timeline-raw">${escapeHtml(JSON.stringify(item.raw, null, 2))}</pre>` : ''}
+    `;
+    el.timelineFeed.appendChild(li);
+  }
+  el.timelineMoreBtn.classList.toggle('hidden', !state.timelineHasMore);
+}
+
+async function loadDashboard() {
+  state.dashboard = await api('/api/dashboard');
+  renderDashboard();
+}
+
+async function loadTimeline(reset) {
+  if (reset) {
+    state.timelineItems = [];
+    state.timelineCursor = '';
+    state.timelineHasMore = false;
+  }
+  const qs = timelineQueryParams(!reset);
+  const page = await api(`/api/events?${qs}`);
+  if (reset) {
+    state.timelineItems = page.items || [];
+  } else {
+    state.timelineItems.push(...(page.items || []));
+  }
+  state.timelineCursor = page.nextCursor || '';
+  state.timelineHasMore = !!page.hasMore;
+  renderTimeline();
+}
+
+function readTimelineFiltersFromForm() {
+  state.timelineFilters = {
+    traceId: el.filterTrace.value.trim(),
+    taskId: el.filterTask.value.trim(),
+    bee: el.filterBee.value.trim(),
+    type: el.filterType.value,
+    kind: el.filterKind.value.trim(),
+    severity: el.filterSeverity.value.trim(),
+  };
+}
+
+function stopDashboardPolling() {
+  if (state.dashboardPollTimer) {
+    clearInterval(state.dashboardPollTimer);
+    state.dashboardPollTimer = null;
+  }
+}
+
+function startDashboardPolling() {
+  stopDashboardPolling();
+  state.dashboardPollTimer = setInterval(() => {
+    loadDashboard().catch(console.error);
+  }, 5000);
+  loadDashboard().catch(console.error);
+}
+
 async function loadBees() {
   state.bees = await api('/api/bees');
   renderBees();
@@ -433,10 +686,35 @@ function startRunPolling() {
   pollRunEvents();
 }
 
+el.tabDashboard.addEventListener('click', () => setTab('dashboard'));
+el.tabTimeline.addEventListener('click', () => setTab('timeline'));
 el.tabSessions.addEventListener('click', () => setTab('sessions'));
 el.tabRuns.addEventListener('click', () => {
   setTab('runs');
   loadRuns().catch(console.error);
+});
+
+el.dashboardRefreshBtn.addEventListener('click', () => {
+  loadDashboard().catch(console.error);
+});
+
+el.timelineRefreshBtn.addEventListener('click', () => {
+  loadTimeline(true).catch(console.error);
+});
+
+el.timelineFilters.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  readTimelineFiltersFromForm();
+  loadTimeline(true).catch(console.error);
+});
+
+el.timelineRawToggle.addEventListener('change', () => {
+  state.timelineShowRaw = el.timelineRawToggle.checked;
+  renderTimeline();
+});
+
+el.timelineMoreBtn.addEventListener('click', () => {
+  loadTimeline(false).catch(console.error);
 });
 
 el.rawToggle.addEventListener('change', () => {
@@ -533,6 +811,7 @@ async function init() {
     await loadBees();
     await loadSessions();
     await loadRuns();
+    setTab('dashboard');
   } catch (err) {
     console.error(err);
   }

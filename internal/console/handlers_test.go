@@ -337,6 +337,172 @@ func TestRunsAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-10 * time.Minute)
+	traceID := "trace-dash"
+	agentID := "agent-dash"
+
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Bee:             "scout",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		TaskID:          "task-dash",
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusFailed,
+		StartedAt:       started,
+		FinishedAt:      started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	insight, err := protocol.NewEvent(traceID, agentID, 1, protocol.EventInsight, protocol.NarrativeInsightPayload{
+		Kind:    protocol.InsightRunSummary,
+		Summary: "dashboard summary",
+		TaskID:  "task-dash",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insight.CreatedAt = started.Add(30 * time.Second)
+	if err := d.AppendEvent(insight); err != nil {
+		t.Fatal(err)
+	}
+
+	signal, err := protocol.NewEvent(traceID, agentID, 2, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-dash",
+		Title:  "Do work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	signal.CreatedAt = started.Add(45 * time.Second)
+	if err := d.AppendEvent(signal); err != nil {
+		t.Fatal(err)
+	}
+
+	taskDir, err := runs.NewTaskDir(repo, traceID, "task-dash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := taskDir.WriteTask(runs.TaskFrontmatter{
+		TraceID: traceID,
+		TaskID:  "task-dash",
+		Title:   "Do work",
+		Bee:     "scout",
+		Status:  protocol.TaskStatusReady,
+	}, "body"); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	dashReq := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
+	dashRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(dashRec, dashReq)
+	if dashRec.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d body=%s", dashRec.Code, dashRec.Body.String())
+	}
+	var dash console.DashboardView
+	if err := json.NewDecoder(dashRec.Body).Decode(&dash); err != nil {
+		t.Fatal(err)
+	}
+	if len(dash.RecentTraces) == 0 {
+		t.Fatalf("expected recent traces, got %+v", dash)
+	}
+	if len(dash.FailedRuns) == 0 {
+		t.Fatalf("expected failed runs, got %+v", dash)
+	}
+	if len(dash.RecentInsights) == 0 {
+		t.Fatalf("expected recent insights, got %+v", dash)
+	}
+	if dash.TaskCounts[string(protocol.TaskStatusReady)] != 1 {
+		t.Fatalf("task counts = %+v", dash.TaskCounts)
+	}
+
+	tracesReq := httptest.NewRequest(http.MethodGet, "/api/traces", nil)
+	tracesRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(tracesRec, tracesReq)
+	if tracesRec.Code != http.StatusOK {
+		t.Fatalf("traces status = %d body=%s", tracesRec.Code, tracesRec.Body.String())
+	}
+	var traces []console.TraceSummaryView
+	if err := json.NewDecoder(tracesRec.Body).Decode(&traces); err != nil {
+		t.Fatal(err)
+	}
+	if len(traces) == 0 || traces[0].TraceID != traceID {
+		t.Fatalf("traces = %+v", traces)
+	}
+
+	traceReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID, nil)
+	traceRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(traceRec, traceReq)
+	if traceRec.Code != http.StatusOK {
+		t.Fatalf("trace detail status = %d body=%s", traceRec.Code, traceRec.Body.String())
+	}
+	var traceDetail console.TraceDetailView
+	if err := json.NewDecoder(traceRec.Body).Decode(&traceDetail); err != nil {
+		t.Fatal(err)
+	}
+	if traceDetail.TraceID != traceID || len(traceDetail.Tasks) != 1 {
+		t.Fatalf("trace detail = %+v", traceDetail)
+	}
+
+	eventsReq := httptest.NewRequest(http.MethodGet, "/api/events?type=SIGNAL&kind=task.ready", nil)
+	eventsRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(eventsRec, eventsReq)
+	if eventsRec.Code != http.StatusOK {
+		t.Fatalf("events status = %d body=%s", eventsRec.Code, eventsRec.Body.String())
+	}
+	var feed console.EventFeedPage
+	if err := json.NewDecoder(eventsRec.Body).Decode(&feed); err != nil {
+		t.Fatal(err)
+	}
+	if len(feed.Items) != 1 {
+		t.Fatalf("feed = %+v", feed)
+	}
+	if feed.Items[0].PayloadKind != string(protocol.TaskEventReady) {
+		t.Fatalf("feed item = %+v", feed.Items[0])
+	}
+	if feed.Items[0].Raw.TraceID != traceID {
+		t.Fatalf("raw event missing: %+v", feed.Items[0])
+	}
+
+	traceEventsReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/events", nil)
+	traceEventsRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(traceEventsRec, traceEventsReq)
+	if traceEventsRec.Code != http.StatusOK {
+		t.Fatalf("trace events status = %d body=%s", traceEventsRec.Code, traceEventsRec.Body.String())
+	}
+	var traceFeed console.EventFeedPage
+	if err := json.NewDecoder(traceEventsRec.Body).Decode(&traceFeed); err != nil {
+		t.Fatal(err)
+	}
+	if len(traceFeed.Items) < 2 {
+		t.Fatalf("trace feed = %+v", traceFeed)
+	}
+}
+
 func TestListRunsProjection(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)

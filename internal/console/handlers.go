@@ -80,6 +80,101 @@ func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, bees)
 }
 
+func (a *api) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := GetDashboard(a.ctx, a.runtime, a.sessions)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
+}
+
+func (a *api) handleTraces(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	list, err := ListTraces(a.ctx, 20)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, list)
+}
+
+func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/traces/")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	parts := strings.Split(path, "/")
+	traceID := parts[0]
+	suffix := ""
+	if len(parts) > 1 {
+		suffix = parts[1]
+	}
+
+	if suffix == "events" {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.handleTraceEvents(w, r, traceID)
+		return
+	}
+	if suffix != "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, ok, err := GetTrace(a.ctx, traceID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, view)
+}
+
+func (a *api) handleTraceEvents(w http.ResponseWriter, r *http.Request, traceID string) {
+	filter := ParseEventFilter(r.URL.Query())
+	filter.TraceID = traceID
+	page, err := ListEventFeed(a.ctx, filter)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, page)
+}
+
+func (a *api) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filter := ParseEventFilter(r.URL.Query())
+	page, err := ListEventFeed(a.ctx, filter)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, page)
+}
+
 func (a *api) handleRuns(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
