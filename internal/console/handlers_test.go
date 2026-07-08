@@ -627,6 +627,127 @@ func TestTasksAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestReviewQueueAPIHandlers(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	traceID := "trace-review"
+	requiredID := "task-required"
+	finalID := "task-final"
+	plannedID := "task-planned"
+
+	for _, spec := range []struct {
+		taskID  string
+		title   string
+		status  protocol.TaskStatus
+		review  protocol.TaskReviewPolicy
+		summary string
+	}{
+		{requiredID, "Per-task review", protocol.TaskStatusWaitingReview, protocol.TaskReviewRequired, "Awaiting human approval"},
+		{finalID, "Final merge gate", protocol.TaskStatusWaitingReview, protocol.TaskReviewFinal, "All tasks completed — awaiting human review and merge"},
+		{plannedID, "Planned work", protocol.TaskStatusPlanned, protocol.TaskReviewNone, ""},
+	} {
+		taskDir, err := runs.NewTaskDir(repo, traceID, spec.taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := taskDir.WriteTask(runs.TaskFrontmatter{
+			TraceID: traceID,
+			TaskID:  spec.taskID,
+			Title:   spec.title,
+			Bee:     "builder",
+			Status:  spec.status,
+			Review:  spec.review,
+			Summary: spec.summary,
+		}, "task body"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	queueReq := httptest.NewRequest(http.MethodGet, "/api/review-queue", nil)
+	queueRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(queueRec, queueReq)
+	if queueRec.Code != http.StatusOK {
+		t.Fatalf("review queue status = %d body=%s", queueRec.Code, queueRec.Body.String())
+	}
+	var queue console.ReviewQueueView
+	if err := json.NewDecoder(queueRec.Body).Decode(&queue); err != nil {
+		t.Fatal(err)
+	}
+	if queue.Count != 2 || len(queue.Items) != 2 {
+		t.Fatalf("queue = %+v", queue)
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/tasks/"+requiredID, nil)
+	detailRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(detailRec, detailReq)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("task detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
+	}
+	var detail console.TaskDetailView
+	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Review != string(protocol.TaskReviewRequired) {
+		t.Fatalf("review policy = %q", detail.Review)
+	}
+	if !detail.CanApprove || !detail.CanReject {
+		t.Fatalf("detail actions = %+v", detail)
+	}
+	if detail.IsFinal {
+		t.Fatalf("required task should not be final: %+v", detail)
+	}
+
+	finalDetailReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/tasks/"+finalID, nil)
+	finalDetailRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(finalDetailRec, finalDetailReq)
+	if finalDetailRec.Code != http.StatusOK {
+		t.Fatalf("final detail status = %d body=%s", finalDetailRec.Code, finalDetailRec.Body.String())
+	}
+	var finalDetail console.TaskDetailView
+	if err := json.NewDecoder(finalDetailRec.Body).Decode(&finalDetail); err != nil {
+		t.Fatal(err)
+	}
+	if !finalDetail.IsFinal {
+		t.Fatalf("final task detail = %+v", finalDetail)
+	}
+
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+requiredID+"/approve", bytes.NewBufferString(`{"summary":"looks good"}`))
+	approveRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(approveRec, approveReq)
+	if approveRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("approve without nats status = %d body=%s", approveRec.Code, approveRec.Body.String())
+	}
+
+	rejectReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+plannedID+"/reject", bytes.NewBufferString(`{"feedback":"needs changes"}`))
+	rejectPlannedRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rejectPlannedRec, rejectReq)
+	if rejectPlannedRec.Code != http.StatusBadRequest {
+		t.Fatalf("reject planned task status = %d body=%s", rejectPlannedRec.Code, rejectPlannedRec.Body.String())
+	}
+
+	rejectReq = httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+requiredID+"/reject", bytes.NewBufferString(`{"feedback":"needs changes"}`))
+	rejectRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rejectRec, rejectReq)
+	if rejectRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("reject without nats status = %d body=%s", rejectRec.Code, rejectRec.Body.String())
+	}
+
+	methodReq := httptest.NewRequest(http.MethodGet, "/api/review-queue", nil)
+	methodReq.Method = http.MethodPost
+	methodRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(methodRec, methodReq)
+	if methodRec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("review queue POST status = %d", methodRec.Code)
+	}
+}
+
 func TestListRunsProjection(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)

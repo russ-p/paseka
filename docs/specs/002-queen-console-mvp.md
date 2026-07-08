@@ -26,7 +26,6 @@ This spec is now a living MVP baseline. It reflects the implementation state aft
 - Do not introduce a new database for the MVP.
 - Do not build a full multi-user or remote-host control plane.
 - Do not implement a full browser terminal or PTY attach in the first release.
-- Do not implement proposal approval/rejection from the browser in the first shipped console baseline.
 - Do not redesign event contracts, task lifecycle, or run-directory layout for the sake of the UI.
 - Do not require all interactions to be live-only; filesystem projections must remain usable as fallback state.
 
@@ -70,7 +69,8 @@ Implemented UI surfaces:
 
 - **Dashboard**: runtime status, NATS diagnostics, active sessions, active worktrees, task counts, recent traces, failed runs, and recent narrative insights.
 - **Timeline**: filterable event feed with trace, task, bee, event type, payload kind, severity, cursor pagination, and optional raw JSON display.
-- **Tasks**: grouped task board, task creation, optional autorun, task detail, linked runs, timeline navigation, and start controls for eligible tasks.
+- **Tasks**: grouped task board, task creation with optional `review` policy, optional autorun, task detail, linked runs, timeline navigation, start controls for eligible tasks, and inline approve/reject for `waiting_review` review-gated tasks.
+- **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
 - **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, poll transcript updates, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
 - **Runtime panel**: start and stop the registered local hive runtime and poll runtime status.
@@ -85,10 +85,10 @@ Implemented backend behavior:
 
 Not implemented in the current baseline:
 
-- Review queue UI and approve/reject actions.
 - Dedicated worktrees page or `/api/worktrees` endpoint.
 - Browser-native terminal input or PTY relay.
 - WebSocket/SSE live transport.
+- Diff artifact preview in the review queue (links to runs/timeline only).
 
 ## Primary User Outcomes
 
@@ -102,6 +102,7 @@ The MVP should let a solo developer:
 - Start and stop the local hive runtime from the browser.
 - Launch a detached bee session from the browser and observe its transcript, even if full in-browser terminal control is deferred.
 - Inspect recent adapter runs and their emitted events without manually opening run directories.
+- Approve or reject review-gated tasks from the browser when NATS and the task ledger are available.
 
 ## Decisions
 
@@ -114,11 +115,14 @@ The current baseline prioritizes:
 - dashboard visibility
 - timeline and event-feed inspection
 - task board visibility and basic task actions
+- review queue visibility and approve/reject actions
 - run inspection
 - session launch and session observation
 - local runtime start/stop control
 
-It does not prioritize full browser-native terminal control or review approval.
+It does not prioritize full browser-native terminal control.
+
+Task creation, start, approve, and reject actions require NATS and the task ledger KV because they publish domain events instead of writing local files directly.
 
 ### Backend Shape
 
@@ -155,11 +159,11 @@ This allows the UI to remain useful even when:
 
 Future live subscriptions may add JetStream data as the freshest source for event updates, but the current UI is intentionally useful from local projections alone.
 
-Task creation and start actions are the main exception to read-only fallback behavior: they require NATS and the task ledger KV because they publish domain events instead of writing local files directly.
+Approve and reject actions follow the same rule: they call `internal/review.Approve` / `internal/review.Reject` and require NATS.
 
 ### MVP Screens
 
-The current MVP includes five primary SPA tabs plus a global runtime panel.
+The current MVP includes six primary SPA tabs plus a global runtime panel.
 
 #### 1. Dashboard
 
@@ -225,9 +229,10 @@ The Tasks tab exposes task control and task state using the existing task ledger
 Current implementation supports:
 
 - grouped task board across recent traces
-- task creation with title, body, bee, optional trace id, sector, intent, dependencies, and autorun
-- task detail with status, source, body, summary, commit, dependencies, and linked runs
+- task creation with title, body, bee, optional trace id, sector, intent, optional `review` policy (`none`, `required`, `final`), dependencies, and autorun
+- task detail with status, review policy, source, body, summary, commit, dependencies, and linked runs
 - start action for eligible tasks
+- approve/reject actions for review-gated tasks in `waiting_review`
 - linked run navigation
 - task-scoped timeline navigation
 
@@ -235,7 +240,21 @@ Create and start actions require NATS and the task ledger KV. Read-only board/de
 
 The board is a grouped list, not drag-and-drop Kanban. It polls `GET /api/tasks` every 5 seconds while the Tasks tab is active.
 
-#### 4. Runs
+#### 5. Reviews
+
+The Reviews tab exposes the human-in-the-loop review queue:
+
+- list tasks in `waiting_review` with `review: required` or `review: final`
+- proposal detail with trace/task metadata, summary, and review policy
+- approve action (optional summary; optional merge commit message for `review: final`)
+- reject action with human feedback
+- links to timeline and linked runs for inspection context
+
+Approve/reject reuse the same domain flows as `paseka proposal approve|reject`. For `review: required`, reject publishes `human.feedback` and the runtime may return the task to `ready`. For `review: final`, reject only publishes feedback; approve may merge the trace worktree.
+
+Current implementation polls `GET /api/review-queue` every 5 seconds while the Reviews tab is active.
+
+#### 6. Runs
 
 The Runs tab exposes recent headless adapter invocations:
 
@@ -254,7 +273,7 @@ This page answers:
 - What did the run summarize?
 - Which events did the run emit?
 
-#### 5. Sessions
+#### 7. Sessions
 
 The sessions page supports:
 
@@ -329,17 +348,17 @@ This phase depends on a dedicated session relay API and should not block the MVP
 
 ### Review Queue
 
-Because human approval is central to the product model, Queen Console should expose a lightweight review queue for code proposals and review outcomes. This is deferred from the current baseline.
+Implemented in the Reviews tab. The queue lists review-gated tasks in `waiting_review` and supports browser approve/reject through the shared `internal/review` domain layer.
 
-At minimum, show:
+At minimum, the UI shows:
 
 - proposals awaiting attention
 - source trace and task
 - summary
-- current run status
-- links to diff artifacts when present
+- review policy (`required` vs `final`)
+- links to timeline and linked runs for inspection context
 
-If approve/reject actions are included in MVP scope, they should reuse the same domain flows as existing CLI commands.
+Approve/reject actions reuse the same domain flows as `paseka proposal approve|reject`.
 
 ### Worktree Visibility
 
@@ -381,6 +400,9 @@ Implemented HTTP endpoints:
 - `GET /api/sessions/:sessionId`
 - `GET /api/sessions/:sessionId/transcript`
 - `POST /api/sessions/:sessionId/stop`
+- `GET /api/review-queue`
+- `POST /api/traces/:traceId/tasks/:taskId/approve`
+- `POST /api/traces/:traceId/tasks/:taskId/reject`
 - `GET /api/runs`
 - `GET /api/runs/:traceId/:agentId`
 - `GET /api/runs/:traceId/:agentId/events`
@@ -388,7 +410,6 @@ Implemented HTTP endpoints:
 Deferred suggested endpoints:
 
 - `GET /api/worktrees`
-- `GET /api/review-queue`
 
 Deferred live endpoints:
 
@@ -561,14 +582,15 @@ Includes:
 
 Backend projection exists for trace detail and trace-scoped events. A first-class Trace tab is still deferred.
 
-### 7. Review Queue (Deferred)
+### 7. Review Queue (Implemented)
 
-Add:
+Includes:
 
 - review queue page
 - proposal detail
 - approve proposal
 - reject proposal with human feedback
+- task board/detail review policy visibility
 
 ### 8. Live Streaming Improvements (Deferred)
 
@@ -619,8 +641,8 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 ## Open Questions
 
 - Should `paseka console` continue supervising an external `paseka run`, or should a future console mode embed the runtime in-process?
-- Should live updates move from polling to WebSocket or SSE once the review queue exists or session/event volume grows?
-- Should the next UI expansion prioritize first-class Trace view, Review Queue, or Worktree view?
+- Should live updates move from polling to WebSocket or SSE once session/event volume grows?
+- Should the next UI expansion prioritize first-class Trace view or Worktree view?
 - Should frontend code stay as embedded static assets, or move to a small bundled frontend workspace if UI complexity grows?
 
 ## Verification

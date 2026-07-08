@@ -4,6 +4,9 @@ const state = {
   sessions: [],
   runs: [],
   tasks: null,
+  reviews: null,
+  selectedReviewKey: null,
+  selectedReviewDetail: null,
   selectedTaskKey: null,
   selectedTaskDetail: null,
   dashboard: null,
@@ -24,6 +27,7 @@ const state = {
   runtimePollTimer: null,
   dashboardPollTimer: null,
   tasksPollTimer: null,
+  reviewsPollTimer: null,
 };
 
 const el = {
@@ -31,6 +35,7 @@ const el = {
   tabDashboard: document.getElementById('tab-dashboard'),
   tabTimeline: document.getElementById('tab-timeline'),
   tabTasks: document.getElementById('tab-tasks'),
+  tabReviews: document.getElementById('tab-reviews'),
   tabSessions: document.getElementById('tab-sessions'),
   tabRuns: document.getElementById('tab-runs'),
   dashboardLayout: document.getElementById('dashboard-layout'),
@@ -59,6 +64,7 @@ const el = {
   taskTraceInput: document.getElementById('task-trace-input'),
   taskSectorInput: document.getElementById('task-sector-input'),
   taskIntentSelect: document.getElementById('task-intent-select'),
+  taskReviewSelect: document.getElementById('task-review-select'),
   taskDependsInput: document.getElementById('task-depends-input'),
   taskAutorunToggle: document.getElementById('task-autorun-toggle'),
   taskCreateBtn: document.getElementById('task-create-btn'),
@@ -73,7 +79,36 @@ const el = {
   taskRunsList: document.getElementById('task-runs-list'),
   taskDetailActions: document.getElementById('task-detail-actions'),
   taskStartBtn: document.getElementById('task-start-btn'),
+  taskApproveBtn: document.getElementById('task-approve-btn'),
+  taskRejectBtn: document.getElementById('task-reject-btn'),
   taskOpenTimelineBtn: document.getElementById('task-open-timeline-btn'),
+  taskReviewActions: document.getElementById('task-review-actions'),
+  taskApproveForm: document.getElementById('task-approve-form'),
+  taskApproveSummary: document.getElementById('task-approve-summary'),
+  taskMergeMessageLabel: document.getElementById('task-merge-message-label'),
+  taskMergeMessage: document.getElementById('task-merge-message'),
+  taskRejectForm: document.getElementById('task-reject-form'),
+  taskRejectFeedback: document.getElementById('task-reject-feedback'),
+  taskReviewError: document.getElementById('task-review-error'),
+  reviewsLayout: document.getElementById('reviews-layout'),
+  reviewsRefreshBtn: document.getElementById('reviews-refresh-btn'),
+  reviewQueueList: document.getElementById('review-queue-list'),
+  reviewDetailEmpty: document.getElementById('review-detail-empty'),
+  reviewDetailMeta: document.getElementById('review-detail-meta'),
+  reviewSummaryWrap: document.getElementById('review-summary-wrap'),
+  reviewSummary: document.getElementById('review-summary'),
+  reviewActionsWrap: document.getElementById('review-actions-wrap'),
+  reviewFinalHint: document.getElementById('review-final-hint'),
+  reviewApproveForm: document.getElementById('review-approve-form'),
+  reviewApproveSummary: document.getElementById('review-approve-summary'),
+  reviewMergeMessageLabel: document.getElementById('review-merge-message-label'),
+  reviewMergeMessage: document.getElementById('review-merge-message'),
+  reviewRejectForm: document.getElementById('review-reject-form'),
+  reviewRejectFeedback: document.getElementById('review-reject-feedback'),
+  reviewOpenTimelineBtn: document.getElementById('review-open-timeline-btn'),
+  reviewOpenRunsBtn: document.getElementById('review-open-runs-btn'),
+  reviewActionError: document.getElementById('review-action-error'),
+  reviewActionSuccess: document.getElementById('review-action-success'),
   sessionsLayout: document.getElementById('sessions-layout'),
   runsLayout: document.getElementById('runs-layout'),
   beeSelect: document.getElementById('bee-select'),
@@ -190,11 +225,12 @@ function escapeHtml(str) {
 
 function setTab(tab) {
   state.tab = tab;
-  const tabs = ['dashboard', 'timeline', 'tasks', 'sessions', 'runs'];
+  const tabs = ['dashboard', 'timeline', 'tasks', 'reviews', 'sessions', 'runs'];
   const layouts = {
     dashboard: el.dashboardLayout,
     timeline: el.timelineLayout,
     tasks: el.tasksLayout,
+    reviews: el.reviewsLayout,
     sessions: el.sessionsLayout,
     runs: el.runsLayout,
   };
@@ -214,6 +250,7 @@ function setTab(tab) {
     dashboard: 'Dashboard — colony-wide snapshot and recent activity',
     timeline: 'Timeline — filterable event feed across the colony',
     tasks: 'Tasks — create, start, and inspect trace tasks',
+    reviews: 'Reviews — approve or reject proposals awaiting human review',
     sessions: 'Sessions — launch and observe interactive bees',
     runs: 'Runs — observe headless adapter invocations',
   };
@@ -222,6 +259,7 @@ function setTab(tab) {
   stopPolling();
   stopDashboardPolling();
   stopTasksPolling();
+  stopReviewsPolling();
   if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
   } else if (tab === 'runs' && state.selectedRunKey) {
@@ -232,6 +270,8 @@ function setTab(tab) {
     loadTimeline(true).catch(console.error);
   } else if (tab === 'tasks') {
     startTasksPolling();
+  } else if (tab === 'reviews') {
+    startReviewsPolling();
   }
 }
 
@@ -577,6 +617,97 @@ function renderTaskBoard() {
   }
 }
 
+function reviewKey(item) {
+  return `${item.traceId}/${item.taskId}`;
+}
+
+function renderReviewQueue() {
+  el.reviewQueueList.innerHTML = '';
+  const items = state.reviews?.items || [];
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No proposals awaiting review.';
+    el.reviewQueueList.appendChild(li);
+    return;
+  }
+  for (const item of items) {
+    const key = reviewKey(item);
+    const li = document.createElement('li');
+    li.className = 'session-item' + (key === state.selectedReviewKey ? ' selected' : '');
+    const finalTag = item.isFinal ? '<span class="task-tag" style="color:var(--warn)">final gate</span>' : '';
+    const reviewTag = item.review ? `<span class="task-tag">${escapeHtml(item.review)}</span>` : '';
+    li.innerHTML = `
+      <div class="top">
+        <span class="bee">${escapeHtml(item.title)}</span>
+        <span class="badge waiting_review">waiting_review</span>
+      </div>
+      <div class="id">${escapeHtml(item.traceId)} / ${escapeHtml(item.taskId)}</div>
+      <div class="badges" style="margin-top:0.35rem">${reviewTag}${finalTag}</div>
+      ${item.summary ? `<div class="muted" style="font-size:0.8rem;margin-top:0.35rem">${escapeHtml(item.summary)}</div>` : ''}
+    `;
+    li.addEventListener('click', () => selectReview(item.traceId, item.taskId));
+    el.reviewQueueList.appendChild(li);
+  }
+}
+
+function renderReviewDetail(item) {
+  if (!item) {
+    el.reviewDetailEmpty.classList.remove('hidden');
+    el.reviewDetailMeta.classList.add('hidden');
+    el.reviewSummaryWrap.classList.add('hidden');
+    el.reviewActionsWrap.classList.add('hidden');
+    return;
+  }
+
+  el.reviewDetailEmpty.classList.add('hidden');
+  el.reviewDetailMeta.classList.remove('hidden');
+  el.reviewActionError.classList.add('hidden');
+  el.reviewActionSuccess.classList.add('hidden');
+
+  const rows = [
+    ['Review policy', item.review || '—'],
+    ['Trace ID', item.traceId],
+    ['Task ID', item.taskId],
+    ['Bee', item.bee],
+    ['Sector', item.sector],
+    ['Runs', String(item.runCount ?? 0)],
+    ['Updated', formatTime(item.updatedAt)],
+  ];
+  if (item.isFinal) {
+    rows.unshift(['Gate', 'Final merge gate']);
+  }
+  el.reviewDetailMeta.innerHTML = rows
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
+    .join('');
+
+  if (item.summary) {
+    el.reviewSummaryWrap.classList.remove('hidden');
+    el.reviewSummary.textContent = item.summary;
+  } else {
+    el.reviewSummaryWrap.classList.add('hidden');
+    el.reviewSummary.textContent = '';
+  }
+
+  const canAct = item.canApprove && item.canReject;
+  if (canAct) {
+    el.reviewActionsWrap.classList.remove('hidden');
+    el.reviewFinalHint.classList.toggle('hidden', !item.isFinal);
+    el.reviewMergeMessageLabel.classList.toggle('hidden', !item.isFinal);
+  } else {
+    el.reviewActionsWrap.classList.add('hidden');
+  }
+}
+
+function updateTaskReviewUI(task) {
+  const canReview = task && task.canApprove && task.canReject;
+  el.taskApproveBtn.classList.toggle('hidden', !canReview);
+  el.taskRejectBtn.classList.toggle('hidden', !canReview);
+  el.taskReviewActions.classList.toggle('hidden', !canReview);
+  el.taskMergeMessageLabel.classList.toggle('hidden', !(canReview && task.isFinal));
+  el.taskReviewError.classList.add('hidden');
+}
+
 function renderTaskDetail(task) {
   if (!task) {
     el.taskDetailEmpty.classList.remove('hidden');
@@ -585,6 +716,7 @@ function renderTaskDetail(task) {
     el.taskRunsWrap.classList.add('hidden');
     el.taskDetailActions.classList.add('hidden');
     el.taskStartBtn.classList.add('hidden');
+    updateTaskReviewUI(null);
     return;
   }
 
@@ -594,6 +726,7 @@ function renderTaskDetail(task) {
 
   const rows = [
     ['Status', task.status],
+    ['Review', task.review || 'none'],
     ['Trace ID', task.traceId],
     ['Task ID', task.taskId],
     ['Bee', task.bee],
@@ -649,6 +782,79 @@ function renderTaskDetail(task) {
   } else {
     el.taskStartBtn.classList.add('hidden');
   }
+  updateTaskReviewUI(task);
+}
+
+async function loadReviews() {
+  state.reviews = await api('/api/review-queue');
+  renderReviewQueue();
+  if (state.selectedReviewKey) {
+    const [traceId, taskId] = state.selectedReviewKey.split('/');
+    const item = state.reviews.items?.find((i) => i.traceId === traceId && i.taskId === taskId);
+    state.selectedReviewDetail = item || null;
+    renderReviewDetail(state.selectedReviewDetail);
+  }
+}
+
+async function selectReview(traceId, taskId) {
+  state.selectedReviewKey = `${traceId}/${taskId}`;
+  renderReviewQueue();
+  const item = state.reviews?.items?.find((i) => i.traceId === traceId && i.taskId === taskId);
+  if (item) {
+    state.selectedReviewDetail = item;
+    renderReviewDetail(item);
+    return;
+  }
+  const detail = await api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}`);
+  state.selectedReviewDetail = {
+    traceId: detail.traceId,
+    taskId: detail.taskId,
+    title: detail.title,
+    review: detail.review,
+    summary: detail.summary,
+    bee: detail.bee,
+    sector: detail.sector,
+    runCount: detail.runCount,
+    updatedAt: detail.updatedAt,
+    isFinal: detail.isFinal,
+    canApprove: detail.canApprove,
+    canReject: detail.canReject,
+  };
+  renderReviewDetail(state.selectedReviewDetail);
+}
+
+async function approveReview(traceId, taskId, { summary, mergeMessage }) {
+  const body = {};
+  if (summary) body.summary = summary;
+  if (mergeMessage) body.mergeMessage = mergeMessage;
+  return api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+async function rejectReview(traceId, taskId, feedback) {
+  const body = {};
+  if (feedback) body.feedback = feedback;
+  return api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+function stopReviewsPolling() {
+  if (state.reviewsPollTimer) {
+    clearInterval(state.reviewsPollTimer);
+    state.reviewsPollTimer = null;
+  }
+}
+
+function startReviewsPolling() {
+  stopReviewsPolling();
+  state.reviewsPollTimer = setInterval(() => {
+    loadReviews().catch(console.error);
+  }, 5000);
+  loadReviews().catch(console.error);
 }
 
 async function loadTasks() {
@@ -686,6 +892,7 @@ async function createTaskFromForm() {
       traceId: el.taskTraceInput.value.trim(),
       sector: el.taskSectorInput.value.trim(),
       intent: el.taskIntentSelect.value,
+      review: el.taskReviewSelect.value,
       dependsOn: dependsRaw ? dependsRaw.split(',').map((s) => s.trim()).filter(Boolean) : [],
       autorun: el.taskAutorunToggle.checked,
     };
@@ -956,6 +1163,7 @@ function startRunPolling() {
 el.tabDashboard.addEventListener('click', () => setTab('dashboard'));
 el.tabTimeline.addEventListener('click', () => setTab('timeline'));
 el.tabTasks.addEventListener('click', () => setTab('tasks'));
+el.tabReviews.addEventListener('click', () => setTab('reviews'));
 el.tabSessions.addEventListener('click', () => setTab('sessions'));
 el.tabRuns.addEventListener('click', () => {
   setTab('runs');
@@ -1001,6 +1209,125 @@ el.taskStartBtn.addEventListener('click', () => {
 el.taskOpenTimelineBtn.addEventListener('click', () => {
   if (!state.selectedTaskDetail) return;
   navigateToTaskTimeline(state.selectedTaskDetail.traceId, state.selectedTaskDetail.taskId);
+});
+
+el.taskApproveBtn.addEventListener('click', () => {
+  if (!state.selectedTaskDetail) return;
+  el.taskReviewActions.classList.remove('hidden');
+  el.taskReviewActions.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+el.taskRejectBtn.addEventListener('click', () => {
+  if (!state.selectedTaskDetail) return;
+  el.taskReviewActions.classList.remove('hidden');
+  el.taskRejectFeedback.focus();
+  el.taskReviewActions.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+el.taskApproveForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!state.selectedTaskDetail) return;
+  const { traceId, taskId } = state.selectedTaskDetail;
+  el.taskReviewError.classList.add('hidden');
+  try {
+    const res = await approveReview(traceId, taskId, {
+      summary: el.taskApproveSummary.value.trim(),
+      mergeMessage: el.taskMergeMessage.value.trim(),
+    });
+    await loadTasks();
+    await loadReviews();
+    alert(res.message || 'Task approved.');
+    state.selectedTaskKey = `${traceId}/${taskId}`;
+    await selectTask(traceId, taskId);
+  } catch (err) {
+    el.taskReviewError.textContent = err.message;
+    el.taskReviewError.classList.remove('hidden');
+  }
+});
+
+el.taskRejectForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!state.selectedTaskDetail) return;
+  const { traceId, taskId } = state.selectedTaskDetail;
+  el.taskReviewError.classList.add('hidden');
+  try {
+    const res = await rejectReview(traceId, taskId, el.taskRejectFeedback.value.trim());
+    await loadTasks();
+    await loadReviews();
+    alert(res.message || 'Feedback published.');
+    state.selectedTaskKey = `${traceId}/${taskId}`;
+    await selectTask(traceId, taskId);
+  } catch (err) {
+    el.taskReviewError.textContent = err.message;
+    el.taskReviewError.classList.remove('hidden');
+  }
+});
+
+el.reviewsRefreshBtn.addEventListener('click', () => {
+  loadReviews().catch(console.error);
+});
+
+function showReviewActionSuccess(message) {
+  el.reviewActionError.classList.add('hidden');
+  el.reviewActionSuccess.textContent = message;
+  el.reviewActionSuccess.classList.remove('hidden');
+}
+
+el.reviewApproveForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!state.selectedReviewDetail) return;
+  const { traceId, taskId } = state.selectedReviewDetail;
+  el.reviewActionError.classList.add('hidden');
+  el.reviewActionSuccess.classList.add('hidden');
+  try {
+    const res = await approveReview(traceId, taskId, {
+      summary: el.reviewApproveSummary.value.trim(),
+      mergeMessage: el.reviewMergeMessage.value.trim(),
+    });
+    const message = res.commitSha
+      ? `${res.message} Commit: ${res.commitSha}`
+      : (res.message || 'Task approved.');
+    state.selectedReviewKey = null;
+    state.selectedReviewDetail = null;
+    renderReviewDetail(null);
+    showReviewActionSuccess(message);
+    await loadReviews();
+    await loadTasks();
+  } catch (err) {
+    el.reviewActionError.textContent = err.message;
+    el.reviewActionError.classList.remove('hidden');
+  }
+});
+
+el.reviewRejectForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!state.selectedReviewDetail) return;
+  const { traceId, taskId } = state.selectedReviewDetail;
+  el.reviewActionError.classList.add('hidden');
+  el.reviewActionSuccess.classList.add('hidden');
+  try {
+    const res = await rejectReview(traceId, taskId, el.reviewRejectFeedback.value.trim());
+    state.selectedReviewKey = null;
+    state.selectedReviewDetail = null;
+    renderReviewDetail(null);
+    showReviewActionSuccess(res.message || 'Feedback published.');
+    await loadReviews();
+    await loadTasks();
+  } catch (err) {
+    el.reviewActionError.textContent = err.message;
+    el.reviewActionError.classList.remove('hidden');
+  }
+});
+
+el.reviewOpenTimelineBtn.addEventListener('click', () => {
+  if (!state.selectedReviewDetail) return;
+  navigateToTaskTimeline(state.selectedReviewDetail.traceId, state.selectedReviewDetail.taskId);
+});
+
+el.reviewOpenRunsBtn.addEventListener('click', () => {
+  if (!state.selectedReviewDetail) return;
+  setTab('tasks');
+  selectTask(state.selectedReviewDetail.traceId, state.selectedReviewDetail.taskId).catch(console.error);
 });
 
 el.rawToggle.addEventListener('change', () => {

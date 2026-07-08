@@ -245,10 +245,10 @@ func newProposalRejectCmd() *cobra.Command {
 				return err
 			}
 			defer session.Close()
-			if session.Client == nil {
+			if session.Client == nil || session.Ledger == nil {
 				return fmt.Errorf("nats url not configured")
 			}
-			if err := review.Reject(cmd.Context(), session.Client, review.RejectInput{
+			if err := review.Reject(cmd.Context(), session.Client, session.Ledger, review.RejectInput{
 				TraceID:  traceID,
 				TaskID:   taskID,
 				Feedback: feedback,

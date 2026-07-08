@@ -2,6 +2,7 @@ package review_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
@@ -92,6 +93,40 @@ func TestApproveRequiredSkipsMerge(t *testing.T) {
 	}
 	if commit != "" {
 		t.Fatalf("commit = %q, want empty (no merge for required review)", commit)
+	}
+}
+
+func TestRejectRequiresWaitingReviewGate(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-1"
+
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Work", Review: protocol.TaskReviewRequired},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	err = review.Reject(context.Background(), nil, ledger, review.RejectInput{
+		TraceID: traceID,
+		TaskID:  "task-1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "waiting_review") {
+		t.Fatalf("Reject planned task err = %v", err)
+	}
+
+	err = review.Reject(context.Background(), nil, ledger, review.RejectInput{
+		TraceID: traceID,
+		TaskID:  "missing",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("Reject missing task err = %v", err)
 	}
 }
 

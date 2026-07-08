@@ -38,16 +38,20 @@ type TaskRunView struct {
 
 // TaskListItem is one task row on the board.
 type TaskListItem struct {
-	TraceID   string    `json:"traceId"`
-	TaskID    string    `json:"taskId"`
-	Title     string    `json:"title"`
-	Status    string    `json:"status"`
-	Bee       string    `json:"bee,omitempty"`
-	Sector    string    `json:"sector,omitempty"`
-	DependsOn []string  `json:"dependsOn,omitempty"`
-	RunCount  int       `json:"runCount"`
-	CanStart  bool      `json:"canStart"`
-	UpdatedAt time.Time `json:"updatedAt,omitempty"`
+	TraceID    string    `json:"traceId"`
+	TaskID     string    `json:"taskId"`
+	Title      string    `json:"title"`
+	Status     string    `json:"status"`
+	Review     string    `json:"review,omitempty"`
+	Bee        string    `json:"bee,omitempty"`
+	Sector     string    `json:"sector,omitempty"`
+	DependsOn  []string  `json:"dependsOn,omitempty"`
+	RunCount   int       `json:"runCount"`
+	CanStart   bool      `json:"canStart"`
+	CanApprove bool      `json:"canApprove"`
+	CanReject  bool      `json:"canReject"`
+	IsFinal    bool      `json:"isFinal"`
+	UpdatedAt  time.Time `json:"updatedAt,omitempty"`
 }
 
 // TaskStatusGroup groups tasks by lifecycle status.
@@ -83,6 +87,7 @@ type CreateTaskRequest struct {
 	Sector    string   `json:"sector"`
 	Intent    string   `json:"intent"`
 	DependsOn []string `json:"dependsOn"`
+	Review    string   `json:"review"`
 	Autorun   bool     `json:"autorun"`
 }
 
@@ -197,6 +202,7 @@ func CreateTask(ctx context.Context, colonyCtx colony.Context, req CreateTaskReq
 		Sector:    req.Sector,
 		Intent:    req.Intent,
 		DependsOn: req.DependsOn,
+		Review:    req.Review,
 		Autorun:   req.Autorun,
 		AgentID:   "console",
 	})
@@ -341,17 +347,23 @@ func taskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 		}
 	}
 
+	reviewPolicy := string(protocol.NormalizeTaskReviewPolicy(task.Review))
+	canApprove, canReject := reviewActionsForTask(task)
 	return TaskListItem{
-		TraceID:   traceID,
-		TaskID:    task.TaskID,
-		Title:     title,
-		Status:    status,
-		Bee:       task.Bee,
-		Sector:    task.Sector,
-		DependsOn: append([]string(nil), task.DependsOn...),
-		RunCount:  runCount,
-		CanStart:  tasks.CanStartTask(snap, task.TaskID),
-		UpdatedAt: task.UpdatedAt,
+		TraceID:    traceID,
+		TaskID:     task.TaskID,
+		Title:      title,
+		Status:     status,
+		Review:     reviewPolicy,
+		Bee:        task.Bee,
+		Sector:     task.Sector,
+		DependsOn:  append([]string(nil), task.DependsOn...),
+		RunCount:   runCount,
+		CanStart:   tasks.CanStartTask(snap, task.TaskID),
+		CanApprove: canApprove,
+		CanReject:  canReject,
+		IsFinal:    taskledger.IsFinalReviewTask(task),
+		UpdatedAt:  task.UpdatedAt,
 	}
 }
 

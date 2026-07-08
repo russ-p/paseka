@@ -60,6 +60,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
 	mux.HandleFunc("/api/dashboard", apiHandler.handleDashboard)
 	mux.HandleFunc("/api/tasks", apiHandler.handleTasks)
+	mux.HandleFunc("/api/review-queue", apiHandler.handleReviewQueue)
 	mux.HandleFunc("/api/traces", apiHandler.handleTraces)
 	mux.HandleFunc("/api/traces/", apiHandler.handleTraceByID)
 	mux.HandleFunc("/api/events", apiHandler.handleEvents)

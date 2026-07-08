@@ -277,6 +277,53 @@ header h1 {
   grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.2fr) minmax(300px, 1fr);
 }
 
+#reviews-layout {
+  grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.3fr);
+}
+
+.reviews-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.review-actions {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.review-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.review-detail-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.success {
+  color: var(--ok);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.badge.waiting_review {
+  background: #3d3318;
+  color: var(--warn);
+}
+
 .task-board {
   display: flex;
   flex-direction: column;
@@ -362,7 +409,8 @@ header h1 {
 @media (max-width: 1100px) {
   #sessions-layout,
   #runs-layout,
-  #tasks-layout {
+  #tasks-layout,
+  #reviews-layout {
     grid-template-columns: 1fr;
   }
 }

@@ -29,6 +29,7 @@
       <button type="button" id="tab-dashboard" class="tab active" role="tab" aria-selected="true">Dashboard</button>
       <button type="button" id="tab-timeline" class="tab" role="tab" aria-selected="false">Timeline</button>
       <button type="button" id="tab-tasks" class="tab" role="tab" aria-selected="false">Tasks</button>
+      <button type="button" id="tab-reviews" class="tab" role="tab" aria-selected="false">Reviews</button>
       <button type="button" id="tab-sessions" class="tab" role="tab" aria-selected="false">Sessions</button>
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
     </nav>
@@ -146,6 +147,14 @@
           </label>
         </div>
         <label>
+          Review policy
+          <select id="task-review-select">
+            <option value="">none (auto-complete)</option>
+            <option value="required">required (per-task review)</option>
+            <option value="final">final (trace merge gate)</option>
+          </select>
+        </label>
+        <label>
           Depends on <span class="hint">(comma-separated task ids)</span>
           <input type="text" id="task-depends-input" placeholder="task-a, task-b">
         </label>
@@ -183,8 +192,82 @@
         <ul id="task-runs-list" class="session-list compact-list"></ul>
       </div>
       <div id="task-detail-actions" class="task-detail-actions hidden">
+        <button type="button" id="task-approve-btn" class="secondary hidden">Approve</button>
+        <button type="button" id="task-reject-btn" class="danger hidden">Reject</button>
         <button type="button" id="task-open-timeline-btn" class="secondary">Open in timeline</button>
       </div>
+      <div id="task-review-actions" class="review-actions hidden">
+        <h3>Review actions</h3>
+        <form id="task-approve-form" class="review-form">
+          <label>
+            Approval summary <span class="hint">(optional)</span>
+            <input type="text" id="task-approve-summary" placeholder="approved by human">
+          </label>
+          <label id="task-merge-message-label" class="hidden">
+            Merge commit message <span class="hint">(final gate)</span>
+            <input type="text" id="task-merge-message" placeholder="Merge trace changes">
+          </label>
+          <button type="submit" id="task-approve-submit-btn">Approve</button>
+        </form>
+        <form id="task-reject-form" class="review-form">
+          <label>
+            Feedback for bee
+            <textarea id="task-reject-feedback" rows="3" placeholder="Please revise the proposal…"></textarea>
+          </label>
+          <button type="submit" id="task-reject-submit-btn" class="danger">Reject</button>
+        </form>
+        <p id="task-review-error" class="error hidden"></p>
+      </div>
+    </section>
+  </main>
+
+  <main class="layout reviews-layout hidden" id="reviews-layout">
+    <section class="panel reviews-queue-panel">
+      <div class="panel-header">
+        <h2>Review queue</h2>
+        <button type="button" id="reviews-refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <p class="muted reviews-hint">Tasks in <code>waiting_review</code> with <code>review: required</code> or <code>review: final</code>.</p>
+      <ul id="review-queue-list" class="session-list"></ul>
+    </section>
+
+    <section class="panel detail-panel reviews-detail-panel">
+      <div class="panel-header">
+        <h2>Proposal detail</h2>
+      </div>
+      <div id="review-detail-empty" class="muted">Select a review item to inspect and approve or reject.</div>
+      <dl id="review-detail-meta" class="meta hidden"></dl>
+      <div id="review-summary-wrap" class="hidden">
+        <h3>Summary</h3>
+        <pre id="review-summary" class="transcript"></pre>
+      </div>
+      <div id="review-actions-wrap" class="review-actions hidden">
+        <p id="review-final-hint" class="muted hidden">Final merge gate — approve merges the trace worktree. Reject only publishes feedback.</p>
+        <form id="review-approve-form" class="review-form">
+          <label>
+            Approval summary <span class="hint">(optional)</span>
+            <input type="text" id="review-approve-summary" placeholder="approved by human">
+          </label>
+          <label id="review-merge-message-label" class="hidden">
+            Merge commit message
+            <input type="text" id="review-merge-message" placeholder="Merge trace changes">
+          </label>
+          <button type="submit" id="review-approve-btn">Approve</button>
+        </form>
+        <form id="review-reject-form" class="review-form">
+          <label>
+            Feedback for bee
+            <textarea id="review-reject-feedback" rows="3" placeholder="Please revise the proposal…"></textarea>
+          </label>
+          <button type="submit" id="review-reject-btn" class="danger">Reject</button>
+        </form>
+        <div class="review-detail-links">
+          <button type="button" id="review-open-timeline-btn" class="secondary">Open in timeline</button>
+          <button type="button" id="review-open-runs-btn" class="secondary">Open linked runs</button>
+        </div>
+      </div>
+      <p id="review-action-error" class="error hidden"></p>
+      <p id="review-action-success" class="success hidden"></p>
     </section>
   </main>
 

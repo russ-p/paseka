@@ -93,6 +93,19 @@ func (a *api) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, view)
 }
 
+func (a *api) handleReviewQueue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := ListReviewQueue(a.ctx)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
+}
+
 func (a *api) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -541,7 +554,70 @@ func (a *api) handleTraceTasks(w http.ResponseWriter, r *http.Request, traceID s
 		return
 	}
 
+	if len(parts) == 3 && parts[2] == "approve" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.approveTask(w, r, traceID, taskID)
+		return
+	}
+
+	if len(parts) == 3 && parts[2] == "reject" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.rejectTask(w, r, traceID, taskID)
+		return
+	}
+
 	http.NotFound(w, r)
+}
+
+func (a *api) approveTask(w http.ResponseWriter, r *http.Request, traceID, taskID string) {
+	var req ApproveTaskRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+	}
+	res, err := ApproveTask(r.Context(), a.ctx, traceID, taskID, req)
+	if err != nil {
+		writeReviewError(w, err)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func (a *api) rejectTask(w http.ResponseWriter, r *http.Request, traceID, taskID string) {
+	var req RejectTaskRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+	}
+	res, err := RejectTask(r.Context(), a.ctx, traceID, taskID, req)
+	if err != nil {
+		writeReviewError(w, err)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func writeReviewError(w http.ResponseWriter, err error) {
+	msg := err.Error()
+	status := http.StatusInternalServerError
+	if strings.Contains(strings.ToLower(msg), "not configured") {
+		status = http.StatusServiceUnavailable
+	} else if strings.Contains(msg, "not found") {
+		status = http.StatusNotFound
+	} else if strings.Contains(msg, "required") || strings.Contains(msg, "expected") || strings.Contains(msg, "not a review") {
+		status = http.StatusBadRequest
+	}
+	http.Error(w, msg, status)
 }
 
 func writeError(w http.ResponseWriter, err error) {

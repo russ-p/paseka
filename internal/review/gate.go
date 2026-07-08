@@ -107,9 +107,27 @@ type RejectInput struct {
 }
 
 // Reject publishes human feedback for a review-gated task.
-func Reject(ctx context.Context, client *bus.Client, in RejectInput) error {
+func Reject(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, in RejectInput) error {
 	if in.TraceID == "" || in.TaskID == "" {
 		return fmt.Errorf("trace and task id are required")
+	}
+	if ledger == nil {
+		return fmt.Errorf("task ledger is required")
+	}
+
+	snap, err := ledger.Snapshot(in.TraceID)
+	if err != nil {
+		return err
+	}
+	task, ok := snap.Tasks[in.TaskID]
+	if !ok {
+		return fmt.Errorf("task %q not found in trace %s", in.TaskID, in.TraceID)
+	}
+	if task.Status != protocol.TaskStatusWaitingReview {
+		return fmt.Errorf("task %q is %q, expected waiting_review", in.TaskID, task.Status)
+	}
+	if !taskledger.IsReviewGate(task) {
+		return fmt.Errorf("task %q is not a review gate task", in.TaskID)
 	}
 	if client == nil {
 		return fmt.Errorf("nats client is required")
