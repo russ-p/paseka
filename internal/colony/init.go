@@ -196,7 +196,13 @@ adapters:
 
 	cursorPath := filepath.Join(homeDir, "adapters", "cursor.yaml")
 	created, err = writeFileIfMissing(cursorPath, []byte(cursorAdapterYAML), 0o644)
-	return r.track(created, cursorPath, err)
+	if err := r.track(created, cursorPath, err); err != nil {
+		return err
+	}
+
+	claudePath := filepath.Join(homeDir, "adapters", "claude.yaml")
+	created, err = writeFileIfMissing(claudePath, []byte(claudeAdapterYAML), 0o644)
+	return r.track(created, claudePath, err)
 }
 
 func relProject(root, path string) string {
@@ -377,5 +383,10 @@ paseka event emit --stdin <<'EOF'
 EOF`
 	cursorAdapterYAML = `binary: agent
 api_key_env: CURSOR_API_KEY
+`
+	claudeAdapterYAML = `binary: claude
+# When ANTHROPIC_API_KEY is unset, Claude Code uses your subscription
+# login (claude login) instead of an API key.
+api_key_env: ANTHROPIC_API_KEY
 `
 )

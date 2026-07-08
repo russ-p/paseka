@@ -21,6 +21,7 @@ const (
 var interactiveAdapters = map[string]bool{
 	"cursor": true,
 	"pi":     true,
+	"claude": true,
 }
 
 // BeeView is a launchable interactive bee.

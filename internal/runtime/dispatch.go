@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/bus"
@@ -49,6 +50,7 @@ func NewDispatcher() *Dispatcher {
 		adapters: map[string]adapters.Adapter{
 			"cursor": cursor.New(),
 			"pi":     pi.New(),
+			"claude": claude.New(),
 		},
 	}
 }

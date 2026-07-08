@@ -82,6 +82,11 @@ func AdapterExtra(ctx Context, adapterName string) adapters.RunParams {
 			Binary: ctx.Pi.Binary,
 			APIKey: ctx.Pi.APIKey(),
 		}
+	case "claude":
+		return adapters.RunParams{
+			Binary: ctx.Claude.Binary,
+			APIKey: ctx.Claude.APIKey(),
+		}
 	default:
 		return adapters.RunParams{
 			Binary: ctx.Cursor.Binary,
@@ -115,7 +120,7 @@ func (b Bee) ResolveAdapter() (string, error) {
 		name = "cursor"
 	}
 	switch name {
-	case "cursor", "pi":
+	case "cursor", "pi", "claude":
 		return name, nil
 	default:
 		return "", fmt.Errorf("colony: unknown adapter %q for bee %q", name, b.Role)
