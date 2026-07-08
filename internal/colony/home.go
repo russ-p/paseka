@@ -34,6 +34,12 @@ type PiAdapterConfig struct {
 	APIKeyEnv string `yaml:"api_key_env"`
 }
 
+// ClaudeAdapterConfig is ~/.config/paseka/<slug>/adapters/claude.yaml.
+type ClaudeAdapterConfig struct {
+	Binary    string `yaml:"binary"`
+	APIKeyEnv string `yaml:"api_key_env"`
+}
+
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
 	ColonyRoot string
@@ -41,6 +47,7 @@ type Context struct {
 	Home       HomeConfig
 	Cursor     CursorAdapterConfig
 	Pi         PiAdapterConfig
+	Claude     ClaudeAdapterConfig
 }
 
 // ResolveContext finds the git repo, loads colony + home config.
@@ -96,12 +103,18 @@ func ResolveContext(startDir string) (Context, error) {
 		return Context{}, err
 	}
 
+	claude, err := LoadClaudeAdapter(slug)
+	if err != nil {
+		return Context{}, err
+	}
+
 	return Context{
 		ColonyRoot: colonyRoot,
 		Slug:       slug,
 		Home:       home,
 		Cursor:     cursor,
 		Pi:         pi,
+		Claude:     claude,
 	}, nil
 }
 
@@ -187,6 +200,43 @@ func LoadPiAdapter(slug string) (PiAdapterConfig, error) {
 
 // APIKey returns the Pi API key when api_key_env is configured and set in the environment.
 func (c PiAdapterConfig) APIKey() string {
+	if c.APIKeyEnv == "" {
+		return ""
+	}
+	return os.Getenv(c.APIKeyEnv)
+}
+
+// LoadClaudeAdapter reads ~/.config/paseka/<slug>/adapters/claude.yaml.
+func LoadClaudeAdapter(slug string) (ClaudeAdapterConfig, error) {
+	homeDir, err := HomeDir(slug)
+	if err != nil {
+		return ClaudeAdapterConfig{}, err
+	}
+	path := filepath.Join(homeDir, "adapters", "claude.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ClaudeAdapterConfig{Binary: "claude", APIKeyEnv: "ANTHROPIC_API_KEY"}, nil
+		}
+		return ClaudeAdapterConfig{}, err
+	}
+	var cfg ClaudeAdapterConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return ClaudeAdapterConfig{}, fmt.Errorf("parse claude adapter config: %w", err)
+	}
+	if cfg.Binary == "" {
+		cfg.Binary = "claude"
+	}
+	if cfg.APIKeyEnv == "" {
+		cfg.APIKeyEnv = "ANTHROPIC_API_KEY"
+	}
+	return cfg, nil
+}
+
+// APIKey returns the Claude API key from the configured environment variable.
+// When empty, Claude Code falls back to its own stored subscription auth
+// (claude login), so no key is forwarded.
+func (c ClaudeAdapterConfig) APIKey() string {
 	if c.APIKeyEnv == "" {
 		return ""
 	}
