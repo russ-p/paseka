@@ -160,18 +160,19 @@ func newTaskShowCmd() *cobra.Command {
 
 func newTaskCreateCmd() *cobra.Command {
 	var (
-		startDir  string
-		traceID   string
-		taskID    string
-		title     string
-		body      string
-		bodyFile  string
-		fromStdin bool
-		bee       string
-		sector    string
-		intent    string
-		dependsOn []string
-		autorun   bool
+		startDir     string
+		traceID      string
+		taskID       string
+		title        string
+		body         string
+		bodyFile     string
+		fromStdin    bool
+		bee          string
+		sector       string
+		intent       string
+		dependsOn    []string
+		reviewPolicy string
+		autorun      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -197,6 +198,7 @@ func newTaskCreateCmd() *cobra.Command {
 				Bee:       bee,
 				Sector:    sector,
 				Intent:    intent,
+				Review:    reviewPolicy,
 				DependsOn: dependsOn,
 				Autorun:   autorun,
 				AgentID:   "cli",
@@ -219,6 +221,7 @@ func newTaskCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bee, "bee", "", "bee role (default: builder)")
 	cmd.Flags().StringVar(&sector, "sector", "", "colony sector name (from colony.yaml sectors)")
 	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
+	cmd.Flags().StringVar(&reviewPolicy, "review", "", "review policy: none, required, final")
 	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "task dependencies (repeatable or comma-separated)")
 	cmd.Flags().BoolVar(&autorun, "autorun", false, "publish task.ready immediately after task.plan")
 	return cmd

@@ -10,8 +10,12 @@ import (
 // EligiblePlanned returns planned tasks whose dependencies are all completed.
 func EligiblePlanned(trace TraceSnapshot) []TaskSnapshot {
 	var out []TaskSnapshot
+	afkDone := AllAFKTasksCompleted(trace)
 	for _, task := range trace.Tasks {
 		if task.Status != protocol.TaskStatusPlanned {
+			continue
+		}
+		if IsFinalReviewTask(task) && !afkDone {
 			continue
 		}
 		if !allDepsCompleted(trace, task.DependsOn) {

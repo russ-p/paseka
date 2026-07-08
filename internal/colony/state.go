@@ -94,6 +94,22 @@ func RegisterWorktree(slug string, entry WorktreeEntry) error {
 	return SaveState(slug, st)
 }
 
+// UnregisterWorktree removes a worktree entry for a trace.
+func UnregisterWorktree(slug, traceID string) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	out := st.Worktrees[:0]
+	for _, w := range st.Worktrees {
+		if w.TraceID != traceID {
+			out = append(out, w)
+		}
+	}
+	st.Worktrees = out
+	return SaveState(slug, st)
+}
+
 // RegisterSession records an active interactive session.
 func RegisterSession(slug string, entry SessionEntry) error {
 	st, err := LoadState(slug)

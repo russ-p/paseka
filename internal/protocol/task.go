@@ -8,8 +8,31 @@ type TaskEventKind string
 const (
 	TaskEventPlan      TaskEventKind = "task.plan"
 	TaskEventReady     TaskEventKind = "task.ready"
+	TaskEventStatus    TaskEventKind = "task.status"
 	TaskEventCompleted TaskEventKind = "task.completed"
 )
+
+// TaskReviewPolicy controls when a task requires human review before completion.
+type TaskReviewPolicy string
+
+const (
+	// TaskReviewNone is the default: AFK runs auto-complete on adapter success.
+	TaskReviewNone TaskReviewPolicy = "none"
+	// TaskReviewRequired waits for human approval after the bee run succeeds.
+	TaskReviewRequired TaskReviewPolicy = "required"
+	// TaskReviewFinal is the trace-level merge gate after all other tasks complete.
+	TaskReviewFinal TaskReviewPolicy = "final"
+)
+
+// NormalizeTaskReviewPolicy returns a known review policy or TaskReviewNone.
+func NormalizeTaskReviewPolicy(p TaskReviewPolicy) TaskReviewPolicy {
+	switch p {
+	case TaskReviewRequired, TaskReviewFinal:
+		return p
+	default:
+		return TaskReviewNone
+	}
+}
 
 // TaskStatus is the lifecycle state of one task within a trace.
 type TaskStatus string
@@ -26,13 +49,14 @@ const (
 
 // TaskSpec describes one planned task inside a trace.
 type TaskSpec struct {
-	TaskID    string   `json:"taskId"`
-	Title     string   `json:"title"`
-	Body      string   `json:"body,omitempty"`
-	Bee       string   `json:"bee,omitempty"`
-	Sector    string   `json:"sector,omitempty"`
-	Intent    string   `json:"intent,omitempty"`
-	DependsOn []string `json:"dependsOn,omitempty"`
+	TaskID    string           `json:"taskId"`
+	Title     string           `json:"title"`
+	Body      string           `json:"body,omitempty"`
+	Bee       string           `json:"bee,omitempty"`
+	Sector    string           `json:"sector,omitempty"`
+	Intent    string           `json:"intent,omitempty"`
+	Review    TaskReviewPolicy `json:"review,omitempty"`
+	DependsOn []string         `json:"dependsOn,omitempty"`
 }
 
 // TaskPlanPayload is emitted as INSIGHT with payload.kind=task.plan.
@@ -50,6 +74,14 @@ type TaskReadyPayload struct {
 	Bee    string        `json:"bee,omitempty"`
 	Sector string        `json:"sector,omitempty"`
 	Intent string        `json:"intent,omitempty"`
+}
+
+// TaskStatusPayload is emitted as SIGNAL with payload.kind=task.status.
+type TaskStatusPayload struct {
+	Kind    TaskEventKind `json:"kind"`
+	TaskID  string        `json:"taskId"`
+	Status  TaskStatus    `json:"status"`
+	Summary string        `json:"summary,omitempty"`
 }
 
 // TaskCompletedPayload is emitted as VERIFICATION with payload.kind=task.completed.

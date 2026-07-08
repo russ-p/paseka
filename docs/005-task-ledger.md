@@ -47,12 +47,46 @@ flowchart LR
 | `planned` | Task registered from `task.plan`; waiting on dependencies |
 | `ready` | Dependencies satisfied; eligible for dispatch |
 | `running` | Bee dispatched for this task |
-| `waiting_review` | Code changed; awaiting guard/HITL |
-| `completed` | Review/commit gate passed |
+| `waiting_review` | Code changed or trace gate open; awaiting guard/HITL |
+| `completed` | Task gate passed (AFK success or human approval) |
 | `failed` | Task abandoned or rejected |
 | `blocked` | Cannot proceed (manual intervention) |
 
 Task lifecycle events use `payload.kind` inside existing top-level event types — no new `EventType` values.
+
+### Review policy
+
+Each task may declare an optional `review` field in `task.plan`:
+
+| `review` | Behavior |
+| -------- | -------- |
+| `none` (default) | AFK runs auto-complete on adapter success |
+| `required` | After a successful bee run, task moves to `waiting_review` until human approval |
+| `final` | Trace-level merge gate — activates when all other tasks complete; no AFK dispatch |
+
+When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes.
+
+Human actions:
+
+- `paseka proposal approve --trace <id> --task <id>` — merge trace worktree (when present) and emit `task.completed`
+- `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework
+
+### `task.status` — SIGNAL
+
+Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`).
+
+```json
+{
+  "traceId": "trace-auth-01",
+  "type": "SIGNAL",
+  "payload": {
+    "kind": "task.status",
+    "taskId": "task-1",
+    "status": "waiting_review",
+    "summary": "Awaiting human review"
+  }
+}
+```
 
 ---
 
@@ -84,6 +118,12 @@ Scout (or planner bee) publishes a breakdown after analyzing the initial signal.
         "body": "Login form component",
         "bee": "builder",
         "dependsOn": ["task-1"]
+      },
+      {
+        "taskId": "review",
+        "title": "Human review and merge",
+        "review": "final",
+        "dependsOn": ["task-2"]
       }
     ]
   }
@@ -147,13 +187,12 @@ PRD (SIGNAL: feature.requested)
   → Scout INSIGHT task.plan
   → Task Reactor: task-1 → ready
   → Builder run (traceId + taskId)
-  → Guard review
-  → Commit
-  → VERIFICATION task.completed task-1
-  → Task Reactor: task-2 → ready
+  → AFK tasks auto-complete; review-marked tasks enter waiting_review
+  → All AFK tasks done → final review gate (planned or synthesized)
+  → Human approve → merge worktree → VERIFICATION task.completed
+  → Task Reactor: next task.ready (if any)
   → … repeat …
-  → All tasks completed
-  → PR / merge / HITL
+  → Trace merge gate completed
 ```
 
 ---

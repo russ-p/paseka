@@ -26,6 +26,7 @@ type Reactor struct {
 	inflight        map[string]struct{}
 	directInflight  map[string]struct{}
 	directProcessed map[string]struct{}
+	reworkCounts    map[string]int
 	asyncDispatch   bool
 }
 
@@ -73,6 +74,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		inflight:        make(map[string]struct{}),
 		directInflight:  make(map[string]struct{}),
 		directProcessed: make(map[string]struct{}),
+		reworkCounts:    make(map[string]int),
 		asyncDispatch:   true,
 	}, nil
 }
@@ -110,7 +112,16 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		r.syncTaskProjection(res.Trace)
 	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
-	return r.executeDispatches(ctx, ev, res.Ready)
+	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
+		return err
+	}
+	if err := r.executeDispatches(ctx, ev, res.Ready); err != nil {
+		return err
+	}
+	if ev.Type == protocol.EventVerification && protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventCompleted) {
+		return r.maybeActivateFinalReview(ctx, ev.TraceID)
+	}
+	return nil
 }
 
 func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot) error {
@@ -188,6 +199,23 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
+	snap, err := r.ledger.Snapshot(traceID)
+	if err != nil {
+		return err
+	}
+	taskSnap := snap.Tasks[task.TaskID]
+	if taskSnap.TaskID != "" {
+		task = taskSnap
+	}
+	if taskledger.ShouldSkipDispatch(task) {
+		logDispatchSkip("final review gate — no AFK dispatch", traceID, task.TaskID, bee)
+		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
+	}
+
+	if err := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusRunning, ""); err != nil {
+		return err
+	}
+
 	body := task.Body
 	if body == "" {
 		body = task.Title
@@ -224,33 +252,11 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	finishedAt := time.Now().UTC()
 	r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted), finishedAt)
 
-	completed, err := protocol.NewEvent(traceID, res.AgentID, 0, protocol.EventVerification, protocol.TaskCompletedPayload{
-		Kind:    protocol.TaskEventCompleted,
-		TaskID:  task.TaskID,
-		Status:  protocol.TaskStatusCompleted,
-		Summary: strings.TrimSpace(res.Result.Summary),
-	})
-	if err != nil {
-		return err
+	summary := strings.TrimSpace(res.Result.Summary)
+	if protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired {
+		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
 	}
-	if r.bus != nil {
-		if err := r.bus.PublishEvent(ctx, completed); err != nil {
-			return err
-		}
-	}
-	applyRes, err := r.ledger.Apply(completed)
-	if err != nil {
-		return err
-	}
-	if applyRes.Changed {
-		r.syncTaskProjection(applyRes.Trace)
-	}
-	for _, t := range applyRes.Ready {
-		if err := r.dispatchReady(ctx, traceID, t); err != nil {
-			return err
-		}
-	}
-	return nil
+	return r.completeTask(ctx, traceID, task.TaskID, summary, "")
 }
 
 func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {
@@ -356,6 +362,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		inflight:        make(map[string]struct{}),
 		directInflight:  make(map[string]struct{}),
 		directProcessed: make(map[string]struct{}),
+		reworkCounts:    make(map[string]int),
 		asyncDispatch:   false,
 	}
 }

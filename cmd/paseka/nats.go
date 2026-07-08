@@ -6,6 +6,7 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/review"
 	"github.com/spf13/cobra"
 )
 
@@ -176,27 +177,52 @@ func newProposalCmd() *cobra.Command {
 
 func newProposalApproveCmd() *cobra.Command {
 	var (
-		startDir string
-		traceID  string
-		taskID   string
-		summary  string
+		startDir     string
+		traceID      string
+		taskID       string
+		summary      string
+		mergeMessage string
 	)
 	cmd := &cobra.Command{
 		Use:   "approve",
-		Short: "Approve a code proposal (publishes task.completed)",
+		Short: "Approve a review-gated task and merge the trace worktree",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" || taskID == "" {
 				return fmt.Errorf("--trace and --task are required")
 			}
-			payload := fmt.Sprintf(`{"kind":"task.completed","taskId":%q,"status":"completed","summary":%q}`,
-				taskID, summary)
-			return runSignal(cmd, startDir, traceID, "VERIFICATION", payload)
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			session, err := openTaskSession(startDir)
+			if err != nil {
+				return err
+			}
+			defer session.Close()
+			if session.Client == nil || session.Ledger == nil {
+				return fmt.Errorf("nats url not configured")
+			}
+			commit, err := review.Approve(cmd.Context(), ctxColony, session.Client, session.Ledger, review.ApproveInput{
+				TraceID:      traceID,
+				TaskID:       taskID,
+				Summary:      summary,
+				MergeMessage: mergeMessage,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Approved task %s on trace %s\n", taskID, traceID)
+			if commit != "" {
+				fmt.Printf("  merge commit: %s\n", commit)
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&taskID, "task", "", "task id")
 	cmd.Flags().StringVar(&summary, "summary", "approved by human", "completion summary")
+	cmd.Flags().StringVar(&mergeMessage, "merge-message", "", "merge commit message")
 	return cmd
 }
 
@@ -209,16 +235,28 @@ func newProposalRejectCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "reject",
-		Short: "Reject a code proposal (publishes human INSIGHT feedback)",
+		Short: "Reject a review-gated task (publishes human INSIGHT feedback)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" || taskID == "" {
 				return fmt.Errorf("--trace and --task are required")
 			}
-			if feedback == "" {
-				feedback = "Please revise the proposal."
+			session, err := openTaskSession(startDir)
+			if err != nil {
+				return err
 			}
-			payload := fmt.Sprintf(`{"kind":"human.feedback","taskId":%q,"message":%q}`, taskID, feedback)
-			return runSignal(cmd, startDir, traceID, "INSIGHT", payload)
+			defer session.Close()
+			if session.Client == nil {
+				return fmt.Errorf("nats url not configured")
+			}
+			if err := review.Reject(cmd.Context(), session.Client, review.RejectInput{
+				TraceID:  traceID,
+				TaskID:   taskID,
+				Feedback: feedback,
+			}); err != nil {
+				return err
+			}
+			fmt.Printf("Rejected task %s on trace %s\n", taskID, traceID)
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")

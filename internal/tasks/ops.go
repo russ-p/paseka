@@ -87,6 +87,7 @@ type CreateInput struct {
 	Bee       string
 	Sector    string
 	Intent    string
+	Review    string
 	DependsOn []string
 	Autorun   bool
 	AgentID   string
@@ -153,6 +154,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		Bee:       bee,
 		Sector:    in.Sector,
 		Intent:    in.Intent,
+		Review:    protocol.TaskReviewPolicy(strings.TrimSpace(in.Review)),
 		DependsOn: ParseDependsOn(in.DependsOn),
 	}
 	planEv, err := PlanEvent(traceID, agentID, spec)

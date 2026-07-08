@@ -53,6 +53,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				Bee:       spec.Bee,
 				Sector:    spec.Sector,
 				Intent:    spec.Intent,
+				Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
 				Status:    protocol.TaskStatusPlanned,
 				DependsOn: append([]string(nil), spec.DependsOn...),
 				UpdatedAt: now,
@@ -61,6 +62,42 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		}
 
 	case protocol.EventSignal:
+		var kind string
+		if len(event.Payload) > 0 {
+			var meta struct {
+				Kind string `json:"kind"`
+			}
+			_ = json.Unmarshal(event.Payload, &meta)
+			kind = meta.Kind
+		}
+		if kind == string(protocol.TaskEventStatus) {
+			var payload protocol.TaskStatusPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return ApplyResult{}, fmt.Errorf("taskledger: parse task.status: %w", err)
+			}
+			if payload.Kind != protocol.TaskEventStatus {
+				return ApplyResult{Trace: trace}, nil
+			}
+			if payload.TaskID == "" {
+				return ApplyResult{}, fmt.Errorf("taskledger: task.status missing taskId")
+			}
+			task, ok := trace.Tasks[payload.TaskID]
+			if !ok {
+				task = TaskSnapshot{TaskID: payload.TaskID}
+			}
+			if payload.Status == "" {
+				return ApplyResult{}, fmt.Errorf("taskledger: task.status missing status")
+			}
+			task.Status = payload.Status
+			if payload.Summary != "" {
+				task.Summary = payload.Summary
+			}
+			task.UpdatedAt = now
+			trace.Tasks[payload.TaskID] = task
+			changed = true
+			break
+		}
+
 		var payload protocol.TaskReadyPayload
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
 			return ApplyResult{}, fmt.Errorf("taskledger: parse task.ready: %w", err)

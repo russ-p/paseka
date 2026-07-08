@@ -127,6 +127,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateTaskPlan(payload)
 	case TaskEventReady:
 		return validateTaskReady(payload)
+	case TaskEventStatus:
+		return validateTaskStatus(payload)
 	case TaskEventCompleted:
 		return validateTaskCompleted(payload)
 	}
@@ -160,7 +162,7 @@ func expectedEventType(kind string) EventType {
 	switch TaskEventKind(kind) {
 	case TaskEventPlan:
 		return EventInsight
-	case TaskEventReady:
+	case TaskEventReady, TaskEventStatus:
 		return EventSignal
 	case TaskEventCompleted:
 		return EventVerification
@@ -214,6 +216,21 @@ func validateTaskReady(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.taskId", Message: "required"}}
 	}
 	return nil
+}
+
+func validateTaskStatus(payload json.RawMessage) []ValidationDetail {
+	var p TaskStatusPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid task.status payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.TaskID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.taskId", Message: "required"})
+	}
+	if strings.TrimSpace(string(p.Status)) == "" {
+		details = append(details, ValidationDetail{Path: "payload.status", Message: "required"})
+	}
+	return details
 }
 
 func validateTaskCompleted(payload json.RawMessage) []ValidationDetail {

@@ -79,6 +79,7 @@ func mutationFromResult(pub bus.Publisher, req DispatchRequest, result *adapters
 		Kind:    protocol.MutationCodeProposal,
 		Diff:    diff,
 		Summary: strings.TrimSpace(result.Summary),
+		TaskID:  req.TaskID,
 	}
 	if d, ok := pub.(*bus.Client); ok && len(diff) > 64*1024 {
 		ref, err := d.StoreArtifact(fmt.Sprintf("%s-%s.diff", req.TraceID, req.AgentID), []byte(diff))
