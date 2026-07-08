@@ -3,6 +3,9 @@ const state = {
   bees: [],
   sessions: [],
   runs: [],
+  tasks: null,
+  selectedTaskKey: null,
+  selectedTaskDetail: null,
   dashboard: null,
   timelineItems: [],
   timelineCursor: '',
@@ -20,12 +23,14 @@ const state = {
   pollTimer: null,
   runtimePollTimer: null,
   dashboardPollTimer: null,
+  tasksPollTimer: null,
 };
 
 const el = {
   subtitle: document.getElementById('subtitle'),
   tabDashboard: document.getElementById('tab-dashboard'),
   tabTimeline: document.getElementById('tab-timeline'),
+  tabTasks: document.getElementById('tab-tasks'),
   tabSessions: document.getElementById('tab-sessions'),
   tabRuns: document.getElementById('tab-runs'),
   dashboardLayout: document.getElementById('dashboard-layout'),
@@ -46,6 +51,29 @@ const el = {
   timelineRawToggle: document.getElementById('timeline-raw-toggle'),
   timelineFeed: document.getElementById('timeline-feed'),
   timelineMoreBtn: document.getElementById('timeline-more-btn'),
+  tasksLayout: document.getElementById('tasks-layout'),
+  taskCreateForm: document.getElementById('task-create-form'),
+  taskTitleInput: document.getElementById('task-title-input'),
+  taskBodyInput: document.getElementById('task-body-input'),
+  taskBeeInput: document.getElementById('task-bee-input'),
+  taskTraceInput: document.getElementById('task-trace-input'),
+  taskSectorInput: document.getElementById('task-sector-input'),
+  taskIntentSelect: document.getElementById('task-intent-select'),
+  taskDependsInput: document.getElementById('task-depends-input'),
+  taskAutorunToggle: document.getElementById('task-autorun-toggle'),
+  taskCreateBtn: document.getElementById('task-create-btn'),
+  taskCreateError: document.getElementById('task-create-error'),
+  tasksRefreshBtn: document.getElementById('tasks-refresh-btn'),
+  taskBoard: document.getElementById('task-board'),
+  taskDetailEmpty: document.getElementById('task-detail-empty'),
+  taskDetailMeta: document.getElementById('task-detail-meta'),
+  taskBodyWrap: document.getElementById('task-body-wrap'),
+  taskBody: document.getElementById('task-body'),
+  taskRunsWrap: document.getElementById('task-runs-wrap'),
+  taskRunsList: document.getElementById('task-runs-list'),
+  taskDetailActions: document.getElementById('task-detail-actions'),
+  taskStartBtn: document.getElementById('task-start-btn'),
+  taskOpenTimelineBtn: document.getElementById('task-open-timeline-btn'),
   sessionsLayout: document.getElementById('sessions-layout'),
   runsLayout: document.getElementById('runs-layout'),
   beeSelect: document.getElementById('bee-select'),
@@ -106,6 +134,10 @@ function runKey(run) {
   return `${run.traceId}/${run.agentId}`;
 }
 
+function taskKey(task) {
+  return `${task.traceId}/${task.taskId}`;
+}
+
 function badgeClass(itemState) {
   const s = (itemState || '').toLowerCase();
   if (s === 'active' || s === 'running' || s === 'queued') return 'active';
@@ -158,10 +190,11 @@ function escapeHtml(str) {
 
 function setTab(tab) {
   state.tab = tab;
-  const tabs = ['dashboard', 'timeline', 'sessions', 'runs'];
+  const tabs = ['dashboard', 'timeline', 'tasks', 'sessions', 'runs'];
   const layouts = {
     dashboard: el.dashboardLayout,
     timeline: el.timelineLayout,
+    tasks: el.tasksLayout,
     sessions: el.sessionsLayout,
     runs: el.runsLayout,
   };
@@ -180,6 +213,7 @@ function setTab(tab) {
   const subtitles = {
     dashboard: 'Dashboard — colony-wide snapshot and recent activity',
     timeline: 'Timeline — filterable event feed across the colony',
+    tasks: 'Tasks — create, start, and inspect trace tasks',
     sessions: 'Sessions — launch and observe interactive bees',
     runs: 'Runs — observe headless adapter invocations',
   };
@@ -187,6 +221,7 @@ function setTab(tab) {
 
   stopPolling();
   stopDashboardPolling();
+  stopTasksPolling();
   if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
   } else if (tab === 'runs' && state.selectedRunKey) {
@@ -195,6 +230,8 @@ function setTab(tab) {
     startDashboardPolling();
   } else if (tab === 'timeline') {
     loadTimeline(true).catch(console.error);
+  } else if (tab === 'tasks') {
+    startTasksPolling();
   }
 }
 
@@ -420,7 +457,12 @@ function renderDashboard() {
     </div>
     <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks</div>
   `, 'No recent traces.', (trace) => {
-    navigateToTrace(trace.traceId).catch(console.error);
+    if (trace.taskCount > 0) {
+      setTab('tasks');
+      loadTasks().catch(console.error);
+    } else {
+      navigateToTrace(trace.traceId).catch(console.error);
+    }
   });
 
   renderDashboardList(el.dashboardFailedRuns, d.failedRuns, (run) => `
@@ -484,6 +526,231 @@ async function navigateToTrace(traceId) {
   if (match) {
     await selectRun(match.traceId, match.agentId);
   }
+}
+
+function renderTaskBoard() {
+  const board = state.tasks;
+  el.taskBoard.innerHTML = '';
+  if (!board || !board.groups || !board.groups.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No tasks yet. Create one to get started.';
+    el.taskBoard.appendChild(empty);
+    return;
+  }
+
+  for (const group of board.groups) {
+    const section = document.createElement('section');
+    section.className = 'task-group';
+    section.innerHTML = `
+      <div class="task-group-header">
+        <span>${escapeHtml(group.status)}</span>
+        <span class="muted">${group.tasks.length}</span>
+      </div>
+    `;
+    const items = document.createElement('div');
+    items.className = 'task-group-items';
+    for (const task of group.tasks) {
+      const card = document.createElement('div');
+      const key = taskKey(task);
+      card.className = 'task-card' + (key === state.selectedTaskKey ? ' selected' : '');
+      const deps = task.dependsOn?.length ? `<span class="task-tag">deps: ${escapeHtml(task.dependsOn.join(', '))}</span>` : '';
+      const sector = task.sector ? `<span class="task-tag">${escapeHtml(task.sector)}</span>` : '';
+      const runs = task.runCount ? `<span class="task-tag">${task.runCount} runs</span>` : '';
+      const startable = task.canStart ? '<span class="task-tag" style="color:var(--ok)">startable</span>' : '';
+      card.innerHTML = `
+        <div class="top">
+          <span class="title">${escapeHtml(task.title)}</span>
+          <span class="badge ${badgeClass(task.status)}">${escapeHtml(task.status)}</span>
+        </div>
+        <div class="meta-line">${escapeHtml(task.traceId)} / ${escapeHtml(task.taskId)}</div>
+        <div class="badges">
+          ${task.bee ? `<span class="task-tag">${escapeHtml(task.bee)}</span>` : ''}
+          ${sector}${deps}${runs}${startable}
+        </div>
+      `;
+      card.addEventListener('click', () => selectTask(task.traceId, task.taskId));
+      items.appendChild(card);
+    }
+    section.appendChild(items);
+    el.taskBoard.appendChild(section);
+  }
+}
+
+function renderTaskDetail(task) {
+  if (!task) {
+    el.taskDetailEmpty.classList.remove('hidden');
+    el.taskDetailMeta.classList.add('hidden');
+    el.taskBodyWrap.classList.add('hidden');
+    el.taskRunsWrap.classList.add('hidden');
+    el.taskDetailActions.classList.add('hidden');
+    el.taskStartBtn.classList.add('hidden');
+    return;
+  }
+
+  el.taskDetailEmpty.classList.add('hidden');
+  el.taskDetailMeta.classList.remove('hidden');
+  el.taskDetailActions.classList.remove('hidden');
+
+  const rows = [
+    ['Status', task.status],
+    ['Trace ID', task.traceId],
+    ['Task ID', task.taskId],
+    ['Bee', task.bee],
+    ['Sector', task.sector],
+    ['Intent', task.intent],
+    ['Source', task.source],
+    ['Updated', formatTime(task.updatedAt)],
+  ];
+  if (task.dependsOn?.length) {
+    rows.push(['Depends on', task.dependsOn.join(', ')]);
+  }
+  if (task.summary) {
+    rows.push(['Summary', task.summary]);
+  }
+  if (task.commit) {
+    rows.push(['Commit', task.commit]);
+  }
+
+  el.taskDetailMeta.innerHTML = rows
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
+    .join('');
+
+  if (task.body) {
+    el.taskBodyWrap.classList.remove('hidden');
+    el.taskBody.textContent = task.body;
+  } else {
+    el.taskBodyWrap.classList.add('hidden');
+    el.taskBody.textContent = '';
+  }
+
+  el.taskRunsList.innerHTML = '';
+  if (task.runs?.length) {
+    el.taskRunsWrap.classList.remove('hidden');
+    for (const run of task.runs) {
+      const li = document.createElement('li');
+      li.className = 'session-item compact-item';
+      li.innerHTML = `
+        <div class="top">
+          <span class="bee">${escapeHtml(run.agentId)}</span>
+          <span class="badge ${badgeClass(run.runStatus)}">${escapeHtml(run.runStatus || 'unknown')}</span>
+        </div>
+        <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(run.startedAt)}</div>
+      `;
+      li.addEventListener('click', () => navigateToRun(task.traceId, run.agentId));
+      el.taskRunsList.appendChild(li);
+    }
+  } else {
+    el.taskRunsWrap.classList.add('hidden');
+  }
+
+  if (task.canStart) {
+    el.taskStartBtn.classList.remove('hidden');
+  } else {
+    el.taskStartBtn.classList.add('hidden');
+  }
+}
+
+async function loadTasks() {
+  state.tasks = await api('/api/tasks');
+  renderTaskBoard();
+  if (state.selectedTaskKey) {
+    const [traceId, taskId] = state.selectedTaskKey.split('/');
+    try {
+      const detail = await api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}`);
+      state.selectedTaskDetail = detail;
+      renderTaskDetail(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+}
+
+async function selectTask(traceId, taskId) {
+  state.selectedTaskKey = `${traceId}/${taskId}`;
+  renderTaskBoard();
+  const detail = await api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}`);
+  state.selectedTaskDetail = detail;
+  renderTaskDetail(detail);
+}
+
+async function createTaskFromForm() {
+  el.taskCreateError.classList.add('hidden');
+  el.taskCreateBtn.disabled = true;
+  try {
+    const dependsRaw = el.taskDependsInput.value.trim();
+    const body = {
+      title: el.taskTitleInput.value.trim(),
+      body: el.taskBodyInput.value.trim(),
+      bee: el.taskBeeInput.value.trim(),
+      traceId: el.taskTraceInput.value.trim(),
+      sector: el.taskSectorInput.value.trim(),
+      intent: el.taskIntentSelect.value,
+      dependsOn: dependsRaw ? dependsRaw.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      autorun: el.taskAutorunToggle.checked,
+    };
+    const created = await api('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+    await loadTasks();
+    await selectTask(created.traceId, created.taskId);
+    el.taskTitleInput.value = '';
+    el.taskBodyInput.value = '';
+    el.taskTraceInput.value = '';
+    el.taskDependsInput.value = '';
+    el.taskAutorunToggle.checked = false;
+  } catch (err) {
+    el.taskCreateError.textContent = err.message;
+    el.taskCreateError.classList.remove('hidden');
+  } finally {
+    el.taskCreateBtn.disabled = false;
+  }
+}
+
+async function startSelectedTask() {
+  if (!state.selectedTaskDetail) return;
+  const { traceId, taskId } = state.selectedTaskDetail;
+  el.taskStartBtn.disabled = true;
+  try {
+    await api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/start`, { method: 'POST' });
+    await loadTasks();
+    await selectTask(traceId, taskId);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    el.taskStartBtn.disabled = false;
+  }
+}
+
+function stopTasksPolling() {
+  if (state.tasksPollTimer) {
+    clearInterval(state.tasksPollTimer);
+    state.tasksPollTimer = null;
+  }
+}
+
+function startTasksPolling() {
+  stopTasksPolling();
+  state.tasksPollTimer = setInterval(() => {
+    loadTasks().catch(console.error);
+  }, 5000);
+  loadTasks().catch(console.error);
+}
+
+async function navigateToTask(traceId, taskId) {
+  if (!traceId || !taskId) return;
+  setTab('tasks');
+  await loadTasks();
+  await selectTask(traceId, taskId);
+}
+
+function navigateToTaskTimeline(traceId, taskId) {
+  if (!traceId) return;
+  setTab('timeline');
+  el.filterTrace.value = traceId;
+  if (taskId) {
+    el.filterTask.value = taskId;
+  }
+  readTimelineFiltersFromForm();
+  loadTimeline(true).catch(console.error);
 }
 
 function timelineQueryParams(appendCursor) {
@@ -688,6 +955,7 @@ function startRunPolling() {
 
 el.tabDashboard.addEventListener('click', () => setTab('dashboard'));
 el.tabTimeline.addEventListener('click', () => setTab('timeline'));
+el.tabTasks.addEventListener('click', () => setTab('tasks'));
 el.tabSessions.addEventListener('click', () => setTab('sessions'));
 el.tabRuns.addEventListener('click', () => {
   setTab('runs');
@@ -715,6 +983,24 @@ el.timelineRawToggle.addEventListener('change', () => {
 
 el.timelineMoreBtn.addEventListener('click', () => {
   loadTimeline(false).catch(console.error);
+});
+
+el.taskCreateForm.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  createTaskFromForm().catch(console.error);
+});
+
+el.tasksRefreshBtn.addEventListener('click', () => {
+  loadTasks().catch(console.error);
+});
+
+el.taskStartBtn.addEventListener('click', () => {
+  startSelectedTask().catch(console.error);
+});
+
+el.taskOpenTimelineBtn.addEventListener('click', () => {
+  if (!state.selectedTaskDetail) return;
+  navigateToTaskTimeline(state.selectedTaskDetail.traceId, state.selectedTaskDetail.taskId);
 });
 
 el.rawToggle.addEventListener('change', () => {

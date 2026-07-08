@@ -93,6 +93,42 @@ func (a *api) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, view)
 }
 
+func (a *api) handleTasks(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		view, err := ListTaskBoard(a.ctx)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, view)
+	case http.MethodPost:
+		a.createTask(w, r)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (a *api) createTask(w http.ResponseWriter, r *http.Request) {
+	var req CreateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if req.Title == "" && strings.TrimSpace(req.Body) == "" {
+		http.Error(w, "title or body is required", http.StatusBadRequest)
+		return
+	}
+
+	res, err := CreateTask(r.Context(), a.ctx, req)
+	if err != nil {
+		writeTaskError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, res)
+}
+
 func (a *api) handleTraces(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -127,6 +163,10 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.handleTraceEvents(w, r, traceID)
+		return
+	}
+	if suffix == "tasks" || (len(parts) > 1 && parts[1] == "tasks") {
+		a.handleTraceTasks(w, r, traceID, parts[1:])
 		return
 	}
 	if suffix != "" {
@@ -438,12 +478,92 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = enc.Encode(v)
 }
 
+func (a *api) handleTraceTasks(w http.ResponseWriter, r *http.Request, traceID string, parts []string) {
+	// parts[0] is always "tasks"
+	if len(parts) == 1 {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		list, err := ListTraceTasks(a.ctx, traceID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, list)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "start" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		res, err := StartTask(r.Context(), a.ctx, traceID, "")
+		if err != nil {
+			writeTaskError(w, err)
+			return
+		}
+		writeJSON(w, res)
+		return
+	}
+
+	taskID := parts[1]
+	if len(parts) == 2 {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		view, ok, err := GetTask(a.ctx, traceID, taskID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, view)
+		return
+	}
+
+	if len(parts) == 3 && parts[2] == "start" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		res, err := StartTask(r.Context(), a.ctx, traceID, taskID)
+		if err != nil {
+			writeTaskError(w, err)
+			return
+		}
+		writeJSON(w, res)
+		return
+	}
+
+	http.NotFound(w, r)
+}
+
 func writeError(w http.ResponseWriter, err error) {
 	msg := err.Error()
 	status := http.StatusInternalServerError
 	if strings.Contains(msg, "not found") {
 		status = http.StatusNotFound
 	} else if strings.Contains(msg, "required") || strings.Contains(msg, "invalid") {
+		status = http.StatusBadRequest
+	}
+	http.Error(w, msg, status)
+}
+
+func writeTaskError(w http.ResponseWriter, err error) {
+	msg := mapTaskError(err)
+	if msg == "" {
+		msg = err.Error()
+	}
+	status := http.StatusInternalServerError
+	if strings.Contains(strings.ToLower(msg), "not configured") {
+		status = http.StatusServiceUnavailable
+	} else if isTaskClientError(err) {
 		status = http.StatusBadRequest
 	}
 	http.Error(w, msg, status)

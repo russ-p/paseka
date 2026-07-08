@@ -28,6 +28,7 @@
     <nav class="tabs" role="tablist">
       <button type="button" id="tab-dashboard" class="tab active" role="tab" aria-selected="true">Dashboard</button>
       <button type="button" id="tab-timeline" class="tab" role="tab" aria-selected="false">Timeline</button>
+      <button type="button" id="tab-tasks" class="tab" role="tab" aria-selected="false">Tasks</button>
       <button type="button" id="tab-sessions" class="tab" role="tab" aria-selected="false">Sessions</button>
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
     </nav>
@@ -102,6 +103,88 @@
       </label>
       <ul id="timeline-feed" class="timeline-feed"></ul>
       <button type="button" id="timeline-more-btn" class="secondary hidden">Load more</button>
+    </section>
+  </main>
+
+  <main class="layout tasks-layout hidden" id="tasks-layout">
+    <section class="panel launch-panel tasks-create-panel">
+      <h2>Create task</h2>
+      <form id="task-create-form">
+        <label>
+          Title
+          <input type="text" id="task-title-input" placeholder="Short task title">
+        </label>
+        <label>
+          Body
+          <textarea id="task-body-input" rows="4" placeholder="Describe the task…"></textarea>
+        </label>
+        <div class="row">
+          <label>
+            Bee
+            <input type="text" id="task-bee-input" placeholder="builder" value="builder">
+          </label>
+          <label>
+            Trace ID <span class="hint">(optional)</span>
+            <input type="text" id="task-trace-input" placeholder="auto-generated">
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Sector <span class="hint">(optional)</span>
+            <input type="text" id="task-sector-input" placeholder="from colony.yaml">
+          </label>
+          <label>
+            Intent
+            <select id="task-intent-select">
+              <option value="">—</option>
+              <option value="general">general</option>
+              <option value="feature">feature</option>
+              <option value="bugfix">bugfix</option>
+              <option value="test-fix">test-fix</option>
+              <option value="refactor">refactor</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Depends on <span class="hint">(comma-separated task ids)</span>
+          <input type="text" id="task-depends-input" placeholder="task-a, task-b">
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="task-autorun-toggle">
+          Start immediately (publish task.ready)
+        </label>
+        <button type="submit" id="task-create-btn">Create task</button>
+        <p id="task-create-error" class="error hidden"></p>
+        <p id="task-create-hint" class="muted">Create/start requires NATS and an active <code>paseka run</code> process.</p>
+      </form>
+    </section>
+
+    <section class="panel tasks-board-panel">
+      <div class="panel-header">
+        <h2>Task board</h2>
+        <button type="button" id="tasks-refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <div id="task-board" class="task-board"></div>
+    </section>
+
+    <section class="panel detail-panel tasks-detail-panel">
+      <div class="panel-header">
+        <h2>Task detail</h2>
+        <button type="button" id="task-start-btn" class="secondary hidden">Start</button>
+      </div>
+      <div id="task-detail-empty" class="muted">Select a task to inspect details and linked runs.</div>
+      <dl id="task-detail-meta" class="meta hidden"></dl>
+      <div id="task-body-wrap" class="hidden">
+        <h3>Description</h3>
+        <pre id="task-body" class="transcript"></pre>
+      </div>
+      <div id="task-runs-wrap" class="hidden">
+        <h3>Linked runs</h3>
+        <ul id="task-runs-list" class="session-list compact-list"></ul>
+      </div>
+      <div id="task-detail-actions" class="task-detail-actions hidden">
+        <button type="button" id="task-open-timeline-btn" class="secondary">Open in timeline</button>
+      </div>
     </section>
   </main>
 

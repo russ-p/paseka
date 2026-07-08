@@ -8,11 +8,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/paseka/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
 
@@ -183,82 +182,30 @@ func newTaskCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resolvedTitle := deriveTaskTitle(title, resolvedBody)
-			if resolvedTitle == "" && strings.TrimSpace(resolvedBody) == "" {
-				return fmt.Errorf("provide --title and/or task body via --body, --file, or --stdin")
-			}
 
-			if traceID == "" {
-				id, err := colony.NewTraceID()
-				if err != nil {
-					return err
-				}
-				traceID = id
-			}
-			if taskID == "" {
-				id, err := colony.NewTaskID()
-				if err != nil {
-					return err
-				}
-				taskID = id
-			}
-			if bee == "" {
-				bee = "builder"
-			}
-
-			ctxColony, client, _, cleanup, err := openTaskLedger(startDir)
+			session, err := openTaskSession(startDir)
 			if err != nil {
 				return err
 			}
-			defer cleanup()
-			if client == nil {
-				return fmt.Errorf("nats url not configured (task create requires NATS)")
-			}
-			if sector != "" {
-				manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
-				if err != nil {
-					return err
-				}
-				if _, err := manifest.ResolveSector(sector); err != nil {
-					return err
-				}
-			}
+			defer session.Close()
 
-			spec := protocol.TaskSpec{
+			res, err := tasks.Create(cmd.Context(), session, tasks.CreateInput{
+				TraceID:   traceID,
 				TaskID:    taskID,
-				Title:     resolvedTitle,
-				Body:      strings.TrimSpace(resolvedBody),
+				Title:     title,
+				Body:      resolvedBody,
 				Bee:       bee,
 				Sector:    sector,
 				Intent:    intent,
-				DependsOn: parseDependsOn(dependsOn),
-			}
-			planEv, err := taskPlanEvent(traceID, spec)
+				DependsOn: dependsOn,
+				Autorun:   autorun,
+				AgentID:   "cli",
+			})
 			if err != nil {
 				return err
 			}
-			if err := client.PublishEvent(cmd.Context(), planEv); err != nil {
-				return err
-			}
 
-			if autorun {
-				readyEv, err := taskReadyEvent(traceID, taskledger.TaskSnapshot{
-					TaskID: taskID,
-					Title:  resolvedTitle,
-					Body:   strings.TrimSpace(resolvedBody),
-					Bee:    bee,
-					Sector: sector,
-					Intent: intent,
-				})
-				if err != nil {
-					return err
-				}
-				if err := client.PublishEvent(cmd.Context(), readyEv); err != nil {
-					return err
-				}
-			}
-
-			printTaskCreateResult(traceID, taskID, bee, autorun)
+			printTaskCreateResult(res.TraceID, res.TaskID, res.Bee, res.Autorun)
 			return nil
 		},
 	}
@@ -291,36 +238,21 @@ func newTaskStartCmd() *cobra.Command {
 			if traceID == "" {
 				return fmt.Errorf("--trace is required")
 			}
-			ctxColony, client, ledger, cleanup, err := openTaskLedger(startDir)
+			session, err := openTaskSession(startDir)
 			if err != nil {
 				return err
 			}
-			defer cleanup()
-			if client == nil {
-				return fmt.Errorf("nats url not configured (task start requires JetStream KV)")
-			}
+			defer session.Close()
 
-			snap, err := ledger.Snapshot(traceID)
-			if err != nil {
-				return err
-			}
-			tasks, err := tasksToStart(snap, taskID)
+			started, err := tasks.Start(cmd.Context(), session, traceID, taskID, "cli")
 			if err != nil {
 				return err
 			}
 
-			for _, task := range tasks {
-				ev, err := taskReadyEvent(traceID, task)
-				if err != nil {
-					return err
-				}
-				if err := client.PublishEvent(cmd.Context(), ev); err != nil {
-					return err
-				}
+			for _, task := range started {
 				fmt.Printf("Published task.ready for %s on trace %s (bee=%s)\n", task.TaskID, traceID, task.Bee)
 			}
 			fmt.Println("\nEnsure paseka run is active to dispatch queued tasks.")
-			_ = ctxColony
 			return nil
 		},
 	}
@@ -331,99 +263,29 @@ func newTaskStartCmd() *cobra.Command {
 	return cmd
 }
 
-type taskTraceSource string
-
-const (
-	sourceKV taskTraceSource = "jetstream-kv"
-	sourceFS taskTraceSource = "filesystem"
-)
-
-func loadTaskTrace(startDir, traceID string) (colony.Context, taskledger.TraceSnapshot, taskTraceSource, error) {
+func loadTaskTrace(startDir, traceID string) (colony.Context, taskledger.TraceSnapshot, tasks.Source, error) {
 	ctxColony, err := colony.ResolveContext(startDir)
 	if err != nil {
 		return colony.Context{}, taskledger.TraceSnapshot{}, "", err
 	}
-	_, client, ledger, cleanup, err := openTaskLedger(startDir)
+	session, err := openTaskSession(startDir)
 	if err != nil {
 		return colony.Context{}, taskledger.TraceSnapshot{}, "", err
 	}
-	defer cleanup()
-	if ledger != nil {
-		snap, err := ledger.Snapshot(traceID)
-		if err != nil {
-			return colony.Context{}, taskledger.TraceSnapshot{}, "", err
-		}
-		if len(snap.Tasks) > 0 {
-			_ = client
-			return ctxColony, snap, sourceKV, nil
-		}
-	}
-	snap, err := runs.LoadTraceTasksFromFS(ctxColony.ColonyRoot, traceID)
+	defer session.Close()
+	snap, source, err := tasks.LoadTrace(ctxColony, session.Ledger, traceID)
 	if err != nil {
 		return colony.Context{}, taskledger.TraceSnapshot{}, "", err
 	}
-	return ctxColony, snap, sourceFS, nil
+	return ctxColony, snap, source, nil
 }
 
-func openTaskLedger(startDir string) (colony.Context, *bus.Client, taskledger.Ledger, func(), error) {
+func openTaskSession(startDir string) (*tasks.LedgerSession, error) {
 	ctxColony, err := colony.ResolveContext(startDir)
 	if err != nil {
-		return colony.Context{}, nil, nil, func() {}, err
+		return nil, err
 	}
-	client, err := bus.ConnectColony(ctxColony, false)
-	if err != nil {
-		return colony.Context{}, nil, nil, func() {}, err
-	}
-	if client == nil {
-		return ctxColony, nil, nil, func() {}, nil
-	}
-	kv, err := client.JetStream().KeyValue(bus.TaskLedgerBucket(ctxColony.Slug))
-	if err != nil {
-		client.Close()
-		return colony.Context{}, nil, nil, func() {}, fmt.Errorf("task ledger kv: %w", err)
-	}
-	return ctxColony, client, taskledger.NewKVLedger(kv), func() { client.Close() }, nil
-}
-
-func tasksToStart(snap taskledger.TraceSnapshot, taskID string) ([]taskledger.TaskSnapshot, error) {
-	if taskID != "" {
-		task, err := taskledger.CanStart(snap, taskID)
-		if err == taskledger.ErrTaskAlreadyReady {
-			return nil, fmt.Errorf("task %q is already ready", taskID)
-		}
-		if err != nil {
-			return nil, err
-		}
-		return []taskledger.TaskSnapshot{task}, nil
-	}
-	eligible := taskledger.EligiblePlanned(snap)
-	if len(eligible) == 0 {
-		return nil, taskledger.ErrNoEligibleTasks
-	}
-	return []taskledger.TaskSnapshot{eligible[0]}, nil
-}
-
-func taskReadyEvent(traceID string, task taskledger.TaskSnapshot) (protocol.Event, error) {
-	bee := task.Bee
-	if bee == "" {
-		bee = "builder"
-	}
-	return protocol.NewEvent(traceID, "cli", 0, protocol.EventSignal, protocol.TaskReadyPayload{
-		Kind:   protocol.TaskEventReady,
-		TaskID: task.TaskID,
-		Title:  task.Title,
-		Body:   task.Body,
-		Bee:    bee,
-		Sector: task.Sector,
-		Intent: task.Intent,
-	})
-}
-
-func taskPlanEvent(traceID string, spec protocol.TaskSpec) (protocol.Event, error) {
-	return protocol.NewEvent(traceID, "cli", 0, protocol.EventInsight, protocol.TaskPlanPayload{
-		Kind:  protocol.TaskEventPlan,
-		Tasks: []protocol.TaskSpec{spec},
-	})
+	return tasks.OpenLedger(ctxColony)
 }
 
 func resolveTaskCreateBody(body, filePath string, fromStdin bool, stdin io.Reader) (string, error) {
@@ -458,35 +320,6 @@ func resolveTaskCreateBody(body, filePath string, fromStdin bool, stdin io.Reade
 		return string(data), nil
 	}
 	return "", nil
-}
-
-func deriveTaskTitle(title, body string) string {
-	if strings.TrimSpace(title) != "" {
-		return strings.TrimSpace(title)
-	}
-	for _, line := range strings.Split(body, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			if len(line) > 120 {
-				return line[:120]
-			}
-			return line
-		}
-	}
-	return ""
-}
-
-func parseDependsOn(values []string) []string {
-	var out []string
-	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
-			part = strings.TrimSpace(part)
-			if part != "" {
-				out = append(out, part)
-			}
-		}
-	}
-	return out
 }
 
 func printTaskCreateResult(traceID, taskID, bee string, autorun bool) {

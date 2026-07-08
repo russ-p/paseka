@@ -503,6 +503,130 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestTasksAPIHandlers(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	traceID := "trace-tasks"
+	plannedID := "task-planned"
+	readyID := "task-ready"
+
+	for _, spec := range []struct {
+		taskID string
+		title  string
+		status protocol.TaskStatus
+	}{
+		{plannedID, "Planned work", protocol.TaskStatusPlanned},
+		{readyID, "Ready work", protocol.TaskStatusReady},
+	} {
+		taskDir, err := runs.NewTaskDir(repo, traceID, spec.taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := taskDir.WriteTask(runs.TaskFrontmatter{
+			TraceID: traceID,
+			TaskID:  spec.taskID,
+			Title:   spec.title,
+			Bee:     "scout",
+			Status:  spec.status,
+		}, "task body"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	readyDir, err := runs.NewTaskDir(repo, traceID, readyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := readyDir.AppendTaskRun(runs.TaskRunEntry{
+		AgentID:   "agent-task",
+		Bee:       "scout",
+		RunDir:    filepath.Join(repo, ".paseka", "runs", traceID, "agent-task"),
+		RunStatus: string(protocol.StatusCompleted),
+		StartedAt: time.Now().UTC().Add(-5 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	boardReq := httptest.NewRequest(http.MethodGet, "/api/tasks", nil)
+	boardRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(boardRec, boardReq)
+	if boardRec.Code != http.StatusOK {
+		t.Fatalf("board status = %d body=%s", boardRec.Code, boardRec.Body.String())
+	}
+	var board console.TaskBoardView
+	if err := json.NewDecoder(boardRec.Body).Decode(&board); err != nil {
+		t.Fatal(err)
+	}
+	if board.TaskCounts[string(protocol.TaskStatusPlanned)] != 1 {
+		t.Fatalf("planned count = %+v", board.TaskCounts)
+	}
+	if board.TaskCounts[string(protocol.TaskStatusReady)] != 1 {
+		t.Fatalf("ready count = %+v", board.TaskCounts)
+	}
+	if len(board.Groups) < 2 {
+		t.Fatalf("groups = %+v", board.Groups)
+	}
+
+	traceTasksReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/tasks", nil)
+	traceTasksRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(traceTasksRec, traceTasksReq)
+	if traceTasksRec.Code != http.StatusOK {
+		t.Fatalf("trace tasks status = %d body=%s", traceTasksRec.Code, traceTasksRec.Body.String())
+	}
+	var traceTasks []console.TaskListItem
+	if err := json.NewDecoder(traceTasksRec.Body).Decode(&traceTasks); err != nil {
+		t.Fatal(err)
+	}
+	if len(traceTasks) != 2 {
+		t.Fatalf("trace tasks = %+v", traceTasks)
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/tasks/"+readyID, nil)
+	detailRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(detailRec, detailReq)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("task detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
+	}
+	var detail console.TaskDetailView
+	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.TaskID != readyID || len(detail.Runs) != 1 {
+		t.Fatalf("detail = %+v", detail)
+	}
+	if detail.Status == string(protocol.TaskStatusReady) && detail.CanStart {
+		t.Fatalf("ready task should not be startable: %+v", detail)
+	}
+
+	createBadReq := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewBufferString(`{}`))
+	createBadRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(createBadRec, createBadReq)
+	if createBadRec.Code != http.StatusBadRequest {
+		t.Fatalf("create bad status = %d body=%s", createBadRec.Code, createBadRec.Body.String())
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewBufferString(`{"title":"New task","body":"do things"}`))
+	createRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("create without nats status = %d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	startReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+plannedID+"/start", nil)
+	startRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(startRec, startReq)
+	if startRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("start without nats status = %d body=%s", startRec.Code, startRec.Body.String())
+	}
+}
+
 func TestListRunsProjection(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)

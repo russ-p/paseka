@@ -6,6 +6,7 @@ import (
 
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/paseka/paseka/internal/tasks"
 )
 
 func TestResolveTaskCreateBodyPrecedence(t *testing.T) {
@@ -26,16 +27,16 @@ func TestResolveTaskCreateBodyPrecedence(t *testing.T) {
 }
 
 func TestDeriveTaskTitle(t *testing.T) {
-	if got := deriveTaskTitle("Explicit title", "body"); got != "Explicit title" {
+	if got := tasks.DeriveTitle("Explicit title", "body"); got != "Explicit title" {
 		t.Fatalf("title = %q", got)
 	}
-	if got := deriveTaskTitle("", "First line\nSecond line"); got != "First line" {
+	if got := tasks.DeriveTitle("", "First line\nSecond line"); got != "First line" {
 		t.Fatalf("derived title = %q", got)
 	}
 }
 
 func TestParseDependsOn(t *testing.T) {
-	got := parseDependsOn([]string{"task-1", "task-2, task-3"})
+	got := tasks.ParseDependsOn([]string{"task-1", "task-2, task-3"})
 	want := []string{"task-1", "task-2", "task-3"}
 	if len(got) != len(want) {
 		t.Fatalf("depends = %#v", got)
@@ -48,7 +49,7 @@ func TestParseDependsOn(t *testing.T) {
 }
 
 func TestTaskReadyEventIncludesIntent(t *testing.T) {
-	ev, err := taskReadyEvent("trace-1", taskledger.TaskSnapshot{
+	ev, err := tasks.ReadyEvent("trace-1", "cli", taskledger.TaskSnapshot{
 		TaskID: "task-1",
 		Title:  "Fix bug",
 		Bee:    "builder",
@@ -63,7 +64,7 @@ func TestTaskReadyEventIncludesIntent(t *testing.T) {
 }
 
 func TestTaskPlanEventIncludesIntent(t *testing.T) {
-	ev, err := taskPlanEvent("trace-1", protocol.TaskSpec{
+	ev, err := tasks.PlanEvent("trace-1", "cli", protocol.TaskSpec{
 		TaskID: "task-1",
 		Title:  "Add endpoint",
 		Bee:    "builder",
@@ -78,7 +79,7 @@ func TestTaskPlanEventIncludesIntent(t *testing.T) {
 }
 
 func TestTaskPlanEvent(t *testing.T) {
-	ev, err := taskPlanEvent("trace-1", protocol.TaskSpec{
+	ev, err := tasks.PlanEvent("trace-1", "cli", protocol.TaskSpec{
 		TaskID: "task-1",
 		Title:  "Add endpoint",
 		Bee:    "builder",
@@ -98,12 +99,12 @@ func TestTasksToStartSingleTask(t *testing.T) {
 			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusPlanned},
 		},
 	}
-	tasks, err := tasksToStart(snap, "task-1")
+	started, err := tasks.TasksToStart(snap, "task-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tasks) != 1 || tasks[0].TaskID != "task-1" {
-		t.Fatalf("tasks = %+v", tasks)
+	if len(started) != 1 || started[0].TaskID != "task-1" {
+		t.Fatalf("tasks = %+v", started)
 	}
 }
 
@@ -116,11 +117,11 @@ func TestTasksToStartEligibleBatch(t *testing.T) {
 			"task-3": {TaskID: "task-3", Status: protocol.TaskStatusPlanned, DependsOn: []string{"task-2"}},
 		},
 	}
-	tasks, err := tasksToStart(snap, "")
+	started, err := tasks.TasksToStart(snap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tasks) != 1 || tasks[0].TaskID != "task-2" {
-		t.Fatalf("tasks = %+v", tasks)
+	if len(started) != 1 || started[0].TaskID != "task-2" {
+		t.Fatalf("tasks = %+v", started)
 	}
 }

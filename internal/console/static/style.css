@@ -273,9 +273,96 @@ header h1 {
   grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr);
 }
 
+#tasks-layout {
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.2fr) minmax(300px, 1fr);
+}
+
+.task-board {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.task-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  background: #12151d;
+}
+
+.task-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.task-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.task-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  background: var(--panel);
+}
+
+.task-card:hover { border-color: var(--accent); }
+.task-card.selected { outline: 1px solid var(--accent); }
+
+.task-card .top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.task-card .title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.task-card .meta-line {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.task-card .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.task-tag {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.task-detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 1100px) {
   #sessions-layout,
-  #runs-layout {
+  #runs-layout,
+  #tasks-layout {
     grid-template-columns: 1fr;
   }
 }
