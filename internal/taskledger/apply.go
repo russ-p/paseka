@@ -70,77 +70,110 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 			_ = json.Unmarshal(event.Payload, &meta)
 			kind = meta.Kind
 		}
-		if kind == string(protocol.TaskEventStatus) {
-			var payload protocol.TaskStatusPayload
+
+		switch protocol.EnergyEventKind(kind) {
+		case protocol.SignalEnergyAdd:
+			var payload protocol.EnergyAddPayload
 			if err := json.Unmarshal(event.Payload, &payload); err != nil {
-				return ApplyResult{}, fmt.Errorf("taskledger: parse task.status: %w", err)
+				return ApplyResult{}, fmt.Errorf("taskledger: parse energy.add: %w", err)
 			}
-			if payload.Kind != protocol.TaskEventStatus {
+			if payload.Amount <= 0 {
+				return ApplyResult{}, fmt.Errorf("taskledger: energy.add amount must be positive")
+			}
+			trace.EnergyRemaining += payload.Amount
+			// Leave EnergyBudget untouched when still 0 so SeedEnergy can apply
+			// colony defaults.energy_budget (not a hardcoded DefaultEnergyBudget).
+			changed = true
+			break
+
+		case protocol.SignalEnergyConsume:
+			var payload protocol.EnergyConsumePayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return ApplyResult{}, fmt.Errorf("taskledger: parse energy.consume: %w", err)
+			}
+			if payload.Amount <= 0 {
+				return ApplyResult{}, fmt.Errorf("taskledger: energy.consume amount must be positive")
+			}
+			if trace.EnergyRemaining < payload.Amount {
+				return ApplyResult{}, fmt.Errorf("taskledger: insufficient honey reserve")
+			}
+			trace.EnergyRemaining -= payload.Amount
+			changed = true
+			break
+
+		default:
+			if kind == string(protocol.TaskEventStatus) {
+				var payload protocol.TaskStatusPayload
+				if err := json.Unmarshal(event.Payload, &payload); err != nil {
+					return ApplyResult{}, fmt.Errorf("taskledger: parse task.status: %w", err)
+				}
+				if payload.Kind != protocol.TaskEventStatus {
+					return ApplyResult{Trace: trace}, nil
+				}
+				if payload.TaskID == "" {
+					return ApplyResult{}, fmt.Errorf("taskledger: task.status missing taskId")
+				}
+				task, ok := trace.Tasks[payload.TaskID]
+				if !ok {
+					task = TaskSnapshot{TaskID: payload.TaskID}
+				}
+				if payload.Status == "" {
+					return ApplyResult{}, fmt.Errorf("taskledger: task.status missing status")
+				}
+				task.Status = payload.Status
+				// Always assign summary (including "") so unblock/clear transitions
+				// can drop stale reasons like "Honey reserve exhausted".
+				task.Summary = payload.Summary
+				task.UpdatedAt = now
+				trace.Tasks[payload.TaskID] = task
+				changed = true
+				break
+			}
+
+			var payload protocol.TaskReadyPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return ApplyResult{}, fmt.Errorf("taskledger: parse task.ready: %w", err)
+			}
+			if payload.Kind != protocol.TaskEventReady {
 				return ApplyResult{Trace: trace}, nil
 			}
 			if payload.TaskID == "" {
-				return ApplyResult{}, fmt.Errorf("taskledger: task.status missing taskId")
+				return ApplyResult{}, fmt.Errorf("taskledger: task.ready missing taskId")
 			}
 			task, ok := trace.Tasks[payload.TaskID]
 			if !ok {
 				task = TaskSnapshot{TaskID: payload.TaskID}
 			}
-			if payload.Status == "" {
-				return ApplyResult{}, fmt.Errorf("taskledger: task.status missing status")
+			if payload.Title != "" {
+				task.Title = payload.Title
 			}
-			task.Status = payload.Status
-			if payload.Summary != "" {
-				task.Summary = payload.Summary
+			if payload.Body != "" {
+				task.Body = payload.Body
+			}
+			if payload.Bee != "" {
+				task.Bee = payload.Bee
+			}
+			if payload.Sector != "" {
+				task.Sector = payload.Sector
+			}
+			if payload.Intent != "" {
+				task.Intent = payload.Intent
+			}
+			if task.Status == protocol.TaskStatusReady {
+				task.UpdatedAt = now
+				trace.Tasks[payload.TaskID] = task
+				break
+			}
+			if !HasReadyTask(trace) {
+				if first, ok := FirstEligiblePlanned(trace); ok && first.TaskID == payload.TaskID {
+					task.Status = protocol.TaskStatusReady
+					ready = append(ready, task)
+					changed = true
+				}
 			}
 			task.UpdatedAt = now
 			trace.Tasks[payload.TaskID] = task
-			changed = true
-			break
 		}
-
-		var payload protocol.TaskReadyPayload
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			return ApplyResult{}, fmt.Errorf("taskledger: parse task.ready: %w", err)
-		}
-		if payload.Kind != protocol.TaskEventReady {
-			return ApplyResult{Trace: trace}, nil
-		}
-		if payload.TaskID == "" {
-			return ApplyResult{}, fmt.Errorf("taskledger: task.ready missing taskId")
-		}
-		task, ok := trace.Tasks[payload.TaskID]
-		if !ok {
-			task = TaskSnapshot{TaskID: payload.TaskID}
-		}
-		if payload.Title != "" {
-			task.Title = payload.Title
-		}
-		if payload.Body != "" {
-			task.Body = payload.Body
-		}
-		if payload.Bee != "" {
-			task.Bee = payload.Bee
-		}
-		if payload.Sector != "" {
-			task.Sector = payload.Sector
-		}
-		if payload.Intent != "" {
-			task.Intent = payload.Intent
-		}
-		if task.Status == protocol.TaskStatusReady {
-			task.UpdatedAt = now
-			trace.Tasks[payload.TaskID] = task
-			break
-		}
-		if !HasReadyTask(trace) {
-			if first, ok := FirstEligiblePlanned(trace); ok && first.TaskID == payload.TaskID {
-				task.Status = protocol.TaskStatusReady
-				ready = append(ready, task)
-				changed = true
-			}
-		}
-		task.UpdatedAt = now
-		trace.Tasks[payload.TaskID] = task
 
 	case protocol.EventVerification:
 		var payload protocol.TaskCompletedPayload

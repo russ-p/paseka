@@ -47,6 +47,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newSignalCmd())
 	root.AddCommand(newEventCmd())
 	root.AddCommand(newProposalCmd())
+	root.AddCommand(newEnergyCmd())
 	root.AddCommand(newPurgeCmd())
 	root.AddCommand(newConsoleCmd())
 	return root

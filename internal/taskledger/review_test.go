@@ -35,6 +35,37 @@ func TestApplyEventTaskStatus(t *testing.T) {
 	}
 }
 
+func TestApplyEventTaskStatusClearsSummary(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID:  "task-1",
+				Status:  protocol.TaskStatusBlocked,
+				Summary: protocol.HoneyReserveExhaustedSummary,
+			},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:   protocol.TaskEventStatus,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusReady,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-1"].Status != protocol.TaskStatusReady {
+		t.Fatalf("status = %q", res.Trace.Tasks["task-1"].Status)
+	}
+	if res.Trace.Tasks["task-1"].Summary != "" {
+		t.Fatalf("summary = %q, want cleared", res.Trace.Tasks["task-1"].Summary)
+	}
+}
+
 func TestApplyEventTaskPlanPreservesReview(t *testing.T) {
 	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
 	ev, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventInsight, protocol.TaskPlanPayload{

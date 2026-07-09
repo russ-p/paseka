@@ -10,39 +10,8 @@ import (
 	"github.com/paseka/paseka/internal/review"
 )
 
-const maxReworkCycles = 3
-
 func (r *Reactor) handleReviewSideEffects(ctx context.Context, ev protocol.Event) error {
-	if err := r.handleVerificationFailedLoop(ctx, ev); err != nil {
-		return err
-	}
 	return r.handleHumanFeedback(ctx, ev)
-}
-
-func (r *Reactor) handleVerificationFailedLoop(ctx context.Context, ev protocol.Event) error {
-	if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.VerificationFailed) {
-		return nil
-	}
-	var payload protocol.VerificationPayload
-	if err := unmarshalPayload(ev.Payload, &payload); err != nil {
-		return nil
-	}
-	if payload.TaskID == "" {
-		return nil
-	}
-	key := ev.TraceID + ":" + payload.TaskID
-	r.mu.Lock()
-	r.reworkCounts[key]++
-	count := r.reworkCounts[key]
-	r.mu.Unlock()
-	if count < maxReworkCycles {
-		return nil
-	}
-	summary := fmt.Sprintf("Bee appears stuck after %d rework cycles", count)
-	if payload.Summary != "" {
-		summary = summary + ": " + payload.Summary
-	}
-	return r.setTaskStatus(ctx, ev.TraceID, payload.TaskID, protocol.TaskStatusWaitingReview, summary)
 }
 
 func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event) error {
@@ -106,17 +75,19 @@ func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, co
 	if err != nil {
 		return err
 	}
-	if r.bus != nil {
-		if err := r.bus.PublishEvent(ctx, completed); err != nil {
-			return err
-		}
-	}
 	res, err := r.ledger.Apply(completed)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	// Remember before publish so the JetStream echo cannot re-apply.
+	r.rememberLocalEvent(completed)
+	if r.bus != nil {
+		if err := r.bus.PublishEvent(ctx, completed); err != nil {
+			return err
+		}
 	}
 	for _, t := range res.Ready {
 		if err := r.dispatchReady(ctx, traceID, t); err != nil {
@@ -141,18 +112,22 @@ func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string) 
 	return nil
 }
 
+// applyAndSync applies locally first, then publishes. Publish-before-apply would
+// leave a bad stream event when CAS/apply fails, and the reactor's own
+// subscription would double-apply non-idempotent events (e.g. energy.consume).
 func (r *Reactor) applyAndSync(ctx context.Context, ev protocol.Event) error {
-	if r.bus != nil {
-		if err := r.bus.PublishEvent(ctx, ev); err != nil {
-			return err
-		}
-	}
 	res, err := r.ledger.Apply(ev)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	r.rememberLocalEvent(ev)
+	if r.bus != nil {
+		if err := r.bus.PublishEvent(ctx, ev); err != nil {
+			return err
+		}
 	}
 	return nil
 }

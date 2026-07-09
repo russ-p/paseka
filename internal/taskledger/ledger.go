@@ -24,8 +24,10 @@ type TaskSnapshot struct {
 
 // TraceSnapshot is the aggregated task ledger for one trace.
 type TraceSnapshot struct {
-	TraceID string                  `json:"traceId"`
-	Tasks   map[string]TaskSnapshot `json:"tasks"`
+	TraceID         string                  `json:"traceId"`
+	EnergyBudget    int                     `json:"energyBudget,omitempty"`
+	EnergyRemaining int                     `json:"energyRemaining,omitempty"`
+	Tasks           map[string]TaskSnapshot `json:"tasks"`
 }
 
 // ApplyResult is the outcome of applying one bus event to a trace ledger.
@@ -44,4 +46,7 @@ type Ledger interface {
 	// Apply processes one bus event and returns the updated trace snapshot
 	// plus any tasks that newly transitioned to ready.
 	Apply(event protocol.Event) (ApplyResult, error)
+
+	// SeedEnergy initializes the honey reserve when not yet seeded.
+	SeedEnergy(traceID string, budget int) error
 }

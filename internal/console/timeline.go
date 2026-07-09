@@ -12,6 +12,7 @@ import (
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
+	"github.com/paseka/paseka/internal/tasks"
 )
 
 const (
@@ -68,13 +69,16 @@ type EventFilter struct {
 
 // TraceSummaryView is a console projection of one trace.
 type TraceSummaryView struct {
-	TraceID        string    `json:"traceId"`
-	LastActivityAt time.Time `json:"lastActivityAt"`
-	RunCount       int       `json:"runCount"`
-	TaskCount      int       `json:"taskCount"`
-	Bees           []string  `json:"bees,omitempty"`
-	HasFailures    bool      `json:"hasFailures"`
-	HasActive      bool      `json:"hasActive"`
+	TraceID         string    `json:"traceId"`
+	LastActivityAt  time.Time `json:"lastActivityAt"`
+	RunCount        int       `json:"runCount"`
+	TaskCount       int       `json:"taskCount"`
+	Bees            []string  `json:"bees,omitempty"`
+	HasFailures     bool      `json:"hasFailures"`
+	HasActive       bool      `json:"hasActive"`
+	EnergyBudget    int       `json:"energyBudget,omitempty"`
+	EnergyRemaining int       `json:"energyRemaining,omitempty"`
+	LowEnergy       bool      `json:"lowEnergy,omitempty"`
 }
 
 // TaskSummaryView is a lightweight task row for trace detail.
@@ -185,6 +189,7 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	view := TraceDetailView{
 		TraceSummaryView: traceSummaryViewFromRuns(summary),
 	}
+	enrichTraceEnergy(ctx, &view.TraceSummaryView)
 
 	taskSnap, err := runs.LoadTraceTasksFromFS(ctx.ColonyRoot, traceID)
 	if err != nil {
@@ -366,6 +371,24 @@ func traceSummaryViewFromRuns(s runs.TraceSummary) TraceSummaryView {
 		HasFailures:    s.HasFailures,
 		HasActive:      s.HasActive,
 	}
+}
+
+func enrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
+	if view == nil || view.TraceID == "" {
+		return
+	}
+	session, err := tasks.OpenLedger(ctx)
+	if err != nil || session.Ledger == nil {
+		return
+	}
+	defer session.Close()
+	snap, err := session.Ledger.Snapshot(view.TraceID)
+	if err != nil || snap.EnergyBudget == 0 {
+		return
+	}
+	view.EnergyBudget = snap.EnergyBudget
+	view.EnergyRemaining = snap.EnergyRemaining
+	view.LowEnergy = snap.EnergyRemaining <= snap.EnergyBudget/4
 }
 
 func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {

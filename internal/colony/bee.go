@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/paseka/paseka/internal/protocol"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,6 +28,15 @@ type ColonyNATS struct {
 // Defaults holds colony-wide fallbacks.
 type Defaults struct {
 	PromptTemplate string `yaml:"prompt_template"`
+	EnergyBudget   int    `yaml:"energy_budget,omitempty"`
+}
+
+// ResolvedEnergyBudget returns the per-trace honey reserve default for this colony.
+func (c Colony) ResolvedEnergyBudget() int {
+	if c.Defaults.EnergyBudget > 0 {
+		return c.Defaults.EnergyBudget
+	}
+	return protocol.DefaultEnergyBudget
 }
 
 // Bee binds a role to an adapter and prompt template.

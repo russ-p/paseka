@@ -56,3 +56,22 @@ func (l *MemoryLedger) Apply(event protocol.Event) (ApplyResult, error) {
 	}
 	return res, nil
 }
+
+// SeedEnergy initializes the honey reserve when not yet seeded.
+func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		trace = TraceSnapshot{TraceID: traceID, Tasks: map[string]TaskSnapshot{}}
+	}
+	updated, changed := EnsureEnergySeeded(trace, budget)
+	if !changed {
+		return nil
+	}
+	l.traces[traceID] = updated
+	return nil
+}

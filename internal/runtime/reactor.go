@@ -26,7 +26,7 @@ type Reactor struct {
 	inflight        map[string]struct{}
 	directInflight  map[string]struct{}
 	directProcessed map[string]struct{}
-	reworkCounts    map[string]int
+	recentLocal     map[string]time.Time // fingerprints of events applied before publish
 	asyncDispatch   bool
 }
 
@@ -74,7 +74,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		inflight:        make(map[string]struct{}),
 		directInflight:  make(map[string]struct{}),
 		directProcessed: make(map[string]struct{}),
-		reworkCounts:    make(map[string]int),
+		recentLocal:     make(map[string]time.Time),
 		asyncDispatch:   true,
 	}, nil
 }
@@ -104,6 +104,13 @@ func (r *Reactor) handleEvent(ev protocol.Event) error {
 func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	logEventReceived(ev)
 
+	// Runtime-generated events are applied before publish; skip the JetStream echo
+	// so non-idempotent reducers (energy.consume) are not applied twice.
+	if r.takeLocalEcho(ev) {
+		logLedgerOutcome(ev.TraceID, 0)
+		return nil
+	}
+
 	res, err := r.ledger.Apply(ev)
 	if err != nil {
 		return err
@@ -112,6 +119,11 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		r.syncTaskProjection(res.Trace)
 	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
+	if energyAddDetected(ev) {
+		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
+			return err
+		}
+	}
 	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
 		return err
 	}
@@ -122,6 +134,39 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		return r.maybeActivateFinalReview(ctx, ev.TraceID)
 	}
 	return nil
+}
+
+func eventFingerprint(ev protocol.Event) string {
+	return fmt.Sprintf("%s\x00%s\x00%d\x00%s", ev.TraceID, ev.Type, ev.CreatedAt.UnixNano(), string(ev.Payload))
+}
+
+func (r *Reactor) rememberLocalEvent(ev protocol.Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.recentLocal == nil {
+		r.recentLocal = make(map[string]time.Time)
+	}
+	now := time.Now()
+	r.recentLocal[eventFingerprint(ev)] = now
+	for key, at := range r.recentLocal {
+		if now.Sub(at) > 2*time.Minute {
+			delete(r.recentLocal, key)
+		}
+	}
+}
+
+func (r *Reactor) takeLocalEcho(ev protocol.Event) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.recentLocal == nil {
+		return false
+	}
+	key := eventFingerprint(ev)
+	if _, ok := r.recentLocal[key]; !ok {
+		return false
+	}
+	delete(r.recentLocal, key)
+	return true
 }
 
 func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot) error {
@@ -212,6 +257,15 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
 	}
 
+	ok, err := r.gateDispatchEnergy(ctx, traceID, task.TaskID, "task.dispatch")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		logDispatchSkip("honey reserve exhausted", traceID, task.TaskID, bee)
+		return nil
+	}
+
 	if err := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusRunning, ""); err != nil {
 		return err
 	}
@@ -289,6 +343,15 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		r.mu.Unlock()
 	}()
 
+	ok, err := r.gateDispatchEnergy(ctx, ev.TraceID, taskID, "direct.dispatch")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		logDispatchSkip("honey reserve exhausted", ev.TraceID, taskID, beeRole)
+		return nil
+	}
+
 	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
 		Bee:     beeRole,
 		TraceID: ev.TraceID,
@@ -344,6 +407,16 @@ func (r *Reactor) ProcessEvent(ctx context.Context, ev protocol.Event) error {
 	return r.processEvent(ctx, ev)
 }
 
+// RememberLocalEvent records an event fingerprint as already applied (for tests).
+func (r *Reactor) RememberLocalEvent(ev protocol.Event) {
+	r.rememberLocalEvent(ev)
+}
+
+// ApplyAndSyncForTest applies then publishes via the reactor sync path (for tests).
+func (r *Reactor) ApplyAndSyncForTest(ctx context.Context, ev protocol.Event) error {
+	return r.applyAndSync(ctx, ev)
+}
+
 // TestReactorOptions configures a reactor without NATS (unit tests).
 type TestReactorOptions struct {
 	ColonyRoot string
@@ -362,7 +435,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		inflight:        make(map[string]struct{}),
 		directInflight:  make(map[string]struct{}),
 		directProcessed: make(map[string]struct{}),
-		reworkCounts:    make(map[string]int),
+		recentLocal:     make(map[string]time.Time),
 		asyncDispatch:   false,
 	}
 }

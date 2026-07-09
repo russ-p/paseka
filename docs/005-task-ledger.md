@@ -50,9 +50,22 @@ flowchart LR
 | `waiting_review` | Code changed or trace gate open; awaiting guard/HITL |
 | `completed` | Task gate passed (AFK success or human approval) |
 | `failed` | Task abandoned or rejected |
-| `blocked` | Cannot proceed (manual intervention) |
+| `blocked` | Cannot proceed (manual intervention or honey reserve exhausted) |
 
 Task lifecycle events use `payload.kind` inside existing top-level event types — no new `EventType` values.
+
+### Honey reserve (`energyToken`)
+
+Each trace carries a shared honey reserve on the task ledger snapshot:
+
+| Field | Meaning |
+| ----- | ------- |
+| `energyBudget` | Initial reserve seeded from `colony.yaml` → `defaults.energy_budget` (default `12`) |
+| `energyRemaining` | Tokens left; each adapter dispatch consumes `1` |
+
+When `energyRemaining` reaches `0`, further dispatches set the task to `blocked` with summary `Honey reserve exhausted`. Top up with `paseka energy add --trace <id> --amount <n>` (`SIGNAL` / `energy.add`). Runtime audit events use `SIGNAL` / `energy.consume`.
+
+`energy.add` only increments `energyRemaining`; it does not set `energyBudget`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml`. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
 
 ### Review policy
 
@@ -73,7 +86,7 @@ Human actions:
 
 ### `task.status` — SIGNAL
 
-Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`).
+Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`). The `summary` field on `task.status` replaces the previous task summary (omit or empty clears it — used when unblocking honey-exhausted tasks).
 
 ```json
 {

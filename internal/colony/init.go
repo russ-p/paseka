@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/protocol"
 	"gopkg.in/yaml.v3"
 )
 
@@ -132,8 +133,11 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	path := PasekaPath(root, "colony.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		c := Colony{
-			Slug:     slug,
-			Defaults: Defaults{PromptTemplate: "default.md"},
+			Slug: slug,
+			Defaults: Defaults{
+				PromptTemplate: "default.md",
+				EnergyBudget:   protocol.DefaultEnergyBudget,
+			},
 		}
 		data, err := yaml.Marshal(c)
 		if err != nil {
@@ -154,6 +158,9 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	manifest.Slug = slug
 	if manifest.Defaults.PromptTemplate == "" {
 		manifest.Defaults.PromptTemplate = "default.md"
+	}
+	if manifest.Defaults.EnergyBudget == 0 {
+		manifest.Defaults.EnergyBudget = protocol.DefaultEnergyBudget
 	}
 	data, err := yaml.Marshal(manifest)
 	if err != nil {

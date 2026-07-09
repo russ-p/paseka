@@ -133,6 +133,13 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateTaskCompleted(payload)
 	}
 
+	switch EnergyEventKind(kind) {
+	case SignalEnergyAdd:
+		return validateEnergyAdd(payload)
+	case SignalEnergyConsume:
+		return validateEnergyConsume(payload)
+	}
+
 	switch VerificationKind(kind) {
 	case VerificationSuccess, VerificationFailed:
 		return validateVerification(payload)
@@ -166,6 +173,10 @@ func expectedEventType(kind string) EventType {
 		return EventSignal
 	case TaskEventCompleted:
 		return EventVerification
+	}
+	switch EnergyEventKind(kind) {
+	case SignalEnergyAdd, SignalEnergyConsume:
+		return EventSignal
 	}
 	switch VerificationKind(kind) {
 	case VerificationSuccess, VerificationFailed:
@@ -294,6 +305,28 @@ func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
 		details = append(details, ValidationDetail{Path: "payload.message", Message: "required"})
 	}
 	return details
+}
+
+func validateEnergyAdd(payload json.RawMessage) []ValidationDetail {
+	var p EnergyAddPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.add payload"}}
+	}
+	if p.Amount <= 0 {
+		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
+	}
+	return nil
+}
+
+func validateEnergyConsume(payload json.RawMessage) []ValidationDetail {
+	var p EnergyConsumePayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.consume payload"}}
+	}
+	if p.Amount <= 0 {
+		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
+	}
+	return nil
 }
 
 // ToEvent validates input and builds a canonical protocol.Event.

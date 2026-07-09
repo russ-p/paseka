@@ -142,6 +142,16 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 	}
 
+	manifest, err := colony.LoadColony(session.Colony.ColonyRoot)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	if session.Ledger != nil {
+		if err := session.Ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget()); err != nil {
+			return CreateResult{}, err
+		}
+	}
+
 	agentID := in.AgentID
 	if agentID == "" {
 		agentID = "cli"

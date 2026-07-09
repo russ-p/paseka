@@ -18,7 +18,7 @@ This spec captures the shared design only. Implementation must not start until e
 ## Non-Goals
 
 - Do not turn `paseka replay` into a re-execution engine in this spec (today it is inspect-only).
-- Do not implement `energyToken` / `confidence` budgets here; loop protection remains `maxReworkCycles` until those land.
+- Do not implement `confidence` budgets here; loop protection uses per-trace `energyToken` (honey reserve).
 - Do not require a dedicated eval database or Queen Console UI for the first cut.
 - Do not make live LLM evals the only gate; flaky model runs must not block choreography correctness.
 - Do not evaluate prompt quality in isolation without a hive outcome oracle.
@@ -35,7 +35,7 @@ Relevant existing pieces:
 | Runs IPC | `.paseka/runs/<traceId>/<agentId>/` | Audit trail: prompts, events, status |
 | Task ledger | JetStream KV + `paseka task *` | Case work queue |
 | Routing | [008-bee-routing.md](../008-bee-routing.md) | `task.ready` → builder → `code.proposal` → guard → `verification.*` → builder |
-| Rework cap | `maxReworkCycles = 3` in `internal/runtime/review_gate.go` | Stuck loops escalate to `waiting_review` |
+| Honey reserve | `defaults.energy_budget` in `colony.yaml`; `TraceSnapshot.energyRemaining` in JetStream KV | Each dispatch consumes 1 token; exhausted traces block until `paseka energy add` |
 | Fixed trace | CLI `--trace` | Stable case identity across resets |
 | Purge | `paseka purge --runs --worktrees --state` | Ephemeral cleanup between runs |
 | Signal inject | `paseka signal` | Bus-level fault injection |
@@ -50,7 +50,7 @@ SIGNAL/task.ready
   → builder (MUTATION/code.proposal from diff)
   → guard (VERIFICATION/success|failed)
   → on failed: builder direct dispatch (fix-up)
-  → after 3 failed cycles: task → waiting_review
+  → when honey reserve is empty: task → blocked
 ```
 
 Gaps today:
@@ -59,7 +59,7 @@ Gaps today:
 - No seeded `agentId` control.
 - No JetStream snapshot/restore helper for eval namespaces.
 - No end-to-end builder→guard→builder integration test with scripted adapters.
-- `energyToken` / `confidence` are product vision only.
+- `confidence` filtering is not implemented.
 
 ## Decisions
 
