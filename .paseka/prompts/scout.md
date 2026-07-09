@@ -10,5 +10,6 @@ Flight trail: {{.TraceID}}
 {{range .Insights}}- {{.}}
 {{end}}
 
-{{template "json-events" .}}
-{{template "task-events" .}}
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
+{{template "emit-signal" .}}

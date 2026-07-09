@@ -25,9 +25,9 @@ func writePromptTree(t *testing.T, colonyRoot string) {
 Colony: {{.ColonyRoot}}
 Trail: {{.TraceID}}
 Task: {{.Task}}
-{{template "json-events" .}}
+{{template "emit-howto" .}}
 `,
-		".paseka/prompts/_partials/json-events.md": `Emit valid JSON events on the bus.`,
+		".paseka/prompts/_partials/emit-howto.md": `Emit valid JSON events on the bus.`,
 	}
 	for path, content := range files {
 		if err := os.WriteFile(filepath.Join(colonyRoot, path), []byte(content), 0o644); err != nil {

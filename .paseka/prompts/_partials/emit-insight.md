@@ -1,6 +1,6 @@
-## Narrative INSIGHT events
+## INSIGHT events
 
-Use `INSIGHT` for context, audit, and dashboard narrative. INSIGHT events do **not** drive workflow routing — use `VERIFICATION` for gate decisions.
+Use `type: INSIGHT` for context, audit, and dashboard narrative. INSIGHT events do **not** drive workflow routing.
 
 Runtime automatically projects selected narrative INSIGHT kinds into `{{.Insights}}` for subsequent bees on the same trace.
 
@@ -38,4 +38,10 @@ paseka event emit --stdin <<'EOF'
 EOF
 ```
 
-Workflow routing uses `VERIFICATION` (`verification.success`, `verification.failed`, `task.completed`). Publish exactly one final `VERIFICATION` when your bee role requires a gate decision.
+### `task.plan` — task breakdown
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder","sector":"backend-users"}]}}
+EOF
+```

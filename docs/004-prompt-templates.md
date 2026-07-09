@@ -11,8 +11,10 @@ Implementation: [`internal/prompts`](../internal/prompts/prompts.go).
 ```
 .paseka/prompts/
 ├── _partials/           # shared snippets (not used as top-level bee templates)
-│   ├── json-events.md
-│   └── task-events.md
+│   ├── emit-howto.md
+│   ├── emit-insight.md
+│   ├── emit-signal.md
+│   └── emit-verification.md
 ├── default.md           # colony-wide fallback
 ├── scout.md
 └── builder.md
@@ -83,7 +85,7 @@ Variables **not** available in templates today:
 - Bee adapter params (`model`, `trust`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
 - Arbitrary bus event fields — only `Task`, `Intent`, and `Insights` are surfaced in MVP.
 
-Bus event publishing is instructed through the `json-events` partial, which teaches agents to call `paseka event emit --stdin`.
+Bus event publishing is instructed through emit partials: `emit-howto` (safe CLI mechanics for all bees) plus type-scoped partials (`emit-insight`, `emit-signal`, `emit-verification`) included only by bees that may publish those types.
 
 ---
 
@@ -125,20 +127,20 @@ When `Insights` is empty, the range produces no lines.
 Partials live in `.paseka/prompts/_partials/`. The file name without `.md` is the template name:
 
 ```
-_partials/json-events.md  →  {{template "json-events" .}}
-_partials/insight-events.md  →  {{template "insight-events" .}}
-_partials/task-events.md  →  {{template "task-events" .}}
-_partials/verification-events.md  →  {{template "verification-events" .}}
+_partials/emit-howto.md  →  {{template "emit-howto" .}}
+_partials/emit-insight.md  →  {{template "emit-insight" .}}
+_partials/emit-signal.md  →  {{template "emit-signal" .}}
+_partials/emit-verification.md  →  {{template "emit-verification" .}}
 _partials/builder-intent-feature.md  →  {{template "builder-intent-feature" .}}
 ```
 
 Builder Bee uses intent partials for mission-specific guidance while keeping one stable role prompt. The top-level `builder.md` routes by `{{.Intent}}` and falls back to `builder-intent-general`.
 
-Include a partial and pass the full context:
+Include only the emit partials your bee role may publish:
 
 ```markdown
-{{template "json-events" .}}
-{{template "task-events" .}}
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
 ```
 
 Partials are loaded before the main template and can use the same variables (`{{.TraceID}}`, etc.).
@@ -186,7 +188,7 @@ bee config + CLI flags
   Runtime normalizes summary, writes log artifact, may auto-publish `INSIGHT/run.summary`
 ```
 
-Bus events are published separately through `paseka event emit --stdin` as described in the `json-events` partial. Runtime may also synthesize `INSIGHT/run.summary` after a successful AFK run when the bee policy allows.
+Bus events are published separately through `paseka event emit --stdin` as described in the emit partials. Each bee includes `emit-howto` plus only the type partials it may publish. Runtime may also synthesize `INSIGHT/run.summary` after a successful AFK run when the bee policy allows.
 
 ---
 
@@ -208,6 +210,9 @@ Intent: {{.Intent}}
 {{else}}
 {{template "builder-intent-general" .}}
 {{end}}
+
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
 ```
 
 Known intents: `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Unknown values normalize to `general`; the raw requested value remains in `{{.IntentRaw}}` when it differs.
@@ -228,8 +233,9 @@ Flight trail: {{.TraceID}}
 {{range .Insights}}- {{.}}
 {{end}}
 
-{{template "json-events" .}}
-{{template "task-events" .}}
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
+{{template "emit-signal" .}}
 ```
 
 ### Inline one-shot prompt
@@ -268,13 +274,23 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
 | Partial | Role |
 | ------- | ---- |
-| `json-events` | General bus event publish contract via `paseka event emit --stdin` |
-| `insight-events` | Narrative `INSIGHT` kinds for prompt memory (`run.summary`, `review.note`, etc.) |
-| `task-events` | Task lifecycle events (`task.plan`, `task.ready`, `task.completed`) |
+| `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (no type enumeration) |
+| `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) |
+| `emit-signal` | `SIGNAL` kinds (`task.ready`) |
+| `emit-verification` | `VERIFICATION` gate kinds (`verification.success`, `verification.failed`, `task.completed`) |
 
-Project prompts may also define role-specific partials for tighter instructions. For example, `verification-events` compresses reviewer guidance into a single `VERIFICATION` contract plus an optional `INSIGHT/review.note`.
+Bees include only the type partials they may publish. For example:
 
-Bees that plan or manage tasks (e.g. scout, drone) typically include `json-events`, `insight-events`, and `task-events`. Reviewer bees can use a smaller role-specific partial instead of repeating the full generic event guidance plus reviewer-specific examples.
+| Bee | Emit partials |
+| --- | ------------- |
+| `builder` | `emit-howto`, `emit-insight` |
+| `scout` | `emit-howto`, `emit-insight`, `emit-signal` |
+| `drone` | `emit-howto`; on `breakdown` also `emit-insight`, `emit-signal` |
+| `guard` | `emit-howto`, `emit-verification`, `emit-insight` |
+| `main-guard` | `emit-howto`, `emit-insight` |
+| `receiver` | `emit-howto`, `emit-verification` |
+
+`MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal` from staged diffs.
 
 See [009-insight-kinds.md](009-insight-kinds.md) for the full INSIGHT taxonomy and prompt-memory rules.
 

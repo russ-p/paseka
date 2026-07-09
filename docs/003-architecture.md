@@ -125,8 +125,10 @@ Templates live in **`.paseka/prompts/`** — version-controlled, one colony, sha
 ```
 .paseka/prompts/
 ├── _partials/
-│   ├── json-events.md      # «emit valid SIGNAL/INSIGHT JSON…»
-│   └── result-file.md      # optional; runtime usually injects result path
+│   ├── emit-howto.md       # safe CLI emit mechanics for all bees
+│   ├── emit-insight.md     # INSIGHT kinds
+│   ├── emit-signal.md      # SIGNAL kinds
+│   └── emit-verification.md # VERIFICATION gate kinds
 ├── scout.md
 ├── builder.md
 └── guard.md
@@ -182,7 +184,8 @@ Implement the task in the workspace. Follow existing code conventions.
 **Partials** — include shared blocks to avoid duplication:
 
 ```markdown
-{{template "json-events" .}}
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
 ```
 
 Partials load from `.paseka/prompts/_partials/*.md` (filename without extension = template name).

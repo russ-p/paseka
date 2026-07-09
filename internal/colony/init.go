@@ -108,9 +108,10 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
 		PasekaPath(root, "prompts", "default.md"):                              defaultPrompt,
 		PasekaPath(root, "prompts", "scout.md"):                                scoutPrompt,
 		PasekaPath(root, "prompts", "builder.md"):                              builderPrompt,
-		PasekaPath(root, "prompts", "_partials", "json-events.md"):             jsonEventsPartial,
-		PasekaPath(root, "prompts", "_partials", "task-events.md"):             taskEventsPartial,
-		PasekaPath(root, "prompts", "_partials", "insight-events.md"):          insightEventsPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-howto.md"):              emitHowtoPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):            emitInsightPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):             emitSignalPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-verification.md"):       emitVerificationPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):  builderIntentGeneralPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):  builderIntentFeaturePartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):   builderIntentBugfixPartial,
@@ -272,8 +273,9 @@ Flight trail: {{.TraceID}}
 {{range .Insights}}- {{.}}
 {{end}}
 
-{{template "json-events" .}}
-{{template "task-events" .}}
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
+{{template "emit-signal" .}}
 `
 	builderPrompt = `You are Builder Bee. Implement the task in the workspace.
 
@@ -303,8 +305,16 @@ Requested intent: {{.IntentRaw}}{{end}}
 {{template "builder-intent-general" .}}
 {{end}}
 
-{{template "json-events" .}}
-{{template "insight-events" .}}
+Stage the changes, DON'T commit them yet.
+
+Success criteria (must confirm all):
+- All acceptance criteria in the task are met
+- Build passes (module-level build succeeds)
+- No new compiler errors or warnings that are not explicitly accepted
+- Related tests (if any) pass
+
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
 
 Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
 `
@@ -318,7 +328,7 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 `
 	builderIntentRefactorPartial = `You are restructuring code without changing behavior. Keep the diff focused, avoid feature creep, and run tests to confirm behavior is unchanged.
 `
-	jsonEventsPartial = `When you need to publish a bus event during a run:
+	emitHowtoPartial = `When you need to publish a bus event during a run:
 
 1. Build one valid JSON object for the event.
 2. Validate and publish it with Paseka CLI via stdin.
@@ -331,56 +341,87 @@ Do not write event JSON directly to files.
 Use this command form:
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"Short narrative context"}}
 EOF
 
 Each event JSON object must include:
 - traceId — current flight trail id ({{.TraceID}})
 - agentId — current agent run id ({{.AgentID}})
-- type — one of SIGNAL, INSIGHT, MUTATION, VERIFICATION
+- type — the event type your bee role may publish (see role-specific emit guidance below)
 - payload — event-specific object with required payload.kind
 
-Routing vs narrative:
-- VERIFICATION — gate outcomes that drive workflow routing
-- INSIGHT — narrative context for audit and prompt memory
-
 If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing.`
-	insightEventsPartial = `## Narrative INSIGHT events
+	emitInsightPartial = `## INSIGHT events
 
-Use INSIGHT for context and audit. INSIGHT does not drive workflow routing — use VERIFICATION for gate decisions.
+Use type: INSIGHT for context, audit, and dashboard narrative. INSIGHT events do not drive workflow routing.
 
-Runtime projects run.summary, review.note, context.note, and human.feedback into {{.Insights}} for subsequent bees. Runtime may auto-synthesize run.summary after successful AFK runs when the bee policy allows.
+Runtime automatically projects selected narrative INSIGHT kinds into {{.Insights}} for subsequent bees on the same trace.
 
-Examples:
+| payload.kind | Role | Included in prompt memory |
+| -------------- | ---- | ------------------------- |
+| run.summary | Short run outcome for the next bee | yes |
+| review.note | Reviewer observation (non-gate) | yes |
+| context.note | Trace/task context fact | yes |
+| human.feedback | Beekeeper HITL feedback | yes |
+| task.plan | Task ledger planning | no (operational) |
+
+### run.summary — narrative after work (runtime may auto-synthesize)
+
+Runtime auto-publishes INSIGHT/run.summary after a successful AFK run when the bee policy allows and no summary was emitted during the run. You may still publish one explicitly:
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Implemented the requested change","taskId":"{{.TaskID}}"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Implemented OAuth callback and added focused tests","taskId":"{{.TaskID}}"}}
 EOF
 
+### review.note — optional reviewer context
+
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing error handling in token refresh","taskId":"{{.TaskID}}","severity":"medium"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Token refresh path still lacks retry handling","taskId":"{{.TaskID}}","severity":"medium"}}
+EOF
+
+### context.note — optional trace context
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"NATS KV is the source of truth for task ledger state"}}
+EOF
+
+### task.plan — task breakdown
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder","sector":"backend-users"}]}}
 EOF`
-	taskEventsPartial = `## Task lifecycle events
+	emitSignalPartial = `## SIGNAL events
 
-Use these payload.kind values when publishing task queue events:
+Use type: SIGNAL to mark operational signals on the bus.
 
-- task.plan — INSIGHT: publish a breakdown of tasks
-- task.ready — SIGNAL: mark a task ready to run
-- task.completed — VERIFICATION: report that a task passed review/commit gate
-
-Examples:
+### task.ready — mark a task ready to run
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder"}]}}
-EOF
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder","sector":"backend-users"}}
+EOF`
+	emitVerificationPartial = `## VERIFICATION events
+
+Use type: VERIFICATION for gate outcomes that drive workflow routing.
+
+Publish exactly one final VERIFICATION gate decision when your bee role requires it:
+- verification.success when all requirements, scope checks, and targeted checks pass.
+- verification.failed when anything required is missing or failing.
+
+Optional: publish one INSIGHT/review.note for extra reviewer context. It does not replace the required VERIFICATION.
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
 EOF
+
+Change payload.kind to verification.failed when rejecting.
+
+### task.completed — report task passed review/commit gate
 
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"task.completed","taskId":"task-1","status":"completed","summary":"Endpoint implemented and committed"}}
-EOF`
+EOF
+
+Each event must include traceId, agentId, type, and payload.kind.`
 	cursorAdapterYAML = `binary: agent
 api_key_env: CURSOR_API_KEY
 `

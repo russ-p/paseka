@@ -12,18 +12,14 @@ Use this command form:
 
 ```bash
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"Short narrative context"}}
 EOF
 ```
 
 Each event JSON object must include:
 - `traceId` — current flight trail id (`{{.TraceID}}`)
 - `agentId` — current agent run id (`{{.AgentID}}`)
-- `type` — one of `SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`
+- `type` — the event type your bee role may publish (see role-specific emit guidance below)
 - `payload` — event-specific object with required `payload.kind`
-
-**Routing vs narrative:**
-- `VERIFICATION` — gate outcomes that drive workflow routing (`verification.success`, `verification.failed`, `task.completed`)
-- `INSIGHT` — narrative context for audit and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`)
 
 If the command returns `"ok": false`, treat it as a failed publish and correct the payload before continuing.

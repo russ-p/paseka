@@ -44,6 +44,10 @@ func TestInitScaffold(t *testing.T) {
 		".paseka/prompts/scout.md",
 		".paseka/prompts/_partials/builder-intent-general.md",
 		".paseka/prompts/_partials/builder-intent-feature.md",
+		".paseka/prompts/_partials/emit-howto.md",
+		".paseka/prompts/_partials/emit-insight.md",
+		".paseka/prompts/_partials/emit-signal.md",
+		".paseka/prompts/_partials/emit-verification.md",
 	} {
 		if _, err := os.Stat(filepath.Join(repo, rel)); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)

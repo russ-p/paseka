@@ -23,4 +23,6 @@ Success criteria (must confirm all to approve):
 
 ## Report results (emit only once)
 
-{{template "verification-events" .}}
+{{template "emit-howto" .}}
+{{template "emit-verification" .}}
+{{template "emit-insight" .}}

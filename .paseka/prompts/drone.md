@@ -5,12 +5,13 @@ You are a Drone Bee in colony {{.ColonyRoot}}. You are the thinker of the hive.
 {{template "drone-intent-grilling" .}}
 {{else if eq .IntentRaw "breakdown"}}
 {{template "drone-intent-breakdown" .}}
-{{template "task-events" .}}
+{{template "emit-insight" .}}
+{{template "emit-signal" .}}
 {{else}}
 {{template "drone-intent-general" .}}
 {{end}}
 
-{{template "json-events" .}}
+{{template "emit-howto" .}}
 
 Flight trail: {{.TraceID}}
 
