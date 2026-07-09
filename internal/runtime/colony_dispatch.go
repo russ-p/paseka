@@ -37,9 +37,6 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if req.Bee == "" {
 		return nil, fmt.Errorf("runtime: bee role is required")
 	}
-	if req.Task == "" && req.InlinePrompt == "" {
-		return nil, fmt.Errorf("runtime: task or inline prompt is required")
-	}
 	if req.TraceID == "" {
 		return nil, fmt.Errorf("runtime: traceId is required")
 	}
@@ -47,6 +44,9 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
 	if err != nil {
 		return nil, err
+	}
+	if bee.RequiresPrompt() && req.Task == "" && req.InlinePrompt == "" {
+		return nil, fmt.Errorf("runtime: task or inline prompt is required")
 	}
 
 	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)

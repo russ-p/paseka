@@ -10,10 +10,14 @@ import (
 	"github.com/paseka/paseka/internal/runs"
 )
 
-func postExecVars(prompt, workspace, resultText string, runDir runs.Dir) colony.CommandVars {
+func postExecVars(prompt, workspace, resultText string, runDir runs.Dir, traceID, agentID, taskID, colonyRoot string) colony.CommandVars {
 	return colony.CommandVars{
 		Prompt:     prompt,
 		Workspace:  workspace,
+		TraceID:    traceID,
+		AgentID:    agentID,
+		TaskID:     taskID,
+		ColonyRoot: colonyRoot,
 		Result:     strings.TrimSpace(resultText),
 		ResultFile: runDir.ResultPath(),
 		Meta:       runDir.MetaPath(),
@@ -36,12 +40,13 @@ func (d *Dispatcher) runPostExec(
 	bee colony.Bee,
 	prompt, workspace string,
 	runDir runs.Dir,
+	taskID string,
 	result *adapters.RunResult,
 ) {
 	if !bee.PostExec.IsSet() {
 		return
 	}
-	vars := postExecVars(prompt, workspace, resultText(result), runDir)
+	vars := postExecVars(prompt, workspace, resultText(result), runDir, runDir.TraceID, runDir.AgentID, taskID, runDir.ColonyRoot)
 	if err := colony.RunPostExec(ctx, bee.PostExec, vars, workspace); err != nil {
 		runtimeLog.Warn("post_exec failed",
 			logging.F("bee", bee.Role),

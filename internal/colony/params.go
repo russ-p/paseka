@@ -120,7 +120,7 @@ func (b Bee) ResolveAdapter() (string, error) {
 		name = "cursor"
 	}
 	switch name {
-	case "cursor", "pi", "claude":
+	case "cursor", "pi", "claude", "script":
 		return name, nil
 	default:
 		return "", fmt.Errorf("colony: unknown adapter %q for bee %q", name, b.Role)

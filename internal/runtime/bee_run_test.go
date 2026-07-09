@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
@@ -47,6 +48,59 @@ func TestBeeRunUsesWorktreeForBuilder(t *testing.T) {
 	}
 	if len(st.Worktrees) != 1 {
 		t.Fatalf("worktrees = %+v", st.Worktrees)
+	}
+}
+
+func TestBeeRunScriptWithoutTask(t *testing.T) {
+	repo := initBeeRunRepo(t)
+	setupBeeRunHome(t, repo)
+
+	scriptPath := filepath.Join(repo, "run.sh")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\necho script-ok\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	beeYAML := fmt.Sprintf(`role: oracle-guard
+adapter: script
+command: %s
+run_summary: disabled
+`, scriptPath)
+	if err := os.WriteFile(filepath.Join(repo, ".paseka/bees/oracle-guard.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := runtime.NewDispatcher()
+	res, err := d.BeeRun(context.Background(), runtime.BeeRunRequest{
+		StartDir: repo,
+		Bee:      "oracle-guard",
+		TraceID:  "trace-script-cli",
+		NoBus:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Result == nil || res.Result.Status != "completed" {
+		t.Fatalf("result = %+v", res.Result)
+	}
+	if res.Result.Summary != "script-ok" {
+		t.Fatalf("summary = %q, want script-ok", res.Result.Summary)
+	}
+}
+
+func TestBeeRunLLMRequiresTask(t *testing.T) {
+	repo := initBeeRunRepo(t)
+	setupBeeRunHome(t, repo)
+
+	d := runtime.NewDispatcher()
+	_, err := d.BeeRun(context.Background(), runtime.BeeRunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		NoBus:    true,
+	})
+	if err == nil {
+		t.Fatal("expected error when LLM bee runs without task")
+	}
+	if !strings.Contains(err.Error(), "task or inline prompt is required") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

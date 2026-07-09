@@ -11,6 +11,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
+	"github.com/paseka/paseka/internal/adapters/script"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
@@ -51,6 +52,7 @@ func NewDispatcher() *Dispatcher {
 			"cursor": cursor.New(),
 			"pi":     pi.New(),
 			"claude": claude.New(),
+			"script": script.New(),
 		},
 	}
 }
@@ -136,12 +138,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	}
 	insights := MergeInsights(req.Insights, projectedInsights)
 
-	rendered, err := loader.RenderResolved(prompts.ResolveInput{
+	adapterName, err := bee.ResolveAdapter()
+	if err != nil {
+		return nil, err
+	}
+
+	resolveInput := prompts.ResolveInput{
 		InlinePrompt:     req.InlinePrompt,
 		BeeLocalTemplate: beeLocalTemplate,
 		BeeTemplate:      bee.PromptTemplate,
 		DefaultTemplate:  manifest.Defaults.PromptTemplate,
-	}, prompts.PromptContext(prompts.Context{
+	}
+	if adapterName == "script" {
+		resolveInput.SkipDefaults = true
+		resolveInput.AllowEmpty = true
+	}
+
+	rendered, err := loader.RenderResolved(resolveInput, prompts.PromptContext(prompts.Context{
 		Bee:        bee.Role,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
@@ -159,16 +172,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, fmt.Errorf("runtime: render prompt: %w", err)
 	}
 
-	adapterName, err := bee.ResolveAdapter()
-	if err != nil {
-		return nil, err
-	}
 	adapter, ok := d.adapters[adapterName]
 	if !ok {
 		return nil, fmt.Errorf("runtime: adapter %q not registered", adapterName)
 	}
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
+
+	runDirPath := runDir.Root()
+	cmdVars := colony.CommandVars{
+		Prompt:     rendered,
+		Workspace:  workspace,
+		TraceID:    req.TraceID,
+		AgentID:    agentID,
+		TaskID:     req.TaskID,
+		ColonyRoot: colonyRoot,
+		ResultFile: resultFile,
+		RunDir:     runDirPath,
+	}
 
 	var command []string
 	if bee.Command.IsSet() {
@@ -179,13 +200,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 				logging.F("agent", agentID),
 			)
 		}
-		command, err = bee.Command.RenderCommand(colony.CommandVars{
-			Prompt:    rendered,
-			Workspace: workspace,
-		})
+		command, err = bee.Command.RenderCommand(cmdVars)
 		if err != nil {
 			return nil, fmt.Errorf("runtime: render command: %w", err)
 		}
+	} else if adapterName == "script" {
+		return nil, fmt.Errorf("runtime: bee %q: adapter script requires command", bee.Role)
 	}
 
 	if err := runDir.Prepare(); err != nil {
@@ -219,7 +239,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, fmt.Errorf("runtime: write status: %w", err)
 	}
 
-	runDirPath := runDir.Root()
 	runtimeLog.Info("adapter run",
 		logging.F("adapter", adapterName),
 		logging.F("bee", bee.Role),
@@ -275,7 +294,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		d.enforceCompletionContract(bee, runEvents, result)
 	}
 
-	d.runPostExec(ctx, bee, rendered, workspace, runDir, result)
+	d.runPostExec(ctx, bee, rendered, workspace, runDir, req.TaskID, result)
 
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
 		ColonyRoot: colonyRoot,

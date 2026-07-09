@@ -35,7 +35,15 @@ func newBeeRunCmd() *cobra.Command {
 		Short: "Dispatch one bee (one-shot agent run)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if task == "" && inlinePrompt == "" {
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, args[0])
+			if err != nil {
+				return err
+			}
+			if bee.RequiresPrompt() && task == "" && inlinePrompt == "" {
 				return fmt.Errorf("provide --task or --prompt")
 			}
 			d := runtime.NewDispatcher()

@@ -106,6 +106,11 @@ func TestResolvePrecedence(t *testing.T) {
 			in:   prompts.ResolveInput{DefaultTemplate: "default.md"},
 			file: "default.md",
 		},
+		{
+			name: "allow empty",
+			in:   prompts.ResolveInput{SkipDefaults: true, AllowEmpty: true},
+			body: "",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -18,6 +18,10 @@ type Command struct {
 type CommandVars struct {
 	Prompt     string
 	Workspace  string
+	TraceID    string
+	AgentID    string
+	TaskID     string
+	ColonyRoot string
 	Result     string // human-readable run summary text
 	ResultFile string // path to result.txt
 	Meta       string // path to meta.json
@@ -95,6 +99,10 @@ func substituteCommandVars(s string, vars CommandVars) string {
 	replacements := map[string]string{
 		"PROMPT":      vars.Prompt,
 		"WORKSPACE":   vars.Workspace,
+		"TRACE_ID":    vars.TraceID,
+		"AGENT_ID":    vars.AgentID,
+		"TASK_ID":     vars.TaskID,
+		"COLONY_ROOT": vars.ColonyRoot,
 		"RESULT":      vars.Result,
 		"RESULT_FILE": vars.ResultFile,
 		"META":        vars.Meta,

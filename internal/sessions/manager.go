@@ -487,9 +487,14 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 
 	if bee, _, beeErr := colony.LoadBee(active.entry.Handle.ColonyRoot, active.entry.Handle.Bee); beeErr == nil {
 		prompt, _ := os.ReadFile(active.entry.RunDir.PromptPath())
+		req, _ := active.entry.RunDir.ReadRequest()
 		vars := colony.CommandVars{
 			Prompt:     string(prompt),
 			Workspace:  active.entry.Handle.Workspace,
+			TraceID:    active.entry.Handle.TraceID,
+			AgentID:    active.entry.Handle.AgentID,
+			TaskID:     req.TaskID,
+			ColonyRoot: active.entry.Handle.ColonyRoot,
 			Result:     strings.TrimSpace(resultText),
 			ResultFile: active.entry.RunDir.ResultPath(),
 			Meta:       active.entry.RunDir.MetaPath(),

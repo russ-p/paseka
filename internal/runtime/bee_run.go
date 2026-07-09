@@ -37,13 +37,18 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 	if req.Bee == "" {
 		return nil, fmt.Errorf("runtime: bee role is required")
 	}
-	if req.Task == "" && req.InlinePrompt == "" {
-		return nil, fmt.Errorf("runtime: task or inline prompt is required")
-	}
 
 	ctxColony, err := colony.ResolveContext(req.StartDir)
 	if err != nil {
 		return nil, err
+	}
+
+	bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
+	if err != nil {
+		return nil, err
+	}
+	if bee.RequiresPrompt() && req.Task == "" && req.InlinePrompt == "" {
+		return nil, fmt.Errorf("runtime: task or inline prompt is required")
 	}
 
 	if !req.NoBus {

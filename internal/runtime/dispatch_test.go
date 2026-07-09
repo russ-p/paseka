@@ -312,3 +312,95 @@ post_exec: ["sh", "-c", "echo $RESULT > ` + hookOut + `"]
 		t.Fatalf("hook output = %q, want %q", data, "hooked summary")
 	}
 }
+
+func TestDispatchPostExecTaskID(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	hookOut := filepath.Join(root, "hook.task")
+	beeYAML := `role: builder
+adapter: cursor
+prompt_template: builder.md
+post_exec: ["sh", "-c", "echo $TASK_ID > ` + hookOut + `"]
+`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{
+		result: &adapters.RunResult{Status: "completed", Summary: "ok"},
+	}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-hook-task",
+		TaskID:     "task-hook-1",
+		Task:       "notify me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(hookOut)
+	if err != nil {
+		t.Fatalf("hook output missing: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "task-hook-1" {
+		t.Fatalf("hook task id = %q, want task-hook-1", data)
+	}
+}
+
+func TestDispatchScriptBee(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".paseka/bees"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka/colony.yaml"), []byte(`defaults:
+  prompt_template: default.md
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	outFile := filepath.Join(root, "script.out")
+	scriptPath := filepath.Join(root, "run.sh")
+	scriptBody := "#!/bin/sh\n" +
+		"echo \"$PASEKA_TRACE_ID\" > \"" + outFile + "\"\n" +
+		"echo \"$PASEKA_TASK_ID\" >> \"" + outFile + "\"\n" +
+		"echo ok\n"
+	if err := os.WriteFile(scriptPath, []byte(scriptBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	beeYAML := "role: oracle-guard\nadapter: script\ncommand: " + scriptPath + "\nrun_summary: disabled\n"
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/oracle-guard.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := runtime.NewDispatcher()
+	result, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "oracle-guard",
+		TraceID:    "trace-script",
+		TaskID:     "task-script",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("status = %q, want completed", result.Status)
+	}
+	if result.Summary != "ok" {
+		t.Fatalf("summary = %q, want ok", result.Summary)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 || lines[0] != "trace-script" || lines[1] != "task-script" {
+		t.Fatalf("script output = %v", lines)
+	}
+}

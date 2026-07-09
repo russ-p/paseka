@@ -67,6 +67,8 @@ type ResolveInput struct {
 	BeeLocalTemplate string
 	BeeTemplate      string
 	DefaultTemplate  string
+	SkipDefaults     bool // when true, do not fall back to DefaultTemplate
+	AllowEmpty       bool // when true, return empty prompt instead of error
 }
 
 // Resolve picks a template file or inline prompt body.
@@ -80,8 +82,13 @@ func Resolve(input ResolveInput) (templateFile string, inline string, err error)
 	if t := strings.TrimSpace(input.BeeTemplate); t != "" {
 		return t, "", nil
 	}
-	if t := strings.TrimSpace(input.DefaultTemplate); t != "" {
-		return t, "", nil
+	if !input.SkipDefaults {
+		if t := strings.TrimSpace(input.DefaultTemplate); t != "" {
+			return t, "", nil
+		}
+	}
+	if input.AllowEmpty {
+		return "", "", nil
 	}
 	return "", "", fmt.Errorf("prompts: no template configured")
 }
@@ -117,6 +124,9 @@ func (l *Loader) RenderResolved(input ResolveInput, ctx Context) (string, error)
 	file, inline, err := Resolve(input)
 	if err != nil {
 		return "", err
+	}
+	if file == "" && inline == "" {
+		return "", nil
 	}
 	if inline != "" {
 		return l.RenderString(inline, ctx)

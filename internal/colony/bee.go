@@ -85,6 +85,9 @@ func LoadBee(colonyRoot, role string) (Bee, string, error) {
 	if err := bee.ValidateRunSummaryPolicy(); err != nil {
 		return Bee{}, "", err
 	}
+	if err := bee.ValidateAdapterRequirements(); err != nil {
+		return Bee{}, "", err
+	}
 
 	localTemplate := ""
 	localPath := filepath.Join(colonyRoot, pasekaDir, "bees", role+".local.yaml")

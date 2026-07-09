@@ -12,7 +12,7 @@ Paseka treats a **git repository** as the center of work. Every colony (project)
 | **Apiary** | Developer machine | Hosts Hive Runtime, NATS, and local adapter credentials |
 | **Bee** | Config + runtime | A role (Scout, Guard, Builder…) bound to an **adapter** that drives an external agent |
 
-The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — the **Cursor Agent CLI** (`agent`) and the **Pi CLI** (`pi`) — reads their output, and publishes results to the NATS bus as contract events.
+The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — the **Cursor Agent CLI** (`agent`), the **Pi CLI** (`pi`), **Claude Code**, and **script** commands — reads their output, and publishes results to the NATS bus as contract events.
 
 ---
 
@@ -103,10 +103,14 @@ command: ["agent", "-p", "--model", "composer-2.5", "$PROMPT"]
 | -------- | -------- | ----- |
 | `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered prompt |
 | `$WORKSPACE` / `${WORKSPACE}` | dispatch + post_exec | agent working directory |
+| `$TRACE_ID` / `${TRACE_ID}` | dispatch + post_exec | current flight trail |
+| `$AGENT_ID` / `${AGENT_ID}` | dispatch + post_exec | this invocation id |
+| `$TASK_ID` / `${TASK_ID}` | dispatch + post_exec | task id when dispatched from ledger |
+| `$COLONY_ROOT` / `${COLONY_ROOT}` | dispatch + post_exec | git repo root |
+| `$RUN_DIR` / `${RUN_DIR}` | dispatch + post_exec | `.paseka/runs/<traceId>/<agentId>/` |
 | `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
-| `$RESULT_FILE` / `${RESULT_FILE}` | post_exec only | path to `result.txt` |
+| `$RESULT_FILE` / `${RESULT_FILE}` | dispatch + post_exec | path to `result.txt` |
 | `$META` / `${META}` | post_exec only | path to `meta.json` |
-| `$RUN_DIR` / `${RUN_DIR}` | post_exec only | `.paseka/runs/<traceId>/<agentId>/` |
 
 ```yaml
 post_exec: notify.sh --bee builder --status ok --summary "$RESULT"
@@ -450,7 +454,68 @@ prompt_template: scout.md
 
 Go implementation: `internal/adapters/pi/`.
 
-Future adapters (same contract): `claude-code`, `aider`, custom shell.
+### Script adapter (bash / python / custom)
+
+**Decision:** bees with `adapter: script` run a **declared command** (bash, python, Go binary, etc.) instead of an LLM CLI. Use for deterministic eval bees (oracle guard, fault-injecting builder), CI hooks, and other signal-driven automation.
+
+Script bees are **AFK-only** (`paseka bee run`); `bee chat` remains LLM-only.
+
+```yaml
+# .paseka/bees/oracle-guard.yaml
+role: oracle-guard
+adapter: script
+command: ./scripts/oracle-guard.sh
+run_summary: disabled
+subscribes:
+  - type: MUTATION
+    kind: code.proposal
+    dispatch: direct
+publishes:
+  - type: VERIFICATION
+    kind: verification.success
+  - type: VERIFICATION
+    kind: verification.failed
+```
+
+**Requirements:**
+
+- `command:` is **required** (shell-like string or YAML argv list).
+- `prompt_template` is **optional** — when omitted, no colony default is applied; when set, the rendered prompt is written to `prompt.txt` and available as `$PROMPT`.
+- `params` are ignored (runtime logs a warning if both `command` and `params` are set).
+
+**Process environment** (in addition to `command` variable substitution):
+
+| Variable | Value |
+| -------- | ----- |
+| `PASEKA_TRACE_ID` | current `traceId` |
+| `PASEKA_AGENT_ID` | this invocation id |
+| `PASEKA_TASK_ID` | task id when dispatched from ledger |
+| `PASEKA_WORKSPACE` | adapter cwd (repo root or worktree) |
+| `PASEKA_COLONY_ROOT` | git repo root |
+| `PASEKA_RUN_DIR` | `.paseka/runs/<traceId>/<agentId>/` |
+| `PASEKA_BEE` | bee role name |
+| `PASEKA_EVENT_LOG` | path to `events.ndjson` |
+| `PASEKA_RESULT_FILE` | path to `result.txt` |
+| `PASEKA_PROMPT_FILE` | path to `prompt.txt` |
+
+**Emitting events:** scripts publish domain events the same way LLM agents do — pipe JSON to `paseka event emit --stdin`:
+
+```bash
+paseka event emit --stdin <<EOF
+{"traceId":"$PASEKA_TRACE_ID","agentId":"$PASEKA_AGENT_ID","type":"VERIFICATION","payload":{"kind":"verification.failed","summary":"tests failed"}}
+EOF
+```
+
+**Run outcome:**
+
+1. Non-zero exit → `failed` status (same as LLM adapters).
+2. Stdout (trimmed) → run summary when non-empty.
+3. Git diff in workspace → auto `MUTATION/code.proposal` when the bee declares it in `publishes` (same as builder bees).
+4. Domain events are **not** synthesized from exit codes — the script must call `paseka event emit`.
+
+Go implementation: `internal/adapters/script/`.
+
+Future adapters (same contract): `aider`, custom wrappers.
 
 ### 5.2 Interactive sessions (HITL)
 
