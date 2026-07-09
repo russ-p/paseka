@@ -1,3 +1,35 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/vendor/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/vendor/fonts/JetBrainsMono-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/vendor/fonts/JetBrainsMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/vendor/fonts/JetBrainsMono-Bold-Italic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --bg: #0f1117;
   --panel: #171a22;
@@ -9,7 +41,7 @@
   --ok: #5fd38d;
   --warn: #f0c14b;
   --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -576,3 +608,70 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .transcript .line-system { color: var(--muted); }
 .transcript .line-agent { color: var(--text); }
 .transcript .line-user { color: var(--warn); }
+
+.terminal-header {
+  margin-bottom: 0.5rem;
+}
+
+.terminal-header h3 {
+  margin: 0;
+}
+
+.terminal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.terminal-status {
+  font-size: 0.8rem;
+}
+
+#terminal-wide-btn {
+  width: auto;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.terminal-container {
+  width: 100%;
+  min-height: 280px;
+  height: min(50vh, 480px);
+  background: #111318;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+/* Full-page-wide terminal: hide launch/list, expand detail + terminal height. */
+#sessions-layout.terminal-wide {
+  grid-template-columns: 1fr;
+}
+
+#sessions-layout.terminal-wide .launch-panel,
+#sessions-layout.terminal-wide .list-panel {
+  display: none;
+}
+
+#sessions-layout.terminal-wide .detail-panel {
+  min-height: calc(100vh - 9rem);
+}
+
+#sessions-layout.terminal-wide #detail-meta,
+#sessions-layout.terminal-wide #transcript-wrap {
+  display: none !important;
+}
+
+#sessions-layout.terminal-wide .terminal-container {
+  min-height: 360px;
+  height: calc(100vh - 12rem);
+}
+
+#transcript-wrap.inactive-only {
+  margin-top: 0.75rem;
+}

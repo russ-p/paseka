@@ -183,11 +183,11 @@ func TestManagerStartDetachedCapturesOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.SessionID == "" || res.State != adapters.SessionActive {
+	if res.SessionID == "" {
 		t.Fatalf("result = %+v", res)
 	}
-	if !output.lastReq.Detached {
-		t.Fatal("expected detached session request")
+	if output.lastReq.Detached {
+		t.Fatal("StartDetached must not mark SessionRequest as headless Detached")
 	}
 
 	deadline := time.Now().Add(3 * time.Second)
@@ -304,7 +304,7 @@ func (o *outputSessionAdapter) SessionCommand(req adapters.SessionRequest) (adap
 	}
 	script := o.script
 	if script == "" {
-		script = `printf '\033[31mhello-detached\033[0m\n'; exit 0`
+		script = `printf '\033[31mhello-detached\033[0m\n'; sleep 0.05; exit 0`
 	}
 	return adapters.SessionCommand{
 		Binary: shell,

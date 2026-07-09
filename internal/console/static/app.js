@@ -23,6 +23,7 @@ const state = {
   transcriptLines: [],
   eventsCursor: 0,
   eventLines: [],
+  terminalWide: false,
   pollTimer: null,
   runtimePollTimer: null,
   dashboardPollTimer: null,
@@ -126,7 +127,12 @@ const el = {
   refreshBtn: document.getElementById('refresh-btn'),
   detailEmpty: document.getElementById('detail-empty'),
   detailMeta: document.getElementById('detail-meta'),
+  terminalWrap: document.getElementById('terminal-wrap'),
+  terminalContainer: document.getElementById('terminal-container'),
+  terminalStatus: document.getElementById('terminal-status'),
+  terminalWideBtn: document.getElementById('terminal-wide-btn'),
   transcriptWrap: document.getElementById('transcript-wrap'),
+  transcriptHeading: document.getElementById('transcript-heading'),
   transcript: document.getElementById('transcript'),
   stopBtn: document.getElementById('stop-btn'),
   runList: document.getElementById('run-list'),
@@ -259,7 +265,7 @@ function setTab(tab) {
     timeline: 'Timeline — filterable event feed across the colony',
     tasks: 'Tasks — create, start, and inspect trace tasks',
     reviews: 'Reviews — approve or reject proposals awaiting human review',
-    sessions: 'Sessions — launch and observe interactive bees',
+    sessions: 'Sessions — launch, attach, and observe interactive bees',
     runs: 'Runs — observe headless adapter invocations',
   };
   el.subtitle.textContent = subtitles[tab] || '';
@@ -268,6 +274,10 @@ function setTab(tab) {
   stopDashboardPolling();
   stopTasksPolling();
   stopReviewsPolling();
+  if (tab !== 'sessions') {
+    detachSessionTerminal();
+    setTerminalWide(false);
+  }
   if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
   } else if (tab === 'runs' && state.selectedRunKey) {
@@ -373,17 +383,75 @@ function renderEvents() {
   el.runEvents.scrollTop = el.runEvents.scrollHeight;
 }
 
+function setTerminalStatus(text) {
+  if (el.terminalStatus) {
+    el.terminalStatus.textContent = text;
+  }
+}
+
+function setTerminalWide(wide) {
+  state.terminalWide = !!wide;
+  if (el.sessionsLayout) {
+    el.sessionsLayout.classList.toggle('terminal-wide', state.terminalWide);
+  }
+  if (el.terminalWideBtn) {
+    el.terminalWideBtn.setAttribute('aria-pressed', String(state.terminalWide));
+    el.terminalWideBtn.textContent = state.terminalWide ? 'Restore' : 'Widen';
+    el.terminalWideBtn.title = state.terminalWide
+      ? 'Restore normal session layout'
+      : 'Widen terminal to full page width';
+  }
+  requestAnimationFrame(() => {
+    window.SessionTerminal?.sendResize?.();
+  });
+}
+
+function detachSessionTerminal() {
+  if (window.SessionTerminal) {
+    window.SessionTerminal.detach();
+  }
+  setTerminalStatus('');
+}
+
+function attachSessionTerminal(session) {
+  if (!session || !session.active || !window.SessionTerminal) {
+    detachSessionTerminal();
+    return;
+  }
+  setTerminalStatus('connecting…');
+  window.SessionTerminal.attach(session.sessionId, el.terminalContainer, {
+    onExit: async (reason) => {
+      setTerminalStatus(reason ? `exited — ${reason}` : 'exited');
+      await loadSessions();
+      if (state.selectedId === session.sessionId) {
+        const refreshed = await api(`/api/sessions/${encodeURIComponent(session.sessionId)}`);
+        renderSessionDetail(refreshed);
+        state.transcriptCursor = 0;
+        state.transcriptLines = [];
+        await pollTranscript();
+        startSessionPolling();
+      }
+    },
+  });
+  setTerminalStatus('connected');
+  requestAnimationFrame(() => {
+    window.SessionTerminal.sendResize?.();
+  });
+}
+
 function renderSessionDetail(session) {
   if (!session) {
     el.detailEmpty.classList.remove('hidden');
     el.detailMeta.classList.add('hidden');
+    el.terminalWrap.classList.add('hidden');
     el.transcriptWrap.classList.add('hidden');
     el.stopBtn.classList.add('hidden');
+    detachSessionTerminal();
+    setTerminalWide(false);
     return;
   }
   el.detailEmpty.classList.add('hidden');
   el.detailMeta.classList.remove('hidden');
-  el.transcriptWrap.classList.remove('hidden');
 
   const rows = [
     ['State', session.state],
@@ -404,8 +472,22 @@ function renderSessionDetail(session) {
 
   if (session.active) {
     el.stopBtn.classList.remove('hidden');
+    el.terminalWrap.classList.remove('hidden');
+    el.transcriptWrap.classList.add('hidden');
+    el.transcriptWrap.classList.remove('inactive-only');
+    if (state.tab === 'sessions') {
+      attachSessionTerminal(session);
+    }
   } else {
     el.stopBtn.classList.add('hidden');
+    el.terminalWrap.classList.add('hidden');
+    el.transcriptWrap.classList.remove('hidden');
+    el.transcriptWrap.classList.add('inactive-only');
+    if (el.transcriptHeading) {
+      el.transcriptHeading.textContent = 'Transcript';
+    }
+    detachSessionTerminal();
+    setTerminalWide(false);
   }
 }
 
@@ -1110,6 +1192,23 @@ async function selectRun(traceId, agentId) {
   }
 }
 
+async function pollSessionState() {
+  if (!state.selectedId) return;
+  try {
+    const session = await api(`/api/sessions/${encodeURIComponent(state.selectedId)}`);
+    const prevActive = state.sessions.find((s) => s.sessionId === state.selectedId)?.active;
+    await loadSessions();
+    renderSessionDetail(session);
+    if (prevActive && !session.active) {
+      state.transcriptCursor = 0;
+      state.transcriptLines = [];
+      await pollTranscript();
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 async function pollTranscript() {
   if (!state.selectedId) return;
   try {
@@ -1158,8 +1257,14 @@ function stopPolling() {
 
 function startSessionPolling() {
   stopPolling();
-  state.pollTimer = setInterval(pollTranscript, 1500);
-  pollTranscript();
+  const session = state.sessions.find((s) => s.sessionId === state.selectedId);
+  if (session && session.active) {
+    state.pollTimer = setInterval(pollSessionState, 2000);
+    pollSessionState();
+  } else {
+    state.pollTimer = setInterval(pollTranscript, 1500);
+    pollTranscript();
+  }
 }
 
 function startRunPolling() {
@@ -1375,6 +1480,10 @@ el.refreshBtn.addEventListener('click', () => {
   loadSessions().catch(console.error);
 });
 
+el.terminalWideBtn?.addEventListener('click', () => {
+  setTerminalWide(!state.terminalWide);
+});
+
 el.runsRefreshBtn.addEventListener('click', () => {
   loadRuns().catch(console.error);
 });
@@ -1383,6 +1492,7 @@ el.stopBtn.addEventListener('click', async () => {
   if (!state.selectedId) return;
   el.stopBtn.disabled = true;
   try {
+    detachSessionTerminal();
     await api(`/api/sessions/${encodeURIComponent(state.selectedId)}/stop`, { method: 'POST' });
     await loadSessions();
     await selectSession(state.selectedId);

@@ -22,7 +22,8 @@ func (a *SessionAdapter) Name() string {
 	return adapterName
 }
 
-// SessionCommand builds a Pi invocation for interactive or detached sessions.
+// SessionCommand builds a Pi invocation for interactive PTY sessions.
+// Detached attach still uses the interactive TUI; headless -p belongs to Adapter.Run().
 func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("pi: workspace is required")
@@ -47,9 +48,6 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		if b == "" {
 			b = defaultBinary
 		}
-		if req.Detached {
-			return b, buildDetachedArgs(req, prompt)
-		}
 		return b, buildInteractiveArgs(req, sessionDir, prompt)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -69,31 +67,6 @@ func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt string
 	args := []string{
 		"--session-dir", sessionDir,
 		"--session-id", req.AgentID,
-	}
-	if p.Model != "" {
-		args = append(args, "--model", p.Model)
-	}
-	if p.Provider != "" {
-		args = append(args, "--provider", p.Provider)
-	}
-	if p.Thinking != "" {
-		args = append(args, "--thinking", p.Thinking)
-	}
-	if p.Plan {
-		args = append(args, "--plan")
-	}
-	if p.APIKey != "" {
-		args = append(args, "--api-key", p.APIKey)
-	}
-	args = append(args, prompt)
-	return args
-}
-
-func buildDetachedArgs(req adapters.SessionRequest, prompt string) []string {
-	p := req.Params
-	args := []string{
-		"-p",
-		"--mode", "text",
 	}
 	if p.Model != "" {
 		args = append(args, "--model", p.Model)

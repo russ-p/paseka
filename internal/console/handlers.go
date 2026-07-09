@@ -411,6 +411,10 @@ func (a *api) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		a.handleTranscript(w, r, sessionID)
 		return
 	}
+	if sessionID, ok := parseSessionPTYPath(path); ok {
+		a.handleSessionPTY(w, r, sessionID)
+		return
+	}
 	if strings.HasSuffix(path, "/stop") {
 		sessionID := strings.TrimSuffix(path, "/stop")
 		sessionID = strings.Trim(sessionID, "/")

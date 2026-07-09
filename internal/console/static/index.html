@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Queen Console 🐝</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/vendor/xterm/xterm.css">
 </head>
 <body>
   <header>
     <div class="header-row">
       <div>
         <h1>Queen Console</h1>
-        <p class="subtitle" id="subtitle">Sessions — launch and observe interactive bees</p>
+        <p class="subtitle" id="subtitle">Sessions — launch, attach, and observe interactive bees</p>
       </div>
       <section class="runtime-panel" id="runtime-panel" aria-label="Hive runtime">
         <div class="runtime-status">
@@ -328,8 +329,18 @@
       </div>
       <div id="detail-empty" class="muted">Select a session to inspect metadata and transcript.</div>
       <dl id="detail-meta" class="meta hidden"></dl>
+      <div id="terminal-wrap" class="hidden">
+        <div class="panel-header terminal-header">
+          <h3>Terminal</h3>
+          <div class="terminal-header-actions">
+            <span id="terminal-status" class="muted terminal-status">connecting…</span>
+            <button type="button" id="terminal-wide-btn" class="secondary" aria-pressed="false" title="Widen terminal to full page width">Widen</button>
+          </div>
+        </div>
+        <div id="terminal-container" class="terminal-container" aria-label="Interactive session terminal"></div>
+      </div>
       <div id="transcript-wrap" class="hidden">
-        <h3>Transcript</h3>
+        <h3 id="transcript-heading">Transcript</h3>
         <pre id="transcript" class="transcript"></pre>
       </div>
     </section>
@@ -362,6 +373,10 @@
     </section>
   </main>
 
+  <script src="/vendor/xterm/xterm.js"></script>
+  <script src="/vendor/xterm/addon-fit.js"></script>
+  <script src="/vendor/xterm/addon-web-links.js"></script>
+  <script src="/terminal.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -32,7 +32,7 @@ func TestSessionCommandInteractiveNoPrintFlag(t *testing.T) {
 	}
 }
 
-func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
+func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 	a := claude.NewSession()
 	cmd, err := a.SessionCommand(adapters.SessionRequest{
 		Workspace:     "/tmp/ws",
@@ -44,10 +44,12 @@ func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	for _, arg := range cmd.Args {
+		if arg == "-p" || arg == "--output-format" || arg == "--permission-mode" {
+			t.Fatalf("detached session must stay interactive, args=%v", cmd.Args)
+		}
+	}
 	want := []string{
-		"-p",
-		"--output-format", "text",
-		"--permission-mode", "bypassPermissions",
 		"--model", "claude-opus-4-8",
 		"implement feature",
 	}

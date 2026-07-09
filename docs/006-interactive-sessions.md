@@ -24,7 +24,7 @@ flowchart LR
   pty --> externalAgent[External Agent]
   sessionManager --> runDir[Run Directory]
   ghostty[Ghostty UI] --> queenShell
-  queenConsole[Queen Console later] --> sessionManager
+  queenConsole[Queen Console] --> sessionManager
 ```
 
 **Core rules:**
@@ -288,7 +288,8 @@ paseka bee chat <role> [prompt]
 
 | Topic | MVP | Later |
 | ----- | --- | ----- |
-| Cross-process attach | `session attach` same process only; use Ghostty for new window | Unix socket / WebSocket relay for Queen Console |
+| Cross-process attach | `session attach` same process only; use Ghostty for new window | Unix socket relay for sessions started outside `paseka console` |
+| Queen Console PTY | WebSocket relay for sessions owned by current `paseka console` (`GET /api/sessions/:id/pty`); launch uses interactive agent TUI (no `-p`); Sessions UI has a Widen/Restore control for full-page terminal layout | Cross-process browser attach |
 | `SessionAdapter.Send` | Full PTY passthrough; no separate send API | Structured message API for web UI |
 | Bee YAML `mode: interactive` | Use `bee chat` explicitly | Optional default per bee |
 | NATS events | File-based audit only | Publish session lifecycle to bus |

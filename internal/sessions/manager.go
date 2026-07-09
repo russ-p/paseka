@@ -2,7 +2,6 @@ package sessions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -67,6 +66,7 @@ type Manager struct {
 type activeSession struct {
 	entry   Entry
 	process *ptyProcess
+	hub     *ptyHub
 	cancel  context.CancelFunc
 	done    chan struct{}
 }
@@ -104,55 +104,44 @@ func (m *Manager) RunInteractive(ctx context.Context, req RunRequest) (*RunResul
 
 	<-active.done
 
-	return m.runResult(active), nil
+	result := launchResult(active)
+	if meta, err := active.entry.RunDir.ReadSession(); err == nil {
+		result.State = adapters.SessionState(meta.State)
+	}
+	return result, nil
 }
 
-// StartDetached launches an interactive session, captures PTY output in the background,
-// and returns immediately without attaching the current terminal.
+// StartDetached launches an interactive agent session (same TUI as bee chat),
+// captures PTY I/O via a hub for later AttachPTY, and returns immediately
+// without attaching the current terminal.
 func (m *Manager) StartDetached(ctx context.Context, req RunRequest) (*RunResult, error) {
 	active, err := m.launch(ctx, req, true)
 	if err != nil {
 		return nil, err
 	}
-	go m.capturePTYOutput(active)
-	return m.runResult(active), nil
-}
 
-func (m *Manager) runResult(active *activeSession) *RunResult {
-	return &RunResult{
-		SessionID: active.entry.Handle.SessionID,
-		TraceID:   active.entry.Handle.TraceID,
-		AgentID:   active.entry.Handle.AgentID,
-		Workspace: active.entry.Handle.Workspace,
-		RunDir:    active.entry.RunDir.Root(),
-		State:     active.entry.Handle.State,
+	m.mu.Lock()
+	stillActive := m.sessions[active.entry.Handle.SessionID] == active
+	if stillActive {
+		active.hub = newPTYHub(active.process, active.entry.RunDir)
 	}
+	m.mu.Unlock()
+	if stillActive {
+		active.hub.start()
+	}
+
+	return launchResult(active), nil
 }
 
-func (m *Manager) capturePTYOutput(active *activeSession) {
-	buf := make([]byte, 4096)
-	for {
-		n, err := active.process.ReadWriteCloser().Read(buf)
-		if n > 0 {
-			text := runs.NormalizePTYOutput(buf[:n])
-			if text != "" {
-				_ = active.entry.RunDir.AppendTranscript(runs.TranscriptEntry{
-					At:      time.Now().UTC(),
-					Role:    "agent",
-					Content: text,
-				})
-			}
-		}
-		if err != nil {
-			if err != io.EOF && !errors.Is(err, syscall.EIO) {
-				_ = active.entry.RunDir.AppendTranscript(runs.TranscriptEntry{
-					At:      time.Now().UTC(),
-					Role:    "system",
-					Content: fmt.Sprintf("pty read error: %v", err),
-				})
-			}
-			return
-		}
+func launchResult(active *activeSession) *RunResult {
+	handle := active.entry.Handle
+	return &RunResult{
+		SessionID: handle.SessionID,
+		TraceID:   handle.TraceID,
+		AgentID:   handle.AgentID,
+		Workspace: handle.Workspace,
+		RunDir:    active.entry.RunDir.Root(),
+		State:     adapters.SessionActive,
 	}
 }
 
@@ -314,6 +303,8 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 
+	// Detached attach mode (PTY hub / no local terminal) must still launch the
+	// interactive agent TUI. Headless -p belongs to Adapter.Run(), not sessions.
 	sessReq := adapters.SessionRequest{
 		Bee:           bee.Role,
 		InitialPrompt: rendered,
@@ -327,7 +318,6 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Task:          req.Task,
 		Intent:        req.Intent,
 		Insights:      req.Insights,
-		Detached:      detached,
 	}
 
 	cmd, err := sessAdapter.SessionCommand(sessReq)
@@ -437,27 +427,25 @@ func (m *Manager) waitSession(ctx context.Context, sessionID string) {
 func (m *Manager) finishSession(sessionID string, state adapters.SessionState, waitErr error) {
 	m.mu.Lock()
 	active, ok := m.sessions[sessionID]
-	if ok {
-		active.entry.Handle.State = state
-		delete(m.sessions, sessionID)
-	}
-	m.mu.Unlock()
 	if !ok {
+		m.mu.Unlock()
 		return
 	}
+	entry := active.entry
+	m.mu.Unlock()
 
 	finishedAt := time.Now().UTC()
 
-	_ = active.entry.RunDir.WriteSession(runs.SessionMeta{
+	_ = entry.RunDir.WriteSession(runs.SessionMeta{
 		SessionID:  sessionID,
-		TraceID:    active.entry.Handle.TraceID,
-		AgentID:    active.entry.Handle.AgentID,
-		Bee:        active.entry.Handle.Bee,
-		Adapter:    active.entry.Handle.Adapter,
-		Workspace:  active.entry.Handle.Workspace,
-		ColonyRoot: active.entry.Handle.ColonyRoot,
+		TraceID:    entry.Handle.TraceID,
+		AgentID:    entry.Handle.AgentID,
+		Bee:        entry.Handle.Bee,
+		Adapter:    entry.Handle.Adapter,
+		Workspace:  entry.Handle.Workspace,
+		ColonyRoot: entry.Handle.ColonyRoot,
 		State:      string(state),
-		StartedAt:  active.entry.Handle.StartedAt,
+		StartedAt:  entry.Handle.StartedAt,
 		FinishedAt: finishedAt,
 	})
 
@@ -475,42 +463,47 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		protoState = protocol.StatusCancelled
 	}
 
-	_ = active.entry.RunDir.WriteStatus(protoState, exitCode, active.entry.Handle.StartedAt, finishedAt, errMsg)
-	_ = active.entry.RunDir.AppendTranscript(runs.TranscriptEntry{
+	_ = entry.RunDir.WriteStatus(protoState, exitCode, entry.Handle.StartedAt, finishedAt, errMsg)
+	_ = entry.RunDir.AppendTranscript(runs.TranscriptEntry{
 		At:      finishedAt,
 		Role:    "system",
 		Content: fmt.Sprintf("session %s", state),
 	})
 
-	resultText := buildSessionResultText(active.entry.RunDir)
-	_ = active.entry.RunDir.WriteResultText(resultText)
+	resultText := buildSessionResultText(entry.RunDir)
+	_ = entry.RunDir.WriteResultText(resultText)
 
-	if bee, _, beeErr := colony.LoadBee(active.entry.Handle.ColonyRoot, active.entry.Handle.Bee); beeErr == nil {
-		prompt, _ := os.ReadFile(active.entry.RunDir.PromptPath())
-		req, _ := active.entry.RunDir.ReadRequest()
+	if bee, _, beeErr := colony.LoadBee(entry.Handle.ColonyRoot, entry.Handle.Bee); beeErr == nil {
+		prompt, _ := os.ReadFile(entry.RunDir.PromptPath())
+		req, _ := entry.RunDir.ReadRequest()
 		vars := colony.CommandVars{
 			Prompt:     string(prompt),
-			Workspace:  active.entry.Handle.Workspace,
-			TraceID:    active.entry.Handle.TraceID,
-			AgentID:    active.entry.Handle.AgentID,
+			Workspace:  entry.Handle.Workspace,
+			TraceID:    entry.Handle.TraceID,
+			AgentID:    entry.Handle.AgentID,
 			TaskID:     req.TaskID,
-			ColonyRoot: active.entry.Handle.ColonyRoot,
+			ColonyRoot: entry.Handle.ColonyRoot,
 			Result:     strings.TrimSpace(resultText),
-			ResultFile: active.entry.RunDir.ResultPath(),
-			Meta:       active.entry.RunDir.MetaPath(),
-			RunDir:     active.entry.RunDir.Root(),
+			ResultFile: entry.RunDir.ResultPath(),
+			Meta:       entry.RunDir.MetaPath(),
+			RunDir:     entry.RunDir.Root(),
 		}
-		if err := colony.RunPostExec(context.Background(), bee.PostExec, vars, active.entry.Handle.Workspace); err != nil {
+		if err := colony.RunPostExec(context.Background(), bee.PostExec, vars, entry.Handle.Workspace); err != nil {
 			logging.Component("sessions").Warn("post_exec failed",
-				logging.F("bee", active.entry.Handle.Bee),
-				logging.F("trace", active.entry.Handle.TraceID),
-				logging.F("agent", active.entry.Handle.AgentID),
+				logging.F("bee", entry.Handle.Bee),
+				logging.F("trace", entry.Handle.TraceID),
+				logging.F("agent", entry.Handle.AgentID),
 				logging.F("error", err.Error()),
 			)
 		}
 	}
 
-	_ = colony.UnregisterSession(active.entry.Slug, sessionID)
+	_ = colony.UnregisterSession(entry.Slug, sessionID)
+
+	m.mu.Lock()
+	delete(m.sessions, sessionID)
+	m.mu.Unlock()
+
 	close(active.done)
 }
 
@@ -606,6 +599,20 @@ func (m *Manager) ListActive() []Entry {
 		out = append(out, s.entry)
 	}
 	return out
+}
+
+// AttachPTY subscribes to raw PTY output for a detached session in this process.
+func (m *Manager) AttachPTY(sessionID string) (*PTYStream, error) {
+	m.mu.RLock()
+	active, ok := m.sessions[sessionID]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("sessions: session %q not active in this process", sessionID)
+	}
+	if active.hub == nil {
+		return nil, fmt.Errorf("sessions: session %q has no pty hub (not detached)", sessionID)
+	}
+	return active.hub.subscribe(active.done), nil
 }
 
 // AttachInPlace connects the current terminal to a session PTY in this process.

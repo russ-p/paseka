@@ -20,7 +20,8 @@ func (a *SessionAdapter) Name() string {
 	return adapterName
 }
 
-// SessionCommand builds a claude invocation for interactive or detached sessions.
+// SessionCommand builds a claude invocation for interactive PTY sessions.
+// Detached attach still uses the interactive TUI; headless -p belongs to Adapter.Run().
 func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("claude: workspace is required")
@@ -34,9 +35,6 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
-		}
-		if req.Detached {
-			return b, buildDetachedArgs(req, prompt)
 		}
 		return b, buildInteractiveArgs(req, prompt)
 	})
@@ -67,23 +65,6 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
 	if p.Plan {
 		args = append(args, "--permission-mode", "plan")
 	}
-	if p.Model != "" {
-		args = append(args, "--model", p.Model)
-	}
-
-	args = append(args, prompt)
-	return args
-}
-
-// buildDetachedArgs runs a headless, text-only claude session for detached use.
-func buildDetachedArgs(req adapters.SessionRequest, prompt string) []string {
-	p := req.Params
-	args := []string{
-		"-p",
-		"--output-format", "text",
-		"--permission-mode", permissionMode(p),
-	}
-
 	if p.Model != "" {
 		args = append(args, "--model", p.Model)
 	}

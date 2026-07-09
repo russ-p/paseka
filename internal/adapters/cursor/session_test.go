@@ -35,7 +35,7 @@ func TestSessionCommandInteractiveNoPrintFlag(t *testing.T) {
 	}
 }
 
-func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
+func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 	a := cursor.NewSession()
 	cmd, err := a.SessionCommand(adapters.SessionRequest{
 		Workspace:     "/tmp/ws",
@@ -47,10 +47,15 @@ func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	for _, arg := range cmd.Args {
+		switch arg {
+		case "-p", "--trust", "--output-format":
+			t.Fatalf("detached session must stay interactive, args=%v", cmd.Args)
+		}
+	}
 	want := []string{
-		"-p", "--workspace", "/tmp/ws",
-		"--output-format", "text",
-		"--trust", "--force",
+		"--workspace", "/tmp/ws",
+		"--force",
 		"--model", "composer-2.5",
 		"implement feature",
 	}

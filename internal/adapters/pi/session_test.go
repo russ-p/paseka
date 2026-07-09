@@ -68,7 +68,7 @@ func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {
 	}
 }
 
-func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
+func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 	fakePi := writeFakePiBinary(t)
 	a := NewSession()
 
@@ -92,13 +92,14 @@ func TestSessionCommandDetachedUsesPrintMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if containsArg(cmd.Args, "--session-dir") || containsArg(cmd.Args, "--session-id") {
-		t.Fatalf("detached session must not include interactive session flags, args=%v", cmd.Args)
+	for _, arg := range cmd.Args {
+		if arg == "-p" || arg == "--mode" {
+			t.Fatalf("detached session must stay interactive, args=%v", cmd.Args)
+		}
 	}
-	if !containsArg(cmd.Args, "-p") {
-		t.Fatalf("expected print mode in args=%v", cmd.Args)
-	}
-	assertArgPair(t, cmd.Args, "--mode", "text")
+	wantSessionDir := filepath.Join("/colony", ".paseka", "runs", "trace-1", "agent-1", "pi-sessions")
+	assertArgPair(t, cmd.Args, "--session-dir", wantSessionDir)
+	assertArgPair(t, cmd.Args, "--session-id", "agent-1")
 	assertArgPair(t, cmd.Args, "--model", "gpt-4")
 	assertArgPair(t, cmd.Args, "--provider", "gemini")
 	assertArgPair(t, cmd.Args, "--thinking", "high")

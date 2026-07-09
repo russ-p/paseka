@@ -30,7 +30,9 @@ type SessionRequest struct {
 	Task          string
 	Intent        string
 	Insights      []string
-	Detached      bool
+	// Detached is retained for compatibility but ignored by session adapters.
+	// StartDetached means "no local terminal attach / use PTY hub", not headless -p.
+	Detached bool
 }
 
 // SessionCommand describes how to launch the external agent process.

@@ -25,7 +25,6 @@ This spec is now a living MVP baseline. It reflects the implementation state aft
 - Do not replace `paseka run`, `paseka bee run`, `paseka bee chat`, or `paseka task *`.
 - Do not introduce a new database for the MVP.
 - Do not build a full multi-user or remote-host control plane.
-- Do not implement a full browser terminal or PTY attach in the first release.
 - Do not redesign event contracts, task lifecycle, or run-directory layout for the sake of the UI.
 - Do not require all interactions to be live-only; filesystem projections must remain usable as fallback state.
 
@@ -71,23 +70,23 @@ Implemented UI surfaces:
 - **Timeline**: filterable event feed with trace, task, bee, event type, payload kind, severity, cursor pagination, and optional raw JSON display.
 - **Tasks**: grouped task board, task creation with optional `review` policy, optional autorun, task detail, linked runs, timeline navigation, start controls for eligible tasks, and inline approve/reject for `waiting_review` review-gated tasks.
 - **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
-- **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, poll transcript updates, and stop active sessions.
+- **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, attach an in-browser xterm.js terminal over WebSocket for active sessions (with optional full-page Widen layout), poll transcript updates for completed sessions, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
 - **Runtime panel**: start and stop the registered local hive runtime and poll runtime status.
 
 Implemented backend behavior:
 
-- Uses polling JSON endpoints, not WebSocket or SSE.
+- Uses polling JSON endpoints for most views; per-session PTY relay uses WebSocket.
 - Reads run, session, trace, task, transcript, and event state from `.paseka/runs`.
 - Reads active sessions, active worktrees, and runtime registration from machine-local colony state.
 - Uses NATS diagnostics for dashboard connectivity status; it does not yet consume a live JetStream event stream for console updates.
-- Starts detached console sessions through the session manager and adapter session APIs; current detached console sessions use headless agent CLI execution rather than browser PTY attach.
+- Starts detached console sessions through the session manager and adapter session APIs (interactive agent TUI in a PTY hub, not headless `-p`); active sessions can be attached from the browser via `GET /api/sessions/:sessionId/pty`.
 
 Not implemented in the current baseline:
 
 - Dedicated worktrees page or `/api/worktrees` endpoint.
-- Browser-native terminal input or PTY relay.
-- WebSocket/SSE live transport.
+- Cross-process browser attach (sessions started outside the current `paseka console` process).
+- Global WebSocket/SSE event stream (`/api/events/stream`).
 - Diff artifact preview in the review queue (links to runs/timeline only).
 
 ## Primary User Outcomes
@@ -100,7 +99,7 @@ The MVP should let a solo developer:
 - Inspect a trace without manually opening run directories.
 - Create tasks, start eligible tasks, and review task status from the browser.
 - Start and stop the local hive runtime from the browser.
-- Launch a detached bee session from the browser and observe its transcript, even if full in-browser terminal control is deferred.
+- Launch a detached bee session from the browser, attach an interactive terminal, and read the transcript after completion.
 - Inspect recent adapter runs and their emitted events without manually opening run directories.
 - Approve or reject review-gated tasks from the browser when NATS and the task ledger are available.
 
@@ -117,10 +116,10 @@ The current baseline prioritizes:
 - task board visibility and basic task actions
 - review queue visibility and approve/reject actions
 - run inspection
-- session launch and session observation
+- session launch, browser terminal attach, and session observation
 - local runtime start/stop control
 
-It does not prioritize full browser-native terminal control.
+Browser terminal attach is implemented for sessions owned by the current `paseka console` process.
 
 Task creation, start, approve, and reject actions require NATS and the task ledger KV because they publish domain events instead of writing local files directly.
 
@@ -333,18 +332,20 @@ After launch, the UI shows:
 
 This phase is enough to make sessions visible and manageable in the browser while still relying on the current PTY-owned session model.
 
-The current implementation uses detached session execution and transcript polling. It does not provide browser input to an already-running PTY.
+For active sessions, the UI attaches xterm.js over WebSocket and still writes normalized transcript lines in the background. Completed sessions fall back to transcript polling. A **Widen** control expands the terminal to full page width (hiding launch/list panels) for focused interactive work; **Restore** returns to the three-column layout.
 
 #### Phase B: Browser Terminal
 
-Later, Queen Console may add:
+Implemented for same-process console sessions:
 
-- PTY relay over WebSocket
-- browser terminal attach
-- send input from browser to session
-- better session resume / reconnect behavior
+- PTY relay over WebSocket (`GET /api/sessions/:sessionId/pty`)
+- xterm.js terminal with FitAddon and WebLinksAddon
+- browser input and resize
+- reconnect with scrollback while the session remains active
+- transcript polling as audit/fallback after exit
+- optional full-page-wide terminal layout toggle
 
-This phase depends on a dedicated session relay API and should not block the MVP.
+Cross-process attach (session started by another `paseka` process or Ghostty window) remains deferred.
 
 ### Review Queue
 
@@ -399,6 +400,7 @@ Implemented HTTP endpoints:
 - `POST /api/sessions`
 - `GET /api/sessions/:sessionId`
 - `GET /api/sessions/:sessionId/transcript`
+- `GET /api/sessions/:sessionId/pty` (WebSocket PTY relay)
 - `POST /api/sessions/:sessionId/stop`
 - `GET /api/review-queue`
 - `POST /api/traces/:traceId/tasks/:taskId/approve`
@@ -414,9 +416,8 @@ Deferred suggested endpoints:
 Deferred live endpoints:
 
 - `GET /api/events/stream` via WebSocket or Server-Sent Events
-- `GET /api/sessions/:sessionId/stream` via WebSocket or Server-Sent Events
 
-The current MVP uses polling instead of streaming.
+Per-session PTY streaming is implemented at `GET /api/sessions/:sessionId/pty`. Most other views still use polling.
 
 ## Data Projection Rules
 
@@ -597,16 +598,20 @@ Includes:
 Add:
 
 - global event stream
-- per-session live updates
 - better review queue freshness
 
-### 9. Browser Terminal (Deferred)
+### 9. Browser Terminal (Implemented)
 
-Only after MVP proves useful:
+Includes:
 
-- PTY relay
-- browser terminal component
-- reconnect / attach semantics
+- PTY hub fan-out in `internal/sessions`
+- WebSocket relay in `internal/console`
+- vendored xterm.js UI in Sessions tab
+- resize, reconnect, transcript fallback
+
+### 10. Cross-Process Browser Attach (Deferred)
+
+Unix socket relay for sessions started outside the current `paseka console` process.
 
 ## Risks and Constraints
 
@@ -614,7 +619,7 @@ Only after MVP proves useful:
 
 The current session model is PTY-owned and optimized for terminal attach, not browser interaction.
 
-Detached launch and transcript observation are implemented. Browser-native chat input is still deferred.
+Detached launch and browser terminal attach are implemented for sessions owned by the current console process. Cross-process attach is still deferred.
 
 ### Event History Is Distributed Across Run Directories
 
