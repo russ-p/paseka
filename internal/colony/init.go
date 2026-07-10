@@ -14,12 +14,14 @@ import (
 // InitOptions configures paseka init.
 type InitOptions struct {
 	StartDir string // directory to resolve git root from; default cwd
+	Adapter  string // scaffold bees and home config for this adapter (default: cursor)
 }
 
 // InitResult summarizes what init did.
 type InitResult struct {
 	ColonyRoot string
 	Slug       string
+	Adapter    string
 	HomeDir    string
 	Created    []string
 	Skipped    []string
@@ -58,12 +60,13 @@ func Init(opts InitOptions) (InitResult, error) {
 		return InitResult{}, err
 	}
 
-	res := InitResult{ColonyRoot: repoRoot, Slug: slug}
+	adapter := NormalizeInitAdapter(opts.Adapter)
+	res := InitResult{ColonyRoot: repoRoot, Slug: slug, Adapter: adapter}
 
-	if err := res.scaffoldProject(slug, manifest); err != nil {
+	if err := res.scaffoldProject(slug, manifest, adapter); err != nil {
 		return InitResult{}, err
 	}
-	if err := res.scaffoldHome(slug, repoRoot); err != nil {
+	if err := res.scaffoldHome(slug, repoRoot, adapter); err != nil {
 		return InitResult{}, err
 	}
 
@@ -87,7 +90,7 @@ func (r *InitResult) track(created bool, path string, err error) error {
 	return nil
 }
 
-func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
+func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter string) error {
 	root := r.ColonyRoot
 	for _, d := range []string{
 		PasekaPath(root, "bees"),
@@ -104,8 +107,8 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony) error {
 
 	files := map[string]string{
 		PasekaPath(root, ".gitignore"):                                         gitignoreContent,
-		PasekaPath(root, "bees", "scout.yaml"):                                 scoutBeeYAML,
-		PasekaPath(root, "bees", "builder.yaml"):                               builderBeeYAML,
+		PasekaPath(root, "bees", "scout.yaml"):                                 scoutBeeYAMLFor(adapter),
+		PasekaPath(root, "bees", "builder.yaml"):                               builderBeeYAMLFor(adapter),
 		PasekaPath(root, "prompts", "default.md"):                              defaultPrompt,
 		PasekaPath(root, "prompts", "scout.md"):                                scoutPrompt,
 		PasekaPath(root, "prompts", "builder.md"):                              builderPrompt,
@@ -173,7 +176,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	return nil
 }
 
-func (r *InitResult) scaffoldHome(slug, repoRoot string) error {
+func (r *InitResult) scaffoldHome(slug, repoRoot, adapter string) error {
 	homeDir, err := HomeDir(slug)
 	if err != nil {
 		return err
@@ -183,14 +186,7 @@ func (r *InitResult) scaffoldHome(slug, repoRoot string) error {
 	}
 
 	cfgPath := filepath.Join(homeDir, "config.yaml")
-	cfgContent := fmt.Sprintf(`colony_root: %q
-slug: %q
-nats:
-  url: nats://127.0.0.1:4222
-adapters:
-  cursor:
-    api_key_env: CURSOR_API_KEY
-`, repoRoot, slug)
+	cfgContent := homeConfigYAML(repoRoot, slug, adapter)
 	created, err := writeFileIfMissing(cfgPath, []byte(cfgContent), 0o600)
 	if err := r.track(created, cfgPath, err); err != nil {
 		return err
@@ -210,7 +206,16 @@ adapters:
 
 	claudePath := filepath.Join(homeDir, "adapters", "claude.yaml")
 	created, err = writeFileIfMissing(claudePath, []byte(claudeAdapterYAML), 0o644)
-	return r.track(created, claudePath, err)
+	if err := r.track(created, claudePath, err); err != nil {
+		return err
+	}
+
+	if adapter == "pi" {
+		piPath := filepath.Join(homeDir, "adapters", "pi.yaml")
+		created, err = writeFileIfMissing(piPath, []byte(piAdapterYAML), 0o644)
+		return r.track(created, piPath, err)
+	}
+	return nil
 }
 
 func relProject(root, path string) string {
@@ -436,5 +441,38 @@ api_key_env: CURSOR_API_KEY
 # When ANTHROPIC_API_KEY is unset, Claude Code uses your subscription
 # login (claude login) instead of an API key.
 api_key_env: ANTHROPIC_API_KEY
+`
+	scoutBeePiYAML = `role: scout
+adapter: pi
+prompt_template: scout.md
+params:
+  output_format: json
+  plan: true
+worktree: false
+publishes:
+  - type: INSIGHT
+    kind: task.plan
+`
+	builderBeePiYAML = `role: builder
+adapter: pi
+prompt_template: builder.md
+params:
+  output_format: json
+worktree: true
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+  - type: VERIFICATION
+    kind: verification.failed
+    dispatch: direct
+publishes:
+  - type: MUTATION
+    kind: code.proposal
+  - type: VERIFICATION
+    kind: task.completed
+`
+	piAdapterYAML = `binary: pi
+# api_key_env: GEMINI_API_KEY   # optional; passed as --api-key when set in env
 `
 )

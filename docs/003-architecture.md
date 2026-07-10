@@ -257,18 +257,21 @@ Stored in `.paseka/colony.yaml` as `slug` after first `paseka init` so later com
 Run from inside a git repository (or at repo root).
 
 ```
-paseka init
+paseka init [--adapter cursor|pi]
   │
   ├─► resolve git root (fail if not a repo)
   ├─► compute / persist project slug
   ├─► create .paseka/colony.yaml (defaults)
   ├─► create .paseka/prompts/ with starter templates (scout, builder)
-  ├─► create .paseka/bees/ with starter bees (scout, builder)
+  ├─► create .paseka/bees/ with starter bees (scout, builder) for the selected adapter
   ├─► create .paseka/.gitignore (worktrees/, runs/, *.local.yaml, cache/)
   ├─► create ~/.config/paseka/<slug>/config.yaml
   ├─► create ~/.config/paseka/<slug>/state.json (empty)
-  └─► print next steps (`agent login` or CURSOR_API_KEY, then `paseka run`)
+  ├─► create ~/.config/paseka/<slug>/adapters/<adapter>.yaml (cursor by default; pi when --adapter pi)
+  └─► print next steps (adapter-specific auth / CLI setup, then `paseka run`)
 ```
+
+`--adapter` selects which LLM adapter the starter bees use (`cursor` default; `pi` supported). Unknown adapter names fall back to `cursor`.
 
 `paseka init` is idempotent: existing files are preserved; missing pieces are added.
 
