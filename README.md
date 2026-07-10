@@ -34,6 +34,14 @@ go build -o paseka ./cmd/paseka
 ./paseka run
 ```
 
+4. Start the local Queen Console web UI:
+
+```
+./paseka console
+```
+
+Open http://127.0.0.1:8787 in your browser. Queen Console does not enforce authentication yet, so keep it bound to localhost or another trusted interface only. Use `--addr` only when you understand the exposure risk.
+
 ## Technologies
 
 - Go
