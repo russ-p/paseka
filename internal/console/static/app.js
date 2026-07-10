@@ -3,6 +3,11 @@ const state = {
   bees: [],
   sessions: [],
   runs: [],
+  traces: [],
+  selectedTraceId: null,
+  selectedTraceDetail: null,
+  traceDetailError: '',
+  traceDetailLoading: false,
   tasks: null,
   reviews: null,
   selectedReviewKey: null,
@@ -27,6 +32,7 @@ const state = {
   pollTimer: null,
   runtimePollTimer: null,
   dashboardPollTimer: null,
+  tracesPollTimer: null,
   tasksPollTimer: null,
   reviewsPollTimer: null,
 };
@@ -34,18 +40,35 @@ const state = {
 const el = {
   subtitle: document.getElementById('subtitle'),
   tabDashboard: document.getElementById('tab-dashboard'),
+  tabTraces: document.getElementById('tab-traces'),
   tabTimeline: document.getElementById('tab-timeline'),
   tabTasks: document.getElementById('tab-tasks'),
   tabReviews: document.getElementById('tab-reviews'),
   tabSessions: document.getElementById('tab-sessions'),
   tabRuns: document.getElementById('tab-runs'),
   dashboardLayout: document.getElementById('dashboard-layout'),
+  tracesLayout: document.getElementById('traces-layout'),
   timelineLayout: document.getElementById('timeline-layout'),
   dashboardStats: document.getElementById('dashboard-stats'),
   dashboardTraces: document.getElementById('dashboard-traces'),
   dashboardFailedRuns: document.getElementById('dashboard-failed-runs'),
   dashboardInsights: document.getElementById('dashboard-insights'),
   dashboardRefreshBtn: document.getElementById('dashboard-refresh-btn'),
+  tracesRefreshBtn: document.getElementById('traces-refresh-btn'),
+  traceList: document.getElementById('trace-list'),
+  traceDetailEmpty: document.getElementById('trace-detail-empty'),
+  traceDetailError: document.getElementById('trace-detail-error'),
+  traceDetailLoading: document.getElementById('trace-detail-loading'),
+  traceDetailBody: document.getElementById('trace-detail-body'),
+  traceDetailMeta: document.getElementById('trace-detail-meta'),
+  traceEnergyWrap: document.getElementById('trace-energy-wrap'),
+  traceEnergy: document.getElementById('trace-energy'),
+  traceWorktreeWrap: document.getElementById('trace-worktree-wrap'),
+  traceWorktreeMeta: document.getElementById('trace-worktree-meta'),
+  traceTasksList: document.getElementById('trace-tasks-list'),
+  traceRunsList: document.getElementById('trace-runs-list'),
+  traceEventsList: document.getElementById('trace-events-list'),
+  traceOpenTimelineBtn: document.getElementById('trace-open-timeline-btn'),
   timelineRefreshBtn: document.getElementById('timeline-refresh-btn'),
   timelineFilters: document.getElementById('timeline-filters'),
   filterTrace: document.getElementById('filter-trace'),
@@ -239,9 +262,10 @@ function escapeHtml(str) {
 
 function setTab(tab) {
   state.tab = tab;
-  const tabs = ['dashboard', 'timeline', 'tasks', 'reviews', 'sessions', 'runs'];
+  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs'];
   const layouts = {
     dashboard: el.dashboardLayout,
+    traces: el.tracesLayout,
     timeline: el.timelineLayout,
     tasks: el.tasksLayout,
     reviews: el.reviewsLayout,
@@ -262,6 +286,7 @@ function setTab(tab) {
 
   const subtitles = {
     dashboard: 'Dashboard — colony-wide snapshot and recent activity',
+    traces: 'Traces — inspect flight trails, tasks, runs, and worktrees',
     timeline: 'Timeline — filterable event feed across the colony',
     tasks: 'Tasks — create, start, and inspect trace tasks',
     reviews: 'Reviews — approve or reject proposals awaiting human review',
@@ -272,6 +297,7 @@ function setTab(tab) {
 
   stopPolling();
   stopDashboardPolling();
+  stopTracesPolling();
   stopTasksPolling();
   stopReviewsPolling();
   if (tab !== 'sessions') {
@@ -284,6 +310,8 @@ function setTab(tab) {
     startRunPolling();
   } else if (tab === 'dashboard') {
     startDashboardPolling();
+  } else if (tab === 'traces') {
+    startTracesPolling();
   } else if (tab === 'timeline') {
     loadTimeline(true).catch(console.error);
   } else if (tab === 'tasks') {
@@ -587,12 +615,7 @@ function renderDashboard() {
     </div>
     <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks</div>
   `, 'No recent traces.', (trace) => {
-    if (trace.taskCount > 0) {
-      setTab('tasks');
-      loadTasks().catch(console.error);
-    } else {
-      navigateToTrace(trace.traceId).catch(console.error);
-    }
+    navigateToTrace(trace.traceId).catch(console.error);
   });
 
   renderDashboardList(el.dashboardFailedRuns, d.failedRuns, (run) => `
@@ -650,12 +673,238 @@ async function navigateToRun(traceId, agentId) {
 
 async function navigateToTrace(traceId) {
   if (!traceId) return;
-  setTab('runs');
-  await loadRuns();
-  const match = state.runs.find((r) => r.traceId === traceId);
-  if (match) {
-    await selectRun(match.traceId, match.agentId);
+  setTab('traces');
+  await loadTraces();
+  await selectTrace(traceId);
+}
+
+function renderTraces() {
+  el.traceList.innerHTML = '';
+  if (!state.traces.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No traces yet.';
+    el.traceList.appendChild(li);
+    return;
   }
+  for (const trace of state.traces) {
+    const li = document.createElement('li');
+    li.className = 'session-item';
+    if (trace.traceId === state.selectedTraceId) {
+      li.classList.add('selected');
+    }
+    const badge = trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '');
+    const badgeLabel = trace.hasActive ? 'active' : (trace.hasFailures ? 'failures' : `${trace.runCount} runs`);
+    const bees = (trace.bees || []).join(', ') || '—';
+    li.innerHTML = `
+      <div class="top">
+        <span class="bee">${escapeHtml(trace.traceId)}</span>
+        <span class="badge ${badge}">${escapeHtml(badgeLabel)}</span>
+      </div>
+      <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">
+        ${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks · ${escapeHtml(bees)}
+      </div>
+    `;
+    li.addEventListener('click', () => {
+      selectTrace(trace.traceId).catch(console.error);
+    });
+    el.traceList.appendChild(li);
+  }
+}
+
+function renderTraceDetail(detail) {
+  const hasSelection = !!state.selectedTraceId;
+  el.traceDetailEmpty.classList.toggle('hidden', hasSelection || state.traceDetailLoading);
+  el.traceDetailLoading.classList.toggle('hidden', !state.traceDetailLoading);
+  el.traceOpenTimelineBtn.classList.toggle('hidden', !detail);
+
+  if (state.traceDetailError) {
+    el.traceDetailError.textContent = state.traceDetailError;
+    el.traceDetailError.classList.remove('hidden');
+  } else {
+    el.traceDetailError.classList.add('hidden');
+    el.traceDetailError.textContent = '';
+  }
+
+  if (!detail) {
+    el.traceDetailBody.classList.add('hidden');
+    return;
+  }
+
+  el.traceDetailBody.classList.remove('hidden');
+  const bees = (detail.bees || []).join(', ') || '—';
+  const flags = [];
+  if (detail.hasActive) flags.push('active');
+  if (detail.hasFailures) flags.push('failures');
+  el.traceDetailMeta.innerHTML = `
+    <dt>Trace</dt><dd>${escapeHtml(detail.traceId)}</dd>
+    <dt>Last activity</dt><dd>${formatTime(detail.lastActivityAt)}</dd>
+    <dt>Runs</dt><dd>${detail.runCount ?? (detail.runs || []).length}</dd>
+    <dt>Tasks</dt><dd>${detail.taskCount ?? (detail.tasks || []).length}</dd>
+    <dt>Bees</dt><dd>${escapeHtml(bees)}</dd>
+    <dt>Flags</dt><dd>${flags.length ? escapeHtml(flags.join(', ')) : '—'}</dd>
+  `;
+
+  const hasEnergy = detail.energyBudget > 0 || detail.energyRemaining > 0;
+  el.traceEnergyWrap.classList.toggle('hidden', !hasEnergy);
+  if (hasEnergy) {
+    const low = detail.lowEnergy ? ' <span class="badge warn">low</span>' : '';
+    el.traceEnergy.innerHTML = `
+      <span>${detail.energyRemaining} / ${detail.energyBudget} remaining</span>${low}
+    `;
+  }
+
+  const wt = detail.worktree;
+  el.traceWorktreeWrap.classList.toggle('hidden', !wt);
+  if (wt) {
+    el.traceWorktreeMeta.innerHTML = `
+      <dt>Path</dt><dd><code>${escapeHtml(wt.path)}</code></dd>
+      <dt>Branch</dt><dd>${escapeHtml(wt.branch || '—')}</dd>
+      <dt>Base SHA</dt><dd><code>${escapeHtml(wt.baseSha || '—')}</code></dd>
+      <dt>Created</dt><dd>${formatTime(wt.createdAt)}</dd>
+    `;
+  }
+
+  renderTraceTasks(detail.tasks || []);
+  renderTraceRuns(detail.runs || []);
+  renderTraceEvents(detail.recentEvents || []);
+}
+
+function renderTraceTasks(tasks) {
+  el.traceTasksList.innerHTML = '';
+  if (!tasks.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No tasks in this trace.';
+    el.traceTasksList.appendChild(li);
+    return;
+  }
+  for (const task of tasks) {
+    const li = document.createElement('li');
+    li.className = 'session-item compact-item';
+    li.innerHTML = `
+      <div class="top">
+        <span class="bee">${escapeHtml(task.title || task.taskId)}</span>
+        <span class="badge ${badgeClass(task.status)}">${escapeHtml(task.status || '—')}</span>
+      </div>
+      <div class="id">${escapeHtml(task.taskId)}${task.bee ? ` · ${escapeHtml(task.bee)}` : ''}</div>
+    `;
+    li.addEventListener('click', () => {
+      navigateToTask(state.selectedTraceId, task.taskId).catch(console.error);
+    });
+    el.traceTasksList.appendChild(li);
+  }
+}
+
+function renderTraceRuns(runs) {
+  el.traceRunsList.innerHTML = '';
+  if (!runs.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No runs in this trace.';
+    el.traceRunsList.appendChild(li);
+    return;
+  }
+  for (const run of runs) {
+    const li = document.createElement('li');
+    li.className = 'session-item compact-item';
+    li.innerHTML = `
+      <div class="top">
+        <span class="bee">${escapeHtml(run.bee || run.agentId)}</span>
+        <span class="badge ${badgeClass(run.state)}">${escapeHtml(run.state || '—')}</span>
+      </div>
+      <div class="id">${escapeHtml(run.agentId)}${run.taskId ? ` · ${escapeHtml(run.taskId)}` : ''}</div>
+      <div class="muted" style="font-size:0.78rem;margin-top:0.2rem">${formatTime(run.startedAt)}</div>
+    `;
+    li.addEventListener('click', () => {
+      navigateToRun(run.traceId || state.selectedTraceId, run.agentId).catch(console.error);
+    });
+    el.traceRunsList.appendChild(li);
+  }
+}
+
+function renderTraceEvents(events) {
+  el.traceEventsList.innerHTML = '';
+  if (!events.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No recent events.';
+    el.traceEventsList.appendChild(li);
+    return;
+  }
+  for (const item of events) {
+    const li = document.createElement('li');
+    li.className = 'timeline-item';
+    const kind = item.payloadKind ? ` · ${item.payloadKind}` : '';
+    li.innerHTML = `
+      <div class="timeline-top">
+        <span class="timeline-type">${escapeHtml(item.type)}${escapeHtml(kind)}</span>
+        <span class="muted timeline-time">${formatTime(item.createdAt)}</span>
+      </div>
+      <div class="timeline-summary">${escapeHtml(item.summary || '')}</div>
+      <div class="timeline-meta muted">${escapeHtml(item.agentId || '—')}${item.bee ? ` · ${escapeHtml(item.bee)}` : ''}</div>
+    `;
+    el.traceEventsList.appendChild(li);
+  }
+}
+
+async function loadTraces() {
+  state.traces = await api('/api/traces');
+  renderTraces();
+  if (state.selectedTraceId) {
+    const still = state.traces.find((t) => t.traceId === state.selectedTraceId);
+    if (still) {
+      await selectTrace(state.selectedTraceId, { quiet: true });
+    } else if (!state.selectedTraceDetail) {
+      renderTraceDetail(null);
+    }
+  }
+}
+
+async function selectTrace(traceId, opts = {}) {
+  if (!traceId) return;
+  const switching = state.selectedTraceId !== traceId;
+  state.selectedTraceId = traceId;
+  state.traceDetailError = '';
+  if (!opts.quiet) {
+    state.traceDetailLoading = true;
+    if (switching) {
+      state.selectedTraceDetail = null;
+    }
+    renderTraces();
+    renderTraceDetail(state.selectedTraceDetail);
+  } else {
+    renderTraces();
+  }
+  try {
+    const detail = await api(`/api/traces/${encodeURIComponent(traceId)}`);
+    if (state.selectedTraceId !== traceId) return;
+    state.selectedTraceDetail = detail;
+    state.traceDetailLoading = false;
+    state.traceDetailError = '';
+    renderTraceDetail(detail);
+  } catch (err) {
+    if (state.selectedTraceId !== traceId) return;
+    state.traceDetailLoading = false;
+    state.traceDetailError = err.message || String(err);
+    state.selectedTraceDetail = null;
+    renderTraceDetail(null);
+  }
+}
+
+function stopTracesPolling() {
+  if (state.tracesPollTimer) {
+    clearInterval(state.tracesPollTimer);
+    state.tracesPollTimer = null;
+  }
+}
+
+function startTracesPolling() {
+  stopTracesPolling();
+  state.tracesPollTimer = setInterval(() => {
+    loadTraces().catch(console.error);
+  }, 5000);
+  loadTraces().catch(console.error);
 }
 
 function renderTaskBoard() {
@@ -1041,13 +1290,11 @@ async function navigateToTask(traceId, taskId) {
 
 function navigateToTaskTimeline(traceId, taskId) {
   if (!traceId) return;
-  setTab('timeline');
+  // Apply filters before setTab so its automatic loadTimeline uses them.
   el.filterTrace.value = traceId;
-  if (taskId) {
-    el.filterTask.value = taskId;
-  }
+  el.filterTask.value = taskId || '';
   readTimelineFiltersFromForm();
-  loadTimeline(true).catch(console.error);
+  setTab('timeline');
 }
 
 function timelineQueryParams(appendCursor) {
@@ -1274,6 +1521,7 @@ function startRunPolling() {
 }
 
 el.tabDashboard.addEventListener('click', () => setTab('dashboard'));
+el.tabTraces.addEventListener('click', () => setTab('traces'));
 el.tabTimeline.addEventListener('click', () => setTab('timeline'));
 el.tabTasks.addEventListener('click', () => setTab('tasks'));
 el.tabReviews.addEventListener('click', () => setTab('reviews'));
@@ -1285,6 +1533,15 @@ el.tabRuns.addEventListener('click', () => {
 
 el.dashboardRefreshBtn.addEventListener('click', () => {
   loadDashboard().catch(console.error);
+});
+
+el.tracesRefreshBtn.addEventListener('click', () => {
+  loadTraces().catch(console.error);
+});
+
+el.traceOpenTimelineBtn.addEventListener('click', () => {
+  if (!state.selectedTraceId) return;
+  navigateToTaskTimeline(state.selectedTraceId, null);
 });
 
 el.timelineRefreshBtn.addEventListener('click', () => {

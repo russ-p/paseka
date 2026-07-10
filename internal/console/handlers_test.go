@@ -503,6 +503,214 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestTraceDetailAPIHandler(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-15 * time.Minute)
+	traceID := "trace-detail"
+	otherTrace := "trace-other"
+
+	writeConsoleRun(t, repo, traceID, "agent-a", started, protocol.StatusCompleted, "first")
+	writeConsoleRun(t, repo, traceID, "agent-b", started.Add(5*time.Minute), protocol.StatusFailed, "second")
+	writeConsoleRun(t, repo, otherTrace, "agent-x", started.Add(time.Minute), protocol.StatusRunning, "")
+
+	dA := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-a"}
+	ev1, err := protocol.NewEvent(traceID, "agent-a", 1, protocol.EventInsight, protocol.NarrativeInsightPayload{
+		Kind:    protocol.InsightRunSummary,
+		Summary: "first insight",
+		TaskID:  "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev1.CreatedAt = started.Add(time.Minute)
+	if err := dA.AppendEvent(ev1); err != nil {
+		t.Fatal(err)
+	}
+	ev2, err := protocol.NewEvent(traceID, "agent-a", 2, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-1",
+		Title:  "Ship it",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev2.CreatedAt = started.Add(2 * time.Minute)
+	if err := dA.AppendEvent(ev2); err != nil {
+		t.Fatal(err)
+	}
+
+	taskDir, err := runs.NewTaskDir(repo, traceID, "task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := taskDir.WriteTask(runs.TaskFrontmatter{
+		TraceID: traceID,
+		TaskID:  "task-1",
+		Title:   "Ship it",
+		Bee:     "scout",
+		Status:  protocol.TaskStatusReady,
+	}, "body"); err != nil {
+		t.Fatal(err)
+	}
+
+	wtCreated := started.Add(3 * time.Minute)
+	if err := colony.RegisterWorktree(ctxColony.Slug, colony.WorktreeEntry{
+		TraceID:   traceID,
+		Path:      filepath.Join(repo, ".paseka", "worktrees", traceID),
+		BaseSHA:   "abc123",
+		Branch:    "paseka/" + traceID,
+		CreatedAt: wtCreated,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var detail console.TraceDetailView
+	if err := json.NewDecoder(rec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.TraceID != traceID {
+		t.Fatalf("traceId = %q", detail.TraceID)
+	}
+	if len(detail.Tasks) != 1 || detail.Tasks[0].TaskID != "task-1" || detail.Tasks[0].Title != "Ship it" {
+		t.Fatalf("tasks = %+v", detail.Tasks)
+	}
+	if detail.TaskCount != len(detail.Tasks) {
+		t.Fatalf("TaskCount=%d len(Tasks)=%d", detail.TaskCount, len(detail.Tasks))
+	}
+	if len(detail.Runs) != 2 {
+		t.Fatalf("runs = %+v", detail.Runs)
+	}
+	for _, run := range detail.Runs {
+		if run.TraceID != traceID {
+			t.Fatalf("unrelated run leaked: %+v", run)
+		}
+	}
+	if detail.Runs[0].AgentID != "agent-b" || detail.Runs[1].AgentID != "agent-a" {
+		t.Fatalf("run order = %+v", detail.Runs)
+	}
+	if detail.Worktree == nil || detail.Worktree.BaseSHA != "abc123" || detail.Worktree.Branch == "" {
+		t.Fatalf("worktree = %+v", detail.Worktree)
+	}
+	if len(detail.RecentEvents) < 2 {
+		t.Fatalf("recentEvents = %+v", detail.RecentEvents)
+	}
+	for _, item := range detail.RecentEvents {
+		if item.TraceID != traceID {
+			t.Fatalf("unrelated event leaked: %+v", item)
+		}
+	}
+	if detail.RecentEvents[0].CreatedAt.Before(detail.RecentEvents[1].CreatedAt) {
+		t.Fatalf("events not ordered newest-first: %+v", detail.RecentEvents)
+	}
+}
+
+func TestTraceDetailFallsBackWhenNATSUnavailable(t *testing.T) {
+	repo := initConsoleRepo(t)
+	// Point at a closed local port so Connect fails instead of hanging.
+	ctxColony := setupConsoleHomeWithNATS(t, repo, "nats://127.0.0.1:1")
+
+	started := time.Now().UTC().Add(-5 * time.Minute)
+	traceID := "trace-offline"
+	writeConsoleRun(t, repo, traceID, "agent-1", started, protocol.StatusCompleted, "ok")
+
+	taskDir, err := runs.NewTaskDir(repo, traceID, "task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := taskDir.WriteTask(runs.TaskFrontmatter{
+		TraceID: traceID,
+		TaskID:  "task-1",
+		Title:   "Offline task",
+		Bee:     "scout",
+		Status:  protocol.TaskStatusReady,
+	}, "body"); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var detail console.TraceDetailView
+	if err := json.NewDecoder(rec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.TraceID != traceID {
+		t.Fatalf("traceId = %q", detail.TraceID)
+	}
+	if len(detail.Tasks) != 1 || detail.Tasks[0].TaskID != "task-1" {
+		t.Fatalf("expected filesystem task fallback, got %+v", detail.Tasks)
+	}
+	if len(detail.Runs) != 1 {
+		t.Fatalf("runs = %+v", detail.Runs)
+	}
+}
+
+func writeConsoleRun(t *testing.T, root, traceID, agentID string, started time.Time, state protocol.RunStatus, summary string) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: root, TraceID: traceID, AgentID: agentID}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Bee:             "scout",
+		Adapter:         "cursor",
+		Workspace:       root,
+		ColonyRoot:      root,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snap := protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           state,
+		StartedAt:       started,
+	}
+	if state == protocol.StatusCompleted || state == protocol.StatusFailed {
+		snap.FinishedAt = started.Add(time.Minute)
+	}
+	if err := d.WriteStatusSnapshot(snap); err != nil {
+		t.Fatal(err)
+	}
+	if summary != "" {
+		if err := d.WriteResult(protocol.Result{
+			ProtocolVersion: protocol.Version,
+			TraceID:         traceID,
+			AgentID:         agentID,
+			Status:          state,
+			Summary:         summary,
+			FinishedAt:      started.Add(time.Minute),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestTasksAPIHandlers(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)
@@ -828,6 +1036,11 @@ prompt_template: scout.md
 
 func setupConsoleHome(t *testing.T, repo string) colony.Context {
 	t.Helper()
+	return setupConsoleHomeWithNATS(t, repo, "")
+}
+
+func setupConsoleHomeWithNATS(t *testing.T, repo, natsURL string) colony.Context {
+	t.Helper()
 	slug := "console-test"
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
@@ -836,6 +1049,9 @@ func setupConsoleHome(t *testing.T, repo string) colony.Context {
 		t.Fatal(err)
 	}
 	cfg := "colony_root: " + repo + "\nslug: " + slug + "\n"
+	if natsURL != "" {
+		cfg += "nats:\n  url: " + natsURL + "\n"
+	}
 	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

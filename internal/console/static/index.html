@@ -28,6 +28,7 @@
     </div>
     <nav class="tabs" role="tablist">
       <button type="button" id="tab-dashboard" class="tab active" role="tab" aria-selected="true">Dashboard</button>
+      <button type="button" id="tab-traces" class="tab" role="tab" aria-selected="false">Traces</button>
       <button type="button" id="tab-timeline" class="tab" role="tab" aria-selected="false">Timeline</button>
       <button type="button" id="tab-tasks" class="tab" role="tab" aria-selected="false">Tasks</button>
       <button type="button" id="tab-reviews" class="tab" role="tab" aria-selected="false">Reviews</button>
@@ -56,6 +57,50 @@
           <h3>Recent insights</h3>
           <ul id="dashboard-insights" class="session-list compact-list"></ul>
         </section>
+      </div>
+    </section>
+  </main>
+
+  <main class="layout traces-layout hidden" id="traces-layout">
+    <section class="panel list-panel traces-list-panel">
+      <div class="panel-header">
+        <h2>Traces</h2>
+        <button type="button" id="traces-refresh-btn" class="secondary">Refresh</button>
+      </div>
+      <p class="muted traces-hint">Inspect a flight trail: tasks, runs, worktree, and recent events.</p>
+      <ul id="trace-list" class="session-list"></ul>
+    </section>
+
+    <section class="panel detail-panel traces-detail-panel">
+      <div class="panel-header">
+        <h2>Trace detail</h2>
+        <button type="button" id="trace-open-timeline-btn" class="secondary hidden">Open timeline</button>
+      </div>
+      <div id="trace-detail-empty" class="muted">Select a trace to inspect summary, tasks, runs, and events.</div>
+      <p id="trace-detail-error" class="error hidden"></p>
+      <div id="trace-detail-loading" class="muted hidden">Loading trace…</div>
+      <div id="trace-detail-body" class="hidden">
+        <dl id="trace-detail-meta" class="meta"></dl>
+        <div id="trace-energy-wrap" class="trace-section hidden">
+          <h3>Energy</h3>
+          <div id="trace-energy" class="trace-energy"></div>
+        </div>
+        <div id="trace-worktree-wrap" class="trace-section hidden">
+          <h3>Worktree</h3>
+          <dl id="trace-worktree-meta" class="meta compact-meta"></dl>
+        </div>
+        <div class="trace-section">
+          <h3>Tasks</h3>
+          <ul id="trace-tasks-list" class="session-list compact-list"></ul>
+        </div>
+        <div class="trace-section">
+          <h3>Runs</h3>
+          <ul id="trace-runs-list" class="session-list compact-list"></ul>
+        </div>
+        <div class="trace-section">
+          <h3>Recent events</h3>
+          <ul id="trace-events-list" class="timeline-feed compact-feed"></ul>
+        </div>
       </div>
     </section>
   </main>

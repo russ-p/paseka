@@ -162,7 +162,7 @@ Approve and reject actions follow the same rule: they call `internal/review.Appr
 
 ### MVP Screens
 
-The current MVP includes six primary SPA tabs plus a global runtime panel.
+The current MVP includes seven primary SPA tabs plus a global runtime panel.
 
 #### 1. Dashboard
 
@@ -239,6 +239,21 @@ Create and start actions require NATS and the task ledger KV. Read-only board/de
 
 The board is a grouped list, not drag-and-drop Kanban. It polls `GET /api/tasks` every 5 seconds while the Tasks tab is active.
 
+#### 4. Trace View
+
+A first-class Traces tab inspects one flight trail without opening run directories by hand.
+
+The list panel shows recent traces with activity and failure state. Selecting a trace loads `GET /api/traces/:traceId` and renders:
+
+- trace summary (counts, bees, active/failure flags)
+- energy budget/remaining when the task ledger is available
+- active worktree metadata for that trace
+- tasks in that trace (click → Tasks tab)
+- related runs for that trace only (click → Runs tab)
+- recent events (Open timeline → Timeline filtered by `traceId`)
+
+Dashboard recent-trace cards and trace-only insight links navigate to this tab. The tab polls while active.
+
 #### 5. Reviews
 
 The Reviews tab exposes the human-in-the-loop review queue:
@@ -296,18 +311,6 @@ For the MVP, session interaction remains split:
 - transcript and status visible in browser
 
 Full browser-native terminal control is explicitly deferred.
-
-#### Deferred: Trace View
-
-A trace detail API exists and aggregates:
-
-- trace summary
-- tasks in that trace
-- related runs
-- active worktree state for that trace
-- recent events
-
-The SPA does not yet expose this as a first-class Trace tab. Dashboard trace clicks currently navigate to the Runs tab and select a matching run when one exists.
 
 ### Chat UX Phases
 
@@ -447,7 +450,7 @@ Aggregate from:
 - linked task projections under `.paseka/runs/<traceId>/tasks/`
 - active worktree state from machine-local colony state
 
-The trace projection exists in the backend, but a dedicated Trace tab is not part of the current SPA.
+The SPA Traces tab consumes this projection via `GET /api/traces/:traceId`.
 
 ### Task Board Projection
 
@@ -579,9 +582,17 @@ Includes:
 - linked run navigation
 - task timeline navigation
 
-### 6. Trace View (Partially Implemented)
+### 6. Trace View (Implemented)
 
-Backend projection exists for trace detail and trace-scoped events. A first-class Trace tab is still deferred.
+Includes:
+
+- first-class Traces tab
+- trace list from `GET /api/traces`
+- trace detail aggregate from `GET /api/traces/:traceId`
+- KV-preferring task summaries with filesystem fallback
+- complete per-trace run listing
+- worktree and energy display when available
+- cross-navigation to Tasks, Runs, and Timeline
 
 ### 7. Review Queue (Implemented)
 
@@ -647,7 +658,7 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 
 - Should `paseka console` continue supervising an external `paseka run`, or should a future console mode embed the runtime in-process?
 - Should live updates move from polling to WebSocket or SSE once session/event volume grows?
-- Should the next UI expansion prioritize first-class Trace view or Worktree view?
+- Should the next UI expansion prioritize a dedicated Worktree view?
 - Should frontend code stay as embedded static assets, or move to a small bundled frontend workspace if UI complexity grows?
 
 ## Verification

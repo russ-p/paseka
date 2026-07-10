@@ -127,34 +127,61 @@ func ScanRecentRuns(colonyRoot string, limit int) ([]RunMeta, error) {
 			continue
 		}
 		traceID := traceEntry.Name()
-		tracePath := filepath.Join(runsRoot, traceID)
-		agentDirs, err := os.ReadDir(tracePath)
+		traceMetas, err := listRunsInTraceDir(colonyRoot, traceID, filepath.Join(runsRoot, traceID))
 		if err != nil {
 			continue
 		}
-		for _, agentEntry := range agentDirs {
-			if !agentEntry.IsDir() || agentEntry.Name() == "tasks" {
-				continue
-			}
-			d := Dir{
-				ColonyRoot: colonyRoot,
-				TraceID:    traceID,
-				AgentID:    agentEntry.Name(),
-			}
-			if !fileExists(d.RequestPath()) {
-				continue
-			}
-			meta, err := LoadRunMeta(d)
-			if err != nil {
-				continue
-			}
-			metas = append(metas, meta)
-		}
+		metas = append(metas, traceMetas...)
 	}
 
 	sortRunsByStartedAt(metas)
 	if len(metas) > limit {
 		metas = metas[:limit]
+	}
+	return metas, nil
+}
+
+// ListRunsForTrace returns every valid run under .paseka/runs/<traceId>/,
+// newest first by StartedAt. The tasks projection directory is ignored.
+func ListRunsForTrace(colonyRoot, traceID string) ([]RunMeta, error) {
+	if colonyRoot == "" || traceID == "" {
+		return nil, nil
+	}
+	tracePath := filepath.Join(colonyRoot, ".paseka", "runs", traceID)
+	metas, err := listRunsInTraceDir(colonyRoot, traceID, tracePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	sortRunsByStartedAt(metas)
+	return metas, nil
+}
+
+func listRunsInTraceDir(colonyRoot, traceID, tracePath string) ([]RunMeta, error) {
+	agentDirs, err := os.ReadDir(tracePath)
+	if err != nil {
+		return nil, err
+	}
+	var metas []RunMeta
+	for _, agentEntry := range agentDirs {
+		if !agentEntry.IsDir() || agentEntry.Name() == "tasks" {
+			continue
+		}
+		d := Dir{
+			ColonyRoot: colonyRoot,
+			TraceID:    traceID,
+			AgentID:    agentEntry.Name(),
+		}
+		if !fileExists(d.RequestPath()) {
+			continue
+		}
+		meta, err := LoadRunMeta(d)
+		if err != nil {
+			continue
+		}
+		metas = append(metas, meta)
 	}
 	return metas, nil
 }

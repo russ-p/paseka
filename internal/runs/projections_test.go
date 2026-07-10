@@ -69,6 +69,61 @@ func TestScanRecentRunsSkipsTasksDir(t *testing.T) {
 	}
 }
 
+func TestListRunsForTrace(t *testing.T) {
+	root := t.TempDir()
+	older := time.Now().UTC().Add(-2 * time.Hour)
+	newer := time.Now().UTC().Add(-30 * time.Minute)
+
+	writeHeadlessRun(t, root, "trace-a", "agent-old", older, protocol.StatusCompleted, "old")
+	writeHeadlessRun(t, root, "trace-a", "agent-new", newer, protocol.StatusRunning, "")
+	writeHeadlessRun(t, root, "trace-b", "agent-other", newer, protocol.StatusFailed, "other")
+
+	// tasks projection and a directory without request.json must be ignored
+	tasksDir := filepath.Join(root, ".paseka", "runs", "trace-a", "tasks", "task-1")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	orphan := runs.Dir{ColonyRoot: root, TraceID: "trace-a", AgentID: "agent-orphan"}
+	if err := orphan.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := runs.ListRunsForTrace(root, "trace-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("runs = %+v", list)
+	}
+	if list[0].AgentID != "agent-new" || list[1].AgentID != "agent-old" {
+		t.Fatalf("sort order = %+v", list)
+	}
+	for _, meta := range list {
+		if meta.TraceID != "trace-a" {
+			t.Fatalf("unexpected trace in list: %+v", meta)
+		}
+	}
+}
+
+func TestListRunsForTraceMissing(t *testing.T) {
+	root := t.TempDir()
+	list, err := runs.ListRunsForTrace(root, "missing-trace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("expected empty list, got %+v", list)
+	}
+
+	list, err = runs.ListRunsForTrace(root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("expected empty list for empty id, got %+v", list)
+	}
+}
+
 func TestLoadRunMetaToleratesMissingStatusAndResult(t *testing.T) {
 	root := t.TempDir()
 	started := time.Now().UTC()

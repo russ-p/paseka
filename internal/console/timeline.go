@@ -12,6 +12,7 @@ import (
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
+	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
 )
 
@@ -191,7 +192,7 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	}
 	enrichTraceEnergy(ctx, &view.TraceSummaryView)
 
-	taskSnap, err := runs.LoadTraceTasksFromFS(ctx.ColonyRoot, traceID)
+	taskSnap, err := loadTraceTasksOfflineFirst(ctx, traceID)
 	if err != nil {
 		return TraceDetailView{}, false, err
 	}
@@ -213,15 +214,14 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 			Bee:    task.Bee,
 		})
 	}
+	// Align summary count with the tasks actually rendered (KV may be newer than FS scan).
+	view.TaskCount = len(view.Tasks)
 
-	runMetas, err := runs.ScanRecentRuns(ctx.ColonyRoot, recentRunLimit*4)
+	runMetas, err := runs.ListRunsForTrace(ctx.ColonyRoot, traceID)
 	if err != nil {
 		return TraceDetailView{}, false, err
 	}
 	for _, meta := range runMetas {
-		if meta.TraceID != traceID {
-			continue
-		}
 		view.Runs = append(view.Runs, runViewFromMeta(meta))
 	}
 	sortRuns(view.Runs)
@@ -389,6 +389,30 @@ func enrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
 	view.EnergyBudget = snap.EnergyBudget
 	view.EnergyRemaining = snap.EnergyRemaining
 	view.LowEnergy = snap.EnergyRemaining <= snap.EnergyBudget/4
+}
+
+// loadTraceTasksOfflineFirst prefers the KV ledger when NATS is available.
+// If OpenLedger or LoadTrace fails (NATS/KV unavailable mid-request), it falls
+// back to filesystem projections so historical traces remain inspectable.
+func loadTraceTasksOfflineFirst(ctx colony.Context, traceID string) (taskledger.TraceSnapshot, error) {
+	session, err := tasks.OpenLedger(ctx)
+	var ledger taskledger.Ledger
+	if err == nil {
+		defer session.Close()
+		ledger = session.Ledger
+	}
+	return resolveTraceTasks(ctx, ledger, traceID)
+}
+
+// resolveTraceTasks tries the ledger first, then filesystem on any load error.
+func resolveTraceTasks(ctx colony.Context, ledger taskledger.Ledger, traceID string) (taskledger.TraceSnapshot, error) {
+	if ledger != nil {
+		snap, _, err := tasks.LoadTrace(ctx, ledger, traceID)
+		if err == nil {
+			return snap, nil
+		}
+	}
+	return runs.LoadTraceTasksFromFS(ctx.ColonyRoot, traceID)
 }
 
 func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {

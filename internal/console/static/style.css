@@ -301,8 +301,40 @@ header h1 {
   grid-template-columns: 1fr;
 }
 
-#runs-layout {
+#runs-layout,
+#traces-layout {
   grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr);
+}
+
+.traces-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.trace-section {
+  margin-top: 1rem;
+}
+
+.trace-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.trace-energy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.compact-meta {
+  margin-bottom: 0;
+}
+
+.compact-feed {
+  max-height: 18rem;
+  overflow: auto;
 }
 
 #tasks-layout {
@@ -441,6 +473,7 @@ header h1 {
 @media (max-width: 1100px) {
   #sessions-layout,
   #runs-layout,
+  #traces-layout,
   #tasks-layout,
   #reviews-layout {
     grid-template-columns: 1fr;
