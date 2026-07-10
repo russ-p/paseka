@@ -50,6 +50,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newEnergyCmd())
 	root.AddCommand(newPurgeCmd())
 	root.AddCommand(newConsoleCmd())
+	root.AddCommand(newExportCmd())
 	return root
 }
 

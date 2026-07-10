@@ -415,6 +415,27 @@ func resolveTraceTasks(ctx colony.Context, ledger taskledger.Ledger, traceID str
 	return runs.LoadTraceTasksFromFS(ctx.ColonyRoot, traceID)
 }
 
+// BuildEventFeedItems maps trace events to normalized feed rows, preserving input order
+// (typically chronological ascending from runs.ReadTraceEvents).
+func BuildEventFeedItems(colonyRoot, traceID string, events []protocol.Event) []EventFeedItem {
+	beeCache := map[string]string{}
+	items := make([]EventFeedItem, 0, len(events))
+	for _, ev := range events {
+		items = append(items, eventFeedItemFromScanned(runs.ScannedEvent{
+			Event: ev,
+			Bee:   runsBeeForEvent(colonyRoot, traceID, ev.AgentID, beeCache),
+		}))
+	}
+	return items
+}
+
+// SortRunsAsc sorts runs oldest-first by StartedAt.
+func SortRunsAsc(out []RunView) {
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].StartedAt.Before(out[j].StartedAt)
+	})
+}
+
 func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {
 	ev := row.Event
 	kind := protocol.PayloadKind(ev.Payload)
