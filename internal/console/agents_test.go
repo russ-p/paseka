@@ -82,6 +82,131 @@ func TestAgentsAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestAgentsAPIMixedAFKAndSession(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	afkChild := exec.Command("sleep", "300")
+	if err := afkChild.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if afkChild.Process != nil {
+			_ = afkChild.Process.Kill()
+		}
+		_ = afkChild.Wait()
+	})
+
+	sessChild := exec.Command("sleep", "300")
+	if err := sessChild.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if sessChild.Process != nil {
+			_ = sessChild.Process.Kill()
+		}
+		_ = sessChild.Wait()
+	})
+
+	started := time.Now().UTC().Add(-3 * time.Minute)
+	writeLiveAFKRun(t, repo, "trace-mixed", "agent-afk", "drone", started, afkChild.Process.Pid)
+
+	sessStarted := started.Add(time.Minute)
+	if err := colony.RegisterSession(ctxColony.Slug, colony.SessionEntry{
+		SessionID: "sess-mixed",
+		TraceID:   "trace-sess-mixed",
+		AgentID:   "agent-sess",
+		Bee:       "hivewright",
+		PID:       sessChild.Process.Pid,
+		StartedAt: sessStarted,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = colony.UnregisterSession(ctxColony.Slug, "sess-mixed") })
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agents", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view console.AgentsView
+	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Count != 2 || view.AFK != 1 || view.Sessions != 1 {
+		t.Fatalf("mixed view = %+v", view)
+	}
+	if len(view.Items) != 2 {
+		t.Fatalf("items = %+v", view.Items)
+	}
+	if view.Items[0].Kind != "afk" || view.Items[0].Bee != "drone" {
+		t.Fatalf("first item (oldest) = %+v", view.Items[0])
+	}
+	if view.Items[1].Kind != "session" || view.Items[1].SessionID != "sess-mixed" {
+		t.Fatalf("second item = %+v", view.Items[1])
+	}
+}
+
+func TestAgentsAPISessionDeadPIDExcluded(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	child := exec.Command("sleep", "300")
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := child.Process.Pid
+	_ = child.Process.Kill()
+	_ = child.Wait()
+
+	if err := colony.RegisterSession(ctxColony.Slug, colony.SessionEntry{
+		SessionID: "sess-dead",
+		TraceID:   "trace-dead-sess",
+		AgentID:   "agent-dead-sess",
+		Bee:       "hivewright",
+		PID:       pid,
+		StartedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = colony.UnregisterSession(ctxColony.Slug, "sess-dead") })
+
+	entries, err := colony.ListSessions(ctxColony.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].SessionID != "sess-dead" {
+		t.Fatalf("registry should still hold session: %+v", entries)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agents", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view console.AgentsView
+	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Count != 0 || view.Sessions != 0 {
+		t.Fatalf("dead session pid must be excluded: %+v", view)
+	}
+}
+
 func TestAgentsAPIRegistersLiveSession(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)

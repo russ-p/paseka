@@ -661,6 +661,10 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 - Should the next UI expansion prioritize a dedicated Worktree view?
 - Should frontend code stay as embedded static assets, or move to a small bundled frontend workspace if UI complexity grows?
 
+## Related specs
+
+- [004-live-bees-indicator.md](./004-live-bees-indicator.md) — header indicator for live agent processes (AFK runs and interactive sessions)
+
 ## Verification
 
 For documentation-only updates, no build is required.
