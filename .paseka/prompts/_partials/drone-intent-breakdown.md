@@ -1,6 +1,8 @@
-# To Issues
+# To Tasks
 
 Break a plan into independently-grabbable tasks using vertical slices (tracer bullets).
+
+User input: {{.Task}}
 
 ## Process
 
@@ -52,16 +54,20 @@ taskId Format: `nnn-short-description`
 - Sequential numbering
 - Three-digit format (001, 002, 003…)
 
-For each approved slice, emit INSIGHT event with kind: "task.plan". Use the task body template below. These tasks are
-considered ready for AFK agents.
+After approval, emit **one** `INSIGHT/task.plan` whose `tasks` array lists every approved slice (dependency
+order: blockers first). Put the task body template below into each task's `body` field. Do not emit one
+`task.plan` per slice.
 
-Create tasks in dependency order (blockers first) so you can reference real task identifiers in the "Blocked by"
-field.
+Then ask whether to start the first unblocked AFK slice immediately. Emit `SIGNAL/task.ready` **only** for
+that first task, and **only** when the Beekeeper confirms immediate start. Never mark later tasks ready
+yourself — the ledger unlocks them after prior tasks complete.
+
+Optionally emit `INSIGHT/context.note` for a short trace fact (source doc, ordering rationale).
 
 <task-template>
 ## Parent
 
-A reference to the parent document (PRD,TDD) (if the source was an existing issue, otherwise omit this section).
+A reference to the parent document (PRD,TDD,spec) (if the source was an existing issue, otherwise omit this section).
 
 ## What to build
 

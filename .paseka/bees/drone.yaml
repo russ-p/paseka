@@ -2,6 +2,6 @@ role: drone
 adapter: cursor
 prompt_template: drone.md
 params:
-  model: gpt-5.5-medium
+  model: grok-4.5-high
   yolo: true
 worktree: false
