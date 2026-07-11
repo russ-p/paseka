@@ -2,11 +2,11 @@ role: hivewright
 adapter: cursor
 prompt_template: hivewright.md
 params:
-  model: composer-2.5
+  model: grok-4.5-medium
   output_format: stream-json
   trust: true
   force: true
-worktree: true
+worktree: false
 publishes:
   - type: MUTATION
     kind: code.proposal
