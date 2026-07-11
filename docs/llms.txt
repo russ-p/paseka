@@ -1,0 +1,25 @@
+# Paseka
+
+> Decentralized event-driven AI agent swarm for solo developers. Configure bees via YAML, prompt templates, and bus event contracts (SIGNAL, INSIGHT, MUTATION, VERIFICATION).
+
+Colony work lives in a git repo under `.paseka/`. Machine secrets stay in `~/.config/paseka/<slug>/`. Use the guides below (or the full corpus) to configure roles without reading Go source.
+
+## Agent configuration (start here)
+
+- [Bee role YAML](https://russ-p.github.io/paseka/010-bee-config/): schema for `.paseka/bees/<role>.yaml` — adapter, prompt_template, command, post_exec, routing, completion
+- [Prompt templates](https://russ-p.github.io/paseka/004-prompt-templates/): `.paseka/prompts/`, text/template context, emit partials
+- [Bee event routing](https://russ-p.github.io/paseka/008-bee-routing/): subscribes / publishes, Reactor, task vs direct dispatch
+- [INSIGHT kinds](https://russ-p.github.io/paseka/009-insight-kinds/): insight taxonomy and `{{.Insights}}` projection
+- [Architecture (colony layout)](https://russ-p.github.io/paseka/003-architecture/): `.paseka/` layout, adapters, worktrees
+
+## Full corpus
+
+- [llms-full.txt](https://russ-p.github.io/paseka/llms-full.txt): concatenated agent-config docs for single-fetch context
+
+## Optional
+
+- [Glossary](https://russ-p.github.io/paseka/002-paseka-glossary/): bee-language vocabulary
+- [CLI](https://russ-p.github.io/paseka/007-cli/): `paseka bee run` / `bee chat`, event emit
+- [Task ledger](https://russ-p.github.io/paseka/005-task-ledger/): traceId / taskId / agentId
+- [Product brief](https://russ-p.github.io/paseka/001-brief/): choreography model overview
+- [Interactive sessions](https://russ-p.github.io/paseka/006-interactive-sessions/): HITL `bee chat`, SessionAdapter, Ghostty attach

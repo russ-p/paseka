@@ -17,3 +17,5 @@ Index of the main docs. Feature specs under `specs/` are not listed here.
 | [999-backlog.md](999-backlog.md) | Deferred ideas and follow-ups outside the current MVP |
 
 Russian index: [README-RU.md](README-RU.md).
+
+Agent index: [llms.txt](llms.txt) (full corpus: [llms-full.txt](llms-full.txt)).

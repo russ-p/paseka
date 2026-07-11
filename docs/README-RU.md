@@ -17,3 +17,5 @@
 | [999-backlog.md](999-backlog.md) | Отложенные идеи и follow-up'ы вне текущего MVP |
 
 Английский индекс: [README.md](README.md).
+
+Индекс для агентов: [llms.txt](llms.txt) (полный корпус: [llms-full.txt](llms-full.txt)).
