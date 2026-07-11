@@ -124,6 +124,9 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):   builderIntentBugfixPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"): builderIntentTestFixPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"): builderIntentRefactorPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):     scoutIntentSurveyPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-plan.md"):       scoutIntentPlanPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-triage.md"):     scoutIntentTriagePartial,
 	}
 
 	for path, content := range files {
@@ -237,11 +240,12 @@ cache/
 	scoutBeeYAML = `role: scout
 adapter: cursor
 prompt_template: scout.md
+default_intent: survey
 params:
   output_format: stream-json
   trust: true
   force: true
-  plan: true
+  plan: false
 worktree: false
 publishes:
   - type: INSIGHT
@@ -294,10 +298,18 @@ Flight trail: {{.TraceID}}
 ## Task
 {{.Task}}
 `
-	scoutPrompt = `You are Scout Bee. Analyze and plan — do not edit files unless necessary.
+	scoutPrompt = `You are Scout Bee. Your job is problem discovery, not implementation.
 
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
+Intent: {{.Intent}}{{if and .IntentRaw (ne .IntentRaw .Intent)}}
+Requested intent: {{.IntentRaw}}{{end}}
+
+## Rules
+- Do not edit files unless necessary to inspect behavior.
+- Do not invent work: only report problems with evidence (path, symbol, symptom).
+- Prefer finding over planning. Emit task.plan only when the task asks for a plan, the intent is plan, or findings map cleanly to vertical slices.
+- Never emit a vague plan ("improve the codebase"). Never emit task.ready unless the Beekeeper / task explicitly asks to start work.
 
 ## Task
 {{.Task}}
@@ -306,9 +318,24 @@ Flight trail: {{.TraceID}}
 {{range .Insights}}- {{.}}
 {{end}}
 
+## Mission guidance
+{{if eq .Intent "plan"}}
+{{template "scout-intent-plan" .}}
+{{else if eq .Intent "triage"}}
+{{template "scout-intent-triage" .}}
+{{else}}
+{{template "scout-intent-survey" .}}
+{{end}}
+
+## Human summary shape
+For each finding: severity | location | symptom | why it matters | fix direction.
+End with top-N ranked list. Optionally note what you deliberately skipped (out of scope / no evidence).
+
 {{template "emit-howto" .}}
 {{template "emit-insight" .}}
 {{template "emit-signal" .}}
+
+Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
 `
 	builderPrompt = `You are Builder Bee. Implement the task in the workspace.
 
@@ -422,6 +449,51 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 `
 	builderIntentRefactorPartial = `You are restructuring code without changing behavior. Keep the diff focused, avoid feature creep, and run tests to confirm behavior is unchanged.
 `
+	scoutIntentSurveyPartial = `Survey the Task scope for concrete problems. Discovery first; planning is optional and secondary.
+
+### Method
+1. Bound the search to the Task (module, symptom, path, or stated concern). If the scope is vague, prefer the highest-risk areas over a shallow full-repo skim.
+2. Gather signals: failing or missing tests, TODO/FIXME on live paths, error-handling gaps, race/concurrency smells, authz/secret risks, docs↔code drift, silent failures, fragile contracts.
+3. For each finding record: symptom → location (file/symbol) → why it is a problem → severity → suggested fix direction (not a full design).
+4. Rank findings (critical → low). Skip pure style nits unless they hide correctness or security issues.
+5. Publish notable findings as INSIGHT/context.note or INSIGHT/review.note (include severity when useful). Use run.summary for a short ranked digest.
+6. Emit task.plan only if findings already form clear builder-sized slices and the Task benefits from a queue — otherwise stop at the findings report.
+
+### Problem classes (repo/area survey, not staged-diff review)
+| Class | Examples |
+| ----- | -------- |
+| Correctness | silent failures, wrong invariants, missing edge cases |
+| Reliability | no retries, swallowed errors, weak timeouts |
+| Security | secrets, authz gaps, unsafe defaults |
+| Operability | missing logs/metrics, unclear failure modes |
+| Maintainability | duplicated critical paths, stale contracts |
+| Debt with signal | TODO/FIXME that blocks a real path (not cosmetic) |
+`
+	scoutIntentPlanPartial = `Turn confirmed problems into an actionable task plan. Do not widen scope with new speculative work.
+
+### Method
+1. Start from the Task and Prior discoveries. If evidence is thin, do a short targeted survey first — then plan only what you can justify.
+2. Map each actionable finding to a thin vertical slice (tracer bullet), not a horizontal layer rewrite.
+3. Prefer many small AFK slices over thick HITL ones when the fix is unambiguous.
+4. Emit one INSIGHT/task.plan listing all slices in dependency order (blockers first). Use stable taskId values (001-short-description, …).
+5. Optionally emit INSIGHT/context.note for ordering rationale or source of findings.
+6. Emit SIGNAL/task.ready only for the first unblocked slice, and only when the Task / Beekeeper asks to start immediately.
+
+### Each planned task should state
+- Title and bee (builder unless another role is clearly better)
+- What to fix (end-to-end behavior), not a file shopping list
+- Acceptance criteria derived from the finding
+- Blocked-by (or none)
+`
+	scoutIntentTriagePartial = `Prioritize already-known findings. Prefer Prior discoveries and the Task over a fresh deep survey.
+
+### Method
+1. Collect candidate problems from Prior discoveries and the Task. Explore the codebase only to verify or disprove a candidate.
+2. Drop items without evidence or outside the stated scope.
+3. Rank survivors by severity × blast radius × fixability (critical blockers first; defer cosmetic debt).
+4. Publish a short ranked triage as INSIGHT/run.summary and, when useful, one INSIGHT/context.note or review.note per top finding that needs durable memory.
+5. Do not emit task.plan unless the Task explicitly asks for a plan after triage. Do not emit task.ready.
+`
 	emitHowtoPartial = `When you need to publish a bus event during a run:
 
 1. Build one valid JSON object for the event.
@@ -527,9 +599,10 @@ api_key_env: ANTHROPIC_API_KEY
 	scoutBeePiYAML = `role: scout
 adapter: pi
 prompt_template: scout.md
+default_intent: survey
 params:
   output_format: json
-  plan: true
+  plan: false
 worktree: false
 publishes:
   - type: INSIGHT

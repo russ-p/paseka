@@ -237,22 +237,32 @@ Intent: {{.Intent}}
 {{template "emit-insight" .}}
 ```
 
-Known builder intents (discovered from `builder-intent-*` partials): `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Drone uses `drone-intent-*` partials (`general`, `grilling`, `breakdown`) and routes on `{{.IntentRaw}}` in its template.
+Known builder intents (discovered from `builder-intent-*` partials): `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Drone uses `drone-intent-*` partials (`general`, `grilling`, `breakdown`) and routes on `{{.IntentRaw}}` in its template. Scout uses `scout-intent-*` partials (`survey` default via bee `default_intent`, `plan`, `triage`).
 
 ### Scout bee with bus-event partial
 
 ```markdown
 # .paseka/prompts/scout.md
-You are Scout Bee. Analyze and plan — do not edit files unless necessary.
+You are Scout Bee. Your job is problem discovery, not implementation.
 
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
+Intent: {{.Intent}}
 
 ## Task
 {{.Task}}
 
 ## Prior discoveries
 {{range .Insights}}- {{.}}
+{{end}}
+
+## Mission guidance
+{{if eq .Intent "plan"}}
+{{template "scout-intent-plan" .}}
+{{else if eq .Intent "triage"}}
+{{template "scout-intent-triage" .}}
+{{else}}
+{{template "scout-intent-survey" .}}
 {{end}}
 
 {{template "emit-howto" .}}
