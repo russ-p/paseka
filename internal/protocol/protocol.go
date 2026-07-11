@@ -90,6 +90,7 @@ type Result struct {
 type StatusSnapshot struct {
 	ProtocolVersion string    `json:"protocolVersion"`
 	State           RunStatus `json:"state"`
+	PID             int       `json:"pid,omitempty"`
 	ExitCode        int       `json:"exitCode,omitempty"`
 	StartedAt       time.Time `json:"startedAt,omitempty"`
 	FinishedAt      time.Time `json:"finishedAt,omitempty"`

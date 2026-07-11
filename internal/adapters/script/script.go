@@ -70,13 +70,6 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}); err != nil {
 		return nil, fmt.Errorf("script: write meta: %w", err)
 	}
-	if err := runDir.WriteStatusSnapshot(protocol.StatusSnapshot{
-		ProtocolVersion: protocol.Version,
-		State:           protocol.StatusRunning,
-		StartedAt:       startedAt,
-	}); err != nil {
-		return nil, fmt.Errorf("script: write status: %w", err)
-	}
 
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, req.Command)
 	cmd := exec.CommandContext(ctx, binary, args...)
@@ -87,7 +80,14 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	runErr := cmd.Run()
+	runErr := adapters.RunCommand(cmd, func(pid int) error {
+		return runDir.WriteStatusSnapshot(protocol.StatusSnapshot{
+			ProtocolVersion: protocol.Version,
+			State:           protocol.StatusRunning,
+			PID:             pid,
+			StartedAt:       startedAt,
+		})
+	})
 	exitCode := 0
 	if runErr != nil {
 		var exitErr *exec.ExitError
