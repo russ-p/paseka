@@ -164,4 +164,5 @@ Narrative `INSIGHT` events are optional and do not satisfy completion contracts.
 
 - [005-task-ledger.md](005-task-ledger.md) — task lifecycle events
 - [003-architecture.md](003-architecture.md) — colony layout and adapters
+- [010-bee-config.md](010-bee-config.md) — full bee YAML schema (`role`, `adapter`, contracts, …)
 - [009-insight-kinds.md](009-insight-kinds.md) — INSIGHT taxonomy and prompt memory projection

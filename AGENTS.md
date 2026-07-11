@@ -25,7 +25,7 @@ Bees do not embed LLM logic. An **adapter** launches external agents via **Curso
 
 ## Prompt templates
 
-Prompt templates live in `.paseka/prompts/` (committed); each bee references a template in `bees/*.yaml`. Runtime renders with `text/template` via `internal/prompts`, then `internal/runtime.Dispatcher` passes the result to the adapter. See [docs/003-architecture.md](docs/003-architecture.md) §2.1.
+Prompt templates live in `.paseka/prompts/` (committed); each bee references a template in `bees/*.yaml`. Runtime renders with `text/template` via `internal/prompts`, then `internal/runtime.Dispatcher` passes the result to the adapter. See [docs/004-prompt-templates.md](docs/004-prompt-templates.md). Bee YAML schema: [docs/010-bee-config.md](docs/010-bee-config.md).
 
 ## Documentation
 
@@ -35,6 +35,7 @@ Read these before making architectural or naming decisions:
 - [docs/002-paseka-glossary.md](docs/002-paseka-glossary.md) — Bee glossary: branding, user-facing terms, agent roles, architecture metaphors, and domain model vocabulary (technical ↔ bee language).
 - [docs/003-architecture.md](docs/003-architecture.md) — Colony config layout, `paseka init`, adapter contract, worktree flow, package layout.
 - [docs/006-interactive-sessions.md](docs/006-interactive-sessions.md) — Interactive agent sessions (HITL), `bee chat`, session registry, Ghostty attach.
+- [docs/010-bee-config.md](docs/010-bee-config.md) — Bee role YAML: adapter, params, command/post_exec, routing and completion fields.
 
 ## After Go changes
 

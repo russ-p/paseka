@@ -70,65 +70,7 @@ sectors:
 
 A **sector** is a named path inside the colony. Tasks may optionally set `sector`; bees may declare a default `sector` in `bees/*.yaml`. Runtime resolves the adapter workspace as `colonyRoot/<sector.path>` or `.paseka/worktrees/<traceId>/<sector.path>` when `worktree: true`. The colony root remains the audit boundary for `.paseka/runs/`.
 
-**`bees/*.yaml`** — maps a bee role to an adapter and parameters:
-
-```yaml
-# .paseka/bees/builder.yaml
-role: builder
-adapter: cursor
-sector: frontend
-params:
-  model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
-# Optional: override adapter flag mapping (docker-compose style).
-# command: agent -p --yolo --workspace $WORKSPACE $PROMPT
-prompt_template: builder.md   # relative to .paseka/prompts/
-worktree: true                  # run inside .paseka/worktrees/<traceId>/
-subscribes:                     # optional — see docs/008-bee-routing.md
-  - type: SIGNAL
-    kind: task.ready
-    dispatch: task
-publishes:
-  - type: MUTATION
-    kind: code.proposal
-```
-
-**`command` (optional):** full agent invocation as a shell-like string or YAML list. When set, it **replaces** `params`-based CLI flag mapping for that bee; runtime logs a warning if both are present. Substitute runtime values with `$PROMPT` / `${PROMPT}` and `$WORKSPACE` / `${WORKSPACE}`:
-
-```yaml
-command: agent -p --trust --workspace $WORKSPACE $PROMPT
-# or
-command: ["agent", "-p", "--model", "composer-2.5", "$PROMPT"]
-```
-
-`adapter` still selects which adapter implementation runs (result parsing, session PTY, etc.). Machine-local credentials from `~/.config/paseka/<slug>/adapters/*.yaml` (e.g. API keys via env) still apply when the custom command does not pass them explicitly.
-
-**`post_exec` (optional):** shell-like command or YAML list run after the agent finishes (AFK `bee run` and interactive `bee chat` sessions). Use the same variable syntax as `command`. Post-exec failures are logged but do not fail the bee run.
-
-| Variable | When set | Value |
-| -------- | -------- | ----- |
-| `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered prompt |
-| `$WORKSPACE` / `${WORKSPACE}` | dispatch + post_exec | agent working directory |
-| `$TRACE_ID` / `${TRACE_ID}` | dispatch + post_exec | current flight trail |
-| `$AGENT_ID` / `${AGENT_ID}` | dispatch + post_exec | this invocation id |
-| `$TASK_ID` / `${TASK_ID}` | dispatch + post_exec | task id when dispatched from ledger |
-| `$COLONY_ROOT` / `${COLONY_ROOT}` | dispatch + post_exec | git repo root |
-| `$RUN_DIR` / `${RUN_DIR}` | dispatch + post_exec | `.paseka/runs/<traceId>/<agentId>/` |
-| `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
-| `$RESULT_FILE` / `${RESULT_FILE}` | dispatch + post_exec | path to `result.txt` |
-| `$META` / `${META}` | post_exec only | path to `meta.json` |
-
-```yaml
-post_exec: notify.sh --bee builder --status ok --summary "$RESULT"
-# or
-post_exec: ["curl", "-fsS", "-d", "@$META", "https://hooks.example.com/paseka"]
-```
-
-Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
-
-Bee event routing (`subscribes` / `publishes`) is documented in [008-bee-routing.md](008-bee-routing.md).
+**`bees/*.yaml`** — one file per role: binds the bee to an adapter, prompt template, optional `command` / `post_exec`, sector/worktree, and routing rules. Full schema, examples, and variable substitution: [010-bee-config.md](010-bee-config.md). Event routing (`subscribes` / `publishes`): [008-bee-routing.md](008-bee-routing.md). Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
 
 ### 2.1 Prompt templates
 
@@ -360,7 +302,7 @@ Agents build one JSON object per event, pass it on stdin, and receive machine-re
 
 | Input (bee config + event) | Maps to `agent` flag |
 | ---------------------------- | -------------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see bees section above) |
+| `command` (optional) | full argv; overrides `params` mapping (see [010-bee-config.md](010-bee-config.md)) |
 | `Workspace` | `--workspace <path>` (repo root or `.paseka/worktrees/<traceId>/`) |
 | `Prompt` | positional prompt argument |
 | `params.model` | `--model <id>` |
@@ -398,7 +340,7 @@ Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.pase
 
 | Input (bee config + event) | Maps to `pi` flag |
 | ---------------------------- | ----------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see bees section above) |
+| `command` (optional) | full argv; overrides `params` mapping (see [010-bee-config.md](010-bee-config.md)) |
 | `Workspace` | process cwd |
 | `Prompt` | positional prompt argument |
 | `params.model` | `--model <pattern>` |

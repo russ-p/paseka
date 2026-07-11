@@ -1,0 +1,74 @@
+site_name: Paseka
+site_description: Decentralized, event-driven AI agent swarm for solo developers
+site_url: https://russ-p.github.io/paseka/
+repo_url: https://github.com/russ-p/paseka
+repo_name: russ-p/paseka
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+exclude_docs: |
+  specs/**
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: amber
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: amber
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+# Links into the Go tree (../internal/...) are for local browsing; ignore on the site build.
+validation:
+  links:
+    not_found: ignore
+    absolute_links: ignore
+    unrecognized_links: ignore
+
+nav:
+  - Home: README.md
+  - Индекс (RU): README-RU.md
+  - Guides:
+      - Brief: 001-brief.md
+      - Glossary: 002-paseka-glossary.md
+      - Architecture: 003-architecture.md
+      - Prompt templates: 004-prompt-templates.md
+      - Task ledger: 005-task-ledger.md
+      - Interactive sessions: 006-interactive-sessions.md
+      - CLI: 007-cli.md
+      - Bee routing: 008-bee-routing.md
+      - Insight kinds: 009-insight-kinds.md
+      - Bee config: 010-bee-config.md
+      - Backlog: 999-backlog.md

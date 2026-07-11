@@ -307,6 +307,7 @@ Use `{{.TraceID}}` and `{{.AgentID}}` inside partials so examples match the curr
 ## 10. Related docs
 
 - [003-architecture.md](003-architecture.md) — colony layout, adapter contract, runs/worktrees
+- [010-bee-config.md](010-bee-config.md) — bee role YAML (`prompt_template` and other fields)
 - [005-task-ledger.md](005-task-ledger.md) — task queue protocol and lifecycle
 - [002-paseka-glossary.md](002-paseka-glossary.md) — bee language vs technical terms (`TraceID` / Flight Trail, `Task` / Nectar)
 - Agent run file protocol — `request.json`, `result.txt`, `events.ndjson` under `.paseka/runs/`
