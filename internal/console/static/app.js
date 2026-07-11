@@ -22,6 +22,7 @@ const state = {
   timelineFilters: {},
   runtime: null,
   runtimeBusy: false,
+  agents: null,
   selectedId: null,
   selectedRunKey: null,
   transcriptCursor: 0,
@@ -170,6 +171,10 @@ const el = {
   runtimeMeta: document.getElementById('runtime-meta'),
   runtimeStartBtn: document.getElementById('runtime-start-btn'),
   runtimeStopBtn: document.getElementById('runtime-stop-btn'),
+  agentsPanel: document.getElementById('agents-panel'),
+  agentsBadge: document.getElementById('agents-badge'),
+  agentsMeta: document.getElementById('agents-meta'),
+  agentsDetail: document.getElementById('agents-detail'),
 };
 
 async function api(path, options = {}) {
@@ -240,15 +245,44 @@ function renderRuntime() {
   el.runtimeStopBtn.disabled = state.runtimeBusy;
 }
 
-async function loadRuntime() {
-  state.runtime = await api('/api/runtime');
+function renderAgents() {
+  const ag = state.agents || { count: 0, afk: 0, sessions: 0, items: [] };
+  el.agentsBadge.textContent = String(ag.count);
+  el.agentsBadge.className = `badge ${ag.count > 0 ? 'active' : 'idle'}`;
+
+  if (ag.count === 0) {
+    el.agentsMeta.textContent = 'None active';
+    el.agentsDetail.textContent = '';
+    return;
+  }
+
+  const parts = [];
+  if (ag.afk > 0) parts.push(`${ag.afk} afk`);
+  if (ag.sessions > 0) parts.push(`${ag.sessions} ${ag.sessions === 1 ? 'session' : 'sessions'}`);
+  el.agentsMeta.textContent = parts.join(' · ');
+
+  const shown = (ag.items || []).slice(0, 3);
+  const labels = shown.map((item) => `${item.bee}/${item.pid}`);
+  const overflow = ag.count - shown.length;
+  if (overflow > 0) labels.push(`+${overflow} more`);
+  el.agentsDetail.textContent = labels.join(' · ');
+}
+
+async function loadHeaderStatus() {
+  const [runtime, agents] = await Promise.all([
+    api('/api/runtime'),
+    api('/api/agents'),
+  ]);
+  state.runtime = runtime;
+  state.agents = agents;
   renderRuntime();
+  renderAgents();
 }
 
 function startRuntimePolling() {
   if (state.runtimePollTimer) return;
   state.runtimePollTimer = setInterval(() => {
-    loadRuntime().catch(console.error);
+    loadHeaderStatus().catch(console.error);
   }, 3000);
 }
 
@@ -1823,7 +1857,7 @@ el.runtimeStartBtn.addEventListener('click', async () => {
     startRuntimePolling();
   } catch (err) {
     alert(err.message);
-    await loadRuntime();
+    await loadHeaderStatus();
   } finally {
     state.runtimeBusy = false;
     renderRuntime();
@@ -1839,16 +1873,37 @@ el.runtimeStopBtn.addEventListener('click', async () => {
     renderRuntime();
   } catch (err) {
     alert(err.message);
-    await loadRuntime();
+    await loadHeaderStatus();
   } finally {
     state.runtimeBusy = false;
     renderRuntime();
   }
 });
 
+function navigateAgentsPanel() {
+  const ag = state.agents || { afk: 0, sessions: 0 };
+  if (ag.afk > 0) {
+    setTab('runs');
+    return;
+  }
+  if (ag.sessions > 0) {
+    setTab('sessions');
+    return;
+  }
+  setTab('runs');
+}
+
+el.agentsPanel.addEventListener('click', navigateAgentsPanel);
+el.agentsPanel.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    navigateAgentsPanel();
+  }
+});
+
 async function init() {
   try {
-    await loadRuntime();
+    await loadHeaderStatus();
     startRuntimePolling();
     await loadBees();
     await loadSessions();

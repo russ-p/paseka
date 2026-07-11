@@ -14,17 +14,27 @@
         <h1>Queen Console</h1>
         <p class="subtitle" id="subtitle">Sessions — launch, attach, and observe interactive bees</p>
       </div>
-      <section class="runtime-panel" id="runtime-panel" aria-label="Hive runtime">
-        <div class="runtime-status">
-          <span class="runtime-label">Hive runtime</span>
-          <span id="runtime-badge" class="badge">stopped</span>
-        </div>
-        <div class="runtime-meta muted" id="runtime-meta">Not running</div>
-        <div class="runtime-actions">
-          <button type="button" id="runtime-start-btn" class="secondary">Start</button>
-          <button type="button" id="runtime-stop-btn" class="danger hidden">Stop</button>
-        </div>
-      </section>
+      <div class="header-panels">
+        <section class="runtime-panel" id="runtime-panel" aria-label="Hive runtime">
+          <div class="runtime-status">
+            <span class="runtime-label">Hive runtime</span>
+            <span id="runtime-badge" class="badge">stopped</span>
+          </div>
+          <div class="runtime-meta muted" id="runtime-meta">Not running</div>
+          <div class="runtime-actions">
+            <button type="button" id="runtime-start-btn" class="secondary">Start</button>
+            <button type="button" id="runtime-stop-btn" class="danger hidden">Stop</button>
+          </div>
+        </section>
+        <section class="agents-panel" id="agents-panel" aria-label="Live bees" role="button" tabindex="0">
+          <div class="runtime-status">
+            <span class="runtime-label">Live bees</span>
+            <span id="agents-badge" class="badge idle">0</span>
+          </div>
+          <div class="runtime-meta muted" id="agents-meta">None active</div>
+          <div class="runtime-meta muted" id="agents-detail"></div>
+        </section>
+      </div>
     </div>
     <nav class="tabs" role="tablist">
       <button type="button" id="tab-dashboard" class="tab active" role="tab" aria-selected="true">Dashboard</button>

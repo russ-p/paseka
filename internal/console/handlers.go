@@ -41,6 +41,19 @@ func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *api) handleAgents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := GetAgents(a.ctx, a.sessions)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
+}
+
 func (a *api) handleRuntimeStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

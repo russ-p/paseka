@@ -67,12 +67,27 @@ header {
   flex-wrap: wrap;
 }
 
-.runtime-panel {
+.header-panels {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.runtime-panel,
+.agents-panel {
   min-width: 220px;
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
+}
+
+.agents-panel {
+  cursor: pointer;
+}
+
+.agents-panel:hover {
+  border-color: #3a4560;
 }
 
 .runtime-status {
@@ -109,6 +124,9 @@ header {
 #runtime-badge.stale { background: #3d3318; color: var(--warn); }
 #runtime-badge.stopping { background: #3d2a18; color: var(--warn); }
 #runtime-badge.starting { background: #1a2a3d; color: var(--accent); }
+
+#agents-badge.idle { background: #2a3040; color: var(--muted); }
+#agents-badge.active { background: #1f3d2e; color: var(--ok); }
 
 header h1 {
   margin: 0;

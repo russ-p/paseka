@@ -19,6 +19,61 @@ func TestAppJSUses24HourTimeFormat(t *testing.T) {
 	}
 }
 
+func TestAgentsPanelStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="agents-panel"`,
+		`id="agents-badge"`,
+		`id="agents-meta"`,
+		`id="agents-detail"`,
+		`aria-label="Live bees"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"function renderAgents()",
+		"api('/api/agents')",
+		"function navigateAgentsPanel()",
+		"setTab('runs')",
+		"setTab('sessions')",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	navIdx := strings.Index(jsSrc, "function navigateAgentsPanel()")
+	if navIdx < 0 {
+		t.Fatal("navigateAgentsPanel missing")
+	}
+	navFn := jsSrc[navIdx:]
+	if end := strings.Index(navFn, "\nfunction "); end > 0 {
+		navFn = navFn[:end]
+	}
+	afkIdx := strings.Index(navFn, "ag.afk > 0")
+	runsIdx := strings.Index(navFn, "setTab('runs')")
+	sessIdx := strings.Index(navFn, "ag.sessions > 0")
+	sessTabIdx := strings.Index(navFn, "setTab('sessions')")
+	if afkIdx < 0 || runsIdx < 0 || sessIdx < 0 || sessTabIdx < 0 {
+		t.Fatal("navigateAgentsPanel must check afk then sessions")
+	}
+	if !(afkIdx < runsIdx && runsIdx < sessIdx && sessIdx < sessTabIdx) {
+		t.Fatal("smart-nav order must be: afk→runs, sessions→sessions, else runs")
+	}
+}
+
 func TestTracesTabStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
