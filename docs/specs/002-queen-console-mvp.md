@@ -73,6 +73,7 @@ Implemented UI surfaces:
 - **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, attach an in-browser xterm.js terminal over WebSocket for active sessions (with optional full-page Widen layout), poll transcript updates for completed sessions, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
 - **Runtime panel**: start and stop the registered local hive runtime and poll runtime status.
+- **Live bees panel**: header indicator for live AFK adapter runs and interactive sessions (`GET /api/agents`, PID liveness via `ProcessAlive`).
 
 Implemented backend behavior:
 
@@ -304,13 +305,12 @@ Session launch supports:
 - using an advanced raw-prompt override
 - optionally setting trace id and per-bee intent (options from `GET /api/bees` → `intents` / `defaultIntent`)
 
-For the MVP, session interaction remains split:
+For the MVP, session interaction covers:
 
 - launch from Web UI
-- execution in existing session/adapter model
+- execution in the existing session/adapter model
+- in-browser xterm.js terminal over WebSocket for sessions owned by this console process (Phase B)
 - transcript and status visible in browser
-
-Full browser-native terminal control is explicitly deferred.
 
 ### Chat UX Phases
 
@@ -385,6 +385,7 @@ The current routing keeps web transport in `internal/console` and runtime/run/se
 Implemented HTTP endpoints:
 
 - `GET /api/runtime`
+- `GET /api/agents` — live AFK runs and interactive sessions (header Live bees panel)
 - `POST /api/runtime/start`
 - `POST /api/runtime/stop`
 - `GET /api/dashboard`

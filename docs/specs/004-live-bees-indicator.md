@@ -1,10 +1,14 @@
 # Spec 004: Live Bees Indicator
 
+## Status
+
+**Implemented.** Header panel, `GET /api/agents`, AFK PID persistence in `status.json`, and `ProcessAlive` liveness checks are shipped in Queen Console.
+
 ## Purpose
 
 Add a Queen Console header indicator for **currently live agent processes** — both AFK/headless adapter runs spawned by the hive runtime and interactive bee sessions — analogous to the existing **Hive runtime** panel.
 
-This spec captures the shared design agreed in flight trail `trace-019f51fd4b601818`. Implementation must not start until explicitly confirmed.
+This spec captures the shared design agreed in flight trail `trace-019f51fd4b601818`.
 
 ## Goals
 
@@ -30,19 +34,14 @@ Relevant existing pieces:
 | Primitive | Location / behavior | Indicator use |
 | --------- | ------------------- | ------------- |
 | Hive runtime panel | Header + `GET /api/runtime` | UX pattern to mirror (badge, pid meta, 3s poll) |
+| Live bees panel | Header + `GET /api/agents` | Total count, AFK/session breakdown, truncated `bee/pid` list |
 | Runtime registry | `~/.config/paseka/<slug>/state.json` → `runtime` | Unchanged; reactor process only |
 | Session registry | `state.json` → `sessions[]` with `pid` | Live interactive sessions |
-| AFK run status | `.paseka/runs/<traceId>/<agentId>/status.json` | Detect `state=running` AFK runs |
-| AFK adapters | `internal/adapters/{cursor,pi,claude,script}` | Today write running status **without** PID |
-| `StatusSnapshot` | `internal/protocol` | Extend with optional `pid` |
-| `ProcessAlive` | `internal/colony` | Liveness check already used by runtime supervisor |
+| AFK run status | `.paseka/runs/<traceId>/<agentId>/status.json` | Detect `state=running` AFK runs with `pid` |
+| AFK adapters | `internal/adapters/{cursor,pi,claude,script}` | Write running status with PID |
+| `StatusSnapshot` | `internal/protocol` | Optional `pid` field |
+| `ProcessAlive` | `internal/colony` | Liveness check used by runtime supervisor and agents projection |
 | Runs / Sessions tabs | Queen Console SPA | Drill-down targets after header click |
-
-Gaps today:
-
-- No header signal for child agent processes (only the reactor).
-- AFK `status.json` has no PID, so console cannot distinguish a live adapter from a crashed run left as `running`.
-- Dashboard shows `activeSessions` count but not AFK process count or PIDs, and only while the Dashboard tab is active.
 
 ## Decisions
 
@@ -111,9 +110,9 @@ Legacy AFK runs still marked `running` but lacking `pid` are not counted as live
 
 ### 6. API: `GET /api/agents`
 
-New endpoint, separate from `GET /api/runtime` (runtime remains reactor-only).
+Endpoint separate from `GET /api/runtime` (runtime remains reactor-only).
 
-Suggested response shape:
+Response shape:
 
 ```json
 {
@@ -176,24 +175,23 @@ Follow Queen Console MVP:
 3. `ProcessAlive` for honesty of “live”
 4. Do not require NATS for this indicator
 
-## Implementation Outline
+## Implementation
 
-When implementation is confirmed:
+Shipped in `internal/console` and AFK adapters:
 
 1. **Protocol / adapters**
-   - Add optional `pid` to `protocol.StatusSnapshot`
-   - On AFK launch, capture and persist PID in the running snapshot for each adapter
+   - Optional `pid` on `protocol.StatusSnapshot`
+   - AFK launch captures and persists PID in the running snapshot for each adapter
 2. **Console backend**
-   - Add `AgentsView` projection (scan AFK running+alive; merge sessions+alive)
-   - Wire `GET /api/agents` in `internal/console` handlers
+   - `AgentsView` projection (scan AFK running+alive; merge sessions+alive)
+   - `GET /api/agents` in `internal/console` handlers
    - Unit tests: live / dead PID / missing PID / soft-cap
 3. **SPA**
    - Header markup + styles beside runtime panel
-   - Render badge, breakdown, truncated `bee/pid` list
+   - Badge, breakdown, truncated `bee/pid` list
    - Shared poll with runtime; smart-nav click handler
 4. **Docs**
-   - Keep this spec as the feature source of truth
-   - Optionally cross-link from [002-queen-console-mvp.md](./002-queen-console-mvp.md) under a short “Related specs” note (no need to duplicate decisions)
+   - Cross-linked from [002-queen-console-mvp.md](./002-queen-console-mvp.md) under Related specs
 
 ## Acceptance Criteria
 
