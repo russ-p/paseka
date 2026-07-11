@@ -113,7 +113,8 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "default.md"):                              defaultPrompt,
 		PasekaPath(root, "prompts", "scout.md"):                                scoutPrompt,
 		PasekaPath(root, "prompts", "builder.md"):                              builderPrompt,
-		PasekaPath(root, "prompts", "hivewright.md"):                           hivewrightPrompt,
+		PasekaPath(root, "prompts", "hivewright-system.md"):                    hivewrightSystemPrompt,
+		PasekaPath(root, "prompts", "hivewright-task.md"):                      hivewrightTaskPrompt,
 		PasekaPath(root, "prompts", "_partials", "emit-howto.md"):              emitHowtoPartial,
 		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):            emitInsightPartial,
 		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):             emitSignalPartial,
@@ -270,7 +271,8 @@ publishes:
 `
 	hivewrightBeeYAML = `role: hivewright
 adapter: cursor
-prompt_template: hivewright.md
+system_template: hivewright-system.md
+prompt_template: hivewright-task.md
 params:
   model: composer-2.5
   output_format: stream-json
@@ -349,12 +351,8 @@ Success criteria (must confirm all):
 
 Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
 `
-	hivewrightPrompt = `You are Hivewright Bee. Your craft is the hive itself — how bees are defined,
+	hivewrightSystemPrompt = `You are Hivewright Bee. Your craft is the hive itself — how bees are defined,
 prompted, and wired into the Air — not the Colony's product code.
-
-Colony: {{.ColonyRoot}}
-Flight trail: {{.TraceID}}
-Workspace: {{.Workspace}}
 
 ## Mandate
 - Improve sibling bees: prompt templates, partials, bee YAML, and choreography
@@ -377,13 +375,6 @@ https://russ-p.github.io/paseka/llms-full.txt
 Start with bee YAML, prompt templates, routing, and INSIGHT kinds before
 mutating colony config.
 
-## Task
-{{.Task}}
-
-## Prior discoveries
-{{range .Insights}}- {{.}}
-{{end}}
-
 ## Workflow
 1. Read the task and any Beekeeper guidance in prior discoveries.
 2. Consult Hive docs above for current contracts and template rules.
@@ -403,7 +394,23 @@ Success criteria (must confirm all):
 {{template "emit-howto" .}}
 {{template "emit-insight" .}}
 
+## Session context
+Colony: {{.ColonyRoot}}
+Flight trail: {{.TraceID}}
+Workspace: {{.Workspace}}
+
+{{if .Insights}}
+## Prior discoveries
+{{range .Insights}}- {{.}}
+{{end}}
+{{end}}
+
 Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
+`
+	hivewrightTaskPrompt = `{{if .Task}}
+## Task
+{{.Task}}
+{{end}}
 `
 	builderIntentGeneralPartial = `Implement or fix the requested change with minimal scope. Follow existing code conventions, run relevant tests when practical, and prefer small focused diffs over broad rewrites.
 `
@@ -549,7 +556,8 @@ publishes:
 `
 	hivewrightBeePiYAML = `role: hivewright
 adapter: pi
-prompt_template: hivewright.md
+system_template: hivewright-system.md
+prompt_template: hivewright-task.md
 params:
   output_format: json
 worktree: true

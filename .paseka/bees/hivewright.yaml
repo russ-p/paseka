@@ -1,6 +1,7 @@
 role: hivewright
 adapter: cursor
-prompt_template: hivewright.md
+system_template: hivewright-system.md
+prompt_template: hivewright-task.md
 params:
   model: grok-4.5-medium
   output_format: stream-json

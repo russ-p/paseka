@@ -38,7 +38,39 @@ func PromptContext(base Context, known []string, defaultIntent string) Context {
 	return base
 }
 
-// ResolveInput encodes template override precedence (highest wins).
+// SystemResolveInput encodes system template override precedence (highest wins).
+type SystemResolveInput struct {
+	BeeLocalTemplate string
+	BeeTemplate      string
+	DefaultTemplate  string
+}
+
+// ResolveSystem picks a system template file.
+func ResolveSystem(input SystemResolveInput) (templateFile string, err error) {
+	if t := strings.TrimSpace(input.BeeLocalTemplate); t != "" {
+		return t, nil
+	}
+	if t := strings.TrimSpace(input.BeeTemplate); t != "" {
+		return t, nil
+	}
+	if t := strings.TrimSpace(input.DefaultTemplate); t != "" {
+		return t, nil
+	}
+	return "", nil
+}
+
+// RenderSystemResolved renders the configured system template, or empty when unset.
+func (l *Loader) RenderSystemResolved(input SystemResolveInput, ctx Context) (string, error) {
+	file, err := ResolveSystem(input)
+	if err != nil {
+		return "", err
+	}
+	if file == "" {
+		return "", nil
+	}
+	return l.Render(file, ctx)
+}
+
 type ResolveInput struct {
 	InlinePrompt     string
 	BeeLocalTemplate string

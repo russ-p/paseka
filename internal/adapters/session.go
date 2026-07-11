@@ -20,6 +20,7 @@ const (
 type SessionRequest struct {
 	Bee           string
 	InitialPrompt string
+	SystemPrompt  string
 	ColonyRoot    string
 	Workspace     string
 	Params        RunParams

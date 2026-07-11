@@ -42,28 +42,32 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	if req.TraceID == "" || req.AgentID == "" {
 		return nil, errors.New("pi: traceId and agentId are required")
 	}
-	if req.Prompt == "" {
-		return nil, errors.New("pi: prompt is required")
+	if req.Prompt == "" && req.SystemPrompt == "" {
+		return nil, errors.New("pi: prompt or system prompt is required")
 	}
 
 	prompt := req.Prompt
-	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
-		mode := piMode(req.Params.OutputFormat)
-		return b, buildArgs(req, prompt, mode)
-	})
-	if _, err := exec.LookPath(binary); err != nil {
-		return nil, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
-	}
-
 	runDir := runs.Dir{
 		ColonyRoot: req.ColonyRoot,
 		TraceID:    req.TraceID,
 		AgentID:    req.AgentID,
 	}
+	systemFile := ""
+	if req.SystemPrompt != "" {
+		systemFile = runDir.SystemPath()
+	}
+
+	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
+		b := req.Params.Binary
+		if b == "" {
+			b = defaultBinary
+		}
+		return b, buildArgs(req, prompt, systemFile)
+	})
+	if _, err := exec.LookPath(binary); err != nil {
+		return nil, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
+	}
+
 	if err := runDir.Prepare(); err != nil {
 		return nil, err
 	}
@@ -71,6 +75,11 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	startedAt := time.Now().UTC()
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("pi: write prompt: %w", err)
+	}
+	if req.SystemPrompt != "" {
+		if err := runDir.WriteSystem(req.SystemPrompt); err != nil {
+			return nil, fmt.Errorf("pi: write system: %w", err)
+		}
 	}
 	if err := runDir.WriteMeta(runs.Meta{
 		TraceID:   req.TraceID,
@@ -213,11 +222,15 @@ func pickSummary(fileSummary, parsedSummary string) string {
 	return parsedSummary
 }
 
-func buildArgs(req adapters.RunRequest, prompt, mode string) []string {
+func buildArgs(req adapters.RunRequest, prompt, systemFile string) []string {
 	p := req.Params
+	mode := piMode(req.Params.OutputFormat)
 	args := []string{
 		"-p",
 		"--mode", mode,
+	}
+	if systemFile != "" {
+		args = append(args, "--append-system-prompt", systemFile)
 	}
 	if p.Model != "" {
 		args = append(args, "--model", p.Model)
@@ -234,7 +247,9 @@ func buildArgs(req adapters.RunRequest, prompt, mode string) []string {
 	if p.APIKey != "" {
 		args = append(args, "--api-key", p.APIKey)
 	}
-	args = append(args, prompt)
+	if prompt != "" {
+		args = append(args, prompt)
+	}
 	return args
 }
 

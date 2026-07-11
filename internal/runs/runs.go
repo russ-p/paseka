@@ -19,6 +19,7 @@ var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\
 const (
 	ResultFileName     = "result.txt"
 	PromptFileName     = "prompt.txt"
+	SystemFileName     = "system.txt"
 	MetaFileName       = "meta.json"
 	StatusFileName     = "status.json"
 	RequestFileName    = "request.json"
@@ -42,6 +43,7 @@ func (d Dir) Root() string {
 
 func (d Dir) ResultPath() string     { return filepath.Join(d.Root(), ResultFileName) }
 func (d Dir) PromptPath() string     { return filepath.Join(d.Root(), PromptFileName) }
+func (d Dir) SystemPath() string     { return filepath.Join(d.Root(), SystemFileName) }
 func (d Dir) MetaPath() string       { return filepath.Join(d.Root(), MetaFileName) }
 func (d Dir) StatusPath() string     { return filepath.Join(d.Root(), StatusFileName) }
 func (d Dir) RequestPath() string    { return filepath.Join(d.Root(), RequestFileName) }
@@ -77,6 +79,10 @@ func (d Dir) Prepare() error {
 
 func (d Dir) WritePrompt(prompt string) error {
 	return os.WriteFile(d.PromptPath(), []byte(prompt), 0o644)
+}
+
+func (d Dir) WriteSystem(system string) error {
+	return os.WriteFile(d.SystemPath(), []byte(system), 0o644)
 }
 
 func (d Dir) WriteMeta(meta Meta) error {

@@ -28,7 +28,14 @@ type ColonyNATS struct {
 // Defaults holds colony-wide fallbacks.
 type Defaults struct {
 	PromptTemplate string `yaml:"prompt_template"`
+	SystemTemplate string `yaml:"system_template"`
 	EnergyBudget   int    `yaml:"energy_budget,omitempty"`
+}
+
+// BeeLocalOverlay holds optional per-machine overrides from bees/<role>.local.yaml.
+type BeeLocalOverlay struct {
+	PromptTemplate string `yaml:"prompt_template"`
+	SystemTemplate string `yaml:"system_template"`
 }
 
 // ResolvedEnergyBudget returns the per-trace honey reserve default for this colony.
@@ -44,6 +51,7 @@ type Bee struct {
 	Role               string             `yaml:"role"`
 	Adapter            string             `yaml:"adapter"`
 	PromptTemplate     string             `yaml:"prompt_template"`
+	SystemTemplate     string             `yaml:"system_template,omitempty"`
 	Sector             string             `yaml:"sector,omitempty"`
 	Worktree           bool               `yaml:"worktree"`
 	Intents            []string           `yaml:"intents,omitempty"`
@@ -74,52 +82,61 @@ func LoadColony(colonyRoot string) (Colony, error) {
 	return c, nil
 }
 
+// ResolvedSystemTemplate returns the configured system template path using overlay precedence.
+func ResolvedSystemTemplate(bee Bee, overlay BeeLocalOverlay, defaults Defaults) string {
+	if t := strings.TrimSpace(overlay.SystemTemplate); t != "" {
+		return t
+	}
+	if t := strings.TrimSpace(bee.SystemTemplate); t != "" {
+		return t
+	}
+	return strings.TrimSpace(defaults.SystemTemplate)
+}
+
+// HasSystemTemplate reports whether a system template is configured for the bee.
+func HasSystemTemplate(bee Bee, overlay BeeLocalOverlay, defaults Defaults) bool {
+	return ResolvedSystemTemplate(bee, overlay, defaults) != ""
+}
+
 // LoadBee reads .paseka/bees/<role>.yaml and optional <role>.local.yaml overlay.
-func LoadBee(colonyRoot, role string) (Bee, string, error) {
+func LoadBee(colonyRoot, role string) (Bee, BeeLocalOverlay, error) {
 	if err := validateRole(role); err != nil {
-		return Bee{}, "", err
+		return Bee{}, BeeLocalOverlay{}, err
 	}
 	basePath := filepath.Join(colonyRoot, pasekaDir, "bees", role+".yaml")
 	data, err := os.ReadFile(basePath)
 	if err != nil {
-		return Bee{}, "", fmt.Errorf("colony: read bee %q: %w", role, err)
+		return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: read bee %q: %w", role, err)
 	}
 	var bee Bee
 	if err := yaml.Unmarshal(data, &bee); err != nil {
-		return Bee{}, "", fmt.Errorf("colony: parse bee %q: %w", role, err)
+		return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: parse bee %q: %w", role, err)
 	}
 	if bee.Role == "" {
 		bee.Role = role
 	}
 	if err := bee.ValidateEventRules(); err != nil {
-		return Bee{}, "", err
+		return Bee{}, BeeLocalOverlay{}, err
 	}
 	if err := bee.ValidateRunSummaryPolicy(); err != nil {
-		return Bee{}, "", err
+		return Bee{}, BeeLocalOverlay{}, err
 	}
 	if err := bee.ValidateAdapterRequirements(); err != nil {
-		return Bee{}, "", err
+		return Bee{}, BeeLocalOverlay{}, err
 	}
 
-	localTemplate := ""
+	var overlay BeeLocalOverlay
 	localPath := filepath.Join(colonyRoot, pasekaDir, "bees", role+".local.yaml")
 	localData, err := os.ReadFile(localPath)
 	if err == nil {
-		var overlay struct {
-			PromptTemplate string `yaml:"prompt_template"`
-		}
 		if err := yaml.Unmarshal(localData, &overlay); err != nil {
-			return Bee{}, "", fmt.Errorf("colony: parse bee local %q: %w", role, err)
-		}
-		localTemplate = overlay.PromptTemplate
-		if overlay.PromptTemplate != "" {
-			// local overlay wins over base bee file at resolve time
+			return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: parse bee local %q: %w", role, err)
 		}
 	} else if !os.IsNotExist(err) {
-		return Bee{}, "", fmt.Errorf("colony: read bee local %q: %w", role, err)
+		return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: read bee local %q: %w", role, err)
 	}
 
-	return bee, localTemplate, nil
+	return bee, overlay, nil
 }
 
 func validateRole(role string) error {

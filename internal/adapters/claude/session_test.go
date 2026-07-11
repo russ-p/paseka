@@ -1,6 +1,7 @@
 package claude_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -61,4 +62,41 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], want[i], cmd.Args)
 		}
 	}
+}
+
+func TestSessionCommandSystemOnlyAppendsSystemPrompt(t *testing.T) {
+	a := claude.NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		ColonyRoot:   "/colony",
+		Workspace:    "/tmp/ws",
+		TraceID:      "trace-1",
+		AgentID:      "agent-1",
+		SystemPrompt: "You are Scout.",
+		Params:       adapters.RunParams{Binary: "sh", Model: "claude-opus-4-8"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSystem := filepath.Join("/colony", ".paseka", "runs", "trace-1", "agent-1", "system.txt")
+	assertArgPair(t, cmd.Args, "--append-system-prompt-file", wantSystem)
+	if len(cmd.Args) > 0 && cmd.Args[len(cmd.Args)-1] == "You are Scout." {
+		t.Fatalf("system prompt must not be positional arg, args=%v", cmd.Args)
+	}
+}
+
+func assertArgPair(t *testing.T, args []string, flag, want string) {
+	t.Helper()
+	for i := 0; i < len(args); i++ {
+		if args[i] != flag {
+			continue
+		}
+		if i+1 >= len(args) {
+			t.Fatalf("flag %q missing value in %v", flag, args)
+		}
+		if args[i+1] != want {
+			t.Fatalf("%q = %q, want %q", flag, args[i+1], want)
+		}
+		return
+	}
+	t.Fatalf("flag %q not found in %v", flag, args)
 }

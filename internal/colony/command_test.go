@@ -80,6 +80,69 @@ func TestCommandRenderBraceVars(t *testing.T) {
 	}
 }
 
+func TestCommandRenderCursorPluginVar(t *testing.T) {
+	var cmd colony.Command
+	if err := yaml.Unmarshal([]byte(`agent -p --plugin-dir $CURSOR_PLUGIN $PROMPT`), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	argv, err := cmd.RenderCommand(colony.CommandVars{
+		Prompt:       "do the thing",
+		CursorPlugin: "/tmp/runs/cursor-plugin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"agent", "-p", "--plugin-dir", "/tmp/runs/cursor-plugin", "do the thing"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q", i, argv[i], want[i])
+		}
+	}
+}
+
+func TestCommandRenderSystemVars(t *testing.T) {
+	var cmd colony.Command
+	if err := yaml.Unmarshal([]byte(`pi -p --append-system-prompt $SYSTEM_FILE $PROMPT`), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	argv, err := cmd.RenderCommand(colony.CommandVars{
+		Prompt:       "do the thing",
+		SystemPrompt: "role text",
+		SystemFile:   "/tmp/runs/system.txt",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"pi", "-p", "--append-system-prompt", "/tmp/runs/system.txt", "do the thing"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q", i, argv[i], want[i])
+		}
+	}
+}
+
+func TestHasSystemTemplate(t *testing.T) {
+	bee := colony.Bee{SystemTemplate: "scout-system.md"}
+	overlay := colony.BeeLocalOverlay{}
+	defaults := colony.Defaults{}
+	if !colony.HasSystemTemplate(bee, overlay, defaults) {
+		t.Fatal("expected system template")
+	}
+	if got := colony.ResolvedSystemTemplate(bee, overlay, defaults); got != "scout-system.md" {
+		t.Fatalf("resolved = %q", got)
+	}
+	overlay.SystemTemplate = "local-system.md"
+	if got := colony.ResolvedSystemTemplate(bee, overlay, defaults); got != "local-system.md" {
+		t.Fatalf("local overlay = %q", got)
+	}
+}
+
 func TestBeeHasParams(t *testing.T) {
 	if (colony.Bee{}).HasParams() {
 		t.Fatal("empty bee should not have params")

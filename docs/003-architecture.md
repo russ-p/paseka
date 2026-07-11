@@ -37,6 +37,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │   └── <traceId>/
 │       ├── <agentId>/
 │       │   ├── prompt.txt
+│       │   ├── system.txt   # optional — rendered system_template
 │       │   ├── result.txt
 │       │   ├── meta.json
 │       │   └── status.json
@@ -53,6 +54,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 ```yaml
 defaults:
   prompt_template: default.md
+  system_template: default-system.md   # optional colony-wide role context
   energy_budget: 12
 ```
 
@@ -70,86 +72,33 @@ sectors:
 
 A **sector** is a named path inside the colony. Tasks may optionally set `sector`; bees may declare a default `sector` in `bees/*.yaml`. Runtime resolves the adapter workspace as `colonyRoot/<sector.path>` or `.paseka/worktrees/<traceId>/<sector.path>` when `worktree: true`. The colony root remains the audit boundary for `.paseka/runs/`.
 
-**`bees/*.yaml`** — one file per role: binds the bee to an adapter, prompt template, optional `command` / `post_exec`, sector/worktree, and routing rules. Full schema, examples, and variable substitution: [010-bee-config.md](010-bee-config.md). Event routing (`subscribes` / `publishes`): [008-bee-routing.md](008-bee-routing.md). Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
+**`bees/*.yaml`** — one file per role: binds the bee to an adapter, prompt template(s), optional `command` / `post_exec`, sector/worktree, and routing rules. Full schema, examples, and variable substitution: [010-bee-config.md](010-bee-config.md). Event routing (`subscribes` / `publishes`): [008-bee-routing.md](008-bee-routing.md). Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
 
 ### 2.1 Prompt templates
 
-Templates live in **`.paseka/prompts/`** — version-controlled, one colony, shareable across machines. Each bee references a template from its `bees/<role>.yaml`.
+Templates live in **`.paseka/prompts/`** — version-controlled, one colony, shareable across machines. Each bee may reference one or two templates from its `bees/<role>.yaml`:
 
-```
-.paseka/prompts/
-├── _partials/
-│   ├── emit-howto.md       # safe CLI emit mechanics for all bees
-│   ├── emit-insight.md     # INSIGHT kinds
-│   ├── emit-signal.md      # SIGNAL kinds
-│   └── emit-verification.md # VERIFICATION gate kinds
-├── scout.md
-├── builder.md
-└── guard.md
-```
+| Field | Artifact | Role |
+| ----- | -------- | ---- |
+| `system_template` (optional) | `system.txt` | Standing role context — injected by the adapter, not the first chat turn |
+| `prompt_template` | `prompt.txt` | User/task turn for AFK runs; optional kickoff for interactive chat |
 
-**Bee config → template:**
+When `system_template` is unset, behavior matches the previous single-template model (full prompt as positional argv only). Full variable list, partials, and override precedence: [004-prompt-templates.md](004-prompt-templates.md). Bee YAML schema: [010-bee-config.md](010-bee-config.md).
+
+**Bee config → templates:**
 
 ```yaml
 # .paseka/bees/builder.yaml
 role: builder
 adapter: cursor
-prompt_template: builder.md          # file under .paseka/prompts/
-# prompt_template: scout.md           # reuse another bee's template
-# prompt_template: _partials/foo.md   # usually avoid for top-level bees
+system_template: builder-system.md   # optional — role / standing instructions
+prompt_template: builder.md          # user/task turn
 worktree: true
 ```
 
-**Rendering:** Go `text/template` at dispatch time. Runtime builds a **PromptContext** from bus event + colony state and writes the final string to `.paseka/runs/<traceId>/<agentId>/prompt.txt` before launching the adapter.
+**Rendering:** Go `text/template` at dispatch time. Runtime builds a **PromptContext** from bus event + colony state, writes `prompt.txt` (and `system.txt` when `system_template` is set) under `.paseka/runs/<traceId>/<agentId>/`, then passes rendered strings to the adapter.
 
-Available template fields (MVP):
-
-| Field | Source |
-| ----- | ------ |
-| `{{.Bee}}` | role from bee config |
-| `{{.TraceID}}` | current flight trail |
-| `{{.AgentID}}` | this invocation |
-| `{{.ColonyRoot}}` | git repo root |
-| `{{.Workspace}}` | worktree or repo root (adapter cwd) |
-| `{{.Sector}}` | resolved sector name, if any |
-| `{{.SectorPath}}` | relative sector path within colony/worktree |
-| `{{.Task}}` | nectar / task body from event |
-| `{{.Insights}}` | narrative INSIGHT events projected from prior runs on the trace (see [009-insight-kinds.md](009-insight-kinds.md)) |
-| `{{.ResultFile}}` | absolute path to `result.txt` log artifact (runtime may write after the run) |
-
-Example template:
-
-```markdown
-# .paseka/prompts/builder.md
-You are Builder Bee for colony {{.ColonyRoot}}.
-
-Flight trail: {{.TraceID}}
-
-## Task
-{{.Task}}
-
-## Prior discoveries
-{{range .Insights}}- {{.}}
-{{end}}
-
-Implement the task in the workspace. Follow existing code conventions.
-```
-
-**Partials** — include shared blocks to avoid duplication:
-
-```markdown
-{{template "emit-howto" .}}
-{{template "emit-insight" .}}
-```
-
-Partials load from `.paseka/prompts/_partials/*.md` (filename without extension = template name).
-
-**Overrides (precedence, highest wins):**
-
-1. Inline `prompt:` in event / CLI `--prompt` (one-shot)
-2. `bees/builder.local.yaml` → `prompt_template: my-builder.md` (gitignored via `*.local.yaml`)
-3. `bees/builder.yaml` → `prompt_template`
-4. `colony.yaml` → `defaults.prompt_template` (fallback for all bees)
+Colony-wide fallbacks when a bee omits a field: `defaults.prompt_template` and optional `defaults.system_template` in `colony.yaml`.
 
 Do **not** store prompts in `~/.config/paseka/` — they belong to the colony and should ride with the repo. Home config only holds secrets and runtime state.
 
@@ -259,7 +208,8 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 
 ```
 .paseka/runs/<traceId>/<agentId>/
-├── prompt.txt         # runtime → agent: rendered prompt (audit / replay)
+├── prompt.txt         # runtime → agent: rendered prompt_template (audit / replay)
+├── system.txt         # optional — rendered system_template (adapter injection)
 ├── result.txt         # runtime log: human-readable summary (not a success contract)
 ├── meta.json          # runtime → observers: bee, adapter, workspace, startedAt
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
@@ -586,7 +536,7 @@ internal/
 | Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §5.1 Pi adapter |
 | Supported adapters | `cursor` (default), `pi` — selected per bee via `adapter:` in `bees/*.yaml` |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |
-| Prompt templates | `.paseka/prompts/` — committed; bee YAML references by filename |
+| Prompt templates | `.paseka/prompts/` — committed; bee YAML references `prompt_template` and optional `system_template` |
 | Commit `.paseka/` | yes by default; `.gitignore` covers `worktrees/`, `runs/`, `*.local.yaml`, `cache/` |
 | Slug in colony.yaml | written at `paseka init`, reused on every run |
 | Interactive sessions | separate `SessionAdapter`; PTY in `internal/sessions/`; see [006-interactive-sessions.md](006-interactive-sessions.md) |

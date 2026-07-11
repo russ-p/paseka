@@ -25,5 +25,6 @@ func ScriptEnv(req RunRequest, runDir runs.Dir) []string {
 	set("PASEKA_EVENT_LOG", runDir.EventsPath())
 	set("PASEKA_RESULT_FILE", runDir.ResultPath())
 	set("PASEKA_PROMPT_FILE", runDir.PromptPath())
+	set("PASEKA_SYSTEM_FILE", runDir.SystemPath())
 	return env
 }

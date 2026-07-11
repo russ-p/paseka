@@ -1,6 +1,6 @@
 # Prompt templates
 
-Paseka renders bee prompts from version-controlled Markdown files under `.paseka/prompts/`. Templates use Go [`text/template`](https://pkg.go.dev/text/template) syntax. At dispatch time the runtime fills in context variables, writes the result to `.paseka/runs/<traceId>/<agentId>/prompt.txt`, and passes the rendered string to the adapter.
+Paseka renders bee prompts from version-controlled Markdown files under `.paseka/prompts/`. Templates use Go [`text/template`](https://pkg.go.dev/text/template) syntax. At dispatch time the runtime fills in context variables, writes the result to `.paseka/runs/<traceId>/<agentId>/prompt.txt` (and optionally `system.txt`), and passes rendered strings to the adapter.
 
 Implementation: [`internal/prompts`](../internal/prompts/prompts.go).
 
@@ -32,23 +32,32 @@ Prompts belong in the git repo so the colony shares the same instructions across
 
 ## 2. Linking a template to a bee
 
-Each bee references a template file (relative to `.paseka/prompts/`) in its config:
+Each bee references template files (relative to `.paseka/prompts/`) in its config:
 
 ```yaml
-# .paseka/bees/builder.yaml
-role: builder
-adapter: cursor
-prompt_template: builder.md
+# .paseka/bees/scout.yaml
+role: scout
+adapter: pi
+system_template: scout-system.md   # role / standing instructions (optional)
+prompt_template: scout.md          # user/task turn
 worktree: true
 ```
 
-Colony-wide fallback when a bee omits `prompt_template`:
+| Field | Artifact | Role |
+| ----- | -------- | ---- |
+| `system_template` (optional) | `system.txt` | Identity and standing instructions — injected by the adapter, not shown as the first chat turn |
+| `prompt_template` | `prompt.txt` | User/task message for AFK runs; optional kickoff for interactive chat |
+
+Colony-wide fallbacks when a bee omits a field:
 
 ```yaml
 # .paseka/colony.yaml
 defaults:
   prompt_template: default.md
+  system_template: default-system.md   # optional
 ```
+
+When `system_template` is unset, behavior matches the previous single-template model (full prompt as positional argv only).
 
 ---
 
@@ -165,9 +174,9 @@ When resolving which template to render, the **first non-empty** source wins:
 | Priority | Source | Example |
 | -------- | ------ | ------- |
 | 1 (highest) | Inline prompt | `paseka bee run builder --prompt "Fix {{.Task}}"` |
-| 2 | Bee local overlay | `.paseka/bees/builder.local.yaml` → `prompt_template: my-builder.md` |
-| 3 | Bee config | `.paseka/bees/builder.yaml` → `prompt_template: builder.md` |
-| 4 (lowest) | Colony default | `.paseka/colony.yaml` → `defaults.prompt_template` |
+| 2 | Bee local overlay | `.paseka/bees/builder.local.yaml` → `prompt_template` / `system_template` |
+| 3 | Bee config | `.paseka/bees/builder.yaml` → `prompt_template` / `system_template` |
+| 4 (lowest) | Colony default | `.paseka/colony.yaml` → `defaults.prompt_template` / `defaults.system_template` |
 
 `*.local.yaml` files are gitignored — use them for machine- or developer-specific template overrides without committing.
 
@@ -189,11 +198,13 @@ bee config + CLI flags
         ▼
   Execute text/template with Context (§3)
         │
+        ├─► Write system.txt (when system_template configured)
+        │
         ▼
   Write .paseka/runs/<traceId>/<agentId>/prompt.txt
         │
         ▼
-  Adapter runs external agent (e.g. Cursor CLI)
+  Adapter injects system context (per adapter) and runs external agent
         │
         ▼
   Runtime normalizes summary, writes log artifact, may auto-publish `INSIGHT/run.summary`

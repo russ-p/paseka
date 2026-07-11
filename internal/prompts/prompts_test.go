@@ -125,6 +125,69 @@ func TestResolvePrecedence(t *testing.T) {
 	}
 }
 
+func TestResolveSystemPrecedence(t *testing.T) {
+	cases := []struct {
+		name string
+		in   prompts.SystemResolveInput
+		want string
+	}{
+		{
+			name: "bee local",
+			in:   prompts.SystemResolveInput{BeeLocalTemplate: "local.md", BeeTemplate: "bee.md"},
+			want: "local.md",
+		},
+		{
+			name: "bee",
+			in:   prompts.SystemResolveInput{BeeTemplate: "bee.md"},
+			want: "bee.md",
+		},
+		{
+			name: "default",
+			in:   prompts.SystemResolveInput{DefaultTemplate: "default-system.md"},
+			want: "default-system.md",
+		},
+		{
+			name: "unset",
+			in:   prompts.SystemResolveInput{},
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := prompts.ResolveSystem(tc.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderSystemResolved(t *testing.T) {
+	root := t.TempDir()
+	writePromptTree(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/scout-system.md"),
+		[]byte("Role: {{.Bee}}\nTask context: {{.Task}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader, err := prompts.NewLoader(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
+		BeeTemplate: "scout-system.md",
+	}, prompts.Context{Bee: "scout", Task: "survey"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAll(got, "scout", "survey") {
+		t.Fatalf("unexpected render:\n%s", got)
+	}
+}
+
 func TestRenderInsights(t *testing.T) {
 	root := t.TempDir()
 	writePromptTree(t, root)

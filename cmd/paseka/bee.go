@@ -92,15 +92,29 @@ func newBeeChatCmd() *cobra.Command {
 		Short: "Start an interactive agent session (HITL)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bee := args[0]
+			beeRole := args[0]
 			if len(args) > 1 && inlinePrompt == "" {
 				inlinePrompt = strings.Join(args[1:], " ")
 			}
 			if task == "" && inlinePrompt == "" {
-				return fmt.Errorf("provide a prompt argument, --task, or --prompt")
+				ctxColony, err := colony.ResolveContext(startDir)
+				if err != nil {
+					return err
+				}
+				manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
+				if err != nil {
+					return err
+				}
+				bee, overlay, err := colony.LoadBee(ctxColony.ColonyRoot, beeRole)
+				if err != nil {
+					return err
+				}
+				if !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
+					return fmt.Errorf("provide a prompt argument, --task, --prompt, or configure system_template on the bee")
+				}
 			}
 
-			runArgs := []string{bee}
+			runArgs := []string{beeRole}
 			if startDir != "" {
 				runArgs = append(runArgs, "--path", startDir)
 			}
@@ -145,7 +159,7 @@ func newBeeChatCmd() *cobra.Command {
 
 			res, err := sessions.DefaultManager.RunInteractive(cmd.Context(), sessions.RunRequest{
 				StartDir:     startDir,
-				Bee:          bee,
+				Bee:          beeRole,
 				TraceID:      traceID,
 				Task:         task,
 				Intent:       intent,

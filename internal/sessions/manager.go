@@ -17,6 +17,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
+	"github.com/paseka/paseka/internal/adapters/systeminject"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/prompts"
@@ -149,13 +150,22 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if req.Bee == "" {
 		return nil, fmt.Errorf("sessions: bee role is required")
 	}
-	if req.Task == "" && req.InlinePrompt == "" {
-		return nil, fmt.Errorf("sessions: task or inline prompt is required")
-	}
 
 	ctxColony, err := colony.ResolveContext(req.StartDir)
 	if err != nil {
 		return nil, err
+	}
+
+	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	bee, overlay, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
+	if err != nil {
+		return nil, err
+	}
+	if req.Task == "" && req.InlinePrompt == "" && !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
+		return nil, fmt.Errorf("sessions: task, inline prompt, or system_template is required")
 	}
 
 	traceID := req.TraceID
@@ -165,15 +175,6 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			return nil, err
 		}
 		traceID = id
-	}
-
-	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
-	if err != nil {
-		return nil, err
-	}
-	bee, beeLocalTemplate, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
-	if err != nil {
-		return nil, err
 	}
 
 	workspace := ctxColony.ColonyRoot
@@ -217,12 +218,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, fmt.Errorf("sessions: discover intents: %w", err)
 	}
-	rendered, err := loader.RenderResolved(prompts.ResolveInput{
-		InlinePrompt:     req.InlinePrompt,
-		BeeLocalTemplate: beeLocalTemplate,
-		BeeTemplate:      bee.PromptTemplate,
-		DefaultTemplate:  manifest.Defaults.PromptTemplate,
-	}, prompts.PromptContext(prompts.Context{
+	promptCtx := prompts.PromptContext(prompts.Context{
 		Bee:        bee.Role,
 		TraceID:    traceID,
 		AgentID:    agentID,
@@ -233,7 +229,24 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		IntentRaw:  req.Intent,
 		Insights:   req.Insights,
 		ResultFile: resultFile,
-	}, knownIntents, defaultIntent))
+	}, knownIntents, defaultIntent)
+
+	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
+		BeeLocalTemplate: overlay.SystemTemplate,
+		BeeTemplate:      bee.SystemTemplate,
+		DefaultTemplate:  manifest.Defaults.SystemTemplate,
+	}, promptCtx)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: render system prompt: %w", err)
+	}
+
+	rendered, err := loader.RenderResolved(prompts.ResolveInput{
+		InlinePrompt:     req.InlinePrompt,
+		BeeLocalTemplate: overlay.PromptTemplate,
+		BeeTemplate:      bee.PromptTemplate,
+		DefaultTemplate:  manifest.Defaults.PromptTemplate,
+		AllowEmpty:       colony.HasSystemTemplate(bee, overlay, manifest.Defaults),
+	}, promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: render prompt: %w", err)
 	}
@@ -259,8 +272,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			)
 		}
 		command, err = bee.Command.RenderCommand(colony.CommandVars{
-			Prompt:    rendered,
-			Workspace: workspace,
+			Prompt:       rendered,
+			SystemPrompt: renderedSystem,
+			SystemFile:   runDir.SystemPath(),
+			CursorPlugin: systeminject.CursorPluginPath(runDir),
+			Workspace:    workspace,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("sessions: render command: %w", err)
@@ -270,6 +286,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	startedAt := time.Now().UTC()
 	if err := runDir.WritePrompt(rendered); err != nil {
 		return nil, err
+	}
+	if renderedSystem != "" {
+		if err := runDir.WriteSystem(renderedSystem); err != nil {
+			return nil, fmt.Errorf("sessions: write system: %w", err)
+		}
 	}
 	if err := runDir.WriteMeta(runs.Meta{
 		TraceID:   traceID,
@@ -312,6 +333,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	sessReq := adapters.SessionRequest{
 		Bee:           bee.Role,
 		InitialPrompt: rendered,
+		SystemPrompt:  renderedSystem,
 		ColonyRoot:    ctxColony.ColonyRoot,
 		Workspace:     workspace,
 		Params:        params,

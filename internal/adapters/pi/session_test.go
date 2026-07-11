@@ -113,6 +113,29 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 	}
 }
 
+func TestSessionCommandSystemOnlyOmitsPositionalPrompt(t *testing.T) {
+	fakePi := writeFakePiBinary(t)
+	a := NewSession()
+
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		ColonyRoot:   "/colony",
+		Workspace:    "/tmp/ws",
+		TraceID:      "trace-1",
+		AgentID:      "agent-1",
+		SystemPrompt: "You are Scout.",
+		Params:       adapters.RunParams{Binary: fakePi},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantSystem := filepath.Join("/colony", ".paseka", "runs", "trace-1", "agent-1", "system.txt")
+	assertArgPair(t, cmd.Args, "--append-system-prompt", wantSystem)
+	if cmd.Args[len(cmd.Args)-1] == "You are Scout." {
+		t.Fatalf("system prompt must not be positional arg, args=%v", cmd.Args)
+	}
+}
+
 func TestSessionCommandRequiresFields(t *testing.T) {
 	fakePi := writeFakePiBinary(t)
 	a := NewSession()
@@ -130,7 +153,7 @@ func TestSessionCommandRequiresFields(t *testing.T) {
 		req  adapters.SessionRequest
 	}{
 		{name: "workspace", req: func() adapters.SessionRequest { r := base; r.Workspace = ""; return r }()},
-		{name: "prompt", req: func() adapters.SessionRequest { r := base; r.InitialPrompt = ""; return r }()},
+		{name: "prompt or system", req: func() adapters.SessionRequest { r := base; r.InitialPrompt = ""; return r }()},
 		{name: "colony root", req: func() adapters.SessionRequest { r := base; r.ColonyRoot = ""; return r }()},
 		{name: "trace id", req: func() adapters.SessionRequest { r := base; r.TraceID = ""; return r }()},
 		{name: "agent id", req: func() adapters.SessionRequest { r := base; r.AgentID = ""; return r }()},

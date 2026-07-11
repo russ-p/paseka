@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/adapters/systeminject"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
@@ -42,27 +43,36 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	if req.TraceID == "" || req.AgentID == "" {
 		return nil, errors.New("cursor: traceId and agentId are required")
 	}
-	if req.Prompt == "" {
-		return nil, errors.New("cursor: prompt is required")
+	if req.Prompt == "" && req.SystemPrompt == "" {
+		return nil, errors.New("cursor: prompt or system prompt is required")
 	}
 
 	prompt := req.Prompt
-	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
-		return b, buildArgs(req, prompt)
-	})
-	if _, err := exec.LookPath(binary); err != nil {
-		return nil, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
-	}
-
 	runDir := runs.Dir{
 		ColonyRoot: req.ColonyRoot,
 		TraceID:    req.TraceID,
 		AgentID:    req.AgentID,
 	}
+	var pluginDir string
+	if req.SystemPrompt != "" {
+		dir, err := systeminject.WriteCursorPlugin(runDir, req.SystemPrompt)
+		if err != nil {
+			return nil, fmt.Errorf("cursor: write system plugin: %w", err)
+		}
+		pluginDir = dir
+	}
+
+	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
+		b := req.Params.Binary
+		if b == "" {
+			b = defaultBinary
+		}
+		return b, buildArgs(req, prompt, pluginDir)
+	})
+	if _, err := exec.LookPath(binary); err != nil {
+		return nil, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
+	}
+
 	if err := runDir.Prepare(); err != nil {
 		return nil, err
 	}
@@ -70,6 +80,11 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	startedAt := time.Now().UTC()
 	if err := runDir.WritePrompt(prompt); err != nil {
 		return nil, fmt.Errorf("cursor: write prompt: %w", err)
+	}
+	if req.SystemPrompt != "" {
+		if err := runDir.WriteSystem(req.SystemPrompt); err != nil {
+			return nil, fmt.Errorf("cursor: write system: %w", err)
+		}
 	}
 	if err := runDir.WriteMeta(runs.Meta{
 		TraceID:   req.TraceID,
@@ -230,7 +245,7 @@ func pickSummary(fileSummary, streamSummary string) string {
 	return streamSummary
 }
 
-func buildArgs(req adapters.RunRequest, prompt string) []string {
+func buildArgs(req adapters.RunRequest, prompt, pluginDir string) []string {
 	p := req.Params
 	args := []string{
 		"-p",
@@ -258,8 +273,12 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	if p.APIKey != "" {
 		args = append(args, "--api-key", p.APIKey)
 	}
-
-	args = append(args, prompt)
+	if pluginDir != "" {
+		args = append(args, "--plugin-dir", pluginDir)
+	}
+	if prompt != "" {
+		args = append(args, prompt)
+	}
 	return args
 }
 

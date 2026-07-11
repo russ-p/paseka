@@ -15,20 +15,21 @@ type Artifact struct {
 
 // RunRequest is passed to an adapter when a bee is dispatched.
 type RunRequest struct {
-	Bee        string // role name from bees/*.yaml
-	Prompt     string // rendered prompt
-	ColonyRoot string // git repo root — .paseka/runs/ always lives here
-	Workspace  string // absolute path: repo root or worktree (adapter cwd)
-	Sector     string // resolved sector name, if any
-	SectorPath string // relative sector path within colony/worktree
-	Params     RunParams
-	Command    []string // optional full argv; overrides Params-based arg building when set
-	TraceID    string
-	AgentID    string // unique id per spawned agent invocation
-	TaskID     string
-	Task       string
-	Intent     string
-	Insights   []string
+	Bee          string // role name from bees/*.yaml
+	Prompt       string // rendered user/task prompt
+	SystemPrompt string // rendered system/role context
+	ColonyRoot   string // git repo root — .paseka/runs/ always lives here
+	Workspace    string // absolute path: repo root or worktree (adapter cwd)
+	Sector       string // resolved sector name, if any
+	SectorPath   string // relative sector path within colony/worktree
+	Params       RunParams
+	Command      []string // optional full argv; overrides Params-based arg building when set
+	TraceID      string
+	AgentID      string // unique id per spawned agent invocation
+	TaskID       string
+	Task         string
+	Intent       string
+	Insights     []string
 }
 
 // RunParams holds adapter CLI flags and shared bee params.

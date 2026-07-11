@@ -7,6 +7,8 @@ import (
 	"os/exec"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/adapters/systeminject"
+	"github.com/paseka/paseka/internal/runs"
 )
 
 // SessionAdapter builds commands for interactive Cursor Agent CLI sessions.
@@ -27,17 +29,34 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("cursor: workspace is required")
 	}
-	if req.InitialPrompt == "" {
-		return adapters.SessionCommand{}, errors.New("cursor: initial prompt is required")
+	if req.InitialPrompt == "" && req.SystemPrompt == "" {
+		return adapters.SessionCommand{}, errors.New("cursor: initial prompt or system prompt is required")
+	}
+	if req.SystemPrompt != "" && (req.ColonyRoot == "" || req.TraceID == "" || req.AgentID == "") {
+		return adapters.SessionCommand{}, errors.New("cursor: colony root, traceId, and agentId are required for system prompt injection")
 	}
 
 	prompt := req.InitialPrompt
+	var pluginDir string
+	if req.SystemPrompt != "" {
+		runDir := runs.Dir{
+			ColonyRoot: req.ColonyRoot,
+			TraceID:    req.TraceID,
+			AgentID:    req.AgentID,
+		}
+		dir, err := systeminject.WriteCursorPlugin(runDir, req.SystemPrompt)
+		if err != nil {
+			return adapters.SessionCommand{}, fmt.Errorf("cursor: write system plugin: %w", err)
+		}
+		pluginDir = dir
+	}
+
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildInteractiveArgs(req, prompt)
+		return b, buildInteractiveArgs(req, prompt, pluginDir)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
@@ -56,7 +75,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}, nil
 }
 
-func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
+func buildInteractiveArgs(req adapters.SessionRequest, prompt, pluginDir string) []string {
 	p := req.Params
 	args := []string{
 		"--workspace", req.Workspace,
@@ -75,7 +94,11 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
 	if p.APIKey != "" {
 		args = append(args, "--api-key", p.APIKey)
 	}
-
-	args = append(args, prompt)
+	if pluginDir != "" {
+		args = append(args, "--plugin-dir", pluginDir)
+	}
+	if prompt != "" {
+		args = append(args, prompt)
+	}
 	return args
 }

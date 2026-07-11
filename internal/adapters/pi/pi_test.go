@@ -34,7 +34,7 @@ func TestBuildArgs(t *testing.T) {
 			Force:        true,
 		},
 	}
-	args := buildArgs(req, "implement feature", "json")
+	args := buildArgs(req, "implement feature", "")
 
 	want := []string{
 		"-p", "--mode", "json",

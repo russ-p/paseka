@@ -16,16 +16,19 @@ type Command struct {
 
 // CommandVars are substituted into bee command templates at dispatch time.
 type CommandVars struct {
-	Prompt     string
-	Workspace  string
-	TraceID    string
-	AgentID    string
-	TaskID     string
-	ColonyRoot string
-	Result     string // human-readable run summary text
-	ResultFile string // path to result.txt
-	Meta       string // path to meta.json
-	RunDir     string // .paseka/runs/<traceId>/<agentId>/
+	Prompt       string
+	SystemPrompt string
+	SystemFile   string
+	CursorPlugin string // .paseka/runs/<traceId>/<agentId>/cursor-plugin
+	Workspace    string
+	TraceID      string
+	AgentID      string
+	TaskID       string
+	ColonyRoot   string
+	Result       string // human-readable run summary text
+	ResultFile   string // path to result.txt
+	Meta         string // path to meta.json
+	RunDir       string // .paseka/runs/<traceId>/<agentId>/
 }
 
 // IsSet reports whether the bee declares a custom command.
@@ -97,16 +100,19 @@ func (b Bee) HasParams() bool {
 
 func substituteCommandVars(s string, vars CommandVars) string {
 	replacements := map[string]string{
-		"PROMPT":      vars.Prompt,
-		"WORKSPACE":   vars.Workspace,
-		"TRACE_ID":    vars.TraceID,
-		"AGENT_ID":    vars.AgentID,
-		"TASK_ID":     vars.TaskID,
-		"COLONY_ROOT": vars.ColonyRoot,
-		"RESULT":      vars.Result,
-		"RESULT_FILE": vars.ResultFile,
-		"META":        vars.Meta,
-		"RUN_DIR":     vars.RunDir,
+		"PROMPT":        vars.Prompt,
+		"SYSTEM_PROMPT": vars.SystemPrompt,
+		"SYSTEM_FILE":   vars.SystemFile,
+		"CURSOR_PLUGIN": vars.CursorPlugin,
+		"WORKSPACE":     vars.Workspace,
+		"TRACE_ID":      vars.TraceID,
+		"AGENT_ID":      vars.AgentID,
+		"TASK_ID":       vars.TaskID,
+		"COLONY_ROOT":   vars.ColonyRoot,
+		"RESULT":        vars.Result,
+		"RESULT_FILE":   vars.ResultFile,
+		"META":          vars.Meta,
+		"RUN_DIR":       vars.RunDir,
 	}
 	for name, val := range replacements {
 		s = strings.ReplaceAll(s, "${"+name+"}", val)

@@ -28,8 +28,8 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("pi: workspace is required")
 	}
-	if req.InitialPrompt == "" {
-		return adapters.SessionCommand{}, errors.New("pi: initial prompt is required")
+	if req.InitialPrompt == "" && req.SystemPrompt == "" {
+		return adapters.SessionCommand{}, errors.New("pi: initial prompt or system prompt is required")
 	}
 	if req.ColonyRoot == "" || req.TraceID == "" || req.AgentID == "" {
 		return adapters.SessionCommand{}, errors.New("pi: colony root, traceId, and agentId are required")
@@ -42,13 +42,17 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		AgentID:    req.AgentID,
 	}
 	sessionDir := filepath.Join(runDir.Root(), "pi-sessions")
+	systemFile := ""
+	if req.SystemPrompt != "" {
+		systemFile = runDir.SystemPath()
+	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildInteractiveArgs(req, sessionDir, prompt)
+		return b, buildInteractiveArgs(req, sessionDir, prompt, systemFile)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
@@ -62,11 +66,14 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}, nil
 }
 
-func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt string) []string {
+func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt, systemFile string) []string {
 	p := req.Params
 	args := []string{
 		"--session-dir", sessionDir,
 		"--session-id", req.AgentID,
+	}
+	if systemFile != "" {
+		args = append(args, "--append-system-prompt", systemFile)
 	}
 	if p.Model != "" {
 		args = append(args, "--model", p.Model)
@@ -83,6 +90,8 @@ func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt string
 	if p.APIKey != "" {
 		args = append(args, "--api-key", p.APIKey)
 	}
-	args = append(args, prompt)
+	if prompt != "" {
+		args = append(args, prompt)
+	}
 	return args
 }

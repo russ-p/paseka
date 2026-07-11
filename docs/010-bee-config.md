@@ -21,14 +21,14 @@ Related: [008-bee-routing.md](008-bee-routing.md) (`subscribes` / `publishes`), 
 | Path | Purpose |
 | ---- | ------- |
 | `.paseka/bees/<role>.yaml` | Canonical role definition (committed) |
-| `.paseka/bees/<role>.local.yaml` | Machine-local overlay; today only `prompt_template` is applied |
+| `.paseka/bees/<role>.local.yaml` | Machine-local overlay; `prompt_template` and `system_template` applied at resolve time |
 
 `paseka` loads bees via `colony.LoadBee(colonyRoot, role)` / `LoadAllBees`:
 
 1. Role must be non-empty and must not contain `/` or `..`.
 2. Base file is `.paseka/bees/<role>.yaml` (filename stem = role when `role:` is omitted).
 3. Event rules, `run_summary`, and adapter requirements are validated at load time.
-4. If `<role>.local.yaml` exists, its `prompt_template` overrides the base at resolve time (see [004-prompt-templates.md](004-prompt-templates.md)).
+4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [004-prompt-templates.md](004-prompt-templates.md)).
 
 `*.local.yaml` files are listed in `.paseka/.gitignore` and are skipped by `LoadAllBees`.
 
@@ -43,6 +43,7 @@ type Bee struct {
     Role               string
     Adapter            string
     PromptTemplate     string
+    SystemTemplate     string
     Sector             string
     Worktree           bool
     Intents            []string
@@ -63,7 +64,8 @@ type Bee struct {
 | ---------- | -------- | ------- |
 | `role` | recommended | Role name. If empty, defaults to the filename stem (`builder.yaml` → `builder`). |
 | `adapter` | no | `cursor` (default), `pi`, `claude`, or `script`. Unknown names fail load. |
-| `prompt_template` | usually | Path relative to `.paseka/prompts/`. Optional for `adapter: script` (no colony default applied when omitted). |
+| `prompt_template` | usually | Path relative to `.paseka/prompts/`. User/task turn. Optional for `adapter: script` (no colony default applied when omitted). |
+| `system_template` | no | Path relative to `.paseka/prompts/`. Role / standing instructions injected by the adapter (see [004-prompt-templates.md](004-prompt-templates.md)). |
 | `sector` | no | Default sector name from `colony.yaml` `sectors`. Task `sector` wins when set. |
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
 | `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
@@ -142,7 +144,7 @@ completion_contract:
 
 | Adapter | Notes |
 | ------- | ----- |
-| `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. |
+| `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. Custom `command` with `system_template` should pass `--plugin-dir $CURSOR_PLUGIN` for system injection. |
 | `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
@@ -213,7 +215,10 @@ Supports `$NAME` and `${NAME}`:
 
 | Variable | When set | Value |
 | -------- | -------- | ----- |
-| `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered prompt |
+| `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered user/task prompt |
+| `$SYSTEM_PROMPT` / `${SYSTEM_PROMPT}` | dispatch + post_exec | rendered system prompt |
+| `$SYSTEM_FILE` / `${SYSTEM_FILE}` | dispatch + post_exec | path to `system.txt` |
+| `$CURSOR_PLUGIN` / `${CURSOR_PLUGIN}` | dispatch + chat | ephemeral Cursor plugin dir (`.paseka/runs/<traceId>/<agentId>/cursor-plugin`); pass as `--plugin-dir` in custom Cursor `command` |
 | `$WORKSPACE` / `${WORKSPACE}` | dispatch + post_exec | agent working directory |
 | `$TRACE_ID` / `${TRACE_ID}` | dispatch + post_exec | current flight trail |
 | `$AGENT_ID` / `${AGENT_ID}` | dispatch + post_exec | this invocation id |

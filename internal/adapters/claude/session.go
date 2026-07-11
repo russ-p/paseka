@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/runs"
 )
 
 // SessionAdapter builds commands for interactive Claude Code CLI sessions.
@@ -26,17 +27,30 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("claude: workspace is required")
 	}
-	if req.InitialPrompt == "" {
-		return adapters.SessionCommand{}, errors.New("claude: initial prompt is required")
+	if req.InitialPrompt == "" && req.SystemPrompt == "" {
+		return adapters.SessionCommand{}, errors.New("claude: initial prompt or system prompt is required")
+	}
+	if req.SystemPrompt != "" && (req.ColonyRoot == "" || req.TraceID == "" || req.AgentID == "") {
+		return adapters.SessionCommand{}, errors.New("claude: colony root, traceId, and agentId are required for system prompt injection")
 	}
 
 	prompt := req.InitialPrompt
+	systemFile := ""
+	if req.SystemPrompt != "" {
+		runDir := runs.Dir{
+			ColonyRoot: req.ColonyRoot,
+			TraceID:    req.TraceID,
+			AgentID:    req.AgentID,
+		}
+		systemFile = runDir.SystemPath()
+	}
+
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildInteractiveArgs(req, prompt)
+		return b, buildInteractiveArgs(req, prompt, systemFile)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("claude: %q not found in PATH (install Claude Code CLI)", binary)
@@ -58,17 +72,21 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 // buildInteractiveArgs launches the Claude Code TUI seeded with an initial
 // prompt. Permission prompts are handled in the TUI, so --permission-mode is
 // only forwarded for plan mode.
-func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
+func buildInteractiveArgs(req adapters.SessionRequest, prompt, systemFile string) []string {
 	p := req.Params
 	var args []string
 
+	if systemFile != "" {
+		args = append(args, "--append-system-prompt-file", systemFile)
+	}
 	if p.Plan {
 		args = append(args, "--permission-mode", "plan")
 	}
 	if p.Model != "" {
 		args = append(args, "--model", p.Model)
 	}
-
-	args = append(args, prompt)
+	if prompt != "" {
+		args = append(args, prompt)
+	}
 	return args
 }

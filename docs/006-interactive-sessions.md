@@ -40,6 +40,7 @@ flowchart LR
 | `internal/adapters` | `SessionAdapter`, `SessionRequest`, `SessionHandle` |
 | `internal/adapters/cursor` | Interactive `agent` invocation (no `-p`) |
 | `internal/adapters/pi` | Interactive `pi` invocation (no `-p`, run-local session storage) |
+| `internal/adapters/claude` | Interactive `claude` invocation (no `-p`) |
 | `internal/sessions` | PTY process, attach, registry, Ghostty launcher |
 | `internal/runs` | `session.json`, `transcript.ndjson` |
 | `internal/colony` | Session registry in `state.json`, `terminal.yaml` |
@@ -75,6 +76,7 @@ Interactive sessions reuse `.paseka/runs/<traceId>/<agentId>/` under the **colon
 ```
 .paseka/runs/<traceId>/<agentId>/
 ├── prompt.txt
+├── system.txt          # optional — rendered system_template
 ├── result.txt
 ├── meta.json
 ├── status.json
@@ -193,7 +195,8 @@ If Ghostty is not installed, set `terminal: default` or omit `terminal.yaml`.
 | ----- | --------------- |
 | `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
 | `Workspace` | `--workspace <path>` |
-| `InitialPrompt` | positional prompt (no `-p`) |
+| `SystemPrompt` | ephemeral `--plugin-dir` rule (run-local plugin under `runs/`) |
+| `InitialPrompt` | positional prompt when provided (no `-p`) |
 | `params.model` | `--model <id>` |
 | `params.force` | `--force` |
 | `params.plan` | `--plan` |
@@ -204,9 +207,13 @@ Interactive invocation:
 ```bash
 agent --force \
   --workspace "$WORKSPACE" \
-  --model composer-2.5 \
-  "$PROMPT"
+  --plugin-dir "$CURSOR_PLUGIN" \
+  --model composer-2.5
+# optional positional kickoff when task/prompt provided:
+# "$PROMPT"
 ```
+
+When `system_template` is set and no task/prompt is given, the session starts without a positional prompt and waits for user input.
 
 Worktrees: if the bee has `worktree: true`, the session cwd is `.paseka/worktrees/<traceId>/` (same as `bee run`).
 
@@ -220,7 +227,8 @@ Bees with `adapter: pi` launch the Pi CLI in its normal interactive UI (no `-p`,
 | ----- | ------------ |
 | `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
 | `Workspace` | process cwd |
-| `InitialPrompt` | positional prompt |
+| `SystemPrompt` | `--append-system-prompt <system.txt>` (file path) |
+| `InitialPrompt` | positional prompt when provided |
 | `params.model` | `--model <pattern>` |
 | `params.provider` | `--provider <name>` |
 | `params.thinking` | `--thinking <level>` |
@@ -235,9 +243,10 @@ Interactive invocation:
 ```bash
 pi --session-dir "$RUN_DIR/pi-sessions" \
   --session-id "$AGENT_ID" \
+  --append-system-prompt "$RUN_DIR/system.txt" \
   --model gemini-2.5-pro \
-  --provider google \
-  "$PROMPT"
+  --provider google
+# optional: "$PROMPT"
 ```
 
 Pi session artifacts stay under `.paseka/runs/<traceId>/<agentId>/pi-sessions/`, tied to the current `agentId`.
@@ -246,7 +255,35 @@ Pi session artifacts stay under `.paseka/runs/<traceId>/<agentId>/pi-sessions/`,
 
 ---
 
-## 9. Lifecycle
+## 9. Claude adapter (interactive)
+
+Bees with `adapter: claude` launch the Claude Code CLI in its normal interactive TUI (no `-p`).
+
+| Input | Maps to `claude` |
+| ----- | ---------------- |
+| `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
+| `Workspace` | process cwd |
+| `SystemPrompt` | `--append-system-prompt-file <system.txt>` (file path, not inline) |
+| `InitialPrompt` | positional prompt when provided |
+| `params.model` | `--model <id>` |
+| `params.plan` | `--permission-mode plan` |
+| `params.binary` | CLI binary name (default `claude`) |
+| API key | `ANTHROPIC_API_KEY` or `api_key_env` from `~/.config/paseka/<slug>/adapters/claude.yaml` |
+
+Interactive invocation:
+
+```bash
+claude --append-system-prompt-file "$RUN_DIR/system.txt" \
+  --model claude-opus-4-8
+# optional positional kickoff when task/prompt provided:
+# "$PROMPT"
+```
+
+When `system_template` is set and no task/prompt is given, the session starts without a positional prompt and waits for user input in the TUI.
+
+---
+
+## 10. Lifecycle
 
 ```
 paseka bee chat <role> [prompt]
@@ -258,7 +295,7 @@ paseka bee chat <role> [prompt]
   Optional worktree for traceId
         │
         ▼
-  Render prompt → prompt.txt
+  Render templates → prompt.txt (and system.txt when system_template is set)
         │
         ▼
   SessionAdapter.SessionCommand()
@@ -284,7 +321,7 @@ paseka bee chat <role> [prompt]
 
 ---
 
-## 10. MVP limitations and next steps
+## 11. MVP limitations and next steps
 
 | Topic | MVP | Later |
 | ----- | --- | ----- |
@@ -296,7 +333,7 @@ paseka bee chat <role> [prompt]
 
 ---
 
-## 11. Decisions (locked)
+## 12. Decisions (locked)
 
 | Topic | Decision |
 | ----- | -------- |

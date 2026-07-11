@@ -12,6 +12,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/adapters/script"
+	"github.com/paseka/paseka/internal/adapters/systeminject"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
@@ -102,7 +103,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	if err != nil {
 		return nil, err
 	}
-	bee, beeLocalTemplate, err := colony.LoadBee(colonyRoot, req.Bee)
+	bee, overlay, err := colony.LoadBee(colonyRoot, req.Bee)
 	if err != nil {
 		return nil, err
 	}
@@ -148,18 +149,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, fmt.Errorf("runtime: discover intents: %w", err)
 	}
 
-	resolveInput := prompts.ResolveInput{
-		InlinePrompt:     req.InlinePrompt,
-		BeeLocalTemplate: beeLocalTemplate,
-		BeeTemplate:      bee.PromptTemplate,
-		DefaultTemplate:  manifest.Defaults.PromptTemplate,
-	}
-	if adapterName == "script" {
-		resolveInput.SkipDefaults = true
-		resolveInput.AllowEmpty = true
-	}
-
-	rendered, err := loader.RenderResolved(resolveInput, prompts.PromptContext(prompts.Context{
+	promptCtx := prompts.PromptContext(prompts.Context{
 		Bee:        bee.Role,
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
@@ -172,7 +162,29 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		IntentRaw:  req.Intent,
 		Insights:   insights,
 		ResultFile: resultFile,
-	}, knownIntents, defaultIntent))
+	}, knownIntents, defaultIntent)
+
+	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
+		BeeLocalTemplate: overlay.SystemTemplate,
+		BeeTemplate:      bee.SystemTemplate,
+		DefaultTemplate:  manifest.Defaults.SystemTemplate,
+	}, promptCtx)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: render system prompt: %w", err)
+	}
+
+	resolveInput := prompts.ResolveInput{
+		InlinePrompt:     req.InlinePrompt,
+		BeeLocalTemplate: overlay.PromptTemplate,
+		BeeTemplate:      bee.PromptTemplate,
+		DefaultTemplate:  manifest.Defaults.PromptTemplate,
+	}
+	if adapterName == "script" {
+		resolveInput.SkipDefaults = true
+		resolveInput.AllowEmpty = true
+	}
+
+	rendered, err := loader.RenderResolved(resolveInput, promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: render prompt: %w", err)
 	}
@@ -186,14 +198,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 
 	runDirPath := runDir.Root()
 	cmdVars := colony.CommandVars{
-		Prompt:     rendered,
-		Workspace:  workspace,
-		TraceID:    req.TraceID,
-		AgentID:    agentID,
-		TaskID:     req.TaskID,
-		ColonyRoot: colonyRoot,
-		ResultFile: resultFile,
-		RunDir:     runDirPath,
+		Prompt:       rendered,
+		SystemPrompt: renderedSystem,
+		SystemFile:   runDir.SystemPath(),
+		CursorPlugin: systeminject.CursorPluginPath(runDir),
+		Workspace:    workspace,
+		TraceID:      req.TraceID,
+		AgentID:      agentID,
+		TaskID:       req.TaskID,
+		ColonyRoot:   colonyRoot,
+		ResultFile:   resultFile,
+		RunDir:       runDirPath,
 	}
 
 	var command []string
@@ -215,6 +230,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 
 	if err := runDir.Prepare(); err != nil {
 		return nil, fmt.Errorf("runtime: prepare run dir: %w", err)
+	}
+	if renderedSystem != "" {
+		if err := runDir.WriteSystem(renderedSystem); err != nil {
+			return nil, fmt.Errorf("runtime: write system: %w", err)
+		}
 	}
 
 	createdAt := time.Now().UTC()
@@ -254,20 +274,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	)
 
 	result, err := adapter.Run(ctx, adapters.RunRequest{
-		Bee:        bee.Role,
-		Prompt:     rendered,
-		ColonyRoot: colonyRoot,
-		Workspace:  workspace,
-		Sector:     req.Sector,
-		SectorPath: req.SectorPath,
-		Params:     params,
-		Command:    command,
-		TraceID:    req.TraceID,
-		AgentID:    agentID,
-		TaskID:     req.TaskID,
-		Task:       req.Task,
-		Intent:     req.Intent,
-		Insights:   insights,
+		Bee:          bee.Role,
+		Prompt:       rendered,
+		SystemPrompt: renderedSystem,
+		ColonyRoot:   colonyRoot,
+		Workspace:    workspace,
+		Sector:       req.Sector,
+		SectorPath:   req.SectorPath,
+		Params:       params,
+		Command:      command,
+		TraceID:      req.TraceID,
+		AgentID:      agentID,
+		TaskID:       req.TaskID,
+		Task:         req.Task,
+		Intent:       req.Intent,
+		Insights:     insights,
 	})
 	if err != nil {
 		return nil, err

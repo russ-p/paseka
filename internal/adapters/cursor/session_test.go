@@ -1,6 +1,7 @@
 package cursor_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -66,5 +67,40 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 		if cmd.Args[i] != want[i] {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], want[i], cmd.Args)
 		}
+	}
+}
+
+func TestSessionCommandSystemOnlyUsesPluginDir(t *testing.T) {
+	root := t.TempDir()
+	a := cursor.NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		ColonyRoot:   root,
+		Workspace:    root,
+		TraceID:      "trace-1",
+		AgentID:      "agent-1",
+		SystemPrompt: "You are Scout.",
+		Params:       adapters.RunParams{Binary: "sh", Model: "composer-2.5"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pluginFlag := false
+	for i, arg := range cmd.Args {
+		if arg == "--plugin-dir" {
+			pluginFlag = true
+			if i+1 >= len(cmd.Args) {
+				t.Fatal("missing plugin dir value")
+			}
+			if _, err := os.Stat(cmd.Args[i+1]); err != nil {
+				t.Fatalf("plugin dir: %v", err)
+			}
+		}
+	}
+	if !pluginFlag {
+		t.Fatalf("expected --plugin-dir in args=%v", cmd.Args)
+	}
+	if len(cmd.Args) > 0 && cmd.Args[len(cmd.Args)-1] == "You are Scout." {
+		t.Fatalf("system prompt must not be positional, args=%v", cmd.Args)
 	}
 }

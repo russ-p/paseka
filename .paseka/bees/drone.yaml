@@ -1,6 +1,7 @@
 role: drone
 adapter: cursor
-prompt_template: drone.md
+system_template: drone-system.md
+prompt_template: drone-task.md
 params:
   model: grok-4.5-high
   yolo: true

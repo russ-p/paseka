@@ -25,7 +25,7 @@ func TestBuildArgs(t *testing.T) {
 			Force:        true,
 		},
 	}
-	args := buildArgs(req, "implement feature")
+	args := buildArgs(req, "implement feature", "")
 
 	want := []string{
 		"-p", "--workspace", "/colony/worktree",
