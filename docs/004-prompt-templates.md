@@ -289,6 +289,7 @@ Bees include only the type partials they may publish. For example:
 | `guard` | `emit-howto`, `emit-verification`, `emit-insight` |
 | `main-guard` | `emit-howto`, `emit-insight` |
 | `receiver` | `emit-howto`, `emit-verification` |
+| `hivewright` | `emit-howto`, `emit-insight` |
 
 `MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal` from staged diffs.
 

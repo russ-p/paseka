@@ -40,8 +40,11 @@
 | Notification Agent | Messenger Bee |
 | Diagnostic Agent   | Medic Bee     |
 | Observer           | Watch Bee     |
+| Hive meta-agent    | Hivewright Bee |
 
 При необходимости пользователь может создавать собственные виды пчёл.
+
+**Hivewright Bee** — улучшает других пчёл и среду улья (prompts, bee YAML, протоколы хореографии) по идеям пасечника и анализу Flight Trails. Не пишет продуктовый код Colony; понимание проекта нужно только чтобы сузить фокус ролей.
 
 ---
 

@@ -204,8 +204,8 @@ paseka init [--adapter cursor|pi]
   ├─► resolve git root (fail if not a repo)
   ├─► compute / persist project slug
   ├─► create .paseka/colony.yaml (defaults)
-  ├─► create .paseka/prompts/ with starter templates (scout, builder)
-  ├─► create .paseka/bees/ with starter bees (scout, builder) for the selected adapter
+  ├─► create .paseka/prompts/ with starter templates (scout, builder, hivewright)
+  ├─► create .paseka/bees/ with starter bees (scout, builder, hivewright) for the selected adapter
   ├─► create .paseka/.gitignore (worktrees/, runs/, *.local.yaml, cache/)
   ├─► create ~/.config/paseka/<slug>/config.yaml
   ├─► create ~/.config/paseka/<slug>/state.json (empty)

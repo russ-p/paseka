@@ -34,6 +34,15 @@ func builderBeeYAMLFor(adapter string) string {
 	}
 }
 
+func hivewrightBeeYAMLFor(adapter string) string {
+	switch adapter {
+	case "pi":
+		return hivewrightBeePiYAML
+	default:
+		return hivewrightBeeYAML
+	}
+}
+
 func homeConfigYAML(repoRoot, slug, adapter string) string {
 	adaptersBlock := `adapters:
   cursor:

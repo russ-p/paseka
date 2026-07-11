@@ -109,9 +109,11 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, ".gitignore"):                                         gitignoreContent,
 		PasekaPath(root, "bees", "scout.yaml"):                                 scoutBeeYAMLFor(adapter),
 		PasekaPath(root, "bees", "builder.yaml"):                               builderBeeYAMLFor(adapter),
+		PasekaPath(root, "bees", "hivewright.yaml"):                            hivewrightBeeYAMLFor(adapter),
 		PasekaPath(root, "prompts", "default.md"):                              defaultPrompt,
 		PasekaPath(root, "prompts", "scout.md"):                                scoutPrompt,
 		PasekaPath(root, "prompts", "builder.md"):                              builderPrompt,
+		PasekaPath(root, "prompts", "hivewright.md"):                           hivewrightPrompt,
 		PasekaPath(root, "prompts", "_partials", "emit-howto.md"):              emitHowtoPartial,
 		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):            emitInsightPartial,
 		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):             emitSignalPartial,
@@ -266,6 +268,23 @@ publishes:
   - type: VERIFICATION
     kind: task.completed
 `
+	hivewrightBeeYAML = `role: hivewright
+adapter: cursor
+prompt_template: hivewright.md
+params:
+  model: composer-2.5
+  output_format: stream-json
+  trust: true
+  force: true
+worktree: true
+publishes:
+  - type: MUTATION
+    kind: code.proposal
+  - type: INSIGHT
+    kind: run.summary
+  - type: INSIGHT
+    kind: context.note
+`
 	defaultPrompt = `You are a Worker Bee in colony {{.ColonyRoot}}.
 
 Flight trail: {{.TraceID}}
@@ -324,6 +343,62 @@ Success criteria (must confirm all):
 - Build passes (module-level build succeeds)
 - No new compiler errors or warnings that are not explicitly accepted
 - Related tests (if any) pass
+
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
+
+Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit run.summary, runtime will synthesize one from the normalized run outcome when possible.
+`
+	hivewrightPrompt = `You are Hivewright Bee. Your craft is the hive itself — how bees are defined,
+prompted, and wired into the Air — not the Colony's product code.
+
+Colony: {{.ColonyRoot}}
+Flight trail: {{.TraceID}}
+Workspace: {{.Workspace}}
+
+## Mandate
+- Improve sibling bees: prompt templates, partials, bee YAML, and choreography
+  contracts under .paseka/.
+- Ground changes in Beekeeper intent and Flight Trail analysis when available.
+- Use published Hive documentation for Paseka capabilities. Do not rely on
+  the Paseka platform source tree (internal/, cmd/, Go packages).
+- Read the project only enough to sharpen each bee's focus for this Colony.
+- Prefer small, reviewable Comb Proposals with explicit rationale.
+- Do not implement product features; leave that to Builder / Worker bees.
+- Do not impersonate the Queen or invent central orchestration.
+
+## Hive docs (capabilities)
+Canonical index (fetch and follow links as needed):
+https://russ-p.github.io/paseka/llms.txt
+
+Full corpus (optional single-fetch):
+https://russ-p.github.io/paseka/llms-full.txt
+
+Start with bee YAML, prompt templates, routing, and INSIGHT kinds before
+mutating colony config.
+
+## Task
+{{.Task}}
+
+## Prior discoveries
+{{range .Insights}}- {{.}}
+{{end}}
+
+## Workflow
+1. Read the task and any Beekeeper guidance in prior discoveries.
+2. Consult Hive docs above for current contracts and template rules.
+3. Inspect relevant .paseka/bees/*.yaml and .paseka/prompts/ (and partials).
+4. When Flight Trails matter, inspect .paseka/runs/ for the current or named
+   trail — prompts, results, and emitted events — without rewriting platform code.
+5. Propose focused edits under .paseka/ only. Stage changes; do not commit.
+6. Summarize what changed and why (tie to Beekeeper intent and/or trail evidence).
+
+Success criteria (must confirm all):
+- Changes stay inside .paseka/ (prompts, bee YAML, related colony config)
+- No product/application code outside .paseka/ is modified
+- Edits are justified by Beekeeper intent and/or Flight Trail evidence
+- Bee roles become more focused, not more generic
+- Staged diff is reviewable and scoped to the task
 
 {{template "emit-howto" .}}
 {{template "emit-insight" .}}
@@ -471,6 +546,20 @@ publishes:
     kind: code.proposal
   - type: VERIFICATION
     kind: task.completed
+`
+	hivewrightBeePiYAML = `role: hivewright
+adapter: pi
+prompt_template: hivewright.md
+params:
+  output_format: json
+worktree: true
+publishes:
+  - type: MUTATION
+    kind: code.proposal
+  - type: INSIGHT
+    kind: run.summary
+  - type: INSIGHT
+    kind: context.note
 `
 	piAdapterYAML = `binary: pi
 # api_key_env: GEMINI_API_KEY   # optional; passed as --api-key when set in env

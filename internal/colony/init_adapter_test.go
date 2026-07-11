@@ -59,6 +59,14 @@ func TestInitScaffoldWithPiAdapter(t *testing.T) {
 		t.Fatalf("builder bee should use pi adapter:\n%s", builder)
 	}
 
+	hivewright, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", "hivewright.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hivewright), "adapter: pi") {
+		t.Fatalf("hivewright bee should use pi adapter:\n%s", hivewright)
+	}
+
 	piYAML := filepath.Join(res.HomeDir, "adapters", "pi.yaml")
 	if _, err := os.Stat(piYAML); err != nil {
 		t.Fatalf("missing pi adapter config: %v", err)
