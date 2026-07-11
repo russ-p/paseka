@@ -8,6 +8,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
@@ -26,10 +27,12 @@ var interactiveAdapters = map[string]bool{
 
 // BeeView is a launchable interactive bee.
 type BeeView struct {
-	Role           string `json:"role"`
-	Adapter        string `json:"adapter"`
-	PromptTemplate string `json:"promptTemplate"`
-	Worktree       bool   `json:"worktree"`
+	Role           string   `json:"role"`
+	Adapter        string   `json:"adapter"`
+	PromptTemplate string   `json:"promptTemplate"`
+	Worktree       bool     `json:"worktree"`
+	Intents        []string `json:"intents"`
+	DefaultIntent  string   `json:"defaultIntent,omitempty"`
 }
 
 // SessionView is a console projection of one interactive session.
@@ -103,11 +106,17 @@ func ListInteractiveBees(colonyRoot string) ([]BeeView, error) {
 		if err != nil || !interactiveAdapters[adapterName] {
 			continue
 		}
+		intents, defaultIntent, err := prompts.DiscoverIntents(colonyRoot, bee)
+		if err != nil {
+			continue
+		}
 		out = append(out, BeeView{
 			Role:           bee.Role,
 			Adapter:        adapterName,
 			PromptTemplate: bee.PromptTemplate,
 			Worktree:       bee.Worktree,
+			Intents:        intents,
+			DefaultIntent:  defaultIntent,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Role < out[j].Role })

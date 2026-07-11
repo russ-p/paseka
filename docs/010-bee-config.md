@@ -45,6 +45,8 @@ type Bee struct {
     PromptTemplate     string
     Sector             string
     Worktree           bool
+    Intents            []string
+    DefaultIntent      string
     Command            Command
     PostExec           Command
     Params             map[string]any
@@ -64,6 +66,8 @@ type Bee struct {
 | `prompt_template` | usually | Path relative to `.paseka/prompts/`. Optional for `adapter: script` (no colony default applied when omitted). |
 | `sector` | no | Default sector name from `colony.yaml` `sectors`. Task `sector` wins when set. |
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
+| `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
+| `default_intent` | no | Default intent when the caller omits `--intent` or passes an unknown value. When omitted, `general` is used if present in the vocabulary; otherwise the first discovered intent. |
 | `params` | no | Adapter flag map (`model`, `trust`, …). Ignored when `command` is set (runtime warns if both are present). |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |

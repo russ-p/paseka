@@ -213,6 +213,10 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, err
 	}
+	knownIntents, defaultIntent, err := prompts.DiscoverIntents(ctxColony.ColonyRoot, bee)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: discover intents: %w", err)
+	}
 	rendered, err := loader.RenderResolved(prompts.ResolveInput{
 		InlinePrompt:     req.InlinePrompt,
 		BeeLocalTemplate: beeLocalTemplate,
@@ -229,7 +233,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		IntentRaw:  req.Intent,
 		Insights:   req.Insights,
 		ResultFile: resultFile,
-	}))
+	}, knownIntents, defaultIntent))
 	if err != nil {
 		return nil, fmt.Errorf("sessions: render prompt: %w", err)
 	}

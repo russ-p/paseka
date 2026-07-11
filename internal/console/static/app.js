@@ -321,23 +321,74 @@ function setTab(tab) {
   }
 }
 
+function findBee(role) {
+  return state.bees.find((b) => b.role === role);
+}
+
+function renderIntentSelect(selectEl, bee) {
+  selectEl.innerHTML = '';
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = '—';
+  selectEl.appendChild(blank);
+  if (!bee?.intents?.length) {
+    return;
+  }
+  for (const intent of bee.intents) {
+    const opt = document.createElement('option');
+    opt.value = intent;
+    opt.textContent = intent;
+    selectEl.appendChild(opt);
+  }
+  if (bee.defaultIntent) {
+    selectEl.value = bee.defaultIntent;
+  }
+}
+
+function syncSessionIntents() {
+  const bee = findBee(el.beeSelect.value);
+  renderIntentSelect(el.intentSelect, bee);
+}
+
+function syncTaskIntents() {
+  const bee = findBee(el.taskBeeInput.value);
+  renderIntentSelect(el.taskIntentSelect, bee);
+}
+
 function renderBees() {
   el.beeSelect.innerHTML = '';
+  el.taskBeeInput.innerHTML = '';
   if (!state.bees.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No interactive bees found';
-    el.beeSelect.appendChild(opt);
+    const sessionOpt = document.createElement('option');
+    sessionOpt.value = '';
+    sessionOpt.textContent = 'No interactive bees found';
+    el.beeSelect.appendChild(sessionOpt);
     el.launchBtn.disabled = true;
+    el.taskCreateBtn.disabled = true;
+    renderIntentSelect(el.intentSelect, null);
+    renderIntentSelect(el.taskIntentSelect, null);
     return;
   }
   el.launchBtn.disabled = false;
+  el.taskCreateBtn.disabled = false;
   for (const bee of state.bees) {
-    const opt = document.createElement('option');
-    opt.value = bee.role;
-    opt.textContent = `${bee.role} (${bee.adapter})`;
-    el.beeSelect.appendChild(opt);
+    const sessionOpt = document.createElement('option');
+    sessionOpt.value = bee.role;
+    sessionOpt.textContent = `${bee.role} (${bee.adapter})`;
+    el.beeSelect.appendChild(sessionOpt);
+
+    const taskOpt = document.createElement('option');
+    taskOpt.value = bee.role;
+    taskOpt.textContent = `${bee.role} (${bee.adapter})`;
+    el.taskBeeInput.appendChild(taskOpt);
   }
+  const builder = findBee('builder');
+  if (builder) {
+    el.beeSelect.value = builder.role;
+    el.taskBeeInput.value = builder.role;
+  }
+  syncSessionIntents();
+  syncTaskIntents();
 }
 
 function renderSessions() {
@@ -1227,7 +1278,7 @@ async function createTaskFromForm() {
     const body = {
       title: el.taskTitleInput.value.trim(),
       body: el.taskBodyInput.value.trim(),
-      bee: el.taskBeeInput.value.trim(),
+      bee: el.taskBeeInput.value,
       traceId: el.taskTraceInput.value.trim(),
       sector: el.taskSectorInput.value.trim(),
       intent: el.taskIntentSelect.value,
@@ -1699,6 +1750,9 @@ el.reviewOpenRunsBtn.addEventListener('click', () => {
   setTab('tasks');
   selectTask(state.selectedReviewDetail.traceId, state.selectedReviewDetail.taskId).catch(console.error);
 });
+
+el.beeSelect.addEventListener('change', syncSessionIntents);
+el.taskBeeInput.addEventListener('change', syncTaskIntents);
 
 el.rawToggle.addEventListener('change', () => {
   const on = el.rawToggle.checked;

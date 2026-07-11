@@ -72,7 +72,7 @@ func newBeeRunCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository (default: current directory)")
 	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
-	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
+	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().BoolVar(&noBus, "no-bus", false, "skip NATS publish (file-only run)")
 	return cmd
@@ -164,7 +164,7 @@ func newBeeChatCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
-	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
+	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().StringVar(&terminal, "terminal", "", "terminal UI: default or ghostty (overrides ~/.config/paseka/<slug>/terminal.yaml)")
 	return cmd

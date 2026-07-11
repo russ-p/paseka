@@ -228,7 +228,7 @@ The Tasks tab exposes task control and task state using the existing task ledger
 Current implementation supports:
 
 - grouped task board across recent traces
-- task creation with title, body, bee, optional trace id, sector, intent, optional `review` policy (`none`, `required`, `final`), dependencies, and autorun
+- task creation with title, body, bee (select from interactive bees), optional trace id, sector, per-bee intent, optional `review` policy (`none`, `required`, `final`), dependencies, and autorun
 - task detail with status, review policy, source, body, summary, commit, dependencies, and linked runs
 - start action for eligible tasks
 - approve/reject actions for review-gated tasks in `waiting_review`
@@ -302,7 +302,7 @@ Session launch supports:
 - choosing an interactive-capable bee
 - entering task text
 - using an advanced raw-prompt override
-- optionally setting trace id and intent
+- optionally setting trace id and per-bee intent (options from `GET /api/bees` → `intents` / `defaultIntent`)
 
 For the MVP, session interaction remains split:
 
@@ -322,7 +322,7 @@ Implemented. From the UI, the user can:
 
 - choose bee
 - enter task or prompt
-- optionally set trace and intent
+- optionally set trace and per-bee intent (intent options follow the selected bee)
 - start the session
 
 After launch, the UI shows:
@@ -398,7 +398,7 @@ Implemented HTTP endpoints:
 - `GET /api/traces/:traceId/tasks/:taskId`
 - `POST /api/traces/:traceId/tasks/:taskId/start`
 - `GET /api/events`
-- `GET /api/bees`
+- `GET /api/bees` — interactive bees with `role`, `adapter`, `promptTemplate`, `worktree`, `intents`, `defaultIntent`
 - `GET /api/sessions`
 - `POST /api/sessions`
 - `GET /api/sessions/:sessionId`

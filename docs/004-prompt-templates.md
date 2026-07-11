@@ -65,7 +65,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.ColonyRoot}}` | `string` | Absolute path to the git repository root. |
 | `{{.Workspace}}` | `string` | Absolute cwd for the adapter: colony root, or `.paseka/worktrees/<traceId>/` when `worktree: true`. |
 | `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or bus event payload. |
-| `{{.Intent}}` | `string` | Normalized builder task intent for partial routing (`general`, `feature`, `bugfix`, `test-fix`, `refactor`). Empty caller input becomes `general`. |
+| `{{.Intent}}` | `string` | Normalized task intent for partial routing within the bee's vocabulary. Empty or unknown caller input becomes the bee's default intent. |
 | `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [009-insight-kinds.md](009-insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `result.txt` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
@@ -135,6 +135,17 @@ _partials/builder-intent-feature.md  →  {{template "builder-intent-feature" .}
 ```
 
 Builder Bee uses intent partials for mission-specific guidance while keeping one stable role prompt. The top-level `builder.md` routes by `{{.Intent}}` and falls back to `builder-intent-general`.
+
+### Per-bee intent vocabulary
+
+Each bee may define an intent vocabulary used for `{{.Intent}}` normalization and Queen Console intent pickers:
+
+1. **Explicit** — `intents:` and optional `default_intent:` in `bees/<role>.yaml` (see [010-bee-config.md](010-bee-config.md)).
+2. **Discovered** — when `intents` is omitted, runtime scans `_partials/<role>-intent-*.md` (e.g. `builder-intent-feature.md` → `feature`, `drone-intent-grilling.md` → `grilling`).
+
+At dispatch, empty or unknown caller input normalizes to the bee's default intent (`general` when present, otherwise the first discovered intent). The raw requested value remains in `{{.IntentRaw}}` when it differs from `{{.Intent}}`.
+
+Bees without YAML intents and without `<role>-intent-*` partials have no intent vocabulary; `{{.Intent}}` stays empty unless the caller passes a recognized value.
 
 Include only the emit partials your bee role may publish:
 
@@ -215,7 +226,7 @@ Intent: {{.Intent}}
 {{template "emit-insight" .}}
 ```
 
-Known intents: `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Unknown values normalize to `general`; the raw requested value remains in `{{.IntentRaw}}` when it differs.
+Known builder intents (discovered from `builder-intent-*` partials): `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Drone uses `drone-intent-*` partials (`general`, `grilling`, `breakdown`) and routes on `{{.IntentRaw}}` in its template.
 
 ### Scout bee with bus-event partial
 

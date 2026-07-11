@@ -143,6 +143,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		return nil, err
 	}
 
+	knownIntents, defaultIntent, err := prompts.DiscoverIntents(colonyRoot, bee)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: discover intents: %w", err)
+	}
+
 	resolveInput := prompts.ResolveInput{
 		InlinePrompt:     req.InlinePrompt,
 		BeeLocalTemplate: beeLocalTemplate,
@@ -167,7 +172,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		IntentRaw:  req.Intent,
 		Insights:   insights,
 		ResultFile: resultFile,
-	}))
+	}, knownIntents, defaultIntent))
 	if err != nil {
 		return nil, fmt.Errorf("runtime: render prompt: %w", err)
 	}

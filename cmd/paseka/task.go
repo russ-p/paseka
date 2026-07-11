@@ -220,7 +220,7 @@ func newTaskCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read task body from stdin")
 	cmd.Flags().StringVar(&bee, "bee", "", "bee role (default: builder)")
 	cmd.Flags().StringVar(&sector, "sector", "", "colony sector name (from colony.yaml sectors)")
-	cmd.Flags().StringVar(&intent, "intent", "", "builder task intent: general, feature, bugfix, test-fix, refactor")
+	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&reviewPolicy, "review", "", "review policy: none, required, final")
 	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "task dependencies (repeatable or comma-separated)")
 	cmd.Flags().BoolVar(&autorun, "autorun", false, "publish task.ready immediately after task.plan")

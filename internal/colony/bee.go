@@ -46,6 +46,8 @@ type Bee struct {
 	PromptTemplate     string             `yaml:"prompt_template"`
 	Sector             string             `yaml:"sector,omitempty"`
 	Worktree           bool               `yaml:"worktree"`
+	Intents            []string           `yaml:"intents,omitempty"`
+	DefaultIntent      string             `yaml:"default_intent,omitempty"`
 	Command            Command            `yaml:"command,omitempty"`
 	PostExec           Command            `yaml:"post_exec,omitempty"`
 	Params             map[string]any     `yaml:"params"`

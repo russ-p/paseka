@@ -28,36 +28,13 @@ type Context struct {
 	ResultFile string
 }
 
-// Known intents supported by builder intent partials.
-const (
-	IntentGeneral  = "general"
-	IntentFeature  = "feature"
-	IntentBugfix   = "bugfix"
-	IntentTestFix  = "test-fix"
-	IntentRefactor = "refactor"
-)
-
-// NormalizeIntent maps a caller intent to a stable partial name.
-// Empty and unknown values become IntentGeneral.
-func NormalizeIntent(raw string) string {
-	raw = strings.TrimSpace(strings.ToLower(raw))
-	switch raw {
-	case "", IntentGeneral:
-		return IntentGeneral
-	case IntentFeature, IntentBugfix, IntentTestFix, IntentRefactor:
-		return raw
-	default:
-		return IntentGeneral
-	}
-}
-
 // PromptContext builds a template context with normalized intent fields.
-func PromptContext(base Context) Context {
+func PromptContext(base Context, known []string, defaultIntent string) Context {
 	base.IntentRaw = strings.TrimSpace(base.IntentRaw)
 	if base.IntentRaw == "" {
 		base.IntentRaw = strings.TrimSpace(base.Intent)
 	}
-	base.Intent = NormalizeIntent(base.IntentRaw)
+	base.Intent = NormalizeIntent(base.IntentRaw, known, defaultIntent)
 	return base
 }
 
