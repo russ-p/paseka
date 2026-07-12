@@ -37,7 +37,7 @@ Relevant existing pieces:
 | Routing | [008-bee-routing.md](../008-bee-routing.md) | `task.ready` → builder → `code.proposal` → guard → `verification.*` → builder |
 | Honey reserve | `defaults.energy_budget` in `colony.yaml`; `TraceSnapshot.energyRemaining` in JetStream KV | Each dispatch consumes 1 token; exhausted traces block until `paseka energy add` |
 | Fixed trace | CLI `--trace` | Stable case identity across resets |
-| Purge | `paseka purge --runs --worktrees --state` | Ephemeral cleanup between runs |
+| Purge | `paseka purge --runs --worktrees --state --bus --trace <traceId>` | Ephemeral cleanup between runs (bus wipe requires stopped reactor) |
 | Signal inject | `paseka signal` | Bus-level fault injection |
 | Replay | `paseka replay <traceId>` | Read-only event chain inspection |
 | Test harness | `recordingAdapter`, `NewTestReactor`, `MemoryLedger` | Tier A in-process evals |
@@ -105,10 +105,10 @@ Canonical reset model per case run:
 2. **Trace** — use a fixed `--trace` from `case.yaml` (e.g. `eval-01-add-function`).
 3. **Ephemeral worktree** — runtime creates `.paseka/worktrees/<traceId>/` on `paseka/<traceId>` from current `HEAD` (`BaseSHA`).
 4. **Clean slate** before each run:
-   - `paseka purge --runs --worktrees --state --yes`
+   - stop `paseka run` if it is active (avoid reactor/KV races during bus purge)
+   - `paseka purge --runs --worktrees --state --bus --trace <case-trace> --yes`
    - `git worktree prune` and delete leftover `paseka/<trace>` branches if present
    - reset colony working tree to `seedSha`
-   - use a dedicated NATS subject prefix / JetStream namespace for eval, or wipe eval consumers/KV between runs
 
 Repeatable inputs:
 
@@ -117,7 +117,7 @@ Repeatable inputs:
 | Code baseline | `seedSha` |
 | Trace identity | fixed `trace` in case YAML |
 | Colony config | committed `.paseka/` in eval repo |
-| Bus state | isolated prefix or wipe |
+| Bus state | `paseka purge --bus --trace <case-trace>` (NATS required; stop reactor first) |
 | Apiary state | purge + optional `XDG_CONFIG_HOME` isolation |
 
 Non-deterministic (acceptable at Tier C only):
@@ -310,8 +310,8 @@ go build -o paseka ./cmd/paseka
 Eval colony (Tier B/C):
 
 ```bash
-# from eval colony root, with NATS up
-paseka purge --runs --worktrees --state --yes
+# from eval colony root, with NATS up (stop paseka run before bus purge)
+paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
 # runner or manual:
 paseka run &
 paseka task create --trace eval-01-add-function --title "..." --body "..." --bee builder --intent test-fix --autorun
@@ -330,7 +330,7 @@ Success criteria for the design:
 1. **Runner home** — Go subcommand in Paseka (`paseka eval …`) vs standalone tool in the eval colony?
 2. **Seed materialization** — copy `seed/` into a throwaway git repo each run vs tags on a single eval-colony history?
 3. **Script bees** — **resolved:** first-class `adapter: script` in platform; eval colonies use script bees with `paseka event emit` for domain events.
-4. **JetStream wipe** — document manual wipe, or add `paseka purge --bus` for eval namespaces?
+4. **JetStream wipe** — **resolved:** `paseka purge --bus --trace <traceId>` removes task-ledger KV, stream events, and object-store artifacts for one trace without restarting NATS. Stop `paseka run` before bus purge. See [007-cli.md](../007-cli.md) § `paseka purge`.
 5. **Case language** — keep YAML only, or allow Markdown task bodies with YAML front matter?
 6. **Multi-sector cases** — defer until sectors are common in real colonies?
 
