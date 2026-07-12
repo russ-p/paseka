@@ -4,10 +4,10 @@ Paseka is a decentralized, event-driven AI agent swarm for solo developers. Agen
 
 ## Tech stack
 
-- **Language:** Go — platform, CLI, runtime, and future Queen Console API.
+- **Language:** Go — platform, CLI, runtime, and Queen Console API.
 - **Message bus:** NATS + JetStream (event sourcing, KV, Object Store).
 - **CLI:** Queen Shell (`cmd/paseka`) — single binary for init, run, status, and minimal hive management.
-- **Web UI (later):** Queen Console — SPA frontend + Go HTTP/WebSocket API; not part of MVP.
+- **Web UI:** Queen Console — embedded SPA + Go HTTP/WebSocket API via `paseka console`; baseline in [docs/specs/002-queen-console-mvp.md](docs/specs/002-queen-console-mvp.md).
 - **Agents (Bees):** implemented in Go by default. Optional Python workers may subscribe to the same NATS contracts later for code/AST-heavy tasks.
 
 ## Colony model

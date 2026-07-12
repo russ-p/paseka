@@ -12,6 +12,7 @@ const state = {
   reviews: null,
   selectedReviewKey: null,
   selectedReviewDetail: null,
+  reviewMergeDiffToken: 0,
   selectedTaskKey: null,
   selectedTaskDetail: null,
   dashboard: null,
@@ -122,6 +123,15 @@ const el = {
   reviewDetailMeta: document.getElementById('review-detail-meta'),
   reviewSummaryWrap: document.getElementById('review-summary-wrap'),
   reviewSummary: document.getElementById('review-summary'),
+  reviewMergeDiffWrap: document.getElementById('review-merge-diff-wrap'),
+  reviewMergeDiffLoading: document.getElementById('review-merge-diff-loading'),
+  reviewMergeDiffError: document.getElementById('review-merge-diff-error'),
+  reviewMergeDiffMissing: document.getElementById('review-merge-diff-missing'),
+  reviewMergeDiffEmpty: document.getElementById('review-merge-diff-empty'),
+  reviewMergeDiffTruncated: document.getElementById('review-merge-diff-truncated'),
+  reviewMergeDiffMeta: document.getElementById('review-merge-diff-meta'),
+  reviewMergeDiffStat: document.getElementById('review-merge-diff-stat'),
+  reviewMergeDiffContainer: document.getElementById('review-merge-diff-container'),
   reviewActionsWrap: document.getElementById('review-actions-wrap'),
   reviewFinalHint: document.getElementById('review-final-hint'),
   reviewApproveForm: document.getElementById('review-approve-form'),
@@ -1080,6 +1090,7 @@ function renderReviewDetail(item) {
     el.reviewDetailEmpty.classList.remove('hidden');
     el.reviewDetailMeta.classList.add('hidden');
     el.reviewSummaryWrap.classList.add('hidden');
+    clearReviewMergeDiff();
     el.reviewActionsWrap.classList.add('hidden');
     return;
   }
@@ -1113,6 +1124,12 @@ function renderReviewDetail(item) {
     el.reviewSummary.textContent = '';
   }
 
+  if (item.isFinal) {
+    loadReviewMergeDiff(item.traceId);
+  } else {
+    clearReviewMergeDiff();
+  }
+
   const canAct = item.canApprove && item.canReject;
   if (canAct) {
     el.reviewActionsWrap.classList.remove('hidden');
@@ -1120,6 +1137,98 @@ function renderReviewDetail(item) {
     el.reviewMergeMessageLabel.classList.toggle('hidden', !item.isFinal);
   } else {
     el.reviewActionsWrap.classList.add('hidden');
+  }
+}
+
+function clearReviewMergeDiff() {
+  state.reviewMergeDiffToken += 1;
+  el.reviewMergeDiffWrap.classList.add('hidden');
+  el.reviewMergeDiffLoading.classList.add('hidden');
+  el.reviewMergeDiffError.classList.add('hidden');
+  el.reviewMergeDiffMissing.classList.add('hidden');
+  el.reviewMergeDiffEmpty.classList.add('hidden');
+  el.reviewMergeDiffTruncated.classList.add('hidden');
+  el.reviewMergeDiffMeta.classList.add('hidden');
+  el.reviewMergeDiffStat.classList.add('hidden');
+  el.reviewMergeDiffMeta.innerHTML = '';
+  el.reviewMergeDiffStat.textContent = '';
+  el.reviewMergeDiffContainer.innerHTML = '';
+}
+
+function renderReviewMergeDiff(view) {
+  el.reviewMergeDiffWrap.classList.remove('hidden');
+  el.reviewMergeDiffError.classList.add('hidden');
+  el.reviewMergeDiffMissing.classList.add('hidden');
+  el.reviewMergeDiffEmpty.classList.add('hidden');
+  el.reviewMergeDiffTruncated.classList.toggle('hidden', !view.truncated);
+  el.reviewMergeDiffMeta.classList.add('hidden');
+  el.reviewMergeDiffStat.classList.add('hidden');
+  el.reviewMergeDiffContainer.innerHTML = '';
+
+  if (view.missingWorktree) {
+    el.reviewMergeDiffMissing.classList.remove('hidden');
+    return;
+  }
+
+  const metaRows = [
+    ['Default branch', view.defaultBranch],
+    ['Trace branch', view.branch],
+    ['Base SHA', view.baseSha],
+    ['Head SHA', view.headSha],
+  ];
+  el.reviewMergeDiffMeta.innerHTML = metaRows
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd><code>${escapeHtml(v || '—')}</code></dd>`)
+    .join('');
+  el.reviewMergeDiffMeta.classList.remove('hidden');
+
+  if (view.stat) {
+    el.reviewMergeDiffStat.textContent = view.stat;
+    el.reviewMergeDiffStat.classList.remove('hidden');
+  }
+
+  if (view.empty || !view.diff) {
+    el.reviewMergeDiffEmpty.classList.remove('hidden');
+    return;
+  }
+
+  if (typeof Diff2Html === 'undefined' || typeof Diff2Html.html !== 'function') {
+    el.reviewMergeDiffError.textContent = 'Diff viewer failed to load.';
+    el.reviewMergeDiffError.classList.remove('hidden');
+    el.reviewMergeDiffStat.classList.remove('hidden');
+    el.reviewMergeDiffContainer.textContent = view.diff;
+    return;
+  }
+
+  el.reviewMergeDiffContainer.innerHTML = Diff2Html.html(view.diff, {
+    drawFileList: true,
+    matching: 'lines',
+    outputFormat: 'side-by-side',
+  });
+}
+
+function reviewMergeDiffStillValid(traceId, token) {
+  if (token !== state.reviewMergeDiffToken) return false;
+  const item = state.selectedReviewDetail;
+  return !!(item && item.isFinal && item.traceId === traceId);
+}
+
+async function loadReviewMergeDiff(traceId) {
+  clearReviewMergeDiff();
+  const token = ++state.reviewMergeDiffToken;
+  el.reviewMergeDiffWrap.classList.remove('hidden');
+  el.reviewMergeDiffLoading.classList.remove('hidden');
+  try {
+    const view = await api(`/api/traces/${encodeURIComponent(traceId)}/merge-diff`);
+    if (!reviewMergeDiffStillValid(traceId, token)) return;
+    renderReviewMergeDiff(view);
+  } catch (err) {
+    if (!reviewMergeDiffStillValid(traceId, token)) return;
+    el.reviewMergeDiffError.textContent = err.message || 'Failed to load merge diff.';
+    el.reviewMergeDiffError.classList.remove('hidden');
+  } finally {
+    if (reviewMergeDiffStillValid(traceId, token)) {
+      el.reviewMergeDiffLoading.classList.add('hidden');
+    }
   }
 }
 

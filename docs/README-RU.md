@@ -10,7 +10,7 @@
 | [004-prompt-templates.md](004-prompt-templates.md) | Шаблоны промптов в `.paseka/prompts/`: `text/template`, partials, переменные контекста и рендер при диспатче |
 | [005-task-ledger.md](005-task-ledger.md) | Task Ledger: связь `traceId` → `taskId` → `agentId`, жизненный цикл задач и проекция состояния трейса |
 | [006-interactive-sessions.md](006-interactive-sessions.md) | Интерактивные HITL-сессии: `bee chat`, SessionAdapter + PTY, реестр сессий и attach через Ghostty |
-| [007-cli.md](007-cli.md) | Справочник Queen Shell (`paseka`): команды init/run/status, bee run/chat, energy и прочий CLI |
+| [007-cli.md](007-cli.md) | Справочник Queen Shell (`paseka`): команды init/run/status, bee run/chat, console, energy и прочий CLI |
 | [008-bee-routing.md](008-bee-routing.md) | Маршрутизация пчёл: `subscribes` / `publishes`, Reactor, task vs direct dispatch |
 | [009-insight-kinds.md](009-insight-kinds.md) | Таксономия `INSIGHT`: отличие от `VERIFICATION`, виды payload и проекция в `{{.Insights}}` |
 | [010-bee-config.md](010-bee-config.md) | Конфиг роли пчелы (`.paseka/bees/<role>.yaml`): схема, адаптеры, `command` / `post_exec`, params, контракты |

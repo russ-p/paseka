@@ -191,6 +191,19 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		a.handleTraceEvents(w, r, traceID)
 		return
 	}
+	if suffix == "merge-diff" {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		view, err := GetMergeDiff(a.ctx, traceID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, view)
+		return
+	}
 	if suffix == "tasks" || (len(parts) > 1 && parts[1] == "tasks") {
 		a.handleTraceTasks(w, r, traceID, parts[1:])
 		return

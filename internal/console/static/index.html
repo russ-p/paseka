@@ -6,6 +6,7 @@
   <title>Queen Console 🐝</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/vendor/xterm/xterm.css">
+  <link rel="stylesheet" href="/vendor/diff2html/diff2html.min.css">
 </head>
 <body>
   <header>
@@ -292,6 +293,17 @@
         <h3>Summary</h3>
         <pre id="review-summary" class="transcript"></pre>
       </div>
+      <div id="review-merge-diff-wrap" class="review-merge-diff hidden">
+        <h3>Merge diff</h3>
+        <p id="review-merge-diff-loading" class="muted hidden">Loading worktree diff…</p>
+        <p id="review-merge-diff-error" class="error hidden"></p>
+        <p id="review-merge-diff-missing" class="muted hidden">No trace worktree branch found — merge preview unavailable.</p>
+        <p id="review-merge-diff-empty" class="muted hidden">No changes between the default branch and the trace branch.</p>
+        <p id="review-merge-diff-truncated" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
+        <dl id="review-merge-diff-meta" class="meta compact-meta hidden"></dl>
+        <pre id="review-merge-diff-stat" class="transcript hidden"></pre>
+        <div id="review-merge-diff-container" class="merge-diff-container"></div>
+      </div>
       <div id="review-actions-wrap" class="review-actions hidden">
         <p id="review-final-hint" class="muted hidden">Final merge gate — approve merges the trace worktree. Reject only publishes feedback.</p>
         <form id="review-approve-form" class="review-form">
@@ -421,6 +433,7 @@
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>
   <script src="/vendor/xterm/addon-web-links.js"></script>
+  <script src="/vendor/diff2html/diff2html.min.js"></script>
   <script src="/terminal.js"></script>
   <script src="/app.js"></script>
 </body>

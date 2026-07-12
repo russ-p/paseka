@@ -33,6 +33,7 @@ Backlog items:
 - **`confidence` (Pollen Quality)** — filter or weight events by confidence level; mentioned in [001-brief.md](001-brief.md) alongside `energyToken`.
 - **`system.kill`** — bus signal to forcibly stop a trace or agent dispute avalanche; HITL energy injection exists via `paseka energy add`, but no kill primitive.
 - **Queen Console UI polish** — API fields (`energyBudget`, `energyRemaining`, `lowEnergy`) exist; richer badges, alerts, and beekeeper actions in the SPA are not done.
+- **Per-run proposal diff in Reviews** — final merge gate preview (`GET /api/traces/:traceId/merge-diff`) ships; side-by-side preview of per-run `MUTATION/code.proposal` for `review: required` tasks does not.
 - **Energy gate on `paseka bee run` / interactive chat** — one-shot `bee run` and `bee chat` bypass the reactor; only AFK/HITL paths through `paseka run` consume honey today.
 - **Per-bee cost multipliers** — every adapter dispatch costs `1`; no per-role or per-intent pricing.
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
+	"github.com/paseka/paseka/internal/worktree"
 )
 
 func TestRuntimeAPIHandlers(t *testing.T) {
@@ -615,6 +617,69 @@ func TestTraceDetailAPIHandler(t *testing.T) {
 	}
 	if detail.RecentEvents[0].CreatedAt.Before(detail.RecentEvents[1].CreatedAt) {
 		t.Fatalf("events not ordered newest-first: %+v", detail.RecentEvents)
+	}
+}
+
+func TestTraceMergeDiffAPIHandler(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+	traceID := "trace-merge-diff"
+
+	entry, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    traceID,
+		Slug:       ctxColony.Slug,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entry.Path, "feature.txt"), []byte("merge me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, entry.Path, "add", "feature.txt")
+	runGit(t, entry.Path, "commit", "-m", "feature")
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/merge-diff", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view console.MergeDiffView
+	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
+		t.Fatal(err)
+	}
+	if view.TraceID != traceID {
+		t.Fatalf("traceId = %q", view.TraceID)
+	}
+	if view.MissingWorktree {
+		t.Fatal("expected worktree branch")
+	}
+	if view.Empty {
+		t.Fatal("expected non-empty diff")
+	}
+	if !strings.Contains(view.Diff, "feature.txt") {
+		t.Fatalf("diff = %q", view.Diff)
+	}
+
+	missingReq := httptest.NewRequest(http.MethodGet, "/api/traces/trace-no-branch/merge-diff", nil)
+	missingRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(missingRec, missingReq)
+	if missingRec.Code != http.StatusOK {
+		t.Fatalf("missing status = %d body=%s", missingRec.Code, missingRec.Body.String())
+	}
+	var missing console.MergeDiffView
+	if err := json.NewDecoder(missingRec.Body).Decode(&missing); err != nil {
+		t.Fatal(err)
+	}
+	if !missing.MissingWorktree {
+		t.Fatalf("expected missingWorktree, got %+v", missing)
 	}
 }
 

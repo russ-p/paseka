@@ -69,7 +69,7 @@ Implemented UI surfaces:
 - **Dashboard**: runtime status, NATS diagnostics, active sessions, active worktrees, task counts, recent traces, failed runs, and recent narrative insights.
 - **Timeline**: filterable event feed with trace, task, bee, event type, payload kind, severity, cursor pagination, and optional raw JSON display.
 - **Tasks**: grouped task board, task creation with optional `review` policy, optional autorun, task detail, linked runs, timeline navigation, start controls for eligible tasks, and inline approve/reject for `waiting_review` review-gated tasks.
-- **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
+- **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, final-merge worktree diff preview (`GET /api/traces/:traceId/merge-diff`), approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
 - **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, attach an in-browser xterm.js terminal over WebSocket for active sessions (with optional full-page Widen layout), poll transcript updates for completed sessions, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
 - **Runtime panel**: start and stop the registered local hive runtime and poll runtime status.
@@ -82,13 +82,14 @@ Implemented backend behavior:
 - Reads active sessions, active worktrees, and runtime registration from machine-local colony state.
 - Uses NATS diagnostics for dashboard connectivity status; it does not yet consume a live JetStream event stream for console updates.
 - Starts detached console sessions through the session manager and adapter session APIs (interactive agent TUI in a PTY hub, not headless `-p`); active sessions can be attached from the browser via `GET /api/sessions/:sessionId/pty`.
+- Final merge gate review (`review: final` / `_review`) shows a three-dot worktree diff vs the default branch in the Reviews detail panel (vendored diff2html, side-by-side).
 
 Not implemented in the current baseline:
 
 - Dedicated worktrees page or `/api/worktrees` endpoint.
 - Cross-process browser attach (sessions started outside the current `paseka console` process).
 - Global WebSocket/SSE event stream (`/api/events/stream`).
-- Diff artifact preview in the review queue (links to runs/timeline only).
+- Per-run `MUTATION/code.proposal` diff preview for `review: required` tasks (final merge gate diff is implemented).
 
 ## Primary User Outcomes
 
@@ -103,6 +104,7 @@ The MVP should let a solo developer:
 - Launch a detached bee session from the browser, attach an interactive terminal, and read the transcript after completion.
 - Inspect recent adapter runs and their emitted events without manually opening run directories.
 - Approve or reject review-gated tasks from the browser when NATS and the task ledger are available.
+- Inspect the accumulated worktree diff before approving a final merge gate.
 
 ## Decisions
 
@@ -261,6 +263,7 @@ The Reviews tab exposes the human-in-the-loop review queue:
 
 - list tasks in `waiting_review` with `review: required` or `review: final`
 - proposal detail with trace/task metadata, summary, and review policy
+- for `review: final` / `_review`: merge preview via `GET /api/traces/:traceId/merge-diff` (three-dot diff of trace branch vs default branch, side-by-side in Reviews detail)
 - approve action (optional summary; optional merge commit message for `review: final`)
 - reject action with human feedback
 - links to timeline and linked runs for inspection context
@@ -360,6 +363,7 @@ At minimum, the UI shows:
 - source trace and task
 - summary
 - review policy (`required` vs `final`)
+- for final merge gates: branch metadata, `--stat` summary, and side-by-side diff rendered with vendored diff2html
 - links to timeline and linked runs for inspection context
 
 Approve/reject actions reuse the same domain flows as `paseka proposal approve|reject`.
@@ -393,6 +397,21 @@ Implemented HTTP endpoints:
 - `POST /api/tasks`
 - `GET /api/traces`
 - `GET /api/traces/:traceId`
+- `GET /api/traces/:traceId/merge-diff` — three-dot worktree merge preview (`defaultBranch...traceBranch`, unified diff + stat; truncated at 1 MiB). Response shape:
+
+  | Field | Type | Notes |
+  | ----- | ---- | ----- |
+  | `traceId` | string | Requested flight trail |
+  | `defaultBranch` | string | Colony default branch (e.g. `main`) |
+  | `branch` | string | Trace worktree branch (usually `paseka/<traceId>`) |
+  | `baseSha` | string | Tip of default branch |
+  | `headSha` | string | Tip of trace branch |
+  | `stat` | string | `git diff --stat` output |
+  | `diff` | string | Unified patch (may be truncated) |
+  | `truncated` | bool | Diff body capped at 1 MiB |
+  | `empty` | bool | No changes between branches |
+  | `missingWorktree` | bool | Trace branch not found — preview unavailable |
+
 - `GET /api/traces/:traceId/events`
 - `GET /api/traces/:traceId/tasks`
 - `POST /api/traces/:traceId/tasks/start`

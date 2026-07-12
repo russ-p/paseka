@@ -461,6 +461,10 @@ SIGNAL / INSIGHT on bus
 
 **Default location:** `.paseka/worktrees/<traceId>/` — colocated with colony, simple paths for adapters, listed in `.gitignore`.
 
+**Branch:** `paseka/<traceId>` (registered in machine-local `state.json`).
+
+**Merge preview:** before approving a final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...paseka/<traceId>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
+
 **Registry:** `~/.config/paseka/<slug>/state.json` tracks active worktrees, base SHA, branch, and linked `traceId` for cleanup on `paseka doctor`.
 
 Commands (later): `paseka worktree list`, `paseka worktree clean`.

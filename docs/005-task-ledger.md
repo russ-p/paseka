@@ -79,10 +79,12 @@ Each task may declare an optional `review` field in `task.plan`:
 
 When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes.
 
-Human actions:
+Human actions (CLI and Queen Console Reviews use the same domain flows):
 
 - `paseka proposal approve --trace <id> --task <id>` — merge trace worktree (when present) and emit `task.completed`
 - `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework
+
+For `review: final` / `_review`, Queen Console Reviews shows an accumulated worktree merge preview (`GET /api/traces/:traceId/merge-diff`) before approve. See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
 
 ### `task.status` — SIGNAL
 
@@ -267,3 +269,4 @@ For human-friendly task injection from the CLI, use `paseka task create` to publ
 - [003-architecture.md](003-architecture.md) — colony layout, adapter contract, worktrees
 - [004-prompt-templates.md](004-prompt-templates.md) — template variables including `TaskID`
 - [002-paseka-glossary.md](002-paseka-glossary.md) — Task/Nectar, TraceID/Flight Trail
+- [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md) — Reviews UI and merge-diff preview

@@ -167,3 +167,57 @@ func TestTracesTabStaticContract(t *testing.T) {
 		t.Fatal("responsive media query must collapse #traces-layout")
 	}
 }
+
+func TestReviewMergeDiffStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="review-merge-diff-wrap"`,
+		`id="review-merge-diff-container"`,
+		`/vendor/diff2html/diff2html.min.js`,
+		`/vendor/diff2html/diff2html.min.css`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"async function loadReviewMergeDiff(traceId)",
+		"function reviewMergeDiffStillValid(traceId, token)",
+		"function clearReviewMergeDiff()",
+		"state.reviewMergeDiffToken += 1",
+		"function renderReviewMergeDiff(view)",
+		"`/api/traces/${encodeURIComponent(traceId)}/merge-diff`",
+		"Diff2Html.html(view.diff",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	css, err := staticFiles.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatalf("read style.css: %v", err)
+	}
+	if !strings.Contains(string(css), ".merge-diff-container") {
+		t.Fatal("style.css missing .merge-diff-container")
+	}
+
+	for _, path := range []string{
+		"static/vendor/diff2html/diff2html.min.js",
+		"static/vendor/diff2html/diff2html.min.css",
+	} {
+		if _, err := staticFiles.ReadFile(path); err != nil {
+			t.Fatalf("missing vendored asset %s: %v", path, err)
+		}
+	}
+}
