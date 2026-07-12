@@ -16,11 +16,36 @@ type PurgeTarget struct {
 	Worktrees bool
 	Cache     bool
 	State     bool
+	Bus       bool
+	TraceID   string
 }
 
 // Any reports whether at least one target is selected.
 func (t PurgeTarget) Any() bool {
-	return t.Runs || t.Worktrees || t.Cache || t.State
+	return t.Runs || t.Worktrees || t.Cache || t.State || t.Bus
+}
+
+// BusPurgePlan describes JetStream artifacts that would be removed for one trace.
+type BusPurgePlan struct {
+	TraceID       string
+	TaskLedgerKey bool
+	EventCount    int
+	Artifacts     []string
+}
+
+// Empty reports whether bus purge would affect nothing.
+func (p BusPurgePlan) Empty() bool {
+	return !p.TaskLedgerKey && p.EventCount == 0 && len(p.Artifacts) == 0
+}
+
+// BusPurgePlanFromTrace builds a bus purge plan from bus inspection results.
+func BusPurgePlanFromTrace(traceID string, taskLedgerKey bool, eventCount int, artifacts []string) *BusPurgePlan {
+	return &BusPurgePlan{
+		TraceID:       traceID,
+		TaskLedgerKey: taskLedgerKey,
+		EventCount:    eventCount,
+		Artifacts:     artifacts,
+	}
 }
 
 // PurgePlan describes what will be removed before confirmation.
@@ -29,11 +54,20 @@ type PurgePlan struct {
 	Worktrees []string
 	Cache     bool
 	State     bool
+	Bus       *BusPurgePlan
+}
+
+// BusPurgeResult reports bus artifacts removed for one trace.
+type BusPurgeResult struct {
+	KeysRemoved    []string
+	EventsRemoved  int
+	ObjectsRemoved []string
 }
 
 // PurgeResult reports what was removed.
 type PurgeResult struct {
 	Removed []string
+	Bus     *BusPurgeResult
 }
 
 // PlanPurge lists paths and flags that would be affected.
@@ -192,10 +226,29 @@ func FormatPlan(plan PurgePlan) string {
 	if plan.State {
 		b.WriteString("  state.json (worktree registry)\n")
 	}
+	if plan.Bus != nil {
+		fmt.Fprintf(&b, "  bus (trace %s):\n", plan.Bus.TraceID)
+		if plan.Bus.TaskLedgerKey {
+			fmt.Fprintf(&b, "    - task ledger key: %s\n", plan.Bus.TraceID)
+		}
+		if plan.Bus.EventCount > 0 {
+			fmt.Fprintf(&b, "    - %d stream event(s)\n", plan.Bus.EventCount)
+		}
+		if len(plan.Bus.Artifacts) > 0 {
+			fmt.Fprintf(&b, "    - %d artifact object(s):\n", len(plan.Bus.Artifacts))
+			for _, name := range plan.Bus.Artifacts {
+				fmt.Fprintf(&b, "      - %s\n", name)
+			}
+		}
+	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
 // PlanEmpty reports whether nothing would be removed.
 func PlanEmpty(plan PurgePlan) bool {
-	return len(plan.Runs) == 0 && len(plan.Worktrees) == 0 && !plan.Cache && !plan.State
+	fsEmpty := len(plan.Runs) == 0 && len(plan.Worktrees) == 0 && !plan.Cache && !plan.State
+	if plan.Bus == nil {
+		return fsEmpty
+	}
+	return fsEmpty && plan.Bus.Empty()
 }

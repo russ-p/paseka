@@ -58,7 +58,7 @@ Gotchas observed while standing up Phase 2:
 - **Script bees run from the worktree checkout** — `scripts/*.sh` and bee YAML come from git `HEAD`. Uncommitted script changes are invisible inside `.paseka/worktrees/<traceId>/`.
 - **`paseka event emit` from script bees needs `-C "$PASEKA_COLONY_ROOT"`** — when cwd is the worktree, emit without `-C` fails colony/home resolution (`home config points to … but repo is …/worktrees/<traceId>`). Guard/receiver scripts must pass colony root explicitly.
 - **`paseka event emit` can fail the script even after a bus publish** — if audit log append to `.paseka/runs/<traceId>/<agentId>/events.ndjson` fails, emit exits non-zero and the adapter run is marked failed. During a normal adapter run the run dir exists; ad-hoc manual emits need a matching run dir.
-- **Fixed `trace` + JetStream state accumulates** — reusing `eval-01-add-function` across runs leaves task-ledger KV entries, depleted honey, and replay history unless wiped. Until `paseka purge --bus` exists: restart NATS / wipe the JetStream volume, or use `nats kv del` on the colony task-ledger bucket. Runner may also call `paseka energy add` as a partial workaround.
+- **Fixed `trace` + JetStream state accumulates** — reusing `eval-01-add-function` across runs leaves task-ledger KV entries, depleted honey, and replay history unless wiped. Use `paseka purge --bus --trace <case-trace>` (stop `paseka run` first); see [007-cli.md](007-cli.md) § `paseka purge`.
 - **Only one `paseka run` consumer per colony subject prefix** — starting a second reactor logs `consumer is already bound to a subscription`. Stop the previous runtime before `run-case.sh` starts another.
 - **`review: none` completes the task after builder success** — runtime publishes `VERIFICATION/task.completed` when the builder adapter succeeds, before guard/receiver direct dispatches finish. Eval scoring should poll the **oracle** (worktree tests) or replay events, not rely solely on task status reaching `completed`.
 - **Builder rework is async** — `verification.failed` → builder fix-up uses the direct dispatch path and can continue after the task is already `completed` or `blocked` (e.g. honey exhausted). Allow time for the guard→builder loop; treat `blocked` as a terminal status when honey runs out.
@@ -66,6 +66,5 @@ Gotchas observed while standing up Phase 2:
 
 Backlog follow-ups (eval harness):
 
-- **`paseka purge --bus`** — wipe eval trace KV / stream namespace between case runs without restarting NATS.
-- **Platform: optional trace reset helper** — seed energy + clear ledger for a fixed `--trace` in one command.
+- **Platform: optional trace reset helper** — seed energy + clear ledger for a fixed `--trace` in one command (partially covered by `paseka purge --bus --trace`; a dedicated helper could also re-seed `defaults.energy_budget`).
 - **Event-chain scorer in runner** — assert `case.yaml` `expect_event_chain` against `paseka replay` output (today: oracle + human replay inspection only).

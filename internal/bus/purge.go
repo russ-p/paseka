@@ -11,11 +11,68 @@ import (
 	"github.com/paseka/paseka/internal/protocol"
 )
 
+// PurgeTracePlan describes bus artifacts that would be removed for one trace.
+type PurgeTracePlan struct {
+	TraceID         string
+	TaskLedgerKey   bool
+	EventCount      int
+	ArtifactObjects []string
+}
+
+// Empty reports whether purge would affect nothing.
+func (p PurgeTracePlan) Empty() bool {
+	return !p.TaskLedgerKey && p.EventCount == 0 && len(p.ArtifactObjects) == 0
+}
+
 // PurgeTraceResult reports bus artifacts removed for one trace.
 type PurgeTraceResult struct {
 	KeysRemoved    []string `json:"keysRemoved,omitempty"`
 	EventsRemoved  int      `json:"eventsRemoved"`
 	ObjectsRemoved []string `json:"objectsRemoved,omitempty"`
+}
+
+// PlanPurgeTrace lists bus artifacts that would be removed for one trace.
+func (c *Client) PlanPurgeTrace(traceID string) (PurgeTracePlan, error) {
+	if traceID == "" {
+		return PurgeTracePlan{}, fmt.Errorf("bus: traceId is required")
+	}
+	plan := PurgeTracePlan{TraceID: traceID}
+
+	kv, err := c.js.KeyValue(kvBucketName(c.cfg.Slug))
+	if err == nil {
+		if _, err := kv.Get(traceID); err == nil {
+			plan.TaskLedgerKey = true
+		} else if !errors.Is(err, nats.ErrKeyNotFound) {
+			return plan, fmt.Errorf("bus: task ledger kv: %w", err)
+		}
+	} else if !errors.Is(err, nats.ErrBucketNotFound) {
+		return plan, fmt.Errorf("bus: task ledger kv: %w", err)
+	}
+
+	events, err := c.ReplayTrace(traceID)
+	if err != nil {
+		return plan, err
+	}
+	plan.EventCount = len(events)
+
+	os, err := c.js.ObjectStore(objectStoreName(c.cfg.Slug))
+	if err == nil {
+		objs, err := os.List()
+		if err != nil && !errors.Is(err, nats.ErrNoObjectsFound) {
+			return plan, fmt.Errorf("bus: list artifacts: %w", err)
+		}
+		prefix := traceID + "-"
+		for _, obj := range objs {
+			name := obj.Name
+			if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".diff") {
+				plan.ArtifactObjects = append(plan.ArtifactObjects, name)
+			}
+		}
+	} else if !errors.Is(err, nats.ErrBucketNotFound) && !errors.Is(err, nats.ErrStreamNotFound) {
+		return plan, fmt.Errorf("bus: artifacts store: %w", err)
+	}
+
+	return plan, nil
 }
 
 // PurgeTrace removes task-ledger KV, matching stream events, and trace artifacts.
@@ -103,7 +160,7 @@ func (c *Client) purgeTraceArtifacts(traceID string, res *PurgeTraceResult) erro
 		return fmt.Errorf("bus: artifacts store: %w", err)
 	}
 	objs, err := os.List()
-	if err != nil {
+	if err != nil && !errors.Is(err, nats.ErrNoObjectsFound) {
 		return fmt.Errorf("bus: list artifacts: %w", err)
 	}
 	prefix := traceID + "-"

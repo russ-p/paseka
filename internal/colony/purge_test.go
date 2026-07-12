@@ -3,6 +3,7 @@ package colony_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
@@ -147,6 +148,48 @@ func TestPurgeCache(t *testing.T) {
 	}
 	if len(res.Removed) != 1 {
 		t.Fatalf("removed = %+v", res.Removed)
+	}
+}
+
+func TestFormatBusPurgePlan(t *testing.T) {
+	plan := colony.PurgePlan{
+		Bus: &colony.BusPurgePlan{
+			TraceID:       "trace-bus",
+			TaskLedgerKey: true,
+			EventCount:    2,
+			Artifacts:     []string{"trace-bus-agent-1.diff"},
+		},
+	}
+	out := colony.FormatPlan(plan)
+	if !strings.Contains(out, "bus (trace trace-bus)") {
+		t.Fatalf("format plan = %q", out)
+	}
+	if !strings.Contains(out, "task ledger key: trace-bus") {
+		t.Fatalf("format plan = %q", out)
+	}
+	if !strings.Contains(out, "2 stream event(s)") {
+		t.Fatalf("format plan = %q", out)
+	}
+	if !strings.Contains(out, "trace-bus-agent-1.diff") {
+		t.Fatalf("format plan = %q", out)
+	}
+}
+
+func TestPlanEmptyBus(t *testing.T) {
+	empty := colony.PurgePlan{Bus: &colony.BusPurgePlan{TraceID: "trace-bus"}}
+	if !colony.PlanEmpty(empty) {
+		t.Fatal("expected empty bus plan")
+	}
+	populated := colony.PurgePlan{Bus: &colony.BusPurgePlan{TraceID: "trace-bus", EventCount: 1}}
+	if colony.PlanEmpty(populated) {
+		t.Fatal("expected non-empty bus plan")
+	}
+}
+
+func TestBusPurgePlanFromTrace(t *testing.T) {
+	plan := colony.BusPurgePlanFromTrace("trace-bus", true, 2, []string{"trace-bus-agent-1.diff"})
+	if plan.TraceID != "trace-bus" || !plan.TaskLedgerKey || plan.EventCount != 2 {
+		t.Fatalf("plan = %#v", plan)
 	}
 }
 
