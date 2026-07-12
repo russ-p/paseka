@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
@@ -132,6 +133,99 @@ func TestReactorDirectDispatchVerificationFailed(t *testing.T) {
 	}
 	if rec.lastReq.Bee != "builder" {
 		t.Fatalf("bee = %q, want builder", rec.lastReq.Bee)
+	}
+}
+
+func TestReactorSkipsDirectDispatchSamePublisherBee(t *testing.T) {
+	r := newTestReactor(t, map[string]colony.Bee{
+		"receiver": {Role: "receiver", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: "verification.success"}, Dispatch: colony.DispatchDirect},
+		}},
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	publisherID := "receiver-publisher"
+	runDir := runs.Dir{ColonyRoot: r.ColonyRoot(), TraceID: "trace-1", AgentID: publisherID}
+	if err := runDir.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := runDir.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-1",
+		AgentID:         publisherID,
+		Bee:             "receiver",
+		Adapter:         "cursor",
+		Workspace:       r.ColonyRoot(),
+		ColonyRoot:      r.ColonyRoot(),
+		CreatedAt:       time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ev, err := protocol.NewEvent("trace-1", publisherID, 0, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationSuccess,
+		Summary: "receiver echoed verification.success",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d, want 0 (same-bee publisher must not re-dispatch)", rec.calls)
+	}
+}
+
+func TestReactorDedupesDirectDispatchByTaskID(t *testing.T) {
+	r := newTestReactor(t, map[string]colony.Bee{
+		"receiver": {Role: "receiver", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: "verification.success"}, Dispatch: colony.DispatchDirect},
+		}},
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	first, err := protocol.NewEvent("trace-1", "guard-1", 1, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationSuccess,
+		TaskID:  "task-1",
+		Summary: "approved",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	echo, err := protocol.NewEvent("trace-1", "receiver-1", 2, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationSuccess,
+		TaskID:  "task-1",
+		Summary: "echoed success",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondTask, err := protocol.NewEvent("trace-1", "guard-2", 3, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationSuccess,
+		TaskID:  "task-2",
+		Summary: "another task approved",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.ProcessEvent(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), echo); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("adapter calls = %d after echo, want 1", rec.calls)
+	}
+	if err := r.ProcessEvent(context.Background(), secondTask); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 2 {
+		t.Fatalf("adapter calls = %d after second task, want 2", rec.calls)
 	}
 }
 

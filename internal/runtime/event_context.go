@@ -103,8 +103,16 @@ func truncateString(s string, max int) string {
 	return s[:max] + "\n…(truncated)"
 }
 
-// directDispatchKey identifies one bus event + bee role for deduplication.
+// directDispatchKey identifies a direct dispatch for deduplication.
+// When payload.taskId is set, duplicates collapse per traceId+taskId+bee+type+kind
+// (so a mistaken re-emit of the same gate kind does not re-run the bee).
+// Without taskId, fall back to a unique event fingerprint.
 func directDispatchKey(ev protocol.Event, beeRole string) string {
+	kind := protocol.PayloadKind(ev.Payload)
+	taskID := protocol.PayloadTaskID(ev.Payload)
+	if taskID != "" {
+		return fmt.Sprintf("%s|%s|%s|%s|%s", ev.TraceID, taskID, beeRole, ev.Type, kind)
+	}
 	return directEventFingerprint(ev) + ":" + beeRole
 }
 

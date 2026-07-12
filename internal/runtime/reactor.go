@@ -323,6 +323,11 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return nil
 	}
 
+	if publisherBee := r.publisherBee(ev); publisherBee != "" && publisherBee == beeRole {
+		logDispatchSkip("publisher is same bee role", ev.TraceID, taskID, beeRole)
+		return nil
+	}
+
 	key := directDispatchKey(ev, beeRole)
 	r.mu.Lock()
 	if _, ok := r.directProcessed[key]; ok {
@@ -370,6 +375,18 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 	}
 	logDispatchDone(DispatchModeDirect, beeRole, ev.TraceID, taskID, res.AgentID, status)
 	return nil
+}
+
+// publisherBee resolves the bee role that emitted an event from its run metadata.
+func (r *Reactor) publisherBee(ev protocol.Event) string {
+	if r.colony.ColonyRoot == "" || ev.TraceID == "" || ev.AgentID == "" {
+		return ""
+	}
+	meta, ok, err := runs.FindRun(r.colony.ColonyRoot, ev.TraceID, ev.AgentID)
+	if err != nil || !ok {
+		return ""
+	}
+	return strings.TrimSpace(meta.Bee)
 }
 
 // PublishEvent injects a domain event onto the bus (used by paseka signal).

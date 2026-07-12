@@ -19,6 +19,20 @@ func PayloadKind(payload json.RawMessage) string {
 	return strings.TrimSpace(meta.Kind)
 }
 
+// PayloadTaskID extracts payload.taskId from a bus event payload when present.
+func PayloadTaskID(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var meta struct {
+		TaskID string `json:"taskId"`
+	}
+	if err := json.Unmarshal(payload, &meta); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.TaskID)
+}
+
 // IsDomainEvent reports whether an event type belongs on the NATS bus.
 func IsDomainEvent(t EventType) bool {
 	switch t {

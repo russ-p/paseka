@@ -119,6 +119,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):            emitInsightPartial,
 		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):             emitSignalPartial,
 		PasekaPath(root, "prompts", "_partials", "emit-verification.md"):       emitVerificationPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-task-completed.md"):     emitTaskCompletedPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):  builderIntentGeneralPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):  builderIntentFeaturePartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):   builderIntentBugfixPartial,
@@ -565,29 +566,35 @@ Use type: SIGNAL to mark operational signals on the bus.
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder","sector":"backend-users"}}
 EOF`
-	emitVerificationPartial = `## VERIFICATION events
+	emitVerificationPartial = `## VERIFICATION events (review gate)
 
-Use type: VERIFICATION for gate outcomes that drive workflow routing.
+Use type: VERIFICATION for review gate outcomes that drive workflow routing.
 
-Publish exactly one final VERIFICATION gate decision when your bee role requires it:
+Publish exactly one final gate decision:
 - verification.success when all requirements, scope checks, and targeted checks pass.
 - verification.failed when anything required is missing or failing.
+
+Do not publish task.completed from a review bee — that is the receiver / commit-gate role.
 
 Optional: publish one INSIGHT/review.note for extra reviewer context. It does not replace the required VERIFICATION.
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"All requirements met"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"verification.success","taskId":"{{.TaskID}}","summary":"All requirements met"}}
 EOF
 
 Change payload.kind to verification.failed when rejecting.
 
-### task.completed — report task passed review/commit gate
+Each event must include traceId, agentId, type, and payload.kind. Include payload.taskId when known.`
+	emitTaskCompletedPartial = `## VERIFICATION / task.completed (commit gate)
+
+After you commit the approved changes, publish exactly one task.completed event.
+Do not publish verification.success or verification.failed — those are review-gate outcomes from Guard, and re-emitting them re-triggers this bee.
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"task.completed","taskId":"task-1","status":"completed","summary":"Endpoint implemented and committed"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"VERIFICATION","payload":{"kind":"task.completed","taskId":"{{.TaskID}}","status":"completed","summary":"Endpoint implemented and committed"}}
 EOF
 
-Each event must include traceId, agentId, type, and payload.kind.`
+Each event must include traceId, agentId, type, and payload.kind. Prefer the real payload.taskId from the task context when known.`
 	cursorAdapterYAML = `binary: agent
 api_key_env: CURSOR_API_KEY
 `

@@ -14,7 +14,8 @@ Implementation: [`internal/prompts`](../internal/prompts/prompts.go).
 │   ├── emit-howto.md
 │   ├── emit-insight.md
 │   ├── emit-signal.md
-│   └── emit-verification.md
+│   ├── emit-verification.md
+│   └── emit-task-completed.md
 ├── default.md           # colony-wide fallback
 ├── scout.md
 └── builder.md
@@ -94,7 +95,7 @@ Variables **not** available in templates today:
 - Bee adapter params (`model`, `trust`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
 - Arbitrary bus event fields — only `Task`, `Intent`, and `Insights` are surfaced in MVP.
 
-Bus event publishing is instructed through emit partials: `emit-howto` (safe CLI mechanics for all bees) plus type-scoped partials (`emit-insight`, `emit-signal`, `emit-verification`) included only by bees that may publish those types.
+Bus event publishing is instructed through emit partials: `emit-howto` (safe CLI mechanics for all bees) plus type-scoped partials (`emit-insight`, `emit-signal`, `emit-verification`, `emit-task-completed`) included only by bees that may publish those types.
 
 ---
 
@@ -140,6 +141,7 @@ _partials/emit-howto.md  →  {{template "emit-howto" .}}
 _partials/emit-insight.md  →  {{template "emit-insight" .}}
 _partials/emit-signal.md  →  {{template "emit-signal" .}}
 _partials/emit-verification.md  →  {{template "emit-verification" .}}
+_partials/emit-task-completed.md  →  {{template "emit-task-completed" .}}
 _partials/builder-intent-feature.md  →  {{template "builder-intent-feature" .}}
 ```
 
@@ -309,7 +311,8 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 | `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (no type enumeration) |
 | `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) |
 | `emit-signal` | `SIGNAL` kinds (`task.ready`) |
-| `emit-verification` | `VERIFICATION` gate kinds (`verification.success`, `verification.failed`, `task.completed`) |
+| `emit-verification` | Review-gate `VERIFICATION` kinds (`verification.success`, `verification.failed`) |
+| `emit-task-completed` | Commit-gate `VERIFICATION/task.completed` (receiver only) |
 
 Bees include only the type partials they may publish. For example:
 
@@ -320,7 +323,7 @@ Bees include only the type partials they may publish. For example:
 | `drone` | `emit-howto`; on `breakdown` also `emit-insight`, `emit-signal` |
 | `guard` | `emit-howto`, `emit-verification`, `emit-insight` |
 | `main-guard` | `emit-howto`, `emit-insight` |
-| `receiver` | `emit-howto`, `emit-verification` |
+| `receiver` | `emit-howto`, `emit-task-completed` |
 | `hivewright` | `emit-howto`, `emit-insight` |
 
 `MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal` from staged diffs.
