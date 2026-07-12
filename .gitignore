@@ -2,4 +2,5 @@
 /bin/
 paseka-export-*.html
 /site/
+/.venv-docs/
 /docs/llms-full.txt
