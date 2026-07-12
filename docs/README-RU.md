@@ -18,4 +18,4 @@
 
 Английский индекс: [README.md](README.md).
 
-Индекс для агентов: [llms.txt](llms.txt) (полный корпус: [llms-full.txt](llms-full.txt)).
+Индекс для агентов: [llms.txt](llms.txt) (полный корпус: [llms-full.txt](https://russ-p.github.io/paseka/llms-full.txt), генерируется `scripts/gen-llms-full.sh`).
