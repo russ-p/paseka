@@ -12,15 +12,16 @@ Context:
 Backlog items:
 
 - ~~**Phase 0** — Scout `classify` prompt + Drone grilling guidance to write `docs/specs/…` and emit `SIGNAL/spec.ready` (manual `bee chat` path).~~ **Done** — prompts shipped; see [007-cli.md](007-cli.md) soft path.
-- **Phase 1** — Protocol validation for `feature.classified`, `session.invite`, `beekeeper.ready`, `spec.ready`.
-- **Phase 2+** — Invite persistence, CLI `paseka invite *`, Console accept → session; optional auto-invite on classify.
+- ~~**Phase 1** — Platform vs colony SIGNAL boundary: colony ideation kinds (`feature.*`, `spec.ready`) stay out of `internal/protocol`; payload tables remain in the spec + prompts.~~ **Done** — see spec § Decision 8.
+- **Phase 2** — Invite persistence, CLI `paseka invite *`, Console accept → session; validate `session.invite` / `beekeeper.ready` at the invite boundary.
+- **Phase 3+** — Auto-invite on `feature.classified`; hardening (`spec.ready` completion checks, session energy policy).
 
-Why deferred (Phase 1+):
-- Spec is drafted; implementation spans protocol, reactor/Human Gateway, prompts, and Console UX.
-- Soft Phase 0 unblocks Beekeepers without session-dispatch in the reactor.
+Why deferred (Phase 2+):
+- Spec is drafted; invite work spans Human Gateway, projector, and Console UX.
+- Colony ideation kinds are bus-published contracts — runtime stays generic until invites land.
 
 Exit criteria for revisiting:
-- Beekeeper runs ideation soft path successfully, or Phase 1+ is scheduled for implementation.
+- Phase 2 invite implementation is scheduled, or Beekeeper needs bus-driven classify → invite without manual `bee chat`.
 
 ### Replace `result.txt` with a clearer log artifact
 

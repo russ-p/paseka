@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft.** Design locked for choreography and event shapes. **Phase 0 Soft** (Scout `classify` + Drone grilling `spec.ready` prompts) is implemented; Beekeeper can run the manual soft path via CLI. Phases 1–4 (protocol validation, invites, auto-invite, hardening) remain open.
+**Draft.** Design locked for choreography and event shapes. **Phase 0 Soft** (Scout `classify` + Drone grilling `spec.ready` prompts) and **Phase 1** (platform vs colony SIGNAL boundary) are done. **Phases 2–4** (invites, auto-invite, hardening) remain open.
 
 ## Purpose
 
@@ -42,12 +42,13 @@ This extends — does not replace — the short path in [005-task-ledger.md](../
 - Do not invent a second task ledger for grill/breakdown meta-tasks (optional later; not MVP).
 - Do not require Object Store for MVP specs — a repo path under `docs/specs/` is enough.
 - Do not redesign Queen Console Sessions beyond invite accept / list pending invites.
+- Do not register `feature.*` / `spec.ready` as hardcoded validators or reactor special-cases in `internal/protocol` — those are colony choreography contracts, not platform primitives.
 
 ## Current System Context
 
 | Primitive | Location / behavior | Ideation use |
 | --------- | ------------------- | ------------ |
-| `feature.requested` | Allowed in `protocol` validate; no subscribers | Entry scent for ideas / PRDs |
+| `feature.requested` | Colony contract; envelope-only on bus; no reactor subscribers | Entry scent for ideas / PRDs |
 | Scout intents | `survey` (default), `plan`, `triage` | Need `classify` for routing without planning |
 | Drone intents | `general`, `grilling`, `breakdown` | Grilling + breakdown already prompted |
 | Reactor dispatch | `task` + `direct` → AFK `Adapter.Run()` only | Cannot start interactive sessions today |
@@ -138,7 +139,21 @@ Breakdown still follows [drone-intent-breakdown](../../.paseka/prompts/_partials
 | `scout` | `classify` | AFK (`direct` on `feature.requested`) |
 | `builder` | `feature` / … | AFK via `task.ready` (unchanged) |
 
-### 8. Soft bootstrap (Phase 0)
+### 8. Platform vs colony SIGNAL boundary (Phase 1)
+
+Runtime and `internal/protocol` own **platform** kinds the reactor, ledger, and Human Gateway depend on (`task.*`, `energy.*`, verification/mutation payloads, and — in Phase 2 — `session.invite` / `beekeeper.ready` at the invite boundary).
+
+**Colony** kinds (`feature.requested`, `feature.classified`, `spec.ready`) are choreography contracts:
+
+| Kind | Owner | Schema source | In `internal/protocol`? |
+| ---- | ----- | ------------- | ------------------------- |
+| `feature.requested`, `feature.classified`, `spec.ready` | Colony / Scout / Drone prompts | This spec + emit partials | **No** — publish as ordinary `SIGNAL`; bees and docs own field shapes |
+| `session.invite`, `beekeeper.ready` | Platform Human Gateway | This spec; validated when invite projector/CLI lands (Phase 2) | At invite boundary only, not as “feature ideation vocabulary” |
+| `task.*`, `energy.*`, … | Platform / ledger / reactor | Existing protocol + docs | Yes (already) |
+
+`paseka signal` and the bus accept colony kinds with envelope checks only (`traceId`, domain `type`, valid JSON with `kind`). Field validation for colony ideation kinds is **not** enforced by runtime — prompts and Beekeeper review are the gate. Phase 2 invite publisher reads `feature.classified` JSON without promoting those kinds into core protocol vocabulary.
+
+### 9. Soft bootstrap (Phase 0)
 
 Until invite→session is wired, Beekeeper may:
 
@@ -305,7 +320,9 @@ default_intent: classify   # or keep survey default; classify only on this subsc
 - Breakdown: require `specRef` or readable spec path in `{{.Task}}` / Insights; keep existing `task.plan` emit rules.
 - No AFK `subscribes` on `feature.requested` (avoids skipping Beekeeper).
 
-### Invite publisher (runtime)
+### Invite publisher (runtime, Phase 2)
+
+Reads `feature.classified` JSON fields without registering colony kinds in `internal/protocol`. Validates `session.invite` / `beekeeper.ready` at the invite boundary when publishing or accepting.
 
 Minimal behavior after `feature.classified` with `route=grill`:
 
@@ -340,8 +357,8 @@ paseka invite reject <inviteId>
 | Phase | Scope | Done when |
 | ----- | ----- | --------- |
 | **0 Soft** | Docs + Scout `classify` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand **(done)** |
-| **1 Protocol** | Validate + document payload schemas for new SIGNAL kinds | `paseka signal` / `event emit` accept structured payloads |
-| **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept | Accept starts Drone grilling session on the same `traceId` |
+| **1 Boundary** | Document platform vs colony SIGNAL ownership; remove protocol stub for `feature.requested` | Colony ideation kinds stay out of `internal/protocol`; HITL kinds deferred to Phase 2 **(done)** |
+| **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept; validate `session.invite` / `beekeeper.ready` at invite boundary | Accept starts Drone grilling session on the same `traceId` |
 | **3 Auto-invite** | Publisher on `feature.classified` / optional on `spec.ready` | Classify → pending invite without manual SIGNAL crafting |
 | **4 Hardening** | Completion checks for grilling (`spec.ready` required); energy policy for sessions | Failed grilling without spec is visible as failed/incomplete invite |
 
@@ -366,6 +383,7 @@ paseka invite reject <inviteId>
 - Starting grilling automatically on `feature.classified` without Beekeeper accept.
 - Running breakdown without a readable `spec.ready.ref`.
 - Introducing a central “ideation orchestrator” process that sequences bees by role name.
+- Hardcoding `feature.*` / `spec.ready` in `internal/protocol` or reactor dispatch (colony contracts belong in prompts + this spec).
 
 ## Open questions
 
@@ -386,12 +404,12 @@ paseka invite reject <inviteId>
 
 ## Verification
 
-Documentation-only updates: no build required.
-
-When Phase 0–1 code lands:
+Phase 1 is documentation + removal of the `feature.requested` protocol stub:
 
 ```bash
 gofmt -w .
 go build -o paseka ./cmd/paseka
-go test ./internal/protocol/... ./internal/prompts/...
+go test ./internal/protocol/...
 ```
+
+When Phase 2+ code lands, extend tests under `./internal/runtime/...` and invite CLI packages as needed.

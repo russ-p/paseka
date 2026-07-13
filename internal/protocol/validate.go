@@ -157,12 +157,7 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateHumanFeedback(payload)
 	}
 
-	switch kind {
-	case "feature.requested":
-		return nil
-	default:
-		return nil
-	}
+	return nil
 }
 
 func expectedEventType(kind string) EventType {
