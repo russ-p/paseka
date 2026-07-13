@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft.** Design locked for choreography and event shapes. **Phase 0 Soft** (Scout `classify` + Drone grilling `spec.ready` prompts) and **Phase 1** (platform vs colony SIGNAL boundary) are done. **Phases 2–4** (invites, auto-invite, hardening) remain open.
+**Draft.** Design locked for choreography and event shapes. **Phases 0–2** (soft path, platform/colony boundary, Human Gateway invites) are done. **Phases 3–4** (auto-invite, hardening) remain open.
 
 ## Purpose
 
@@ -358,7 +358,7 @@ paseka invite reject <inviteId>
 | ----- | ----- | --------- |
 | **0 Soft** | Docs + Scout `classify` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand **(done)** |
 | **1 Boundary** | Document platform vs colony SIGNAL ownership; remove protocol stub for `feature.requested` | Colony ideation kinds stay out of `internal/protocol`; HITL kinds deferred to Phase 2 **(done)** |
-| **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept; validate `session.invite` / `beekeeper.ready` at invite boundary | Accept starts Drone grilling session on the same `traceId` |
+| **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept; validate `session.invite` / `beekeeper.ready` at invite boundary | Accept starts Drone grilling session on the same `traceId` **(done)** |
 | **3 Auto-invite** | Publisher on `feature.classified` / optional on `spec.ready` | Classify → pending invite without manual SIGNAL crafting |
 | **4 Hardening** | Completion checks for grilling (`spec.ready` required); energy policy for sessions | Failed grilling without spec is visible as failed/incomplete invite |
 
@@ -404,12 +404,20 @@ paseka invite reject <inviteId>
 
 ## Verification
 
-Phase 1 is documentation + removal of the `feature.requested` protocol stub:
+Phases 0–2:
 
 ```bash
 gofmt -w .
 go build -o paseka ./cmd/paseka
-go test ./internal/protocol/...
+go test ./internal/protocol/... ./internal/invites/... ./internal/runtime/... ./internal/console/...
 ```
 
-When Phase 2+ code lands, extend tests under `./internal/runtime/...` and invite CLI packages as needed.
+Manual E2E (Phase 2 invites):
+
+```bash
+paseka invite record --trace "$TRACE" --bee drone --intent grilling --task "Grill: …"
+paseka invite list
+paseka invite accept <inviteId>
+```
+
+When Phase 3+ code lands, extend tests under `./internal/runtime/...` for auto-invite publisher.

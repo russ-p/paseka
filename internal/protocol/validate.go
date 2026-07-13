@@ -157,6 +157,13 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateHumanFeedback(payload)
 	}
 
+	switch InviteEventKind(kind) {
+	case SignalSessionInvite:
+		return validateSessionInvite(payload)
+	case SignalBeekeeperReady:
+		return validateBeekeeperReady(payload)
+	}
+
 	return nil
 }
 
@@ -183,6 +190,10 @@ func expectedEventType(kind string) EventType {
 	}
 	if t := InsightKindForEventType(kind); t != "" {
 		return t
+	}
+	switch InviteEventKind(kind) {
+	case SignalSessionInvite, SignalBeekeeperReady:
+		return EventSignal
 	}
 	return ""
 }
@@ -322,6 +333,70 @@ func validateEnergyConsume(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
 	}
 	return nil
+}
+
+func validateSessionInvite(payload json.RawMessage) []ValidationDetail {
+	var p SessionInvitePayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid session.invite payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.InviteID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.inviteId", Message: "required"})
+	}
+	if strings.TrimSpace(p.Bee) == "" {
+		details = append(details, ValidationDetail{Path: "payload.bee", Message: "required"})
+	}
+	if strings.TrimSpace(p.Task) == "" {
+		details = append(details, ValidationDetail{Path: "payload.task", Message: "required"})
+	}
+	if strings.TrimSpace(string(p.Status)) == "" {
+		details = append(details, ValidationDetail{Path: "payload.status", Message: "required"})
+	} else if !isInviteStatus(p.Status) {
+		details = append(details, ValidationDetail{
+			Path:    "payload.status",
+			Message: "must be one of pending, accepted, cancelled, completed",
+		})
+	}
+	return details
+}
+
+func validateBeekeeperReady(payload json.RawMessage) []ValidationDetail {
+	var p BeekeeperReadyPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid beekeeper.ready payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.InviteID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.inviteId", Message: "required"})
+	}
+	if strings.TrimSpace(string(p.Action)) == "" {
+		details = append(details, ValidationDetail{Path: "payload.action", Message: "required"})
+	} else if !isBeekeeperAction(p.Action) {
+		details = append(details, ValidationDetail{
+			Path:    "payload.action",
+			Message: "must be one of accept, reject, defer",
+		})
+	}
+	return details
+}
+
+func isInviteStatus(status InviteStatus) bool {
+	switch status {
+	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+func isBeekeeperAction(action BeekeeperAction) bool {
+	switch action {
+	case BeekeeperAccept, BeekeeperReject, BeekeeperDefer:
+		return true
+	default:
+		return false
+	}
 }
 
 // ToEvent validates input and builds a canonical protocol.Event.

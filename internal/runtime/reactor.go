@@ -127,6 +127,9 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
 		return err
 	}
+	if err := r.handleInviteProjection(ev); err != nil {
+		return err
+	}
 	if err := r.executeDispatches(ctx, ev, res.Ready); err != nil {
 		return err
 	}

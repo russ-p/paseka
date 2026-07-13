@@ -12,6 +12,7 @@ import (
 type State struct {
 	Worktrees []WorktreeEntry `json:"worktrees,omitempty"`
 	Sessions  []SessionEntry  `json:"sessions,omitempty"`
+	Invites   []InviteEntry   `json:"invites,omitempty"`
 	Runtime   *RuntimeEntry   `json:"runtime,omitempty"`
 }
 
@@ -35,6 +36,28 @@ type SessionEntry struct {
 	PID       int       `json:"pid"`
 	StartedAt time.Time `json:"startedAt"`
 }
+
+// InviteEntry tracks one Human Gateway session invite.
+type InviteEntry struct {
+	InviteID  string    `json:"inviteId"`
+	TraceID   string    `json:"traceId"`
+	Bee       string    `json:"bee"`
+	Intent    string    `json:"intent,omitempty"`
+	Task      string    `json:"task"`
+	Status    string    `json:"status"`
+	SpecRef   string    `json:"specRef,omitempty"`
+	SessionID string    `json:"sessionId,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+const (
+	InviteStatusPending   = "pending"
+	InviteStatusAccepted  = "accepted"
+	InviteStatusCancelled = "cancelled"
+	InviteStatusCompleted = "completed"
+	InviteStatusDeferred  = "deferred"
+)
 
 // WorktreeEntry tracks one colony-managed git worktree.
 type WorktreeEntry struct {
@@ -224,6 +247,65 @@ func FindSession(slug, sessionID string) (SessionEntry, error) {
 		}
 	}
 	return SessionEntry{}, fmt.Errorf("colony: session %q not found", sessionID)
+}
+
+// UpsertInvite stores or updates an invite entry by inviteId.
+func UpsertInvite(slug string, entry InviteEntry) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = now
+	}
+	entry.UpdatedAt = now
+	for i, inv := range st.Invites {
+		if inv.InviteID == entry.InviteID {
+			if st.Invites[i].CreatedAt.IsZero() {
+				entry.CreatedAt = now
+			} else {
+				entry.CreatedAt = st.Invites[i].CreatedAt
+			}
+			st.Invites[i] = entry
+			return SaveState(slug, st)
+		}
+	}
+	st.Invites = append(st.Invites, entry)
+	return SaveState(slug, st)
+}
+
+// ListInvites returns invite entries, optionally filtered by status and traceId.
+func ListInvites(slug, status, traceID string) ([]InviteEntry, error) {
+	st, err := LoadState(slug)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InviteEntry, 0, len(st.Invites))
+	for _, inv := range st.Invites {
+		if status != "" && inv.Status != status {
+			continue
+		}
+		if traceID != "" && inv.TraceID != traceID {
+			continue
+		}
+		out = append(out, inv)
+	}
+	return out, nil
+}
+
+// FindInvite returns one invite by ID.
+func FindInvite(slug, inviteID string) (InviteEntry, error) {
+	st, err := LoadState(slug)
+	if err != nil {
+		return InviteEntry{}, err
+	}
+	for _, inv := range st.Invites {
+		if inv.InviteID == inviteID {
+			return inv, nil
+		}
+	}
+	return InviteEntry{}, fmt.Errorf("colony: invite %q not found", inviteID)
 }
 
 func statePath(slug string) (string, error) {
