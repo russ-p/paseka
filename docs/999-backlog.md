@@ -2,6 +2,26 @@
 
 ## Deferred Ideas
 
+### Feature ideation choreography (classify → invite → spec)
+
+Context:
+- Raw feature ideas should not jump straight to Scout `task.plan`.
+- Drone already has `grilling` / `breakdown` intents; interactive sessions exist but are not bus-driven.
+- Design and event shapes are recorded in [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
+
+Backlog items:
+
+- **Phase 0** — Scout `classify` prompt + Drone grilling guidance to write `docs/specs/…` and emit `SIGNAL/spec.ready` (manual `bee chat` path).
+- **Phase 1** — Protocol validation for `feature.classified`, `session.invite`, `beekeeper.ready`, `spec.ready`.
+- **Phase 2+** — Invite persistence, CLI `paseka invite *`, Console accept → session; optional auto-invite on classify.
+
+Why deferred:
+- Spec is drafted; implementation spans protocol, reactor/Human Gateway, prompts, and Console UX.
+- Soft Phase 0 unblocks Beekeepers without session-dispatch in the reactor.
+
+Exit criteria for revisiting:
+- Beekeeper runs ideation soft path successfully, or Phase 1+ is scheduled for implementation.
+
 ### Replace `result.txt` with a clearer log artifact
 
 Context:
