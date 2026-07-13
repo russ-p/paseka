@@ -1,10 +1,14 @@
 # Spec 001: Pi Adapter Integration
 
+## Status
+
+**Implemented.** Pi is a first-class adapter for AFK (`paseka bee run`) and interactive (`paseka bee chat`) modes. Package: `internal/adapters/pi/`. Registered in `runtime.NewDispatcher` and `sessions.NewManager`. Machine-local config, bee params (`provider`, `thinking`, `output_format` → `--mode`), and docs are shipped. `paseka init --adapter pi` scaffolds Pi starter bees and `adapters/pi.yaml` (added after the original non-goal below).
+
 ## Purpose
 
 Integrate `pi` as a first-class Paseka adapter so bees can run through the Pi CLI in both AFK and interactive modes.
 
-This spec captures the shared design only. Implementation must not start until explicitly confirmed.
+This document remains the design record for the integration.
 
 ## Goals
 
@@ -16,25 +20,34 @@ This spec captures the shared design only. Implementation must not start until e
 
 ## Non-Goals
 
-- Do not switch existing `.paseka/bees/*.yaml` files from `cursor` to `pi`.
-- Do not change `paseka init` defaults or scaffold Pi config yet.
+- Do not switch existing committed `.paseka/bees/*.yaml` files from `cursor` to `pi` by default (opt-in via `adapter: pi` or `paseka init --adapter pi`).
+- Do not change the default `paseka init` adapter away from `cursor` (Pi is opt-in via `--adapter pi`).
 - Do not expose every Pi CLI flag through bee YAML.
-- Do not parse Pi JSON into protocol bus events in the first implementation.
+- Do not parse Pi JSON into protocol bus events.
 - Do not force Cursor-style `stream-json` semantics onto Pi.
 
 ## Current System Context
 
-Paseka currently has two adapter surfaces:
+Paseka has two adapter surfaces:
 
 - `adapters.Adapter` for AFK runs.
 - `adapters.SessionAdapter` for PTY-backed interactive sessions.
 
-The Cursor adapter is the only registered adapter today. It is registered in:
+Registered adapters today:
+
+| Name | AFK | Interactive | Package |
+| ---- | --- | ----------- | ------- |
+| `cursor` | yes | yes | `internal/adapters/cursor` |
+| `pi` | yes | yes | `internal/adapters/pi` |
+| `claude` | yes | yes | `internal/adapters/claude` |
+| `script` | yes | no | `internal/adapters/script` |
+
+Registration:
 
 - `internal/runtime/dispatch.go`
-- `internal/sessions/manager.go`
+- `internal/sessions/manager.go` (LLM adapters only)
 
-Bee configs select adapters through `.paseka/bees/<role>.yaml` via `adapter: cursor`, and adapter params are loaded through `internal/colony/params.go`.
+Bee configs select adapters through `.paseka/bees/<role>.yaml` via `adapter: …`, and adapter params are loaded through `internal/colony/params.go`. Canonical docs: [003-architecture.md](../003-architecture.md) §5.1, [006-interactive-sessions.md](../006-interactive-sessions.md) §8, [010-bee-config.md](../010-bee-config.md).
 
 ## Pi CLI Facts
 
@@ -52,7 +65,7 @@ Relevant flags:
 - `--session-dir <dir>`: session storage directory.
 - `--session-id <id>`: exact project session id.
 
-Pi has `--approve` and `--no-approve`, but the Pi adapter will not map Paseka `trust` to these flags.
+Pi has `--approve` and `--no-approve`, but the Pi adapter does not map Paseka `trust` to these flags.
 
 ## Decisions
 
@@ -79,7 +92,7 @@ pi -p --mode json "$PROMPT"
 
 If `params.output_format` is empty, the adapter uses `json`.
 
-The first implementation uses a tolerant parser:
+AFK uses a tolerant parser:
 
 - Extract summary/output from common JSON fields when present.
 - Preserve raw stdout JSON as an artifact.
@@ -117,7 +130,7 @@ Reuse existing params:
 - `plan`
 - `binary`
 
-Add shared params:
+Shared params:
 
 - `provider`
 - `thinking`
@@ -126,7 +139,7 @@ Do not add tool allowlists, extension paths, skills, themes, or broad Pi-specifi
 
 ### Local Config
 
-Add support for:
+Support:
 
 ```yaml
 binary: pi
@@ -149,21 +162,17 @@ If `api_key_env` is configured and the environment variable is set, pass the val
 
 ### Init Behavior
 
-Do not update `paseka init` to scaffold Pi config yet.
+`paseka init --adapter pi` scaffolds starter bees with `adapter: pi` and creates `adapters/pi.yaml`. Default init remains `cursor`.
 
-A future `init` flag can choose or scaffold additional adapters.
+## Implementation (shipped)
 
-## Implementation Plan
+### 1. Pi Adapter Package
 
-### 1. Add Pi Adapter Package
-
-Create `internal/adapters/pi/`.
-
-Implement AFK run behavior parallel to `internal/adapters/cursor`:
+`internal/adapters/pi/` — AFK run parallel to Cursor:
 
 - Validate required request fields.
 - Prepare run directory.
-- Write prompt, metadata, and running status.
+- Write prompt, metadata, and running status (including PID).
 - Invoke `pi -p`.
 - Capture stdout and stderr.
 - Parse stdout according to `--mode`.
@@ -171,78 +180,40 @@ Implement AFK run behavior parallel to `internal/adapters/cursor`:
 - Write protocol result and status.
 - Return normalized `adapters.RunResult`.
 
-### 2. Add Pi Session Adapter
+### 2. Pi Session Adapter
 
-Implement `SessionAdapter.SessionCommand`.
+`SessionAdapter.SessionCommand` with:
 
-Interactive args should include:
-
-- `--model`, if configured.
-- `--provider`, if configured.
-- `--thinking`, if configured.
-- `--plan`, if configured.
-- `--api-key`, if configured.
+- `--model`, `--provider`, `--thinking`, `--plan`, `--api-key` when configured.
 - `--session-dir <runDir>/pi-sessions`.
 - `--session-id <agentId>`.
 - Initial prompt as positional argument.
+- No `--mode`.
 
-Interactive args should not include `--mode`.
+### 3. Params and Config
 
-### 3. Extend Params and Config
+- Shared run params: `Provider`, `Thinking`.
+- Bee param parsing for `provider` / `thinking`.
+- `adapter: pi` allowed in bee validation.
+- `PiAdapterConfig` under colony home config.
 
-Update shared run params with:
+### 4. Registration
 
-- `Provider`
-- `Thinking`
-
-Update bee param parsing for:
-
-- `provider`
-- `thinking`
-
-Allow `adapter: pi` in bee validation.
-
-Add `PiAdapterConfig` loading under colony home config.
-
-### 4. Register Adapter
-
-Register `pi` in:
-
-- `runtime.NewDispatcher`
-- `sessions.NewManager`
-
-Update dispatch and session setup so local binary/API-key config is selected by resolved adapter name:
-
-- `cursor` uses Cursor config.
-- `pi` uses Pi config.
+- `runtime.NewDispatcher` and `sessions.NewManager` register `pi`.
+- Local binary/API-key config selected by resolved adapter name (`cursor` vs `pi` vs `claude`).
 
 ### 5. Tests
 
-Add focused tests for:
-
-- Pi AFK arg building.
-- Pi interactive arg building.
-- Tolerant JSON summary extraction.
-- Bee param parsing for `provider` and `thinking`.
-- `adapter: pi` validation.
-- Adapter-specific local config routing.
+Covered in `internal/adapters/pi/`, colony params/validation, and runtime dispatch tests.
 
 ### 6. Docs
 
-Update architecture docs after implementation details settle:
-
-- Mention Pi as a supported adapter.
-- Document Pi `output_format -> --mode`.
-- Document `provider` and `thinking`.
-- Document local `adapters/pi.yaml`.
+Documented in architecture, interactive sessions, bee config, and CLI (`paseka init --adapter pi`).
 
 ## Verification
-
-After Go changes:
 
 ```bash
 gofmt -w .
 go build -o paseka ./cmd/paseka
+go test ./internal/adapters/pi/ ./internal/colony/ ./internal/runtime/ -count=1
 ```
-
-Run relevant targeted tests before the full build if the implementation touches parser, config, runtime, or sessions.

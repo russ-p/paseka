@@ -1,12 +1,23 @@
 # Spec 002: Queen Console MVP
 
+## Status
+
+**Implemented (MVP baseline).** Living baseline for Queen Console: `paseka console`, embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews (including final merge-diff preview), sessions (same-process browser PTY), runs, and the Live bees header panel ([004](./004-live-bees-indicator.md)).
+
+Still deferred from this baseline:
+
+- Dedicated worktrees page / `GET /api/worktrees`
+- Cross-process browser attach
+- Global WebSocket/SSE event stream (`/api/events/stream`)
+- Per-run `MUTATION/code.proposal` diff preview for `review: required` (final merge gate diff is shipped)
+
 ## Purpose
 
 Introduce a first Web UI for Paseka: **Queen Console**.
 
 The MVP should make the colony observable and operable from a browser without replacing the existing CLI-first runtime model.
 
-This spec is now a living MVP baseline. It reflects the implementation state after the recent Queen Console work: `paseka console`, the embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, task board, sessions, and runs.
+This spec is a living MVP baseline. It reflects the shipped Queen Console: `paseka console`, the embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews, sessions, and runs.
 
 ## Goals
 

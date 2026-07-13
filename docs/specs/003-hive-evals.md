@@ -1,10 +1,19 @@
 # Spec 003: Hive Evals
 
+## Status
+
+**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner, and at least two cases (`01-add-function`, `02-energy-exhausted`). Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [999-backlog.md](../999-backlog.md) § Eval colony gotchas.
+
+Resolved since the original draft:
+
+- First-class `adapter: script` in the platform (eval bees use it + `paseka event emit`).
+- `paseka purge --bus --trace <traceId>` for per-trace JetStream wipe (stop `paseka run` first).
+
 ## Purpose
 
 Define a repeatable evaluation system for Paseka's choreographed hive: side test colonies, seeded initial state, fault injection, and scoring of builder ↔ guard correction loops.
 
-This spec captures the shared design only. Implementation must not start until explicitly confirmed.
+This document is the shared design record; further phases should follow it unless decisions below are revised.
 
 ## Goals
 
@@ -40,10 +49,11 @@ Relevant existing pieces:
 | Purge | `paseka purge --runs --worktrees --state --bus --trace <traceId>` | Ephemeral cleanup between runs (bus wipe requires stopped reactor) |
 | Signal inject | `paseka signal` | Bus-level fault injection |
 | Replay | `paseka replay <traceId>` | Read-only event chain inspection |
+| Script adapter | `adapter: script` + `command` | Deterministic eval bees without an LLM |
 | Test harness | `recordingAdapter`, `NewTestReactor`, `MemoryLedger` | Tier A in-process evals |
 | Builder intent | `_partials/builder-intent-test-fix.md` | Prefer `intent: test-fix` for oracle tasks |
 
-Builder / guard loop (already shipped):
+Builder / guard loop (shipped):
 
 ```text
 SIGNAL/task.ready
@@ -53,13 +63,14 @@ SIGNAL/task.ready
   → when honey reserve is empty: task → blocked
 ```
 
-Gaps today:
+Gaps remaining:
 
-- No `testdata/` / `fixtures/` / golden eval suite.
+- No golden `testdata/` suite inside the **platform** repo beyond unit/integration tests (Tier B lives in the sibling eval colony).
 - No seeded `agentId` control.
-- No JetStream snapshot/restore helper for eval namespaces.
-- No end-to-end builder→guard→builder integration test with scripted adapters.
-- `confidence` filtering is not implemented.
+- No JetStream snapshot/restore helper beyond per-trace `purge --bus`.
+- No automated event-chain scorer in the runner (oracle + human `paseka replay` inspection today).
+- Tier C live LLM suite not started.
+- `confidence` filtering is not implemented (out of scope; see backlog).
 
 ## Decisions
 
@@ -67,13 +78,13 @@ Gaps today:
 
 Keep evals **out of** the Paseka platform repo.
 
-Recommended layout:
+Recommended layout (matches current `paseka-eval-colony`):
 
 ```text
 paseka-eval-colony/                 # separate git repository
 ├── .paseka/
 │   ├── colony.yaml
-│   ├── bees/                       # builder, guard, receiver (eval-tuned)
+│   ├── bees/                       # builder, guard, receiver (eval-tuned script bees)
 │   └── prompts/                    # may be thinner than production prompts
 ├── cases/
 │   ├── 01-add-function/
@@ -81,11 +92,13 @@ paseka-eval-colony/                 # separate git repository
 │   │   ├── seed/                   # initial tree checked into the case
 │   │   ├── broken/                 # optional intentional bad patch/diff
 │   │   └── expect/                 # oracle tests or expected files
-│   └── 02-fix-off-by-one/
+│   └── 02-energy-exhausted/
 │       ├── case.yaml
 │       ├── seed/
-│       └── expect/
-├── runner/                         # optional Go/CLI harness (later)
+│       └── broken/
+├── scripts/                        # script-adapter hooks
+├── runner/                         # reset + run-case harness
+├── reports/                        # gitignored run reports
 └── README.md
 ```
 
@@ -129,12 +142,12 @@ Non-deterministic (acceptable at Tier C only):
 
 | Tier | Name | LLM | Bus | What it proves |
 | ---- | ---- | --- | --- | -------------- |
-| **A** | Choreography | No (mock / recording adapters) | Optional in-memory | Routing, ledger transitions, rework cap, direct dispatch loop |
+| **A** | Choreography | No (mock / recording adapters) | Optional in-memory | Routing, ledger transitions, energy gate, direct dispatch loop |
 | **B** | Bus integration | No (scripted bees or `paseka signal`) | Real NATS | End-to-end subjects, replay chain, purge/reset |
 | **C** | Live hive | Yes | Real NATS | Prompt + adapter quality against oracles; report pass@k |
 
 Tier A lives primarily in the Paseka repo as Go tests (extend `internal/runtime` harness).
-Tiers B/C live primarily in the eval colony + a thin runner.
+Tiers B/C live primarily in the eval colony + runner.
 
 ### Fault injection modes
 
@@ -143,6 +156,7 @@ Cases declare how the first mistake is introduced:
 | Mode | Mechanism | Use |
 | ---- | --------- | --- |
 | `scripted` | Fake/script adapter (or fixture bee) applies `broken/` patch as first builder result | Deterministic loop tests |
+| `always_broken` | Script builder always applies a bad change (e.g. energy exhaustion cases) | Force rework until honey blocks |
 | `inject-mutation` | Runner publishes `MUTATION/code.proposal` via `paseka signal` with a bad diff | Skip builder v1; test guard→builder |
 | `live` | Real builder may err naturally; oracle decides pass/fail | Statistical quality evals |
 
@@ -159,7 +173,7 @@ builder produces bad change
 Also cover:
 
 - guard success on first proposal (no rework)
-- three failures → `waiting_review` escalation
+- honey exhaustion → `blocked` (energy budget)
 - human reject path (`INSIGHT/human.feedback`) when review policy requires it
 
 ### Oracle and scoring
@@ -168,9 +182,10 @@ Score **outcomes**, not narratives.
 
 Minimum oracle for a case:
 
-- shell command in the worktree (usually tests), e.g. `go test ./...`
+- shell command in the worktree (usually tests), e.g. `go test ./pkg/...` (prefer narrow paths; see backlog gotchas)
 - optional expected event chain (type/kind sequence)
 - budgets: `max_rework_cycles`, `max_builder_runs`, wall-clock timeout
+- optional expected terminal task status / summary (e.g. energy cases)
 
 Suggested score fields:
 
@@ -179,9 +194,10 @@ Suggested score fields:
 | `tests_passed` | Oracle command exit 0 in worktree |
 | `event_chain_ok` | Observed bus/run events match expected subsequence |
 | `rework_cycles` | Count of `verification.failed` for the task |
-| `escalated` | Task reached `waiting_review` due to rework cap |
+| `escalated` | Task reached `waiting_review` due to rework / review policy |
 | `builder_runs` | Number of builder dispatches |
 | `duration` | Wall time |
+| `task_status` | Terminal ledger status when asserted |
 
 Tier C aggregates: `pass@k`, median rework cycles, p95 duration.
 
@@ -203,10 +219,10 @@ task:
   intent: test-fix
   review: none              # or required/final when testing HITL gates
 fault:
-  mode: scripted            # scripted | inject-mutation | live
+  mode: scripted            # scripted | always_broken | inject-mutation | live
   broken_diff: broken/bad.patch
 oracle:
-  command: "go test ./..."
+  command: "go test ./pkg/..."
   workdir: "."              # relative to worktree (or sector path later)
   max_rework_cycles: 2
   expect_event_chain:
@@ -230,16 +246,17 @@ Notes:
 - `seed/` should be tiny; prefer one package and a few files.
 - Prefer `intent: test-fix` so builder prompts align with oracle-driven tasks.
 - Sectors may be added later; v1 assumes colony-root workspace.
+- Seed code must be **committed** before worktree create (worktrees come from `HEAD`).
 
-### Runner responsibilities (later implementation)
+### Runner responsibilities
 
-A runner (script or Go command, location TBD) should:
+A runner (script in the eval colony today: `runner/run-case.sh`) should:
 
 1. Load `case.yaml`.
-2. Reset colony to seed + purge ephemeral state.
+2. Reset colony to seed + purge ephemeral state (`paseka … -C` to the eval root).
 3. Ensure NATS/eval namespace is clean.
 4. Start or attach to `paseka run` when Tier B/C.
-5. Apply fault mode (`scripted` / `inject-mutation` / `live`).
+5. Apply fault mode (`scripted` / `always_broken` / `inject-mutation` / `live`).
 6. Create/start the task with fixed `--trace`.
 7. Wait for terminal task status or timeout.
 8. Run oracle in the trace worktree.
@@ -250,7 +267,7 @@ Tier A may skip the external runner and stay as Go tests that assert the same ev
 
 ### Eval-tuned bees
 
-The eval colony may ship simplified bees:
+The eval colony ships simplified bees:
 
 - **Script guard** — runs `oracle.command` (or case tests) and emits `verification.success|failed` without an LLM.
 - **Script builder** (Tier A/B) — applies fixture patches / writes known files.
@@ -264,37 +281,38 @@ Production Paseka bees remain unchanged unless a platform gap is found.
 - Dedicated NATS URL / subject prefix for eval when sharing a machine with a real colony.
 - Never reuse production JetStream KV keys for eval traces without a wipe step.
 - Eval colony `.paseka/runs/` and `worktrees/` stay gitignored (normal colony layout).
+- Always pass `-C` to `paseka` from runner scripts so cwd cannot target the wrong repo.
 
 ## Phased delivery
 
-### Phase 0 — Spec + skeleton (this doc)
+### Phase 0 — Spec + skeleton — Done
 
 - Agree on tiers, reset model, case YAML, scoring.
-- Optionally create empty `paseka-eval-colony` with one stub case (no automation yet).
+- Sibling `paseka-eval-colony` created.
 
-### Phase 1 — Tier A in Paseka
+### Phase 1 — Tier A in Paseka — Partial / ongoing
 
-- Full in-process test: bad builder diff → guard `verification.failed` → builder re-dispatch → success.
-- Test rework escalation after 3 failures → `waiting_review`.
-- Reuse `recordingAdapter` / `NewTestReactor` / `MemoryLedger`.
+- Platform harness: `recordingAdapter` / `NewTestReactor` / `MemoryLedger`.
+- Covered: routing (including `verification.failed` → builder direct dispatch), energy block/unblock, review gates.
+- Still useful to add: a single end-to-end in-process golden for bad builder → guard fail → builder fix → success if not already covered by focused reactor tests.
 
-### Phase 2 — Eval colony + Tier B
+### Phase 2 — Eval colony + Tier B — In progress
 
-- Create sibling repo with 1–3 tiny cases (`seed/`, `expect/`, `case.yaml`).
-- Scripted guard (and optional scripted builder).
-- Reset script: purge + seed checkout + fixed trace.
-- Assert event chain via `paseka replay` / run `events.ndjson`.
+- Sibling repo with cases (`01-add-function`, `02-energy-exhausted`, …).
+- Scripted builder/guard/receiver bees.
+- Reset + run-case scripts; JSON reports under `reports/`.
+- Assert outcomes via oracle and `paseka replay` (automated event-chain scorer still backlog).
 
-### Phase 3 — Tier C live suite
+### Phase 3 — Tier C live suite — Not started
 
 - Same cases with real adapters.
 - Report `pass@k`, median cycles, failures.
 - Keep Tier A/B as merge gates; Tier C as scheduled/manual quality signal.
 
-### Phase 4 — Platform affordances (only if needed)
+### Phase 4 — Platform affordances (only if needed) — Not started
 
 - Optional `--agent-id` / seed for deterministic run dirs.
-- Eval-oriented purge/namespace helpers.
+- Eval-oriented purge/namespace helpers (partially covered by `paseka purge --bus --trace`).
 - True prompt replay against historical JetStream chains (product brief “Event Replay”) — separate spec.
 
 ## Verification (when implementing)
@@ -311,12 +329,9 @@ Eval colony (Tier B/C):
 
 ```bash
 # from eval colony root, with NATS up (stop paseka run before bus purge)
-paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
-# runner or manual:
-paseka run &
-paseka task create --trace eval-01-add-function --title "..." --body "..." --bee builder --intent test-fix --autorun
-paseka replay eval-01-add-function
-# oracle inside worktree
+paseka -C "$EVAL_ROOT" purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
+./runner/run-case.sh 01-add-function
+paseka -C "$EVAL_ROOT" replay eval-01-add-function
 ```
 
 Success criteria for the design:
@@ -327,17 +342,20 @@ Success criteria for the design:
 
 ## Open questions
 
-1. **Runner home** — Go subcommand in Paseka (`paseka eval …`) vs standalone tool in the eval colony?
-2. **Seed materialization** — copy `seed/` into a throwaway git repo each run vs tags on a single eval-colony history?
+1. **Runner home** — today: standalone scripts in the eval colony. Promote to `paseka eval …` later?
+2. **Seed materialization** — copy `seed/` into colony root + commit each run (current runner) vs tags on a single eval-colony history?
 3. **Script bees** — **resolved:** first-class `adapter: script` in platform; eval colonies use script bees with `paseka event emit` for domain events.
 4. **JetStream wipe** — **resolved:** `paseka purge --bus --trace <traceId>` removes task-ledger KV, stream events, and object-store artifacts for one trace without restarting NATS. Stop `paseka run` before bus purge. See [007-cli.md](../007-cli.md) § `paseka purge`.
 5. **Case language** — keep YAML only, or allow Markdown task bodies with YAML front matter?
 6. **Multi-sector cases** — defer until sectors are common in real colonies?
+7. **Event-chain scorer** — automate `expect_event_chain` against `paseka replay` (backlog follow-up).
 
 ## References
 
-- [003-architecture.md](../003-architecture.md) — colony layout, worktrees, runs IPC
+- [003-architecture.md](../003-architecture.md) — colony layout, worktrees, runs IPC, script adapter
 - [005-task-ledger.md](../005-task-ledger.md) — trace / task / agent hierarchy
 - [007-cli.md](../007-cli.md) — `run`, `task`, `signal`, `replay`, `purge`
 - [008-bee-routing.md](../008-bee-routing.md) — builder/guard subscriptions
+- [010-bee-config.md](../010-bee-config.md) — `adapter: script` and bee schema
 - [001-brief.md](../001-brief.md) — event replay and energyToken vision
+- [999-backlog.md](../999-backlog.md) — eval colony gotchas and harness follow-ups
