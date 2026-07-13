@@ -9,7 +9,7 @@ User input: {{.Task}}
 ### 1. Gather context
 
 Work from whatever is already in the conversation context. If the user passes an issue reference (issue number, URL, or
-path) as an argument, fetch it from the issue tracker and read its full body and comments.
+path) as an argument, fetch it from the issue tracker and read its full body and comments. When breaking down after grilling, read the spec at the path in `{{.Task}}` or from a prior `spec.ready.ref` in Prior discoveries — breakdown requires a readable spec file.
 
 ### 2. Explore the codebase (optional)
 

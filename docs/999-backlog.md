@@ -11,11 +11,11 @@ Context:
 
 Backlog items:
 
-- **Phase 0** — Scout `classify` prompt + Drone grilling guidance to write `docs/specs/…` and emit `SIGNAL/spec.ready` (manual `bee chat` path).
+- ~~**Phase 0** — Scout `classify` prompt + Drone grilling guidance to write `docs/specs/…` and emit `SIGNAL/spec.ready` (manual `bee chat` path).~~ **Done** — prompts shipped; see [007-cli.md](007-cli.md) soft path.
 - **Phase 1** — Protocol validation for `feature.classified`, `session.invite`, `beekeeper.ready`, `spec.ready`.
 - **Phase 2+** — Invite persistence, CLI `paseka invite *`, Console accept → session; optional auto-invite on classify.
 
-Why deferred:
+Why deferred (Phase 1+):
 - Spec is drafted; implementation spans protocol, reactor/Human Gateway, prompts, and Console UX.
 - Soft Phase 0 unblocks Beekeepers without session-dispatch in the reactor.
 

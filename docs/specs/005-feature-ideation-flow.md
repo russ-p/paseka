@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft.** Design locked for choreography and event shapes. Implementation is phased: prompts/routing first, then invite → session bridge, then Queen Console invite UX.
+**Draft.** Design locked for choreography and event shapes. **Phase 0 Soft** (Scout `classify` + Drone grilling `spec.ready` prompts) is implemented; Beekeeper can run the manual soft path via CLI. Phases 1–4 (protocol validation, invites, auto-invite, hardening) remain open.
 
 ## Purpose
 
@@ -339,7 +339,7 @@ paseka invite reject <inviteId>
 
 | Phase | Scope | Done when |
 | ----- | ----- | --------- |
-| **0 Soft** | Docs + Scout `classify` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand |
+| **0 Soft** | Docs + Scout `classify` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand **(done)** |
 | **1 Protocol** | Validate + document payload schemas for new SIGNAL kinds | `paseka signal` / `event emit` accept structured payloads |
 | **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept | Accept starts Drone grilling session on the same `traceId` |
 | **3 Auto-invite** | Publisher on `feature.classified` / optional on `spec.ready` | Classify → pending invite without manual SIGNAL crafting |
