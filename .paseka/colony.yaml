@@ -1,3 +1,26 @@
 slug: paseka
 defaults:
     prompt_template: default.md
+auto_invites:
+    - when:
+        type: SIGNAL
+        kind: feature.classified
+      match:
+        route: grill
+      invite:
+        bee:
+            from: bee
+            default: drone
+        intent:
+            from: intent
+            default: grilling
+        task:
+            from_trace_kind: feature.requested
+            from_trace_field: title
+            prefix: "Grill feature: "
+            fallback_from: rationale
+            default: Grill feature
+        status: pending
+      dedupe:
+        - bee
+        - intent

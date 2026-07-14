@@ -49,7 +49,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
     └── <traceId>/
 ```
 
-**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), and colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`).
+**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [008-bee-routing.md](008-bee-routing.md)).
 
 ```yaml
 defaults:

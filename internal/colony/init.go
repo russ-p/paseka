@@ -150,6 +150,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 				PromptTemplate: "default.md",
 				EnergyBudget:   protocol.DefaultEnergyBudget,
 			},
+			AutoInvites: DefaultAutoInviteRules(),
 		}
 		data, err := yaml.Marshal(c)
 		if err != nil {
@@ -173,6 +174,9 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	}
 	if manifest.Defaults.EnergyBudget == 0 {
 		manifest.Defaults.EnergyBudget = protocol.DefaultEnergyBudget
+	}
+	if len(manifest.AutoInvites) == 0 {
+		manifest.AutoInvites = DefaultAutoInviteRules()
 	}
 	data, err := yaml.Marshal(manifest)
 	if err != nil {

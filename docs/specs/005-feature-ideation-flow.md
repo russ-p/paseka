@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft.** Design locked for choreography and event shapes. **Phases 0–2** (soft path, platform/colony boundary, Human Gateway invites) are done. **Phases 3–4** (auto-invite, hardening) remain open.
+**Draft.** Design locked for choreography and event shapes. **Phases 0–3** (soft path through auto-invite on `feature.classified`) are done. **Phase 4** (hardening) remains open.
 
 ## Purpose
 
@@ -151,7 +151,7 @@ Runtime and `internal/protocol` own **platform** kinds the reactor, ledger, and 
 | `session.invite`, `beekeeper.ready` | Platform Human Gateway | This spec; validated when invite projector/CLI lands (Phase 2) | At invite boundary only, not as “feature ideation vocabulary” |
 | `task.*`, `energy.*`, … | Platform / ledger / reactor | Existing protocol + docs | Yes (already) |
 
-`paseka signal` and the bus accept colony kinds with envelope checks only (`traceId`, domain `type`, valid JSON with `kind`). Field validation for colony ideation kinds is **not** enforced by runtime — prompts and Beekeeper review are the gate. Phase 2 invite publisher reads `feature.classified` JSON without promoting those kinds into core protocol vocabulary.
+`paseka signal` and the bus accept colony kinds with envelope checks only (`traceId`, domain `type`, valid JSON with `kind`). Field validation for colony ideation kinds is **not** enforced by runtime — prompts and Beekeeper review are the gate. Phase 3 auto-invite reads colony event JSON via declarative `auto_invites` rules without promoting those kinds into core protocol vocabulary.
 
 ### 9. Soft bootstrap (Phase 0)
 
@@ -320,19 +320,42 @@ default_intent: classify   # or keep survey default; classify only on this subsc
 - Breakdown: require `specRef` or readable spec path in `{{.Task}}` / Insights; keep existing `task.plan` emit rules.
 - No AFK `subscribes` on `feature.requested` (avoids skipping Beekeeper).
 
-### Invite publisher (runtime, Phase 2)
+### Invite publisher (runtime, Phase 2–3)
 
-Reads `feature.classified` JSON fields without registering colony kinds in `internal/protocol`. Validates `session.invite` / `beekeeper.ready` at the invite boundary when publishing or accepting.
+Evaluates **`auto_invites`** rules from `.paseka/colony.yaml` (colony HITL choreography — not bee `subscribes`). When `paseka run` is up and a bus event matches a rule, reactor publishes `session.invite` (pending) and projects to `state.json`. Validates `session.invite` / `beekeeper.ready` at the invite boundary when publishing or accepting.
 
-Minimal behavior after `feature.classified` with `route=grill`:
+Default grill rule (shipped in `paseka init` scaffold):
+
+```yaml
+# .paseka/colony.yaml
+auto_invites:
+  - when:
+      type: SIGNAL
+      kind: feature.classified
+    match:
+      route: grill
+    invite:
+      bee: { from: bee, default: drone }
+      intent: { from: intent, default: grilling }
+      task:
+        from_trace_kind: feature.requested
+        from_trace_field: title
+        prefix: "Grill feature: "
+        fallback_from: rationale
+        default: Grill feature
+      status: pending
+    dedupe: [bee, intent]
+```
+
+Minimal behavior when the grill rule matches:
 
 1. Allocate `inviteId`.
-2. Publish `session.invite` (`pending`) with bee/intent/task derived from classification + original idea body.
+2. Publish `session.invite` (`pending`) with bee/intent/task mapped from the rule + trace history.
 3. Project invite for Console/CLI.
 
-After `spec.ready`:
+With **empty** `auto_invites`, classified events do **not** create invites (no Go hardcode).
 
-1. Publish breakdown `session.invite` **or** surface a Console action “Start breakdown” that publishes the invite (prefer explicit Beekeeper click in MVP).
+After `spec.ready`, add a second `auto_invites` rule (or surface a Console “Start breakdown” action) — no reactor code change required when the mapper fields suffice.
 
 ## Queen Console / CLI surfaces
 
@@ -359,7 +382,7 @@ paseka invite reject <inviteId>
 | **0 Soft** | Docs + Scout `classify` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand **(done)** |
 | **1 Boundary** | Document platform vs colony SIGNAL ownership; remove protocol stub for `feature.requested` | Colony ideation kinds stay out of `internal/protocol`; HITL kinds deferred to Phase 2 **(done)** |
 | **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept; validate `session.invite` / `beekeeper.ready` at invite boundary | Accept starts Drone grilling session on the same `traceId` **(done)** |
-| **3 Auto-invite** | Publisher on `feature.classified` / optional on `spec.ready` | Classify → pending invite without manual SIGNAL crafting |
+| **3 Auto-invite** | Config-driven `auto_invites` in `colony.yaml` (default grill rule) | Classify → pending invite without manual `invite record` while `paseka run` is up **(done)** |
 | **4 Hardening** | Completion checks for grilling (`spec.ready` required); energy policy for sessions | Failed grilling without spec is visible as failed/incomplete invite |
 
 ## End-to-end scenario (happy path)
@@ -384,6 +407,7 @@ paseka invite reject <inviteId>
 - Running breakdown without a readable `spec.ready.ref`.
 - Introducing a central “ideation orchestrator” process that sequences bees by role name.
 - Hardcoding `feature.*` / `spec.ready` in `internal/protocol` or reactor dispatch (colony contracts belong in prompts + this spec).
+- Hardcoding auto-invite choreography in Go (use `auto_invites` in `colony.yaml`).
 
 ## Open questions
 
@@ -404,20 +428,21 @@ paseka invite reject <inviteId>
 
 ## Verification
 
-Phases 0–2:
+Phases 0–3:
 
 ```bash
 gofmt -w .
 go build -o paseka ./cmd/paseka
-go test ./internal/protocol/... ./internal/invites/... ./internal/runtime/... ./internal/console/...
+go test ./internal/protocol/... ./internal/invites/... ./internal/runtime/...
 ```
 
-Manual E2E (Phase 2 invites):
+Manual E2E (Phase 3 auto-invite):
 
 ```bash
-paseka invite record --trace "$TRACE" --bee drone --intent grilling --task "Grill: …"
-paseka invite list
-paseka invite accept <inviteId>
+# paseka run must be up
+paseka signal … feature.requested
+paseka bee run scout --intent classify --trace "$TRACE" …
+paseka invite list   # pending grilling invite auto-created
 ```
 
-When Phase 3+ code lands, extend tests under `./internal/runtime/...` for auto-invite publisher.
+When Phase 4 code lands, extend tests for completion checks and session energy policy.

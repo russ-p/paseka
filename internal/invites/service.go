@@ -14,11 +14,17 @@ import (
 	"github.com/paseka/paseka/internal/sessions"
 )
 
+// EventPublisher publishes protocol events (satisfied by bus.Client).
+type EventPublisher interface {
+	PublishEvent(context.Context, protocol.Event) error
+}
+
 // Service coordinates invite persistence, bus publish, and session launch.
 type Service struct {
-	Colony   colony.Context
-	Bus      *bus.Client
-	Sessions *sessions.Manager
+	Colony    colony.Context
+	Bus       *bus.Client
+	Publisher EventPublisher
+	Sessions  *sessions.Manager
 }
 
 // AcceptResult summarizes an accepted invite.
@@ -154,6 +160,95 @@ func (s *Service) Record(in RecordInput) (colony.InviteEntry, error) {
 	return entry, nil
 }
 
+// PublishPending validates, persists, and publishes a pending session.invite.
+func (s *Service) PublishPending(ctx context.Context, traceID string, payload protocol.SessionInvitePayload) (protocol.Event, error) {
+	traceID = strings.TrimSpace(traceID)
+	if traceID == "" {
+		return protocol.Event{}, fmt.Errorf("invites: traceId is required")
+	}
+	payload.Kind = protocol.SignalSessionInvite
+	if strings.TrimSpace(payload.InviteID) == "" {
+		id, err := ids.Prefixed("inv-")
+		if err != nil {
+			return protocol.Event{}, err
+		}
+		payload.InviteID = id
+	}
+	if payload.Status == "" {
+		payload.Status = protocol.InviteStatusPending
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return protocol.Event{}, err
+	}
+	eventInput := protocol.EventInput{
+		TraceID: traceID,
+		AgentID: "runtime",
+		Type:    protocol.EventSignal,
+		Payload: raw,
+	}
+	if details := eventInput.Validate(); len(details) > 0 {
+		return protocol.Event{}, &protocol.ValidationError{
+			Code:    "schema_validation_failed",
+			Details: details,
+		}
+	}
+	ev, err := eventInput.ToEvent("runtime")
+	if err != nil {
+		return protocol.Event{}, err
+	}
+
+	entry := entryFromPayload(traceID, payload)
+	if err := colony.UpsertInvite(s.Colony.Slug, entry); err != nil {
+		return protocol.Event{}, err
+	}
+
+	pub := s.publisher()
+	if pub == nil {
+		return protocol.Event{}, fmt.Errorf("invites: nats url not configured")
+	}
+	if err := pub.PublishEvent(ctx, ev); err != nil {
+		return protocol.Event{}, err
+	}
+	return ev, nil
+}
+
+// AutoInviteFromEvent evaluates colony auto_invite rules and publishes the first matching invite.
+// Returns the published event and true when an invite was created.
+func (s *Service) AutoInviteFromEvent(ctx context.Context, ev protocol.Event, rules []colony.AutoInviteRule, traceEvents []protocol.Event) (protocol.Event, bool, error) {
+	if len(rules) == 0 {
+		return protocol.Event{}, false, nil
+	}
+	traceID := strings.TrimSpace(ev.TraceID)
+	if traceID == "" {
+		return protocol.Event{}, false, nil
+	}
+
+	for _, rule := range rules {
+		if !MatchAutoInvite(ev, rule) {
+			continue
+		}
+		payload, err := BuildInvite(ev, rule, traceEvents)
+		if err != nil {
+			return protocol.Event{}, false, err
+		}
+		pending, err := colony.ListInvites(s.Colony.Slug, colony.InviteStatusPending, traceID)
+		if err != nil {
+			return protocol.Event{}, false, err
+		}
+		if HasPendingDedupe(pending, payload, rule.Dedupe) {
+			return protocol.Event{}, false, nil
+		}
+		published, err := s.PublishPending(ctx, traceID, payload)
+		if err != nil {
+			return protocol.Event{}, false, err
+		}
+		return published, true, nil
+	}
+	return protocol.Event{}, false, nil
+}
+
 // ProjectEvent upserts invite state from a bus session.invite event.
 func (s *Service) ProjectEvent(ev protocol.Event) error {
 	if ev.Type != protocol.EventSignal || protocol.PayloadKind(ev.Payload) != string(protocol.SignalSessionInvite) {
@@ -191,23 +286,30 @@ func (s *Service) publishReady(ctx context.Context, invite colony.InviteEntry, a
 		return err
 	}
 
-	client := s.Bus
-	ownClient := false
-	if client == nil {
+	pub := s.publisher()
+	if pub == nil {
 		var err error
-		client, err = bus.ConnectColony(s.Colony, false)
+		client, err := bus.ConnectColony(s.Colony, false)
 		if err != nil {
 			return err
 		}
 		if client == nil {
 			return fmt.Errorf("invites: nats url not configured")
 		}
-		ownClient = true
-	}
-	if ownClient {
 		defer client.Close()
+		pub = client
 	}
-	return client.PublishEvent(ctx, ev)
+	return pub.PublishEvent(ctx, ev)
+}
+
+func (s *Service) publisher() EventPublisher {
+	if s.Publisher != nil {
+		return s.Publisher
+	}
+	if s.Bus != nil {
+		return s.Bus
+	}
+	return nil
 }
 
 func entryFromPayload(traceID string, payload protocol.SessionInvitePayload) colony.InviteEntry {
