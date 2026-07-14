@@ -38,27 +38,46 @@ type InviteTaskField struct {
 	Default        string `yaml:"default,omitempty"`
 }
 
-// DefaultAutoInviteRules returns the stock ideation grilling rule for new colonies.
+// DefaultAutoInviteRules returns the stock ideation rules for new colonies.
 func DefaultAutoInviteRules() []AutoInviteRule {
-	return []AutoInviteRule{{
-		When: EventRule{Type: "SIGNAL", Kind: "feature.classified"},
-		Match: map[string]string{
-			"route": "grill",
-		},
-		Invite: AutoInviteInviteSpec{
-			Bee:    InviteStringField{From: "bee", Default: "drone"},
-			Intent: InviteStringField{From: "intent", Default: "grilling"},
-			Task: InviteTaskField{
-				FromTraceKind:  "feature.requested",
-				FromTraceField: "title",
-				Prefix:         "Grill feature: ",
-				FallbackFrom:   "rationale",
-				Default:        "Grill feature",
+	return []AutoInviteRule{
+		{
+			When: EventRule{Type: "SIGNAL", Kind: "feature.classified"},
+			Match: map[string]string{
+				"route": "grill",
 			},
-			Status: "pending",
+			Invite: AutoInviteInviteSpec{
+				Bee:    InviteStringField{From: "bee", Default: "drone"},
+				Intent: InviteStringField{From: "intent", Default: "grilling"},
+				Task: InviteTaskField{
+					FromTraceKind:  "feature.requested",
+					FromTraceField: "title",
+					Prefix:         "Grill feature: ",
+					FallbackFrom:   "rationale",
+					Default:        "Grill feature",
+				},
+				Status: "pending",
+			},
+			Dedupe: []string{"bee", "intent"},
 		},
-		Dedupe: []string{"bee", "intent"},
-	}}
+		{
+			When: EventRule{Type: "SIGNAL", Kind: "spec.ready"},
+			Invite: AutoInviteInviteSpec{
+				Bee:    InviteStringField{Default: "drone"},
+				Intent: InviteStringField{Default: "breakdown"},
+				SpecRef: InviteStringField{
+					From: "ref",
+				},
+				Task: InviteTaskField{
+					From:    "ref",
+					Prefix:  "Break down ",
+					Default: "Break down spec",
+				},
+				Status: "pending",
+			},
+			Dedupe: []string{"intent", "specRef"},
+		},
+	}
 }
 
 // ValidateAutoInvites checks colony-level auto-invite rules.
@@ -93,7 +112,7 @@ func (s AutoInviteInviteSpec) validate(ruleIdx int) error {
 		return nil
 	}
 	switch status {
-	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted:
+	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted, InviteStatusIncomplete:
 	default:
 		return fmt.Errorf("colony: auto_invites[%d].invite.status: invalid %q", ruleIdx, status)
 	}

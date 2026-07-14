@@ -50,6 +50,10 @@ func (s *Service) Accept(ctx context.Context, inviteID string, attach bool) (*Ac
 		return nil, fmt.Errorf("invites: invite %q is %s, not pending", inviteID, invite.Status)
 	}
 
+	if err := s.consumeSessionEnergy(ctx, invite.TraceID); err != nil {
+		return nil, err
+	}
+
 	if err := s.publishReady(ctx, invite, protocol.BeekeeperAccept); err != nil {
 		return nil, err
 	}

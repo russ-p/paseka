@@ -15,13 +15,7 @@ Backlog items:
 - ~~**Phase 1** — Platform vs colony SIGNAL boundary: colony ideation kinds (`feature.*`, `spec.ready`) stay out of `internal/protocol`; payload tables remain in the spec + prompts.~~ **Done** — see spec § Decision 8.
 - ~~**Phase 2** — Invite persistence, CLI `paseka invite *`, Console accept → session; validate `session.invite` / `beekeeper.ready` at the invite boundary.~~ **Done** — see [007-cli.md](007-cli.md) invite commands.
 - ~~**Phase 3** — Config-driven `auto_invites` in `colony.yaml` (default grill rule on `feature.classified` + `route=grill`) while `paseka run` is up.~~ **Done** — reactor loops colony rules; no manual `invite record` for the grill step; empty `auto_invites` disables auto-invite.
-- **Phase 4** — Hardening (`spec.ready` completion checks, session energy policy); optional Console “Start breakdown” on `spec.ready`.
-
-Why deferred (Phase 4):
-- Completion and energy policy after auto-invite MVP.
-
-Exit criteria for revisiting:
-- Beekeeper needs breakdown invite UX or grilling completion enforcement.
+- ~~**Phase 4** — Hardening: grilling invite completion on `spec.ready` (file verify), `incomplete` on session end, 1 honey on `invite accept`, default `spec.ready` → breakdown auto-invite + Console UX.~~ **Done** — see spec § Phase 4 and [007-cli.md](007-cli.md).
 
 ### Replace `result.txt` with a clearer log artifact
 

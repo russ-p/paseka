@@ -525,6 +525,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	}
 
 	_ = colony.UnregisterSession(entry.Slug, sessionID)
+	_ = colony.MarkInviteIncompleteOnSessionEnd(entry.Slug, sessionID)
 
 	m.mu.Lock()
 	delete(m.sessions, sessionID)
@@ -613,6 +614,7 @@ func StopRemote(slug, sessionID string) error {
 		return fmt.Errorf("sessions: signal pid %d: %w", entry.PID, err)
 	}
 	_ = colony.UnregisterSession(slug, sessionID)
+	_ = colony.MarkInviteIncompleteOnSessionEnd(slug, sessionID)
 	return nil
 }
 

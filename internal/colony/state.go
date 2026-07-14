@@ -52,11 +52,12 @@ type InviteEntry struct {
 }
 
 const (
-	InviteStatusPending   = "pending"
-	InviteStatusAccepted  = "accepted"
-	InviteStatusCancelled = "cancelled"
-	InviteStatusCompleted = "completed"
-	InviteStatusDeferred  = "deferred"
+	InviteStatusPending    = "pending"
+	InviteStatusAccepted   = "accepted"
+	InviteStatusCancelled  = "cancelled"
+	InviteStatusCompleted  = "completed"
+	InviteStatusIncomplete = "incomplete"
+	InviteStatusDeferred   = "deferred"
 )
 
 // WorktreeEntry tracks one colony-managed git worktree.
@@ -292,6 +293,33 @@ func ListInvites(slug, status, traceID string) ([]InviteEntry, error) {
 		out = append(out, inv)
 	}
 	return out, nil
+}
+
+// FindInviteBySessionID returns an invite linked to a session, if any.
+func FindInviteBySessionID(slug, sessionID string) (InviteEntry, error) {
+	st, err := LoadState(slug)
+	if err != nil {
+		return InviteEntry{}, err
+	}
+	for _, inv := range st.Invites {
+		if inv.SessionID == sessionID {
+			return inv, nil
+		}
+	}
+	return InviteEntry{}, fmt.Errorf("colony: invite for session %q not found", sessionID)
+}
+
+// MarkInviteIncompleteOnSessionEnd marks an accepted invite incomplete when its session ends.
+func MarkInviteIncompleteOnSessionEnd(slug, sessionID string) error {
+	inv, err := FindInviteBySessionID(slug, sessionID)
+	if err != nil {
+		return nil
+	}
+	if inv.Status != InviteStatusAccepted {
+		return nil
+	}
+	inv.Status = InviteStatusIncomplete
+	return UpsertInvite(slug, inv)
 }
 
 // FindInvite returns one invite by ID.

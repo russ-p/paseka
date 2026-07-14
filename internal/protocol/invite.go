@@ -12,10 +12,11 @@ const (
 type InviteStatus string
 
 const (
-	InviteStatusPending   InviteStatus = "pending"
-	InviteStatusAccepted  InviteStatus = "accepted"
-	InviteStatusCancelled InviteStatus = "cancelled"
-	InviteStatusCompleted InviteStatus = "completed"
+	InviteStatusPending    InviteStatus = "pending"
+	InviteStatusAccepted   InviteStatus = "accepted"
+	InviteStatusCancelled  InviteStatus = "cancelled"
+	InviteStatusCompleted  InviteStatus = "completed"
+	InviteStatusIncomplete InviteStatus = "incomplete"
 )
 
 // BeekeeperAction is the Beekeeper response to a pending invite.

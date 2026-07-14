@@ -453,14 +453,19 @@ function renderInvites() {
     const li = document.createElement('li');
     li.className = 'session-item';
     const task = inv.task && inv.task.length > 64 ? inv.task.slice(0, 61) + '...' : (inv.task || '');
+    const acceptLabel = inv.intent === 'breakdown' ? 'Start breakdown' : 'Accept';
+    const specLine = inv.specRef
+      ? `<div class="muted" style="font-size:0.8rem;margin-top:0.25rem">Spec: ${escapeHtml(inv.specRef)}</div>`
+      : '';
     li.innerHTML = `
       <div class="top">
         <span class="bee">${escapeHtml(inv.bee)}${inv.intent ? ' · ' + escapeHtml(inv.intent) : ''}</span>
         <span class="id">${escapeHtml(inv.inviteId)}</span>
       </div>
       <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${escapeHtml(inv.traceId)} · ${escapeHtml(task)}</div>
+      ${specLine}
       <div class="row" style="margin-top:0.5rem;gap:0.5rem">
-        <button type="button" class="secondary invite-accept-btn" data-id="${escapeHtml(inv.inviteId)}">Accept</button>
+        <button type="button" class="secondary invite-accept-btn" data-id="${escapeHtml(inv.inviteId)}">${escapeHtml(acceptLabel)}</button>
         <button type="button" class="secondary invite-reject-btn" data-id="${escapeHtml(inv.inviteId)}">Reject</button>
       </div>
     `;
@@ -1635,11 +1640,16 @@ async function loadInvites() {
 }
 
 async function acceptInvite(inviteId) {
-  const res = await api(`/api/invites/${encodeURIComponent(inviteId)}/accept`, { method: 'POST' });
-  await loadInvites();
-  await loadSessions();
-  if (res.sessionId) {
-    await selectSession(res.sessionId);
+  try {
+    const res = await api(`/api/invites/${encodeURIComponent(inviteId)}/accept`, { method: 'POST' });
+    await loadInvites();
+    await loadSessions();
+    if (res.sessionId) {
+      await selectSession(res.sessionId);
+    }
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    alert(msg.includes('honey reserve') ? `${msg}\n\nTop up with: paseka energy add --trace <id> --amount 1` : msg);
   }
 }
 

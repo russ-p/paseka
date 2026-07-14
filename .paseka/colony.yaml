@@ -24,3 +24,21 @@ auto_invites:
       dedupe:
         - bee
         - intent
+    - when:
+        type: SIGNAL
+        kind: spec.ready
+      invite:
+        bee:
+            default: drone
+        intent:
+            default: breakdown
+        specRef:
+            from: ref
+        task:
+            from: ref
+            prefix: "Break down "
+            default: Break down spec
+        status: pending
+      dedupe:
+        - intent
+        - specRef

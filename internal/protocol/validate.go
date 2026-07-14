@@ -383,7 +383,7 @@ func validateBeekeeperReady(payload json.RawMessage) []ValidationDetail {
 
 func isInviteStatus(status InviteStatus) bool {
 	switch status {
-	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted:
+	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted, InviteStatusIncomplete:
 		return true
 	default:
 		return false

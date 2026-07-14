@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft.** Design locked for choreography and event shapes. **Phases 0–3** (soft path through auto-invite on `feature.classified`) are done. **Phase 4** (hardening) remains open.
+**Draft.** Design locked for choreography and event shapes. **Phases 0–4** (soft path through ideation hardening) are done.
 
 ## Purpose
 
@@ -355,7 +355,9 @@ Minimal behavior when the grill rule matches:
 
 With **empty** `auto_invites`, classified events do **not** create invites (no Go hardcode).
 
-After `spec.ready`, add a second `auto_invites` rule (or surface a Console “Start breakdown” action) — no reactor code change required when the mapper fields suffice.
+**Phase 4:** `paseka run` also completes grilling invites on `spec.ready` (file must exist at `ref` under colony root or trace worktree). Session end without `spec.ready` marks accepted invites `incomplete`. `paseka invite accept` consumes **1 honey** from the trace reserve (`session.start`); `bee chat` stays exempt.
+
+Default breakdown rule ships alongside the grill rule; Console shows **Start breakdown** for `intent=breakdown` invites.
 
 ## Queen Console / CLI surfaces
 
@@ -363,8 +365,8 @@ After `spec.ready`, add a second `auto_invites` rule (or surface a Console “St
 | ------- | ------------ |
 | Inject idea | Form or reuse `paseka signal` / Console event inject → `feature.requested` |
 | Pending invites | List `status=pending` invites for the colony/trace |
-| Accept | Publish `beekeeper.ready` + start detached session (existing Sessions API) |
-| Spec link | On `spec.ready`, show `ref` and offer “Start breakdown” |
+| Accept | Publish `beekeeper.ready` + start detached session (costs 1 honey); breakdown invites labeled **Start breakdown** |
+| Spec link | On `spec.ready`, timeline shows `ref`; pending breakdown invite from default `auto_invites` rule |
 | Soft path | Document Phase 0 manual `bee chat` commands in CLI help / this spec |
 
 Suggested CLI (implementation phase):
@@ -383,7 +385,7 @@ paseka invite reject <inviteId>
 | **1 Boundary** | Document platform vs colony SIGNAL ownership; remove protocol stub for `feature.requested` | Colony ideation kinds stay out of `internal/protocol`; HITL kinds deferred to Phase 2 **(done)** |
 | **2 Invites** | Persist pending invites; CLI `invite *`; Console list/accept; validate `session.invite` / `beekeeper.ready` at invite boundary | Accept starts Drone grilling session on the same `traceId` **(done)** |
 | **3 Auto-invite** | Config-driven `auto_invites` in `colony.yaml` (default grill rule) | Classify → pending invite without manual `invite record` while `paseka run` is up **(done)** |
-| **4 Hardening** | Completion checks for grilling (`spec.ready` required); energy policy for sessions | Failed grilling without spec is visible as failed/incomplete invite |
+| **4 Hardening** | Grilling completion (`spec.ready` + file verify), session energy on accept, default `spec.ready` → breakdown auto-invite | Failed grilling without spec visible as `incomplete`; accept costs 1 honey; breakdown invite auto-created **(done)** |
 
 ## End-to-end scenario (happy path)
 
@@ -428,7 +430,7 @@ paseka invite reject <inviteId>
 
 ## Verification
 
-Phases 0–3:
+Phases 0–4:
 
 ```bash
 gofmt -w .
@@ -445,4 +447,4 @@ paseka bee run scout --intent classify --trace "$TRACE" …
 paseka invite list   # pending grilling invite auto-created
 ```
 
-When Phase 4 code lands, extend tests for completion checks and session energy policy.
+When Phase 4 landed, tests cover completion checks, session energy on accept, and breakdown auto-invite.

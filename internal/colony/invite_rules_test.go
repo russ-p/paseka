@@ -29,8 +29,14 @@ func TestInitScaffoldIncludesAutoInvites(t *testing.T) {
 	if len(manifest.AutoInvites) == 0 {
 		t.Fatal("expected default auto_invites in scaffold")
 	}
+	if len(manifest.AutoInvites) < 2 {
+		t.Fatalf("auto_invites = %d, want at least 2", len(manifest.AutoInvites))
+	}
 	if manifest.AutoInvites[0].When.Kind != "feature.classified" {
 		t.Fatalf("when.kind = %q", manifest.AutoInvites[0].When.Kind)
+	}
+	if manifest.AutoInvites[1].When.Kind != "spec.ready" {
+		t.Fatalf("second rule kind = %q", manifest.AutoInvites[1].When.Kind)
 	}
 }
 

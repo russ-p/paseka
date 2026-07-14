@@ -184,6 +184,16 @@ auto_invites:
         default: Grill feature
       status: pending
     dedupe: [bee, intent]
+  - when:
+      type: SIGNAL
+      kind: spec.ready
+    invite:
+      bee: { default: drone }
+      intent: { default: breakdown }
+      specRef: { from: ref }
+      task: { from: ref, prefix: "Break down ", default: Break down spec }
+      status: pending
+    dedupe: [intent, specRef]
 ```
 
 | Field | Meaning |
@@ -195,7 +205,7 @@ auto_invites:
 | `invite.task.fallback_from` | Field on trigger payload if trace lookup fails |
 | `dedupe` | Skip when a **pending** invite on the trace matches those invite fields |
 
-`paseka init` seeds the grill rule above. With **empty** `auto_invites`, no auto-invite runs. See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
+`paseka init` seeds the grill and breakdown rules above. With **empty** `auto_invites`, no auto-invite runs. Grilling invite completion on `spec.ready` is handled separately by the reactor (not an auto-invite rule). See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
 
 ---
 

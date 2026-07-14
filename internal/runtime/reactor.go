@@ -137,6 +137,9 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
 		return err
 	}
+	if err := r.handleInviteCompletion(ctx, ev); err != nil {
+		return err
+	}
 	if err := r.handleAutoInvite(ctx, ev); err != nil {
 		return err
 	}
