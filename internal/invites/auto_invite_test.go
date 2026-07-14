@@ -13,10 +13,10 @@ func defaultGrillRules() []colony.AutoInviteRule {
 	return colony.DefaultAutoInviteRules()
 }
 
-func classifiedEvent(route, rationale string, events ...protocol.Event) (protocol.Event, []protocol.Event) {
+func classifiedEvent(decision, rationale string, events ...protocol.Event) (protocol.Event, []protocol.Event) {
 	raw, _ := json.Marshal(map[string]any{
 		"kind":      "feature.classified",
-		"route":     route,
+		"decision":  decision,
 		"rationale": rationale,
 	})
 	ev := protocol.Event{
@@ -30,11 +30,11 @@ func classifiedEvent(route, rationale string, events ...protocol.Event) (protoco
 func TestMatchAutoInviteGrill(t *testing.T) {
 	ev, _ := classifiedEvent("grill", "")
 	if !MatchAutoInvite(ev, defaultGrillRules()[0]) {
-		t.Fatal("expected grill route to match")
+		t.Fatal("expected grill decision to match")
 	}
 	ev, _ = classifiedEvent("plan", "")
 	if MatchAutoInvite(ev, defaultGrillRules()[0]) {
-		t.Fatal("expected plan route to skip")
+		t.Fatal("expected plan decision to skip")
 	}
 }
 
@@ -160,7 +160,7 @@ func TestAutoInviteFromEventIdempotent(t *testing.T) {
 	}
 }
 
-func TestAutoInviteSkipsNonGrillRoute(t *testing.T) {
+func TestAutoInviteSkipsNonGrillDecision(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
 	if err != nil {

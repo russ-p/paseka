@@ -322,12 +322,12 @@ func entryFromPayload(traceID string, payload protocol.SessionInvitePayload) col
 		status = colony.InviteStatusPending
 	}
 	return colony.InviteEntry{
-		InviteID: payload.InviteID,
-		TraceID:  traceID,
-		Bee:      payload.Bee,
-		Intent:   payload.Intent,
-		Task:     payload.Task,
-		Status:   status,
-		SpecRef:  payload.SpecRef,
+		InviteID:    payload.InviteID,
+		TraceID:     traceID,
+		Bee:         payload.Bee,
+		Intent:      payload.Intent,
+		Task:        payload.Task,
+		Status:      status,
+		ArtifactRef: payload.ArtifactRef,
 	}
 }

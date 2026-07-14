@@ -65,8 +65,8 @@ func BuildInvite(ev protocol.Event, rule colony.AutoInviteRule, traceEvents []pr
 		Task:   task,
 		Status: status,
 	}
-	if specRef := resolveStringField(spec.SpecRef, payload); specRef != "" {
-		out.SpecRef = specRef
+	if artifactRef := resolveStringField(spec.ArtifactRef, payload); artifactRef != "" {
+		out.ArtifactRef = artifactRef
 	}
 	return out, nil
 }
@@ -98,8 +98,8 @@ func inviteMatchesDedupe(inv colony.InviteEntry, payload protocol.SessionInviteP
 			if strings.TrimSpace(inv.Intent) != strings.TrimSpace(payload.Intent) {
 				return false
 			}
-		case "specRef":
-			if strings.TrimSpace(inv.SpecRef) != strings.TrimSpace(payload.SpecRef) {
+		case "artifactRef":
+			if strings.TrimSpace(inv.ArtifactRef) != strings.TrimSpace(payload.ArtifactRef) {
 				return false
 			}
 		default:

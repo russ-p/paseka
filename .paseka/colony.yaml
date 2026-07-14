@@ -6,7 +6,7 @@ auto_invites:
         type: SIGNAL
         kind: feature.classified
       match:
-        route: grill
+        decision: grill
       invite:
         bee:
             from: bee
@@ -32,7 +32,7 @@ auto_invites:
             default: drone
         intent:
             default: breakdown
-        specRef:
+        artifactRef:
             from: ref
         task:
             from: ref
@@ -41,4 +41,14 @@ auto_invites:
         status: pending
       dedupe:
         - intent
-        - specRef
+        - artifactRef
+invite_completion:
+    - when:
+        type: SIGNAL
+        kind: spec.ready
+      match_invite:
+        intent: grilling
+      require_file:
+        from: ref
+      set_artifact_ref:
+        from: ref

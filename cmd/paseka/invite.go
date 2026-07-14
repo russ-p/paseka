@@ -153,14 +153,14 @@ func newInviteRejectCmd() *cobra.Command {
 
 func newInviteRecordCmd() *cobra.Command {
 	var (
-		startDir  string
-		traceID   string
-		fromStdin bool
-		inviteID  string
-		bee       string
-		intent    string
-		task      string
-		specRef   string
+		startDir    string
+		traceID     string
+		fromStdin   bool
+		inviteID    string
+		bee         string
+		intent      string
+		task        string
+		artifactRef string
 	)
 	cmd := &cobra.Command{
 		Use:   "record",
@@ -170,7 +170,7 @@ func newInviteRecordCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			payload, trace, err := resolveInviteRecordInput(fromStdin, traceID, inviteID, bee, intent, task, specRef, cmd.InOrStdin())
+			payload, trace, err := resolveInviteRecordInput(fromStdin, traceID, inviteID, bee, intent, task, artifactRef, cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
@@ -190,11 +190,11 @@ func newInviteRecordCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bee, "bee", "", "bee role")
 	cmd.Flags().StringVar(&intent, "intent", "", "session intent")
 	cmd.Flags().StringVar(&task, "task", "", "initial task text")
-	cmd.Flags().StringVar(&specRef, "spec-ref", "", "spec path for breakdown invites")
+	cmd.Flags().StringVar(&artifactRef, "artifact-ref", "", "repo-relative artifact path for handoff invites")
 	return cmd
 }
 
-func resolveInviteRecordInput(fromStdin bool, traceID, inviteID, bee, intent, task, specRef string, stdin io.Reader) (protocol.SessionInvitePayload, string, error) {
+func resolveInviteRecordInput(fromStdin bool, traceID, inviteID, bee, intent, task, artifactRef string, stdin io.Reader) (protocol.SessionInvitePayload, string, error) {
 	if fromStdin {
 		data, err := io.ReadAll(stdin)
 		if err != nil {
@@ -222,12 +222,12 @@ func resolveInviteRecordInput(fromStdin bool, traceID, inviteID, bee, intent, ta
 		return protocol.SessionInvitePayload{}, "", fmt.Errorf("invite record: --bee and --task are required (or use --stdin)")
 	}
 	return protocol.SessionInvitePayload{
-		Kind:     protocol.SignalSessionInvite,
-		InviteID: strings.TrimSpace(inviteID),
-		Bee:      strings.TrimSpace(bee),
-		Intent:   strings.TrimSpace(intent),
-		Task:     strings.TrimSpace(task),
-		Status:   protocol.InviteStatusPending,
-		SpecRef:  strings.TrimSpace(specRef),
+		Kind:        protocol.SignalSessionInvite,
+		InviteID:    strings.TrimSpace(inviteID),
+		Bee:         strings.TrimSpace(bee),
+		Intent:      strings.TrimSpace(intent),
+		Task:        strings.TrimSpace(task),
+		Status:      protocol.InviteStatusPending,
+		ArtifactRef: strings.TrimSpace(artifactRef),
 	}, strings.TrimSpace(traceID), nil
 }

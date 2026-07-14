@@ -454,8 +454,8 @@ function renderInvites() {
     li.className = 'session-item';
     const task = inv.task && inv.task.length > 64 ? inv.task.slice(0, 61) + '...' : (inv.task || '');
     const acceptLabel = inv.intent === 'breakdown' ? 'Start breakdown' : 'Accept';
-    const specLine = inv.specRef
-      ? `<div class="muted" style="font-size:0.8rem;margin-top:0.25rem">Spec: ${escapeHtml(inv.specRef)}</div>`
+    const artifactLine = inv.artifactRef
+      ? `<div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${escapeHtml(inv.artifactRef)}</div>`
       : '';
     li.innerHTML = `
       <div class="top">
@@ -463,7 +463,7 @@ function renderInvites() {
         <span class="id">${escapeHtml(inv.inviteId)}</span>
       </div>
       <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${escapeHtml(inv.traceId)} · ${escapeHtml(task)}</div>
-      ${specLine}
+      ${artifactLine}
       <div class="row" style="margin-top:0.5rem;gap:0.5rem">
         <button type="button" class="secondary invite-accept-btn" data-id="${escapeHtml(inv.inviteId)}">${escapeHtml(acceptLabel)}</button>
         <button type="button" class="secondary invite-reject-btn" data-id="${escapeHtml(inv.inviteId)}">Reject</button>

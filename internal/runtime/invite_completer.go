@@ -7,17 +7,15 @@ import (
 	"github.com/paseka/paseka/internal/protocol"
 )
 
-const colonyKindSpecReady = "spec.ready"
-
 func (r *Reactor) handleInviteCompletion(ctx context.Context, ev protocol.Event) error {
-	if ev.Type != protocol.EventSignal || protocol.PayloadKind(ev.Payload) != colonyKindSpecReady {
+	if len(r.inviteCompletion) == 0 {
 		return nil
 	}
 	svc := &invites.Service{Colony: r.colony, Bus: r.bus}
 	if r.invitePublisher != nil {
 		svc.Publisher = r.invitePublisher
 	}
-	published, ok, err := svc.CompleteFromSpecReady(ctx, ev)
+	published, ok, err := svc.CompleteFromEvent(ctx, ev, r.inviteCompletion)
 	if err != nil {
 		return err
 	}

@@ -27,8 +27,8 @@ func TestHandleAutoInviteIgnoresNonClassified(t *testing.T) {
 func TestHandleAutoInviteEmptyRules(t *testing.T) {
 	r := &Reactor{autoInvites: nil}
 	classifiedRaw, _ := json.Marshal(map[string]any{
-		"kind":  "feature.classified",
-		"route": "grill",
+		"kind":     "feature.classified",
+		"decision": "grill",
 	})
 	ev := protocol.Event{
 		TraceID:   "trace-auto",
@@ -56,7 +56,7 @@ func TestHandleAutoInviteGrill(t *testing.T) {
 	}
 	classifiedRaw, _ := json.Marshal(map[string]any{
 		"kind":      "feature.classified",
-		"route":     "grill",
+		"decision":  "grill",
 		"rationale": "needs grilling",
 	})
 	ev := protocol.Event{

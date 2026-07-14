@@ -18,19 +18,20 @@ import (
 
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
 type Reactor struct {
-	colony          colony.Context
-	bus             *bus.Client
-	dispatcher      *Dispatcher
-	ledger          taskledger.Ledger
-	registry        *BeeRegistry
-	mu              sync.Mutex
-	inflight        map[string]struct{}
-	directInflight  map[string]struct{}
-	directProcessed map[string]struct{}
-	recentLocal     map[string]time.Time // fingerprints of events applied before publish
-	asyncDispatch   bool
-	invitePublisher invites.EventPublisher // test override for auto-invite publish
-	autoInvites     []colony.AutoInviteRule
+	colony           colony.Context
+	bus              *bus.Client
+	dispatcher       *Dispatcher
+	ledger           taskledger.Ledger
+	registry         *BeeRegistry
+	mu               sync.Mutex
+	inflight         map[string]struct{}
+	directInflight   map[string]struct{}
+	directProcessed  map[string]struct{}
+	recentLocal      map[string]time.Time // fingerprints of events applied before publish
+	asyncDispatch    bool
+	invitePublisher  invites.EventPublisher // test override for auto-invite publish
+	autoInvites      []colony.AutoInviteRule
+	inviteCompletion []colony.InviteCompletionRule
 }
 
 // ReactorOptions configures a hive runtime reactor.
@@ -75,17 +76,18 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 	d.SetBeeRegistry(registry)
 
 	return &Reactor{
-		colony:          ctxColony,
-		bus:             busClient,
-		dispatcher:      d,
-		ledger:          taskledger.NewKVLedger(kv),
-		registry:        registry,
-		inflight:        make(map[string]struct{}),
-		directInflight:  make(map[string]struct{}),
-		directProcessed: make(map[string]struct{}),
-		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   true,
-		autoInvites:     manifest.AutoInvites,
+		colony:           ctxColony,
+		bus:              busClient,
+		dispatcher:       d,
+		ledger:           taskledger.NewKVLedger(kv),
+		registry:         registry,
+		inflight:         make(map[string]struct{}),
+		directInflight:   make(map[string]struct{}),
+		directProcessed:  make(map[string]struct{}),
+		recentLocal:      make(map[string]time.Time),
+		asyncDispatch:    true,
+		autoInvites:      manifest.AutoInvites,
+		inviteCompletion: manifest.InviteCompletion,
 	}, nil
 }
 
@@ -455,32 +457,40 @@ func (r *Reactor) ApplyAndSyncForTest(ctx context.Context, ev protocol.Event) er
 
 // TestReactorOptions configures a reactor without NATS (unit tests).
 type TestReactorOptions struct {
-	ColonyRoot  string
-	Dispatcher  *Dispatcher
-	Registry    *BeeRegistry
-	Ledger      taskledger.Ledger
-	AutoInvites []colony.AutoInviteRule
+	ColonyRoot       string
+	Dispatcher       *Dispatcher
+	Registry         *BeeRegistry
+	Ledger           taskledger.Ledger
+	AutoInvites      []colony.AutoInviteRule
+	InviteCompletion []colony.InviteCompletionRule
 }
 
 // NewTestReactor builds a reactor with injected dependencies.
 func NewTestReactor(opts TestReactorOptions) *Reactor {
 	autoInvites := opts.AutoInvites
+	inviteCompletion := opts.InviteCompletion
 	if autoInvites == nil && opts.ColonyRoot != "" {
 		if manifest, err := colony.LoadColony(opts.ColonyRoot); err == nil {
-			autoInvites = manifest.AutoInvites
+			if autoInvites == nil {
+				autoInvites = manifest.AutoInvites
+			}
+			if inviteCompletion == nil {
+				inviteCompletion = manifest.InviteCompletion
+			}
 		}
 	}
 	return &Reactor{
-		colony:          colony.Context{ColonyRoot: opts.ColonyRoot},
-		dispatcher:      opts.Dispatcher,
-		ledger:          opts.Ledger,
-		registry:        opts.Registry,
-		inflight:        make(map[string]struct{}),
-		directInflight:  make(map[string]struct{}),
-		directProcessed: make(map[string]struct{}),
-		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   false,
-		autoInvites:     autoInvites,
+		colony:           colony.Context{ColonyRoot: opts.ColonyRoot},
+		dispatcher:       opts.Dispatcher,
+		ledger:           opts.Ledger,
+		registry:         opts.Registry,
+		inflight:         make(map[string]struct{}),
+		directInflight:   make(map[string]struct{}),
+		directProcessed:  make(map[string]struct{}),
+		recentLocal:      make(map[string]time.Time),
+		asyncDispatch:    false,
+		autoInvites:      autoInvites,
+		inviteCompletion: inviteCompletion,
 	}
 }
 

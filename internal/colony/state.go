@@ -39,16 +39,16 @@ type SessionEntry struct {
 
 // InviteEntry tracks one Human Gateway session invite.
 type InviteEntry struct {
-	InviteID  string    `json:"inviteId"`
-	TraceID   string    `json:"traceId"`
-	Bee       string    `json:"bee"`
-	Intent    string    `json:"intent,omitempty"`
-	Task      string    `json:"task"`
-	Status    string    `json:"status"`
-	SpecRef   string    `json:"specRef,omitempty"`
-	SessionID string    `json:"sessionId,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	InviteID    string    `json:"inviteId"`
+	TraceID     string    `json:"traceId"`
+	Bee         string    `json:"bee"`
+	Intent      string    `json:"intent,omitempty"`
+	Task        string    `json:"task"`
+	Status      string    `json:"status"`
+	ArtifactRef string    `json:"artifactRef,omitempty"`
+	SessionID   string    `json:"sessionId,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 const (

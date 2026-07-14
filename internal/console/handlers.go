@@ -531,16 +531,16 @@ func (a *api) rejectInvite(w http.ResponseWriter, r *http.Request, inviteID stri
 		return
 	}
 	writeJSON(w, InviteView{
-		InviteID:  invite.InviteID,
-		TraceID:   invite.TraceID,
-		Bee:       invite.Bee,
-		Intent:    invite.Intent,
-		Task:      invite.Task,
-		Status:    invite.Status,
-		SpecRef:   invite.SpecRef,
-		SessionID: invite.SessionID,
-		CreatedAt: invite.CreatedAt,
-		UpdatedAt: invite.UpdatedAt,
+		InviteID:    invite.InviteID,
+		TraceID:     invite.TraceID,
+		Bee:         invite.Bee,
+		Intent:      invite.Intent,
+		Task:        invite.Task,
+		Status:      invite.Status,
+		ArtifactRef: invite.ArtifactRef,
+		SessionID:   invite.SessionID,
+		CreatedAt:   invite.CreatedAt,
+		UpdatedAt:   invite.UpdatedAt,
 	})
 }
 

@@ -15,11 +15,11 @@ type AutoInviteRule struct {
 
 // AutoInviteInviteSpec maps trigger event fields to session.invite payload fields.
 type AutoInviteInviteSpec struct {
-	Bee     InviteStringField `yaml:"bee"`
-	Intent  InviteStringField `yaml:"intent,omitempty"`
-	Task    InviteTaskField   `yaml:"task"`
-	Status  string            `yaml:"status,omitempty"`
-	SpecRef InviteStringField `yaml:"specRef,omitempty"`
+	Bee         InviteStringField `yaml:"bee"`
+	Intent      InviteStringField `yaml:"intent,omitempty"`
+	Task        InviteTaskField   `yaml:"task"`
+	Status      string            `yaml:"status,omitempty"`
+	ArtifactRef InviteStringField `yaml:"artifactRef,omitempty"`
 }
 
 // InviteStringField copies a string from the trigger payload or uses a default.
@@ -38,13 +38,28 @@ type InviteTaskField struct {
 	Default        string `yaml:"default,omitempty"`
 }
 
+// InviteCompletionRule updates invite status when a bus event matches.
+type InviteCompletionRule struct {
+	When           EventRule         `yaml:"when"`
+	Match          map[string]string `yaml:"match,omitempty"`
+	MatchInvite    InviteMatchSpec   `yaml:"match_invite"`
+	RequireFile    InviteStringField `yaml:"require_file"`
+	SetArtifactRef InviteStringField `yaml:"set_artifact_ref,omitempty"`
+}
+
+// InviteMatchSpec selects invites on the same trace by field equality.
+type InviteMatchSpec struct {
+	Intent string `yaml:"intent,omitempty"`
+	Bee    string `yaml:"bee,omitempty"`
+}
+
 // DefaultAutoInviteRules returns the stock ideation rules for new colonies.
 func DefaultAutoInviteRules() []AutoInviteRule {
 	return []AutoInviteRule{
 		{
 			When: EventRule{Type: "SIGNAL", Kind: "feature.classified"},
 			Match: map[string]string{
-				"route": "grill",
+				"decision": "grill",
 			},
 			Invite: AutoInviteInviteSpec{
 				Bee:    InviteStringField{From: "bee", Default: "drone"},
@@ -65,7 +80,7 @@ func DefaultAutoInviteRules() []AutoInviteRule {
 			Invite: AutoInviteInviteSpec{
 				Bee:    InviteStringField{Default: "drone"},
 				Intent: InviteStringField{Default: "breakdown"},
-				SpecRef: InviteStringField{
+				ArtifactRef: InviteStringField{
 					From: "ref",
 				},
 				Task: InviteTaskField{
@@ -75,7 +90,21 @@ func DefaultAutoInviteRules() []AutoInviteRule {
 				},
 				Status: "pending",
 			},
-			Dedupe: []string{"intent", "specRef"},
+			Dedupe: []string{"intent", "artifactRef"},
+		},
+	}
+}
+
+// DefaultInviteCompletionRules returns stock invite completion rules for new colonies.
+func DefaultInviteCompletionRules() []InviteCompletionRule {
+	return []InviteCompletionRule{
+		{
+			When: EventRule{Type: "SIGNAL", Kind: "spec.ready"},
+			MatchInvite: InviteMatchSpec{
+				Intent: "grilling",
+			},
+			RequireFile:    InviteStringField{From: "ref"},
+			SetArtifactRef: InviteStringField{From: "ref"},
 		},
 	}
 }
@@ -91,10 +120,26 @@ func (c Colony) ValidateAutoInvites() error {
 		}
 		for j, key := range rule.Dedupe {
 			switch strings.TrimSpace(key) {
-			case "bee", "intent", "specRef":
+			case "bee", "intent", "artifactRef":
 			default:
 				return fmt.Errorf("colony: auto_invites[%d].dedupe[%d]: unknown field %q", i, j, key)
 			}
+		}
+	}
+	return nil
+}
+
+// ValidateInviteCompletion checks colony-level invite completion rules.
+func (c Colony) ValidateInviteCompletion() error {
+	for i, rule := range c.InviteCompletion {
+		if _, err := rule.When.EventType(); err != nil {
+			return fmt.Errorf("colony: invite_completion[%d].when: %w", i, err)
+		}
+		if strings.TrimSpace(rule.MatchInvite.Intent) == "" && strings.TrimSpace(rule.MatchInvite.Bee) == "" {
+			return fmt.Errorf("colony: invite_completion[%d].match_invite: intent or bee required", i)
+		}
+		if strings.TrimSpace(rule.RequireFile.From) == "" {
+			return fmt.Errorf("colony: invite_completion[%d].require_file.from: required", i)
 		}
 	}
 	return nil

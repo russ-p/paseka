@@ -164,6 +164,8 @@ Narrative `INSIGHT` events are optional and do not satisfy completion contracts.
 
 Bee `subscribes` imply `Adapter.Run()` dispatch. **Auto-invite** is separate colony choreography: when a bus event matches, `paseka run` publishes a pending `session.invite` for Beekeeper accept/reject.
 
+**`payload.decision` vs routing:** On colony events (e.g. `feature.classified`), `payload.decision` is a **classification tag** on the branch (`grill`, `plan`, …). Colony rules may match it via `auto_invites.match.decision`. That is distinct from (1) bee **`subscribes`** dispatch (`type` + `payload.kind` → AFK run) and (2) glossary **Flight Route** — the NATS subject (`events.<EventType>[.<kind>]`, §3). See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md) § Decision 0.
+
 Rules live in **`.paseka/colony.yaml`** (not bee YAML). Implementation: [`internal/colony/invite_rules.go`](../internal/colony/invite_rules.go), [`internal/invites/auto_invite.go`](../internal/invites/auto_invite.go), [`internal/runtime/invite_publisher.go`](../internal/runtime/invite_publisher.go).
 
 ```yaml
@@ -172,7 +174,7 @@ auto_invites:
       type: SIGNAL
       kind: feature.classified
     match:
-      route: grill
+      decision: grill
     invite:
       bee: { from: bee, default: drone }
       intent: { from: intent, default: grilling }
@@ -190,10 +192,10 @@ auto_invites:
     invite:
       bee: { default: drone }
       intent: { default: breakdown }
-      specRef: { from: ref }
+      artifactRef: { from: ref }
       task: { from: ref, prefix: "Break down ", default: Break down spec }
       status: pending
-    dedupe: [intent, specRef]
+    dedupe: [intent, artifactRef]
 ```
 
 | Field | Meaning |
@@ -205,11 +207,40 @@ auto_invites:
 | `invite.task.fallback_from` | Field on trigger payload if trace lookup fails |
 | `dedupe` | Skip when a **pending** invite on the trace matches those invite fields |
 
-`paseka init` seeds the grill and breakdown rules above. With **empty** `auto_invites`, no auto-invite runs. Grilling invite completion on `spec.ready` is handled separately by the reactor (not an auto-invite rule). See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
+`paseka init` seeds the grill and breakdown rules above. With **empty** `auto_invites`, no auto-invite runs. See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
 
 ---
 
-## 8. Related docs
+## 8. Colony `invite_completion` (artifact handoff)
+
+When a bus event signals that a durable file artifact is ready, **`invite_completion`** rules update matching accepted/incomplete invites to `completed` (file exists at `ref`) or `incomplete` (missing file). Implementation: [`internal/colony/invite_rules.go`](../internal/colony/invite_rules.go), [`internal/invites/completion.go`](../internal/invites/completion.go), [`internal/runtime/invite_completer.go`](../internal/runtime/invite_completer.go).
+
+```yaml
+invite_completion:
+  - when:
+      type: SIGNAL
+      kind: spec.ready
+    match_invite:
+      intent: grilling
+    require_file:
+      from: ref
+    set_artifact_ref:
+      from: ref
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `when` | Same as `auto_invites`: `type` + optional `kind` |
+| `match` | Optional AND equality on trigger payload string fields |
+| `match_invite` | Select invite on same trace by `intent` and/or `bee` (at least one required) |
+| `require_file.from` | Payload field with repo-relative path; file must exist under colony root or trace worktree |
+| `set_artifact_ref.from` | Copy payload field into invite `artifactRef` on success |
+
+`paseka init` seeds the grilling completion rule above. With **empty** `invite_completion`, no bus-driven invite completion runs (session-end `incomplete` still applies).
+
+---
+
+## 9. Related docs
 
 - [005-task-ledger.md](005-task-ledger.md) — task lifecycle events
 - [003-architecture.md](003-architecture.md) — colony layout and adapters

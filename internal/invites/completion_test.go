@@ -11,7 +11,11 @@ import (
 	"github.com/paseka/paseka/internal/protocol"
 )
 
-func TestCompleteFromSpecReadyMarksCompleted(t *testing.T) {
+func defaultCompletionRules() []colony.InviteCompletionRule {
+	return colony.DefaultInviteCompletionRules()
+}
+
+func TestCompleteFromEventMarksCompleted(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
 	if err != nil {
@@ -44,7 +48,7 @@ func TestCompleteFromSpecReadyMarksCompleted(t *testing.T) {
 		Payload: raw,
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromSpecReady(context.Background(), ev)
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,12 +62,12 @@ func TestCompleteFromSpecReadyMarksCompleted(t *testing.T) {
 	if invite.Status != colony.InviteStatusCompleted {
 		t.Fatalf("status = %q", invite.Status)
 	}
-	if invite.SpecRef != "docs/specs/001-test.md" {
-		t.Fatalf("specRef = %q", invite.SpecRef)
+	if invite.ArtifactRef != "docs/specs/001-test.md" {
+		t.Fatalf("artifactRef = %q", invite.ArtifactRef)
 	}
 }
 
-func TestCompleteFromSpecReadyMissingFileIncomplete(t *testing.T) {
+func TestCompleteFromEventMissingFileIncomplete(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
 	if err != nil {
@@ -89,7 +93,7 @@ func TestCompleteFromSpecReadyMissingFileIncomplete(t *testing.T) {
 		Payload: raw,
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromSpecReady(context.Background(), ev)
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +109,7 @@ func TestCompleteFromSpecReadyMissingFileIncomplete(t *testing.T) {
 	}
 }
 
-func TestCompleteFromSpecReadyUpgradesIncomplete(t *testing.T) {
+func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
 	if err != nil {
@@ -138,7 +142,7 @@ func TestCompleteFromSpecReadyUpgradesIncomplete(t *testing.T) {
 		Payload: raw,
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromSpecReady(context.Background(), ev)
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +155,67 @@ func TestCompleteFromSpecReadyUpgradesIncomplete(t *testing.T) {
 	}
 	if invite.Status != colony.InviteStatusCompleted {
 		t.Fatalf("status = %q", invite.Status)
+	}
+}
+
+func TestCompleteFromEventEmptyRulesNoOp(t *testing.T) {
+	repo := initTestRepo(t)
+	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+		InviteID: "inv-grill",
+		TraceID:  "trace-1",
+		Bee:      "drone",
+		Intent:   "grilling",
+		Status:   colony.InviteStatusAccepted,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]any{"kind": "spec.ready", "ref": "docs/specs/x.md"})
+	ev := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
+	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected no-op with empty rules")
+	}
+}
+
+func TestCompleteFromEventWrongIntentNoOp(t *testing.T) {
+	repo := initTestRepo(t)
+	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(repo, "docs", "specs", "003-test.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(specPath, []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+		InviteID: "inv-bd",
+		TraceID:  "trace-1",
+		Bee:      "drone",
+		Intent:   "breakdown",
+		Status:   colony.InviteStatusAccepted,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]any{"kind": "spec.ready", "ref": "docs/specs/003-test.md"})
+	ev := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
+	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected no update for breakdown invite")
 	}
 }
 
@@ -226,7 +291,7 @@ func TestAutoInviteFromSpecReadyBreakdown(t *testing.T) {
 	if len(invites) != 1 {
 		t.Fatalf("invites = %#v", invites)
 	}
-	if invites[0].Intent != "breakdown" || invites[0].SpecRef != "docs/specs/001-feature.md" {
+	if invites[0].Intent != "breakdown" || invites[0].ArtifactRef != "docs/specs/001-feature.md" {
 		t.Fatalf("invite = %#v", invites[0])
 	}
 }

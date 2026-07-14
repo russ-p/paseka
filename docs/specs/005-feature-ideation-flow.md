@@ -6,6 +6,8 @@
 
 ## Purpose
 
+**Reference colony choreography** — this spec documents one example flow (feature ideation) with colony-owned `SIGNAL` kinds (`feature.*`, `spec.ready`) and payload shapes. It is **not** platform runtime vocabulary: the reactor owns invites, `auto_invites`, `invite_completion`, bee `subscribes`, and the task ledger; colonies own colony kinds and the `decision` field on classification events. Custom flows use specialized bees, colony `SIGNAL` kinds, and `subscribes` / `auto_invites` / `invite_completion` rules — see [008-bee-routing.md](../008-bee-routing.md).
+
 Define how a raw feature idea becomes a durable specification and then a task ledger plan **without** a central orchestrator and **without** short-circuiting Human-in-the-Loop grilling.
 
 Target path:
@@ -13,7 +15,7 @@ Target path:
 ```text
 SIGNAL/feature.requested
   → Scout classify (AFK)
-  → SIGNAL/feature.classified (route=grill)
+  → SIGNAL/feature.classified (decision=grill)
   → SIGNAL/session.invite (pending)
   → Beekeeper accept → SIGNAL/beekeeper.ready
   → Drone interactive grilling → docs/specs/… + SIGNAL/spec.ready
@@ -26,8 +28,8 @@ This extends — does not replace — the short path in [005-task-ledger.md](../
 
 ## Goals
 
-- Keep ideation **choreographed**: bees react to `SIGNAL` kinds; no FeatureOrchestrator service.
-- Let Scout **classify and route**, not invent a premature task breakdown for vague ideas.
+- Keep ideation **choreographed**: bees and colony rules react to `SIGNAL` kinds and payload fields; no central orchestrator (Scout publishes a decision scent, others react).
+- Let Scout **classify and tag** with `payload.decision` (classification branch), not invent a premature task breakdown for vague ideas.
 - Require explicit Beekeeper readiness before interactive Drone grilling (`when I am ready`).
 - Persist grilling output as a **spec artifact** so the next bee (breakdown / AFK) is not blind to session transcript.
 - Reuse existing Drone intents (`grilling`, `breakdown`) and ledger events (`task.plan`, `task.ready`).
@@ -59,9 +61,20 @@ This extends — does not replace — the short path in [005-task-ledger.md](../
 
 ## Decisions
 
+### 0. `decision` is a classification tag (not platform routing)
+
+On colony events such as `feature.classified`, **`payload.decision`** is a classification decision tag — which branch the colony should take (`grill`, `plan`, `triage`, `clarify`, `reject`). It is **not**:
+
+- bee **`subscribes`** dispatch (reactor AFK run selection by `type` + `payload.kind`);
+- the glossary **Flight Route** (NATS subject under `events.<EventType>[.<kind>]`).
+
+Colony **`auto_invites`** rules may **match** on `decision` (e.g. `match.decision: grill`) to decide whether to publish a `session.invite` — that matching is platform routing; the payload field itself is only Scout's classification output.
+
+**Platform routing** stays bee `subscribes` + colony `auto_invites` + `invite_completion` ([008-bee-routing.md](../008-bee-routing.md)). **Choreography** is bees and rules reacting to `SIGNAL` kinds and payload fields — Scout emits `feature.classified` with a `decision`; invite rules, other bees, and Beekeeper react.
+
 ### 1. Two entry paths after `feature.requested`
 
-| Scout `route` | When | Next |
+| Scout `decision` | When | Next |
 | ------------- | ---- | ---- |
 | `grill` | Idea / vague product ask; acceptance criteria missing | `session.invite` → Drone `grilling` |
 | `plan` | Spec/PRD already clear enough for vertical slices | Scout (or Drone) may emit `task.plan` (existing short path) |
@@ -69,20 +82,20 @@ This extends — does not replace — the short path in [005-task-ledger.md](../
 | `clarify` | Ambiguous whether feature vs bug | `INSIGHT/context.note` + optional invite with `intent` unset; Beekeeper chooses |
 | `reject` | Out of scope / duplicate / non-actionable | Narrative insight only; no invite |
 
-Scout **must not** emit `task.plan` or `task.ready` when `route=grill`.
+Scout **must not** emit `task.plan` or `task.ready` when `decision=grill`.
 
 ### 2. Workflow uses SIGNAL; memory uses INSIGHT
 
-| Kind | Type | Drives routing? |
-| ---- | ---- | --------------- |
-| `feature.requested` | `SIGNAL` | yes (Scout classify) |
-| `feature.classified` | `SIGNAL` | yes (invite publisher / UI) |
-| `session.invite` | `SIGNAL` | yes (Human Gateway; not AFK dispatch) |
+| Kind | Type | Drives choreography? |
+| ---- | ---- | -------------------- |
+| `feature.requested` | `SIGNAL` | yes (Scout classify via `subscribes`) |
+| `feature.classified` | `SIGNAL` | yes (`decision` tag → `auto_invites` / UI) |
+| `session.invite` | `SIGNAL` | yes (Human Gateway; not AFK `subscribes` dispatch) |
 | `beekeeper.ready` | `SIGNAL` | yes (session start) |
-| `spec.ready` | `SIGNAL` | yes (breakdown invite or AFK breakdown) |
+| `spec.ready` | `SIGNAL` | yes (artifact handoff → breakdown invite or AFK breakdown) |
 | `run.summary` / `context.note` | `INSIGHT` | no (prompt memory + timeline) |
 | `task.plan` | `INSIGHT` | ledger only (existing) |
-| `task.ready` | `SIGNAL` | yes (existing AFK work queue) |
+| `task.ready` | `SIGNAL` | yes (existing AFK work queue via `subscribes`) |
 
 ### 3. Invite is the HITL parking lot
 
@@ -113,6 +126,8 @@ MVP bridge:
 
 ### 5. Spec artifact is the grilling completion contract
 
+**Artifact handoff pattern (general):** a bee writes a durable file in the repo, then emits a colony `SIGNAL` with `ref` pointing at the repo-relative path so the next bee is not blind to session output. `spec.ready` is **one colony kind** of that pattern in this flow; other choreographies may use different kinds and paths.
+
 After grilling reaches shared understanding, Drone **must**:
 
 1. Write (or update) `docs/specs/<NNN>-<slug>.md` in the colony repo (or trace worktree if one exists — prefer colony root for committed specs).
@@ -125,7 +140,7 @@ Without (1)+(2), breakdown must not start.
 
 | Mode | When | How |
 | ---- | ---- | --- |
-| Interactive (preferred) | Beekeeper wants to quiz slice granularity | Second `session.invite` with `intent=breakdown` + `specRef` |
+| Interactive (preferred) | Beekeeper wants to quiz slice granularity | Second `session.invite` with `intent=breakdown` + `artifactRef` |
 | AFK | Spec is crisp; Beekeeper skips quiz | `paseka bee run drone --intent breakdown --task "…"` after accept, or future direct dispatch on `spec.ready` with Beekeeper opt-in |
 
 Breakdown still follows [drone-intent-breakdown](../../.paseka/prompts/_partials/drone-intent-breakdown.md): one `INSIGHT/task.plan`, `task.ready` only when Beekeeper confirms immediate start.
@@ -204,7 +219,7 @@ Phase 0 still uses the event shapes below when emitting by hand so later phases 
   "type": "SIGNAL",
   "payload": {
     "kind": "feature.classified",
-    "route": "grill",
+    "decision": "grill",
     "bee": "drone",
     "intent": "grilling",
     "confidence": 0.86,
@@ -215,9 +230,9 @@ Phase 0 still uses the event shapes below when emitting by hand so later phases 
 
 | Field | Required | Notes |
 | ----- | -------- | ----- |
-| `route` | yes | `grill` \| `plan` \| `triage` \| `clarify` \| `reject` |
-| `bee` | when route needs a next bee | e.g. `drone` |
-| `intent` | when route needs intent | e.g. `grilling` |
+| `decision` | yes | **Classification tag**: `grill` \| `plan` \| `triage` \| `clarify` \| `reject` — not NATS subject or bee `subscribes` routing |
+| `bee` | when decision needs a next bee | e.g. `drone` |
+| `intent` | when decision needs intent | e.g. `grilling` |
 | `confidence` | no | Advisory; not enforced |
 | `rationale` | yes | Short human-readable reason |
 
@@ -235,7 +250,7 @@ Phase 0 still uses the event shapes below when emitting by hand so later phases 
     "intent": "grilling",
     "task": "Grill feature: Live bees header…",
     "status": "pending",
-    "specRef": ""
+    "artifactRef": ""
   }
 }
 ```
@@ -247,7 +262,7 @@ Phase 0 still uses the event shapes below when emitting by hand so later phases 
 | `intent` | no | Passed to session prompt |
 | `task` | yes | Initial user/task text for the session |
 | `status` | yes | `pending` \| `accepted` \| `cancelled` \| `completed` |
-| `specRef` | no | Set for breakdown invites |
+| `artifactRef` | no | Repo-relative artifact path for handoff (e.g. breakdown after grilling) |
 
 ### `SIGNAL/beekeeper.ready`
 
@@ -317,7 +332,7 @@ default_intent: classify   # or keep survey default; classify only on this subsc
 
 - Keep `grilling` / `breakdown` partials.
 - Grilling completion: instruct write `docs/specs/…` + emit `spec.ready` (new emit partial or extend system prompt).
-- Breakdown: require `specRef` or readable spec path in `{{.Task}}` / Insights; keep existing `task.plan` emit rules.
+- Breakdown: require `artifactRef` or readable spec path in `{{.Task}}` / Insights; keep existing `task.plan` emit rules.
 - No AFK `subscribes` on `feature.requested` (avoids skipping Beekeeper).
 
 ### Invite publisher (runtime, Phase 2–3)
@@ -333,7 +348,7 @@ auto_invites:
       type: SIGNAL
       kind: feature.classified
     match:
-      route: grill
+      decision: grill
     invite:
       bee: { from: bee, default: drone }
       intent: { from: intent, default: grilling }
@@ -355,9 +370,31 @@ Minimal behavior when the grill rule matches:
 
 With **empty** `auto_invites`, classified events do **not** create invites (no Go hardcode).
 
-**Phase 4:** `paseka run` also completes grilling invites on `spec.ready` (file must exist at `ref` under colony root or trace worktree). Session end without `spec.ready` marks accepted invites `incomplete`. `paseka invite accept` consumes **1 honey** from the trace reserve (`session.start`); `bee chat` stays exempt.
+**Phase 4:** `paseka run` completes grilling invites via **`invite_completion`** rules when a matching artifact-handoff `SIGNAL` arrives (default: `spec.ready` with file at `ref`). Session end without a valid artifact marks accepted invites `incomplete`. `paseka invite accept` consumes **1 honey** from the trace reserve (`session.start`); `bee chat` stays exempt.
 
 Default breakdown rule ships alongside the grill rule; Console shows **Start breakdown** for `intent=breakdown` invites.
+
+### Invite completion (runtime, Phase 4)
+
+Evaluates **`invite_completion`** rules from `.paseka/colony.yaml`. When a bus event matches, reactor updates matching accepted/incomplete invites to `completed` (file at `ref` exists) or `incomplete` (missing file).
+
+Default grilling completion rule (shipped in `paseka init` scaffold):
+
+```yaml
+# .paseka/colony.yaml
+invite_completion:
+  - when:
+      type: SIGNAL
+      kind: spec.ready
+    match_invite:
+      intent: grilling
+    require_file:
+      from: ref
+    set_artifact_ref:
+      from: ref
+```
+
+With **empty** `invite_completion`, no bus-driven invite completion runs (session-end `incomplete` still applies).
 
 ## Queen Console / CLI surfaces
 
@@ -391,18 +428,18 @@ paseka invite reject <inviteId>
 
 1. Beekeeper publishes `SIGNAL/feature.requested` with title/body; new `traceId`.
 2. Scout AFK `classify` runs (`direct` or manual `bee run`).
-3. Scout publishes `SIGNAL/feature.classified` (`route=grill`, `bee=drone`, `intent=grilling`).
+3. Scout publishes `SIGNAL/feature.classified` (`decision=grill`, `bee=drone`, `intent=grilling`).
 4. Invite publisher emits `SIGNAL/session.invite` (`pending`).
 5. Beekeeper later accepts → `beekeeper.ready` + interactive Drone grilling session.
 6. Drone interviews one question at a time; Beekeeper answers until shared understanding.
 7. Drone writes `docs/specs/NNN-….md`, emits `SIGNAL/spec.ready` + optional `context.note`.
-8. Beekeeper starts breakdown invite (or `bee chat` / AFK breakdown) with `specRef`.
+8. Beekeeper starts breakdown invite (or `bee chat` / AFK breakdown) with `artifactRef`.
 9. Drone publishes one `INSIGHT/task.plan`; optionally first `SIGNAL/task.ready` if asked to start now.
 10. `paseka run` implements slices via existing builder/guard/receiver choreography through final review gate.
 
 ## Anti-patterns
 
-- Scout emitting `task.plan` for a vague idea (`route` should have been `grill`).
+- Scout emitting `task.plan` for a vague idea (`decision` should have been `grill`).
 - Reactor calling `Adapter.Run()` for `grilling`.
 - Using `INSIGHT` kinds to trigger the next bee.
 - Starting grilling automatically on `feature.classified` without Beekeeper accept.
@@ -415,7 +452,7 @@ paseka invite reject <inviteId>
 
 - Should pending invites live in JetStream KV, machine-local `state.json`, or both?
 - Should `spec.ready` require the file to exist on disk at emit time (runtime verify)?
-- After `route=plan`, does Scout emit `task.plan` itself or invite Drone `breakdown` without grilling?
+- After `decision=plan`, does Scout emit `task.plan` itself or invite Drone `breakdown` without grilling?
 - Does accept always detach in Console, or offer attached Ghostty / in-browser xterm only?
 
 ## Related docs

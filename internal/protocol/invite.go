@@ -30,13 +30,13 @@ const (
 
 // SessionInvitePayload is emitted as SIGNAL with payload.kind=session.invite.
 type SessionInvitePayload struct {
-	Kind     InviteEventKind `json:"kind"`
-	InviteID string          `json:"inviteId"`
-	Bee      string          `json:"bee"`
-	Intent   string          `json:"intent,omitempty"`
-	Task     string          `json:"task"`
-	Status   InviteStatus    `json:"status"`
-	SpecRef  string          `json:"specRef,omitempty"`
+	Kind        InviteEventKind `json:"kind"`
+	InviteID    string          `json:"inviteId"`
+	Bee         string          `json:"bee"`
+	Intent      string          `json:"intent,omitempty"`
+	Task        string          `json:"task"`
+	Status      InviteStatus    `json:"status"`
+	ArtifactRef string          `json:"artifactRef,omitempty"`
 }
 
 // BeekeeperReadyPayload is emitted as SIGNAL with payload.kind=beekeeper.ready.
