@@ -235,6 +235,40 @@ func Start(ctx context.Context, session *LedgerSession, traceID, taskID, agentID
 	return started, nil
 }
 
+// Retry publishes task.ready to re-queue a failed or stuck running task.
+func Retry(ctx context.Context, session *LedgerSession, traceID, taskID, agentID string) (taskledger.TaskSnapshot, error) {
+	if session == nil || session.Client == nil {
+		return taskledger.TaskSnapshot{}, fmt.Errorf("nats url not configured (task retry requires JetStream KV)")
+	}
+	if traceID == "" {
+		return taskledger.TaskSnapshot{}, fmt.Errorf("trace id is required")
+	}
+	if taskID == "" {
+		return taskledger.TaskSnapshot{}, fmt.Errorf("task id is required")
+	}
+
+	snap, err := session.Ledger.Snapshot(traceID)
+	if err != nil {
+		return taskledger.TaskSnapshot{}, err
+	}
+	task, err := taskledger.CanRetry(snap, taskID)
+	if err != nil {
+		return taskledger.TaskSnapshot{}, err
+	}
+	if agentID == "" {
+		agentID = "cli"
+	}
+
+	ev, err := ReadyEvent(traceID, agentID, task)
+	if err != nil {
+		return taskledger.TaskSnapshot{}, err
+	}
+	if err := session.Client.PublishEvent(ctx, ev); err != nil {
+		return taskledger.TaskSnapshot{}, err
+	}
+	return task, nil
+}
+
 // TasksToStart resolves which task(s) should receive task.ready.
 func TasksToStart(snap taskledger.TraceSnapshot, taskID string) ([]taskledger.TaskSnapshot, error) {
 	if taskID != "" {
@@ -313,5 +347,11 @@ func ParseDependsOn(values []string) []string {
 // CanStartTask reports whether a task may be started from the UI.
 func CanStartTask(snap taskledger.TraceSnapshot, taskID string) bool {
 	_, err := taskledger.CanStart(snap, taskID)
+	return err == nil
+}
+
+// CanRetryTask reports whether a task may be retried from the UI.
+func CanRetryTask(snap taskledger.TraceSnapshot, taskID string) bool {
+	_, err := taskledger.CanRetry(snap, taskID)
 	return err == nil
 }

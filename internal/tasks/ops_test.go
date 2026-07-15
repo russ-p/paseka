@@ -67,3 +67,23 @@ func TestCanStartTask(t *testing.T) {
 		t.Fatal("planned task should be startable")
 	}
 }
+
+func TestCanRetryTask(t *testing.T) {
+	snap := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"failed":  {TaskID: "failed", Status: protocol.TaskStatusFailed},
+			"running": {TaskID: "running", Status: protocol.TaskStatusRunning},
+			"planned": {TaskID: "planned", Status: protocol.TaskStatusPlanned},
+		},
+	}
+	if !tasks.CanRetryTask(snap, "failed") {
+		t.Fatal("failed task should be retryable")
+	}
+	if !tasks.CanRetryTask(snap, "running") {
+		t.Fatal("running task should be retryable")
+	}
+	if tasks.CanRetryTask(snap, "planned") {
+		t.Fatal("planned task should not be retryable")
+	}
+}

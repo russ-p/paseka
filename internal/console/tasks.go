@@ -48,6 +48,7 @@ type TaskListItem struct {
 	DependsOn  []string  `json:"dependsOn,omitempty"`
 	RunCount   int       `json:"runCount"`
 	CanStart   bool      `json:"canStart"`
+	CanRetry   bool      `json:"canRetry"`
 	CanApprove bool      `json:"canApprove"`
 	CanReject  bool      `json:"canReject"`
 	IsFinal    bool      `json:"isFinal"`
@@ -105,6 +106,13 @@ type StartTaskResponse struct {
 	TraceID string   `json:"traceId"`
 	TaskIDs []string `json:"taskIds"`
 	Message string   `json:"message,omitempty"`
+}
+
+// RetryTaskResponse is returned after re-publishing task.ready for a failed task.
+type RetryTaskResponse struct {
+	TraceID string `json:"traceId"`
+	TaskID  string `json:"taskId"`
+	Message string `json:"message,omitempty"`
 }
 
 // ListTaskBoard returns tasks grouped by status across recent traces.
@@ -246,6 +254,25 @@ func StartTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID st
 	}, nil
 }
 
+// RetryTask re-publishes task.ready for a failed or stuck running task.
+func RetryTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID string) (RetryTaskResponse, error) {
+	session, err := tasks.OpenLedger(colonyCtx)
+	if err != nil {
+		return RetryTaskResponse{}, err
+	}
+	defer session.Close()
+
+	task, err := tasks.Retry(ctx, session, traceID, taskID, "console")
+	if err != nil {
+		return RetryTaskResponse{}, err
+	}
+	return RetryTaskResponse{
+		TraceID: traceID,
+		TaskID:  task.TaskID,
+		Message: "Published task.ready for retry. Ensure paseka run is active to dispatch queued tasks.",
+	}, nil
+}
+
 func collectRecentTaskItems(ctx colony.Context) ([]TaskListItem, error) {
 	traceSummaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, taskBoardTraceLimit)
 	if err != nil {
@@ -360,6 +387,7 @@ func taskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 		DependsOn:  append([]string(nil), task.DependsOn...),
 		RunCount:   runCount,
 		CanStart:   tasks.CanStartTask(snap, task.TaskID),
+		CanRetry:   tasks.CanRetryTask(snap, task.TaskID),
 		CanApprove: canApprove,
 		CanReject:  canReject,
 		IsFinal:    taskledger.IsFinalReviewTask(task),
@@ -384,6 +412,8 @@ func mapTaskError(err error) string {
 		return "task dependencies are not completed"
 	case taskledger.ErrNoEligibleTasks:
 		return "no eligible tasks to start"
+	case taskledger.ErrTaskNotRetryable:
+		return "task is not eligible to retry"
 	default:
 		return err.Error()
 	}
@@ -403,7 +433,8 @@ func isTaskClientError(err error) bool {
 		taskledger.ErrTaskCompleted,
 		taskledger.ErrTaskNotEligible,
 		taskledger.ErrDependenciesIncomplete,
-		taskledger.ErrNoEligibleTasks:
+		taskledger.ErrNoEligibleTasks,
+		taskledger.ErrTaskNotRetryable:
 		return true
 	default:
 		return strings.Contains(msg, "already ready")

@@ -106,6 +106,7 @@ const el = {
   taskRunsList: document.getElementById('task-runs-list'),
   taskDetailActions: document.getElementById('task-detail-actions'),
   taskStartBtn: document.getElementById('task-start-btn'),
+  taskRetryBtn: document.getElementById('task-retry-btn'),
   taskApproveBtn: document.getElementById('task-approve-btn'),
   taskRejectBtn: document.getElementById('task-reject-btn'),
   taskOpenTimelineBtn: document.getElementById('task-open-timeline-btn'),
@@ -1293,6 +1294,7 @@ function renderTaskDetail(task) {
     el.taskRunsWrap.classList.add('hidden');
     el.taskDetailActions.classList.add('hidden');
     el.taskStartBtn.classList.add('hidden');
+    el.taskRetryBtn.classList.add('hidden');
     updateTaskReviewUI(null);
     return;
   }
@@ -1358,6 +1360,11 @@ function renderTaskDetail(task) {
     el.taskStartBtn.classList.remove('hidden');
   } else {
     el.taskStartBtn.classList.add('hidden');
+  }
+  if (task.canRetry) {
+    el.taskRetryBtn.classList.remove('hidden');
+  } else {
+    el.taskRetryBtn.classList.add('hidden');
   }
   updateTaskReviewUI(task);
 }
@@ -1501,6 +1508,21 @@ async function startSelectedTask() {
     alert(err.message);
   } finally {
     el.taskStartBtn.disabled = false;
+  }
+}
+
+async function retrySelectedTask() {
+  if (!state.selectedTaskDetail) return;
+  const { traceId, taskId } = state.selectedTaskDetail;
+  el.taskRetryBtn.disabled = true;
+  try {
+    await api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/retry`, { method: 'POST' });
+    await loadTasks();
+    await selectTask(traceId, taskId);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    el.taskRetryBtn.disabled = false;
   }
 }
 
@@ -1839,6 +1861,10 @@ el.tasksRefreshBtn.addEventListener('click', () => {
 
 el.taskStartBtn.addEventListener('click', () => {
   startSelectedTask().catch(console.error);
+});
+
+el.taskRetryBtn.addEventListener('click', () => {
+  retrySelectedTask().catch(console.error);
 });
 
 el.taskOpenTimelineBtn.addEventListener('click', () => {

@@ -49,7 +49,7 @@ flowchart LR
 | `running` | Bee dispatched for this task |
 | `waiting_review` | Code changed or trace gate open; awaiting guard/HITL |
 | `completed` | Task gate passed (AFK success or human approval) |
-| `failed` | Task abandoned or rejected |
+| `failed` | Adapter run failed or dispatch error; retry with `paseka task retry` or Queen Console |
 | `blocked` | Cannot proceed (manual intervention or honey reserve exhausted) |
 
 Task lifecycle events use `payload.kind` inside existing top-level event types — no new `EventType` values.
@@ -83,12 +83,19 @@ Human actions (CLI and Queen Console Reviews use the same domain flows):
 
 - `paseka proposal approve --trace <id> --task <id>` — merge trace worktree (when present) and emit `task.completed`
 - `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework
+- `paseka task retry --trace <id> --task <id>` — re-publish `task.ready` for a `failed` or stuck `running` task (same bee, intent, body)
 
 For `review: final` / `_review`, Queen Console Reviews shows an accumulated worktree merge preview (`GET /api/traces/:traceId/merge-diff`) before approve. See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
 
+### Adapter failure
+
+When a `task.ready` dispatch returns a non-completed adapter result or a dispatch error, the runtime emits `SIGNAL` / `task.status` with `failed` and a summary (adapter error text or run status). Run-level `failed` in `.paseka/runs/.../status.json` and task-level `failed` are now aligned.
+
+Retry transitions `failed` or `running` → `ready` via `task.ready`, then the reactor dispatches again when `paseka run` is active. Queen Console exposes the same flow as `POST /api/traces/:traceId/tasks/:taskId/retry`.
+
 ### `task.status` — SIGNAL
 
-Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`). The `summary` field on `task.status` replaces the previous task summary (omit or empty clears it — used when unblocking honey-exhausted tasks).
+Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`, `failed`). The `summary` field on `task.status` replaces the previous task summary (omit or empty clears it — used when unblocking honey-exhausted tasks or clearing a failure reason on retry).
 
 ```json
 {

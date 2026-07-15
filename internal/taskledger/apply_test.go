@@ -163,6 +163,78 @@ func TestApplyEventTaskReady(t *testing.T) {
 	}
 }
 
+func TestApplyEventTaskReadyFromFailed(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID:  "task-1",
+				Title:   "Backend",
+				Status:  protocol.TaskStatusFailed,
+				Summary: "adapter failed: tests failed",
+				Bee:     "builder",
+				Intent:  "feature",
+			},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-1",
+		Bee:    "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Ready) != 1 {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+	task := res.Trace.Tasks["task-1"]
+	if task.Status != protocol.TaskStatusReady {
+		t.Fatalf("status = %q, want ready", task.Status)
+	}
+	if task.Summary != "" {
+		t.Fatalf("summary = %q, want cleared", task.Summary)
+	}
+	if task.Intent != "feature" {
+		t.Fatalf("intent = %q", task.Intent)
+	}
+}
+
+func TestApplyEventTaskReadyFromRunning(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Title: "Backend", Status: protocol.TaskStatusRunning, Bee: "builder"},
+		},
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-1",
+		Bee:    "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Ready) != 1 {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+	if res.Trace.Tasks["task-1"].Status != protocol.TaskStatusReady {
+		t.Fatalf("status = %q, want ready", res.Trace.Tasks["task-1"].Status)
+	}
+}
+
 func TestApplyEventTaskCompletedUnlocksDependent(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

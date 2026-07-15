@@ -164,6 +164,15 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				trace.Tasks[payload.TaskID] = task
 				break
 			}
+			if task.Status == protocol.TaskStatusFailed || task.Status == protocol.TaskStatusRunning {
+				task.Status = protocol.TaskStatusReady
+				task.Summary = ""
+				ready = append(ready, task)
+				changed = true
+				task.UpdatedAt = now
+				trace.Tasks[payload.TaskID] = task
+				break
+			}
 			if !HasReadyTask(trace) {
 				if first, ok := FirstEligiblePlanned(trace); ok && first.TaskID == payload.TaskID {
 					task.Status = protocol.TaskStatusReady

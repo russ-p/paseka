@@ -24,6 +24,7 @@ func newTaskCmd() *cobra.Command {
 	cmd.AddCommand(newTaskShowCmd())
 	cmd.AddCommand(newTaskCreateCmd())
 	cmd.AddCommand(newTaskStartCmd())
+	cmd.AddCommand(newTaskRetryCmd())
 	return cmd
 }
 
@@ -263,6 +264,47 @@ func newTaskStartCmd() *cobra.Command {
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&taskID, "task", "", "task id (optional; starts all eligible planned tasks when omitted)")
 	_ = cmd.MarkFlagRequired("trace")
+	return cmd
+}
+
+func newTaskRetryCmd() *cobra.Command {
+	var (
+		startDir string
+		traceID  string
+		taskID   string
+	)
+	cmd := &cobra.Command{
+		Use:   "retry",
+		Short: "Re-queue a failed or stuck task by publishing task.ready",
+		Long:  "Re-publishes task.ready for a failed or stuck running task using the same bee, intent, and body. Actual execution requires a separate paseka run process.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if traceID == "" {
+				return fmt.Errorf("--trace is required")
+			}
+			if taskID == "" {
+				return fmt.Errorf("--task is required")
+			}
+			session, err := openTaskSession(startDir)
+			if err != nil {
+				return err
+			}
+			defer session.Close()
+
+			task, err := tasks.Retry(cmd.Context(), session, traceID, taskID, "cli")
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("Published task.ready for retry of %s on trace %s (bee=%s)\n", task.TaskID, traceID, task.Bee)
+			fmt.Println("\nEnsure paseka run is active to dispatch queued tasks.")
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
+	cmd.Flags().StringVar(&taskID, "task", "", "task id")
+	_ = cmd.MarkFlagRequired("trace")
+	_ = cmd.MarkFlagRequired("task")
 	return cmd
 }
 

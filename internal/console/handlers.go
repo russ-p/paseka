@@ -709,6 +709,20 @@ func (a *api) handleTraceTasks(w http.ResponseWriter, r *http.Request, traceID s
 		return
 	}
 
+	if len(parts) == 3 && parts[2] == "retry" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		res, err := RetryTask(r.Context(), a.ctx, traceID, taskID)
+		if err != nil {
+			writeTaskError(w, err)
+			return
+		}
+		writeJSON(w, res)
+		return
+	}
+
 	if len(parts) == 3 && parts[2] == "approve" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

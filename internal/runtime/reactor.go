@@ -307,7 +307,10 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		Intent:  task.Intent,
 	}, DispatchModeTask)
 	if err != nil {
-		return err
+		if setErr := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(nil, err)); setErr != nil {
+			return setErr
+		}
+		return nil
 	}
 	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt)
 	if res.Result == nil || res.Result.Status != string(protocol.StatusCompleted) {
@@ -319,6 +322,9 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 			status = res.Result.Status
 		}
 		logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, status)
+		if setErr := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(res, nil)); setErr != nil {
+			return setErr
+		}
 		return nil
 	}
 	logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted))
@@ -498,6 +504,25 @@ func (r *Reactor) syncTaskProjection(trace taskledger.TraceSnapshot) {
 	if err := runs.SyncTraceTasks(r.colony.ColonyRoot, trace); err != nil {
 		runtimeLog.Warn("task projection sync failed", logging.F("error", err.Error()))
 	}
+}
+
+func taskDispatchFailureSummary(res *BeeRunResult, dispatchErr error) string {
+	if dispatchErr != nil {
+		return fmt.Sprintf("dispatch error: %v", dispatchErr)
+	}
+	if res != nil && res.Result != nil {
+		result := res.Result
+		if result.Err != nil {
+			return fmt.Sprintf("adapter %s: %v", result.Status, result.Err)
+		}
+		if strings.TrimSpace(result.Summary) != "" {
+			return result.Status + ": " + strings.TrimSpace(result.Summary)
+		}
+		if result.Status != "" {
+			return "adapter " + result.Status
+		}
+	}
+	return "adapter failed"
 }
 
 func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time) {

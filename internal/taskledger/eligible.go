@@ -85,3 +85,17 @@ func CanStart(trace TraceSnapshot, taskID string) (TaskSnapshot, error) {
 	}
 	return task, nil
 }
+
+// CanRetry reports whether a task may be re-queued via task.ready after failure or a stuck run.
+func CanRetry(trace TraceSnapshot, taskID string) (TaskSnapshot, error) {
+	task, ok := trace.Tasks[taskID]
+	if !ok {
+		return TaskSnapshot{}, ErrTaskNotFound
+	}
+	switch task.Status {
+	case protocol.TaskStatusFailed, protocol.TaskStatusRunning:
+		return task, nil
+	default:
+		return task, ErrTaskNotRetryable
+	}
+}

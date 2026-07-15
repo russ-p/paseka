@@ -93,5 +93,6 @@ Gotchas observed while standing up Phase 2:
 
 Backlog follow-ups (eval harness):
 
+- **Task retry with edit** — allow changing bee, intent, body, or sector when retrying a failed task (CLI flags or Console form). Today `paseka task retry` and Queen Console Retry reuse the ledger snapshot as-is.
 - **Platform: optional trace reset helper** — seed energy + clear ledger for a fixed `--trace` in one command (partially covered by `paseka purge --bus --trace`; a dedicated helper could also re-seed `defaults.energy_budget`).
 - **Event-chain scorer in runner** — assert `case.yaml` `expect_event_chain` against `paseka replay` output (today: oracle + human replay inspection only).
