@@ -1069,6 +1069,92 @@ func (o *outputSessionAdapter) SessionCommand(req adapters.SessionRequest) (adap
 	}, nil
 }
 
+func TestColonyTopologyAPIHandler(t *testing.T) {
+	repo := initTopologyFixtureRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	srv := console.NewServer(console.Options{
+		Addr:   "127.0.0.1:0",
+		Colony: ctxColony,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/colony/topology", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("topology status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var got colony.Topology
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Bees) == 0 || len(got.Events) == 0 || len(got.Edges) == 0 {
+		t.Fatalf("expected non-empty topology: bees=%d events=%d edges=%d",
+			len(got.Bees), len(got.Events), len(got.Edges))
+	}
+	if strings.TrimSpace(got.Mermaid) == "" {
+		t.Fatal("expected non-empty mermaid")
+	}
+
+	fixtureRoot := filepath.Join("..", "colony", "testdata", "topology-fixture")
+
+	gotStructured, err := json.MarshalIndent(struct {
+		Bees   []colony.TopologyBee   `json:"bees"`
+		Events []colony.TopologyEvent `json:"events"`
+		Edges  []colony.TopologyEdge  `json:"edges"`
+	}{
+		Bees:   got.Bees,
+		Events: got.Events,
+		Edges:  got.Edges,
+	}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotStructured = append(gotStructured, '\n')
+
+	wantStructured, err := os.ReadFile(filepath.Join(fixtureRoot, "topology.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotStructured) != string(wantStructured) {
+		t.Fatalf("topology JSON mismatch:\nwant:\n%s\ngot:\n%s", wantStructured, gotStructured)
+	}
+
+	wantMermaid, err := os.ReadFile(filepath.Join(fixtureRoot, "topology.golden.mermaid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Mermaid != strings.TrimRight(string(wantMermaid), "\n") {
+		t.Fatalf("mermaid mismatch:\nwant:\n%s\ngot:\n%s", wantMermaid, got.Mermaid)
+	}
+
+	methodReq := httptest.NewRequest(http.MethodPost, "/api/colony/topology", nil)
+	methodRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(methodRec, methodReq)
+	if methodRec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("topology POST status = %d", methodRec.Code)
+	}
+}
+
+func initTopologyFixtureRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@test.com")
+	runGit(t, dir, "config", "user.name", "test")
+
+	src := filepath.Join("..", "colony", "testdata", "topology-fixture", ".paseka")
+	dst := filepath.Join(dir, ".paseka")
+	cmd := exec.Command("cp", "-a", src, dst)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("copy topology fixture: %v\n%s", err, out)
+	}
+	runGit(t, dir, "add", ".paseka")
+	runGit(t, dir, "commit", "-m", "topology fixture")
+	return dir
+}
+
 func initConsoleRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -1107,6 +1193,9 @@ func setupConsoleHome(t *testing.T, repo string) colony.Context {
 func setupConsoleHomeWithNATS(t *testing.T, repo, natsURL string) colony.Context {
 	t.Helper()
 	slug := "console-test"
+	if manifest, err := colony.LoadColony(repo); err == nil && strings.TrimSpace(manifest.Slug) != "" {
+		slug = strings.TrimSpace(manifest.Slug)
+	}
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
 	homeDir := filepath.Join(home, "paseka", slug)
