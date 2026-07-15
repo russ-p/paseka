@@ -1,0 +1,13 @@
+role: builder
+adapter: cursor
+prompt_template: builder.md
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+  - type: MUTATION
+    kind: code.proposal
+    dispatch: direct
+publishes:
+  - type: MUTATION
+    kind: code.proposal

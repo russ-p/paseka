@@ -1,0 +1,27 @@
+flowchart LR
+  subgraph events [Events]
+    E_INSIGHT_star["INSIGHT/*"]
+    E_MUTATION_code_proposal["MUTATION/code.proposal"]
+    E_SIGNAL_feature_classified["SIGNAL/feature.classified"]
+    E_SIGNAL_review_needed["SIGNAL/review.needed"]
+    E_SIGNAL_task_ready["SIGNAL/task.ready"]
+    E_VERIFICATION_verification_failed["VERIFICATION/verification.failed"]
+    E_VERIFICATION_verification_success["VERIFICATION/verification.success"]
+  end
+  subgraph bees [Bees]
+    B_builder["builder"]
+    B_drone["drone\nintents: breakdown, grilling"]
+    B_guard["guard"]
+    B_scout["scout\nintents: survey, general"]
+  end
+  E_INSIGHT_star -->|invite intent=survey| B_scout
+  E_SIGNAL_feature_classified -->|invite intent=grilling| B_drone
+  E_SIGNAL_review_needed -->|invite from=bee intent=grilling| bees
+  B_builder -->|publish| E_MUTATION_code_proposal
+  B_guard -->|publish| E_VERIFICATION_verification_failed
+  B_guard -->|publish| E_VERIFICATION_verification_success
+  E_MUTATION_code_proposal -->|subscribe direct| B_builder
+  E_MUTATION_code_proposal -->|subscribe direct| B_guard
+  E_SIGNAL_task_ready -->|subscribe task| B_builder
+  E_SIGNAL_task_ready -->|subscribe task implicit| B_drone
+  E_SIGNAL_task_ready -->|subscribe task implicit| B_scout

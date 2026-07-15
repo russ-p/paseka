@@ -1,0 +1,139 @@
+{
+  "bees": [
+    {
+      "role": "builder",
+      "adapter": "cursor"
+    },
+    {
+      "role": "drone",
+      "adapter": "cursor",
+      "intents": [
+        "breakdown",
+        "grilling"
+      ],
+      "defaultIntent": "breakdown"
+    },
+    {
+      "role": "guard",
+      "adapter": "cursor"
+    },
+    {
+      "role": "scout",
+      "adapter": "cursor",
+      "intents": [
+        "survey",
+        "general"
+      ],
+      "defaultIntent": "survey"
+    }
+  ],
+  "events": [
+    {
+      "type": "INSIGHT",
+      "id": "INSIGHT/*"
+    },
+    {
+      "type": "MUTATION",
+      "kind": "code.proposal",
+      "id": "MUTATION/code.proposal"
+    },
+    {
+      "type": "SIGNAL",
+      "kind": "feature.classified",
+      "id": "SIGNAL/feature.classified"
+    },
+    {
+      "type": "SIGNAL",
+      "kind": "review.needed",
+      "id": "SIGNAL/review.needed"
+    },
+    {
+      "type": "SIGNAL",
+      "kind": "task.ready",
+      "id": "SIGNAL/task.ready"
+    },
+    {
+      "type": "VERIFICATION",
+      "kind": "verification.failed",
+      "id": "VERIFICATION/verification.failed"
+    },
+    {
+      "type": "VERIFICATION",
+      "kind": "verification.success",
+      "id": "VERIFICATION/verification.success"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "invite",
+      "from": "INSIGHT/*",
+      "to": "scout",
+      "intent": "survey"
+    },
+    {
+      "kind": "invite",
+      "from": "SIGNAL/feature.classified",
+      "to": "drone",
+      "intent": "grilling",
+      "match": {
+        "decision": "grill"
+      }
+    },
+    {
+      "kind": "invite",
+      "from": "SIGNAL/review.needed",
+      "intent": "grilling",
+      "match": {
+        "decision": "session"
+      },
+      "beeFrom": "bee"
+    },
+    {
+      "kind": "publish",
+      "from": "builder",
+      "to": "MUTATION/code.proposal"
+    },
+    {
+      "kind": "publish",
+      "from": "guard",
+      "to": "VERIFICATION/verification.failed"
+    },
+    {
+      "kind": "publish",
+      "from": "guard",
+      "to": "VERIFICATION/verification.success"
+    },
+    {
+      "kind": "subscribe",
+      "from": "MUTATION/code.proposal",
+      "to": "builder",
+      "dispatch": "direct"
+    },
+    {
+      "kind": "subscribe",
+      "from": "MUTATION/code.proposal",
+      "to": "guard",
+      "dispatch": "direct"
+    },
+    {
+      "kind": "subscribe",
+      "from": "SIGNAL/task.ready",
+      "to": "builder",
+      "dispatch": "task"
+    },
+    {
+      "kind": "subscribe",
+      "from": "SIGNAL/task.ready",
+      "to": "drone",
+      "dispatch": "task",
+      "implicit": true
+    },
+    {
+      "kind": "subscribe",
+      "from": "SIGNAL/task.ready",
+      "to": "scout",
+      "dispatch": "task",
+      "implicit": true
+    }
+  ]
+}

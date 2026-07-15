@@ -1,0 +1,7 @@
+role: scout
+adapter: cursor
+prompt_template: scout.md
+intents:
+  - survey
+  - general
+default_intent: survey

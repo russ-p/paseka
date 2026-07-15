@@ -1,0 +1,12 @@
+role: guard
+adapter: cursor
+prompt_template: guard.md
+subscribes:
+  - type: MUTATION
+    kind: code.proposal
+    dispatch: direct
+publishes:
+  - type: VERIFICATION
+    kind: verification.success
+  - type: VERIFICATION
+    kind: verification.failed

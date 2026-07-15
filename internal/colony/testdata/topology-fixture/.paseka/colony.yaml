@@ -1,0 +1,35 @@
+slug: topology-fixture
+auto_invites:
+  - when:
+      type: SIGNAL
+      kind: feature.classified
+    match:
+      decision: grill
+    invite:
+      bee:
+        default: drone
+      intent:
+        default: grilling
+      task:
+        default: Grill feature
+  - when:
+      type: SIGNAL
+      kind: review.needed
+    match:
+      decision: session
+    invite:
+      bee:
+        from: bee
+      intent:
+        default: grilling
+      task:
+        default: Review item
+  - when:
+      type: INSIGHT
+    invite:
+      bee:
+        default: scout
+      intent:
+        default: survey
+      task:
+        default: Survey trace
