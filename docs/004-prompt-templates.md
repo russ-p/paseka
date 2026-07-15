@@ -239,7 +239,7 @@ Intent: {{.Intent}}
 {{template "emit-insight" .}}
 ```
 
-Known builder intents (discovered from `builder-intent-*` partials): `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Drone uses `drone-intent-*` partials (`general`, `grilling`, `breakdown`) and routes on `{{.IntentRaw}}` in its template. Scout uses `scout-intent-*` partials (`survey` default via bee `default_intent`, `plan`, `triage`).
+Known builder intents (discovered from `builder-intent-*` partials): `general` (default), `feature`, `bugfix`, `test-fix`, `refactor`. Drone uses `drone-intent-*` partials (`general`, `grilling`, `breakdown`) and routes on `{{.IntentRaw}}` in its template; grilling includes `drone-emit-grilling`, breakdown includes `drone-emit-breakdown`. Scout uses `scout-intent-*` partials (`survey` default via bee `default_intent`, `plan`, `classify`, `triage`); classify includes `scout-emit-classify`.
 
 ### Scout bee with bus-event partial
 
@@ -261,6 +261,9 @@ Intent: {{.Intent}}
 ## Mission guidance
 {{if eq .Intent "plan"}}
 {{template "scout-intent-plan" .}}
+{{else if eq .Intent "classify"}}
+{{template "scout-intent-classify" .}}
+{{template "scout-emit-classify" .}}
 {{else if eq .Intent "triage"}}
 {{template "scout-intent-triage" .}}
 {{else}}
@@ -311,6 +314,9 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 | `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (no type enumeration) |
 | `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) |
 | `emit-signal` | `SIGNAL` kinds (`task.ready`) |
+| `scout-emit-classify` | `SIGNAL/feature.classified` (Scout `classify` intent only) |
+| `drone-emit-grilling` | `SIGNAL/spec.ready` + optional `context.note` (Drone `grilling` intent only) |
+| `drone-emit-breakdown` | `INSIGHT/task.plan`, `SIGNAL/task.ready`, optional `context.note` (Drone `breakdown` intent only) |
 | `emit-verification` | Review-gate `VERIFICATION` kinds (`verification.success`, `verification.failed`) |
 | `emit-task-completed` | Commit-gate `VERIFICATION/task.completed` (receiver only) |
 
@@ -319,8 +325,8 @@ Bees include only the type partials they may publish. For example:
 | Bee | Emit partials |
 | --- | ------------- |
 | `builder` | `emit-howto`, `emit-insight` |
-| `scout` | `emit-howto`, `emit-insight`, `emit-signal` |
-| `drone` | `emit-howto`; on `breakdown` also `emit-insight`, `emit-signal` |
+| `scout` | `emit-howto`, `emit-insight`, `emit-signal`; on `classify` also `scout-emit-classify` |
+| `drone` | `emit-howto`; on `grilling` also `drone-emit-grilling`; on `breakdown` also `drone-emit-breakdown` |
 | `guard` | `emit-howto`, `emit-verification`, `emit-insight` |
 | `main-guard` | `emit-howto`, `emit-insight` |
 | `receiver` | `emit-howto`, `emit-task-completed` |

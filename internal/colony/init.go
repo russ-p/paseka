@@ -128,6 +128,8 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):     scoutIntentSurveyPartial,
 		PasekaPath(root, "prompts", "_partials", "scout-intent-plan.md"):       scoutIntentPlanPartial,
 		PasekaPath(root, "prompts", "_partials", "scout-intent-triage.md"):     scoutIntentTriagePartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-classify.md"):   scoutIntentClassifyPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-emit-classify.md"):     scoutEmitClassifyPartial,
 	}
 
 	for path, content := range files {
@@ -148,6 +150,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 				PromptTemplate: "default.md",
 				EnergyBudget:   protocol.DefaultEnergyBudget,
 			},
+			AutoInvites: DefaultAutoInviteRules(),
 		}
 		data, err := yaml.Marshal(c)
 		if err != nil {
@@ -171,6 +174,9 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	}
 	if manifest.Defaults.EnergyBudget == 0 {
 		manifest.Defaults.EnergyBudget = protocol.DefaultEnergyBudget
+	}
+	if len(manifest.AutoInvites) == 0 {
+		manifest.AutoInvites = DefaultAutoInviteRules()
 	}
 	data, err := yaml.Marshal(manifest)
 	if err != nil {
@@ -322,6 +328,9 @@ Requested intent: {{.IntentRaw}}{{end}}
 ## Mission guidance
 {{if eq .Intent "plan"}}
 {{template "scout-intent-plan" .}}
+{{else if eq .Intent "classify"}}
+{{template "scout-intent-classify" .}}
+{{template "scout-emit-classify" .}}
 {{else if eq .Intent "triage"}}
 {{template "scout-intent-triage" .}}
 {{else}}
@@ -494,6 +503,56 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 3. Rank survivors by severity × blast radius × fixability (critical blockers first; defer cosmetic debt).
 4. Publish a short ranked triage as INSIGHT/run.summary and, when useful, one INSIGHT/context.note or review.note per top finding that needs durable memory.
 5. Do not emit task.plan unless the Task explicitly asks for a plan after triage. Do not emit task.ready.
+`
+	scoutIntentClassifyPartial = `Classify a feature.requested idea — do not plan or implement.
+
+### Method
+1. Read the Task and Prior discoveries for the feature.requested title/body (or equivalent idea text).
+2. Decide exactly one decision using evidence from the body and prior insights:
+   - grill — vague product idea; acceptance criteria missing; needs interactive grilling before breakdown.
+   - plan — spec/PRD already clear enough for vertical slices; short path to task.plan is appropriate.
+   - triage — looks like bug, debt, or incident; not a new feature.
+   - clarify — ambiguous whether feature vs bug; Beekeeper should choose next step.
+   - reject — out of scope, duplicate, or non-actionable.
+3. Emit one SIGNAL/feature.classified with decision and rationale only (do not pick the next bee or intent — colony rules / Beekeeper react to decision).
+4. Optionally emit INSIGHT/run.summary with a one-line classification summary.
+5. Do not emit task.plan or task.ready when decision=grill.
+6. Do not emit task.plan unless decision=plan and the Task explicitly asks for a plan after classification.
+`
+	scoutEmitClassifyPartial = `## Publish events (classify only)
+
+For classify, publish only these kinds. Do not emit task.plan or task.ready when decision=grill.
+
+| Event | payload.kind | Role |
+| ----- | ------------ | ---- |
+| SIGNAL | feature.classified | Classification decision (required) |
+| INSIGHT | run.summary | Short classification summary (optional) |
+
+### feature.classified — one classification decision
+
+Emit one SIGNAL/feature.classified after classification. Set decision and rationale. Do not set bee / intent — who runs next is colony auto_invites (or Beekeeper), matching on decision. confidence is optional and advisory.
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"grill","rationale":"Product idea without acceptance criteria; needs grilling before breakdown."}}
+EOF
+
+When decision=plan and the spec is already clear:
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"plan","rationale":"PRD is clear enough for vertical-slice breakdown without grilling."}}
+EOF
+
+When decision=reject:
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"reject","rationale":"Duplicate of an existing spec; no new work."}}
+EOF
+
+### run.summary — optional
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Classified feature.requested as grill"}}
+EOF
 `
 	emitHowtoPartial = `When you need to publish a bus event during a run:
 

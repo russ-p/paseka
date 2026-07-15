@@ -197,6 +197,8 @@ After `task.completed`, the ledger unlocks dependent tasks and may emit `task.re
 
 ## 4. End-to-end feature flow
 
+**Short path** (clear PRD already exists):
+
 ```text
 PRD (SIGNAL: feature.requested)
   → Scout INSIGHT task.plan
@@ -209,6 +211,8 @@ PRD (SIGNAL: feature.requested)
   → … repeat …
   → Trace merge gate completed
 ```
+
+**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md). Scout classifies and must not emit `task.plan` for vague ideas; Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
 
 ---
 
@@ -270,3 +274,4 @@ For human-friendly task injection from the CLI, use `paseka task create` to publ
 - [004-prompt-templates.md](004-prompt-templates.md) — template variables including `TaskID`
 - [002-paseka-glossary.md](002-paseka-glossary.md) — Task/Nectar, TraceID/Flight Trail
 - [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md) — Reviews UI and merge-diff preview
+- [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md) — classify → invite → grilling → `spec.ready` → breakdown before ledger work

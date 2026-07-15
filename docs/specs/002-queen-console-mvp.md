@@ -695,6 +695,7 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 ## Related specs
 
 - [004-live-bees-indicator.md](./004-live-bees-indicator.md) — header indicator for live agent processes (AFK runs and interactive sessions)
+- [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — feature idea → Scout classify → session invite → Drone grilling / breakdown (Console invite UX)
 
 ## Verification
 

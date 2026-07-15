@@ -597,6 +597,22 @@ func RenderEventSummary(ev protocol.Event) (string, bool) {
 			return "Verification failed: " + p.Summary, true
 		}
 		return "Verification failed", true
+	case "spec.ready":
+		var p struct {
+			Ref   string `json:"ref"`
+			Title string `json:"title"`
+		}
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			return "", false
+		}
+		ref := strings.TrimSpace(p.Ref)
+		if ref == "" {
+			return "Spec ready", true
+		}
+		if title := strings.TrimSpace(p.Title); title != "" {
+			return fmt.Sprintf("Spec ready: %s (%s)", title, ref), true
+		}
+		return "Spec ready: " + ref, true
 	default:
 		return "", false
 	}

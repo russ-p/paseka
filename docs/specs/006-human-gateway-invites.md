@@ -14,7 +14,7 @@ Define the **platform** Human Gateway parking lot for interactive work:
 - optionally complete invites via declarative `done_when`
 - optionally auto-publish invites from colony `auto_invites` rules
 
-This is **not** a colony choreography. Colony-owned kinds stay out of `internal/protocol` and are configured via prompts + `auto_invites` (for example a feature-ideation flow that publishes `feature.*` / `spec.ready`).
+This is **not** a colony choreography. Colony-owned kinds stay out of `internal/protocol` and are configured via prompts + `auto_invites`. See [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) for the reference colony flow that builds on this platform.
 
 ## Goals
 
@@ -27,7 +27,7 @@ This is **not** a colony choreography. Colony-owned kinds stay out of `internal/
 
 - Do not AFK-dispatch interactive intents via `task.ready`.
 - Do not hardcode colony kinds (`feature.*`, `spec.ready`, …) in protocol validators or reactor special-cases.
-- Do not seed default `auto_invites` in `paseka init` (empty means off).
+- Do not seed default `auto_invites` in the platform layer (empty means off). Reference colonies may seed rules — see [005-feature-ideation-flow.md](./005-feature-ideation-flow.md).
 - Do not redesign Console beyond pending invite list / accept / reject.
 
 ## Decisions
@@ -125,6 +125,7 @@ Persisted on the invite at publish time. When a bus event matches, reactor marks
 - [006-interactive-sessions.md](../006-interactive-sessions.md) — `bee chat`, session attach
 - [008-bee-routing.md](../008-bee-routing.md) — `auto_invites` + `done_when` schema
 - [007-cli.md](../007-cli.md) — invite commands
+- [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — colony reference flow using this platform
 
 ## Verification
 

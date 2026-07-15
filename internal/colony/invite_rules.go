@@ -47,7 +47,7 @@ type InviteTaskField struct {
 	Default        string `yaml:"default,omitempty"`
 }
 
-// SampleAutoInviteRules returns fixture rules for unit tests (not seeded by paseka init).
+// SampleAutoInviteRules returns fixture rules for unit tests (generic kinds).
 // Colonies enable auto-invite by adding rules to .paseka/colony.yaml.
 func SampleAutoInviteRules() []AutoInviteRule {
 	return []AutoInviteRule{
@@ -87,6 +87,53 @@ func SampleAutoInviteRules() []AutoInviteRule {
 					From:    "ref",
 					Prefix:  "Break down ",
 					Default: "Break down doc",
+				},
+				Status: "pending",
+			},
+			Dedupe: []string{"intent", "artifactRef"},
+		},
+	}
+}
+
+// DefaultAutoInviteRules returns the stock feature-ideation rules for new colonies.
+func DefaultAutoInviteRules() []AutoInviteRule {
+	return []AutoInviteRule{
+		{
+			When: EventRule{Type: "SIGNAL", Kind: "feature.classified"},
+			Match: map[string]string{
+				"decision": "grill",
+			},
+			Invite: AutoInviteInviteSpec{
+				Bee:    InviteStringField{Default: "drone"},
+				Intent: InviteStringField{Default: "grilling"},
+				Task: InviteTaskField{
+					FromTraceKind:  "feature.requested",
+					FromTraceField: "title",
+					Prefix:         "Grill feature: ",
+					FallbackFrom:   "rationale",
+					Default:        "Grill feature",
+				},
+				Status: "pending",
+				DoneWhen: &InviteDoneWhen{
+					When:           EventRule{Type: "SIGNAL", Kind: "spec.ready"},
+					RequireFile:    InviteStringField{From: "ref"},
+					SetArtifactRef: InviteStringField{From: "ref"},
+				},
+			},
+			Dedupe: []string{"bee", "intent"},
+		},
+		{
+			When: EventRule{Type: "SIGNAL", Kind: "spec.ready"},
+			Invite: AutoInviteInviteSpec{
+				Bee:    InviteStringField{Default: "drone"},
+				Intent: InviteStringField{Default: "breakdown"},
+				ArtifactRef: InviteStringField{
+					From: "ref",
+				},
+				Task: InviteTaskField{
+					From:    "ref",
+					Prefix:  "Break down ",
+					Default: "Break down spec",
 				},
 				Status: "pending",
 			},
