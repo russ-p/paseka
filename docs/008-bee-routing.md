@@ -160,9 +160,91 @@ Narrative `INSIGHT` events are optional and do not satisfy completion contracts.
 
 ---
 
-## 7. Related docs
+## 7. Colony `auto_invites` (Human Gateway)
+
+Bee `subscribes` imply `Adapter.Run()` dispatch. **Auto-invite** is separate colony choreography: when a bus event matches, `paseka run` publishes a pending `session.invite` for Beekeeper accept/reject.
+
+**`payload.decision` vs routing:** Colony events may carry a string tag such as `payload.decision`. Colony rules may match it via `auto_invites.match.decision`. That is distinct from (1) bee **`subscribes`** dispatch (`type` + `payload.kind` → AFK run) and (2) glossary **Flight Route** — the NATS subject (`events.<EventType>[.<kind>]`, §3).
+
+Rules live in **`.paseka/colony.yaml`** (not bee YAML). Implementation: [`internal/colony/invite_rules.go`](../internal/colony/invite_rules.go), [`internal/invites/auto_invite.go`](../internal/invites/auto_invite.go), [`internal/runtime/invite_publisher.go`](../internal/runtime/invite_publisher.go).
+
+```yaml
+auto_invites:
+  - when:
+      type: SIGNAL
+      kind: review.needed
+    match:
+      decision: session
+    invite:
+      bee: { from: bee, default: drone }
+      intent: { from: intent, default: grilling }
+      task:
+        from_trace_kind: review.requested
+        from_trace_field: title
+        prefix: "Review: "
+        fallback_from: rationale
+        default: Review item
+      status: pending
+      done_when:
+        when: { type: SIGNAL, kind: doc.ready }
+        require_file: { from: ref }
+        set_artifact_ref: { from: ref }
+    dedupe: [bee, intent]
+  - when:
+      type: SIGNAL
+      kind: doc.ready
+    invite:
+      bee: { default: drone }
+      intent: { default: breakdown }
+      artifactRef: { from: ref }
+      task: { from: ref, prefix: "Break down ", default: Break down doc }
+      status: pending
+    dedupe: [intent, artifactRef]
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `when` | Same as bee `subscribes`: `type` + optional `kind` |
+| `match` | AND equality on top-level payload string fields |
+| `invite.*.from` / `default` | Copy string from trigger payload or fallback |
+| `invite.task.from_trace_*` | Latest prior trace event with that `kind`; read field |
+| `invite.task.fallback_from` | Field on trigger payload if trace lookup fails |
+| `invite.done_when` | Optional completion contract persisted on the invite (see §8) |
+| `dedupe` | Skip when a **pending** invite on the trace matches those invite fields |
+
+`paseka init` leaves `auto_invites` empty. With **empty** `auto_invites`, no auto-invite runs. See [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
+
+---
+
+## 8. Invite `done_when` (completion contract)
+
+An invite is a **work contract**: required `task` (input) plus optional `done_when` (expected result). When a bus event matches a persisted invite's `done_when`, `paseka run` updates that invite by `inviteId` to `completed` (file exists at `ref`) or `incomplete` (missing file). Implementation: [`internal/invites/completion.go`](../internal/invites/completion.go), [`internal/runtime/invite_completer.go`](../internal/runtime/invite_completer.go).
+
+```yaml
+invite:
+  task: { ... }
+  done_when:
+    when: { type: SIGNAL, kind: doc.ready }
+    match: { optional: equality }
+    require_file: { from: ref }
+    set_artifact_ref: { from: ref }
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `done_when.when` | Same as `auto_invites.when`: `type` + optional `kind` |
+| `done_when.match` | Optional AND equality on trigger payload string fields |
+| `done_when.require_file.from` | Payload field with repo-relative path; file must exist under colony root or trace worktree |
+| `done_when.set_artifact_ref.from` | Copy payload field into invite `artifactRef` on success |
+
+Only **accepted** or **incomplete** invites with a `doneWhen` on the same trace are evaluated. Without `done_when`, bus-driven completion does not run (session-end `incomplete` still applies).
+
+---
+
+## 9. Related docs
 
 - [005-task-ledger.md](005-task-ledger.md) — task lifecycle events
 - [003-architecture.md](003-architecture.md) — colony layout and adapters
 - [010-bee-config.md](010-bee-config.md) — full bee YAML schema (`role`, `adapter`, contracts, …)
 - [009-insight-kinds.md](009-insight-kinds.md) — INSIGHT taxonomy and prompt memory projection
+- [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md) — invite lifecycle, CLI/Console, energy

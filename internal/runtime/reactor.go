@@ -9,6 +9,7 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
@@ -28,6 +29,8 @@ type Reactor struct {
 	directProcessed map[string]struct{}
 	recentLocal     map[string]time.Time // fingerprints of events applied before publish
 	asyncDispatch   bool
+	invitePublisher invites.EventPublisher // test override for auto-invite publish
+	autoInvites     []colony.AutoInviteRule
 }
 
 // ReactorOptions configures a hive runtime reactor.
@@ -61,6 +64,12 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		return nil, err
 	}
 
+	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
+	if err != nil {
+		busClient.Close()
+		return nil, err
+	}
+
 	d := NewDispatcher()
 	d.SetPublisher(busClient, true)
 	d.SetBeeRegistry(registry)
@@ -76,6 +85,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		directProcessed: make(map[string]struct{}),
 		recentLocal:     make(map[string]time.Time),
 		asyncDispatch:   true,
+		autoInvites:     manifest.AutoInvites,
 	}, nil
 }
 
@@ -125,6 +135,15 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		}
 	}
 	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
+		return err
+	}
+	if err := r.handleInviteCompletion(ctx, ev); err != nil {
+		return err
+	}
+	if err := r.handleAutoInvite(ctx, ev); err != nil {
+		return err
+	}
+	if err := r.handleInviteProjection(ev); err != nil {
 		return err
 	}
 	if err := r.executeDispatches(ctx, ev, res.Ready); err != nil {
@@ -436,14 +455,23 @@ func (r *Reactor) ApplyAndSyncForTest(ctx context.Context, ev protocol.Event) er
 
 // TestReactorOptions configures a reactor without NATS (unit tests).
 type TestReactorOptions struct {
-	ColonyRoot string
-	Dispatcher *Dispatcher
-	Registry   *BeeRegistry
-	Ledger     taskledger.Ledger
+	ColonyRoot  string
+	Dispatcher  *Dispatcher
+	Registry    *BeeRegistry
+	Ledger      taskledger.Ledger
+	AutoInvites []colony.AutoInviteRule
 }
 
 // NewTestReactor builds a reactor with injected dependencies.
 func NewTestReactor(opts TestReactorOptions) *Reactor {
+	autoInvites := opts.AutoInvites
+	if autoInvites == nil && opts.ColonyRoot != "" {
+		if manifest, err := colony.LoadColony(opts.ColonyRoot); err == nil {
+			if autoInvites == nil {
+				autoInvites = manifest.AutoInvites
+			}
+		}
+	}
 	return &Reactor{
 		colony:          colony.Context{ColonyRoot: opts.ColonyRoot},
 		dispatcher:      opts.Dispatcher,
@@ -454,6 +482,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		directProcessed: make(map[string]struct{}),
 		recentLocal:     make(map[string]time.Time),
 		asyncDispatch:   false,
+		autoInvites:     autoInvites,
 	}
 }
 

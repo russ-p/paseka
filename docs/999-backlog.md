@@ -2,6 +2,19 @@
 
 ## Deferred Ideas
 
+### Human Gateway invites (`session.invite` / `auto_invites`)
+
+Context:
+- Interactive sessions (`bee chat`) existed, but HITL work was not parked on the bus for Beekeeper accept/reject.
+- Design is recorded in [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
+
+Backlog items:
+
+- ~~**Invite persistence + CLI/Console** — `paseka invite *`, Console accept → session; validate `session.invite` / `beekeeper.ready` at the invite boundary.~~ **Done** — see [007-cli.md](007-cli.md).
+- ~~**Config-driven `auto_invites`** — colony.yaml rules while `paseka run` is up; empty `auto_invites` disables auto-invite.~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §7.
+- ~~**Invite `done_when` + session energy** — completion/incomplete on contract match; 1 honey on `invite accept` (`bee chat` exempt).~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §8.
+- **Breaking:** Invite handoff field renamed `specRef` → `artifactRef` (CLI `--artifact-ref`, config `set_artifact_ref`).
+
 ### Replace `result.txt` with a clearer log artifact
 
 Context:
