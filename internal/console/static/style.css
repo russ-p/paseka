@@ -315,7 +315,8 @@ header h1 {
 
 /* Single-panel tabs: must come after .layout (same specificity, later wins). */
 #dashboard-layout,
-#timeline-layout {
+#timeline-layout,
+#topology-layout {
   grid-template-columns: 1fr;
 }
 
@@ -366,6 +367,41 @@ header h1 {
 .reviews-hint {
   margin: 0 0 0.75rem;
   font-size: 0.85rem;
+}
+
+.topology-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.topology-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.topology-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.topology-diagram {
+  overflow: auto;
+  min-height: 20rem;
+  padding: 1rem;
+  background: #0c0e14;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.topology-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .review-actions {

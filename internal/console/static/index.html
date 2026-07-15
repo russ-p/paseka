@@ -45,6 +45,7 @@
       <button type="button" id="tab-reviews" class="tab" role="tab" aria-selected="false">Reviews</button>
       <button type="button" id="tab-sessions" class="tab" role="tab" aria-selected="false">Sessions</button>
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
+      <button type="button" id="tab-topology" class="tab" role="tab" aria-selected="false">Topology</button>
     </nav>
   </header>
 
@@ -436,10 +437,28 @@
     </section>
   </main>
 
+  <main class="layout hidden" id="topology-layout">
+    <section class="panel topology-panel">
+      <div class="panel-header">
+        <h2>Colony EDA topology</h2>
+        <div class="topology-actions">
+          <button type="button" id="topology-copy-btn" class="secondary" disabled>Copy Mermaid</button>
+          <button type="button" id="topology-refresh-btn" class="secondary">Refresh</button>
+        </div>
+      </div>
+      <p class="muted topology-hint">Static view from bee YAML and colony <code>auto_invites</code>. Does not require NATS or <code>paseka run</code>.</p>
+      <p id="topology-error" class="error hidden"></p>
+      <div id="topology-loading" class="muted hidden">Loading topology…</div>
+      <div id="topology-summary" class="topology-summary hidden"></div>
+      <div id="topology-diagram" class="topology-diagram" aria-label="Colony topology diagram"></div>
+    </section>
+  </main>
+
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>
   <script src="/vendor/xterm/addon-web-links.js"></script>
   <script src="/vendor/diff2html/diff2html.min.js"></script>
+  <script src="/vendor/mermaid/mermaid.min.js"></script>
   <script src="/terminal.js"></script>
   <script src="/app.js"></script>
 </body>

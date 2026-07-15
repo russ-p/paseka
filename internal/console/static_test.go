@@ -253,3 +253,55 @@ func TestMermaidVendorStaticContract(t *testing.T) {
 		t.Fatal("HTTP response must serve embedded mermaid bundle")
 	}
 }
+
+func TestTopologyTabStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="tab-topology"`,
+		`id="topology-layout"`,
+		`id="topology-diagram"`,
+		`id="topology-copy-btn"`,
+		`id="topology-refresh-btn"`,
+		`/vendor/mermaid/mermaid.min.js`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"async function loadTopology()",
+		"function renderTopology()",
+		"async function renderTopologyMermaid(mermaidSrc)",
+		"async function copyTopologyMermaid()",
+		"api('/api/colony/topology')",
+		"mermaid.render(id, mermaidSrc)",
+		"setTab('topology')",
+		"navigator.clipboard.writeText(text)",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	css, err := staticFiles.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatalf("read style.css: %v", err)
+	}
+	cssSrc := string(css)
+	if !strings.Contains(cssSrc, "#topology-layout") {
+		t.Fatal("style.css missing #topology-layout")
+	}
+	if !strings.Contains(cssSrc, ".topology-diagram") {
+		t.Fatal("style.css missing .topology-diagram")
+	}
+}

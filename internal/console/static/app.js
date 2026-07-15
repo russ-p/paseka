@@ -38,6 +38,12 @@ const state = {
   tracesPollTimer: null,
   tasksPollTimer: null,
   reviewsPollTimer: null,
+  topology: null,
+  topologyLoading: false,
+  topologyError: '',
+  topologyMermaid: '',
+  topologyRenderToken: 0,
+  mermaidInitialized: false,
 };
 
 const el = {
@@ -49,6 +55,7 @@ const el = {
   tabReviews: document.getElementById('tab-reviews'),
   tabSessions: document.getElementById('tab-sessions'),
   tabRuns: document.getElementById('tab-runs'),
+  tabTopology: document.getElementById('tab-topology'),
   dashboardLayout: document.getElementById('dashboard-layout'),
   tracesLayout: document.getElementById('traces-layout'),
   timelineLayout: document.getElementById('timeline-layout'),
@@ -148,6 +155,13 @@ const el = {
   reviewActionSuccess: document.getElementById('review-action-success'),
   sessionsLayout: document.getElementById('sessions-layout'),
   runsLayout: document.getElementById('runs-layout'),
+  topologyLayout: document.getElementById('topology-layout'),
+  topologyCopyBtn: document.getElementById('topology-copy-btn'),
+  topologyRefreshBtn: document.getElementById('topology-refresh-btn'),
+  topologyError: document.getElementById('topology-error'),
+  topologyLoading: document.getElementById('topology-loading'),
+  topologySummary: document.getElementById('topology-summary'),
+  topologyDiagram: document.getElementById('topology-diagram'),
   beeSelect: document.getElementById('bee-select'),
   taskInput: document.getElementById('task-input'),
   rawToggle: document.getElementById('raw-prompt-toggle'),
@@ -309,7 +323,7 @@ function escapeHtml(str) {
 
 function setTab(tab) {
   state.tab = tab;
-  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs'];
+  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology'];
   const layouts = {
     dashboard: el.dashboardLayout,
     traces: el.tracesLayout,
@@ -318,6 +332,7 @@ function setTab(tab) {
     reviews: el.reviewsLayout,
     sessions: el.sessionsLayout,
     runs: el.runsLayout,
+    topology: el.topologyLayout,
   };
   for (const name of tabs) {
     const active = tab === name;
@@ -339,6 +354,7 @@ function setTab(tab) {
     reviews: 'Reviews — approve or reject proposals awaiting human review',
     sessions: 'Sessions — launch, attach, and observe interactive bees',
     runs: 'Runs — observe headless adapter invocations',
+    topology: 'Topology — config-derived colony EDA graph (bees, events, invites)',
   };
   el.subtitle.textContent = subtitles[tab] || '';
 
@@ -367,11 +383,139 @@ function setTab(tab) {
     startTasksPolling();
   } else if (tab === 'reviews') {
     startReviewsPolling();
+  } else if (tab === 'topology') {
+    loadTopology().catch(console.error);
   }
 }
 
 function findBee(role) {
   return state.bees.find((b) => b.role === role);
+}
+
+function ensureMermaidInitialized() {
+  if (state.mermaidInitialized || typeof mermaid === 'undefined') return;
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'strict',
+    flowchart: { useMaxWidth: true },
+  });
+  state.mermaidInitialized = true;
+}
+
+function renderTopology() {
+  const loading = state.topologyLoading;
+  const err = state.topologyError;
+  const topo = state.topology;
+  const mermaidSrc = state.topologyMermaid;
+
+  el.topologyLoading.classList.toggle('hidden', !loading);
+  el.topologyCopyBtn.disabled = loading || !mermaidSrc;
+
+  if (err) {
+    el.topologyError.textContent = err;
+    el.topologyError.classList.remove('hidden');
+  } else {
+    el.topologyError.classList.add('hidden');
+    el.topologyError.textContent = '';
+  }
+
+  if (topo && !loading) {
+    el.topologySummary.classList.remove('hidden');
+    el.topologySummary.innerHTML = `
+      <span><strong>${topo.bees?.length ?? 0}</strong> bees</span>
+      <span><strong>${topo.events?.length ?? 0}</strong> events</span>
+      <span><strong>${topo.edges?.length ?? 0}</strong> edges</span>
+    `;
+  } else {
+    el.topologySummary.classList.add('hidden');
+    el.topologySummary.innerHTML = '';
+  }
+
+  if (loading) {
+    el.topologyDiagram.innerHTML = '';
+    return;
+  }
+
+  if (!mermaidSrc) {
+    el.topologyDiagram.innerHTML = '<p class="muted">No Mermaid diagram available.</p>';
+    return;
+  }
+
+  renderTopologyMermaid(mermaidSrc).catch((renderErr) => {
+    console.error(renderErr);
+    if (state.tab !== 'topology') return;
+    el.topologyError.textContent = renderErr.message || 'Failed to render diagram.';
+    el.topologyError.classList.remove('hidden');
+    el.topologyDiagram.innerHTML = '';
+  });
+}
+
+async function renderTopologyMermaid(mermaidSrc) {
+  const token = ++state.topologyRenderToken;
+  el.topologyDiagram.innerHTML = '';
+
+  if (typeof mermaid === 'undefined' || typeof mermaid.render !== 'function') {
+    throw new Error('Mermaid failed to load.');
+  }
+
+  ensureMermaidInitialized();
+  const id = `topology-diagram-${token}`;
+  const { svg } = await mermaid.render(id, mermaidSrc);
+  if (token !== state.topologyRenderToken || state.tab !== 'topology') return;
+  el.topologyDiagram.innerHTML = svg;
+}
+
+async function loadTopology() {
+  state.topologyLoading = true;
+  state.topologyError = '';
+  renderTopology();
+  try {
+    const topo = await api('/api/colony/topology');
+    state.topology = topo;
+    state.topologyMermaid = topo.mermaid || '';
+    state.topologyError = '';
+  } catch (err) {
+    state.topology = null;
+    state.topologyMermaid = '';
+    state.topologyError = err.message || String(err);
+  } finally {
+    state.topologyLoading = false;
+    renderTopology();
+  }
+}
+
+async function copyTopologyMermaid() {
+  const text = state.topologyMermaid;
+  if (!text) return;
+  const btn = el.topologyCopyBtn;
+  const original = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1500);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'absolute';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      btn.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.textContent = original;
+      }, 1500);
+    } catch (copyErr) {
+      alert(copyErr.message || 'Copy failed');
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
 }
 
 function renderIntentSelect(selectEl, bee) {
@@ -1816,6 +1960,15 @@ el.tabSessions.addEventListener('click', () => {
 el.tabRuns.addEventListener('click', () => {
   setTab('runs');
   loadRuns().catch(console.error);
+});
+el.tabTopology.addEventListener('click', () => setTab('topology'));
+
+el.topologyRefreshBtn.addEventListener('click', () => {
+  loadTopology().catch(console.error);
+});
+
+el.topologyCopyBtn.addEventListener('click', () => {
+  copyTopologyMermaid().catch(console.error);
 });
 
 el.dashboardRefreshBtn.addEventListener('click', () => {
