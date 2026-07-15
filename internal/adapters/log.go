@@ -1,11 +1,21 @@
 package adapters
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/paseka/paseka/internal/logging"
 )
+
+const logOutputMaxLen = 2048
+
+// AgentDoneOutput carries process output for failure diagnostics.
+type AgentDoneOutput struct {
+	Stdout  string
+	Stderr  string
+	Summary string
+}
 
 // LogAgentLaunch logs adapter process start.
 func LogAgentLaunch(log *logging.Logger, adapter, binary string, req RunRequest, args []string) {
@@ -29,7 +39,7 @@ func LogAgentLaunch(log *logging.Logger, adapter, binary string, req RunRequest,
 }
 
 // LogAgentDone logs adapter process completion.
-func LogAgentDone(log *logging.Logger, adapter, binary string, req RunRequest, started time.Time, status string, exitCode int, runErr error) {
+func LogAgentDone(log *logging.Logger, adapter, binary string, req RunRequest, started time.Time, status string, exitCode int, runErr error, out AgentDoneOutput) {
 	if log == nil {
 		log = logging.Component("adapter")
 	}
@@ -47,10 +57,37 @@ func LogAgentDone(log *logging.Logger, adapter, binary string, req RunRequest, s
 		fields = append(fields, logging.F("error", runErr.Error()))
 	}
 	if status == "failed" || status == "cancelled" {
+		if exitCode != 0 {
+			fields = appendFailureOutput(fields, out)
+		}
 		log.Warn("agent done", fields...)
 		return
 	}
 	log.Info("agent done", fields...)
+}
+
+func appendFailureOutput(fields []logging.Field, out AgentDoneOutput) []logging.Field {
+	stderr := strings.TrimSpace(out.Stderr)
+	summary := strings.TrimSpace(out.Summary)
+	stdout := strings.TrimSpace(out.Stdout)
+
+	if stderr != "" {
+		fields = append(fields, logging.F("stderr", truncateForLog(stderr)))
+	}
+	if summary != "" && summary != stderr {
+		fields = append(fields, logging.F("result", truncateForLog(summary)))
+	}
+	if stderr == "" && summary == "" && stdout != "" {
+		fields = append(fields, logging.F("stdout", truncateForLog(stdout)))
+	}
+	return fields
+}
+
+func truncateForLog(s string) string {
+	if len(s) <= logOutputMaxLen {
+		return s
+	}
+	return s[:logOutputMaxLen] + fmt.Sprintf("…(%d bytes total)", len(s))
 }
 
 // RedactArgs returns CLI args safe for debug logging.
