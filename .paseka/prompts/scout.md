@@ -21,6 +21,9 @@ Requested intent: {{.IntentRaw}}{{end}}
 ## Mission guidance
 {{if eq .Intent "plan"}}
 {{template "scout-intent-plan" .}}
+{{else if eq .Intent "classify"}}
+{{template "scout-intent-classify" .}}
+{{template "scout-emit-classify" .}}
 {{else if eq .Intent "triage"}}
 {{template "scout-intent-triage" .}}
 {{else}}

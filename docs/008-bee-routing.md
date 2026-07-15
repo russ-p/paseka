@@ -164,7 +164,7 @@ Narrative `INSIGHT` events are optional and do not satisfy completion contracts.
 
 Bee `subscribes` imply `Adapter.Run()` dispatch. **Auto-invite** is separate colony choreography: when a bus event matches, `paseka run` publishes a pending `session.invite` for Beekeeper accept/reject.
 
-**`payload.decision` vs routing:** Colony events may carry a string tag such as `payload.decision`. Colony rules may match it via `auto_invites.match.decision`. That is distinct from (1) bee **`subscribes`** dispatch (`type` + `payload.kind` → AFK run) and (2) glossary **Flight Route** — the NATS subject (`events.<EventType>[.<kind>]`, §3).
+**`payload.decision` vs routing:** On colony events (e.g. `feature.classified`), `payload.decision` is a **classification tag** on the branch (`grill`, `plan`, …). Colony rules may match it via `auto_invites.match.decision`. That is distinct from (1) bee **`subscribes`** dispatch (`type` + `payload.kind` → AFK run) and (2) glossary **Flight Route** — the NATS subject (`events.<EventType>[.<kind>]`, §3). See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
 
 Rules live in **`.paseka/colony.yaml`** (not bee YAML). Implementation: [`internal/colony/invite_rules.go`](../internal/colony/invite_rules.go), [`internal/invites/auto_invite.go`](../internal/invites/auto_invite.go), [`internal/runtime/invite_publisher.go`](../internal/runtime/invite_publisher.go).
 
@@ -172,32 +172,32 @@ Rules live in **`.paseka/colony.yaml`** (not bee YAML). Implementation: [`intern
 auto_invites:
   - when:
       type: SIGNAL
-      kind: review.needed
+      kind: feature.classified
     match:
-      decision: session
+      decision: grill
     invite:
       bee: { from: bee, default: drone }
       intent: { from: intent, default: grilling }
       task:
-        from_trace_kind: review.requested
+        from_trace_kind: feature.requested
         from_trace_field: title
-        prefix: "Review: "
+        prefix: "Grill feature: "
         fallback_from: rationale
-        default: Review item
+        default: Grill feature
       status: pending
       done_when:
-        when: { type: SIGNAL, kind: doc.ready }
+        when: { type: SIGNAL, kind: spec.ready }
         require_file: { from: ref }
         set_artifact_ref: { from: ref }
     dedupe: [bee, intent]
   - when:
       type: SIGNAL
-      kind: doc.ready
+      kind: spec.ready
     invite:
       bee: { default: drone }
       intent: { default: breakdown }
       artifactRef: { from: ref }
-      task: { from: ref, prefix: "Break down ", default: Break down doc }
+      task: { from: ref, prefix: "Break down ", default: Break down spec }
       status: pending
     dedupe: [intent, artifactRef]
 ```
@@ -212,7 +212,7 @@ auto_invites:
 | `invite.done_when` | Optional completion contract persisted on the invite (see §8) |
 | `dedupe` | Skip when a **pending** invite on the trace matches those invite fields |
 
-`paseka init` leaves `auto_invites` empty. With **empty** `auto_invites`, no auto-invite runs. See [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
+`paseka init` seeds the grill and breakdown rules above (feature ideation reference). With **empty** `auto_invites`, no auto-invite runs. See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md) and [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
 
 ---
 
@@ -224,7 +224,7 @@ An invite is a **work contract**: required `task` (input) plus optional `done_wh
 invite:
   task: { ... }
   done_when:
-    when: { type: SIGNAL, kind: doc.ready }
+    when: { type: SIGNAL, kind: spec.ready }
     match: { optional: equality }
     require_file: { from: ref }
     set_artifact_ref: { from: ref }

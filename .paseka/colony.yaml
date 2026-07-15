@@ -1,3 +1,52 @@
 slug: paseka
 defaults:
     prompt_template: default.md
+auto_invites:
+    - when:
+        type: SIGNAL
+        kind: feature.classified
+      match:
+        decision: grill
+      invite:
+        bee:
+            from: bee
+            default: drone
+        intent:
+            from: intent
+            default: grilling
+        task:
+            from_trace_kind: feature.requested
+            from_trace_field: title
+            prefix: "Grill feature: "
+            fallback_from: rationale
+            default: Grill feature
+        status: pending
+        done_when:
+            when:
+                type: SIGNAL
+                kind: spec.ready
+            require_file:
+                from: ref
+            set_artifact_ref:
+                from: ref
+      dedupe:
+        - bee
+        - intent
+    - when:
+        type: SIGNAL
+        kind: spec.ready
+      invite:
+        bee:
+            default: drone
+        intent:
+            default: breakdown
+        artifactRef:
+            from: ref
+        task:
+            from: ref
+            prefix: "Break down "
+            default: Break down spec
+        status: pending
+      dedupe:
+        - intent
+        - artifactRef
