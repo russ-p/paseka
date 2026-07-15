@@ -6,7 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
@@ -417,6 +420,128 @@ func (a *api) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, view)
+}
+
+func (a *api) handleInvites(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	status := r.URL.Query().Get("status")
+	list, err := ListInvites(a.ctx, status)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, list)
+}
+
+func (a *api) handleInviteByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/invites/")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+	parts := strings.Split(path, "/")
+	inviteID := parts[0]
+	if inviteID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if len(parts) == 1 {
+		http.NotFound(w, r)
+		return
+	}
+	action := parts[1]
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	switch action {
+	case "accept":
+		a.acceptInvite(w, r, inviteID)
+	case "reject":
+		a.rejectInvite(w, r, inviteID)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (a *api) acceptInvite(w http.ResponseWriter, r *http.Request, inviteID string) {
+	client, err := bus.ConnectColony(a.ctx, false)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if client == nil {
+		http.Error(w, "nats url not configured", http.StatusServiceUnavailable)
+		return
+	}
+	defer client.Close()
+
+	svc := &invites.Service{
+		Colony:   a.ctx,
+		Bus:      client,
+		Sessions: a.sessions,
+	}
+	res, err := svc.Accept(r.Context(), inviteID, false)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	view, ok, err := GetSession(a.ctx, a.sessions, res.SessionID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !ok {
+		view = SessionView{
+			SessionID: res.SessionID,
+			TraceID:   res.TraceID,
+			Bee:       res.Invite.Bee,
+			State:     string(adapters.SessionActive),
+			Active:    true,
+		}
+	}
+	writeJSON(w, map[string]any{
+		"inviteId":  res.Invite.InviteID,
+		"traceId":   res.TraceID,
+		"sessionId": res.SessionID,
+		"session":   view,
+	})
+}
+
+func (a *api) rejectInvite(w http.ResponseWriter, r *http.Request, inviteID string) {
+	client, err := bus.ConnectColony(a.ctx, false)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if client == nil {
+		http.Error(w, "nats url not configured", http.StatusServiceUnavailable)
+		return
+	}
+	defer client.Close()
+
+	svc := &invites.Service{Colony: a.ctx, Bus: client}
+	invite, err := svc.Reject(r.Context(), inviteID, false)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, InviteView{
+		InviteID:    invite.InviteID,
+		TraceID:     invite.TraceID,
+		Bee:         invite.Bee,
+		Intent:      invite.Intent,
+		Task:        invite.Task,
+		Status:      invite.Status,
+		ArtifactRef: invite.ArtifactRef,
+		SessionID:   invite.SessionID,
+		CreatedAt:   invite.CreatedAt,
+		UpdatedAt:   invite.UpdatedAt,
+	})
 }
 
 func (a *api) handleSessionByID(w http.ResponseWriter, r *http.Request) {

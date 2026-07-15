@@ -9,6 +9,8 @@ Paseka supports two ways to run a bee:
 
 Interactive sessions are a **parallel runtime path**. They do not change the existing `Adapter.Run()` contract used for AFK runs.
 
+**Honey reserve:** `paseka invite accept` consumes **1 honey** from the trace reserve (`energy.consume` / `session.start`). Ad-hoc `paseka bee chat` does **not** consume honey. Top up with `paseka energy add --trace <id> --amount <n>` when accept fails with honey exhausted.
+
 See also: [003-architecture.md](003-architecture.md) (adapters, runs layout), [001-brief.md](001-brief.md) (HITL paradigm).
 
 ---

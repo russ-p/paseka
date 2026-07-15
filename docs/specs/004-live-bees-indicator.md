@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented.** Header panel, `GET /api/agents`, AFK PID persistence in `status.json`, and `ProcessAlive` liveness checks are shipped in Queen Console.
+**Implemented.** Header panel, `GET /api/agents`, AFK PID persistence in `status.json`, and `ProcessAlive` liveness checks are shipped in Queen Console. Part of the [002](./002-queen-console-mvp.md) MVP baseline.
 
 ## Purpose
 

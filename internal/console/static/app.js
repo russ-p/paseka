@@ -2,6 +2,7 @@ const state = {
   tab: 'dashboard',
   bees: [],
   sessions: [],
+  invites: [],
   runs: [],
   traces: [],
   selectedTraceId: null,
@@ -158,6 +159,7 @@ const el = {
   launchError: document.getElementById('launch-error'),
   launchBtn: document.getElementById('launch-btn'),
   sessionList: document.getElementById('session-list'),
+  inviteList: document.getElementById('invite-list'),
   refreshBtn: document.getElementById('refresh-btn'),
   detailEmpty: document.getElementById('detail-empty'),
   detailMeta: document.getElementById('detail-meta'),
@@ -350,6 +352,8 @@ function setTab(tab) {
   }
   if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
+  } else if (tab === 'sessions') {
+    loadInvites().catch(console.error);
   } else if (tab === 'runs' && state.selectedRunKey) {
     startRunPolling();
   } else if (tab === 'dashboard') {
@@ -433,6 +437,46 @@ function renderBees() {
   }
   syncSessionIntents();
   syncTaskIntents();
+}
+
+function renderInvites() {
+  if (!el.inviteList) return;
+  el.inviteList.innerHTML = '';
+  if (!state.invites.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No pending invites.';
+    el.inviteList.appendChild(li);
+    return;
+  }
+  for (const inv of state.invites) {
+    const li = document.createElement('li');
+    li.className = 'session-item';
+    const task = inv.task && inv.task.length > 64 ? inv.task.slice(0, 61) + '...' : (inv.task || '');
+    const acceptLabel = inv.intent === 'breakdown' ? 'Start breakdown' : 'Accept';
+    const artifactLine = inv.artifactRef
+      ? `<div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${escapeHtml(inv.artifactRef)}</div>`
+      : '';
+    li.innerHTML = `
+      <div class="top">
+        <span class="bee">${escapeHtml(inv.bee)}${inv.intent ? ' · ' + escapeHtml(inv.intent) : ''}</span>
+        <span class="id">${escapeHtml(inv.inviteId)}</span>
+      </div>
+      <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${escapeHtml(inv.traceId)} · ${escapeHtml(task)}</div>
+      ${artifactLine}
+      <div class="row" style="margin-top:0.5rem;gap:0.5rem">
+        <button type="button" class="secondary invite-accept-btn" data-id="${escapeHtml(inv.inviteId)}">${escapeHtml(acceptLabel)}</button>
+        <button type="button" class="secondary invite-reject-btn" data-id="${escapeHtml(inv.inviteId)}">Reject</button>
+      </div>
+    `;
+    el.inviteList.appendChild(li);
+  }
+  for (const btn of el.inviteList.querySelectorAll('.invite-accept-btn')) {
+    btn.addEventListener('click', () => acceptInvite(btn.dataset.id));
+  }
+  for (const btn of el.inviteList.querySelectorAll('.invite-reject-btn')) {
+    btn.addEventListener('click', () => rejectInvite(btn.dataset.id));
+  }
 }
 
 function renderSessions() {
@@ -1590,6 +1634,30 @@ async function loadBees() {
   renderBees();
 }
 
+async function loadInvites() {
+  state.invites = await api('/api/invites');
+  renderInvites();
+}
+
+async function acceptInvite(inviteId) {
+  try {
+    const res = await api(`/api/invites/${encodeURIComponent(inviteId)}/accept`, { method: 'POST' });
+    await loadInvites();
+    await loadSessions();
+    if (res.sessionId) {
+      await selectSession(res.sessionId);
+    }
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    alert(msg.includes('honey reserve') ? `${msg}\n\nTop up with: paseka energy add --trace <id> --amount 1` : msg);
+  }
+}
+
+async function rejectInvite(inviteId) {
+  await api(`/api/invites/${encodeURIComponent(inviteId)}/reject`, { method: 'POST' });
+  await loadInvites();
+}
+
 async function loadSessions() {
   state.sessions = await api('/api/sessions');
   renderSessions();
@@ -1719,7 +1787,10 @@ el.tabTraces.addEventListener('click', () => setTab('traces'));
 el.tabTimeline.addEventListener('click', () => setTab('timeline'));
 el.tabTasks.addEventListener('click', () => setTab('tasks'));
 el.tabReviews.addEventListener('click', () => setTab('reviews'));
-el.tabSessions.addEventListener('click', () => setTab('sessions'));
+el.tabSessions.addEventListener('click', () => {
+  setTab('sessions');
+  loadInvites().catch(console.error);
+});
 el.tabRuns.addEventListener('click', () => {
   setTab('runs');
   loadRuns().catch(console.error);
@@ -1931,6 +2002,7 @@ el.launchForm.addEventListener('submit', async (ev) => {
 });
 
 el.refreshBtn.addEventListener('click', () => {
+  loadInvites().catch(console.error);
   loadSessions().catch(console.error);
 });
 
@@ -2015,6 +2087,7 @@ async function init() {
     await loadHeaderStatus();
     startRuntimePolling();
     await loadBees();
+    await loadInvites();
     await loadSessions();
     await loadRuns();
     setTab('dashboard');
