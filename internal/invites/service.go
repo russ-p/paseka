@@ -329,5 +329,6 @@ func entryFromPayload(traceID string, payload protocol.SessionInvitePayload) col
 		Task:        payload.Task,
 		Status:      status,
 		ArtifactRef: payload.ArtifactRef,
+		DoneWhen:    doneWhenToColony(payload.DoneWhen),
 	}
 }

@@ -185,6 +185,10 @@ auto_invites:
         fallback_from: rationale
         default: Grill feature
       status: pending
+      done_when:
+        when: { type: SIGNAL, kind: spec.ready }
+        require_file: { from: ref }
+        set_artifact_ref: { from: ref }
     dedupe: [bee, intent]
   - when:
       type: SIGNAL
@@ -205,38 +209,35 @@ auto_invites:
 | `invite.*.from` / `default` | Copy string from trigger payload or fallback |
 | `invite.task.from_trace_*` | Latest prior trace event with that `kind`; read field |
 | `invite.task.fallback_from` | Field on trigger payload if trace lookup fails |
+| `invite.done_when` | Optional completion contract persisted on the invite (see §8) |
 | `dedupe` | Skip when a **pending** invite on the trace matches those invite fields |
 
 `paseka init` seeds the grill and breakdown rules above. With **empty** `auto_invites`, no auto-invite runs. See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
 
 ---
 
-## 8. Colony `invite_completion` (artifact handoff)
+## 8. Invite `done_when` (completion contract)
 
-When a bus event signals that a durable file artifact is ready, **`invite_completion`** rules update matching accepted/incomplete invites to `completed` (file exists at `ref`) or `incomplete` (missing file). Implementation: [`internal/colony/invite_rules.go`](../internal/colony/invite_rules.go), [`internal/invites/completion.go`](../internal/invites/completion.go), [`internal/runtime/invite_completer.go`](../internal/runtime/invite_completer.go).
+An invite is a **work contract**: required `task` (input) plus optional `done_when` (expected result). When a bus event matches a persisted invite's `done_when`, `paseka run` updates that invite by `inviteId` to `completed` (file exists at `ref`) or `incomplete` (missing file). Implementation: [`internal/invites/completion.go`](../internal/invites/completion.go), [`internal/runtime/invite_completer.go`](../internal/runtime/invite_completer.go).
 
 ```yaml
-invite_completion:
-  - when:
-      type: SIGNAL
-      kind: spec.ready
-    match_invite:
-      intent: grilling
-    require_file:
-      from: ref
-    set_artifact_ref:
-      from: ref
+invite:
+  task: { ... }
+  done_when:
+    when: { type: SIGNAL, kind: spec.ready }
+    match: { optional: equality }
+    require_file: { from: ref }
+    set_artifact_ref: { from: ref }
 ```
 
 | Field | Meaning |
 | ----- | ------- |
-| `when` | Same as `auto_invites`: `type` + optional `kind` |
-| `match` | Optional AND equality on trigger payload string fields |
-| `match_invite` | Select invite on same trace by `intent` and/or `bee` (at least one required) |
-| `require_file.from` | Payload field with repo-relative path; file must exist under colony root or trace worktree |
-| `set_artifact_ref.from` | Copy payload field into invite `artifactRef` on success |
+| `done_when.when` | Same as `auto_invites.when`: `type` + optional `kind` |
+| `done_when.match` | Optional AND equality on trigger payload string fields |
+| `done_when.require_file.from` | Payload field with repo-relative path; file must exist under colony root or trace worktree |
+| `done_when.set_artifact_ref.from` | Copy payload field into invite `artifactRef` on success |
 
-`paseka init` seeds the grilling completion rule above. With **empty** `invite_completion`, no bus-driven invite completion runs (session-end `incomplete` still applies).
+Only **accepted** or **incomplete** invites with a `doneWhen` on the same trace are evaluated. Without `done_when`, bus-driven completion does not run (session-end `incomplete` still applies).
 
 ---
 

@@ -124,6 +124,9 @@ func TestAutoInviteFromEventGrill(t *testing.T) {
 	if invites[0].Task != "Grill feature: My idea" {
 		t.Fatalf("task = %q", invites[0].Task)
 	}
+	if invites[0].DoneWhen == nil || invites[0].DoneWhen.When.Kind != "spec.ready" {
+		t.Fatalf("doneWhen = %#v", invites[0].DoneWhen)
+	}
 }
 
 func TestAutoInviteFromEventIdempotent(t *testing.T) {

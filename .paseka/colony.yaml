@@ -21,6 +21,14 @@ auto_invites:
             fallback_from: rationale
             default: Grill feature
         status: pending
+        done_when:
+            when:
+                type: SIGNAL
+                kind: spec.ready
+            require_file:
+                from: ref
+            set_artifact_ref:
+                from: ref
       dedupe:
         - bee
         - intent
@@ -42,13 +50,3 @@ auto_invites:
       dedupe:
         - intent
         - artifactRef
-invite_completion:
-    - when:
-        type: SIGNAL
-        kind: spec.ready
-      match_invite:
-        intent: grilling
-      require_file:
-        from: ref
-      set_artifact_ref:
-        from: ref

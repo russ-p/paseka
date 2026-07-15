@@ -20,6 +20,15 @@ type AutoInviteInviteSpec struct {
 	Task        InviteTaskField   `yaml:"task"`
 	Status      string            `yaml:"status,omitempty"`
 	ArtifactRef InviteStringField `yaml:"artifactRef,omitempty"`
+	DoneWhen    *InviteDoneWhen   `yaml:"done_when,omitempty"`
+}
+
+// InviteDoneWhen declares when an accepted invite is completed or marked incomplete.
+type InviteDoneWhen struct {
+	When           EventRule         `yaml:"when"`
+	Match          map[string]string `yaml:"match,omitempty"`
+	RequireFile    InviteStringField `yaml:"require_file"`
+	SetArtifactRef InviteStringField `yaml:"set_artifact_ref,omitempty"`
 }
 
 // InviteStringField copies a string from the trigger payload or uses a default.
@@ -36,21 +45,6 @@ type InviteTaskField struct {
 	FallbackFrom   string `yaml:"fallback_from,omitempty"`
 	From           string `yaml:"from,omitempty"`
 	Default        string `yaml:"default,omitempty"`
-}
-
-// InviteCompletionRule updates invite status when a bus event matches.
-type InviteCompletionRule struct {
-	When           EventRule         `yaml:"when"`
-	Match          map[string]string `yaml:"match,omitempty"`
-	MatchInvite    InviteMatchSpec   `yaml:"match_invite"`
-	RequireFile    InviteStringField `yaml:"require_file"`
-	SetArtifactRef InviteStringField `yaml:"set_artifact_ref,omitempty"`
-}
-
-// InviteMatchSpec selects invites on the same trace by field equality.
-type InviteMatchSpec struct {
-	Intent string `yaml:"intent,omitempty"`
-	Bee    string `yaml:"bee,omitempty"`
 }
 
 // DefaultAutoInviteRules returns the stock ideation rules for new colonies.
@@ -72,6 +66,11 @@ func DefaultAutoInviteRules() []AutoInviteRule {
 					Default:        "Grill feature",
 				},
 				Status: "pending",
+				DoneWhen: &InviteDoneWhen{
+					When:           EventRule{Type: "SIGNAL", Kind: "spec.ready"},
+					RequireFile:    InviteStringField{From: "ref"},
+					SetArtifactRef: InviteStringField{From: "ref"},
+				},
 			},
 			Dedupe: []string{"bee", "intent"},
 		},
@@ -95,20 +94,6 @@ func DefaultAutoInviteRules() []AutoInviteRule {
 	}
 }
 
-// DefaultInviteCompletionRules returns stock invite completion rules for new colonies.
-func DefaultInviteCompletionRules() []InviteCompletionRule {
-	return []InviteCompletionRule{
-		{
-			When: EventRule{Type: "SIGNAL", Kind: "spec.ready"},
-			MatchInvite: InviteMatchSpec{
-				Intent: "grilling",
-			},
-			RequireFile:    InviteStringField{From: "ref"},
-			SetArtifactRef: InviteStringField{From: "ref"},
-		},
-	}
-}
-
 // ValidateAutoInvites checks colony-level auto-invite rules.
 func (c Colony) ValidateAutoInvites() error {
 	for i, rule := range c.AutoInvites {
@@ -117,6 +102,11 @@ func (c Colony) ValidateAutoInvites() error {
 		}
 		if err := rule.Invite.validate(i); err != nil {
 			return err
+		}
+		if rule.Invite.DoneWhen != nil {
+			if err := rule.Invite.DoneWhen.validate(i); err != nil {
+				return err
+			}
 		}
 		for j, key := range rule.Dedupe {
 			switch strings.TrimSpace(key) {
@@ -129,18 +119,12 @@ func (c Colony) ValidateAutoInvites() error {
 	return nil
 }
 
-// ValidateInviteCompletion checks colony-level invite completion rules.
-func (c Colony) ValidateInviteCompletion() error {
-	for i, rule := range c.InviteCompletion {
-		if _, err := rule.When.EventType(); err != nil {
-			return fmt.Errorf("colony: invite_completion[%d].when: %w", i, err)
-		}
-		if strings.TrimSpace(rule.MatchInvite.Intent) == "" && strings.TrimSpace(rule.MatchInvite.Bee) == "" {
-			return fmt.Errorf("colony: invite_completion[%d].match_invite: intent or bee required", i)
-		}
-		if strings.TrimSpace(rule.RequireFile.From) == "" {
-			return fmt.Errorf("colony: invite_completion[%d].require_file.from: required", i)
-		}
+func (d InviteDoneWhen) validate(ruleIdx int) error {
+	if _, err := d.When.EventType(); err != nil {
+		return fmt.Errorf("colony: auto_invites[%d].invite.done_when.when: %w", ruleIdx, err)
+	}
+	if strings.TrimSpace(d.RequireFile.From) == "" {
+		return fmt.Errorf("colony: auto_invites[%d].invite.done_when.require_file.from: required", ruleIdx)
 	}
 	return nil
 }

@@ -12,20 +12,20 @@ import (
 	"github.com/paseka/paseka/internal/protocol"
 )
 
-// MatchInviteCompletion reports whether ev matches the colony invite-completion rule.
-func MatchInviteCompletion(ev protocol.Event, rule colony.InviteCompletionRule) bool {
+// MatchDoneWhen reports whether ev matches an invite completion contract.
+func MatchDoneWhen(ev protocol.Event, doneWhen colony.InviteDoneWhen) bool {
 	kind := protocol.PayloadKind(ev.Payload)
-	if !rule.When.Matches(ev.Type, kind) {
+	if !doneWhen.When.Matches(ev.Type, kind) {
 		return false
 	}
-	if len(rule.Match) == 0 {
+	if len(doneWhen.Match) == 0 {
 		return true
 	}
 	payload, err := payloadMap(ev.Payload)
 	if err != nil {
 		return false
 	}
-	for key, want := range rule.Match {
+	for key, want := range doneWhen.Match {
 		got, _ := payloadString(payload, key)
 		if strings.TrimSpace(got) != strings.TrimSpace(want) {
 			return false
@@ -34,11 +34,11 @@ func MatchInviteCompletion(ev protocol.Event, rule colony.InviteCompletionRule) 
 	return true
 }
 
-// CompleteFromEvent applies matching invite_completion rules to update invite status.
+// CompleteFromEvent evaluates persisted invite done_when contracts on the trace.
 // Returns the published status event (if any) and true when an invite was updated.
-func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event, rules []colony.InviteCompletionRule) (protocol.Event, bool, error) {
+func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event) (protocol.Event, bool, error) {
 	traceID := strings.TrimSpace(ev.TraceID)
-	if traceID == "" || len(rules) == 0 {
+	if traceID == "" {
 		return protocol.Event{}, false, nil
 	}
 
@@ -47,26 +47,32 @@ func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event, rule
 		return protocol.Event{}, false, nil
 	}
 
-	for _, rule := range rules {
-		if !MatchInviteCompletion(ev, rule) {
+	entries, err := colony.ListInvites(s.Colony.Slug, "", traceID)
+	if err != nil {
+		return protocol.Event{}, false, err
+	}
+
+	for _, invite := range entries {
+		if invite.DoneWhen == nil {
 			continue
 		}
-		refField := strings.TrimSpace(rule.RequireFile.From)
+		switch invite.Status {
+		case colony.InviteStatusAccepted, colony.InviteStatusIncomplete:
+		default:
+			continue
+		}
+		if !MatchDoneWhen(ev, *invite.DoneWhen) {
+			continue
+		}
+
+		refField := strings.TrimSpace(invite.DoneWhen.RequireFile.From)
 		ref, _ := payloadString(payload, refField)
 		ref = strings.TrimSpace(ref)
-
-		invite, ok, err := findMatchingInvite(s.Colony.Slug, traceID, rule.MatchInvite)
-		if err != nil {
-			return protocol.Event{}, false, err
-		}
-		if !ok {
-			continue
-		}
 
 		status := colony.InviteStatusIncomplete
 		if ref != "" && artifactRefExists(s.Colony.ColonyRoot, traceID, ref) {
 			status = colony.InviteStatusCompleted
-			if from := strings.TrimSpace(rule.SetArtifactRef.From); from != "" {
+			if from := strings.TrimSpace(invite.DoneWhen.SetArtifactRef.From); from != "" {
 				if artifactRef, ok := payloadString(payload, from); ok {
 					invite.ArtifactRef = strings.TrimSpace(artifactRef)
 				}
@@ -84,30 +90,6 @@ func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event, rule
 		return published, true, nil
 	}
 	return protocol.Event{}, false, nil
-}
-
-func findMatchingInvite(slug, traceID string, match colony.InviteMatchSpec) (colony.InviteEntry, bool, error) {
-	entries, err := colony.ListInvites(slug, "", traceID)
-	if err != nil {
-		return colony.InviteEntry{}, false, err
-	}
-	wantIntent := strings.TrimSpace(match.Intent)
-	wantBee := strings.TrimSpace(match.Bee)
-	for _, inv := range entries {
-		switch inv.Status {
-		case colony.InviteStatusAccepted, colony.InviteStatusIncomplete:
-		default:
-			continue
-		}
-		if wantIntent != "" && strings.TrimSpace(inv.Intent) != wantIntent {
-			continue
-		}
-		if wantBee != "" && strings.TrimSpace(inv.Bee) != wantBee {
-			continue
-		}
-		return inv, true, nil
-	}
-	return colony.InviteEntry{}, false, nil
 }
 
 func artifactRefExists(colonyRoot, traceID, ref string) bool {
@@ -136,6 +118,7 @@ func (s *Service) publishInviteStatusEvent(ctx context.Context, invite colony.In
 		Task:        invite.Task,
 		Status:      protocol.InviteStatus(invite.Status),
 		ArtifactRef: invite.ArtifactRef,
+		DoneWhen:    doneWhenToProtocol(invite.DoneWhen),
 	}
 	raw, err := marshalInvitePayload(payload)
 	if err != nil {

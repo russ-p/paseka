@@ -68,6 +68,9 @@ func BuildInvite(ev protocol.Event, rule colony.AutoInviteRule, traceEvents []pr
 	if artifactRef := resolveStringField(spec.ArtifactRef, payload); artifactRef != "" {
 		out.ArtifactRef = artifactRef
 	}
+	if spec.DoneWhen != nil {
+		out.DoneWhen = doneWhenToProtocol(spec.DoneWhen)
+	}
 	return out, nil
 }
 
@@ -188,5 +191,43 @@ func payloadString(payload map[string]any, key string) (string, bool) {
 		return s.String(), true
 	default:
 		return fmt.Sprint(v), true
+	}
+}
+
+func doneWhenToProtocol(dw *colony.InviteDoneWhen) *protocol.InviteDoneWhen {
+	if dw == nil {
+		return nil
+	}
+	return &protocol.InviteDoneWhen{
+		When: protocol.InviteWhen{
+			Type: dw.When.Type,
+			Kind: dw.When.Kind,
+		},
+		Match: dw.Match,
+		RequireFile: protocol.InviteFieldRef{
+			From: dw.RequireFile.From,
+		},
+		SetArtifactRef: protocol.InviteFieldRef{
+			From: dw.SetArtifactRef.From,
+		},
+	}
+}
+
+func doneWhenToColony(dw *protocol.InviteDoneWhen) *colony.InviteDoneWhen {
+	if dw == nil {
+		return nil
+	}
+	return &colony.InviteDoneWhen{
+		When: colony.EventRule{
+			Type: dw.When.Type,
+			Kind: dw.When.Kind,
+		},
+		Match: dw.Match,
+		RequireFile: colony.InviteStringField{
+			From: dw.RequireFile.From,
+		},
+		SetArtifactRef: colony.InviteStringField{
+			From: dw.SetArtifactRef.From,
+		},
 	}
 }

@@ -14,12 +14,11 @@ const pasekaDir = ".paseka"
 
 // Colony is the project-local manifest under .paseka/colony.yaml.
 type Colony struct {
-	Slug             string                 `yaml:"slug"`
-	Defaults         Defaults               `yaml:"defaults"`
-	NATS             ColonyNATS             `yaml:"nats"`
-	Sectors          map[string]Sector      `yaml:"sectors,omitempty"`
-	AutoInvites      []AutoInviteRule       `yaml:"auto_invites,omitempty"`
-	InviteCompletion []InviteCompletionRule `yaml:"invite_completion,omitempty"`
+	Slug        string            `yaml:"slug"`
+	Defaults    Defaults          `yaml:"defaults"`
+	NATS        ColonyNATS        `yaml:"nats"`
+	Sectors     map[string]Sector `yaml:"sectors,omitempty"`
+	AutoInvites []AutoInviteRule  `yaml:"auto_invites,omitempty"`
 }
 
 // ColonyNATS holds project-local NATS overrides.
@@ -82,9 +81,6 @@ func LoadColony(colonyRoot string) (Colony, error) {
 		return Colony{}, fmt.Errorf("colony: parse manifest: %w", err)
 	}
 	if err := c.ValidateAutoInvites(); err != nil {
-		return Colony{}, err
-	}
-	if err := c.ValidateInviteCompletion(); err != nil {
 		return Colony{}, err
 	}
 	return c, nil

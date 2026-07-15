@@ -37,6 +37,26 @@ type SessionInvitePayload struct {
 	Task        string          `json:"task"`
 	Status      InviteStatus    `json:"status"`
 	ArtifactRef string          `json:"artifactRef,omitempty"`
+	DoneWhen    *InviteDoneWhen `json:"doneWhen,omitempty"`
+}
+
+// InviteDoneWhen declares when an accepted invite is completed or marked incomplete.
+type InviteDoneWhen struct {
+	When           InviteWhen        `json:"when"`
+	Match          map[string]string `json:"match,omitempty"`
+	RequireFile    InviteFieldRef    `json:"requireFile"`
+	SetArtifactRef InviteFieldRef    `json:"setArtifactRef,omitempty"`
+}
+
+// InviteWhen identifies a bus event by type and optional payload.kind.
+type InviteWhen struct {
+	Type string `json:"type"`
+	Kind string `json:"kind,omitempty"`
+}
+
+// InviteFieldRef copies a string from a trigger payload field.
+type InviteFieldRef struct {
+	From string `json:"from,omitempty"`
 }
 
 // BeekeeperReadyPayload is emitted as SIGNAL with payload.kind=beekeeper.ready.

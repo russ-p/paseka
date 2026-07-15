@@ -16,7 +16,7 @@ Backlog items:
 - ~~**Phase 2** — Invite persistence, CLI `paseka invite *`, Console accept → session; validate `session.invite` / `beekeeper.ready` at the invite boundary.~~ **Done** — see [007-cli.md](007-cli.md) invite commands.
 - ~~**Phase 3** — Config-driven `auto_invites` in `colony.yaml` (default grill rule on `feature.classified` + `decision=grill`) while `paseka run` is up.~~ **Done** — reactor loops colony rules; no manual `invite record` for the grill step; empty `auto_invites` disables auto-invite.
 - ~~**Phase 4** — Hardening: grilling invite completion on `spec.ready` (file verify), `incomplete` on session end, 1 honey on `invite accept`, default `spec.ready` → breakdown auto-invite + Console UX.~~ **Done** — see spec § Phase 4 and [007-cli.md](007-cli.md).
-- ~~**Declarative invite completion / artifact verify** — `invite_completion` in `colony.yaml` replaces reactor-hardcoded grilling completion on `spec.ready`; file-at-`ref` verify + invite status updates are config-driven.~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §8.
+- ~~**Declarative invite completion / artifact verify** — `invite.done_when` on `auto_invites` rules; file-at-`ref` verify + invite status updates are contract-driven per invite.~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §8.
 - **Breaking:** `feature.classified` payload field renamed `route` → `decision` (no dual-read). Invite handoff field renamed `specRef` → `artifactRef` (CLI `--artifact-ref`, config `set_artifact_ref`).
 
 ### Replace `result.txt` with a clearer log artifact

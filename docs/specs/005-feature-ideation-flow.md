@@ -6,7 +6,7 @@
 
 ## Purpose
 
-**Reference colony choreography** — this spec documents one example flow (feature ideation) with colony-owned `SIGNAL` kinds (`feature.*`, `spec.ready`) and payload shapes. It is **not** platform runtime vocabulary: the reactor owns invites, `auto_invites`, `invite_completion`, bee `subscribes`, and the task ledger; colonies own colony kinds and the `decision` field on classification events. Custom flows use specialized bees, colony `SIGNAL` kinds, and `subscribes` / `auto_invites` / `invite_completion` rules — see [008-bee-routing.md](../008-bee-routing.md).
+**Reference colony choreography** — this spec documents one example flow (feature ideation) with colony-owned `SIGNAL` kinds (`feature.*`, `spec.ready`) and payload shapes. It is **not** platform runtime vocabulary: the reactor owns invites, `auto_invites`, bee `subscribes`, and the task ledger; colonies own colony kinds and the `decision` field on classification events. Custom flows use specialized bees, colony `SIGNAL` kinds, and `subscribes` / `auto_invites` rules — see [008-bee-routing.md](../008-bee-routing.md).
 
 Define how a raw feature idea becomes a durable specification and then a task ledger plan **without** a central orchestrator and **without** short-circuiting Human-in-the-Loop grilling.
 
@@ -70,7 +70,7 @@ On colony events such as `feature.classified`, **`payload.decision`** is a class
 
 Colony **`auto_invites`** rules may **match** on `decision` (e.g. `match.decision: grill`) to decide whether to publish a `session.invite` — that matching is platform routing; the payload field itself is only Scout's classification output.
 
-**Platform routing** stays bee `subscribes` + colony `auto_invites` + `invite_completion` ([008-bee-routing.md](../008-bee-routing.md)). **Choreography** is bees and rules reacting to `SIGNAL` kinds and payload fields — Scout emits `feature.classified` with a `decision`; invite rules, other bees, and Beekeeper react.
+**Platform routing** stays bee `subscribes` + colony `auto_invites` with `invite.done_when` ([008-bee-routing.md](../008-bee-routing.md)). **Choreography** is bees and rules reacting to `SIGNAL` kinds and payload fields — Scout emits `feature.classified` with a `decision`; invite rules, other bees, and Beekeeper react.
 
 ### 1. Two entry paths after `feature.requested`
 
@@ -359,42 +359,40 @@ auto_invites:
         fallback_from: rationale
         default: Grill feature
       status: pending
+      done_when:
+        when: { type: SIGNAL, kind: spec.ready }
+        require_file: { from: ref }
+        set_artifact_ref: { from: ref }
     dedupe: [bee, intent]
 ```
 
 Minimal behavior when the grill rule matches:
 
 1. Allocate `inviteId`.
-2. Publish `session.invite` (`pending`) with bee/intent/task mapped from the rule + trace history.
+2. Publish `session.invite` (`pending`) with bee/intent/task/done_when mapped from the rule + trace history.
 3. Project invite for Console/CLI.
 
 With **empty** `auto_invites`, classified events do **not** create invites (no Go hardcode).
 
-**Phase 4:** `paseka run` completes grilling invites via **`invite_completion`** rules when a matching artifact-handoff `SIGNAL` arrives (default: `spec.ready` with file at `ref`). Session end without a valid artifact marks accepted invites `incomplete`. `paseka invite accept` consumes **1 honey** from the trace reserve (`session.start`); `bee chat` stays exempt.
+**Phase 4:** `paseka run` completes accepted grilling invites when a bus event matches the invite's persisted **`done_when`** (default: `spec.ready` with file at `ref`). Session end without a valid artifact marks accepted invites `incomplete`. `paseka invite accept` consumes **1 honey** from the trace reserve (`session.start`); `bee chat` stays exempt.
 
 Default breakdown rule ships alongside the grill rule; Console shows **Start breakdown** for `intent=breakdown` invites.
 
 ### Invite completion (runtime, Phase 4)
 
-Evaluates **`invite_completion`** rules from `.paseka/colony.yaml`. When a bus event matches, reactor updates matching accepted/incomplete invites to `completed` (file at `ref` exists) or `incomplete` (missing file).
+Evaluates each accepted/incomplete invite's persisted **`done_when`** contract (from `auto_invites` at publish time). When a bus event matches, reactor updates that invite by `inviteId` to `completed` (file at `ref` exists) or `incomplete` (missing file).
 
-Default grilling completion rule (shipped in `paseka init` scaffold):
+Default grilling `done_when` (shipped inside the grill `auto_invites` rule):
 
 ```yaml
-# .paseka/colony.yaml
-invite_completion:
-  - when:
-      type: SIGNAL
-      kind: spec.ready
-    match_invite:
-      intent: grilling
-    require_file:
-      from: ref
-    set_artifact_ref:
-      from: ref
+# .paseka/colony.yaml — inside auto_invites[].invite
+done_when:
+  when: { type: SIGNAL, kind: spec.ready }
+  require_file: { from: ref }
+  set_artifact_ref: { from: ref }
 ```
 
-With **empty** `invite_completion`, no bus-driven invite completion runs (session-end `incomplete` still applies).
+Without `done_when` on an invite, no bus-driven completion runs for it (session-end `incomplete` still applies).
 
 ## Queen Console / CLI surfaces
 

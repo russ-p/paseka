@@ -11,8 +11,12 @@ import (
 	"github.com/paseka/paseka/internal/protocol"
 )
 
-func defaultCompletionRules() []colony.InviteCompletionRule {
-	return colony.DefaultInviteCompletionRules()
+func defaultGrillDoneWhen() *colony.InviteDoneWhen {
+	return &colony.InviteDoneWhen{
+		When:           colony.EventRule{Type: "SIGNAL", Kind: "spec.ready"},
+		RequireFile:    colony.InviteStringField{From: "ref"},
+		SetArtifactRef: colony.InviteStringField{From: "ref"},
+	}
 }
 
 func TestCompleteFromEventMarksCompleted(t *testing.T) {
@@ -35,6 +39,7 @@ func TestCompleteFromEventMarksCompleted(t *testing.T) {
 		Intent:   "grilling",
 		Task:     "Grill feature",
 		Status:   colony.InviteStatusAccepted,
+		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +53,7 @@ func TestCompleteFromEventMarksCompleted(t *testing.T) {
 		Payload: raw,
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +85,7 @@ func TestCompleteFromEventMissingFileIncomplete(t *testing.T) {
 		Intent:   "grilling",
 		Task:     "Grill feature",
 		Status:   colony.InviteStatusAccepted,
+		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +99,7 @@ func TestCompleteFromEventMissingFileIncomplete(t *testing.T) {
 		Payload: raw,
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +135,7 @@ func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 		Intent:   "grilling",
 		Task:     "Grill feature",
 		Status:   colony.InviteStatusIncomplete,
+		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +149,7 @@ func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 		Payload: raw,
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +165,7 @@ func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 	}
 }
 
-func TestCompleteFromEventEmptyRulesNoOp(t *testing.T) {
+func TestCompleteFromEventNoDoneWhenNoOp(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
 	if err != nil {
@@ -176,16 +183,16 @@ func TestCompleteFromEventEmptyRulesNoOp(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"kind": "spec.ready", "ref": "docs/specs/x.md"})
 	ev := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, nil)
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
-		t.Fatal("expected no-op with empty rules")
+		t.Fatal("expected no-op without done_when")
 	}
 }
 
-func TestCompleteFromEventWrongIntentNoOp(t *testing.T) {
+func TestCompleteFromEventWrongDoneWhenNoOp(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
 	if err != nil {
@@ -204,18 +211,22 @@ func TestCompleteFromEventWrongIntentNoOp(t *testing.T) {
 		Bee:      "drone",
 		Intent:   "breakdown",
 		Status:   colony.InviteStatusAccepted,
+		DoneWhen: &colony.InviteDoneWhen{
+			When:        colony.EventRule{Type: "SIGNAL", Kind: "task.ready"},
+			RequireFile: colony.InviteStringField{From: "ref"},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(map[string]any{"kind": "spec.ready", "ref": "docs/specs/003-test.md"})
 	ev := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	_, ok, err := svc.CompleteFromEvent(context.Background(), ev, defaultCompletionRules())
+	_, ok, err := svc.CompleteFromEvent(context.Background(), ev)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
-		t.Fatal("expected no update for breakdown invite")
+		t.Fatal("expected no update for non-matching done_when")
 	}
 }
 
@@ -257,6 +268,16 @@ func TestDefaultAutoInviteRulesIncludeSpecReady(t *testing.T) {
 	}
 }
 
+func TestDefaultGrillRuleIncludesDoneWhen(t *testing.T) {
+	rules := colony.DefaultAutoInviteRules()
+	if rules[0].Invite.DoneWhen == nil {
+		t.Fatal("expected grill rule done_when")
+	}
+	if rules[0].Invite.DoneWhen.When.Kind != "spec.ready" {
+		t.Fatalf("done_when kind = %q", rules[0].Invite.DoneWhen.When.Kind)
+	}
+}
+
 func TestAutoInviteFromSpecReadyBreakdown(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colony.Init(colony.InitOptions{StartDir: repo})
@@ -293,5 +314,16 @@ func TestAutoInviteFromSpecReadyBreakdown(t *testing.T) {
 	}
 	if invites[0].Intent != "breakdown" || invites[0].ArtifactRef != "docs/specs/001-feature.md" {
 		t.Fatalf("invite = %#v", invites[0])
+	}
+}
+
+func TestBuildInviteIncludesDoneWhen(t *testing.T) {
+	ev, _ := classifiedEvent("grill", "")
+	payload, err := BuildInvite(ev, defaultGrillRules()[0], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.DoneWhen == nil || payload.DoneWhen.When.Kind != "spec.ready" {
+		t.Fatalf("doneWhen = %#v", payload.DoneWhen)
 	}
 }
