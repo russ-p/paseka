@@ -104,8 +104,8 @@ func DefaultAutoInviteRules() []AutoInviteRule {
 				"decision": "grill",
 			},
 			Invite: AutoInviteInviteSpec{
-				Bee:    InviteStringField{From: "bee", Default: "drone"},
-				Intent: InviteStringField{From: "intent", Default: "grilling"},
+				Bee:    InviteStringField{Default: "drone"},
+				Intent: InviteStringField{Default: "grilling"},
 				Task: InviteTaskField{
 					FromTraceKind:  "feature.requested",
 					FromTraceField: "title",

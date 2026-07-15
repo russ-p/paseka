@@ -176,8 +176,8 @@ auto_invites:
     match:
       decision: grill
     invite:
-      bee: { from: bee, default: drone }
-      intent: { from: intent, default: grilling }
+      bee: { default: drone }
+      intent: { default: grilling }
       task:
         from_trace_kind: feature.requested
         from_trace_field: title

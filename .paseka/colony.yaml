@@ -9,10 +9,8 @@ auto_invites:
         decision: grill
       invite:
         bee:
-            from: bee
             default: drone
         intent:
-            from: intent
             default: grilling
         task:
             from_trace_kind: feature.requested

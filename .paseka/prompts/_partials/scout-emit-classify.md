@@ -9,11 +9,11 @@ For classify, publish **only** these kinds. Do not emit `task.plan` or `task.rea
 
 ### `feature.classified` — one classification decision
 
-Emit **one** `SIGNAL/feature.classified` after classification. Set `decision`, `rationale`, and when the decision needs a next bee: `bee` + `intent`. `confidence` is optional and advisory.
+Emit **one** `SIGNAL/feature.classified` after classification. Set `decision` and `rationale`. Do **not** set `bee` / `intent` — who runs next is colony `auto_invites` (or Beekeeper), matching on `decision`. `confidence` is optional and advisory.
 
 ```bash
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"grill","bee":"drone","intent":"grilling","rationale":"Product idea without acceptance criteria; needs grilling before breakdown."}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"grill","rationale":"Product idea without acceptance criteria; needs grilling before breakdown."}}
 EOF
 ```
 
@@ -37,6 +37,6 @@ EOF
 
 ```bash
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Classified feature.requested as grill → drone grilling"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Classified feature.requested as grill"}}
 EOF
 ```

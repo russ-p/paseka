@@ -14,7 +14,7 @@ After shared understanding and writing the spec file, publish **only** these kin
 
 ```bash
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"spec.ready","ref":"docs/specs/006-live-bees-header.md","title":"Live bees header","next":{"bee":"drone","intent":"breakdown"}}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"spec.ready","ref":"docs/specs/006-live-bees-header.md","title":"Live bees header"}}
 EOF
 ```
 

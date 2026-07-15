@@ -202,8 +202,6 @@ Colony-owned kinds only. Platform invite payloads (`session.invite`, `beekeeper.
   "payload": {
     "kind": "feature.classified",
     "decision": "grill",
-    "bee": "drone",
-    "intent": "grilling",
     "confidence": 0.86,
     "rationale": "Product idea without acceptance criteria; needs grilling before breakdown."
   }
@@ -213,10 +211,11 @@ Colony-owned kinds only. Platform invite payloads (`session.invite`, `beekeeper.
 | Field | Required | Notes |
 | ----- | -------- | ----- |
 | `decision` | yes | **Classification tag**: `grill` \| `plan` \| `triage` \| `clarify` \| `reject` — not NATS subject or bee `subscribes` routing |
-| `bee` | when decision needs a next bee | e.g. `drone` |
-| `intent` | when decision needs intent | e.g. `grilling` |
 | `confidence` | no | Advisory; not enforced |
 | `rationale` | yes | Short human-readable reason |
+
+Do **not** put `bee` / `intent` on this payload — `auto_invites` (or Beekeeper) react to `decision` and supply invite bee/intent from rule defaults.
+
 
 ### `SIGNAL/spec.ready`
 
@@ -228,8 +227,7 @@ Colony-owned kinds only. Platform invite payloads (`session.invite`, `beekeeper.
   "payload": {
     "kind": "spec.ready",
     "ref": "docs/specs/004-live-bees-indicator.md",
-    "title": "Live bees indicator",
-    "next": { "bee": "drone", "intent": "breakdown" }
+    "title": "Live bees indicator"
   }
 }
 ```
@@ -238,7 +236,8 @@ Colony-owned kinds only. Platform invite payloads (`session.invite`, `beekeeper.
 | ----- | -------- | ----- |
 | `ref` | yes | Repo-relative path to the written spec |
 | `title` | no | Display title |
-| `next` | no | Suggested next bee/intent for invite publisher |
+
+Who runs next is **not** on this payload — colony `auto_invites` (or Beekeeper) react to `spec.ready` itself.
 
 ## Bee and prompt changes
 
@@ -282,8 +281,8 @@ auto_invites:
     match:
       decision: grill
     invite:
-      bee: { from: bee, default: drone }
-      intent: { from: intent, default: grilling }
+      bee: { default: drone }
+      intent: { default: grilling }
       task:
         from_trace_kind: feature.requested
         from_trace_field: title
@@ -335,7 +334,7 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 
 1. Beekeeper publishes `SIGNAL/feature.requested` with title/body; new `traceId`.
 2. Scout AFK `classify` runs (`direct` or manual `bee run`).
-3. Scout publishes `SIGNAL/feature.classified` (`decision=grill`, `bee=drone`, `intent=grilling`).
+3. Scout publishes `SIGNAL/feature.classified` (`decision=grill`).
 4. Colony `auto_invites` → pending `session.invite` for Drone grilling ([006](./006-human-gateway-invites.md)).
 5. Beekeeper later accepts → interactive Drone grilling session on the same `traceId`.
 6. Drone interviews one question at a time; Beekeeper answers until shared understanding.
@@ -352,6 +351,7 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 - Starting grilling automatically on `feature.classified` without Beekeeper accept.
 - Running breakdown without a readable `spec.ready.ref`.
 - Introducing a central “ideation orchestrator” process that sequences bees by role name.
+- Emitting `bee` / `intent` / `next` on colony classification or artifact events — Scout tags with `decision`; `auto_invites` owns who is invited.
 - Hardcoding `feature.*` / `spec.ready` in `internal/protocol` or reactor dispatch (colony contracts belong in prompts + this spec).
 - Hardcoding auto-invite choreography in Go (use `auto_invites` in `colony.yaml`).
 - Duplicating invite field tables / parking-lot mechanics in colony specs (link [006](./006-human-gateway-invites.md)).

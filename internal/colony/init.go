@@ -514,20 +514,10 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
    - triage — looks like bug, debt, or incident; not a new feature.
    - clarify — ambiguous whether feature vs bug; Beekeeper should choose next step.
    - reject — out of scope, duplicate, or non-actionable.
-3. Emit one SIGNAL/feature.classified with decision, rationale, and when the decision needs a next bee: bee + intent.
+3. Emit one SIGNAL/feature.classified with decision and rationale only (do not pick the next bee or intent — colony rules / Beekeeper react to decision).
 4. Optionally emit INSIGHT/run.summary with a one-line classification summary.
 5. Do not emit task.plan or task.ready when decision=grill.
 6. Do not emit task.plan unless decision=plan and the Task explicitly asks for a plan after classification.
-
-### Decision → next bee (when applicable)
-
-| decision | bee | intent |
-| -------- | --- | ------ |
-| grill | drone | grilling |
-| plan | omit or scout | plan |
-| triage | scout | triage |
-| clarify | omit | omit |
-| reject | omit | omit |
 `
 	scoutEmitClassifyPartial = `## Publish events (classify only)
 
@@ -540,10 +530,10 @@ For classify, publish only these kinds. Do not emit task.plan or task.ready when
 
 ### feature.classified — one classification decision
 
-Emit one SIGNAL/feature.classified after classification. Set decision, rationale, and when the decision needs a next bee: bee + intent. confidence is optional and advisory.
+Emit one SIGNAL/feature.classified after classification. Set decision and rationale. Do not set bee / intent — who runs next is colony auto_invites (or Beekeeper), matching on decision. confidence is optional and advisory.
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"grill","bee":"drone","intent":"grilling","rationale":"Product idea without acceptance criteria; needs grilling before breakdown."}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"grill","rationale":"Product idea without acceptance criteria; needs grilling before breakdown."}}
 EOF
 
 When decision=plan and the spec is already clear:
@@ -561,7 +551,7 @@ EOF
 ### run.summary — optional
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Classified feature.requested as grill → drone grilling"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Classified feature.requested as grill"}}
 EOF
 `
 	emitHowtoPartial = `When you need to publish a bus event during a run:
