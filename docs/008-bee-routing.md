@@ -4,6 +4,8 @@ Declarative `subscribes` and `publishes` in `.paseka/bees/<role>.yaml` describe 
 
 Implementation: [`internal/colony/routing.go`](../internal/colony/routing.go), [`internal/runtime/reactor.go`](../internal/runtime/reactor.go).
 
+For a static graph of how these rules connect in your colony config, see [spec 007: Colony EDA Topology](specs/007-colony-eda-topology.md) (Queen Console **Topology** tab and `paseka colony topology`) — observability only; routing semantics remain in this doc.
+
 ---
 
 ## 1. Principles
@@ -243,6 +245,7 @@ Only **accepted** or **incomplete** invites with a `doneWhen` on the same trace 
 
 ## 9. Related docs
 
+- [specs/007-colony-eda-topology.md](specs/007-colony-eda-topology.md) — config-derived EDA graph (Console Topology tab, `paseka colony topology`)
 - [005-task-ledger.md](005-task-ledger.md) — task lifecycle events
 - [003-architecture.md](003-architecture.md) — colony layout and adapters
 - [010-bee-config.md](010-bee-config.md) — full bee YAML schema (`role`, `adapter`, contracts, …)

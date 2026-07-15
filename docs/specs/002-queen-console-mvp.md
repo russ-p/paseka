@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented (MVP baseline).** Living baseline for Queen Console: `paseka console`, embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews (including final merge-diff preview), sessions (same-process browser PTY), runs, and the Live bees header panel ([004](./004-live-bees-indicator.md)).
+**Implemented (MVP baseline).** Living baseline for Queen Console: `paseka console`, embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews (including final merge-diff preview), sessions (same-process browser PTY), runs, Topology tab ([007](./007-colony-eda-topology.md)), and the Live bees header panel ([004](./004-live-bees-indicator.md)).
 
 Still deferred from this baseline:
 
@@ -17,7 +17,7 @@ Introduce a first Web UI for Paseka: **Queen Console**.
 
 The MVP should make the colony observable and operable from a browser without replacing the existing CLI-first runtime model.
 
-This spec is a living MVP baseline. It reflects the shipped Queen Console: `paseka console`, the embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews, sessions, and runs.
+This spec is a living MVP baseline. It reflects the shipped Queen Console: `paseka console`, the embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews, sessions, runs, and Topology ([007](./007-colony-eda-topology.md)).
 
 ## Goals
 
@@ -83,6 +83,7 @@ Implemented UI surfaces:
 - **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, final-merge worktree diff preview (`GET /api/traces/:traceId/merge-diff`), approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
 - **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, attach an in-browser xterm.js terminal over WebSocket for active sessions (with optional full-page Widen layout), poll transcript updates for completed sessions, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
+- **Topology**: config-derived colony EDA graph from bee `subscribes`/`publishes` and `auto_invites`; Mermaid render via vendored Mermaid.js; copy Mermaid source; works when runtime/NATS are stopped ([007](./007-colony-eda-topology.md)).
 - **Runtime panel**: start and stop the registered local hive runtime and poll runtime status.
 - **Live bees panel**: header indicator for live AFK adapter runs and interactive sessions (`GET /api/agents`, PID liveness via `ProcessAlive`).
 
@@ -176,7 +177,7 @@ Approve and reject actions follow the same rule: they call `internal/review.Appr
 
 ### MVP Screens
 
-The current MVP includes seven primary SPA tabs plus a global runtime panel.
+The current MVP includes eight primary SPA tabs plus a global runtime panel.
 
 #### 1. Dashboard
 
@@ -364,6 +365,18 @@ Implemented for same-process console sessions:
 
 Cross-process attach (session started by another `paseka` process or Ghostty window) remains deferred.
 
+#### 8. Topology
+
+The Topology tab renders a **static, config-derived** EDA graph: bee nodes, event-kind nodes, subscribe/publish edges, and `auto_invites` invite edges. Data comes from `GET /api/colony/topology` (same projection as `paseka colony topology`). Routing semantics live in [008](../008-bee-routing.md); graph shape and API are specified in [007](./007-colony-eda-topology.md).
+
+This page answers:
+
+- Which bees subscribe to or publish which event kinds?
+- What auto-invite rules connect events to bees?
+- What does the colony choreography look like at a glance?
+
+The tab loads on demand (no background poll). Mermaid source can be copied for docs and PRs.
+
 ### Review Queue
 
 Implemented in the Reviews tab. The queue lists review-gated tasks in `waiting_review` and supports browser approve/reject through the shared `internal/review` domain layer.
@@ -430,6 +443,7 @@ Implemented HTTP endpoints:
 - `POST /api/traces/:traceId/tasks/:taskId/start`
 - `GET /api/events`
 - `GET /api/bees` — interactive bees with `role`, `adapter`, `promptTemplate`, `worktree`, `intents`, `defaultIntent`
+- `GET /api/colony/topology` — config-derived EDA graph JSON + Mermaid string ([007](./007-colony-eda-topology.md))
 - `GET /api/sessions`
 - `POST /api/sessions`
 - `GET /api/sessions/:sessionId`
@@ -651,7 +665,18 @@ Includes:
 - vendored xterm.js UI in Sessions tab
 - resize, reconnect, transcript fallback
 
-### 10. Cross-Process Browser Attach (Deferred)
+### 10. Colony Topology (Implemented)
+
+Includes:
+
+- Topology SPA tab with vendored Mermaid.js
+- `GET /api/colony/topology` delegating to `colony.BuildTopology`
+- copy Mermaid source control
+- config-only projection (no NATS/`paseka run` required)
+
+See [007](./007-colony-eda-topology.md) for graph semantics; [008](../008-bee-routing.md) remains the routing deep-dive.
+
+### 11. Cross-Process Browser Attach (Deferred)
 
 Unix socket relay for sessions started outside the current `paseka console` process.
 
@@ -694,6 +719,7 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 
 ## Related specs
 
+- [007-colony-eda-topology.md](./007-colony-eda-topology.md) — Topology tab and `GET /api/colony/topology`
 - [004-live-bees-indicator.md](./004-live-bees-indicator.md) — header indicator for live agent processes (AFK runs and interactive sessions)
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — feature idea → Scout classify → session invite → Drone grilling / breakdown (Console invite UX)
 

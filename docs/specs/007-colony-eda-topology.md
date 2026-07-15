@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft.** Design locked in grilling (`trace-019f67474c9886d2`). Not implemented.
+**Implemented.** Config-derived EDA topology via `colony.BuildTopology`, Queen Console Topology tab (`GET /api/colony/topology`), and `paseka colony topology`. Part of the [002](./002-queen-console-mvp.md) MVP baseline.
 
 ## Purpose
 
