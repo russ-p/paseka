@@ -143,7 +143,7 @@ func BuildTopology(colonyRoot string) (Topology, error) {
 
 	topo.Events = sortedTopologyEvents(eventByID)
 	topo.Edges = sortTopologyEdges(edges)
-	topo.Mermaid = TopologyMermaid(topo)
+	topo.Mermaid = NormalizedTopologyMermaid(topo)
 	return topo, nil
 }
 

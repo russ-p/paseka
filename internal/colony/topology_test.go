@@ -224,3 +224,18 @@ func diffJSONLines(want, got string) string {
 	}
 	return b.String()
 }
+
+func TestBuildTopologyMermaidMatchesRenderer(t *testing.T) {
+	root := filepath.Join("testdata", "topology-fixture")
+	topo, err := colony.BuildTopology(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topo.Mermaid != colony.NormalizedTopologyMermaid(topo) {
+		t.Fatal("BuildTopology.Mermaid must match NormalizedTopologyMermaid(topo)")
+	}
+	structured := colony.Topology{Bees: topo.Bees, Events: topo.Events, Edges: topo.Edges}
+	if colony.NormalizedTopologyMermaid(structured) != topo.Mermaid {
+		t.Fatal("Mermaid must be derivable from structured topology alone")
+	}
+}
