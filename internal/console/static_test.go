@@ -1,6 +1,9 @@
 package console
 
 import (
+	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -219,5 +222,34 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 		if _, err := staticFiles.ReadFile(path); err != nil {
 			t.Fatalf("missing vendored asset %s: %v", path, err)
 		}
+	}
+}
+
+func TestMermaidVendorStaticContract(t *testing.T) {
+	const path = "static/vendor/mermaid/mermaid.min.js"
+	data, err := staticFiles.ReadFile(path)
+	if err != nil {
+		t.Fatalf("missing vendored asset %s: %v", path, err)
+	}
+	src := string(data)
+	if !strings.Contains(src, `globalThis["mermaid"]`) {
+		t.Fatal("mermaid.min.js must expose globalThis[\"mermaid\"]")
+	}
+	if !strings.Contains(src, "11.15.0") {
+		t.Fatal("mermaid.min.js must be version 11.15.0")
+	}
+
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/vendor/mermaid/mermaid.min.js", nil)
+	spaHandler(staticFS).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /vendor/mermaid/mermaid.min.js status = %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `globalThis["mermaid"]`) {
+		t.Fatal("HTTP response must serve embedded mermaid bundle")
 	}
 }
