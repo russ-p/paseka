@@ -1,6 +1,6 @@
 # Paseka
 
-Paseka is a local CLI runtime for running AI agents inside a git repository. It helps solo developers initialize a colony, dispatch bees, keep runtime state, and exchange events through NATS and JetStream.
+Paseka is a local CLI runtime for running AI agents inside a git repository. It helps solo developers initialize a project (colony), dispatch agents (bees), keep runtime state, and exchange events over a message bus.
 
 ## What It Can Do
 
