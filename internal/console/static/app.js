@@ -46,6 +46,7 @@ const state = {
 };
 
 const el = {
+  colonyIdentity: document.getElementById('colony-identity'),
   subtitle: document.getElementById('subtitle'),
   tabDashboard: document.getElementById('tab-dashboard'),
   tabTraces: document.getElementById('tab-traces'),
@@ -250,6 +251,26 @@ function badgeClass(itemState) {
   return '';
 }
 
+function renderColonyIdentity() {
+  const rt = state.runtime || {};
+  const slug = rt.slug || '';
+  const root = rt.colonyRoot || '';
+  if (!slug && !root) {
+    el.colonyIdentity.textContent = '';
+    el.colonyIdentity.hidden = true;
+    document.title = 'Queen Console 🐝';
+    return;
+  }
+
+  const parts = [];
+  if (slug) parts.push(slug);
+  if (root) parts.push(root);
+  el.colonyIdentity.textContent = parts.join(' · ');
+  el.colonyIdentity.title = root || '';
+  el.colonyIdentity.hidden = false;
+  document.title = slug ? `${slug} · Queen Console` : 'Queen Console 🐝';
+}
+
 function renderRuntime() {
   const rt = state.runtime || { status: 'stopped', alive: false };
   const status = (rt.status || 'stopped').toLowerCase();
@@ -269,6 +290,8 @@ function renderRuntime() {
   el.runtimeStopBtn.classList.toggle('hidden', !canStop);
   el.runtimeStartBtn.disabled = state.runtimeBusy;
   el.runtimeStopBtn.disabled = state.runtimeBusy;
+
+  renderColonyIdentity();
 }
 
 function renderAgents() {

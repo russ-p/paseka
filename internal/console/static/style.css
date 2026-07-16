@@ -133,6 +133,13 @@ header h1 {
   font-size: 1.35rem;
 }
 
+.colony-identity {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .subtitle {
   margin: 0.25rem 0 0;
   color: var(--muted);

@@ -74,6 +74,9 @@ func TestRuntimeAPIHandlers(t *testing.T) {
 	if stopped.Status != runtime.RuntimeStatusStopped {
 		t.Fatalf("stopped view = %+v", stopped)
 	}
+	if stopped.Slug != ctxColony.Slug || stopped.ColonyRoot != ctxColony.ColonyRoot {
+		t.Fatalf("stopped identity = slug=%q root=%q want slug=%q root=%q", stopped.Slug, stopped.ColonyRoot, ctxColony.Slug, ctxColony.ColonyRoot)
+	}
 
 	startReq := httptest.NewRequest(http.MethodPost, "/api/runtime/start", nil)
 	startRec := httptest.NewRecorder()

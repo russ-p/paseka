@@ -412,7 +412,7 @@ The current routing keeps web transport in `internal/console` and runtime/run/se
 
 Implemented HTTP endpoints:
 
-- `GET /api/runtime`
+- `GET /api/runtime` — hive status plus stable colony identity (`slug`, `colonyRoot` from console context; always present even when runtime is stopped)
 - `GET /api/agents` — live AFK runs and interactive sessions (header Live bees panel)
 - `POST /api/runtime/start`
 - `POST /api/runtime/stop`

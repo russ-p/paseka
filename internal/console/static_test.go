@@ -22,6 +22,46 @@ func TestAppJSUses24HourTimeFormat(t *testing.T) {
 	}
 }
 
+func TestColonyIdentityStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="colony-identity"`,
+		`class="colony-identity"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"colonyIdentity: document.getElementById('colony-identity')",
+		"function renderColonyIdentity()",
+		"rt.slug",
+		"rt.colonyRoot",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	css, err := staticFiles.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatalf("read style.css: %v", err)
+	}
+	if !strings.Contains(string(css), ".colony-identity") {
+		t.Fatal("style.css missing .colony-identity")
+	}
+}
+
 func TestAgentsPanelStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
