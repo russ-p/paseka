@@ -225,18 +225,18 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 	}
 }
 
-func TestMermaidVendorStaticContract(t *testing.T) {
-	const path = "static/vendor/mermaid/mermaid.min.js"
+func TestCytoscapeVendorStaticContract(t *testing.T) {
+	const path = "static/vendor/cytoscape/cytoscape.min.js"
 	data, err := staticFiles.ReadFile(path)
 	if err != nil {
 		t.Fatalf("missing vendored asset %s: %v", path, err)
 	}
 	src := string(data)
-	if !strings.Contains(src, `globalThis["mermaid"]`) {
-		t.Fatal("mermaid.min.js must expose globalThis[\"mermaid\"]")
+	if !strings.Contains(src, "cytoscape=t()") {
+		t.Fatal("cytoscape.min.js must expose global cytoscape")
 	}
-	if !strings.Contains(src, "11.15.0") {
-		t.Fatal("mermaid.min.js must be version 11.15.0")
+	if !strings.Contains(src, "3.30.4") {
+		t.Fatal("cytoscape.min.js must be version 3.30.4")
 	}
 
 	staticFS, err := fs.Sub(staticFiles, "static")
@@ -244,13 +244,13 @@ func TestMermaidVendorStaticContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/vendor/mermaid/mermaid.min.js", nil)
+	req := httptest.NewRequest(http.MethodGet, "/vendor/cytoscape/cytoscape.min.js", nil)
 	spaHandler(staticFS).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /vendor/mermaid/mermaid.min.js status = %d", rec.Code)
+		t.Fatalf("GET /vendor/cytoscape/cytoscape.min.js status = %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), `globalThis["mermaid"]`) {
-		t.Fatal("HTTP response must serve embedded mermaid bundle")
+	if !strings.Contains(rec.Body.String(), "cytoscape=t()") {
+		t.Fatal("HTTP response must serve embedded cytoscape bundle")
 	}
 }
 
@@ -266,7 +266,7 @@ func TestTopologyTabStaticContract(t *testing.T) {
 		`id="topology-diagram"`,
 		`id="topology-copy-btn"`,
 		`id="topology-refresh-btn"`,
-		`/vendor/mermaid/mermaid.min.js`,
+		`/vendor/cytoscape/cytoscape.min.js`,
 	} {
 		if !strings.Contains(htmlSrc, needle) {
 			t.Fatalf("index.html missing %s", needle)
@@ -281,10 +281,11 @@ func TestTopologyTabStaticContract(t *testing.T) {
 	for _, needle := range []string{
 		"async function loadTopology()",
 		"function renderTopology()",
-		"async function renderTopologyMermaid(mermaidSrc)",
+		"function renderTopologyCytoscape(topo)",
+		"function layoutTopologyBipartite(cy, topo)",
 		"async function copyTopologyMermaid()",
 		"api('/api/colony/topology')",
-		"mermaid.render(id, mermaidSrc)",
+		"cytoscape({",
 		"setTab('topology')",
 		"navigator.clipboard.writeText(text)",
 	} {

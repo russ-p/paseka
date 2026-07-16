@@ -42,8 +42,7 @@ const state = {
   topologyLoading: false,
   topologyError: '',
   topologyMermaid: '',
-  topologyRenderToken: 0,
-  mermaidInitialized: false,
+  topologyCy: null,
 };
 
 const el = {
@@ -367,6 +366,9 @@ function setTab(tab) {
     detachSessionTerminal();
     setTerminalWide(false);
   }
+  if (tab !== 'topology') {
+    destroyTopologyCy();
+  }
   if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
   } else if (tab === 'sessions') {
@@ -392,15 +394,304 @@ function findBee(role) {
   return state.bees.find((b) => b.role === role);
 }
 
-function ensureMermaidInitialized() {
-  if (state.mermaidInitialized || typeof mermaid === 'undefined') return;
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'dark',
-    securityLevel: 'strict',
-    flowchart: { useMaxWidth: true },
+function destroyTopologyCy() {
+  if (state.topologyCy) {
+    state.topologyCy.destroy();
+    state.topologyCy = null;
+  }
+}
+
+function topologyBeeLabel(bee) {
+  if (!bee.intents || bee.intents.length === 0) return bee.role;
+  return `${bee.role}\nintents: ${bee.intents.join(', ')}`;
+}
+
+function topologyEdgeLabel(edge) {
+  switch (edge.kind) {
+    case 'subscribe': {
+      const parts = ['subscribe'];
+      if (edge.dispatch) parts.push(edge.dispatch);
+      if (edge.implicit) parts.push('implicit');
+      return parts.join(' ');
+    }
+    case 'publish':
+      return 'publish';
+    case 'invite': {
+      const parts = ['invite'];
+      if (edge.beeFrom) parts.push(`from=${edge.beeFrom}`);
+      if (edge.intent) parts.push(`intent=${edge.intent}`);
+      return parts.join(' ');
+    }
+    default:
+      return edge.kind || '';
+  }
+}
+
+function topologyElementsFrom(topo) {
+  const nodes = [];
+  const edges = [];
+
+  for (const ev of topo.events || []) {
+    nodes.push({
+      data: { id: `event:${ev.id}`, label: ev.id, nodeType: 'event' },
+    });
+  }
+
+  for (const bee of topo.bees || []) {
+    nodes.push({
+      data: { id: `bee:${bee.role}`, label: topologyBeeLabel(bee), nodeType: 'bee' },
+    });
+  }
+
+  const nodeIds = new Set(nodes.map((n) => n.data.id));
+
+  (topo.edges || []).forEach((edge, i) => {
+    let source;
+    let target;
+    switch (edge.kind) {
+      case 'subscribe':
+        source = `event:${edge.from}`;
+        target = `bee:${edge.to}`;
+        break;
+      case 'publish':
+        source = `bee:${edge.from}`;
+        target = `event:${edge.to}`;
+        break;
+      case 'invite':
+        if (!edge.to) return;
+        source = `event:${edge.from}`;
+        target = `bee:${edge.to}`;
+        break;
+      default:
+        return;
+    }
+    if (!nodeIds.has(source) || !nodeIds.has(target)) return;
+    edges.push({
+      data: {
+        id: `edge:${i}`,
+        source,
+        target,
+        label: topologyEdgeLabel(edge),
+        edgeKind: edge.kind,
+        implicit: !!edge.implicit,
+      },
+    });
   });
-  state.mermaidInitialized = true;
+
+  return [...nodes, ...edges];
+}
+
+function topologyCytoscapeStyle() {
+  return [
+    {
+      selector: 'node',
+      style: {
+        label: 'data(label)',
+        'text-wrap': 'wrap',
+        'text-max-width': '160px',
+        'font-size': '11px',
+        'font-family': 'JetBrains Mono, ui-monospace, monospace',
+        color: '#e8ecf4',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'background-color': '#2a3040',
+        'border-color': '#6ea8ff',
+        'border-width': 1,
+        shape: 'round-rectangle',
+        padding: '10px',
+        width: 'label',
+        height: 'label',
+      },
+    },
+    {
+      selector: 'node[nodeType = "event"]',
+      style: {
+        'background-color': '#1a2233',
+        'border-color': '#8b95a8',
+      },
+    },
+    {
+      selector: 'node[nodeType = "bee"]',
+      style: {
+        'background-color': '#1f2a1f',
+        'border-color': '#5fd38d',
+      },
+    },
+    {
+      selector: 'edge',
+      style: {
+        label: 'data(label)',
+        'font-size': '9px',
+        'font-family': 'JetBrains Mono, ui-monospace, monospace',
+        color: '#8b95a8',
+        'text-background-color': '#0c0e14',
+        'text-background-opacity': 0.85,
+        'text-background-padding': '2px',
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'arrow-scale': 0.8,
+        width: 1.5,
+        'line-color': '#4a5568',
+        'target-arrow-color': '#4a5568',
+      },
+    },
+    {
+      selector: 'edge[edgeKind = "subscribe"]',
+      style: {
+        'line-color': '#6ea8ff',
+        'target-arrow-color': '#6ea8ff',
+      },
+    },
+    {
+      selector: 'edge[edgeKind = "publish"]',
+      style: {
+        'line-style': 'dashed',
+        'line-color': '#8b95a8',
+        'target-arrow-color': '#8b95a8',
+      },
+    },
+    {
+      selector: 'edge[edgeKind = "invite"]',
+      style: {
+        'line-style': 'dotted',
+        'line-color': '#f0c14b',
+        'target-arrow-color': '#f0c14b',
+        width: 2,
+      },
+    },
+    {
+      selector: 'edge[implicit = "true"]',
+      style: {
+        opacity: 0.65,
+      },
+    },
+  ];
+}
+
+function topologyNeighborIds(edges, nodeId, side) {
+  const out = [];
+  for (const edge of edges || []) {
+    const source = edge.data.source;
+    const target = edge.data.target;
+    if (side === 'bee' && source === nodeId && target.startsWith('event:')) {
+      out.push(target);
+    } else if (side === 'bee' && target === nodeId && source.startsWith('event:')) {
+      out.push(source);
+    } else if (side === 'event' && source === nodeId && target.startsWith('bee:')) {
+      out.push(target);
+    } else if (side === 'event' && target === nodeId && source.startsWith('bee:')) {
+      out.push(source);
+    }
+  }
+  return out;
+}
+
+function topologyOrderByBarycenter(ids, neighborFn, otherIndex) {
+  return ids
+    .map((id, fallback) => {
+      const neighbors = neighborFn(id);
+      let rank = fallback;
+      if (neighbors.length > 0) {
+        let sum = 0;
+        let n = 0;
+        for (const nb of neighbors) {
+          if (otherIndex.has(nb)) {
+            sum += otherIndex.get(nb);
+            n += 1;
+          }
+        }
+        if (n > 0) rank = sum / n;
+      }
+      return { id, rank, fallback };
+    })
+    .sort((a, b) => a.rank - b.rank || a.fallback - b.fallback)
+    .map((item) => item.id);
+}
+
+function topologyPlaceRow(cy, orderedIds, y, gap) {
+  const sizes = orderedIds.map((id) => {
+    const node = cy.getElementById(id);
+    if (!node.nonempty()) return { id, w: 120, h: 40 };
+    const bb = node.boundingBox({ includeLabels: true });
+    return { id, w: Math.max(bb.w, 80), h: Math.max(bb.h, 32) };
+  });
+
+  const totalW = sizes.reduce((sum, s, i) => sum + s.w + (i > 0 ? gap : 0), 0);
+  let x = -totalW / 2;
+  let maxH = 40;
+  for (const s of sizes) {
+    const node = cy.getElementById(s.id);
+    if (node.nonempty()) {
+      node.position({ x: x + s.w / 2, y });
+    }
+    x += s.w + gap;
+    maxH = Math.max(maxH, s.h);
+  }
+  return { totalW, maxH };
+}
+
+function layoutTopologyBipartite(cy, topo) {
+  const beeIds = (topo.bees || []).map((bee) => `bee:${bee.role}`);
+  const eventIds = (topo.events || []).map((ev) => `event:${ev.id}`);
+  const edges = cy.edges().jsons();
+
+  let beesOrdered = beeIds.slice();
+  let eventsOrdered = eventIds.slice();
+
+  // Median/barycenter heuristic: fewer edge crossings between the two rows.
+  for (let pass = 0; pass < 2; pass += 1) {
+    const beeIndex = new Map(beesOrdered.map((id, i) => [id, i]));
+    eventsOrdered = topologyOrderByBarycenter(
+      eventsOrdered,
+      (id) => topologyNeighborIds(edges, id, 'event'),
+      beeIndex,
+    );
+    const eventIndex = new Map(eventsOrdered.map((id, i) => [id, i]));
+    beesOrdered = topologyOrderByBarycenter(
+      beesOrdered,
+      (id) => topologyNeighborIds(edges, id, 'bee'),
+      eventIndex,
+    );
+  }
+
+  const gap = 28;
+  // Seed rows so label-inclusive bounding boxes are measurable.
+  topologyPlaceRow(cy, beesOrdered, 0, gap);
+  topologyPlaceRow(cy, eventsOrdered, 240, gap);
+
+  const beeRow = topologyPlaceRow(cy, beesOrdered, 0, gap);
+  const eventMeasure = topologyPlaceRow(cy, eventsOrdered, 240, gap);
+  const eventY = beeRow.maxH / 2 + 160 + eventMeasure.maxH / 2;
+  topologyPlaceRow(cy, eventsOrdered, eventY, gap);
+
+  cy.fit(undefined, 48);
+}
+
+function renderTopologyCytoscape(topo) {
+  destroyTopologyCy();
+  el.topologyDiagram.innerHTML = '';
+
+  if (typeof cytoscape === 'undefined') {
+    throw new Error('Cytoscape failed to load.');
+  }
+
+  const elements = topologyElementsFrom(topo);
+  if (elements.length === 0) {
+    el.topologyDiagram.innerHTML = '<p class="muted">No topology graph available.</p>';
+    return;
+  }
+
+  state.topologyCy = cytoscape({
+    container: el.topologyDiagram,
+    elements,
+    style: topologyCytoscapeStyle(),
+    layout: { name: 'preset' },
+    minZoom: 0.2,
+    maxZoom: 3,
+    wheelSensitivity: 0.3,
+  });
+
+  layoutTopologyBipartite(state.topologyCy, topo);
 }
 
 function renderTopology() {
@@ -433,37 +724,27 @@ function renderTopology() {
   }
 
   if (loading) {
+    destroyTopologyCy();
     el.topologyDiagram.innerHTML = '';
     return;
   }
 
-  if (!mermaidSrc) {
-    el.topologyDiagram.innerHTML = '<p class="muted">No Mermaid diagram available.</p>';
+  if (!topo || (!topo.bees?.length && !topo.events?.length)) {
+    destroyTopologyCy();
+    el.topologyDiagram.innerHTML = '<p class="muted">No topology graph available.</p>';
     return;
   }
 
-  renderTopologyMermaid(mermaidSrc).catch((renderErr) => {
+  try {
+    renderTopologyCytoscape(topo);
+  } catch (renderErr) {
     console.error(renderErr);
     if (state.tab !== 'topology') return;
     el.topologyError.textContent = renderErr.message || 'Failed to render diagram.';
     el.topologyError.classList.remove('hidden');
+    destroyTopologyCy();
     el.topologyDiagram.innerHTML = '';
-  });
-}
-
-async function renderTopologyMermaid(mermaidSrc) {
-  const token = ++state.topologyRenderToken;
-  el.topologyDiagram.innerHTML = '';
-
-  if (typeof mermaid === 'undefined' || typeof mermaid.render !== 'function') {
-    throw new Error('Mermaid failed to load.');
   }
-
-  ensureMermaidInitialized();
-  const id = `topology-diagram-${token}`;
-  const { svg } = await mermaid.render(id, mermaidSrc);
-  if (token !== state.topologyRenderToken || state.tab !== 'topology') return;
-  el.topologyDiagram.innerHTML = svg;
 }
 
 async function loadTopology() {

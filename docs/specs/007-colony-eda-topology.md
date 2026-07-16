@@ -8,7 +8,7 @@
 
 Expose a **static, config-derived EDA topology** of the colony: how bees and colony invite rules relate to bus event kinds (`SIGNAL` / `INSIGHT` / `MUTATION` / `VERIFICATION` + `payload.kind`).
 
-Primary UX: Queen Console **Topology** tab (Mermaid render). Secondary: CLI prints the same Mermaid for docs/PRs.
+Primary UX: Queen Console **Topology** tab (interactive Cytoscape graph from structured JSON). Secondary: CLI prints the same Mermaid for docs/PRs; Console **Copy Mermaid** exposes that string.
 
 This is an **observability** surface — not a second orchestrator and not a YAML editor.
 
@@ -39,7 +39,7 @@ This is an **observability** surface — not a second orchestrator and not a YAM
 | `auto_invites` | `.paseka/colony.yaml` ([008](../008-bee-routing.md) §7) | Invite-styled edges (not AFK dispatch) |
 | Intent vocabulary | Bee YAML / `_partials/<role>-intent-*.md` via `prompts.DiscoverIntents` | Annotations on bee nodes + invite edge labels |
 | `GET /api/bees` | `BeeView`: role, adapter, intents only | **Insufficient** — no `subscribes`/`publishes` |
-| Console SPA | Vendored `xterm`, `diff2html`; no Mermaid today | New Topology tab + vendored Mermaid.js |
+| Console SPA | Vendored `xterm`, `diff2html`, `cytoscape` | Topology tab renders structured graph; copy Mermaid available |
 | Queen Console MVP | [002-queen-console-mvp.md](./002-queen-console-mvp.md) | Observability-first; config/FS as SoT when bus down |
 
 ## Decisions
@@ -84,7 +84,7 @@ Surfaces:
 | ------- | -------- |
 | `GET /api/colony/topology` (name may vary; dedicated endpoint required) | Returns JSON including `mermaid` string |
 | CLI e.g. `paseka colony topology` | Prints Mermaid to stdout; optional `--out` |
-| Console **Topology** tab | Fetches API; renders with vendored Mermaid.js; copy Mermaid available |
+| Console **Topology** tab | Fetches API; renders structured graph with vendored cytoscape.js (pan/zoom); copy Mermaid available |
 
 Do not extend `GET /api/bees` alone as the topology API — Bees remains a launch picker.
 
@@ -115,11 +115,11 @@ Edges only between bee ↔ event (or event → bee for invites):
 
 Do **not** invent bee→bee edges. Do not draw a fake “bee publishes `session.invite`” unless a bee actually declares that in `publishes`.
 
-### 7. Console render: vendored Mermaid.js
+### 7. Console render: vendored cytoscape.js
 
 Follow existing vendor pattern (`/vendor/...`), not CDN.
 
-API returns structured graph **and** the canonical `mermaid` string so CLI and UI cannot drift.
+Console renders from structured `bees` / `events` / `edges` JSON (not by parsing Mermaid). API still returns the canonical `mermaid` string for CLI parity and **Copy Mermaid**.
 
 ### 8. MVP interaction
 
@@ -201,7 +201,7 @@ Exact field names may be adjusted in implementation; semantics above are normati
 2. Intent never appears as a node or as the sole key of an edge — only as bee lists / invite labels.
 3. No task-ledger-only subgraph beyond bee↔event edges.
 4. `GET` topology API and CLI emit the **same** Mermaid string for the same colony root.
-5. Queen Console Topology tab renders that Mermaid via vendored Mermaid.js without requiring NATS/`paseka run`.
+5. Queen Console Topology tab renders the structured graph via vendored cytoscape.js (pan/zoom) without requiring NATS/`paseka run`; **Copy Mermaid** still copies the API `mermaid` string.
 6. Topology remains correct when runtime is stopped (config-only).
 
 ## Implementation outline (post-breakdown)
@@ -211,7 +211,7 @@ Not a task plan — guidance for breakdown only:
 1. Go: `internal/colony` or `internal/console` topology builder from `LoadAllBees` + colony manifest.
 2. HTTP: dedicated topology endpoint on Queen Console server.
 3. CLI: `paseka colony topology` (or equivalent under existing colony commands).
-4. SPA: Topology tab + vendored Mermaid; copy source control.
+4. SPA: Topology tab + vendored cytoscape.js; copy Mermaid source control.
 5. Tests: fixture colony → golden edges / Mermaid; handler smoke test.
 6. Docs: short link from [008](../008-bee-routing.md) / Console MVP; no duplication of routing semantics.
 

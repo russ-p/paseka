@@ -83,7 +83,7 @@ Implemented UI surfaces:
 - **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, final-merge worktree diff preview (`GET /api/traces/:traceId/merge-diff`), approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
 - **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, attach an in-browser xterm.js terminal over WebSocket for active sessions (with optional full-page Widen layout), poll transcript updates for completed sessions, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
-- **Topology**: config-derived colony EDA graph from bee `subscribes`/`publishes` and `auto_invites`; Mermaid render via vendored Mermaid.js; copy Mermaid source; works when runtime/NATS are stopped ([007](./007-colony-eda-topology.md)).
+- **Topology**: config-derived colony EDA graph from bee `subscribes`/`publishes` and `auto_invites`; interactive Cytoscape render from structured JSON; copy Mermaid source; works when runtime/NATS are stopped ([007](./007-colony-eda-topology.md)).
 - **Runtime panel**: start and stop the registered local hive runtime and poll runtime status.
 - **Live bees panel**: header indicator for live AFK adapter runs and interactive sessions (`GET /api/agents`, PID liveness via `ProcessAlive`).
 
@@ -367,7 +367,7 @@ Cross-process attach (session started by another `paseka` process or Ghostty win
 
 #### 8. Topology
 
-The Topology tab renders a **static, config-derived** EDA graph: bee nodes, event-kind nodes, subscribe/publish edges, and `auto_invites` invite edges. Data comes from `GET /api/colony/topology` (same projection as `paseka colony topology`). Routing semantics live in [008](../008-bee-routing.md); graph shape and API are specified in [007](./007-colony-eda-topology.md).
+The Topology tab renders a **static, config-derived** EDA graph: bee nodes, event-kind nodes, subscribe/publish edges, and `auto_invites` invite edges. Data comes from `GET /api/colony/topology` (same projection as `paseka colony topology`). The SPA renders the structured `bees` / `events` / `edges` payload with vendored cytoscape.js (pan/zoom). Routing semantics live in [008](../008-bee-routing.md); graph shape and API are specified in [007](./007-colony-eda-topology.md).
 
 This page answers:
 
@@ -669,7 +669,7 @@ Includes:
 
 Includes:
 
-- Topology SPA tab with vendored Mermaid.js
+- Topology SPA tab with vendored cytoscape.js
 - `GET /api/colony/topology` delegating to `colony.BuildTopology`
 - copy Mermaid source control
 - config-only projection (no NATS/`paseka run` required)

@@ -390,18 +390,13 @@ header h1 {
 }
 
 .topology-diagram {
-  overflow: auto;
-  min-height: 20rem;
-  padding: 1rem;
+  overflow: hidden;
+  min-height: 24rem;
+  height: min(70vh, 36rem);
+  padding: 0;
   background: #0c0e14;
   border: 1px solid var(--border);
   border-radius: 8px;
-}
-
-.topology-diagram svg {
-  display: block;
-  max-width: 100%;
-  height: auto;
 }
 
 .review-actions {
