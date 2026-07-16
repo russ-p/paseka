@@ -107,7 +107,10 @@ flowchart LR
 1. `INSIGHT/task.plan` registers tasks in the ledger.
 2. `SIGNAL/task.ready` (or dependency unlock after `task.completed`) marks tasks ready.
 3. Reactor dispatches the bee named in `task.Bee` **only if** that bee subscribes to `task.ready` (or has no `subscribes` block).
-4. On successful run, reactor publishes `VERIFICATION/task.completed`.
+4. On successful run with `review: none`:
+   - If the run already emitted `VERIFICATION/task.completed`, apply it.
+   - Else if a colony bee explicitly declares `publishes: VERIFICATION/task.completed` **and** this run opened `MUTATION/code.proposal` (emitted event, or non-empty diff with explicit `code.proposal` on the dispatched bee), set `waiting_review` and wait for the commit-gate publisher (typically receiver).
+   - Else runtime publishes `VERIFICATION/task.completed` (fallback for scout, no-diff runs, colonies without a commit-gate publisher).
 
 ### Direct path
 

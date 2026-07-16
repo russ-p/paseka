@@ -75,6 +75,10 @@ func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, co
 	if err != nil {
 		return err
 	}
+	return r.applyTaskCompletedEvent(ctx, traceID, completed)
+}
+
+func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, completed protocol.Event) error {
 	res, err := r.ledger.Apply(completed)
 	if err != nil {
 		return err

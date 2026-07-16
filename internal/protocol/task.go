@@ -16,7 +16,10 @@ const (
 type TaskReviewPolicy string
 
 const (
-	// TaskReviewNone is the default: AFK runs auto-complete on adapter success.
+	// TaskReviewNone is the default: no human mid-task review. Runtime auto-completes
+	// unless a colony bee explicitly publishes task.completed and this run opened
+	// a code.proposal gate (builder path); then status stays waiting_review until
+	// the declared publisher emits task.completed on the bus.
 	TaskReviewNone TaskReviewPolicy = "none"
 	// TaskReviewRequired waits for human approval after the bee run succeeds.
 	TaskReviewRequired TaskReviewPolicy = "required"

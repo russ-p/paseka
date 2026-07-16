@@ -73,7 +73,7 @@ Each task may declare an optional `review` field in `task.plan`:
 
 | `review` | Behavior |
 | -------- | -------- |
-| `none` (default) | AFK runs auto-complete on adapter success |
+| `none` (default) | No human mid-task review. Runtime auto-completes on adapter success **unless** a colony bee explicitly declares `publishes: VERIFICATION/task.completed` and the run opened a `code.proposal` gate (builder with diff); then status stays `waiting_review` until that publisher emits `task.completed`. Scout and other no-proposal bees still auto-complete. |
 | `required` | After a successful bee run, task moves to `waiting_review` until human approval |
 | `final` | Trace-level merge gate — activates when all other tasks complete; no AFK dispatch |
 
@@ -211,7 +211,8 @@ PRD (SIGNAL: feature.requested)
   → Scout INSIGHT task.plan
   → Task Reactor: task-1 → ready
   → Builder run (traceId + taskId)
-  → AFK tasks auto-complete; review-marked tasks enter waiting_review
+  → AFK tasks auto-complete when no colony commit-gate publisher opened a code.proposal; otherwise wait for receiver task.completed
+  → Review-marked tasks (`review: required`) enter waiting_review for human approval
   → All AFK tasks done → final review gate (planned or synthesized)
   → Human approve → merge worktree → VERIFICATION task.completed
   → Task Reactor: next task.ready (if any)
@@ -219,7 +220,7 @@ PRD (SIGNAL: feature.requested)
   → Trace merge gate completed
 ```
 
-**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md). Scout classifies and must not emit `task.plan` for vague ideas; Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
+**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md). Scout classify and Drone breakdown auto-complete on the ledger when they do not declare `code.proposal`. Drone grilling uses Human Gateway invites (not this defer gate). Scout classifies and must not emit `task.plan` for vague ideas; Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
 
 ---
 

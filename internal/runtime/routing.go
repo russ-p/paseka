@@ -32,6 +32,14 @@ func (r *BeeRegistry) Bee(role string) (colony.Bee, bool) {
 	return b, ok
 }
 
+// Bees returns the loaded bee configs (tests and completion helpers).
+func (r *BeeRegistry) Bees() map[string]colony.Bee {
+	if r == nil {
+		return nil
+	}
+	return r.bees
+}
+
 // DirectSubscribers returns bee roles that should react directly to an event.
 func (r *BeeRegistry) DirectSubscribers(ev protocol.Event) []string {
 	kind := protocol.PayloadKind(ev.Payload)

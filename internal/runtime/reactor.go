@@ -335,6 +335,16 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	if protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired {
 		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
 	}
+	if ev, ok := runEmittedTaskCompleted(res.Result, task.TaskID); ok {
+		return r.applyTaskCompletedEvent(ctx, traceID, ev)
+	}
+	if shouldDeferAFKCompletion(r.registry, bee, res.Result) {
+		afkSummary := summary
+		if afkSummary == "" {
+			afkSummary = "Awaiting AFK verification gate"
+		}
+		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, afkSummary)
+	}
 	return r.completeTask(ctx, traceID, task.TaskID, summary, "")
 }
 

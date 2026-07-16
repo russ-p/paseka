@@ -148,6 +148,45 @@ func TestDeclaresPublishAdvisory(t *testing.T) {
 	}
 }
 
+func TestAnyBeeDeclaresPublishExplicitOnly(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"scout": {Role: "scout"},
+		"receiver": {
+			Role: "receiver",
+			Publishes: []colony.PublicationRule{
+				{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: string(protocol.TaskEventCompleted)}},
+			},
+		},
+	}
+	if !colony.AnyBeeDeclaresPublish(bees, protocol.EventVerification, string(protocol.TaskEventCompleted)) {
+		t.Fatal("expected receiver to declare task.completed")
+	}
+	if colony.AnyBeeDeclaresPublish(bees, protocol.EventMutation, string(protocol.MutationCodeProposal)) {
+		t.Fatal("empty publishes must not count as explicit declaration")
+	}
+	if colony.AnyBeeDeclaresPublish(map[string]colony.Bee{"scout": {Role: "scout"}}, protocol.EventVerification, string(protocol.TaskEventCompleted)) {
+		t.Fatal("expected false when no bee declares publish")
+	}
+}
+
+func TestExplicitlyDeclaresPublish(t *testing.T) {
+	bee := colony.Bee{
+		Role: "builder",
+		Publishes: []colony.PublicationRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}},
+		},
+	}
+	if !bee.ExplicitlyDeclaresPublish(protocol.EventMutation, "code.proposal") {
+		t.Fatal("expected explicit declaration")
+	}
+	if bee.ExplicitlyDeclaresPublish(protocol.EventVerification, string(protocol.TaskEventCompleted)) {
+		t.Fatal("unexpected declaration")
+	}
+	if (colony.Bee{Role: "scout"}).ExplicitlyDeclaresPublish(protocol.EventMutation, "code.proposal") {
+		t.Fatal("empty publishes must be false for explicit check")
+	}
+}
+
 func TestLoadAllBees(t *testing.T) {
 	root := t.TempDir()
 	writeBeeYAML(t, root, "builder", `role: builder

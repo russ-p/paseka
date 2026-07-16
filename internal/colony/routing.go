@@ -168,8 +168,27 @@ func (b Bee) DeclaresPublish(evType protocol.EventType, kind string) bool {
 	if len(b.Publishes) == 0 {
 		return true
 	}
+	return b.ExplicitlyDeclaresPublish(evType, kind)
+}
+
+// ExplicitlyDeclaresPublish reports whether the bee lists the event in publishes.
+// Empty publishes returns false (unlike DeclaresPublish advisory semantics).
+func (b Bee) ExplicitlyDeclaresPublish(evType protocol.EventType, kind string) bool {
+	if len(b.Publishes) == 0 {
+		return false
+	}
 	for _, pub := range b.Publishes {
 		if pub.Matches(evType, kind) {
+			return true
+		}
+	}
+	return false
+}
+
+// AnyBeeDeclaresPublish reports whether any bee explicitly lists the event in publishes.
+func AnyBeeDeclaresPublish(bees map[string]Bee, evType protocol.EventType, kind string) bool {
+	for _, bee := range bees {
+		if bee.ExplicitlyDeclaresPublish(evType, kind) {
 			return true
 		}
 	}

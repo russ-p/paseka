@@ -285,6 +285,8 @@ Documented in [008-bee-routing.md](008-bee-routing.md). Summary:
 - `subscribes[].dispatch`: `task` (task-ledger) or `direct` (reactor runs the bee on the event).
 - Empty `subscribes` → any `task.ready` dispatch allowed.
 - `publishes` is advisory in MVP.
+- Declaring `VERIFICATION/task.completed` marks the AFK commit gate: when another bee explicitly publishes `MUTATION/code.proposal` with a diff, runtime defers auto-complete until that commit-gate bee emits `task.completed`.
+- Declaring `MUTATION/code.proposal` on the dispatched bee (typically builder) is what opens the defer path when a commit-gate publisher exists in the colony.
 
 ---
 
