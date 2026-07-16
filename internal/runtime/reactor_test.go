@@ -178,6 +178,82 @@ func TestReactorSkipsDirectDispatchSamePublisherBee(t *testing.T) {
 	}
 }
 
+func TestReactorRedispatchesGuardOnReworkCodeProposal(t *testing.T) {
+	r := newTestReactor(t, map[string]colony.Bee{
+		"guard": {Role: "guard", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
+		}},
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	first, err := protocol.NewEvent("trace-1", "builder-1", 1, protocol.EventMutation, protocol.MutationPayload{
+		Kind:    protocol.MutationCodeProposal,
+		Summary: "broken fix",
+		Diff:    "+broken",
+		TaskID:  "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rework, err := protocol.NewEvent("trace-1", "builder-2", 2, protocol.EventMutation, protocol.MutationPayload{
+		Kind:    protocol.MutationCodeProposal,
+		Summary: "correct fix",
+		Diff:    "+fixed",
+		TaskID:  "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.ProcessEvent(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), rework); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 2 {
+		t.Fatalf("adapter calls = %d, want 2 (rework code.proposal must re-dispatch guard)", rec.calls)
+	}
+}
+
+func TestReactorRedispatchesBuilderOnReworkVerificationFailed(t *testing.T) {
+	r := newTestReactor(t, map[string]colony.Bee{
+		"builder": {Role: "builder", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: "verification.failed"}, Dispatch: colony.DispatchDirect},
+		}},
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	first, err := protocol.NewEvent("trace-1", "guard-1", 1, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationFailed,
+		TaskID:  "task-1",
+		Summary: "tests failed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := protocol.NewEvent("trace-1", "guard-2", 2, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationFailed,
+		TaskID:  "task-1",
+		Summary: "tests failed again",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.ProcessEvent(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), second); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 2 {
+		t.Fatalf("adapter calls = %d, want 2 (rework verification.failed must re-dispatch builder)", rec.calls)
+	}
+}
+
 func TestReactorDedupesDirectDispatchByTaskID(t *testing.T) {
 	r := newTestReactor(t, map[string]colony.Bee{
 		"receiver": {Role: "receiver", Subscribes: []colony.SubscriptionRule{

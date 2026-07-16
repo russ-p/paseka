@@ -122,7 +122,7 @@ When a domain event arrives, reactor finds all bees with `dispatch: direct` subs
 | `VERIFICATION/verification.failed` | `builder` | failure summary for fix-up |
 | `VERIFICATION/verification.success` | `receiver` | approval summary for commit gate |
 
-Duplicate runs are suppressed per `traceId + taskId + bee + type + kind` when `payload.taskId` is set. Direct dispatch also skips when the publishing run's bee role matches the subscriber (prevents receiver self-loops if it mistakenly re-emits `verification.success`).
+Duplicate runs are suppressed per `traceId + taskId + bee + type + kind` when `payload.taskId` is set, except for rework-cycle gates (`MUTATION/code.proposal`, `VERIFICATION/verification.failed`): those key by event identity so each builder/guard pass can run again on the same task. Direct dispatch also skips when the publishing run's bee role matches the subscriber (prevents receiver self-loops if it mistakenly re-emits `verification.success`).
 
 ---
 

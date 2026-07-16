@@ -104,16 +104,31 @@ func truncateString(s string, max int) string {
 }
 
 // directDispatchKey identifies a direct dispatch for deduplication.
-// When payload.taskId is set, duplicates collapse per traceId+taskId+bee+type+kind
-// (so a mistaken re-emit of the same gate kind does not re-run the bee).
-// Without taskId, fall back to a unique event fingerprint.
+// Rework-cycle gates (code.proposal, verification.failed) key by event identity so
+// each builder/guard pass can run again on the same task. Other task-scoped events
+// collapse per traceId+taskId+bee+type+kind to ignore mistaken re-emits (e.g. echoed
+// verification.success). Events without taskId always use the event fingerprint.
 func directDispatchKey(ev protocol.Event, beeRole string) string {
 	kind := protocol.PayloadKind(ev.Payload)
+	if directDispatchPerEvent(ev.Type, kind) {
+		return directEventFingerprint(ev) + "|" + beeRole
+	}
 	taskID := protocol.PayloadTaskID(ev.Payload)
 	if taskID != "" {
 		return fmt.Sprintf("%s|%s|%s|%s|%s", ev.TraceID, taskID, beeRole, ev.Type, kind)
 	}
-	return directEventFingerprint(ev) + ":" + beeRole
+	return directEventFingerprint(ev) + "|" + beeRole
+}
+
+func directDispatchPerEvent(evType protocol.EventType, kind string) bool {
+	switch evType {
+	case protocol.EventMutation:
+		return kind == string(protocol.MutationCodeProposal)
+	case protocol.EventVerification:
+		return kind == string(protocol.VerificationFailed)
+	default:
+		return false
+	}
 }
 
 func directEventFingerprint(ev protocol.Event) string {
