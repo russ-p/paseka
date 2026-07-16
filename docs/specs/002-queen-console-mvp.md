@@ -276,13 +276,14 @@ The Reviews tab exposes the human-in-the-loop review queue:
 - list tasks in `waiting_review` with `review: required` or `review: final`
 - proposal detail with trace/task metadata, summary, and review policy
 - for `review: final` / `_review`: merge preview via `GET /api/traces/:traceId/merge-diff` (three-dot diff of trace branch vs default branch, side-by-side in Reviews detail)
+- **Widen** control expands the merge diff to full page width (hiding the queue and non-diff detail) and switches the viewer to unified line-by-line layout; **Restore** returns to the two-column layout with side-by-side diff
 - approve action (optional summary; optional merge commit message for `review: final`)
 - reject action with human feedback
 - links to timeline and linked runs for inspection context
 
 Approve/reject reuse the same domain flows as `paseka proposal approve|reject`. For `review: required`, reject publishes `human.feedback` and the runtime may return the task to `ready`. For `review: final`, reject only publishes feedback; approve may merge the trace worktree.
 
-Current implementation polls `GET /api/review-queue` every 5 seconds while the Reviews tab is active.
+Current implementation polls `GET /api/review-queue` every 5 seconds while the Reviews tab is active. While the same final merge gate stays selected, the poll refreshes queue metadata and actions without re-fetching or re-rendering the merge diff (preserving file-list selection and scroll position).
 
 #### 6. Runs
 
@@ -388,6 +389,7 @@ At minimum, the UI shows:
 - summary
 - review policy (`required` vs `final`)
 - for final merge gates: branch metadata, `--stat` summary, and side-by-side diff rendered with vendored diff2html
+- optional full-page **Widen** layout for the merge diff viewer (same interaction model as Sessions terminal widen)
 - links to timeline and linked runs for inspection context
 
 Approve/reject actions reuse the same domain flows as `paseka proposal approve|reject`.

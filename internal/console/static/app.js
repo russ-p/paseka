@@ -14,6 +14,9 @@ const state = {
   selectedReviewKey: null,
   selectedReviewDetail: null,
   reviewMergeDiffToken: 0,
+  reviewMergeDiffLoadedTraceId: null,
+  reviewMergeDiffView: null,
+  reviewDiffWide: false,
   selectedTaskKey: null,
   selectedTaskDetail: null,
   dashboard: null,
@@ -141,6 +144,7 @@ const el = {
   reviewMergeDiffMeta: document.getElementById('review-merge-diff-meta'),
   reviewMergeDiffStat: document.getElementById('review-merge-diff-stat'),
   reviewMergeDiffContainer: document.getElementById('review-merge-diff-container'),
+  reviewDiffWideBtn: document.getElementById('review-diff-wide-btn'),
   reviewActionsWrap: document.getElementById('review-actions-wrap'),
   reviewFinalHint: document.getElementById('review-final-hint'),
   reviewApproveForm: document.getElementById('review-approve-form'),
@@ -388,6 +392,9 @@ function setTab(tab) {
   if (tab !== 'sessions') {
     detachSessionTerminal();
     setTerminalWide(false);
+  }
+  if (tab !== 'reviews') {
+    setReviewDiffWide(false);
   }
   if (tab !== 'topology') {
     destroyTopologyCy();
@@ -1022,6 +1029,44 @@ function setTerminalWide(wide) {
   });
 }
 
+function reviewMergeDiffOutputFormat() {
+  return state.reviewDiffWide ? 'line-by-line' : 'side-by-side';
+}
+
+function renderReviewMergeDiffBody(diff) {
+  const format = reviewMergeDiffOutputFormat();
+  el.reviewMergeDiffContainer.classList.toggle('merge-diff-line-by-line', format === 'line-by-line');
+  el.reviewMergeDiffContainer.classList.toggle('merge-diff-side-by-side', format === 'side-by-side');
+  el.reviewMergeDiffContainer.innerHTML = Diff2Html.html(diff, {
+    drawFileList: true,
+    matching: 'lines',
+    outputFormat: format,
+    colorScheme: 'dark',
+  });
+}
+
+function setReviewDiffWide(wide) {
+  const changing = !!wide !== !!state.reviewDiffWide;
+  const scrollTop = changing ? (el.reviewMergeDiffContainer?.scrollTop || 0) : 0;
+  state.reviewDiffWide = !!wide;
+  if (el.reviewsLayout) {
+    el.reviewsLayout.classList.toggle('review-diff-wide', state.reviewDiffWide);
+  }
+  if (el.reviewDiffWideBtn) {
+    el.reviewDiffWideBtn.setAttribute('aria-pressed', String(state.reviewDiffWide));
+    el.reviewDiffWideBtn.textContent = state.reviewDiffWide ? 'Restore' : 'Widen';
+    el.reviewDiffWideBtn.title = state.reviewDiffWide
+      ? 'Restore normal review layout'
+      : 'Widen merge diff to full page width (unified view)';
+  }
+  if (changing && state.reviewMergeDiffView?.diff && typeof Diff2Html !== 'undefined') {
+    renderReviewMergeDiffBody(state.reviewMergeDiffView.diff);
+    if (el.reviewMergeDiffContainer) {
+      el.reviewMergeDiffContainer.scrollTop = scrollTop;
+    }
+  }
+}
+
 function detachSessionTerminal() {
   if (window.SessionTerminal) {
     window.SessionTerminal.detach();
@@ -1583,6 +1628,7 @@ function renderReviewDetail(item) {
     el.reviewDetailEmpty.classList.remove('hidden');
     el.reviewDetailMeta.classList.add('hidden');
     el.reviewSummaryWrap.classList.add('hidden');
+    setReviewDiffWide(false);
     clearReviewMergeDiff();
     el.reviewActionsWrap.classList.add('hidden');
     return;
@@ -1618,7 +1664,9 @@ function renderReviewDetail(item) {
   }
 
   if (item.isFinal) {
-    loadReviewMergeDiff(item.traceId);
+    if (item.traceId !== state.reviewMergeDiffLoadedTraceId) {
+      loadReviewMergeDiff(item.traceId);
+    }
   } else {
     clearReviewMergeDiff();
   }
@@ -1635,6 +1683,11 @@ function renderReviewDetail(item) {
 
 function clearReviewMergeDiff() {
   state.reviewMergeDiffToken += 1;
+  state.reviewMergeDiffLoadedTraceId = null;
+  state.reviewMergeDiffView = null;
+  if (el.reviewDiffWideBtn) {
+    el.reviewDiffWideBtn.classList.add('hidden');
+  }
   el.reviewMergeDiffWrap.classList.add('hidden');
   el.reviewMergeDiffLoading.classList.add('hidden');
   el.reviewMergeDiffError.classList.add('hidden');
@@ -1649,6 +1702,7 @@ function clearReviewMergeDiff() {
 }
 
 function renderReviewMergeDiff(view) {
+  state.reviewMergeDiffView = view;
   el.reviewMergeDiffWrap.classList.remove('hidden');
   el.reviewMergeDiffError.classList.add('hidden');
   el.reviewMergeDiffMissing.classList.add('hidden');
@@ -1692,11 +1746,10 @@ function renderReviewMergeDiff(view) {
     return;
   }
 
-  el.reviewMergeDiffContainer.innerHTML = Diff2Html.html(view.diff, {
-    drawFileList: true,
-    matching: 'lines',
-    outputFormat: 'side-by-side',
-  });
+  renderReviewMergeDiffBody(view.diff);
+  if (el.reviewDiffWideBtn) {
+    el.reviewDiffWideBtn.classList.remove('hidden');
+  }
 }
 
 function reviewMergeDiffStillValid(traceId, token) {
@@ -1710,12 +1763,17 @@ async function loadReviewMergeDiff(traceId) {
   const token = ++state.reviewMergeDiffToken;
   el.reviewMergeDiffWrap.classList.remove('hidden');
   el.reviewMergeDiffLoading.classList.remove('hidden');
+  if (el.reviewDiffWideBtn) {
+    el.reviewDiffWideBtn.classList.remove('hidden');
+  }
   try {
     const view = await api(`/api/traces/${encodeURIComponent(traceId)}/merge-diff`);
     if (!reviewMergeDiffStillValid(traceId, token)) return;
     renderReviewMergeDiff(view);
+    state.reviewMergeDiffLoadedTraceId = traceId;
   } catch (err) {
     if (!reviewMergeDiffStillValid(traceId, token)) return;
+    state.reviewMergeDiffLoadedTraceId = traceId;
     el.reviewMergeDiffError.textContent = err.message || 'Failed to load merge diff.';
     el.reviewMergeDiffError.classList.remove('hidden');
   } finally {
@@ -2384,6 +2442,12 @@ el.taskRejectForm.addEventListener('submit', async (ev) => {
 el.reviewsRefreshBtn.addEventListener('click', () => {
   loadReviews().catch(console.error);
 });
+
+if (el.reviewDiffWideBtn) {
+  el.reviewDiffWideBtn.addEventListener('click', () => {
+    setReviewDiffWide(!state.reviewDiffWide);
+  });
+}
 
 function showReviewActionSuccess(message) {
   el.reviewActionError.classList.add('hidden');

@@ -239,8 +239,9 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 		"function clearReviewMergeDiff()",
 		"state.reviewMergeDiffToken += 1",
 		"function renderReviewMergeDiff(view)",
+		"function renderReviewMergeDiffBody(diff)",
 		"`/api/traces/${encodeURIComponent(traceId)}/merge-diff`",
-		"Diff2Html.html(view.diff",
+		"Diff2Html.html(diff",
 	} {
 		if !strings.Contains(jsSrc, needle) {
 			t.Fatalf("app.js missing %q", needle)

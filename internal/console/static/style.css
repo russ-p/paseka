@@ -371,6 +371,10 @@ header h1 {
   grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.3fr);
 }
 
+.reviews-detail-panel {
+  min-width: 0;
+}
+
 .reviews-hint {
   margin: 0 0 0.75rem;
   font-size: 0.85rem;
@@ -439,19 +443,92 @@ header h1 {
   border-top: 1px solid var(--border);
 }
 
-.review-merge-diff h3 {
-  margin: 0 0 0.65rem;
+.review-merge-diff-header h3 {
+  margin: 0;
   font-size: 0.95rem;
+}
+
+#review-diff-wide-btn {
+  width: auto;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
 }
 
 .merge-diff-container {
   margin-top: 0.75rem;
   max-height: 28rem;
   overflow: auto;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--panel);
   font-size: 0.8rem;
+  scrollbar-width: thin;
+  scrollbar-color: #3a4560 #141820;
+}
+
+.merge-diff-container::-webkit-scrollbar,
+.merge-diff-container .d2h-file-side-diff::-webkit-scrollbar,
+.merge-diff-container.merge-diff-line-by-line .d2h-file-diff::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.merge-diff-container::-webkit-scrollbar-track,
+.merge-diff-container .d2h-file-side-diff::-webkit-scrollbar-track,
+.merge-diff-container.merge-diff-line-by-line .d2h-file-diff::-webkit-scrollbar-track {
+  background: #141820;
+}
+
+.merge-diff-container::-webkit-scrollbar-thumb,
+.merge-diff-container .d2h-file-side-diff::-webkit-scrollbar-thumb,
+.merge-diff-container.merge-diff-line-by-line .d2h-file-diff::-webkit-scrollbar-thumb {
+  background-color: #3a4560;
+  border: 2px solid #141820;
+  border-radius: 6px;
+}
+
+.merge-diff-container::-webkit-scrollbar-thumb:hover,
+.merge-diff-container .d2h-file-side-diff::-webkit-scrollbar-thumb:hover,
+.merge-diff-container.merge-diff-line-by-line .d2h-file-diff::-webkit-scrollbar-thumb:hover {
+  background-color: #4d5870;
+}
+
+.merge-diff-container::-webkit-scrollbar-corner,
+.merge-diff-container .d2h-file-side-diff::-webkit-scrollbar-corner,
+.merge-diff-container.merge-diff-line-by-line .d2h-file-diff::-webkit-scrollbar-corner {
+  background: #141820;
+}
+
+.merge-diff-container .d2h-wrapper,
+.merge-diff-container .d2h-file-wrapper {
+  max-width: 100%;
+}
+
+.merge-diff-container.merge-diff-side-by-side .d2h-files-diff {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.merge-diff-container.merge-diff-side-by-side .d2h-file-side-diff {
+  display: block;
+  flex: 1 1 0;
+  width: 50%;
+  max-width: 50%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #3a4560 #141820;
+}
+
+.merge-diff-container.merge-diff-line-by-line .d2h-file-diff {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #3a4560 #141820;
 }
 
 .merge-diff-container .d2h-wrapper {
@@ -470,6 +547,19 @@ header h1 {
 .merge-diff-container .d2h-code-line-ctn,
 .merge-diff-container .d2h-code-side-line {
   background: #12151c;
+}
+
+.merge-diff-container .d2h-code-linenumber,
+.merge-diff-container .d2h-code-side-linenumber {
+  background-color: #12151c;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.merge-diff-container .d2h-emptyplaceholder,
+.merge-diff-container .d2h-code-side-emptyplaceholder {
+  background-color: #141820;
+  border-color: var(--border);
 }
 
 .merge-diff-container .d2h-code-line-prefix,
@@ -829,6 +919,50 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 #sessions-layout.terminal-wide .terminal-container {
   min-height: 360px;
   height: calc(100vh - 12rem);
+}
+
+/* Full-page-wide merge diff: hide queue and non-diff detail. */
+#reviews-layout.review-diff-wide {
+  grid-template-columns: 1fr;
+}
+
+#reviews-layout.review-diff-wide .reviews-queue-panel {
+  display: none;
+}
+
+#reviews-layout.review-diff-wide .reviews-detail-panel {
+  min-height: calc(100vh - 9rem);
+  min-width: 0;
+  overflow: hidden;
+}
+
+#reviews-layout.review-diff-wide .review-merge-diff {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#reviews-layout.review-diff-wide #review-detail-meta,
+#reviews-layout.review-diff-wide #review-summary-wrap,
+#reviews-layout.review-diff-wide #review-actions-wrap,
+#reviews-layout.review-diff-wide #review-action-error,
+#reviews-layout.review-diff-wide #review-action-success {
+  display: none !important;
+}
+
+#reviews-layout.review-diff-wide .review-merge-diff {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+#reviews-layout.review-diff-wide .merge-diff-container {
+  max-height: none;
+  min-height: 360px;
+  height: calc(100vh - 12rem);
+  width: 100%;
+  max-width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 #transcript-wrap.inactive-only {

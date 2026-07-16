@@ -297,7 +297,10 @@
         <pre id="review-summary" class="transcript"></pre>
       </div>
       <div id="review-merge-diff-wrap" class="review-merge-diff hidden">
-        <h3>Merge diff</h3>
+        <div class="panel-header review-merge-diff-header">
+          <h3>Merge diff</h3>
+          <button type="button" id="review-diff-wide-btn" class="secondary hidden" aria-pressed="false" title="Widen merge diff to full page width (unified view)">Widen</button>
+        </div>
         <p id="review-merge-diff-loading" class="muted hidden">Loading worktree diff…</p>
         <p id="review-merge-diff-error" class="error hidden"></p>
         <p id="review-merge-diff-missing" class="muted hidden">No trace worktree branch found — merge preview unavailable.</p>
