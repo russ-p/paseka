@@ -102,7 +102,7 @@ subscribes:
     dispatch: task
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
 ```
 
 Guard with a completion contract:
@@ -120,7 +120,7 @@ params:
 worktree: true
 subscribes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
     dispatch: direct
 publishes:
   - type: VERIFICATION
@@ -134,6 +134,32 @@ completion_contract:
         - verification.success
         - verification.failed
       count: 1
+```
+
+Hivewright and main-guard (root proposal path):
+
+```yaml
+# .paseka/bees/hivewright.yaml
+role: hivewright
+adapter: cursor
+worktree: false
+publishes:
+  - type: MUTATION
+    kind: code.proposal.root
+
+# .paseka/bees/main-guard.yaml
+role: main-guard
+adapter: cursor
+worktree: false
+subscribes:
+  - type: MUTATION
+    kind: code.proposal.root
+    dispatch: direct
+publishes:
+  - type: VERIFICATION
+    kind: verification.success
+  - type: VERIFICATION
+    kind: verification.failed
 ```
 
 ---
@@ -161,7 +187,7 @@ command: ./scripts/oracle-guard.sh
 run_summary: disabled
 subscribes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
     dispatch: direct
 publishes:
   - type: VERIFICATION
@@ -235,6 +261,22 @@ Supports `$NAME` and `${NAME}`:
 
 - **`sector`** — default named path from `colony.yaml` `sectors`. Effective sector = task sector if set, else bee default (`EffectiveSector`). Workspace becomes `colonyRoot/<sector.path>` or worktree + sector path when `worktree: true`.
 - **`worktree: true`** — mutations under `.paseka/worktrees/<traceId>/`; audit I/O stays in `.paseka/runs/`.
+- **`worktree: false`** — adapter cwd is colony root (+ sector). Used for hivewright / main-guard root proposals.
+
+### Worktree ↔ proposal kind invariants (hard)
+
+Auto-synthesis and `paseka doctor` enforce matching `worktree` and declared publish/subscribe kinds:
+
+| Bee `worktree` | Declares publish | Auto-publish kind | Else |
+| -------------- | ---------------- | ----------------- | ---- |
+| `true` | `isolated` or alias `code.proposal` | `code.proposal.isolated` | Skip auto mutation + warn |
+| `false` | `code.proposal.root` | `code.proposal.root` | Skip + warn |
+| `true` | only `root` | — | Skip + **doctor error** |
+| `false` | only `isolated` / alias | — | Skip + **doctor error** |
+
+Subscriber mismatches (`guard` with `worktree: false`, `main-guard` with `worktree: true`) are **doctor errors**. Bare `code.proposal` alias use is a **doctor warning**. `review: final` on a task whose bee publishes `code.proposal.root` is rejected at `task.plan` load.
+
+Fail closed: empty / missing `publishes` must **not** auto-publish mutations.
 
 Colony sector definitions remain in [003-architecture.md](003-architecture.md).
 
@@ -285,8 +327,9 @@ Documented in [008-bee-routing.md](008-bee-routing.md). Summary:
 - `subscribes[].dispatch`: `task` (task-ledger) or `direct` (reactor runs the bee on the event).
 - Empty `subscribes` → any `task.ready` dispatch allowed.
 - `publishes` is advisory in MVP.
-- Declaring `VERIFICATION/task.completed` marks the AFK commit gate: when another bee explicitly publishes `MUTATION/code.proposal` with a diff, runtime defers auto-complete until that commit-gate bee emits `task.completed`.
-- Declaring `MUTATION/code.proposal` on the dispatched bee (typically builder) is what opens the defer path when a commit-gate publisher exists in the colony.
+- Declaring `VERIFICATION/task.completed` marks the AFK commit gate: when another bee explicitly publishes an **isolated** `MUTATION/code.proposal` with a diff, runtime defers auto-complete until that commit-gate bee emits `task.completed`. Root proposals do not open this defer.
+- Declaring `MUTATION/code.proposal.isolated` (or alias `code.proposal`) on the dispatched bee (typically builder) is what opens the isolated defer path when a commit-gate publisher exists in the colony.
+- Declaring `MUTATION/code.proposal.root` on a `worktree: false` bee (typically hivewright) publishes from colony root; `main-guard` reviews on the same disk.
 
 ---
 

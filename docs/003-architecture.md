@@ -276,7 +276,7 @@ agent -p --trust --force \
 1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
-4. **Git diff** — after `agent` exits, capture `git diff` in the **workspace** (worktree or repo root).
+4. **Git diff** — after `agent` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root). Pre-existing dirty files are not attributed to the run.
 5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
@@ -326,7 +326,7 @@ pi -p --mode json \
 1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
-4. **Git diff** — after `pi` exits, capture `git diff` in the **workspace** (worktree or repo root).
+4. **Git diff** — after `pi` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root).
 5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `result.txt` only.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
@@ -371,7 +371,7 @@ command: ./scripts/oracle-guard.sh
 run_summary: disabled
 subscribes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
     dispatch: direct
 publishes:
   - type: VERIFICATION
@@ -413,7 +413,7 @@ EOF
 
 1. Non-zero exit → `failed` status (same as LLM adapters).
 2. Stdout (trimmed) → run summary when non-empty.
-3. Git diff in workspace → auto `MUTATION/code.proposal` when the bee declares it in `publishes` (same as builder bees).
+3. Git diff in workspace → auto `MUTATION/code.proposal.isolated` or `code.proposal.root` when the bee declares the matching kind in `publishes` (worktree ↔ kind invariant; see §6).
 4. Domain events are **not** synthesized from exit codes — the script must call `paseka event emit`.
 
 Go implementation: `internal/adapters/script/`.
@@ -433,9 +433,18 @@ Interactive runs add `session.json` and `transcript.ndjson` under the same `.pas
 
 ---
 
-## 6. Worktrees
+## 6. Worktrees and code proposals
 
-Isolated mutations avoid touching the working tree until human approval (Queen Console / HITL).
+Code changes flow through two **proposal paths** distinguished by workspace provenance. Invariant: **a guard bee always reviews the same workspace that produced the diff.** See [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md).
+
+| Path | Publisher | `MUTATION` kind | Reviewer cwd | Human approve |
+| ---- | --------- | --------------- | ------------ | ------------- |
+| **Isolated** | `builder` (`worktree: true`) | `code.proposal.isolated` | `.paseka/worktrees/<traceId>/` (+ sector) | Merge trace worktree when present (`review: final` / `_review`); AFK commit-gate defer |
+| **Root** | `hivewright` (`worktree: false`) | `code.proposal.root` | Colony root (+ sector) | **R1** soft ack only — no worktree merge, no auto-commit |
+
+Bare `code.proposal` in bee YAML is an **alias of `code.proposal.isolated`**; runtime normalizes it on auto-publish write. Subscribers of `code.proposal` or `code.proposal.isolated` match isolated events; `code.proposal.root` subscribers do not.
+
+### Isolated path (trace worktree)
 
 ```
 SIGNAL / INSIGHT on bus
@@ -450,20 +459,49 @@ SIGNAL / INSIGHT on bus
   Adapter.Run(Workspace = worktree path)
         │
         ▼
-  Capture git diff(worktree vs base)
+  Baseline-attributed git diff in worktree
         │
         ▼
-  Publish MUTATION { traceId, diff, summary }
+  Publish MUTATION/code.proposal.isolated (+ provenance)
         │
         ▼
-  Human review → approve (merge) | reject (remove worktree)
+  guard (same worktree, direct dispatch) reviews disk
+        │
+        ▼
+  Human review → approve (merge when final gate) | reject
 ```
 
-**Default location:** `.paseka/worktrees/<traceId>/` — colocated with colony, simple paths for adapters, listed in `.gitignore`.
+### Root path (colony checkout)
+
+```
+task.ready → hivewright (worktree: false, cwd = colony root)
+        │
+        ▼
+  Baseline-attributed git diff on colony root
+        │
+        ▼
+  Publish MUTATION/code.proposal.root (+ provenance)
+        │
+        ▼
+  main-guard (colony root, direct dispatch) reviews disk
+        │
+        ▼
+  review: required → waiting_review (R1 ack; no merge)
+```
+
+Root proposals do **not** open the AFK receiver commit-gate defer (`waiting_review` for merge only applies to isolated proposals). Beekeeper commits root changes manually.
+
+### Shared details
+
+**Default worktree location:** `.paseka/worktrees/<traceId>/` — colocated with colony, simple paths for adapters, listed in `.gitignore`.
 
 **Branch:** `paseka/<traceId>` (registered in machine-local `state.json`).
 
-**Merge preview:** before approving a final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...paseka/<traceId>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
+**Direct dispatch workspace affinity:** isolated (+ alias) → ensure/reuse trace worktree (prefer existing dirty tree over fresh HEAD); root → colony root, never call worktree ensure.
+
+**Auto-publish:** runtime publishes a proposal only when the bee explicitly declares the matching kind in `publishes` and `worktree` matches the kind. Empty `publishes` never auto-publishes (fail closed). Mismatch → skip + warn; hard mismatches are `paseka doctor` errors (see [010-bee-config.md](010-bee-config.md)).
+
+**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...paseka/<traceId>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
 
 **Registry:** `~/.config/paseka/<slug>/state.json` tracks active worktrees, base SHA, branch, and linked `traceId` for cleanup on `paseka doctor`.
 

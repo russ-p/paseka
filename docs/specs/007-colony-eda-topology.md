@@ -133,17 +133,22 @@ Console renders from structured `bees` / `events` / `edges` JSON (not by parsing
 flowchart LR
   subgraph events [Events]
     E_task_ready["SIGNAL/task.ready"]
-    E_code_proposal["MUTATION/code.proposal"]
+    E_proposal_iso["MUTATION/code.proposal.isolated"]
+    E_proposal_root["MUTATION/code.proposal.root"]
     E_feature_classified["SIGNAL/feature.classified"]
   end
   subgraph bees [Bees]
     B_builder["builder"]
     B_guard["guard"]
+    B_hivewright["hivewright"]
+    B_main_guard["main-guard"]
     B_drone["drone\nintents: grilling, …"]
   end
   E_task_ready -->|subscribe task| B_builder
-  B_builder -->|publish| E_code_proposal
-  E_code_proposal -->|subscribe direct| B_guard
+  B_builder -->|publish| E_proposal_iso
+  E_proposal_iso -->|subscribe direct| B_guard
+  B_hivewright -->|publish| E_proposal_root
+  E_proposal_root -->|subscribe direct| B_main_guard
   E_feature_classified -->|invite intent=grilling| B_drone
 ```
 
@@ -175,7 +180,24 @@ Acceptance tests should assert on structured edges (and optionally normalized Me
     {
       "kind": "publish",
       "from": "builder",
-      "to": "MUTATION/code.proposal"
+      "to": "MUTATION/code.proposal.isolated"
+    },
+    {
+      "kind": "subscribe",
+      "from": "MUTATION/code.proposal.isolated",
+      "to": "guard",
+      "dispatch": "direct"
+    },
+    {
+      "kind": "publish",
+      "from": "hivewright",
+      "to": "MUTATION/code.proposal.root"
+    },
+    {
+      "kind": "subscribe",
+      "from": "MUTATION/code.proposal.root",
+      "to": "main-guard",
+      "dispatch": "direct"
     },
     {
       "kind": "invite",
