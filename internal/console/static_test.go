@@ -8,6 +8,33 @@ import (
 	"testing"
 )
 
+func TestFaviconStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`href="/favicon.svg"`,
+		`href="/favicon.ico"`,
+		`href="/apple-touch-icon.png"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	for _, path := range []string{
+		"static/favicon.svg",
+		"static/favicon.ico",
+		"static/apple-touch-icon.png",
+	} {
+		if _, err := staticFiles.ReadFile(path); err != nil {
+			t.Fatalf("missing favicon asset %s: %v", path, err)
+		}
+	}
+}
+
 func TestAppJSUses24HourTimeFormat(t *testing.T) {
 	data, err := staticFiles.ReadFile("static/app.js")
 	if err != nil {
