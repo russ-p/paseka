@@ -248,6 +248,22 @@ function formatTokenCount(n) {
   return String(v);
 }
 
+function formatDuration(ms) {
+  if (ms == null || Number.isNaN(Number(ms))) return '—';
+  const v = Math.max(0, Math.round(Number(ms)));
+  if (v < 1000) return `${v} ms`;
+  const totalSec = Math.round(v / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min < 60) {
+    return sec ? `${min}m ${sec}s` : `${min}m`;
+  }
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return remMin ? `${hr}h ${remMin}m` : `${hr}h`;
+}
+
 /** Compact one-line usage for lists; empty string when unavailable. */
 function formatUsageCompact(usage) {
   if (!usage) return '';
@@ -277,7 +293,7 @@ function usageRows(usage) {
     ['Cache write', formatTokenCount(usage.cacheWriteTokens || 0)],
   ];
   if (usage.durationMs) {
-    rows.push(['Model duration', `${usage.durationMs} ms`]);
+    rows.push(['Model duration', formatDuration(usage.durationMs)]);
   }
   if (usage.source) {
     rows.push(['Usage source', usage.source]);
