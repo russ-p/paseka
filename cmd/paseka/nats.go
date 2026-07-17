@@ -185,7 +185,7 @@ func newProposalApproveCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "approve",
-		Short: "Approve a review-gated task and merge the trace worktree",
+		Short: "Approve a review-gated task (R1 ack for root proposals; merge for isolated final gate)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" || taskID == "" {
 				return fmt.Errorf("--trace and --task are required")

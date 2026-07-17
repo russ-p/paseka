@@ -199,7 +199,8 @@ func TestShouldDeferAFKCompletionMatrix(t *testing.T) {
 
 func builderBeeAlias() colony.Bee {
 	return colony.Bee{
-		Role: "builder",
+		Role:     "builder",
+		Worktree: true,
 		Publishes: []colony.PublicationRule{
 			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}},
 		},

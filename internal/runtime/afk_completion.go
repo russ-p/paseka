@@ -69,6 +69,39 @@ func resultContainsIsolatedCodeProposal(result *adapters.RunResult) bool {
 	return false
 }
 
+func resultContainsRootCodeProposal(result *adapters.RunResult) bool {
+	for _, ev := range result.Events {
+		if ev.Type != protocol.EventMutation {
+			continue
+		}
+		kind := protocol.NormalizeCodeProposalKind(protocol.MutationKind(protocol.PayloadKind(ev.Payload)))
+		if kind == protocol.MutationCodeProposalRoot {
+			return true
+		}
+	}
+	return false
+}
+
+func runOpenedRootProposal(reg *BeeRegistry, beeRole string, result *adapters.RunResult) bool {
+	if result == nil {
+		return false
+	}
+	if resultContainsRootCodeProposal(result) {
+		return true
+	}
+	if !hasNonEmptyDiffArtifact(result) {
+		return false
+	}
+	if reg == nil {
+		return false
+	}
+	bee, ok := reg.Bee(beeRole)
+	if !ok {
+		return false
+	}
+	return bee.DeclaresCodeProposalRoot()
+}
+
 func hasNonEmptyDiffArtifact(result *adapters.RunResult) bool {
 	for _, a := range result.Artifacts {
 		if a.Kind == "diff" && strings.TrimSpace(a.Content) != "" {

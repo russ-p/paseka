@@ -38,21 +38,22 @@ type TaskRunView struct {
 
 // TaskListItem is one task row on the board.
 type TaskListItem struct {
-	TraceID    string    `json:"traceId"`
-	TaskID     string    `json:"taskId"`
-	Title      string    `json:"title"`
-	Status     string    `json:"status"`
-	Review     string    `json:"review,omitempty"`
-	Bee        string    `json:"bee,omitempty"`
-	Sector     string    `json:"sector,omitempty"`
-	DependsOn  []string  `json:"dependsOn,omitempty"`
-	RunCount   int       `json:"runCount"`
-	CanStart   bool      `json:"canStart"`
-	CanRetry   bool      `json:"canRetry"`
-	CanApprove bool      `json:"canApprove"`
-	CanReject  bool      `json:"canReject"`
-	IsFinal    bool      `json:"isFinal"`
-	UpdatedAt  time.Time `json:"updatedAt,omitempty"`
+	TraceID           string    `json:"traceId"`
+	TaskID            string    `json:"taskId"`
+	Title             string    `json:"title"`
+	Status            string    `json:"status"`
+	Review            string    `json:"review,omitempty"`
+	Bee               string    `json:"bee,omitempty"`
+	Sector            string    `json:"sector,omitempty"`
+	DependsOn         []string  `json:"dependsOn,omitempty"`
+	RunCount          int       `json:"runCount"`
+	CanStart          bool      `json:"canStart"`
+	CanRetry          bool      `json:"canRetry"`
+	CanApprove        bool      `json:"canApprove"`
+	CanReject         bool      `json:"canReject"`
+	IsFinal           bool      `json:"isFinal"`
+	ProposalWorkspace string    `json:"proposalWorkspace,omitempty"`
+	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
 }
 
 // TaskStatusGroup groups tasks by lifecycle status.
@@ -376,22 +377,24 @@ func taskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 
 	reviewPolicy := string(protocol.NormalizeTaskReviewPolicy(task.Review))
 	canApprove, canReject := reviewActionsForTask(task)
+	proposalWorkspace := string(task.ProposalWorkspace)
 	return TaskListItem{
-		TraceID:    traceID,
-		TaskID:     task.TaskID,
-		Title:      title,
-		Status:     status,
-		Review:     reviewPolicy,
-		Bee:        task.Bee,
-		Sector:     task.Sector,
-		DependsOn:  append([]string(nil), task.DependsOn...),
-		RunCount:   runCount,
-		CanStart:   tasks.CanStartTask(snap, task.TaskID),
-		CanRetry:   tasks.CanRetryTask(snap, task.TaskID),
-		CanApprove: canApprove,
-		CanReject:  canReject,
-		IsFinal:    taskledger.IsFinalReviewTask(task),
-		UpdatedAt:  task.UpdatedAt,
+		TraceID:           traceID,
+		TaskID:            task.TaskID,
+		Title:             title,
+		Status:            status,
+		Review:            reviewPolicy,
+		Bee:               task.Bee,
+		Sector:            task.Sector,
+		DependsOn:         append([]string(nil), task.DependsOn...),
+		RunCount:          runCount,
+		CanStart:          tasks.CanStartTask(snap, task.TaskID),
+		CanRetry:          tasks.CanRetryTask(snap, task.TaskID),
+		CanApprove:        canApprove,
+		CanReject:         canReject,
+		IsFinal:           taskledger.IsFinalReviewTask(task),
+		ProposalWorkspace: proposalWorkspace,
+		UpdatedAt:         task.UpdatedAt,
 	}
 }
 

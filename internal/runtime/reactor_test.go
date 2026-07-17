@@ -421,6 +421,7 @@ func TestAdvisoryPublishWarning(t *testing.T) {
 	content := `role: builder
 adapter: cursor
 prompt_template: builder.md
+worktree: true
 params:
   model: composer-2.5
   trust: true

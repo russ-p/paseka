@@ -26,6 +26,7 @@ func TestLoadBeeSubscribesPublishes(t *testing.T) {
 	writeBeeYAML(t, root, "builder", `role: builder
 adapter: cursor
 prompt_template: builder.md
+worktree: true
 subscribes:
   - type: SIGNAL
     kind: task.ready

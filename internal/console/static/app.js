@@ -1690,13 +1690,16 @@ function renderReviewQueue() {
     li.className = 'session-item' + (key === state.selectedReviewKey ? ' selected' : '');
     const finalTag = item.isFinal ? '<span class="task-tag" style="color:var(--warn)">final gate</span>' : '';
     const reviewTag = item.review ? `<span class="task-tag">${escapeHtml(item.review)}</span>` : '';
+    const workspaceTag = item.proposalWorkspace
+      ? `<span class="task-tag">${escapeHtml(item.proposalWorkspace)} proposal</span>`
+      : (item.isFinal ? '<span class="task-tag">isolated proposal</span>' : '');
     li.innerHTML = `
       <div class="top">
         <span class="bee">${escapeHtml(item.title)}</span>
         <span class="badge waiting_review">waiting_review</span>
       </div>
       <div class="id">${escapeHtml(item.traceId)} / ${escapeHtml(item.taskId)}</div>
-      <div class="badges" style="margin-top:0.35rem">${reviewTag}${finalTag}</div>
+      <div class="badges" style="margin-top:0.35rem">${reviewTag}${workspaceTag}${finalTag}</div>
       ${item.summary ? `<div class="muted" style="font-size:0.8rem;margin-top:0.35rem">${escapeHtml(item.summary)}</div>` : ''}
     `;
     li.addEventListener('click', () => selectReview(item.traceId, item.taskId));
@@ -1722,6 +1725,7 @@ function renderReviewDetail(item) {
 
   const rows = [
     ['Review policy', item.review || '—'],
+    ['Proposal workspace', item.proposalWorkspace || (item.isFinal ? 'isolated' : '—')],
     ['Trace ID', item.traceId],
     ['Task ID', item.taskId],
     ['Bee', item.bee],

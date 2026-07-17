@@ -12,7 +12,8 @@ import (
 
 func builderBeeWithProposalPublish() colony.Bee {
 	return colony.Bee{
-		Role: "builder",
+		Role:     "builder",
+		Worktree: true,
 		Subscribes: []colony.SubscriptionRule{
 			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "task.ready"}, Dispatch: colony.DispatchTask},
 		},
@@ -349,7 +350,8 @@ func TestReactorRequiredWinsOverDefer(t *testing.T) {
 
 func hivewrightBeeWithRootProposalPublish() colony.Bee {
 	return colony.Bee{
-		Role: "hivewright",
+		Role:     "hivewright",
+		Worktree: false,
 		Subscribes: []colony.SubscriptionRule{
 			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "task.ready"}, Dispatch: colony.DispatchTask},
 		},
@@ -404,5 +406,108 @@ func TestReactorRootProposalDoesNotDefer(t *testing.T) {
 	}
 	if snap.Tasks["task-1"].Status != protocol.TaskStatusCompleted {
 		t.Fatalf("status = %q, want completed (root proposal must not open AFK defer)", snap.Tasks["task-1"].Status)
+	}
+}
+
+func mainGuardBee() colony.Bee {
+	return colony.Bee{
+		Role:     "main-guard",
+		Worktree: false,
+		Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.root"}, Dispatch: colony.DispatchDirect},
+		},
+	}
+}
+
+func TestReactorRootRequiredSoftAckAfterVerification(t *testing.T) {
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "retune hive",
+			Bee:    "hivewright",
+			Review: protocol.TaskReviewRequired,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := protocol.NewEvent("trace-1", "reactor", 0, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind: protocol.TaskEventReady, TaskID: "task-1", Bee: "hivewright",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{
+		"hivewright": hivewrightBeeWithRootProposalPublish(),
+		"main-guard": mainGuardBee(),
+	})
+	rec := &recordingAdapter{result: &adapters.RunResult{
+		Status: "completed",
+		Artifacts: []adapters.Artifact{{
+			Kind:    "diff",
+			Content: "+hive config",
+		}},
+	}}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ready); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := r.Ledger().Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks["task-1"].Status != protocol.TaskStatusRunning {
+		t.Fatalf("after hivewright run status = %q, want running (await main-guard)", snap.Tasks["task-1"].Status)
+	}
+
+	verified, err := protocol.NewEvent("trace-1", "main-guard-1", 0, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationSuccess,
+		TaskID:  "task-1",
+		Summary: "disk looks good",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), verified); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err = r.Ledger().Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := snap.Tasks["task-1"]
+	if task.Status != protocol.TaskStatusWaitingReview {
+		t.Fatalf("status = %q, want waiting_review after root verification", task.Status)
+	}
+}
+
+func TestReactorRejectsFinalReviewOnRootBeePlan(t *testing.T) {
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "bad gate",
+			Bee:    "hivewright",
+			Review: protocol.TaskReviewFinal,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{
+		"hivewright": hivewrightBeeWithRootProposalPublish(),
+	})
+	err = r.ProcessEvent(context.Background(), plan)
+	if err == nil {
+		t.Fatal("expected error for review:final on root-proposal bee")
 	}
 }
