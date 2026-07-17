@@ -572,15 +572,22 @@ func RenderEventSummary(ev protocol.Event) (string, bool) {
 			summary = string(p.Status)
 		}
 		return fmt.Sprintf("Task %s: %s", p.TaskID, summary), true
-	case string(protocol.MutationCodeProposal):
+	case string(protocol.MutationCodeProposal), string(protocol.MutationCodeProposalIsolated), string(protocol.MutationCodeProposalRoot):
 		var p protocol.MutationPayload
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {
 			return "", false
 		}
-		if p.Summary != "" {
-			return "Code proposal: " + p.Summary, true
+		label := "Code proposal"
+		switch protocol.NormalizeCodeProposalKind(p.Kind) {
+		case protocol.MutationCodeProposalRoot:
+			label = "Code proposal (root)"
+		case protocol.MutationCodeProposalIsolated:
+			label = "Code proposal (isolated)"
 		}
-		return "Code proposal submitted", true
+		if p.Summary != "" {
+			return label + ": " + p.Summary, true
+		}
+		return label + " submitted", true
 	case string(protocol.VerificationSuccess):
 		var p protocol.VerificationPayload
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {

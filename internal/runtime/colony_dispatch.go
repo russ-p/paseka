@@ -7,6 +7,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/worktree"
 )
@@ -30,6 +31,9 @@ type ColonyDispatchRequest struct {
 	Intent       string
 	Insights     []string
 	InlinePrompt string
+	// ProposalKind, when set, resolves adapter cwd from the proposal MUTATION kind
+	// (isolated/alias → trace worktree; root → colony root) instead of bee.Worktree.
+	ProposalKind string
 }
 
 // DispatchColonyBee prepares workspace and runs one bee without re-resolving colony context.
@@ -55,7 +59,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 
 	effectiveSector := colony.EffectiveSector(req.Sector, bee.Sector)
-	workspace, sectorRel, err := workspaceForBee(ctxColony, manifest, bee, req.TraceID, effectiveSector)
+	workspace, sectorRel, err := workspaceForDispatch(ctxColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind)
 	if err != nil {
 		return nil, err
 	}
@@ -119,9 +123,16 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}, nil
 }
 
-func workspaceForBee(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName string) (workspace string, sectorRel string, err error) {
+func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string) (workspace string, sectorRel string, err error) {
 	base := ctxColony.ColonyRoot
-	if bee.Worktree {
+	useWorktree := bee.Worktree
+	if proposalKind != "" {
+		if !protocol.IsCodeProposalKind(proposalKind) {
+			return "", "", fmt.Errorf("runtime: unsupported proposal kind %q for workspace affinity", proposalKind)
+		}
+		useWorktree = protocol.NormalizeCodeProposalKind(protocol.MutationKind(proposalKind)) == protocol.MutationCodeProposalIsolated
+	}
+	if useWorktree {
 		entry, err := worktree.Ensure(worktree.EnsureOptions{
 			ColonyRoot: ctxColony.ColonyRoot,
 			TraceID:    traceID,

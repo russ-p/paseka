@@ -33,6 +33,8 @@ type DoctorReport struct {
 	KVOK          bool
 	ObjectStoreOK bool
 	Errors        []string
+	Warnings      []string
+	Advisories    []string
 }
 
 // Diagnose checks NATS connectivity and JetStream resources.
@@ -73,6 +75,16 @@ func Diagnose(ctx colony.Context) (DoctorReport, error) {
 		report.Errors = append(report.Errors, fmt.Sprintf("object store: %v", err))
 	} else {
 		report.ObjectStoreOK = true
+	}
+
+	bees, err := colony.LoadAllBeesForDiagnosis(ctx.ColonyRoot)
+	if err != nil {
+		report.Errors = append(report.Errors, err.Error())
+	} else {
+		proposal := colony.DiagnoseCodeProposal(bees)
+		report.Errors = append(report.Errors, proposal.Errors...)
+		report.Warnings = append(report.Warnings, proposal.Warnings...)
+		report.Advisories = append(report.Advisories, proposal.Advisories...)
 	}
 	return report, nil
 }

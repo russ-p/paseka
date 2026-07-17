@@ -28,7 +28,7 @@ func TestReactorDirectDispatchMutation(t *testing.T) {
 	}
 
 	r := newTestReactor(t, map[string]colony.Bee{
-		"guard": {Role: "guard", Subscribes: []colony.SubscriptionRule{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
 			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
 		}},
 	})
@@ -60,7 +60,7 @@ func TestReactorSkipsDuplicateDirectEvent(t *testing.T) {
 	}
 
 	r := newTestReactor(t, map[string]colony.Bee{
-		"guard": {Role: "guard", Subscribes: []colony.SubscriptionRule{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
 			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
 		}},
 	})
@@ -180,7 +180,7 @@ func TestReactorSkipsDirectDispatchSamePublisherBee(t *testing.T) {
 
 func TestReactorRedispatchesGuardOnReworkCodeProposal(t *testing.T) {
 	r := newTestReactor(t, map[string]colony.Bee{
-		"guard": {Role: "guard", Subscribes: []colony.SubscriptionRule{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
 			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
 		}},
 	})
@@ -327,7 +327,7 @@ func TestReactorSkipsTaskReadyWhenBeeNotSubscribed(t *testing.T) {
 	}
 
 	r := newTestReactor(t, map[string]colony.Bee{
-		"guard": {Role: "guard", Subscribes: []colony.SubscriptionRule{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
 			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
 		}},
 	})
@@ -421,6 +421,7 @@ func TestAdvisoryPublishWarning(t *testing.T) {
 	content := `role: builder
 adapter: cursor
 prompt_template: builder.md
+worktree: true
 params:
   model: composer-2.5
   trust: true

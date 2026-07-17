@@ -276,7 +276,7 @@ subscribes:
     dispatch: direct
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
   - type: VERIFICATION
     kind: task.completed
 `
@@ -289,10 +289,10 @@ params:
   output_format: stream-json
   trust: true
   force: true
-worktree: true
+worktree: false
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.root
   - type: INSIGHT
     kind: run.summary
   - type: INSIGHT
@@ -689,7 +689,7 @@ subscribes:
     dispatch: direct
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
   - type: VERIFICATION
     kind: task.completed
 `
@@ -699,10 +699,10 @@ system_template: hivewright-system.md
 prompt_template: hivewright-task.md
 params:
   output_format: json
-worktree: true
+worktree: false
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.root
   - type: INSIGHT
     kind: run.summary
   - type: INSIGHT

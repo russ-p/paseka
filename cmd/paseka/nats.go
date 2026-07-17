@@ -49,7 +49,20 @@ func printDoctorReport(r bus.DoctorReport) {
 		for _, e := range r.Errors {
 			fmt.Printf("  - %s\n", e)
 		}
-	} else {
+	}
+	if len(r.Warnings) > 0 {
+		fmt.Println("\nWarnings:")
+		for _, w := range r.Warnings {
+			fmt.Printf("  - %s\n", w)
+		}
+	}
+	if len(r.Advisories) > 0 {
+		fmt.Println("\nAdvisories:")
+		for _, a := range r.Advisories {
+			fmt.Printf("  - %s\n", a)
+		}
+	}
+	if len(r.Errors) == 0 && len(r.Warnings) == 0 && len(r.Advisories) == 0 {
 		fmt.Println("\nAll checks passed.")
 	}
 }
@@ -185,7 +198,7 @@ func newProposalApproveCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "approve",
-		Short: "Approve a review-gated task and merge the trace worktree",
+		Short: "Approve a review-gated task (R1 ack for root proposals; merge for isolated final gate)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" || taskID == "" {
 				return fmt.Errorf("--trace and --task are required")

@@ -8,18 +8,19 @@ import (
 
 // TaskSnapshot is the current state of one task within a trace.
 type TaskSnapshot struct {
-	TaskID    string                    `json:"taskId"`
-	Title     string                    `json:"title,omitempty"`
-	Body      string                    `json:"body,omitempty"`
-	Bee       string                    `json:"bee,omitempty"`
-	Sector    string                    `json:"sector,omitempty"`
-	Intent    string                    `json:"intent,omitempty"`
-	Review    protocol.TaskReviewPolicy `json:"review,omitempty"`
-	Status    protocol.TaskStatus       `json:"status"`
-	DependsOn []string                  `json:"dependsOn,omitempty"`
-	Summary   string                    `json:"summary,omitempty"`
-	Commit    string                    `json:"commit,omitempty"`
-	UpdatedAt time.Time                 `json:"updatedAt,omitempty"`
+	TaskID            string                     `json:"taskId"`
+	Title             string                     `json:"title,omitempty"`
+	Body              string                     `json:"body,omitempty"`
+	Bee               string                     `json:"bee,omitempty"`
+	Sector            string                     `json:"sector,omitempty"`
+	Intent            string                     `json:"intent,omitempty"`
+	Review            protocol.TaskReviewPolicy  `json:"review,omitempty"`
+	Status            protocol.TaskStatus        `json:"status"`
+	DependsOn         []string                   `json:"dependsOn,omitempty"`
+	Summary           string                     `json:"summary,omitempty"`
+	Commit            string                     `json:"commit,omitempty"`
+	ProposalWorkspace protocol.ProposalWorkspace `json:"proposalWorkspace,omitempty"`
+	UpdatedAt         time.Time                  `json:"updatedAt,omitempty"`
 }
 
 // TraceSnapshot is the aggregated task ledger for one trace.

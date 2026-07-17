@@ -7,11 +7,19 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/bus"
+	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
-func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest, result *adapters.RunResult, synthesized []protocol.Event) error {
+func (d *Dispatcher) publishRunOutcome(
+	ctx context.Context,
+	req DispatchRequest,
+	bee colony.Bee,
+	baseline adapters.WorkspaceBaseline,
+	result *adapters.RunResult,
+	synthesized []protocol.Event,
+) error {
 	if d.publisher == nil || result == nil {
 		return nil
 	}
@@ -30,11 +38,11 @@ func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest,
 			return err
 		}
 	}
-	mutation, err := mutationFromResult(d.publisher, req, result)
+	mutation, err := d.mutationFromRun(ctx, req, bee, baseline, result)
 	if err != nil {
 		return err
 	}
-	if mutation != nil && d.shouldAutoPublishMutation(req.Bee) {
+	if mutation != nil {
 		d.advisePublish(req.Bee, *mutation, result)
 		if err := d.publisher.PublishEvent(ctx, *mutation); err != nil {
 			return err
@@ -43,11 +51,14 @@ func (d *Dispatcher) publishRunOutcome(ctx context.Context, req DispatchRequest,
 	return nil
 }
 
-func (d *Dispatcher) shouldAutoPublishMutation(beeRole string) bool {
-	if d.registry == nil {
-		return true
+func (d *Dispatcher) shouldAutoPublishMutation(bee colony.Bee) bool {
+	if len(bee.Publishes) == 0 {
+		return false
 	}
-	return d.registry.ShouldAutoPublishMutation(beeRole)
+	if d.registry != nil {
+		return d.registry.ShouldAutoPublishMutation(bee.Role)
+	}
+	return shouldAutoPublishProposal(bee)
 }
 
 func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *adapters.RunResult) {
@@ -64,30 +75,57 @@ func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *ad
 	}
 }
 
-func mutationFromResult(pub bus.Publisher, req DispatchRequest, result *adapters.RunResult) (*protocol.Event, error) {
-	diff := ""
-	for _, a := range result.Artifacts {
-		if a.Kind == "diff" && strings.TrimSpace(a.Content) != "" {
-			diff = a.Content
-			break
-		}
-	}
-	if diff == "" {
+func (d *Dispatcher) mutationFromRun(
+	ctx context.Context,
+	req DispatchRequest,
+	bee colony.Bee,
+	baseline adapters.WorkspaceBaseline,
+	result *adapters.RunResult,
+) (*protocol.Event, error) {
+	if !d.shouldAutoPublishMutation(bee) {
 		return nil, nil
 	}
-	payload := protocol.MutationPayload{
-		Kind:    protocol.MutationCodeProposal,
-		Diff:    diff,
-		Summary: strings.TrimSpace(result.Summary),
-		TaskID:  req.TaskID,
+
+	plan := planAutoProposal(bee)
+	if !plan.ok {
+		appendAutoProposalSkipWarning(bee, plan, result)
+		return nil, nil
 	}
-	if d, ok := pub.(*bus.Client); ok && len(diff) > 64*1024 {
-		ref, err := d.StoreArtifact(fmt.Sprintf("%s-%s.diff", req.TraceID, req.AgentID), []byte(diff))
-		if err == nil {
+
+	workspace := req.Workspace
+	if workspace == "" {
+		workspace = req.ColonyRoot
+	}
+
+	diff, err := adapters.AttributableDiff(ctx, workspace, baseline)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: attributable diff: %w", err)
+	}
+	if strings.TrimSpace(diff) == "" {
+		return nil, nil
+	}
+
+	payload := protocol.MutationPayload{
+		Kind:      plan.kind,
+		Diff:      diff,
+		Summary:   strings.TrimSpace(result.Summary),
+		TaskID:    req.TaskID,
+		Workspace: plan.workspace,
+		BaseSha:   baseline.BaseSHA,
+		Sector:    req.Sector,
+	}
+	if bee.Worktree {
+		payload.WorktreePath = worktreeRelPath(req.ColonyRoot, req.TraceID)
+	}
+
+	if pub, ok := d.publisher.(*bus.Client); ok && len(diff) > 64*1024 {
+		ref, storeErr := pub.StoreArtifact(fmt.Sprintf("%s-%s.diff", req.TraceID, req.AgentID), []byte(diff))
+		if storeErr == nil {
 			payload.Ref = ref
 			payload.Diff = ""
 		}
 	}
+
 	ev, err := protocol.NewEvent(req.TraceID, req.AgentID, 0, protocol.EventMutation, payload)
 	if err != nil {
 		return nil, err

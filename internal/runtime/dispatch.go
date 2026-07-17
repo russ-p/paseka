@@ -273,6 +273,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		logging.F("run_dir", RelRunDir(colonyRoot, runDirPath)),
 	)
 
+	baseline, baselineErr := adapters.CaptureWorkspaceBaseline(ctx, workspace)
+	if baselineErr != nil {
+		runtimeLog.Warn("workspace baseline capture failed", logging.F("error", baselineErr.Error()))
+	}
+
 	result, err := adapter.Run(ctx, adapters.RunRequest{
 		Bee:          bee.Role,
 		Prompt:       rendered,
@@ -328,7 +333,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 		TraceID:    req.TraceID,
 		AgentID:    agentID,
 		TaskID:     req.TaskID,
-	}, result, synthesized); pubErr != nil {
+		Sector:     req.Sector,
+		Workspace:  workspace,
+	}, bee, baseline, result, synthesized); pubErr != nil {
 		if d.busRequired {
 			return result, pubErr
 		}

@@ -225,6 +225,31 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 			ready = append(ready, candidate)
 			changed = true
 		}
+
+	case protocol.EventMutation:
+		var payload protocol.MutationPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return ApplyResult{}, fmt.Errorf("taskledger: parse mutation: %w", err)
+		}
+		if !protocol.IsCodeProposalKind(string(payload.Kind)) || payload.TaskID == "" {
+			return ApplyResult{Trace: trace}, nil
+		}
+		task, ok := trace.Tasks[payload.TaskID]
+		if !ok {
+			task = TaskSnapshot{TaskID: payload.TaskID}
+		}
+		switch protocol.NormalizeCodeProposalKind(payload.Kind) {
+		case protocol.MutationCodeProposalIsolated:
+			task.ProposalWorkspace = protocol.ProposalWorkspaceIsolated
+		case protocol.MutationCodeProposalRoot:
+			task.ProposalWorkspace = protocol.ProposalWorkspaceRoot
+		}
+		if payload.Workspace != "" {
+			task.ProposalWorkspace = payload.Workspace
+		}
+		task.UpdatedAt = now
+		trace.Tasks[payload.TaskID] = task
+		changed = true
 	}
 
 	return ApplyResult{

@@ -34,8 +34,8 @@
     },
     {
       "type": "MUTATION",
-      "kind": "code.proposal",
-      "id": "MUTATION/code.proposal"
+      "kind": "code.proposal.isolated",
+      "id": "MUTATION/code.proposal.isolated"
     },
     {
       "type": "SIGNAL",
@@ -91,7 +91,7 @@
     {
       "kind": "publish",
       "from": "builder",
-      "to": "MUTATION/code.proposal"
+      "to": "MUTATION/code.proposal.isolated"
     },
     {
       "kind": "publish",
@@ -105,13 +105,13 @@
     },
     {
       "kind": "subscribe",
-      "from": "MUTATION/code.proposal",
+      "from": "MUTATION/code.proposal.isolated",
       "to": "builder",
       "dispatch": "direct"
     },
     {
       "kind": "subscribe",
-      "from": "MUTATION/code.proposal",
+      "from": "MUTATION/code.proposal.isolated",
       "to": "guard",
       "dispatch": "direct"
     },

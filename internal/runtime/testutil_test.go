@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/paseka/paseka/internal/colony"
@@ -31,6 +32,9 @@ func writeTestColonyWithBees(root string, bees map[string]colony.Bee) error {
 adapter: cursor
 prompt_template: default.md
 `, role)
+		if bee.Worktree {
+			content += "worktree: true\n"
+		}
 		if len(bee.Subscribes) > 0 {
 			content += "subscribes:\n"
 			for _, sub := range bee.Subscribes {
@@ -58,7 +62,33 @@ prompt_template: default.md
 		}
 		_ = bee.Role
 	}
-	return nil
+	return initTestGitRepo(root)
+}
+
+func initTestGitRepo(root string) error {
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		return err
+	}
+	runGit := func(args ...string) error {
+		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %v: %w: %s", args, err, out)
+		}
+		return nil
+	}
+	if err := runGit("init"); err != nil {
+		return err
+	}
+	if err := runGit("config", "user.email", "test@test.com"); err != nil {
+		return err
+	}
+	if err := runGit("config", "user.name", "test"); err != nil {
+		return err
+	}
+	if err := runGit("add", "."); err != nil {
+		return err
+	}
+	return runGit("commit", "-m", "init")
 }
 
 func mustWriteTestColony(t interface {

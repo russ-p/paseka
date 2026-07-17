@@ -91,15 +91,30 @@ Projected strings appear in templates via:
 
 ---
 
-## VERIFICATION routing (unchanged)
+## MUTATION kinds (workflow)
+
+Code proposals use `MUTATION` with explicit workspace provenance. They drive direct dispatch to reviewers and set `proposalWorkspace` on the task ledger.
+
+| `payload.kind` | Workspace | Typical producer | Typical subscriber |
+| -------------- | --------- | ---------------- | ---------------- |
+| `code.proposal.isolated` | `.paseka/worktrees/<traceId>/` (+ sector) | `builder` (`worktree: true`) | `guard` (`worktree: true`) |
+| `code.proposal.root` | Colony root (+ sector) | `hivewright` (`worktree: false`) | `main-guard` (`worktree: false`) |
+| `code.proposal` (alias) | Same as isolated | Legacy YAML | Matches isolated subscribers |
+
+Bare `code.proposal` is normalized to `code.proposal.isolated` on auto-publish write. Payload may include `workspace`, `baseSha`, `worktreePath` (isolated), `sector`, `diff` / `ref`, `summary`, `taskId`. See [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md).
+
+---
+
+## VERIFICATION routing
 
 Workflow handoff remains `VERIFICATION`-driven:
 
 | Event | Typical subscriber | Handoff |
 | ----- | ------------------ | ------- |
-| `MUTATION/code.proposal` | `guard` | diff + summary for review |
+| `MUTATION/code.proposal.isolated` (+ alias) | `guard` | diff + summary; reviewer cwd = trace worktree |
+| `MUTATION/code.proposal.root` | `main-guard` | diff + summary; reviewer cwd = colony root |
 | `VERIFICATION/verification.failed` | `builder` | failure summary for fix-up |
-| `VERIFICATION/verification.success` | `receiver` | approval summary for commit gate |
+| `VERIFICATION/verification.success` | `receiver` (isolated defer) or ledger (root `review: required`) | approval / soft-gate advance |
 
 See [008-bee-routing.md](008-bee-routing.md).
 

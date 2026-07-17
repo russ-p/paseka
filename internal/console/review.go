@@ -16,18 +16,19 @@ import (
 
 // ReviewQueueItem is one task awaiting human review.
 type ReviewQueueItem struct {
-	TraceID    string    `json:"traceId"`
-	TaskID     string    `json:"taskId"`
-	Title      string    `json:"title"`
-	Review     string    `json:"review"`
-	Summary    string    `json:"summary,omitempty"`
-	Bee        string    `json:"bee,omitempty"`
-	Sector     string    `json:"sector,omitempty"`
-	RunCount   int       `json:"runCount"`
-	UpdatedAt  time.Time `json:"updatedAt,omitempty"`
-	IsFinal    bool      `json:"isFinal"`
-	CanApprove bool      `json:"canApprove"`
-	CanReject  bool      `json:"canReject"`
+	TraceID           string    `json:"traceId"`
+	TaskID            string    `json:"taskId"`
+	Title             string    `json:"title"`
+	Review            string    `json:"review"`
+	Summary           string    `json:"summary,omitempty"`
+	Bee               string    `json:"bee,omitempty"`
+	Sector            string    `json:"sector,omitempty"`
+	RunCount          int       `json:"runCount"`
+	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
+	IsFinal           bool      `json:"isFinal"`
+	ProposalWorkspace string    `json:"proposalWorkspace,omitempty"`
+	CanApprove        bool      `json:"canApprove"`
+	CanReject         bool      `json:"canReject"`
 }
 
 // ReviewQueueView is the colony-wide review queue projection.
@@ -117,8 +118,16 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		return ApproveTaskResponse{}, err
 	}
 
+	snap, _, err := tasks.LoadTrace(colonyCtx, session.Ledger, traceID)
+	if err != nil {
+		return ApproveTaskResponse{}, err
+	}
+	task := snap.Tasks[taskID]
+
 	msg := "Task approved."
-	if commitSHA != "" {
+	if task.ProposalWorkspace == protocol.ProposalWorkspaceRoot {
+		msg = "Task approved (root proposal — no worktree merge)."
+	} else if commitSHA != "" {
 		msg = "Task approved and worktree merged."
 	}
 	return ApproveTaskResponse{
@@ -163,17 +172,18 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 
 func reviewQueueItemFromTask(item TaskListItem) ReviewQueueItem {
 	return ReviewQueueItem{
-		TraceID:    item.TraceID,
-		TaskID:     item.TaskID,
-		Title:      item.Title,
-		Review:     item.Review,
-		Bee:        item.Bee,
-		Sector:     item.Sector,
-		RunCount:   item.RunCount,
-		UpdatedAt:  item.UpdatedAt,
-		IsFinal:    item.IsFinal,
-		CanApprove: item.CanApprove,
-		CanReject:  item.CanReject,
+		TraceID:           item.TraceID,
+		TaskID:            item.TaskID,
+		Title:             item.Title,
+		Review:            item.Review,
+		Bee:               item.Bee,
+		Sector:            item.Sector,
+		RunCount:          item.RunCount,
+		UpdatedAt:         item.UpdatedAt,
+		IsFinal:           item.IsFinal,
+		ProposalWorkspace: item.ProposalWorkspace,
+		CanApprove:        item.CanApprove,
+		CanReject:         item.CanReject,
 	}
 }
 

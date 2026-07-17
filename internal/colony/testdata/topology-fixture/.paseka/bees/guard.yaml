@@ -1,9 +1,10 @@
 role: guard
 adapter: cursor
 prompt_template: guard.md
+worktree: true
 subscribes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
     dispatch: direct
 publishes:
   - type: VERIFICATION

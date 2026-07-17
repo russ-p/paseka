@@ -1,23 +1,22 @@
 # Backlog
 
-## Deferred Ideas
+## Recently shipped
 
 ### Split `code.proposal` by workspace (isolated vs root)
 
-Context:
-- Bees with `worktree: false` that declare `MUTATION/code.proposal` (e.g. hivewright on colony root) can auto-publish diffs from a dirty main checkout.
-- `guard` (`worktree: true`) then ensures a trace worktree from `HEAD`, which does not contain those root edits — review looks at the wrong disk.
+**Shipped** — see [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md) and canonical docs:
 
-Backlog item:
-- Implement [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md): kinds `code.proposal.isolated` / `code.proposal.root`, baseline delta, workspace-affine direct dispatch, AFK merge gate only for isolated, root human ack **R1** (no merge, no auto-commit).
+- [003-architecture.md](003-architecture.md) §6 — dual proposal paths and shared-workspace invariant
+- [008-bee-routing.md](008-bee-routing.md) — kinds, alias matching, direct dispatch, AFK defer scope
+- [010-bee-config.md](010-bee-config.md) — `publishes` examples and worktree ↔ kind invariants
+- [005-task-ledger.md](005-task-ledger.md) — root soft gate (R1) vs isolated merge gate
+- [007-cli.md](007-cli.md) — `proposal approve` branches on workspace
 
-Why deferred:
-- Spec is written; needs a focused protocol + runtime + colony bee retarget pass.
+Kinds `code.proposal.isolated` / `code.proposal.root`, baseline delta, workspace-affine direct dispatch, AFK merge gate only for isolated, root human ack R1, and `paseka doctor` wiring checks are live.
 
-Exit criteria for revisiting:
-- Start implementation from spec 008 acceptance criteria; optional follow-ups (`proposal_paths`, untracked files) can stay deferred after MVP of the split.
+Deferred follow-ups from spec 008: `proposal_paths` allowlist, untracked files in proposal delta, alias removal timeline.
 
-### Replace `result.txt` with a clearer log artifact
+## Deferred Ideas
 
 Context:
 - The current AFK adapter flow still uses `result.txt` as a familiar run artifact inherited from the earliest bash-based prototype.
@@ -48,7 +47,7 @@ Backlog items:
 - **`confidence` (Pollen Quality)** — filter or weight events by confidence level; mentioned in [001-brief.md](001-brief.md) alongside `energyToken`.
 - **`system.kill`** — bus signal to forcibly stop a trace or agent dispute avalanche; HITL energy injection exists via `paseka energy add`, but no kill primitive.
 - **Queen Console UI polish** — API fields (`energyBudget`, `energyRemaining`, `lowEnergy`) exist; richer badges, alerts, and beekeeper actions in the SPA are not done.
-- **Per-run proposal diff in Reviews** — final merge gate preview (`GET /api/traces/:traceId/merge-diff`) ships; side-by-side preview of per-run `MUTATION/code.proposal` for `review: required` tasks does not.
+- **Per-run proposal diff in Reviews** — final merge gate preview (`GET /api/traces/:traceId/merge-diff`) ships; side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks does not.
 - **Energy gate on `paseka bee run` / interactive chat** — one-shot `bee run` and `bee chat` bypass the reactor; only AFK/HITL paths through `paseka run` consume honey today.
 - **Per-bee cost multipliers** — every adapter dispatch costs `1`; no per-role or per-intent pricing.
 - **Honey ↔ LLM token billing** — AFK runs may persist optional LLM `usage` on `result.json` (orthogonal to honey); do not price honey from model tokens without a separate design.

@@ -1,13 +1,14 @@
 role: builder
 adapter: cursor
 prompt_template: builder.md
+worktree: true
 subscribes:
   - type: SIGNAL
     kind: task.ready
     dispatch: task
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
     dispatch: direct
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated

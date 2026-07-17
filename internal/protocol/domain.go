@@ -47,7 +47,18 @@ func IsDomainEvent(t EventType) bool {
 type MutationKind string
 
 const (
-	MutationCodeProposal MutationKind = "code.proposal"
+	// MutationCodeProposal is a read-time alias of MutationCodeProposalIsolated.
+	MutationCodeProposal         MutationKind = "code.proposal"
+	MutationCodeProposalIsolated MutationKind = "code.proposal.isolated"
+	MutationCodeProposalRoot     MutationKind = "code.proposal.root"
+)
+
+// ProposalWorkspace identifies where a code proposal was produced.
+type ProposalWorkspace string
+
+const (
+	ProposalWorkspaceIsolated ProposalWorkspace = "isolated"
+	ProposalWorkspaceRoot     ProposalWorkspace = "root"
 )
 
 // VerificationKind identifies verification payload variants.
@@ -60,11 +71,15 @@ const (
 
 // MutationPayload is emitted as MUTATION for code change proposals.
 type MutationPayload struct {
-	Kind    MutationKind `json:"kind,omitempty"`
-	Diff    string       `json:"diff,omitempty"`
-	Summary string       `json:"summary,omitempty"`
-	Ref     string       `json:"ref,omitempty"` // object store reference for large artifacts
-	TaskID  string       `json:"taskId,omitempty"`
+	Kind         MutationKind      `json:"kind,omitempty"`
+	Diff         string            `json:"diff,omitempty"`
+	Summary      string            `json:"summary,omitempty"`
+	Ref          string            `json:"ref,omitempty"` // object store reference for large artifacts
+	TaskID       string            `json:"taskId,omitempty"`
+	Workspace    ProposalWorkspace `json:"workspace,omitempty"`
+	BaseSha      string            `json:"baseSha,omitempty"`
+	WorktreePath string            `json:"worktreePath,omitempty"`
+	Sector       string            `json:"sector,omitempty"`
 }
 
 // VerificationPayload is emitted as VERIFICATION for review outcomes.

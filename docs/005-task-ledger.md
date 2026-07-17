@@ -73,15 +73,26 @@ Each task may declare an optional `review` field in `task.plan`:
 
 | `review` | Behavior |
 | -------- | -------- |
-| `none` (default) | No human mid-task review. Runtime auto-completes on adapter success **unless** a colony bee explicitly declares `publishes: VERIFICATION/task.completed` and the run opened a `code.proposal` gate (builder with diff); then status stays `waiting_review` until that publisher emits `task.completed`. Scout and other no-proposal bees still auto-complete. |
-| `required` | After a successful bee run, task moves to `waiting_review` until human approval |
-| `final` | Trace-level merge gate — activates when all other tasks complete; no AFK dispatch |
+| `none` (default) | No human mid-task review. Runtime auto-completes on adapter success **unless** a colony bee explicitly declares `publishes: VERIFICATION/task.completed` and the run opened an **isolated** `code.proposal` gate (builder with diff); then status stays `waiting_review` until that publisher emits `task.completed`. Scout and other no-proposal bees still auto-complete. Root proposals (`code.proposal.root`) do **not** open this AFK commit-gate defer. |
+| `required` | After a successful bee run, task moves to `waiting_review` until human approval. For **isolated** proposals this follows guard verification and may include receiver defer semantics. For **root** proposals (`hivewright` → `main-guard`), `waiting_review` is a **soft ack (R1)** only — no worktree merge implied. |
+| `final` | Trace-level **isolated** merge gate — activates when all other tasks complete; no AFK dispatch. **Forbidden** when the task's bee publishes `code.proposal.root` (doctor / `task.plan` load error). |
 
-When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes.
+When a `MUTATION/code.proposal.*` event arrives, the ledger records `proposalWorkspace` on the task (`isolated` or `root`) from the mutation payload. Queen Console shows workspace tags on review tasks.
+
+### Isolated merge gate vs root soft gate
+
+| Aspect | Isolated (`code.proposal.isolated`) | Root (`code.proposal.root`) |
+| ------ | ----------------------------------- | --------------------------- |
+| AFK defer to receiver | Yes, when colony has `task.completed` publisher | No |
+| `waiting_review` on `review: required` | After guard path (or defer) | After `main-guard` emits `verification.success` |
+| `paseka proposal approve` | Merges trace worktree when `review: final` / `_review` and worktree exists | **R1:** records ack + `task.completed`; **no** merge, **no** auto-commit |
+| Beekeeper commit | Via merge approve on final gate | Manual git on colony root |
+
+When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes (isolated merge path).
 
 Human actions (CLI and Queen Console Reviews use the same domain flows):
 
-- `paseka proposal approve --trace <id> --task <id>` — merge trace worktree (when present) and emit `task.completed`
+- `paseka proposal approve --trace <id> --task <id>` — **isolated final gate:** merge trace worktree when present and emit `task.completed`; **root / required soft gate:** ack only (no merge, no commit) and emit `task.completed`
 - `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework
 - `paseka task retry --trace <id> --task <id>` — re-publish `task.ready` for a `failed` or stuck `running` task (same bee, intent, body)
 
@@ -211,8 +222,8 @@ PRD (SIGNAL: feature.requested)
   → Scout INSIGHT task.plan
   → Task Reactor: task-1 → ready
   → Builder run (traceId + taskId)
-  → AFK tasks auto-complete when no colony commit-gate publisher opened a code.proposal; otherwise wait for receiver task.completed
-  → Review-marked tasks (`review: required`) enter waiting_review for human approval
+  → AFK tasks auto-complete when no colony commit-gate publisher opened an isolated code.proposal; otherwise wait for receiver task.completed
+  → Review-marked tasks (`review: required`) enter waiting_review — isolated (guard/receiver) or root soft ack (main-guard)
   → All AFK tasks done → final review gate (planned or synthesized)
   → Human approve → merge worktree → VERIFICATION task.completed
   → Task Reactor: next task.ready (if any)
@@ -246,6 +257,7 @@ type Ledger interface {
 | Field | Where | Notes |
 | ----- | ----- | ----- |
 | `taskId` | `protocol.Request`, `adapters.RunRequest`, `prompts.Context` | Optional; empty for one-shot CLI runs |
+| `proposalWorkspace` | `taskledger.TaskSnapshot`, Queen Console task view | `isolated` or `root`; set from opening `MUTATION/code.proposal.*` |
 | `{{.TaskID}}` | Prompt templates | Available when dispatch includes a task id |
 | `intent` | `task.plan`, `task.ready`, CLI `--intent` | Optional builder mission hint; normalized at prompt render time |
 | Task events | `paseka event emit --stdin` | Validated CLI publish with machine-readable feedback |
@@ -266,7 +278,7 @@ The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/
       runs.ndjson    # agent run history for this task
 ```
 
-`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `dependsOn`, `summary`, `commit`, `updatedAt`). The markdown body stores the human-readable task description (`body`).
+`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `updatedAt`). The markdown body stores the human-readable task description (`body`).
 
 `runs.ndjson` links task executions to existing agent run directories (`agentId`, `bee`, `runDir`, `startedAt`, `finishedAt`, `runStatus`).
 

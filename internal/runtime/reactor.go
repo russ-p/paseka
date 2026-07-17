@@ -114,6 +114,10 @@ func (r *Reactor) handleEvent(ev protocol.Event) error {
 func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	logEventReceived(ev)
 
+	if err := r.validateIncomingTaskPlan(ev); err != nil {
+		return err
+	}
+
 	// Runtime-generated events are applied before publish; skip the JetStream echo
 	// so non-idempotent reducers (energy.consume) are not applied twice.
 	if r.takeLocalEcho(ev) {
@@ -135,6 +139,9 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		}
 	}
 	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
+		return err
+	}
+	if err := r.handleVerificationSuccess(ctx, ev); err != nil {
 		return err
 	}
 	if err := r.handleInviteCompletion(ctx, ev); err != nil {
@@ -333,6 +340,9 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 
 	summary := strings.TrimSpace(res.Result.Summary)
 	if protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired {
+		if runOpenedRootProposal(r.registry, bee, res.Result) {
+			return nil
+		}
 		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
 	}
 	if ev, ok := runEmittedTaskCompleted(res.Result, task.TaskID); ok {
@@ -392,11 +402,15 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return nil
 	}
 
+	proposalSector, proposalKind := proposalDispatchFields(ev)
+
 	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
-		Bee:     beeRole,
-		TraceID: ev.TraceID,
-		TaskID:  taskID,
-		Task:    taskBody,
+		Bee:          beeRole,
+		TraceID:      ev.TraceID,
+		TaskID:       taskID,
+		Task:         taskBody,
+		Sector:       proposalSector,
+		ProposalKind: proposalKind,
 	}, DispatchModeDirect)
 	if err != nil {
 		return err

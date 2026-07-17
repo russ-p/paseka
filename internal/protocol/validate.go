@@ -146,7 +146,7 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 	}
 
 	switch MutationKind(kind) {
-	case MutationCodeProposal:
+	case MutationCodeProposal, MutationCodeProposalIsolated, MutationCodeProposalRoot:
 		return validateCodeProposal(payload)
 	}
 
@@ -185,7 +185,7 @@ func expectedEventType(kind string) EventType {
 		return EventVerification
 	}
 	switch MutationKind(kind) {
-	case MutationCodeProposal:
+	case MutationCodeProposal, MutationCodeProposalIsolated, MutationCodeProposalRoot:
 		return EventMutation
 	}
 	if t := InsightKindForEventType(kind); t != "" {
@@ -284,7 +284,58 @@ func validateCodeProposal(payload json.RawMessage) []ValidationDetail {
 	if strings.TrimSpace(p.Diff) == "" && strings.TrimSpace(p.Ref) == "" && strings.TrimSpace(p.Summary) == "" {
 		return []ValidationDetail{{Path: "payload", Message: "at least one of diff, ref, or summary is required"}}
 	}
-	return nil
+	return validateCodeProposalProvenance(p)
+}
+
+func validateCodeProposalProvenance(p MutationPayload) []ValidationDetail {
+	var details []ValidationDetail
+	kind := NormalizeCodeProposalKind(p.Kind)
+
+	if ws := strings.TrimSpace(string(p.Workspace)); ws != "" {
+		switch ProposalWorkspace(ws) {
+		case ProposalWorkspaceIsolated, ProposalWorkspaceRoot:
+			expected := ProposalWorkspaceIsolated
+			if kind == MutationCodeProposalRoot {
+				expected = ProposalWorkspaceRoot
+			}
+			if ProposalWorkspace(ws) != expected {
+				details = append(details, ValidationDetail{
+					Path:    "payload.workspace",
+					Message: fmt.Sprintf("must be %q for kind %q", expected, kind),
+				})
+			}
+		default:
+			details = append(details, ValidationDetail{
+				Path:    "payload.workspace",
+				Message: "must be one of isolated, root",
+			})
+		}
+	}
+
+	if baseSha := strings.TrimSpace(p.BaseSha); baseSha != "" && len(baseSha) < 4 {
+		details = append(details, ValidationDetail{
+			Path:    "payload.baseSha",
+			Message: "must be a non-empty git object id",
+		})
+	}
+
+	if wt := strings.TrimSpace(p.WorktreePath); wt != "" {
+		if kind == MutationCodeProposalRoot {
+			details = append(details, ValidationDetail{
+				Path:    "payload.worktreePath",
+				Message: "must not be set for code.proposal.root",
+			})
+		}
+	}
+
+	if sector := strings.TrimSpace(p.Sector); sector != "" && strings.Contains(sector, "\n") {
+		details = append(details, ValidationDetail{
+			Path:    "payload.sector",
+			Message: "must be a single-line sector id",
+		})
+	}
+
+	return details
 }
 
 func validateNarrativeInsight(payload json.RawMessage) []ValidationDetail {

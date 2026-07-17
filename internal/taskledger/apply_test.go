@@ -422,3 +422,28 @@ func TestApplyEventsSequence(t *testing.T) {
 		t.Fatalf("task-2 = %+v", trace.Tasks["task-2"])
 	}
 }
+
+func TestApplyEventMutationSetsProposalWorkspace(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusRunning},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "hivewright-1", 1, protocol.EventMutation, protocol.MutationPayload{
+		Kind:      protocol.MutationCodeProposalRoot,
+		TaskID:    "task-1",
+		Workspace: protocol.ProposalWorkspaceRoot,
+		Diff:      "+cfg",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-1"].ProposalWorkspace != protocol.ProposalWorkspaceRoot {
+		t.Fatalf("proposalWorkspace = %q, want root", res.Trace.Tasks["task-1"].ProposalWorkspace)
+	}
+}

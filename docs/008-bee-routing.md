@@ -33,7 +33,7 @@ subscribes:
     dispatch: direct
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
   - type: VERIFICATION
     kind: task.completed
 ```
@@ -42,7 +42,29 @@ publishes:
 # .paseka/bees/guard.yaml
 subscribes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
+    dispatch: direct
+publishes:
+  - type: VERIFICATION
+    kind: verification.success
+  - type: VERIFICATION
+    kind: verification.failed
+```
+
+```yaml
+# .paseka/bees/hivewright.yaml — root proposals on colony checkout
+worktree: false
+publishes:
+  - type: MUTATION
+    kind: code.proposal.root
+```
+
+```yaml
+# .paseka/bees/main-guard.yaml — reviews root proposals on colony root
+worktree: false
+subscribes:
+  - type: MUTATION
+    kind: code.proposal.root
     dispatch: direct
 publishes:
   - type: VERIFICATION
@@ -81,10 +103,24 @@ Subjects follow [`internal/bus/subject.go`](../internal/bus/subject.go):
 Examples:
 
 - `paseka.demo.events.SIGNAL.task.ready`
-- `paseka.demo.events.MUTATION.code.proposal`
+- `paseka.demo.events.MUTATION.code.proposal.isolated`
+- `paseka.demo.events.MUTATION.code.proposal.root`
 - `paseka.demo.events.VERIFICATION.verification.failed`
 
 Routing matches on parsed event `type` + `payload.kind`, not on raw subject strings.
+
+### Code proposal kinds and alias
+
+| `payload.kind` | Workspace | Typical publisher | Typical reviewer |
+| -------------- | --------- | ----------------- | ---------------- |
+| `code.proposal.isolated` | `.paseka/worktrees/<traceId>/` (+ sector) | `builder` (`worktree: true`) | `guard` (`worktree: true`) |
+| `code.proposal.root` | Colony root (+ sector) | `hivewright` (`worktree: false`) | `main-guard` (`worktree: false`) |
+| `code.proposal` (alias) | Same as isolated | Legacy YAML | Matches isolated subscribers |
+
+- Bare `code.proposal` in bee YAML is accepted as an **alias of `code.proposal.isolated`**.
+- Runtime **normalizes alias → `code.proposal.isolated` on auto-publish write** (never leaves bare alias on the wire).
+- Subscription matching: a subscriber of `code.proposal` **or** `code.proposal.isolated` matches isolated events. A subscriber of only `code.proposal.root` does **not** match isolated (or alias).
+- `paseka doctor` warns when bare alias is still in use; prefer explicit kinds.
 
 ---
 
@@ -109,20 +145,23 @@ flowchart LR
 3. Reactor dispatches the bee named in `task.Bee` **only if** that bee subscribes to `task.ready` (or has no `subscribes` block).
 4. On successful run with `review: none`:
    - If the run already emitted `VERIFICATION/task.completed`, apply it.
-   - Else if a colony bee explicitly declares `publishes: VERIFICATION/task.completed` **and** this run opened `MUTATION/code.proposal` (emitted event, or non-empty diff with explicit `code.proposal` on the dispatched bee), set `waiting_review` and wait for the commit-gate publisher (typically receiver).
+   - Else if a colony bee explicitly declares `publishes: VERIFICATION/task.completed` **and** this run opened an **isolated** `code.proposal` (emitted `code.proposal.isolated` / alias, or non-empty diff with explicit isolated publish on the dispatched bee), set `waiting_review` and wait for the commit-gate publisher (typically receiver).
    - Else runtime publishes `VERIFICATION/task.completed` (fallback for scout, no-diff runs, colonies without a commit-gate publisher).
+
+**AFK defer scope:** only **isolated** proposals (`code.proposal.isolated` and alias) open the receiver commit-gate defer. `code.proposal.root` does **not** defer AFK completion — root human review uses the soft-ack path when `review: required` (see [005-task-ledger.md](005-task-ledger.md)).
 
 ### Direct path
 
-When a domain event arrives, reactor finds all bees with `dispatch: direct` subscriptions and runs them with context derived from the event payload:
+When a domain event arrives, reactor finds all bees with `dispatch: direct` subscriptions and runs them with context derived from the event payload. **Workspace affinity:** isolated proposals dispatch reviewers into the trace worktree (reuse existing dirty tree); root proposals dispatch reviewers to colony root (never ensure worktree).
 
-| Event | Typical bee | Task context |
-| ----- | ----------- | ------------ |
-| `MUTATION/code.proposal` | `guard` | diff + summary for review |
-| `VERIFICATION/verification.failed` | `builder` | failure summary for fix-up |
-| `VERIFICATION/verification.success` | `receiver` | approval summary for commit gate |
+| Event | Typical bee | Workspace | Task context |
+| ----- | ----------- | --------- | ------------ |
+| `MUTATION/code.proposal.isolated` (+ alias) | `guard` | Trace worktree (+ sector) | diff + summary; review truth is disk |
+| `MUTATION/code.proposal.root` | `main-guard` | Colony root (+ sector) | diff + summary; review truth is disk |
+| `VERIFICATION/verification.failed` | `builder` | Per bee/task rules | failure summary for fix-up |
+| `VERIFICATION/verification.success` | `receiver` | — | approval summary for commit gate |
 
-Duplicate runs are suppressed per `traceId + taskId + bee + type + kind` when `payload.taskId` is set, except for rework-cycle gates (`MUTATION/code.proposal`, `VERIFICATION/verification.failed`): those key by event identity so each builder/guard pass can run again on the same task. Direct dispatch also skips when the publishing run's bee role matches the subscriber (prevents receiver self-loops if it mistakenly re-emits `verification.success`).
+Duplicate runs are suppressed per `traceId + taskId + bee + type + kind` when `payload.taskId` is set, except for rework-cycle gates (`MUTATION/code.proposal.isolated`, `MUTATION/code.proposal.root`, `code.proposal` alias, `VERIFICATION/verification.failed`): those key by event identity so each publisher→reviewer pass can run again on the same task. Direct dispatch also skips when the publishing run's bee role matches the subscriber (prevents receiver self-loops if it mistakenly re-emits `verification.success`).
 
 ---
 
@@ -134,7 +173,7 @@ After an adapter run, `Dispatcher.publishRunOutcome` compares emitted domain eve
 - **Undeclared** — log warning + append to `RunResult.Warnings`
 - Events are still published (no enforcement in MVP)
 
-Auto-generated `MUTATION/code.proposal` from workspace diffs is published **only** when the bee declares it in `publishes` (typically `builder`). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
+Auto-generated `MUTATION/code.proposal.isolated` or `code.proposal.root` from workspace diffs is published **only** when the bee declares the matching kind in `publishes` and `worktree` matches the kind (see [010-bee-config.md](010-bee-config.md) § worktree invariants). Runtime captures a **baseline-attributed** tracked diff (MVP: tracked changes only). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
 
 Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present.
 

@@ -47,8 +47,13 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 		return "", fmt.Errorf("task %q is not a review gate task", in.TaskID)
 	}
 
+	bees, err := colony.LoadAllBees(colonyCtx.ColonyRoot)
+	if err != nil {
+		return "", err
+	}
+
 	commitSHA := ""
-	if taskledger.IsFinalReviewTask(task) {
+	if ShouldMergeOnApprove(task, bees) {
 		wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
 		if gitroot.IsInsideWorkTree(wtPath) {
 			mergeRes, err := worktree.Merge(worktree.MergeOptions{

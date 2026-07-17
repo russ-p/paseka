@@ -66,7 +66,11 @@ func (r EventRule) Matches(evType protocol.EventType, kind string) bool {
 	if ruleKind == "" {
 		return true
 	}
-	return ruleKind == strings.TrimSpace(kind)
+	eventKind := strings.TrimSpace(kind)
+	if evType == protocol.EventMutation && (protocol.IsCodeProposalKind(ruleKind) || protocol.IsCodeProposalKind(eventKind)) {
+		return protocol.CodeProposalKindsMatch(ruleKind, eventKind)
+	}
+	return ruleKind == eventKind
 }
 
 // ResolvedDispatch returns the effective dispatch mode for a subscription rule.
@@ -80,8 +84,18 @@ func (s SubscriptionRule) ResolvedDispatch() DispatchMode {
 	return DispatchDirect
 }
 
+// LoadAllBeesForDiagnosis reads bee YAML without proposal invariant validation so
+// doctor can report wiring issues on misconfigured colonies.
+func LoadAllBeesForDiagnosis(colonyRoot string) (map[string]Bee, error) {
+	return loadAllBees(colonyRoot, false)
+}
+
 // LoadAllBees reads every .paseka/bees/<role>.yaml (excluding *.local.yaml).
 func LoadAllBees(colonyRoot string) (map[string]Bee, error) {
+	return loadAllBees(colonyRoot, true)
+}
+
+func loadAllBees(colonyRoot string, validateProposal bool) (map[string]Bee, error) {
 	dir := BeesDir(colonyRoot)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -100,7 +114,7 @@ func LoadAllBees(colonyRoot string) (map[string]Bee, error) {
 			continue
 		}
 		role := strings.TrimSuffix(name, ".yaml")
-		bee, _, err := LoadBee(colonyRoot, role)
+		bee, _, err := loadBee(colonyRoot, role, validateProposal)
 		if err != nil {
 			return nil, err
 		}
@@ -169,6 +183,17 @@ func (b Bee) DeclaresPublish(evType protocol.EventType, kind string) bool {
 		return true
 	}
 	return b.ExplicitlyDeclaresPublish(evType, kind)
+}
+
+// DeclaresCodeProposalIsolated reports whether publishes includes isolated or alias code.proposal.
+func (b Bee) DeclaresCodeProposalIsolated() bool {
+	return b.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposal)) ||
+		b.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposalIsolated))
+}
+
+// DeclaresCodeProposalRoot reports whether publishes includes code.proposal.root.
+func (b Bee) DeclaresCodeProposalRoot() bool {
+	return b.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposalRoot))
 }
 
 // ExplicitlyDeclaresPublish reports whether the bee lists the event in publishes.

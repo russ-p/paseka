@@ -68,17 +68,17 @@ func (r *BeeRegistry) ValidatePublish(role string, ev protocol.Event) (warning s
 	return fmt.Sprintf("bee %q published undeclared event %s/%s", role, ev.Type, kind), false
 }
 
-// ShouldAutoPublishMutation reports whether runtime may synthesize MUTATION/code.proposal from git diff.
-// Bees with a non-empty publishes list must declare the mutation; empty list keeps backward compatibility.
+// ShouldAutoPublishMutation reports whether runtime may synthesize a code proposal mutation from git diff.
+// Bees with empty publishes never auto-publish (fail closed).
 func (r *BeeRegistry) ShouldAutoPublishMutation(role string) bool {
 	if r == nil {
-		return true
+		return false
 	}
 	bee, ok := r.bees[role]
-	if !ok || len(bee.Publishes) == 0 {
-		return true
+	if !ok {
+		return false
 	}
-	return bee.DeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposal))
+	return shouldAutoPublishProposal(bee)
 }
 
 // ShouldAutoPublishRunSummary reports whether runtime may synthesize INSIGHT/run.summary.

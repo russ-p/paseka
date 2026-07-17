@@ -328,11 +328,11 @@ Bees include only the type partials they may publish. For example:
 | `scout` | `emit-howto`, `emit-insight`, `emit-signal`; on `classify` also `scout-emit-classify` |
 | `drone` | `emit-howto`; on `grilling` also `drone-emit-grilling`; on `breakdown` also `drone-emit-breakdown` |
 | `guard` | `emit-howto`, `emit-verification`, `emit-insight` |
-| `main-guard` | `emit-howto`, `emit-insight` |
+| `main-guard` | `emit-howto`, `emit-verification`, `emit-insight` |
 | `receiver` | `emit-howto`, `emit-task-completed` |
 | `hivewright` | `emit-howto`, `emit-insight` |
 
-`MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal` from staged diffs.
+`MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal.isolated` or `code.proposal.root` from **baseline-attributed workspace diffs** (tracked changes in the adapter cwd; review truth is working-tree `git diff`, not staged-only). Guard and main-guard prompts instruct disk review via `git diff`.
 
 See [009-insight-kinds.md](009-insight-kinds.md) for the full INSIGHT taxonomy and prompt-memory rules.
 

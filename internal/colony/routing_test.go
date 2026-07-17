@@ -26,6 +26,7 @@ func TestLoadBeeSubscribesPublishes(t *testing.T) {
 	writeBeeYAML(t, root, "builder", `role: builder
 adapter: cursor
 prompt_template: builder.md
+worktree: true
 subscribes:
   - type: SIGNAL
     kind: task.ready
@@ -127,6 +128,46 @@ func TestDirectSubscribers(t *testing.T) {
 	roles := colony.DirectSubscribers(bees, protocol.EventMutation, "code.proposal")
 	if len(roles) != 1 || roles[0] != "guard" {
 		t.Fatalf("direct subscribers = %v, want [guard]", roles)
+	}
+}
+
+func TestDirectSubscribersCodeProposalFamily(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"guard-alias": {
+			Role: "guard-alias",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
+			},
+		},
+		"guard-isolated": {
+			Role: "guard-isolated",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.isolated"}, Dispatch: colony.DispatchDirect},
+			},
+		},
+		"main-guard": {
+			Role: "main-guard",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.root"}, Dispatch: colony.DispatchDirect},
+			},
+		},
+	}
+
+	for _, eventKind := range []string{"code.proposal", "code.proposal.isolated"} {
+		roles := colony.DirectSubscribers(bees, protocol.EventMutation, eventKind)
+		if len(roles) != 2 {
+			t.Fatalf("event %q: direct subscribers = %v, want guard-alias and guard-isolated", eventKind, roles)
+		}
+	}
+
+	rootRoles := colony.DirectSubscribers(bees, protocol.EventMutation, "code.proposal.root")
+	if len(rootRoles) != 1 || rootRoles[0] != "main-guard" {
+		t.Fatalf("root event: direct subscribers = %v, want [main-guard]", rootRoles)
+	}
+
+	aliasOnly := map[string]colony.Bee{"guard-alias": bees["guard-alias"]}
+	if roles := colony.DirectSubscribers(aliasOnly, protocol.EventMutation, "code.proposal.root"); len(roles) != 0 {
+		t.Fatalf("alias subscriber must not match root event, got %v", roles)
 	}
 }
 

@@ -197,23 +197,37 @@ params:
 
 func TestDispatchPublishesMutationForDiff(t *testing.T) {
 	root := t.TempDir()
-	writeColony(t, root)
+	writeProposalColony(t, root, `role: builder
+adapter: cursor
+worktree: true
+prompt_template: builder.md
+params:
+  model: composer-2.5
+  trust: true
+  force: true
+publishes:
+  - type: MUTATION
+    kind: code.proposal
+`)
 
-	rec := &recordingAdapter{
-		result: &adapters.RunResult{
-			Status:  "completed",
-			Summary: "done",
-			Artifacts: []adapters.Artifact{
-				{Kind: "diff", Content: "diff --git a/foo b/foo\n"},
-			},
-		},
-	}
 	pub := &recordingPublisher{}
 	d := runtime.NewDispatcher()
-	d.RegisterAdapter("cursor", rec)
+	d.RegisterAdapter("cursor", &mutatingAdapter{run: func(workspace string) error {
+		readme := filepath.Join(workspace, "README.md")
+		data, err := os.ReadFile(readme)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(readme, append(data, []byte("change\n")...), 0o644)
+	}})
 	d.SetPublisher(pub, false)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
 
-	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+	_, err = d.Dispatch(context.Background(), runtime.DispatchRequest{
 		ColonyRoot: root,
 		Bee:        "builder",
 		TraceID:    "trace-abc",
@@ -222,14 +236,9 @@ func TestDispatchPublishesMutationForDiff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, ev := range pub.events {
-		if ev.Type == protocol.EventMutation {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected MUTATION event, got %+v", pub.events)
+	ev := findMutation(t, pub.events)
+	if protocol.PayloadKind(ev.Payload) != string(protocol.MutationCodeProposalIsolated) {
+		t.Fatalf("expected normalized isolated kind, got %q", protocol.PayloadKind(ev.Payload))
 	}
 }
 

@@ -104,6 +104,14 @@ func HasSystemTemplate(bee Bee, overlay BeeLocalOverlay, defaults Defaults) bool
 
 // LoadBee reads .paseka/bees/<role>.yaml and optional <role>.local.yaml overlay.
 func LoadBee(colonyRoot, role string) (Bee, BeeLocalOverlay, error) {
+	bee, overlay, err := loadBee(colonyRoot, role, true)
+	if err != nil {
+		return Bee{}, BeeLocalOverlay{}, err
+	}
+	return bee, overlay, nil
+}
+
+func loadBee(colonyRoot, role string, validateProposal bool) (Bee, BeeLocalOverlay, error) {
 	if err := validateRole(role); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
@@ -127,6 +135,14 @@ func LoadBee(colonyRoot, role string) (Bee, BeeLocalOverlay, error) {
 	}
 	if err := bee.ValidateAdapterRequirements(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
+	}
+	if validateProposal {
+		if err := bee.ValidateCodeProposalWorktreeInvariants(); err != nil {
+			return Bee{}, BeeLocalOverlay{}, err
+		}
+		if err := bee.ValidateCodeProposalSubscriberInvariants(); err != nil {
+			return Bee{}, BeeLocalOverlay{}, err
+		}
 	}
 
 	var overlay BeeLocalOverlay

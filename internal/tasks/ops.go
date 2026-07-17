@@ -167,6 +167,13 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		Review:    protocol.TaskReviewPolicy(strings.TrimSpace(in.Review)),
 		DependsOn: ParseDependsOn(in.DependsOn),
 	}
+	bees, err := colony.LoadAllBees(session.Colony.ColonyRoot)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	if err := colony.ValidateTaskReviewPolicy(spec, bees); err != nil {
+		return CreateResult{}, err
+	}
 	planEv, err := PlanEvent(traceID, agentID, spec)
 	if err != nil {
 		return CreateResult{}, err

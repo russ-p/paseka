@@ -2,9 +2,9 @@
 
 ## Status
 
-**Proposed** (grilling decisions locked). Design for splitting automatic `MUTATION` code proposals by workspace provenance so worktree review and colony-root config/docs edits do not cross-contaminate.
+**Implemented** (grilling decisions locked). Design for splitting automatic `MUTATION` code proposals by workspace provenance so worktree review and colony-root config/docs edits do not cross-contaminate.
 
-Backlog: [999-backlog.md](../999-backlog.md) — *Split `code.proposal` by workspace*.
+Backlog: [999-backlog.md](../999-backlog.md) — *Split `code.proposal` by workspace* (**shipped**; see Recently shipped).
 
 ## Purpose
 
@@ -399,6 +399,8 @@ on paseka proposal approve / Console approve:
 
 ## Docs to update when implementing
 
+Canonical docs updated in migration step 8:
+
 - [003-architecture.md](../003-architecture.md) — worktree flow + dual proposal paths
 - [008-bee-routing.md](../008-bee-routing.md) — kinds, direct path table, AFK defer scope, alias matching
 - [010-bee-config.md](../010-bee-config.md) — `publishes` examples, invariants
@@ -407,7 +409,7 @@ on paseka proposal approve / Console approve:
 - [004-prompt-templates.md](../004-prompt-templates.md) — stop saying “staged diffs only”; guard prompt disk review
 - [009-insight-kinds.md](../009-insight-kinds.md) — MUTATION kind table if it lists `code.proposal`
 - Init bee templates under `internal/colony` / `.paseka/bees/`
-- Topology examples in [007-colony-eda-topology.md](./007-colony-eda-topology.md) once kinds ship
+- Topology examples in [007-colony-eda-topology.md](./007-colony-eda-topology.md)
 
 ## References
 
