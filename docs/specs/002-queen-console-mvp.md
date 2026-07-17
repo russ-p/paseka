@@ -261,10 +261,11 @@ A first-class Traces tab inspects one flight trail without opening run directori
 The list panel shows recent traces with activity and failure state. Selecting a trace loads `GET /api/traces/:traceId` and renders:
 
 - trace summary (counts, bees, active/failure flags)
-- energy budget/remaining when the task ledger is available
+- energy budget/remaining when the task ledger is available (Honey Reserve; not LLM tokens)
+- optional LLM usage aggregate summed from runs that report `usage` on `result.json` (`runCountWithUsage` vs `runCount`)
 - active worktree metadata for that trace
 - tasks in that trace (click → Tasks tab)
-- related runs for that trace only (click → Runs tab)
+- related runs for that trace only (click → Runs tab; per-run usage when present)
 - recent events (Open timeline → Timeline filtered by `traceId`)
 
 Dashboard recent-trace cards and trace-only insight links navigate to this tab. The tab polls while active.
@@ -293,6 +294,7 @@ The Runs tab exposes recent headless adapter invocations:
 - bee and adapter
 - state, task, intent, workspace, run directory
 - summary from `result.json` or `result.txt`
+- optional LLM `usage` from `result.json` (`inputTokens`, `outputTokens`, cache read/write; shown as `—` when absent)
 - event stream from `events.ndjson`
 - whether the run has an associated session
 

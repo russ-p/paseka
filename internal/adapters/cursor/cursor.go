@@ -129,6 +129,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	var events []protocol.Event
 	var streamSummary string
+	var streamUsage *protocol.Usage
 	outputFormat := req.Params.OutputFormat
 	if len(req.Command) > 0 {
 		outputFormat = adapters.FlagValue(args, "--output-format")
@@ -137,6 +138,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
 		events = parsed.Events
 		streamSummary = strings.TrimSpace(parsed.Summary)
+		streamUsage = parsed.Usage
 		for _, ev := range events {
 			_ = runDir.AppendEvent(ev)
 		}
@@ -186,6 +188,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			Error:    statusErr,
 			Stderr:   stderrStr,
 		},
+		Usage:      streamUsage,
 		FinishedAt: finishedAt,
 	}
 	if err := runDir.WriteResult(protoResult); err != nil {
@@ -200,6 +203,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		Output:    pickOutput(summary, stdoutStr),
 		Events:    events,
 		Artifacts: artifacts,
+		Usage:     streamUsage,
 		ExitCode:  exitCode,
 	}
 	if status == protocol.StatusFailed {

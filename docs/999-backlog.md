@@ -36,6 +36,9 @@ Backlog items:
 - **Per-run proposal diff in Reviews** — final merge gate preview (`GET /api/traces/:traceId/merge-diff`) ships; side-by-side preview of per-run `MUTATION/code.proposal` for `review: required` tasks does not.
 - **Energy gate on `paseka bee run` / interactive chat** — one-shot `bee run` and `bee chat` bypass the reactor; only AFK/HITL paths through `paseka run` consume honey today.
 - **Per-bee cost multipliers** — every adapter dispatch costs `1`; no per-role or per-intent pricing.
+- **Honey ↔ LLM token billing** — AFK runs may persist optional LLM `usage` on `result.json` (orthogonal to honey); do not price honey from model tokens without a separate design.
+- **Interactive session usage** — `bee chat` / SessionAdapter do not yet surface Cursor stream-json `usage`.
+- **`paseka inspect` usage one-liner** — Console/API cover run + trace aggregates; CLI dump is optional.
 
 Why deferred:
 - MVP focused on the minimum anti-loop loop: shared trace budget, dispatch consume, HITL top-up, and durable ledger state.

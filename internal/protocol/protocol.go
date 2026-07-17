@@ -74,6 +74,23 @@ type Diagnostics struct {
 	Stderr   string `json:"stderr,omitempty"`
 }
 
+// UsageSource identifies where per-run LLM token counts came from.
+const (
+	UsageSourceCursorStreamJSON = "cursor.stream-json"
+	UsageSourceUnavailable      = "unavailable"
+)
+
+// Usage is optional LLM token accounting from an adapter when available.
+// Adapters that cannot report usage omit this field; projections must tolerate nil.
+type Usage struct {
+	InputTokens      int64  `json:"inputTokens"`
+	OutputTokens     int64  `json:"outputTokens"`
+	CacheReadTokens  int64  `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens int64  `json:"cacheWriteTokens,omitempty"`
+	DurationMs       int64  `json:"durationMs,omitempty"`
+	Source           string `json:"source,omitempty"`
+}
+
 // Result is the final envelope written to result.json.
 type Result struct {
 	ProtocolVersion string        `json:"protocolVersion"`
@@ -83,6 +100,7 @@ type Result struct {
 	Summary         string        `json:"summary"`
 	Artifacts       []ArtifactRef `json:"artifacts,omitempty"`
 	Diagnostics     Diagnostics   `json:"diagnostics"`
+	Usage           *Usage        `json:"usage,omitempty"`
 	FinishedAt      time.Time     `json:"finishedAt"`
 }
 

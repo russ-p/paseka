@@ -278,7 +278,15 @@ func TestRunsAPIHandlers(t *testing.T) {
 		AgentID:         "agent-run",
 		Status:          protocol.StatusCompleted,
 		Summary:         "run done",
-		FinishedAt:      started.Add(2 * time.Minute),
+		Usage: &protocol.Usage{
+			InputTokens:      8848,
+			OutputTokens:     56,
+			CacheReadTokens:  5472,
+			CacheWriteTokens: 0,
+			DurationMs:       2453,
+			Source:           protocol.UsageSourceCursorStreamJSON,
+		},
+		FinishedAt: started.Add(2 * time.Minute),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -325,6 +333,9 @@ func TestRunsAPIHandlers(t *testing.T) {
 	}
 	if detail.Task != "headless task" || detail.Intent != "feature" {
 		t.Fatalf("detail = %+v", detail)
+	}
+	if detail.Usage == nil || detail.Usage.InputTokens != 8848 || detail.Usage.OutputTokens != 56 {
+		t.Fatalf("detail.Usage = %+v", detail.Usage)
 	}
 
 	eventsReq := httptest.NewRequest(http.MethodGet, "/api/runs/trace-run/agent-run/events?after=0", nil)
@@ -521,6 +532,37 @@ func TestTraceDetailAPIHandler(t *testing.T) {
 	writeConsoleRun(t, repo, otherTrace, "agent-x", started.Add(time.Minute), protocol.StatusRunning, "")
 
 	dA := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-a"}
+	if err := dA.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         "agent-a",
+		Status:          protocol.StatusCompleted,
+		Summary:         "first",
+		Usage: &protocol.Usage{
+			InputTokens:  100,
+			OutputTokens: 10,
+			Source:       protocol.UsageSourceCursorStreamJSON,
+		},
+		FinishedAt: started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dB := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-b"}
+	if err := dB.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         "agent-b",
+		Status:          protocol.StatusFailed,
+		Summary:         "second",
+		Usage: &protocol.Usage{
+			InputTokens:  200,
+			OutputTokens: 30,
+			Source:       protocol.UsageSourceCursorStreamJSON,
+		},
+		FinishedAt: started.Add(6 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	ev1, err := protocol.NewEvent(traceID, "agent-a", 1, protocol.EventInsight, protocol.NarrativeInsightPayload{
 		Kind:    protocol.InsightRunSummary,
 		Summary: "first insight",
@@ -606,6 +648,15 @@ func TestTraceDetailAPIHandler(t *testing.T) {
 	}
 	if detail.Runs[0].AgentID != "agent-b" || detail.Runs[1].AgentID != "agent-a" {
 		t.Fatalf("run order = %+v", detail.Runs)
+	}
+	if detail.Usage == nil || detail.Usage.RunCountWithUsage != 2 {
+		t.Fatalf("usage aggregate = %+v", detail.Usage)
+	}
+	if detail.Usage.InputTokens != 300 || detail.Usage.OutputTokens != 40 {
+		t.Fatalf("usage totals = %+v", detail.Usage)
+	}
+	if detail.Runs[1].Usage == nil || detail.Runs[1].Usage.InputTokens != 100 {
+		t.Fatalf("run usage = %+v", detail.Runs[1].Usage)
 	}
 	if detail.Worktree == nil || detail.Worktree.BaseSHA != "abc123" || detail.Worktree.Branch == "" {
 		t.Fatalf("worktree = %+v", detail.Worktree)

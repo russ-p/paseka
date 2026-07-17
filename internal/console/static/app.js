@@ -76,6 +76,8 @@ const el = {
   traceDetailMeta: document.getElementById('trace-detail-meta'),
   traceEnergyWrap: document.getElementById('trace-energy-wrap'),
   traceEnergy: document.getElementById('trace-energy'),
+  traceUsageWrap: document.getElementById('trace-usage-wrap'),
+  traceUsage: document.getElementById('trace-usage'),
   traceWorktreeWrap: document.getElementById('trace-worktree-wrap'),
   traceWorktreeMeta: document.getElementById('trace-worktree-meta'),
   traceTasksList: document.getElementById('trace-tasks-list'),
@@ -236,6 +238,54 @@ function formatTime(iso) {
   } catch {
     return iso;
   }
+}
+
+function formatTokenCount(n) {
+  if (n == null || Number.isNaN(Number(n))) return '—';
+  const v = Number(n);
+  if (v >= 10000) return `${(v / 1000).toFixed(1)}k`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
+  return String(v);
+}
+
+/** Compact one-line usage for lists; empty string when unavailable. */
+function formatUsageCompact(usage) {
+  if (!usage) return '';
+  const parts = [
+    `${formatTokenCount(usage.inputTokens)} in`,
+    `${formatTokenCount(usage.outputTokens)} out`,
+  ];
+  if (usage.cacheReadTokens) {
+    parts.push(`${formatTokenCount(usage.cacheReadTokens)} cache`);
+  }
+  return parts.join(' · ');
+}
+
+function usageRows(usage) {
+  if (!usage) {
+    return [
+      ['Input tokens', '—'],
+      ['Output tokens', '—'],
+      ['Cache read', '—'],
+      ['Cache write', '—'],
+    ];
+  }
+  const rows = [
+    ['Input tokens', formatTokenCount(usage.inputTokens)],
+    ['Output tokens', formatTokenCount(usage.outputTokens)],
+    ['Cache read', formatTokenCount(usage.cacheReadTokens || 0)],
+    ['Cache write', formatTokenCount(usage.cacheWriteTokens || 0)],
+  ];
+  if (usage.durationMs) {
+    rows.push(['Model duration', `${usage.durationMs} ms`]);
+  }
+  if (usage.source) {
+    rows.push(['Usage source', usage.source]);
+  }
+  if (usage.runCountWithUsage != null) {
+    rows.push(['Runs with usage', String(usage.runCountWithUsage)]);
+  }
+  return rows;
 }
 
 function runKey(run) {
@@ -976,6 +1026,10 @@ function renderRuns() {
     li.className = 'session-item' + (key === state.selectedRunKey ? ' selected' : '');
     li.dataset.key = key;
     const sessionNote = run.hasSession ? ' · session' : '';
+    const usageNote = formatUsageCompact(run.usage);
+    const usageLine = usageNote
+      ? `<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">${escapeHtml(usageNote)}</div>`
+      : '';
     li.innerHTML = `
       <div class="top">
         <span class="bee">${escapeHtml(run.bee)}</span>
@@ -983,6 +1037,7 @@ function renderRuns() {
       </div>
       <div class="id">${escapeHtml(run.traceId)} / ${escapeHtml(run.agentId)}</div>
       <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(run.startedAt)}${escapeHtml(sessionNote)}</div>
+      ${usageLine}
     `;
     li.addEventListener('click', () => selectRun(run.traceId, run.agentId));
     el.runList.appendChild(li);
@@ -1177,6 +1232,7 @@ function renderRunDetail(run) {
     ['Finished', formatTime(run.finishedAt)],
     ['Has session', run.hasSession ? 'yes' : 'no'],
     ['Has events', run.hasEvents ? 'yes' : 'no'],
+    ...usageRows(run.usage),
   ];
 
   el.runDetailMeta.innerHTML = rows
@@ -1387,6 +1443,14 @@ function renderTraceDetail(detail) {
     `;
   }
 
+  const hasUsage = !!detail.usage && (detail.usage.runCountWithUsage > 0);
+  el.traceUsageWrap.classList.toggle('hidden', !hasUsage);
+  if (hasUsage) {
+    el.traceUsage.innerHTML = usageRows(detail.usage)
+      .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
+      .join('');
+  }
+
   const wt = detail.worktree;
   el.traceWorktreeWrap.classList.toggle('hidden', !wt);
   if (wt) {
@@ -1441,13 +1505,14 @@ function renderTraceRuns(runs) {
   for (const run of runs) {
     const li = document.createElement('li');
     li.className = 'session-item compact-item';
+    const usageNote = formatUsageCompact(run.usage) || 'tokens —';
     li.innerHTML = `
       <div class="top">
         <span class="bee">${escapeHtml(run.bee || run.agentId)}</span>
         <span class="badge ${badgeClass(run.state)}">${escapeHtml(run.state || '—')}</span>
       </div>
       <div class="id">${escapeHtml(run.agentId)}${run.taskId ? ` · ${escapeHtml(run.taskId)}` : ''}</div>
-      <div class="muted" style="font-size:0.78rem;margin-top:0.2rem">${formatTime(run.startedAt)}</div>
+      <div class="muted" style="font-size:0.78rem;margin-top:0.2rem">${formatTime(run.startedAt)} · ${escapeHtml(usageNote)}</div>
     `;
     li.addEventListener('click', () => {
       navigateToRun(run.traceId || state.selectedTraceId, run.agentId).catch(console.error);

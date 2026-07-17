@@ -11,22 +11,23 @@ import (
 
 // RunMeta is a read-only projection of one headless adapter run directory.
 type RunMeta struct {
-	TraceID    string    `json:"traceId"`
-	AgentID    string    `json:"agentId"`
-	Bee        string    `json:"bee"`
-	Adapter    string    `json:"adapter"`
-	Workspace  string    `json:"workspace"`
-	ColonyRoot string    `json:"colonyRoot"`
-	TaskID     string    `json:"taskId,omitempty"`
-	Task       string    `json:"task,omitempty"`
-	Intent     string    `json:"intent,omitempty"`
-	State      string    `json:"state"`
-	Summary    string    `json:"summary,omitempty"`
-	RunDir     string    `json:"runDir"`
-	StartedAt  time.Time `json:"startedAt"`
-	FinishedAt time.Time `json:"finishedAt,omitempty"`
-	HasEvents  bool      `json:"hasEvents"`
-	HasSession bool      `json:"hasSession"`
+	TraceID    string          `json:"traceId"`
+	AgentID    string          `json:"agentId"`
+	Bee        string          `json:"bee"`
+	Adapter    string          `json:"adapter"`
+	Workspace  string          `json:"workspace"`
+	ColonyRoot string          `json:"colonyRoot"`
+	TaskID     string          `json:"taskId,omitempty"`
+	Task       string          `json:"task,omitempty"`
+	Intent     string          `json:"intent,omitempty"`
+	State      string          `json:"state"`
+	Summary    string          `json:"summary,omitempty"`
+	Usage      *protocol.Usage `json:"usage,omitempty"`
+	RunDir     string          `json:"runDir"`
+	StartedAt  time.Time       `json:"startedAt"`
+	FinishedAt time.Time       `json:"finishedAt,omitempty"`
+	HasEvents  bool            `json:"hasEvents"`
+	HasSession bool            `json:"hasSession"`
 }
 
 // LoadRunMeta reads a run projection from an existing run directory.
@@ -68,6 +69,9 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		}
 		if res.Summary != "" {
 			meta.Summary = res.Summary
+		}
+		if res.Usage != nil {
+			meta.Usage = res.Usage
 		}
 		if !res.FinishedAt.IsZero() {
 			meta.FinishedAt = res.FinishedAt

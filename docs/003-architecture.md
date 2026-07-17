@@ -277,7 +277,7 @@ agent -p --trust --force \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
 4. **Git diff** — after `agent` exits, capture `git diff` in the **workspace** (worktree or repo root).
-5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text).
+5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandContext` (no tmux — process wait replaces the shell's `tmux wait-for` pattern).

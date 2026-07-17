@@ -49,6 +49,30 @@ func TestAppJSUses24HourTimeFormat(t *testing.T) {
 	}
 }
 
+func TestAppJSRendersLLMUsage(t *testing.T) {
+	data, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	src := string(data)
+	for _, needle := range []string{
+		"function formatUsageCompact(usage)",
+		"function usageRows(usage)",
+		"traceUsageWrap",
+	} {
+		if !strings.Contains(src, needle) {
+			t.Fatalf("app.js missing %s", needle)
+		}
+	}
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	if !strings.Contains(string(html), `id="trace-usage-wrap"`) {
+		t.Fatal("index.html missing trace-usage-wrap")
+	}
+}
+
 func TestColonyIdentityStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {

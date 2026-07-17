@@ -8,12 +8,20 @@ import (
 )
 
 type cliStreamLine struct {
-	Type        string `json:"type"`
-	Subtype     string `json:"subtype"`
-	Result      string `json:"result"`
-	TimestampMS *int64 `json:"timestamp_ms"`
-	ModelCallID string `json:"model_call_id"`
-	Message     *struct {
+	Type          string `json:"type"`
+	Subtype       string `json:"subtype"`
+	Result        string `json:"result"`
+	TimestampMS   *int64 `json:"timestamp_ms"`
+	ModelCallID   string `json:"model_call_id"`
+	DurationMs    *int64 `json:"duration_ms"`
+	DurationAPIMs *int64 `json:"duration_api_ms"`
+	Usage         *struct {
+		InputTokens      int64 `json:"inputTokens"`
+		OutputTokens     int64 `json:"outputTokens"`
+		CacheReadTokens  int64 `json:"cacheReadTokens"`
+		CacheWriteTokens int64 `json:"cacheWriteTokens"`
+	} `json:"usage"`
+	Message *struct {
 		Content []struct {
 			Text string `json:"text"`
 		} `json:"content"`
@@ -39,6 +47,7 @@ type cliStreamLine struct {
 type streamParseOutput struct {
 	Summary string
 	Events  []protocol.Event
+	Usage   *protocol.Usage
 }
 
 func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
@@ -57,6 +66,9 @@ func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
 		case "result":
 			if raw.Subtype == "success" && raw.Result != "" {
 				out.Summary = raw.Result
+			}
+			if u := usageFromResultLine(raw); u != nil {
+				out.Usage = u
 			}
 		case "assistant":
 			text := assistantText(raw)
@@ -86,6 +98,26 @@ func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
 		}
 	}
 	return out
+}
+
+func usageFromResultLine(line cliStreamLine) *protocol.Usage {
+	if line.Usage == nil {
+		return nil
+	}
+	u := &protocol.Usage{
+		InputTokens:      line.Usage.InputTokens,
+		OutputTokens:     line.Usage.OutputTokens,
+		CacheReadTokens:  line.Usage.CacheReadTokens,
+		CacheWriteTokens: line.Usage.CacheWriteTokens,
+		Source:           protocol.UsageSourceCursorStreamJSON,
+	}
+	switch {
+	case line.DurationMs != nil:
+		u.DurationMs = *line.DurationMs
+	case line.DurationAPIMs != nil:
+		u.DurationMs = *line.DurationAPIMs
+	}
+	return u
 }
 
 func assistantText(line cliStreamLine) string {

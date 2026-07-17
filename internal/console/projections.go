@@ -74,22 +74,23 @@ type TranscriptPage struct {
 
 // RunView is a console projection of one headless adapter run.
 type RunView struct {
-	TraceID    string     `json:"traceId"`
-	AgentID    string     `json:"agentId"`
-	Bee        string     `json:"bee"`
-	Adapter    string     `json:"adapter"`
-	Workspace  string     `json:"workspace"`
-	ColonyRoot string     `json:"colonyRoot,omitempty"`
-	TaskID     string     `json:"taskId,omitempty"`
-	Task       string     `json:"task,omitempty"`
-	Intent     string     `json:"intent,omitempty"`
-	State      string     `json:"state"`
-	Summary    string     `json:"summary,omitempty"`
-	RunDir     string     `json:"runDir"`
-	StartedAt  time.Time  `json:"startedAt"`
-	FinishedAt *time.Time `json:"finishedAt,omitempty"`
-	HasEvents  bool       `json:"hasEvents"`
-	HasSession bool       `json:"hasSession"`
+	TraceID    string          `json:"traceId"`
+	AgentID    string          `json:"agentId"`
+	Bee        string          `json:"bee"`
+	Adapter    string          `json:"adapter"`
+	Workspace  string          `json:"workspace"`
+	ColonyRoot string          `json:"colonyRoot,omitempty"`
+	TaskID     string          `json:"taskId,omitempty"`
+	Task       string          `json:"task,omitempty"`
+	Intent     string          `json:"intent,omitempty"`
+	State      string          `json:"state"`
+	Summary    string          `json:"summary,omitempty"`
+	Usage      *protocol.Usage `json:"usage,omitempty"`
+	RunDir     string          `json:"runDir"`
+	StartedAt  time.Time       `json:"startedAt"`
+	FinishedAt *time.Time      `json:"finishedAt,omitempty"`
+	HasEvents  bool            `json:"hasEvents"`
+	HasSession bool            `json:"hasSession"`
 }
 
 // EventsPage is a cursor-based events.ndjson slice.
@@ -249,6 +250,7 @@ func runViewFromMeta(meta runs.RunMeta) RunView {
 		Intent:     meta.Intent,
 		State:      meta.State,
 		Summary:    meta.Summary,
+		Usage:      meta.Usage,
 		RunDir:     meta.RunDir,
 		StartedAt:  meta.StartedAt,
 		HasEvents:  meta.HasEvents,

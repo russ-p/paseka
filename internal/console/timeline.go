@@ -70,16 +70,17 @@ type EventFilter struct {
 
 // TraceSummaryView is a console projection of one trace.
 type TraceSummaryView struct {
-	TraceID         string    `json:"traceId"`
-	LastActivityAt  time.Time `json:"lastActivityAt"`
-	RunCount        int       `json:"runCount"`
-	TaskCount       int       `json:"taskCount"`
-	Bees            []string  `json:"bees,omitempty"`
-	HasFailures     bool      `json:"hasFailures"`
-	HasActive       bool      `json:"hasActive"`
-	EnergyBudget    int       `json:"energyBudget,omitempty"`
-	EnergyRemaining int       `json:"energyRemaining,omitempty"`
-	LowEnergy       bool      `json:"lowEnergy,omitempty"`
+	TraceID         string               `json:"traceId"`
+	LastActivityAt  time.Time            `json:"lastActivityAt"`
+	RunCount        int                  `json:"runCount"`
+	TaskCount       int                  `json:"taskCount"`
+	Bees            []string             `json:"bees,omitempty"`
+	HasFailures     bool                 `json:"hasFailures"`
+	HasActive       bool                 `json:"hasActive"`
+	EnergyBudget    int                  `json:"energyBudget,omitempty"`
+	EnergyRemaining int                  `json:"energyRemaining,omitempty"`
+	LowEnergy       bool                 `json:"lowEnergy,omitempty"`
+	Usage           *runs.UsageAggregate `json:"usage,omitempty"`
 }
 
 // TaskSummaryView is a lightweight task row for trace detail.
@@ -370,6 +371,7 @@ func traceSummaryViewFromRuns(s runs.TraceSummary) TraceSummaryView {
 		Bees:           append([]string(nil), s.Bees...),
 		HasFailures:    s.HasFailures,
 		HasActive:      s.HasActive,
+		Usage:          s.Usage,
 	}
 }
 

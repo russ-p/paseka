@@ -11,15 +11,25 @@ import (
 
 const defaultTraceScanLimit = 50
 
+// UsageAggregate sums per-run LLM usage under one trace (only runs that report usage).
+type UsageAggregate struct {
+	InputTokens       int64 `json:"inputTokens"`
+	OutputTokens      int64 `json:"outputTokens"`
+	CacheReadTokens   int64 `json:"cacheReadTokens"`
+	CacheWriteTokens  int64 `json:"cacheWriteTokens"`
+	RunCountWithUsage int   `json:"runCountWithUsage"`
+}
+
 // TraceSummary is a filesystem projection of activity under one trace directory.
 type TraceSummary struct {
-	TraceID        string    `json:"traceId"`
-	LastActivityAt time.Time `json:"lastActivityAt"`
-	RunCount       int       `json:"runCount"`
-	TaskCount      int       `json:"taskCount"`
-	Bees           []string  `json:"bees,omitempty"`
-	HasFailures    bool      `json:"hasFailures"`
-	HasActive      bool      `json:"hasActive"`
+	TraceID        string          `json:"traceId"`
+	LastActivityAt time.Time       `json:"lastActivityAt"`
+	RunCount       int             `json:"runCount"`
+	TaskCount      int             `json:"taskCount"`
+	Bees           []string        `json:"bees,omitempty"`
+	HasFailures    bool            `json:"hasFailures"`
+	HasActive      bool            `json:"hasActive"`
+	Usage          *UsageAggregate `json:"usage,omitempty"`
 }
 
 // ScannedEvent pairs a protocol event with optional run metadata enrichment.
@@ -133,6 +143,7 @@ func loadTraceSummary(colonyRoot, traceID string) (TraceSummary, error) {
 	}
 
 	bees := map[string]struct{}{}
+	var usageAgg UsageAggregate
 	for _, ent := range entries {
 		if !ent.IsDir() {
 			continue
@@ -159,6 +170,13 @@ func loadTraceSummary(colonyRoot, traceID string) (TraceSummary, error) {
 		if meta.Bee != "" {
 			bees[meta.Bee] = struct{}{}
 		}
+		if meta.Usage != nil {
+			usageAgg.InputTokens += meta.Usage.InputTokens
+			usageAgg.OutputTokens += meta.Usage.OutputTokens
+			usageAgg.CacheReadTokens += meta.Usage.CacheReadTokens
+			usageAgg.CacheWriteTokens += meta.Usage.CacheWriteTokens
+			usageAgg.RunCountWithUsage++
+		}
 		activityAt := meta.StartedAt
 		if !meta.FinishedAt.IsZero() && meta.FinishedAt.After(activityAt) {
 			activityAt = meta.FinishedAt
@@ -172,6 +190,10 @@ func loadTraceSummary(colonyRoot, traceID string) (TraceSummary, error) {
 		case string(protocol.StatusRunning), string(protocol.StatusQueued):
 			summary.HasActive = true
 		}
+	}
+
+	if usageAgg.RunCountWithUsage > 0 {
+		summary.Usage = &usageAgg
 	}
 
 	for bee := range bees {

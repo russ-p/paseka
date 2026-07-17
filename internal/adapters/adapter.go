@@ -52,6 +52,7 @@ type RunResult struct {
 	Output    string // preferred display text (summary or stdout)
 	Events    []protocol.Event
 	Artifacts []Artifact
+	Usage     *protocol.Usage // optional; set when the adapter can report LLM tokens
 	ExitCode  int
 	Err       error
 	Warnings  []string // advisory runtime notices (e.g. undeclared publishes)
