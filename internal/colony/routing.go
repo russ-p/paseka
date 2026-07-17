@@ -66,7 +66,11 @@ func (r EventRule) Matches(evType protocol.EventType, kind string) bool {
 	if ruleKind == "" {
 		return true
 	}
-	return ruleKind == strings.TrimSpace(kind)
+	eventKind := strings.TrimSpace(kind)
+	if evType == protocol.EventMutation && (protocol.IsCodeProposalKind(ruleKind) || protocol.IsCodeProposalKind(eventKind)) {
+		return protocol.CodeProposalKindsMatch(ruleKind, eventKind)
+	}
+	return ruleKind == eventKind
 }
 
 // ResolvedDispatch returns the effective dispatch mode for a subscription rule.
