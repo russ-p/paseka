@@ -56,8 +56,10 @@ func TestAppJSRendersLLMUsage(t *testing.T) {
 	}
 	src := string(data)
 	for _, needle := range []string{
+		"function formatDuration(ms)",
 		"function formatUsageCompact(usage)",
 		"function usageRows(usage)",
+		"formatDuration(usage.durationMs)",
 		"traceUsageWrap",
 	} {
 		if !strings.Contains(src, needle) {
