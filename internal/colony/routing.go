@@ -175,6 +175,17 @@ func (b Bee) DeclaresPublish(evType protocol.EventType, kind string) bool {
 	return b.ExplicitlyDeclaresPublish(evType, kind)
 }
 
+// DeclaresCodeProposalIsolated reports whether publishes includes isolated or alias code.proposal.
+func (b Bee) DeclaresCodeProposalIsolated() bool {
+	return b.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposal)) ||
+		b.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposalIsolated))
+}
+
+// DeclaresCodeProposalRoot reports whether publishes includes code.proposal.root.
+func (b Bee) DeclaresCodeProposalRoot() bool {
+	return b.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposalRoot))
+}
+
 // ExplicitlyDeclaresPublish reports whether the bee lists the event in publishes.
 // Empty publishes returns false (unlike DeclaresPublish advisory semantics).
 func (b Bee) ExplicitlyDeclaresPublish(evType protocol.EventType, kind string) bool {
