@@ -2,6 +2,21 @@
 
 ## Deferred Ideas
 
+### Split `code.proposal` by workspace (isolated vs root)
+
+Context:
+- Bees with `worktree: false` that declare `MUTATION/code.proposal` (e.g. hivewright on colony root) can auto-publish diffs from a dirty main checkout.
+- `guard` (`worktree: true`) then ensures a trace worktree from `HEAD`, which does not contain those root edits — review looks at the wrong disk.
+
+Backlog item:
+- Implement [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md): kinds `code.proposal.isolated` / `code.proposal.root`, baseline delta, workspace-affine direct dispatch, AFK merge gate only for isolated, root human ack **R1** (no merge, no auto-commit).
+
+Why deferred:
+- Spec is written; needs a focused protocol + runtime + colony bee retarget pass.
+
+Exit criteria for revisiting:
+- Start implementation from spec 008 acceptance criteria; optional follow-ups (`proposal_paths`, untracked files) can stay deferred after MVP of the split.
+
 ### Replace `result.txt` with a clearer log artifact
 
 Context:
