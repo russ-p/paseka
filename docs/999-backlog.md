@@ -2,32 +2,6 @@
 
 ## Deferred Ideas
 
-### Human Gateway invites (`session.invite` / `auto_invites`)
-
-Context:
-- Interactive sessions (`bee chat`) existed, but HITL work was not parked on the bus for Beekeeper accept/reject.
-- Design is recorded in [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
-
-Backlog items:
-
-- ~~**Invite persistence + CLI/Console** — `paseka invite *`, Console accept → session; validate `session.invite` / `beekeeper.ready` at the invite boundary.~~ **Done** — see [007-cli.md](007-cli.md).
-- ~~**Config-driven `auto_invites`** — colony.yaml rules while `paseka run` is up; empty `auto_invites` disables auto-invite.~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §7.
-- ~~**Invite `done_when` + session energy** — completion/incomplete on contract match; 1 honey on `invite accept` (`bee chat` exempt).~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §8.
-- **Breaking:** Invite handoff field renamed `specRef` → `artifactRef` (CLI `--artifact-ref`, config `set_artifact_ref`).
-
-### Feature ideation choreography (classify → invite → spec)
-
-Context:
-- Raw feature ideas should not jump straight to Scout `task.plan`.
-- Builds on Human Gateway invites; colony kinds and prompts are recorded in [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
-
-Backlog items:
-
-- ~~**Phase 0** — Scout `classify` prompt + Drone grilling guidance to write `docs/specs/…` and emit `SIGNAL/spec.ready` (manual `bee chat` path).~~ **Done** — see [007-cli.md](007-cli.md) soft path.
-- ~~**Phase 1** — Platform vs colony SIGNAL boundary: colony ideation kinds stay out of `internal/protocol`.~~ **Done** — see spec 005 / 006.
-- ~~**Default grill + breakdown `auto_invites`** — `paseka init` seeds ideation rules on `feature.classified` / `spec.ready`.~~ **Done** — see [008-bee-routing.md](008-bee-routing.md) §7.
-- **Breaking:** `feature.classified` payload field renamed `route` → `decision` (no dual-read).
-
 ### Replace `result.txt` with a clearer log artifact
 
 Context:
