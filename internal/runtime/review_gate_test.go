@@ -346,3 +346,63 @@ func TestReactorRequiredWinsOverDefer(t *testing.T) {
 		t.Fatalf("summary = %q, want human review summary from run", task.Summary)
 	}
 }
+
+func hivewrightBeeWithRootProposalPublish() colony.Bee {
+	return colony.Bee{
+		Role: "hivewright",
+		Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "task.ready"}, Dispatch: colony.DispatchTask},
+		},
+		Publishes: []colony.PublicationRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.root"}},
+		},
+	}
+}
+
+func TestReactorRootProposalDoesNotDefer(t *testing.T) {
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "retune hive",
+			Bee:    "hivewright",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := protocol.NewEvent("trace-1", "reactor", 0, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind: protocol.TaskEventReady, TaskID: "task-1", Bee: "hivewright",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{
+		"hivewright": hivewrightBeeWithRootProposalPublish(),
+		"receiver":   receiverBeeWithTaskCompleted(),
+	})
+	rec := &recordingAdapter{result: &adapters.RunResult{
+		Status: "completed",
+		Artifacts: []adapters.Artifact{{
+			Kind:    "diff",
+			Content: "+hive config",
+		}},
+	}}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ready); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := r.Ledger().Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks["task-1"].Status != protocol.TaskStatusCompleted {
+		t.Fatalf("status = %q, want completed (root proposal must not open AFK defer)", snap.Tasks["task-1"].Status)
+	}
+}

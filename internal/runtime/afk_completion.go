@@ -41,7 +41,7 @@ func runOpenedCodeProposal(reg *BeeRegistry, beeRole string, result *adapters.Ru
 	if result == nil {
 		return false
 	}
-	if resultContainsEvent(result, protocol.EventMutation, string(protocol.MutationCodeProposal)) {
+	if resultContainsIsolatedCodeProposal(result) {
 		return true
 	}
 	if !hasNonEmptyDiffArtifact(result) {
@@ -54,12 +54,15 @@ func runOpenedCodeProposal(reg *BeeRegistry, beeRole string, result *adapters.Ru
 	if !ok {
 		return false
 	}
-	return bee.ExplicitlyDeclaresPublish(protocol.EventMutation, string(protocol.MutationCodeProposal))
+	return bee.DeclaresCodeProposalIsolated()
 }
 
-func resultContainsEvent(result *adapters.RunResult, evType protocol.EventType, kind string) bool {
+func resultContainsIsolatedCodeProposal(result *adapters.RunResult) bool {
 	for _, ev := range result.Events {
-		if ev.Type == evType && protocol.PayloadKind(ev.Payload) == kind {
+		if ev.Type != protocol.EventMutation {
+			continue
+		}
+		if protocol.CodeProposalKindsMatch(string(protocol.MutationCodeProposalIsolated), protocol.PayloadKind(ev.Payload)) {
 			return true
 		}
 	}
