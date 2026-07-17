@@ -31,7 +31,7 @@ func TestWorkspaceForBeeSectorNoWorktree(t *testing.T) {
 	ctxColony := colony.Context{ColonyRoot: root, Slug: "test"}
 	bee := colony.Bee{Role: "builder", Worktree: false}
 
-	workspace, sectorRel, err := workspaceForBee(ctxColony, manifest, bee, "trace-1", "frontend")
+	workspace, sectorRel, err := workspaceForDispatch(ctxColony, manifest, bee, "trace-1", "frontend", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestWorkspaceForBeeUnknownSector(t *testing.T) {
 	ctxColony := colony.Context{ColonyRoot: root, Slug: "test"}
 	bee := colony.Bee{Role: "builder", Worktree: false}
 
-	_, _, err = workspaceForBee(ctxColony, manifest, bee, "trace-1", "missing")
+	_, _, err = workspaceForDispatch(ctxColony, manifest, bee, "trace-1", "missing", "")
 	if err == nil {
 		t.Fatal("expected unknown sector error")
 	}
@@ -84,7 +84,7 @@ func TestWorkspaceForBeeMissingSectorDir(t *testing.T) {
 	ctxColony := colony.Context{ColonyRoot: root, Slug: "test"}
 	bee := colony.Bee{Role: "builder", Worktree: false}
 
-	_, _, err = workspaceForBee(ctxColony, manifest, bee, "trace-1", "frontend")
+	_, _, err = workspaceForDispatch(ctxColony, manifest, bee, "trace-1", "frontend", "")
 	if err == nil {
 		t.Fatal("expected missing sector directory error")
 	}

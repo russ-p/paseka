@@ -16,7 +16,7 @@ func eventDispatchContext(ev protocol.Event) (taskID, taskBody string, err error
 	kind := protocol.PayloadKind(ev.Payload)
 	switch ev.Type {
 	case protocol.EventMutation:
-		if kind != string(protocol.MutationCodeProposal) {
+		if !protocol.IsCodeProposalKind(kind) {
 			return "", "", fmt.Errorf("runtime: unsupported mutation kind %q", kind)
 		}
 		var payload protocol.MutationPayload
@@ -54,6 +54,30 @@ func eventDispatchContext(ev protocol.Event) (taskID, taskBody string, err error
 		taskBody = fmt.Sprintf("Handle %s event (kind=%s)", ev.Type, kind)
 	}
 	return taskID, truncateString(taskBody, maxDirectTaskBody), nil
+}
+
+// proposalDispatchFields returns sector and normalized proposal kind for direct proposal dispatch.
+func proposalDispatchFields(ev protocol.Event) (sector, proposalKind string) {
+	if ev.Type != protocol.EventMutation {
+		return "", ""
+	}
+	kind := protocol.PayloadKind(ev.Payload)
+	if !protocol.IsCodeProposalKind(kind) {
+		return "", ""
+	}
+	var payload protocol.MutationPayload
+	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+		return "", kind
+	}
+	if payload.Sector != "" {
+		sector = payload.Sector
+	}
+	if payload.Kind != "" {
+		proposalKind = string(protocol.NormalizeCodeProposalKind(payload.Kind))
+	} else {
+		proposalKind = kind
+	}
+	return sector, proposalKind
 }
 
 func formatMutationTask(p protocol.MutationPayload) string {
@@ -104,7 +128,7 @@ func truncateString(s string, max int) string {
 }
 
 // directDispatchKey identifies a direct dispatch for deduplication.
-// Rework-cycle gates (code.proposal, verification.failed) key by event identity so
+// Rework-cycle gates (code.proposal family, verification.failed) key by event identity so
 // each builder/guard pass can run again on the same task. Other task-scoped events
 // collapse per traceId+taskId+bee+type+kind to ignore mistaken re-emits (e.g. echoed
 // verification.success). Events without taskId always use the event fingerprint.
@@ -123,7 +147,7 @@ func directDispatchKey(ev protocol.Event, beeRole string) string {
 func directDispatchPerEvent(evType protocol.EventType, kind string) bool {
 	switch evType {
 	case protocol.EventMutation:
-		return kind == string(protocol.MutationCodeProposal)
+		return protocol.IsCodeProposalKind(kind)
 	case protocol.EventVerification:
 		return kind == string(protocol.VerificationFailed)
 	default:

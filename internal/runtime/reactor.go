@@ -392,11 +392,15 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return nil
 	}
 
+	proposalSector, proposalKind := proposalDispatchFields(ev)
+
 	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
-		Bee:     beeRole,
-		TraceID: ev.TraceID,
-		TaskID:  taskID,
-		Task:    taskBody,
+		Bee:          beeRole,
+		TraceID:      ev.TraceID,
+		TaskID:       taskID,
+		Task:         taskBody,
+		Sector:       proposalSector,
+		ProposalKind: proposalKind,
 	}, DispatchModeDirect)
 	if err != nil {
 		return err
