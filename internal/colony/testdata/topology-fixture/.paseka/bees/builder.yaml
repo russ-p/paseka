@@ -7,8 +7,8 @@ subscribes:
     kind: task.ready
     dispatch: task
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated
     dispatch: direct
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.isolated

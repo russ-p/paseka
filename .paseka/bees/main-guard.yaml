@@ -7,6 +7,21 @@ params:
   trust: true
   force: true
 worktree: false
+subscribes:
+  - type: MUTATION
+    kind: code.proposal.root
+    dispatch: direct
 publishes:
+  - type: VERIFICATION
+    kind: verification.success
+  - type: VERIFICATION
+    kind: verification.failed
   - type: INSIGHT
     kind: review.note
+completion_contract:
+  required:
+    - type: VERIFICATION
+      kind_one_of:
+        - verification.success
+        - verification.failed
+      count: 1

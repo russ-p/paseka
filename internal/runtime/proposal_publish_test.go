@@ -270,39 +270,9 @@ publishes:
     kind: code.proposal.isolated
 `)
 
-	pub := &recordingPublisher{}
-	d := runtime.NewDispatcher()
-	d.RegisterAdapter("cursor", &mutatingAdapter{run: func(workspace string) error {
-		readme := filepath.Join(workspace, "README.md")
-		data, err := os.ReadFile(readme)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(readme, append(data, []byte("x\n")...), 0o644)
-	}})
-	d.SetPublisher(pub, false)
-	reg, err := runtime.BuildBeeRegistry(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	d.SetBeeRegistry(reg)
-
-	res, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
-		ColonyRoot: root,
-		Bee:        "builder",
-		TraceID:    "trace-mismatch",
-		Task:       "work",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, ev := range pub.events {
-		if ev.Type == protocol.EventMutation {
-			t.Fatalf("expected no auto mutation on mismatch, got %+v", pub.events)
-		}
-	}
-	if len(res.Warnings) == 0 {
-		t.Fatal("expected mismatch warning on result")
+	_, err := runtime.BuildBeeRegistry(root)
+	if err == nil || !strings.Contains(err.Error(), "isolated code.proposal with worktree: false") {
+		t.Fatalf("BuildBeeRegistry() err = %v, want load-time mismatch error", err)
 	}
 }
 

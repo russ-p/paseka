@@ -10,7 +10,7 @@ params:
 worktree: false
 publishes:
   - type: MUTATION
-    kind: code.proposal
+    kind: code.proposal.root
   - type: INSIGHT
     kind: run.summary
   - type: INSIGHT

@@ -110,7 +110,7 @@ func TestReactorDirectDispatchRootProposalNoWorktree(t *testing.T) {
 	r := newProposalDispatchReactor(t, repo, map[string]colony.Bee{
 		"main-guard": {
 			Role:     "main-guard",
-			Worktree: true,
+			Worktree: false,
 			Subscribes: []colony.SubscriptionRule{
 				{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.root"}, Dispatch: colony.DispatchDirect},
 			},
@@ -165,7 +165,8 @@ func TestReactorDirectDispatchIsolatedReusesPublisherWorktree(t *testing.T) {
 
 	r := newProposalDispatchReactor(t, repo, map[string]colony.Bee{
 		"guard": {
-			Role: "guard",
+			Role:     "guard",
+			Worktree: true,
 			Subscribes: []colony.SubscriptionRule{
 				{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.isolated"}, Dispatch: colony.DispatchDirect},
 			},

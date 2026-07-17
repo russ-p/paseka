@@ -84,8 +84,18 @@ func (s SubscriptionRule) ResolvedDispatch() DispatchMode {
 	return DispatchDirect
 }
 
+// LoadAllBeesForDiagnosis reads bee YAML without proposal invariant validation so
+// doctor can report wiring issues on misconfigured colonies.
+func LoadAllBeesForDiagnosis(colonyRoot string) (map[string]Bee, error) {
+	return loadAllBees(colonyRoot, false)
+}
+
 // LoadAllBees reads every .paseka/bees/<role>.yaml (excluding *.local.yaml).
 func LoadAllBees(colonyRoot string) (map[string]Bee, error) {
+	return loadAllBees(colonyRoot, true)
+}
+
+func loadAllBees(colonyRoot string, validateProposal bool) (map[string]Bee, error) {
 	dir := BeesDir(colonyRoot)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -104,7 +114,7 @@ func LoadAllBees(colonyRoot string) (map[string]Bee, error) {
 			continue
 		}
 		role := strings.TrimSuffix(name, ".yaml")
-		bee, _, err := LoadBee(colonyRoot, role)
+		bee, _, err := loadBee(colonyRoot, role, validateProposal)
 		if err != nil {
 			return nil, err
 		}

@@ -49,7 +49,20 @@ func printDoctorReport(r bus.DoctorReport) {
 		for _, e := range r.Errors {
 			fmt.Printf("  - %s\n", e)
 		}
-	} else {
+	}
+	if len(r.Warnings) > 0 {
+		fmt.Println("\nWarnings:")
+		for _, w := range r.Warnings {
+			fmt.Printf("  - %s\n", w)
+		}
+	}
+	if len(r.Advisories) > 0 {
+		fmt.Println("\nAdvisories:")
+		for _, a := range r.Advisories {
+			fmt.Printf("  - %s\n", a)
+		}
+	}
+	if len(r.Errors) == 0 && len(r.Warnings) == 0 && len(r.Advisories) == 0 {
 		fmt.Println("\nAll checks passed.")
 	}
 }
