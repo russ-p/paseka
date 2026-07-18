@@ -199,13 +199,14 @@ func TestHandlerTaskShowsPreview(t *testing.T) {
 			ChatIDs:   []int64{-100},
 			Commands: tggate.CommandsConfig{
 				DefaultBee:    "builder",
+				DefaultIntent: "general",
 				DefaultReview: "none",
 			},
 		},
 		Bot: bot,
 		Tasks: &tggate.TaskActions{
 			Colony:  ctxColony,
-			Config:  tggate.Config{Commands: tggate.CommandsConfig{DefaultBee: "builder", DefaultReview: "none"}},
+			Config:  tggate.Config{Commands: tggate.CommandsConfig{DefaultBee: "builder", DefaultIntent: "general", DefaultReview: "none"}},
 			Bot:     bot,
 			Pending: tggate.NewPendingTasks(),
 		},

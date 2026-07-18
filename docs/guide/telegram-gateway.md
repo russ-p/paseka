@@ -57,6 +57,7 @@ notify:
 commands:
   task_autorun: true              # Confirm on /task also publishes task.ready
   default_bee: builder
+  default_intent: general         # task intent for default_bee (see bee intents)
   default_review: none
 console_base_url: ""              # optional; e.g. Tailscale URL to Queen Console
 ```
@@ -68,7 +69,7 @@ console_base_url: ""              # optional; e.g. Tailscale URL to Queen Consol
 | `allow_from` | yes | Non-empty; inbound commands from others are **silently ignored** |
 | `chat_ids` | yes | Non-empty; pushes go here; commands from chats outside this list are also ignored |
 | `mode` | no | Default `longpoll`. `webhook` is rejected at runtime until V2 |
-| `commands.*` | no | Defaults: bee `builder`, review `none`, autorun `true` |
+| `commands.*` | no | Defaults: bee `builder`, intent `general`, review `none`, autorun `true` |
 | `console_base_url` | no | When set, cards may include a Console deep-link |
 
 Runtime notify dedup state: `~/.config/paseka/<slug>/telegram-notify-state.json` (created automatically).

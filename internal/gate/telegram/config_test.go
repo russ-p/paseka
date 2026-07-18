@@ -66,6 +66,47 @@ chat_ids: []
 	}
 }
 
+func TestLoadAppliesCommandDefaults(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+`)
+	cfg, err := tggate.Load("tg-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands.DefaultBee != "builder" {
+		t.Fatalf("default_bee = %q", cfg.Commands.DefaultBee)
+	}
+	if cfg.Commands.DefaultIntent != "general" {
+		t.Fatalf("default_intent = %q", cfg.Commands.DefaultIntent)
+	}
+	if cfg.Commands.DefaultReview != "none" {
+		t.Fatalf("default_review = %q", cfg.Commands.DefaultReview)
+	}
+	if !cfg.Commands.AutorunEnabled() {
+		t.Fatal("expected task_autorun default true")
+	}
+}
+
+func TestLoadAcceptsCustomDefaultIntent(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  default_intent: feature
+`)
+	cfg, err := tggate.Load("tg-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands.DefaultIntent != "feature" {
+		t.Fatalf("default_intent = %q", cfg.Commands.DefaultIntent)
+	}
+}
+
 func TestLoadAcceptsValidConfig(t *testing.T) {
 	writeTelegramYAML(t, "tg-test", `enabled: true
 bot_token: "yaml-token"

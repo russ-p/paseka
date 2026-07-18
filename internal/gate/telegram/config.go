@@ -97,6 +97,7 @@ func (c CommandsConfig) AutorunEnabled() bool {
 // CommandsConfig holds /task defaults for later slices.
 type CommandsConfig struct {
 	DefaultBee    string `yaml:"default_bee"`
+	DefaultIntent string `yaml:"default_intent"`
 	DefaultReview string `yaml:"default_review"`
 	TaskAutorun   *bool  `yaml:"task_autorun"`
 }
@@ -146,6 +147,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Commands.DefaultBee == "" {
 		c.Commands.DefaultBee = "builder"
+	}
+	if c.Commands.DefaultIntent == "" {
+		c.Commands.DefaultIntent = "general"
 	}
 	if c.Commands.DefaultReview == "" {
 		c.Commands.DefaultReview = "none"
