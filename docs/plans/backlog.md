@@ -75,6 +75,20 @@ Gotchas observed while standing up Phase 2:
 - **Builder rework is async** — `verification.failed` → builder fix-up uses the direct dispatch path and can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop; treat `blocked` as a terminal status when honey runs out.
 - **Oracle scope** — `go test ./...` in the worktree also picks up packages under `cases/…/expect/`. Prefer a narrow path (e.g. `go test ./pkg/...`) in `case.yaml` `oracle.command` and in script-guard bees.
 
+### Windows release builds
+
+Context:
+- GoReleaser release pipeline ships Linux and macOS binaries (`linux/*`, `darwin/*`) from a single Ubuntu runner with `CGO_ENABLED=0`.
+- Cross-compiling to Windows is supported by Go and GitHub Actions, but the codebase is not ready yet.
+
+Backlog item:
+- **Windows release builds** — `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` fails on Unix-only PTY/HITL code (`syscall.SIGWINCH` in `internal/sessions/manager.go`; also review `Setsid` in `internal/runtime/supervisor.go`).
+- Add build tags or stubs for sessions/PTY paths, then add `windows` to `.goreleaser.yaml` `builds.goos`.
+
+Exit criteria for revisiting:
+- `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` succeeds locally and in CI.
+- Release assets include `.exe` archives for `windows/amd64` (and optionally `windows/arm64`).
+
 Backlog follow-ups (eval harness):
 
 - **Task retry with edit** — allow changing bee, intent, body, or sector when retrying a failed task (CLI flags or Console form). Today `paseka task retry` and Queen Console Retry reuse the ledger snapshot as-is.

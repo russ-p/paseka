@@ -23,7 +23,7 @@ git clone https://github.com/russ-p/paseka.git
 cd paseka
 ```
 
-2. Download dependencies and build the binary:
+2. Download a [release binary](https://github.com/russ-p/paseka/releases) for Linux or macOS, or build from source:
 
 ```
 go mod download

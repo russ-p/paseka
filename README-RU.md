@@ -23,7 +23,7 @@ git clone https://github.com/russ-p/paseka.git
 cd paseka
 ```
 
-2. Установить зависимости и собрать бинарник:
+2. Скачать [релизный бинарник](https://github.com/russ-p/paseka/releases) для Linux или macOS либо собрать из исходников:
 
 ```
 go mod download
