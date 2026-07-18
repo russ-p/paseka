@@ -23,6 +23,8 @@ type Handler struct {
 	Supervisor *runtime.Supervisor
 	Bot        BotAPI
 	Invites    *InviteActions
+	Energy     *EnergyActions
+	Tasks      *TaskActions
 }
 
 // HandleUpdate processes one Telegram update. Non-allowlisted traffic is silently ignored.
@@ -50,6 +52,10 @@ func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 		h.sendHelp(chatID)
 	case "invites":
 		h.inviteActions().SendInvitesList(chatID)
+	case "energy":
+		h.energyActions().HandleCommand(ctx, chatID, update.Message.CommandArguments())
+	case "task":
+		h.taskActions().HandleCommand(ctx, chatID, update.Message.CommandArguments())
 	}
 }
 
@@ -88,8 +94,12 @@ func (h *Handler) handleCallback(ctx context.Context, q *tgbotapi.CallbackQuery)
 	case strings.HasPrefix(data, callbackEnergyAdd):
 		traceID, amount, ok := ParseEnergyCallback(strings.TrimPrefix(data, callbackEnergyAdd))
 		if ok {
-			h.inviteActions().addEnergy(ctx, chatID, messageID, traceID, amount)
+			h.energyActions().Add(ctx, chatID, messageID, traceID, amount)
 		}
+	case strings.HasPrefix(data, callbackTaskConfirm):
+		h.taskActions().Confirm(ctx, chatID, messageID, strings.TrimPrefix(data, callbackTaskConfirm))
+	case strings.HasPrefix(data, callbackTaskCancel):
+		h.taskActions().Cancel(chatID, messageID, strings.TrimPrefix(data, callbackTaskCancel))
 	}
 }
 
@@ -101,6 +111,28 @@ func (h *Handler) inviteActions() *InviteActions {
 		Colony: h.Colony,
 		Config: h.Config,
 		Bot:    h.Bot,
+	}
+}
+
+func (h *Handler) energyActions() *EnergyActions {
+	if h.Energy != nil {
+		return h.Energy
+	}
+	return &EnergyActions{
+		Colony: h.Colony,
+		Bot:    h.Bot,
+	}
+}
+
+func (h *Handler) taskActions() *TaskActions {
+	if h.Tasks != nil {
+		return h.Tasks
+	}
+	return &TaskActions{
+		Colony:  h.Colony,
+		Config:  h.Config,
+		Bot:     h.Bot,
+		Pending: NewPendingTasks(),
 	}
 }
 

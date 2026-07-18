@@ -86,3 +86,7 @@ func (s *NotifyState) saveLocked() error {
 func inviteNotifyKey(inviteID, status string) string {
 	return fmt.Sprintf("invite:%s:%s", inviteID, status)
 }
+
+func taskNotifyKey(traceID, taskID, status string) string {
+	return fmt.Sprintf("task:%s:%s:%s", traceID, taskID, status)
+}

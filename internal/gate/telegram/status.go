@@ -74,5 +74,8 @@ func FormatStatus(s Snapshot) string {
 const HelpText = `Paseka Human Gateway
 
 /status — colony snapshot (Refresh button)
+/energy <traceId> — honey reserve (remaining/budget)
+/energy add <traceId> <n> — top up honey
+/task <text> — inject task (preview + Confirm)
 /invites — pending session invites
 /help — this message`

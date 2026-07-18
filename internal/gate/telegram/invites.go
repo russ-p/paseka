@@ -248,27 +248,7 @@ func (a *InviteActions) executeReject(ctx context.Context, chatID int64, message
 }
 
 func (a *InviteActions) addEnergy(ctx context.Context, chatID int64, messageID int, traceID string, amount int) {
-	session, err := tasks.OpenLedger(a.Colony)
-	if err != nil {
-		a.sendText(chatID, messageID, "energy add failed: "+err.Error())
-		return
-	}
-	defer session.Close()
-	if session.Client == nil || session.Ledger == nil {
-		a.sendText(chatID, messageID, "energy add failed: nats url not configured")
-		return
-	}
-	snap, err := tasks.AddEnergy(ctx, session, tasks.AddEnergyInput{
-		TraceID: traceID,
-		Amount:  amount,
-		AgentID: "telegram",
-	})
-	if err != nil {
-		a.sendText(chatID, messageID, "energy add failed: "+err.Error())
-		return
-	}
-	text := fmt.Sprintf("Added %d honey to %s\nhoney: %d/%d", amount, traceID, snap.EnergyRemaining, snap.EnergyBudget)
-	a.sendText(chatID, messageID, text)
+	(&EnergyActions{Colony: a.Colony, Bot: a.Bot}).Add(ctx, chatID, messageID, traceID, amount)
 }
 
 func formatAcceptSuccess(cfg Config, res *invites.AcceptResult, hostname string) string {

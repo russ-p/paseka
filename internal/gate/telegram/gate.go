@@ -79,6 +79,16 @@ func (g *Gate) Run(ctx context.Context) error {
 			Config: g.Config,
 			Bot:    g.Bot,
 		},
+		Energy: &EnergyActions{
+			Colony: g.Colony,
+			Bot:    g.Bot,
+		},
+		Tasks: &TaskActions{
+			Colony:  g.Colony,
+			Config:  g.Config,
+			Bot:     g.Bot,
+			Pending: NewPendingTasks(),
+		},
 	}
 
 	u := tgbotapi.NewUpdate(0)

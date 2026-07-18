@@ -58,3 +58,10 @@ func TestNotifyConfigInvitesDefaultEnabled(t *testing.T) {
 		t.Fatal("expected explicit false to disable invites notify")
 	}
 }
+
+func TestNotifyConfigBlockedDefaultEnabled(t *testing.T) {
+	var cfg tggate.NotifyConfig
+	if !cfg.BlockedEnabled() {
+		t.Fatal("blocked notify should default to enabled")
+	}
+}

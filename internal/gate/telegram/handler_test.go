@@ -182,6 +182,87 @@ func TestHandlerInvitesListsPending(t *testing.T) {
 	}
 }
 
+func TestHandlerTaskShowsPreview(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	repo := initTestRepo(t)
+	ctxColony, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &mockBot{}
+	h := &tggate.Handler{
+		Colony: ctxColony,
+		Config: tggate.Config{
+			AllowFrom: []int64{1},
+			ChatIDs:   []int64{-100},
+			Commands: tggate.CommandsConfig{
+				DefaultBee:    "builder",
+				DefaultReview: "none",
+			},
+		},
+		Bot: bot,
+		Tasks: &tggate.TaskActions{
+			Colony:  ctxColony,
+			Config:  tggate.Config{Commands: tggate.CommandsConfig{DefaultBee: "builder", DefaultReview: "none"}},
+			Bot:     bot,
+			Pending: tggate.NewPendingTasks(),
+		},
+	}
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 5}},
+			Text:     "/task Add OAuth callback",
+			Chat:     &tgbotapi.Chat{ID: -100},
+			From:     &tgbotapi.User{ID: 1},
+		},
+	}
+	h.HandleUpdate(context.Background(), update)
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected preview card, got %d sends", len(bot.sent))
+	}
+	msg, ok := bot.sent[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("expected MessageConfig, got %T", bot.sent[0])
+	}
+	if msg.ReplyMarkup == nil {
+		t.Fatal("expected confirm keyboard")
+	}
+}
+
+func TestHandlerEnergyWithoutTraceShowsUsage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	repo := initTestRepo(t)
+	ctxColony, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &mockBot{}
+	h := &tggate.Handler{
+		Colony: ctxColony,
+		Config: tggate.Config{
+			AllowFrom: []int64{1},
+			ChatIDs:   []int64{-100},
+		},
+		Bot: bot,
+	}
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 7}},
+			Text:     "/energy",
+			Chat:     &tgbotapi.Chat{ID: -100},
+			From:     &tgbotapi.User{ID: 1},
+		},
+	}
+	h.HandleUpdate(context.Background(), update)
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected usage reply, got %d sends", len(bot.sent))
+	}
+}
+
 func TestHandlerInviteAcceptShowsConfirm(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)

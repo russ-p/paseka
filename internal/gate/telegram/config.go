@@ -23,6 +23,8 @@ const (
 	callbackInviteConfirmReject = "inv:cr:"
 	callbackInviteCancel        = "inv:x:"
 	callbackEnergyAdd           = "en:+:"
+	callbackTaskConfirm         = "task:c:"
+	callbackTaskCancel          = "task:x:"
 )
 
 // Config is machine-local Telegram Human Gateway settings (~/.config/paseka/<slug>/telegram.yaml).
@@ -52,6 +54,38 @@ func (n NotifyConfig) InvitesEnabled() bool {
 		return true
 	}
 	return *n.Invites
+}
+
+// WaitingReviewEnabled reports whether waiting_review task push is on (default true).
+func (n NotifyConfig) WaitingReviewEnabled() bool {
+	if n.WaitingReview == nil {
+		return true
+	}
+	return *n.WaitingReview
+}
+
+// BlockedEnabled reports whether blocked task push is on (default true).
+func (n NotifyConfig) BlockedEnabled() bool {
+	if n.Blocked == nil {
+		return true
+	}
+	return *n.Blocked
+}
+
+// FailedEnabled reports whether failed task push is on (default true).
+func (n NotifyConfig) FailedEnabled() bool {
+	if n.Failed == nil {
+		return true
+	}
+	return *n.Failed
+}
+
+// AutorunEnabled reports whether /task should publish task.ready after Confirm (default true).
+func (c CommandsConfig) AutorunEnabled() bool {
+	if c.TaskAutorun == nil {
+		return true
+	}
+	return *c.TaskAutorun
 }
 
 // CommandsConfig holds /task defaults for later slices.
