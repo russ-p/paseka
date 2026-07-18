@@ -57,3 +57,7 @@ go build -o paseka ./cmd/paseka
 - JetStream
 - YAML
 - PTY
+
+## Лицензия
+
+Распространяется под [Apache License 2.0](LICENSE).

@@ -57,3 +57,7 @@ Guides are grouped by immersion depth under [`docs/`](docs/README.md): idea → 
 - JetStream
 - YAML
 - PTY
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
