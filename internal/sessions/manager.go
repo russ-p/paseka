@@ -17,7 +17,6 @@ import (
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
-	"github.com/paseka/paseka/internal/adapters/systeminject"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/prompts"
@@ -214,21 +213,27 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, err
 	}
+	adapterName, err := bee.ResolveAdapter()
+	if err != nil {
+		return nil, err
+	}
 	knownIntents, defaultIntent, err := prompts.DiscoverIntents(ctxColony.ColonyRoot, bee)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: discover intents: %w", err)
 	}
 	promptCtx := prompts.PromptContext(prompts.Context{
-		Bee:        bee.Role,
-		TraceID:    traceID,
-		AgentID:    agentID,
-		TaskID:     req.TaskID,
-		ColonyRoot: ctxColony.ColonyRoot,
-		Workspace:  workspace,
-		Task:       req.Task,
-		IntentRaw:  req.Intent,
-		Insights:   req.Insights,
-		ResultFile: resultFile,
+		Bee:         bee.Role,
+		TraceID:     traceID,
+		AgentID:     agentID,
+		TaskID:      req.TaskID,
+		ColonyRoot:  ctxColony.ColonyRoot,
+		Workspace:   workspace,
+		Task:        req.Task,
+		IntentRaw:   req.Intent,
+		Insights:    req.Insights,
+		ResultFile:  resultFile,
+		Interactive: true,
+		Adapter:     adapterName,
 	}, knownIntents, defaultIntent)
 
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
@@ -251,16 +256,17 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, fmt.Errorf("sessions: render prompt: %w", err)
 	}
 
-	adapterName, err := bee.ResolveAdapter()
-	if err != nil {
-		return nil, err
-	}
 	sessAdapter, ok := m.adapters[adapterName]
 	if !ok {
 		return nil, fmt.Errorf("sessions: adapter %q does not support interactive sessions", adapterName)
 	}
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), colony.AdapterExtra(ctxColony, adapterName))
+
+	commandPrompt := rendered
+	if adapterName == "cursor" {
+		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
+	}
 
 	var command []string
 	if bee.Command.IsSet() {
@@ -272,10 +278,9 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			)
 		}
 		command, err = bee.Command.RenderCommand(colony.CommandVars{
-			Prompt:       rendered,
+			Prompt:       commandPrompt,
 			SystemPrompt: renderedSystem,
 			SystemFile:   runDir.SystemPath(),
-			CursorPlugin: systeminject.CursorPluginPath(runDir),
 			Workspace:    workspace,
 		})
 		if err != nil {

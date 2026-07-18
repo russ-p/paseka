@@ -7,8 +7,6 @@ import (
 	"os/exec"
 
 	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/systeminject"
-	"github.com/paseka/paseka/internal/runs"
 )
 
 // SessionAdapter builds commands for interactive Cursor Agent CLI sessions.
@@ -32,31 +30,15 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	if req.InitialPrompt == "" && req.SystemPrompt == "" {
 		return adapters.SessionCommand{}, errors.New("cursor: initial prompt or system prompt is required")
 	}
-	if req.SystemPrompt != "" && (req.ColonyRoot == "" || req.TraceID == "" || req.AgentID == "") {
-		return adapters.SessionCommand{}, errors.New("cursor: colony root, traceId, and agentId are required for system prompt injection")
-	}
 
-	prompt := req.InitialPrompt
-	var pluginDir string
-	if req.SystemPrompt != "" {
-		runDir := runs.Dir{
-			ColonyRoot: req.ColonyRoot,
-			TraceID:    req.TraceID,
-			AgentID:    req.AgentID,
-		}
-		dir, err := systeminject.WriteCursorPlugin(runDir, req.SystemPrompt)
-		if err != nil {
-			return adapters.SessionCommand{}, fmt.Errorf("cursor: write system plugin: %w", err)
-		}
-		pluginDir = dir
-	}
+	prompt := JoinPrompt(req.SystemPrompt, req.InitialPrompt)
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildInteractiveArgs(req, prompt, pluginDir)
+		return b, buildInteractiveArgs(req, prompt)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
@@ -75,7 +57,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}, nil
 }
 
-func buildInteractiveArgs(req adapters.SessionRequest, prompt, pluginDir string) []string {
+func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
 	p := req.Params
 	args := []string{
 		"--workspace", req.Workspace,
@@ -93,9 +75,6 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt, pluginDir string)
 	}
 	if p.APIKey != "" {
 		args = append(args, "--api-key", p.APIKey)
-	}
-	if pluginDir != "" {
-		args = append(args, "--plugin-dir", pluginDir)
 	}
 	if prompt != "" {
 		args = append(args, prompt)

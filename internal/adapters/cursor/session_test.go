@@ -1,7 +1,6 @@
 package cursor_test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
@@ -25,6 +24,8 @@ func TestSessionCommandInteractiveNoPrintFlag(t *testing.T) {
 			t.Fatalf("interactive session must not include -p, args=%v", cmd.Args)
 		case "--trust":
 			t.Fatalf("interactive session must not include --trust (headless-only), args=%v", cmd.Args)
+		case "--plugin-dir":
+			t.Fatalf("interactive session must not include --plugin-dir, args=%v", cmd.Args)
 		}
 	}
 	if cmd.Dir != "/tmp/ws" {
@@ -50,7 +51,7 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 
 	for _, arg := range cmd.Args {
 		switch arg {
-		case "-p", "--trust", "--output-format":
+		case "-p", "--trust", "--output-format", "--plugin-dir":
 			t.Fatalf("detached session must stay interactive, args=%v", cmd.Args)
 		}
 	}
@@ -70,37 +71,21 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 	}
 }
 
-func TestSessionCommandSystemOnlyUsesPluginDir(t *testing.T) {
-	root := t.TempDir()
+func TestSessionCommandGluesSystemIntoPositional(t *testing.T) {
 	a := cursor.NewSession()
 	cmd, err := a.SessionCommand(adapters.SessionRequest{
-		ColonyRoot:   root,
-		Workspace:    root,
-		TraceID:      "trace-1",
-		AgentID:      "agent-1",
-		SystemPrompt: "You are Scout.",
-		Params:       adapters.RunParams{Binary: "sh", Model: "composer-2.5"},
+		Workspace:     "/tmp/ws",
+		InitialPrompt: "discuss feature",
+		SystemPrompt:  "You are Scout.",
+		Params:        adapters.RunParams{Binary: "sh", Model: "composer-2.5"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pluginFlag := false
-	for i, arg := range cmd.Args {
-		if arg == "--plugin-dir" {
-			pluginFlag = true
-			if i+1 >= len(cmd.Args) {
-				t.Fatal("missing plugin dir value")
-			}
-			if _, err := os.Stat(cmd.Args[i+1]); err != nil {
-				t.Fatalf("plugin dir: %v", err)
-			}
-		}
-	}
-	if !pluginFlag {
-		t.Fatalf("expected --plugin-dir in args=%v", cmd.Args)
-	}
-	if len(cmd.Args) > 0 && cmd.Args[len(cmd.Args)-1] == "You are Scout." {
-		t.Fatalf("system prompt must not be positional, args=%v", cmd.Args)
+	want := "You are Scout.\ndiscuss feature"
+	last := cmd.Args[len(cmd.Args)-1]
+	if last != want {
+		t.Fatalf("prompt arg = %q, want %q", last, want)
 	}
 }

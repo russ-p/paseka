@@ -170,7 +170,7 @@ publishes:
 
 | Adapter | Notes |
 | ------- | ----- |
-| `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. Custom `command` with `system_template` should pass `--plugin-dir $CURSOR_PLUGIN` for system injection. |
+| `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead. |
 | `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
@@ -241,10 +241,10 @@ Supports `$NAME` and `${NAME}`:
 
 | Variable | When set | Value |
 | -------- | -------- | ----- |
-| `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered user/task prompt |
-| `$SYSTEM_PROMPT` / `${SYSTEM_PROMPT}` | dispatch + post_exec | rendered system prompt |
+| `$PROMPT` / `${PROMPT}` | dispatch + post_exec | rendered user/task prompt; for `cursor`, includes `system_template` when set (newline-separated) |
+| `$SYSTEM_PROMPT` / `${SYSTEM_PROMPT}` | dispatch + post_exec | rendered system prompt (still written to `system.txt`; not duplicated in Cursor positional when using default adapter mapping) |
 | `$SYSTEM_FILE` / `${SYSTEM_FILE}` | dispatch + post_exec | path to `system.txt` |
-| `$CURSOR_PLUGIN` / `${CURSOR_PLUGIN}` | dispatch + chat | ephemeral Cursor plugin dir (`.paseka/runs/<traceId>/<agentId>/cursor-plugin`); pass as `--plugin-dir` in custom Cursor `command` |
+| `$CURSOR_PLUGIN` / `${CURSOR_PLUGIN}` | dispatch + chat | **deprecated** — no longer materialized; `$PROMPT` carries merged system+task for Cursor |
 | `$WORKSPACE` / `${WORKSPACE}` | dispatch + post_exec | agent working directory |
 | `$TRACE_ID` / `${TRACE_ID}` | dispatch + post_exec | current flight trail |
 | `$AGENT_ID` / `${AGENT_ID}` | dispatch + post_exec | this invocation id |

@@ -15,6 +15,21 @@ func TestAdapterName(t *testing.T) {
 	}
 }
 
+func TestJoinPrompt(t *testing.T) {
+	cases := []struct {
+		system, prompt, want string
+	}{
+		{"", "task", "task"},
+		{"role", "", "role"},
+		{"role", "task", "role\ntask"},
+	}
+	for _, tc := range cases {
+		if got := JoinPrompt(tc.system, tc.prompt); got != tc.want {
+			t.Fatalf("JoinPrompt(%q, %q) = %q, want %q", tc.system, tc.prompt, got, tc.want)
+		}
+	}
+}
+
 func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/colony/worktree",
@@ -25,7 +40,7 @@ func TestBuildArgs(t *testing.T) {
 			Force:        true,
 		},
 	}
-	args := buildArgs(req, "implement feature", "")
+	args := buildArgs(req, "implement feature")
 
 	want := []string{
 		"-p", "--workspace", "/colony/worktree",

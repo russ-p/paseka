@@ -106,30 +106,31 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 	}
 
 	files := map[string]string{
-		PasekaPath(root, ".gitignore"):                                         gitignoreContent,
-		PasekaPath(root, "bees", "scout.yaml"):                                 scoutBeeYAMLFor(adapter),
-		PasekaPath(root, "bees", "builder.yaml"):                               builderBeeYAMLFor(adapter),
-		PasekaPath(root, "bees", "hivewright.yaml"):                            hivewrightBeeYAMLFor(adapter),
-		PasekaPath(root, "prompts", "default.md"):                              defaultPrompt,
-		PasekaPath(root, "prompts", "scout.md"):                                scoutPrompt,
-		PasekaPath(root, "prompts", "builder.md"):                              builderPrompt,
-		PasekaPath(root, "prompts", "hivewright-system.md"):                    hivewrightSystemPrompt,
-		PasekaPath(root, "prompts", "hivewright-task.md"):                      hivewrightTaskPrompt,
-		PasekaPath(root, "prompts", "_partials", "emit-howto.md"):              emitHowtoPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):            emitInsightPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):             emitSignalPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-verification.md"):       emitVerificationPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-task-completed.md"):     emitTaskCompletedPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):  builderIntentGeneralPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):  builderIntentFeaturePartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):   builderIntentBugfixPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"): builderIntentTestFixPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"): builderIntentRefactorPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):     scoutIntentSurveyPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-plan.md"):       scoutIntentPlanPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-triage.md"):     scoutIntentTriagePartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-classify.md"):   scoutIntentClassifyPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-emit-classify.md"):     scoutEmitClassifyPartial,
+		PasekaPath(root, ".gitignore"):                                            gitignoreContent,
+		PasekaPath(root, "bees", "scout.yaml"):                                    scoutBeeYAMLFor(adapter),
+		PasekaPath(root, "bees", "builder.yaml"):                                  builderBeeYAMLFor(adapter),
+		PasekaPath(root, "bees", "hivewright.yaml"):                               hivewrightBeeYAMLFor(adapter),
+		PasekaPath(root, "prompts", "default.md"):                                 defaultPrompt,
+		PasekaPath(root, "prompts", "scout.md"):                                   scoutPrompt,
+		PasekaPath(root, "prompts", "builder.md"):                                 builderPrompt,
+		PasekaPath(root, "prompts", "hivewright-system.md"):                       hivewrightSystemPrompt,
+		PasekaPath(root, "prompts", "hivewright-task.md"):                         hivewrightTaskPrompt,
+		PasekaPath(root, "prompts", "_partials", "emit-howto.md"):                 emitHowtoPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):               emitInsightPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):                emitSignalPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-verification.md"):          emitVerificationPartial,
+		PasekaPath(root, "prompts", "_partials", "emit-task-completed.md"):        emitTaskCompletedPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):     builderIntentGeneralPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):     builderIntentFeaturePartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):      builderIntentBugfixPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"):    builderIntentTestFixPartial,
+		PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"):    builderIntentRefactorPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):        scoutIntentSurveyPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-plan.md"):          scoutIntentPlanPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-triage.md"):        scoutIntentTriagePartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-classify.md"):      scoutIntentClassifyPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-emit-classify.md"):        scoutEmitClassifyPartial,
+		PasekaPath(root, "prompts", "_partials", "cursor-interactive-kickoff.md"): cursorInteractiveKickoffPartial,
 	}
 
 	for path, content := range files {
@@ -448,6 +449,11 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 ## Task
 {{.Task}}
 {{end}}
+{{if and .Interactive (eq .Adapter "cursor")}}
+{{template "cursor-interactive-kickoff" .}}
+{{end}}
+`
+	cursorInteractiveKickoffPartial = `Interactive Cursor session: greet the user briefly, then wait for further instructions. Do not start the mission until they reply.
 `
 	builderIntentGeneralPartial = `Implement or fix the requested change with minimal scope. Follow existing code conventions, run relevant tests when practical, and prefer small focused diffs over broad rewrites.
 `

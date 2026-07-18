@@ -79,12 +79,14 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [009-insight-kinds.md](009-insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `result.txt` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
+| `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
+| `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `script`). |
 
 ### Field sources (MVP)
 
 | Variable | Set by |
 | -------- | ------ |
-| `Bee`, `TraceID`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile` | `internal/runtime.Dispatcher` at dispatch time |
+| `Bee`, `TraceID`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile`, `Interactive`, `Adapter` | `internal/runtime.Dispatcher` at dispatch time; `Interactive` is `true` in `internal/sessions` for chat |
 | `Task` | `paseka bee run --task` (required unless using inline prompt) |
 | `Intent` / `IntentRaw` | `paseka bee run --intent`, `paseka task create --intent`, or `intent` on `task.plan` / `task.ready` payloads |
 | `Insights` | Runtime projection from prior narrative `INSIGHT` events on the trace, merged with any manual `DispatchRequest.Insights` |
@@ -319,6 +321,7 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 | `drone-emit-breakdown` | `INSIGHT/task.plan`, `SIGNAL/task.ready`, optional `context.note` (Drone `breakdown` intent only) |
 | `emit-verification` | Review-gate `VERIFICATION` kinds (`verification.success`, `verification.failed`) |
 | `emit-task-completed` | Commit-gate `VERIFICATION/task.completed` (receiver only) |
+| `cursor-interactive-kickoff` | Brief greet-and-wait footer for interactive Cursor chat (`hivewright-task`, `drone-task`) |
 
 Bees include only the type partials they may publish. For example:
 

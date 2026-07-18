@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/systeminject"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
@@ -47,19 +46,11 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, errors.New("cursor: prompt or system prompt is required")
 	}
 
-	prompt := req.Prompt
+	agentPrompt := JoinPrompt(req.SystemPrompt, req.Prompt)
 	runDir := runs.Dir{
 		ColonyRoot: req.ColonyRoot,
 		TraceID:    req.TraceID,
 		AgentID:    req.AgentID,
-	}
-	var pluginDir string
-	if req.SystemPrompt != "" {
-		dir, err := systeminject.WriteCursorPlugin(runDir, req.SystemPrompt)
-		if err != nil {
-			return nil, fmt.Errorf("cursor: write system plugin: %w", err)
-		}
-		pluginDir = dir
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
@@ -67,7 +58,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildArgs(req, prompt, pluginDir)
+		return b, buildArgs(req, agentPrompt)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
@@ -78,7 +69,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	startedAt := time.Now().UTC()
-	if err := runDir.WritePrompt(prompt); err != nil {
+	if err := runDir.WritePrompt(req.Prompt); err != nil {
 		return nil, fmt.Errorf("cursor: write prompt: %w", err)
 	}
 	if req.SystemPrompt != "" {
@@ -251,7 +242,19 @@ func pickSummary(fileSummary, streamSummary string) string {
 	return streamSummary
 }
 
-func buildArgs(req adapters.RunRequest, prompt, pluginDir string) []string {
+// JoinPrompt merges system_template and task prompt for Cursor CLI positional args.
+func JoinPrompt(system, prompt string) string {
+	switch {
+	case system == "":
+		return prompt
+	case prompt == "":
+		return system
+	default:
+		return system + "\n" + prompt
+	}
+}
+
+func buildArgs(req adapters.RunRequest, prompt string) []string {
 	p := req.Params
 	args := []string{
 		"-p",
@@ -278,9 +281,6 @@ func buildArgs(req adapters.RunRequest, prompt, pluginDir string) []string {
 	}
 	if p.APIKey != "" {
 		args = append(args, "--api-key", p.APIKey)
-	}
-	if pluginDir != "" {
-		args = append(args, "--plugin-dir", pluginDir)
 	}
 	if prompt != "" {
 		args = append(args, prompt)

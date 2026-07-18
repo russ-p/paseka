@@ -197,8 +197,8 @@ If Ghostty is not installed, set `terminal: default` or omit `terminal.yaml`.
 | ----- | --------------- |
 | `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
 | `Workspace` | `--workspace <path>` |
-| `SystemPrompt` | ephemeral `--plugin-dir` rule (run-local plugin under `runs/`) |
-| `InitialPrompt` | positional prompt when provided (no `-p`) |
+| `SystemPrompt` + `InitialPrompt` | merged into one positional prompt (newline-separated) |
+| `InitialPrompt` | task/kickoff portion before glue (no `-p`) |
 | `params.model` | `--model <id>` |
 | `params.force` | `--force` |
 | `params.plan` | `--plan` |
@@ -209,10 +209,9 @@ Interactive invocation:
 ```bash
 agent --force \
   --workspace "$WORKSPACE" \
-  --plugin-dir "$CURSOR_PLUGIN" \
   --model composer-2.5
-# optional positional kickoff when task/prompt provided:
-# "$PROMPT"
+# positional prompt when system_template and/or task are set:
+# "$PROMPT"   # system + task, newline-separated
 ```
 
 When `system_template` is set and no task/prompt is given, the session starts without a positional prompt and waits for user input.

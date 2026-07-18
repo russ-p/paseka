@@ -19,7 +19,7 @@ type CommandVars struct {
 	Prompt       string
 	SystemPrompt string
 	SystemFile   string
-	CursorPlugin string // .paseka/runs/<traceId>/<agentId>/cursor-plugin
+	CursorPlugin string // deprecated: no longer materialized; kept for command template substitution
 	Workspace    string
 	TraceID      string
 	AgentID      string

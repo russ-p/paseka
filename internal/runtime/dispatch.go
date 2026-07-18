@@ -12,7 +12,6 @@ import (
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/adapters/script"
-	"github.com/paseka/paseka/internal/adapters/systeminject"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
@@ -150,18 +149,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	}
 
 	promptCtx := prompts.PromptContext(prompts.Context{
-		Bee:        bee.Role,
-		TraceID:    req.TraceID,
-		AgentID:    agentID,
-		TaskID:     req.TaskID,
-		ColonyRoot: colonyRoot,
-		Workspace:  workspace,
-		Sector:     req.Sector,
-		SectorPath: req.SectorPath,
-		Task:       req.Task,
-		IntentRaw:  req.Intent,
-		Insights:   insights,
-		ResultFile: resultFile,
+		Bee:         bee.Role,
+		TraceID:     req.TraceID,
+		AgentID:     agentID,
+		TaskID:      req.TaskID,
+		ColonyRoot:  colonyRoot,
+		Workspace:   workspace,
+		Sector:      req.Sector,
+		SectorPath:  req.SectorPath,
+		Task:        req.Task,
+		IntentRaw:   req.Intent,
+		Insights:    insights,
+		ResultFile:  resultFile,
+		Interactive: false,
+		Adapter:     adapterName,
 	}, knownIntents, defaultIntent)
 
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
@@ -197,11 +198,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
 
 	runDirPath := runDir.Root()
+	commandPrompt := rendered
+	if adapterName == "cursor" {
+		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
+	}
 	cmdVars := colony.CommandVars{
-		Prompt:       rendered,
+		Prompt:       commandPrompt,
 		SystemPrompt: renderedSystem,
 		SystemFile:   runDir.SystemPath(),
-		CursorPlugin: systeminject.CursorPluginPath(runDir),
 		Workspace:    workspace,
 		TraceID:      req.TraceID,
 		AgentID:      agentID,
