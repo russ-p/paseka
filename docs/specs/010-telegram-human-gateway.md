@@ -2,7 +2,7 @@
 
 ## Status
 
-**Ready for breakdown.** Design agreed (Drone grilling). Not implemented.
+**Implemented (MVP).** Shipped 2026-07-18 via `paseka gate telegram` (`4410f01` bootstrap; `4c620a0` invites; `e058e54` energy/task/status notify; `ca01a24` proposal triage; merged in `13f6786`). Webhook transport remains V2 (config accepts `mode: webhook`; runtime requires long-poll).
 
 ## Purpose
 
@@ -281,3 +281,18 @@ go build -o paseka ./cmd/paseka
 # Manual: BotFather token + allowlisted chat → /status, invite push, /task confirm, energy +1/+5/+12
 # Manual: final-merge waiting_review offers Reject only; soft/mid Approve with two-step
 ```
+
+## Implementation
+
+Shipped under `cmd/paseka/gate.go` and `internal/gate/telegram/`:
+
+| Slice | Commit | Coverage |
+| ----- | ------ | -------- |
+| Bootstrap | `4410f01` | `paseka gate telegram`, `telegram.yaml`, allowlist silent ignore, long-poll, `/status` + Refresh, `/help` |
+| Invites | `4c620a0` | Invite push + reconcile dedup, honey line, `/invites`, Accept/Reject two-step, Defer immediate, energy `+1`/`+5`/`+12`, local session + PTY-on-host warning |
+| Energy / task / status notify | `e058e54` | `/energy` show/add, `/task` preview+confirm (`agentId: telegram`), blocked/failed/waiting_review push |
+| Proposals | `ca01a24` | waiting_review buttons; Reject always; Approve only when not final-merge; Console/CLI hint otherwise |
+
+Durable consumer: `paseka-gate-telegram-<slug>`. Notify dedup: `~/.config/paseka/<slug>/telegram-notify-state.json`.
+
+**Not in MVP (as designed):** webhook runtime (rejected until V2), digests/quiet hours, `/traces`, federation `/ctx`, PTY-in-chat.

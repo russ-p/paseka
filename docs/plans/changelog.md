@@ -2,6 +2,12 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-07 — Telegram Human Gateway
+
+Async phone triage via `paseka gate telegram`: long-poll Bot API, allowlisted chats, bus notify + reconcile dedup, `/status` `/energy` `/task` `/invites` `/help`, invite HITL (local PTY on accept), and proposal reject / soft-mid approve (final-merge Console/CLI only).
+
+- Spec: [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md)
+
 ## 2026-07 — Merge autostash on approve
 
 Final merge on isolated proposal approve autostashes a dirty colony root (including untracked files) and restores afterward.
