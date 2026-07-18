@@ -2,7 +2,9 @@ package worktree_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/paseka/paseka/internal/gitroot"
@@ -66,6 +68,61 @@ func TestMergeDirtyTrackedRestoresLocalChanges(t *testing.T) {
 	}
 }
 
+func TestMergeDirtyRootMergeFailureLeavesStash(t *testing.T) {
+	repo, traceID, slug := setupMergeFixture(t)
+	wtPath := worktree.Path(repo, traceID)
+
+	readmeMain := filepath.Join(repo, "README.md")
+	if err := os.WriteFile(readmeMain, []byte("# main version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "README.md")
+	runGit(t, repo, "commit", "-m", "main readme change")
+
+	readmeWT := filepath.Join(wtPath, "README.md")
+	if err := os.WriteFile(readmeWT, []byte("# worktree version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, wtPath, "add", "README.md")
+	runGit(t, wtPath, "commit", "-m", "worktree readme change")
+
+	localPath := filepath.Join(repo, "local-wip.txt")
+	if err := os.WriteFile(localPath, []byte("tracked wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "local-wip.txt")
+
+	res, err := worktree.Merge(worktree.MergeOptions{
+		ColonyRoot: repo,
+		TraceID:    traceID,
+		Slug:       slug,
+	})
+	if err == nil {
+		t.Fatal("expected merge error")
+	}
+	if res.StashOutcome != worktree.StashOutcomeLeftOnFailure {
+		t.Fatalf("stash outcome = %q, want left_on_failure", res.StashOutcome)
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "git stash list") || !strings.Contains(errMsg, "git stash pop") {
+		t.Fatalf("error = %q, want stash recovery guidance", errMsg)
+	}
+	if !strings.Contains(errMsg, "autostashed") {
+		t.Fatalf("error = %q, want autostash mention", errMsg)
+	}
+
+	stashList := gitOutput(t, repo, "stash", "list")
+	if strings.TrimSpace(stashList) == "" {
+		t.Fatal("expected stash entry after failed merge")
+	}
+	if !strings.Contains(stashList, traceID) {
+		t.Fatalf("stash list = %q, want trace id in autostash message", stashList)
+	}
+	if fileExists(localPath) {
+		t.Fatal("expected stashed local file absent from working tree")
+	}
+}
+
 func TestMergeDirtyUntrackedRestoresLocalChanges(t *testing.T) {
 	repo, traceID, slug := setupMergeFixture(t)
 
@@ -124,4 +181,14 @@ func setupMergeFixture(t *testing.T) (repo, traceID, slug string) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return string(out)
 }
