@@ -2,17 +2,17 @@
 
 ## Status
 
-**Agreed — not implemented.** Shared design from flight trail `trace-019f73945163fe35`.
+**Implemented.** Shipped 2026-07-18 in `62b8128` (autostash + outcome threading), `8f5de62` (stash-left-on-failure test), and `b3e4351` (preserve merge on pop conflict). Design from flight trail `trace-019f73945163fe35`.
 
 ## Purpose
 
 When a human approves an isolated final merge gate, merge the trace worktree into the colony root even if the root working tree is dirty, by automatically stashing (including untracked files) and restoring local changes afterward.
 
-Today `worktree.Merge` refuses dirty roots:
+Before this spec, `worktree.Merge` refused dirty roots:
 
 > `colony root has uncommitted changes — commit or stash before merge`
 
-That blocks an otherwise deliberate approve action for a common solo-developer state.
+That blocked an otherwise deliberate approve action for a common solo-developer state. `worktree.Merge` now autostashes by default and restores after a successful merge.
 
 ## Goals
 
@@ -32,16 +32,20 @@ That blocks an otherwise deliberate approve action for a common solo-developer s
 - Autostash for any path other than `worktree.Merge` (today the sole caller is `review.Approve` for isolated final gates).
 - Root proposal approve (R1) — still no worktree merge.
 
-## Current System Context
+## System Context
 
 | Primitive | Location / behavior |
 | --------- | ------------------- |
 | Approve → merge | `internal/review/gate.go` → `worktree.Merge` when `ShouldMergeOnApprove` and worktree exists |
-| Dirty check | `internal/worktree/merge.go` → `hasUncommittedChanges` via `git status --porcelain` |
-| Merge steps | `checkout` “default branch” → `merge --no-ff` → remove trace worktree |
+| Dirty root | `internal/worktree/merge.go` → `hasUncommittedChanges` via `git status --porcelain`; if dirty, `autostash` before checkout |
+| Autostash | `git stash push --include-untracked -m "paseka: autostash before merge <traceId>"` |
+| Restore | After successful merge + worktree removal → `stash pop`; outcome on `MergeResult.StashOutcome` |
+| Merge steps | autostash (if needed) → `checkout` default branch → `merge --no-ff` → remove trace worktree → `stash pop` (if stashed) |
 | “Default branch” | `gitroot.DefaultBranch` = current `HEAD` branch name; detached HEAD falls back to `main` |
+| Stash outcomes | `StashOutcome` enum on `worktree.MergeResult`; threaded through `review.ApproveResult` |
+| User messages | `internal/review/message.go` — `ApproveMessage` (Console) and `CLIApproveMessage` (`paseka proposal approve`) |
 | Root approve (R1) | No merge (unchanged; out of scope) |
-| Console / CLI approve | `internal/console/review.go`, `paseka proposal approve` — human-readable success messages |
+| Console approve API | `message` reflects stash outcome; no dedicated `stashOutcome` JSON field (MVP) |
 
 ## Decisions
 
@@ -75,7 +79,7 @@ Do not change merge target selection in this work. Autostash wraps the existing 
 
 ### 6. Outcome reporting
 
-Extend internal `worktree.MergeResult` with a stash outcome enum (names illustrative):
+`worktree.MergeResult` carries a `StashOutcome` enum:
 
 | Outcome | Meaning |
 | ------- | ------- |
@@ -84,37 +88,46 @@ Extend internal `worktree.MergeResult` with a stash outcome enum (names illustra
 | `left_on_failure` | Stashed, merge failed; stash still present |
 | `restore_conflicted` | Merge ok; pop conflicted |
 
-CLI / Console approve `message` must reflect these cases explicitly, for example:
+CLI / Console approve `message` reflects these cases:
 
-- clean: existing “Task approved and worktree merged.”
-- restored: mention that local changes were restored
+- clean: “Task approved and worktree merged.” / “Approved and worktree merged.”
+- restored: “… Local changes were restored.”
 - restore conflicted: merge ok + warning to resolve stash/working-tree conflicts manually
 
-A dedicated public JSON field on the approve API is optional for MVP if the message is unambiguous; the structured field on `MergeResult` is required so callers can build that message without parsing git stderr.
+Console approve API exposes the outcome only via `message` (no dedicated JSON field in MVP). `MergeResult.StashOutcome` is available internally so callers build messages without parsing git stderr.
 
-## Implementation Outline
+## Implementation
 
-1. In `internal/worktree/merge.go`:
-   - If dirty → `stash push -u -m "paseka: autostash before merge <traceId>"`
-   - Run existing checkout + merge + worktree removal
-   - On merge failure after stash → return error including stash guidance; set outcome `left_on_failure`
-   - On merge success after stash → `stash pop`; set `restored` or `restore_conflicted`
-2. Thread stash outcome from `MergeResult` into `review.Approve` / Console / CLI message composition.
-3. Tests:
-   - dirty tracked file → merge succeeds, changes restored
-   - dirty untracked file → same with `-u`
-   - merge conflict after stash → error, stash remains
-   - successful merge + pop conflict → success + `restore_conflicted`
-   - clean tree → unchanged path (`none`)
+Shipped in `internal/worktree/merge.go`:
+
+1. If dirty → `stash push -u -m "paseka: autostash before merge <traceId>"`
+2. Run existing checkout + merge + worktree removal
+3. On merge failure after stash → return error including stash guidance; set outcome `left_on_failure`
+4. On merge success after stash → `stash pop`; set `restored` or `restore_conflicted` (detected via `git diff --diff-filter=U`)
+
+Threaded through:
+
+- `internal/review/gate.go` — `ApproveResult.StashOutcome`
+- `internal/review/message.go` — Console and CLI message composition
+- `internal/console/review.go` — approve response `message`
+- `cmd/paseka/nats.go` — `paseka proposal approve` output
+
+Tests (`internal/worktree/merge_test.go`, `internal/review/message_test.go`):
+
+- dirty tracked file → merge succeeds, changes restored
+- dirty untracked file → same with `-u`
+- merge conflict after stash → error, stash remains
+- successful merge + pop conflict → success + `restore_conflicted`
+- clean tree → unchanged path (`none`)
 
 ## Acceptance Criteria
 
-1. Approving an isolated final merge gate with a dirty colony root (tracked and/or untracked) completes the merge without requiring a manual stash.
-2. After a successful merge, local changes are restored when pop is clean; the user-facing message says so.
-3. If merge fails after autostash, approve fails, stash remains, and the error tells the user how to recover.
-4. If merge succeeds but pop conflicts, approve still reports merge success with a clear warning.
-5. Clean-root approve behavior and root (R1) approve semantics are unchanged.
-6. No new opt-in/opt-out flag ships in this MVP.
+- [x] Approving an isolated final merge gate with a dirty colony root (tracked and/or untracked) completes the merge without requiring a manual stash.
+- [x] After a successful merge, local changes are restored when pop is clean; the user-facing message says so.
+- [x] If merge fails after autostash, approve fails, stash remains, and the error tells the user how to recover.
+- [x] If merge succeeds but pop conflicts, approve still reports merge success with a clear warning.
+- [x] Clean-root approve behavior and root (R1) approve semantics are unchanged.
+- [x] No new opt-in/opt-out flag ships in this MVP.
 
 ## Open Questions
 
@@ -122,3 +135,4 @@ None for MVP. Follow-ups (separate specs if needed):
 
 - True default-branch resolution (`origin/HEAD` / `main`) vs merge-into-current-HEAD.
 - Explicit `--no-autostash` / colony config if a real need appears.
+- Dedicated `stashOutcome` field on Console approve API JSON if clients need structured access.
