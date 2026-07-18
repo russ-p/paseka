@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/nats-io/nats.go v1.52.0
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.7.8
