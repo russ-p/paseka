@@ -265,6 +265,7 @@ If `telegram.yaml` is missing or `enabled: false`, `paseka gate telegram` exits 
 
 ## Related docs
 
+- [Telegram gateway](../guide/telegram-gateway.md) — setup, config, run, commands (canonical operator guide)
 - [006-human-gateway-invites.md](./006-human-gateway-invites.md) — invite parking lot; accept starts local session
 - [002-queen-console-mvp.md](./002-queen-console-mvp.md) — local Console; non-goal remote control plane
 - [interactive sessions](../guide/interactive-sessions.md) — PTY / `bee chat`

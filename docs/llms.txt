@@ -24,4 +24,5 @@ Colony work lives in a git repo under `.paseka/`. Machine secrets stay in `~/.co
 - [CLI](https://russ-p.github.io/paseka/guide/cli/): `paseka bee run` / `bee chat`, event emit
 - [Task ledger](https://russ-p.github.io/paseka/reference/task-ledger/): traceId / taskId / agentId
 - [Interactive sessions](https://russ-p.github.io/paseka/guide/interactive-sessions/): HITL `bee chat`, SessionAdapter, Ghostty attach
+- [Telegram gateway](https://russ-p.github.io/paseka/guide/telegram-gateway/): setup and run `paseka gate telegram`
 - [Nuc packs](https://russ-p.github.io/paseka/guide/nuc/): export/import bees and prompts

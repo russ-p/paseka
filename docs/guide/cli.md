@@ -41,7 +41,7 @@ Resolution requires:
 | `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
-| `paseka run`, `doctor`, `replay`, `signal`, `proposal`, `energy`, `task create`, `task start`, `task retry` | Yes |
+| `paseka run`, `doctor`, `replay`, `signal`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
 | `paseka task list`, `paseka task show`, `export` | Optional — prefers JetStream KV, falls back to filesystem projection |
 
 Default NATS URL after `paseka init`: `nats://127.0.0.1:4222` (see `docker-compose.yml`).
@@ -82,6 +82,8 @@ paseka
 │   ├── export
 │   └── import <file|url|->
 ├── console
+├── gate
+│   └── telegram
 ├── export
 └── purge
 ```
@@ -531,6 +533,27 @@ paseka nuc import ./dev.nuc.yaml --force
 
 ---
 
+## `paseka gate`
+
+Human Gateway surfaces outside Queen Console. MVP: Telegram only.
+
+### `paseka gate telegram`
+
+Long-poll Telegram Bot API for one colony: push notifications, `/status` `/energy` `/task` `/invites` `/help`, invite and proposal buttons. Separate process from `paseka run`. Requires machine-local `~/.config/paseka/<slug>/telegram.yaml` and NATS.
+
+| Flag | Short | Default | Description |
+| ---- | ----- | ------- | ----------- |
+| `--path` | `-C` | cwd | Directory inside the git repository |
+
+```bash
+paseka gate telegram
+paseka gate telegram -C /path/to/repo
+```
+
+Setup, allowlist, and command reference: [Telegram gateway](telegram-gateway.md). Design: [specs/010-telegram-human-gateway.md](../specs/010-telegram-human-gateway.md).
+
+---
+
 ## `paseka console`
 
 Start the local Queen Console web UI (embedded SPA + JSON API).
@@ -745,5 +768,7 @@ See [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) 
 | [prompt templates](prompt-templates.md) | Prompt template resolution |
 | [task ledger](../reference/task-ledger.md) | Task lifecycle events on the bus |
 | [interactive sessions](interactive-sessions.md) | `bee chat`, sessions, Ghostty |
+| [Telegram gateway](telegram-gateway.md) | Setup and run `paseka gate telegram` |
 | [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) | Feature ideation soft path (classify → grill → breakdown) |
 | [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) | Session invites, auto_invites, done_when |
+| [specs/010-telegram-human-gateway.md](../specs/010-telegram-human-gateway.md) | Telegram Human Gateway design |

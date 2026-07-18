@@ -79,6 +79,7 @@ nav:
       - Bee config: guide/bee-config.md
       - Prompt templates: guide/prompt-templates.md
       - Interactive sessions: guide/interactive-sessions.md
+      - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
   - Reference:
       - Bee routing: reference/bee-routing.md

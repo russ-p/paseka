@@ -110,12 +110,16 @@ Per-colony state on this machine. Not committed.
 
 ```
 ~/.config/paseka/<project-slug>/
-├── config.yaml          # secrets refs, NATS URL, adapter env
-├── state.json           # runtime: active worktrees, last traceId, hive status
-├── adapters/            # adapter-specific local overrides
-│   ├── cursor.yaml      # CLI binary path, API key env
-│   └── pi.yaml          # Pi CLI binary path, API key env
+├── config.yaml                 # secrets refs, NATS URL, adapter env
+├── state.json                  # runtime: active worktrees, last traceId, hive status
+├── telegram.yaml               # optional: Telegram Human Gateway (not created by init)
+├── telegram-notify-state.json  # optional: gate notify dedup (runtime)
+├── adapters/                   # adapter-specific local overrides
+│   ├── cursor.yaml             # CLI binary path, API key env
+│   └── pi.yaml                 # Pi CLI binary path, API key env
 ```
+
+Telegram bot tokens and allowlists stay machine-local — see [Telegram gateway](telegram-gateway.md).
 
 **Split rule:**
 

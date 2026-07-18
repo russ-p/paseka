@@ -7,6 +7,7 @@ Shipped features worth calling out. Design records live under `docs/specs/` in t
 Async phone triage via `paseka gate telegram`: long-poll Bot API, allowlisted chats, bus notify + reconcile dedup, `/status` `/energy` `/task` `/invites` `/help`, invite HITL (local PTY on accept), and proposal reject / soft-mid approve (final-merge Console/CLI only).
 
 - Spec: [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md)
+- Canonical: [Telegram gateway](../guide/telegram-gateway.md)
 
 ## 2026-07 — Merge autostash on approve
 

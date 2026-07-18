@@ -19,6 +19,7 @@
 | [Bee config](guide/bee-config.md) | YAML роли пчелы, адаптеры, routing |
 | [Prompt templates](guide/prompt-templates.md) | `.paseka/prompts/`, `text/template`, partials |
 | [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |
+| [Telegram gateway](guide/telegram-gateway.md) | Настройка и запуск `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Переносимые пакеты bees + prompts |
 
 ## Справочник

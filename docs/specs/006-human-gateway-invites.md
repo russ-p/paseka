@@ -127,7 +127,8 @@ Persisted on the invite at publish time. When a bus event matches, reactor marks
 - [bee routing](../reference/bee-routing.md) — `auto_invites` + `done_when` schema
 - [CLI](../guide/cli.md) — invite commands
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — colony reference flow using this platform
-- [010-telegram-human-gateway.md](./010-telegram-human-gateway.md) — Telegram Human Gateway surface (`paseka gate telegram`)
+- [010-telegram-human-gateway.md](./010-telegram-human-gateway.md) — Telegram Human Gateway design
+- [Telegram gateway](../guide/telegram-gateway.md) — setup and run `paseka gate telegram`
 
 ## Verification
 
