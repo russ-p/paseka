@@ -38,6 +38,7 @@ func (a *TaskActions) HandleCommand(ctx context.Context, chatID int64, text stri
 	pendingID, err := a.pending().Put(PendingTask{
 		Text:    text,
 		Bee:     a.Config.Commands.DefaultBee,
+		Intent:  a.Config.Commands.DefaultIntent,
 		Review:  a.Config.Commands.DefaultReview,
 		Autorun: a.Config.Commands.AutorunEnabled(),
 	})
@@ -45,7 +46,13 @@ func (a *TaskActions) HandleCommand(ctx context.Context, chatID int64, text stri
 		a.sendText(chatID, 0, "task preview failed: "+err.Error())
 		return
 	}
-	body := FormatTaskPreview(a.Config.Commands.DefaultBee, a.Config.Commands.DefaultReview, text, a.Config.Commands.AutorunEnabled())
+	body := FormatTaskPreview(
+		a.Config.Commands.DefaultBee,
+		a.Config.Commands.DefaultIntent,
+		a.Config.Commands.DefaultReview,
+		text,
+		a.Config.Commands.AutorunEnabled(),
+	)
 	keyboard := taskPreviewKeyboard(pendingID)
 	msg := tgbotapi.NewMessage(chatID, body)
 	msg.ReplyMarkup = keyboard
@@ -53,7 +60,8 @@ func (a *TaskActions) HandleCommand(ctx context.Context, chatID int64, text stri
 }
 
 // FormatTaskPreview renders the /task confirm card body.
-func FormatTaskPreview(bee, review, text string, autorun bool) string {
+func FormatTaskPreview(bee, intent, review, text string, autorun bool) string {
+	intent = strings.TrimSpace(intent)
 	review = strings.TrimSpace(review)
 	if review == "" {
 		review = string(protocol.TaskReviewNone)
@@ -65,12 +73,17 @@ func FormatTaskPreview(bee, review, text string, autorun bool) string {
 	lines := []string{
 		"Task preview",
 		fmt.Sprintf("Bee: %s", bee),
+	}
+	if intent != "" {
+		lines = append(lines, fmt.Sprintf("Intent: %s", intent))
+	}
+	lines = append(lines,
 		fmt.Sprintf("Review: %s", review),
 		fmt.Sprintf("Autorun: %s", autorunLabel),
 		fmt.Sprintf("Text: %s", truncateText(text, maxTaskPreviewLen)),
 		"",
-		"Confirm to publish task.plan" + autorunSuffix(autorun),
-	}
+		"Confirm to publish task.plan"+autorunSuffix(autorun),
+	)
 	return strings.Join(lines, "\n")
 }
 
@@ -110,6 +123,7 @@ func (a *TaskActions) Confirm(ctx context.Context, chatID int64, messageID int, 
 	res, err := tasks.Create(ctx, session, tasks.CreateInput{
 		Body:    task.Text,
 		Bee:     task.Bee,
+		Intent:  task.Intent,
 		Review:  task.Review,
 		Autorun: task.Autorun,
 		AgentID: "telegram",

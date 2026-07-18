@@ -8,9 +8,12 @@ import (
 )
 
 func TestFormatTaskPreview(t *testing.T) {
-	text := tggate.FormatTaskPreview("builder", "none", "Fix the login bug", true)
+	text := tggate.FormatTaskPreview("builder", "feature", "none", "Fix the login bug", true)
 	if !strings.Contains(text, "Bee: builder") {
 		t.Fatalf("missing bee:\n%s", text)
+	}
+	if !strings.Contains(text, "Intent: feature") {
+		t.Fatalf("missing intent:\n%s", text)
 	}
 	if !strings.Contains(text, "Review: none") {
 		t.Fatalf("missing review:\n%s", text)
@@ -28,7 +31,7 @@ func TestFormatTaskPreview(t *testing.T) {
 
 func TestFormatTaskPreviewTruncatesLongText(t *testing.T) {
 	long := strings.Repeat("x", 400)
-	text := tggate.FormatTaskPreview("builder", "none", long, false)
+	text := tggate.FormatTaskPreview("builder", "general", "none", long, false)
 	if !strings.Contains(text, "...") {
 		t.Fatal("expected truncation")
 	}

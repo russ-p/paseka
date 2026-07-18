@@ -10,6 +10,7 @@ import (
 type PendingTask struct {
 	Text    string
 	Bee     string
+	Intent  string
 	Review  string
 	Autorun bool
 }

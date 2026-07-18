@@ -139,6 +139,7 @@ Machine-local `telegram.yaml` (not colony shareable config):
 | Key | MVP default | Notes |
 | --- | ----------- | ----- |
 | `commands.default_bee` | `builder` | Aligns with `paseka task create` |
+| `commands.default_intent` | `general` | Intent for `default_bee` (see bee intents / `<role>-intent-*` partials) |
 | `commands.default_review` | `none` | |
 | `commands.task_autorun` | `true` | Phone triage expects plan+ready after Confirm |
 
@@ -214,6 +215,7 @@ notify:
 commands:
   task_autorun: true
   default_bee: builder
+  default_intent: general
   default_review: none
 console_base_url: ""           # optional; e.g. Tailscale/tunnel URL to Console
 ```
@@ -247,7 +249,7 @@ If `telegram.yaml` is missing or `enabled: false`, `paseka gate telegram` exits 
 
 1. **CLI name** → `paseka gate telegram` (separate process).
 2. **Honey before accept** → show `honey: N/M` on invite push; do not disable Accept; fail path offers energy buttons.
-3. **`/task` defaults** → gate `telegram.yaml` (`builder` / `none` / autorun true).
+3. **`/task` defaults** → gate `telegram.yaml` (`builder` / `general` / `none` / autorun true).
 4. **Transport** → long-poll default; webhook opt-in.
 5. **Messenger Bee** → not in MVP; later may share notify events without forking mutations.
 6. **Config file** → `~/.config/paseka/<slug>/telegram.yaml`.
