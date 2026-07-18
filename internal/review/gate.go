@@ -23,36 +23,42 @@ type ApproveInput struct {
 	AgentID      string
 }
 
+// ApproveResult reports the outcome of a successful approve.
+type ApproveResult struct {
+	CommitSHA    string
+	StashOutcome worktree.StashOutcome
+}
+
 // Approve merges the trace worktree when present and completes the review task.
-func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, ledger taskledger.Ledger, in ApproveInput) (string, error) {
+func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, ledger taskledger.Ledger, in ApproveInput) (ApproveResult, error) {
 	if in.TraceID == "" || in.TaskID == "" {
-		return "", fmt.Errorf("trace and task id are required")
+		return ApproveResult{}, fmt.Errorf("trace and task id are required")
 	}
 	if ledger == nil {
-		return "", fmt.Errorf("task ledger is required")
+		return ApproveResult{}, fmt.Errorf("task ledger is required")
 	}
 
 	snap, err := ledger.Snapshot(in.TraceID)
 	if err != nil {
-		return "", err
+		return ApproveResult{}, err
 	}
 	task, ok := snap.Tasks[in.TaskID]
 	if !ok {
-		return "", fmt.Errorf("task %q not found in trace %s", in.TaskID, in.TraceID)
+		return ApproveResult{}, fmt.Errorf("task %q not found in trace %s", in.TaskID, in.TraceID)
 	}
 	if task.Status != protocol.TaskStatusWaitingReview {
-		return "", fmt.Errorf("task %q is %q, expected waiting_review", in.TaskID, task.Status)
+		return ApproveResult{}, fmt.Errorf("task %q is %q, expected waiting_review", in.TaskID, task.Status)
 	}
 	if !taskledger.IsReviewGate(task) {
-		return "", fmt.Errorf("task %q is not a review gate task", in.TaskID)
+		return ApproveResult{}, fmt.Errorf("task %q is not a review gate task", in.TaskID)
 	}
 
 	bees, err := colony.LoadAllBees(colonyCtx.ColonyRoot)
 	if err != nil {
-		return "", err
+		return ApproveResult{}, err
 	}
 
-	commitSHA := ""
+	result := ApproveResult{}
 	if ShouldMergeOnApprove(task, bees) {
 		wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
 		if gitroot.IsInsideWorkTree(wtPath) {
@@ -63,9 +69,10 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 				Message:    in.MergeMessage,
 			})
 			if err != nil {
-				return "", err
+				return ApproveResult{StashOutcome: mergeRes.StashOutcome}, err
 			}
-			commitSHA = mergeRes.CommitSHA
+			result.CommitSHA = mergeRes.CommitSHA
+			result.StashOutcome = mergeRes.StashOutcome
 		}
 	}
 
@@ -83,24 +90,24 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 		TaskID:      in.TaskID,
 		Status:      protocol.TaskStatusCompleted,
 		Summary:     summary,
-		Commit:      commitSHA,
+		Commit:      result.CommitSHA,
 		CompletedAt: time.Now().UTC(),
 	})
 	if err != nil {
-		return "", err
+		return ApproveResult{}, err
 	}
 	if client != nil {
 		if err := client.PublishEvent(ctx, completed); err != nil {
-			return "", err
+			return ApproveResult{}, err
 		}
 	}
 	if _, err := ledger.Apply(completed); err != nil {
-		return "", err
+		return ApproveResult{}, err
 	}
 	if err := ActivateFinalReviewGate(ctx, client, ledger, in.TraceID); err != nil {
-		return "", err
+		return ApproveResult{}, err
 	}
-	return commitSHA, nil
+	return result, nil
 }
 
 // RejectInput describes a human rejection of a review-gated task.

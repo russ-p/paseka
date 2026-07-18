@@ -49,15 +49,15 @@ func TestApproveRootRequiredDoesNotMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	commit, err := review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
+	approveRes, err := review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
 		TraceID: traceID,
 		TaskID:  "task-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if commit != "" {
-		t.Fatalf("commit = %q, want empty (root R1 approve must not merge)", commit)
+	if approveRes.CommitSHA != "" {
+		t.Fatalf("commit = %q, want empty (root R1 approve must not merge)", approveRes.CommitSHA)
 	}
 
 	snap, err := ledger.Snapshot(traceID)
