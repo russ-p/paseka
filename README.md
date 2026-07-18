@@ -1,15 +1,18 @@
 # Paseka
 
+[Русский](README-RU.md) · [Documentation](https://russ-p.github.io/paseka/)
+
 Paseka is a local CLI runtime for running AI agents inside a git repository. It helps solo developers initialize a project (colony), dispatch agents (bees), keep runtime state, and exchange events over a message bus.
+
+The product language is a hive metaphor: a **colony** (git project) of **bees** (agents) works in a **hive** (runtime), coordinating through dances on the **air** (event bus) rather than a central queen brain. See the [bee glossary](docs/idea/glossary.md).
+
+This is a research experiment: can a swarm of modest agents coordinate through choreography alone — no central mega-brain — while keeping each bee's capability floor low enough that some can run on a local LLM on consumer hardware? Cloud models stay in the mix where the hard problems actually need them.
 
 ## What It Can Do
 
-- Initialize project-local colony config in `.paseka/`.
-- Run the hive runtime for a repository.
-- Dispatch one-shot bee runs from the CLI.
-- Start interactive human-in-the-loop bee sessions.
-- Publish, replay, and inspect domain events.
-- Open the local Queen Console web UI.
+- Execute coding tasks — write and review code — by launching Cursor, Pi, or Claude with a focused prompt per bee role.
+- Run AFK (headless) dispatches and interactive HITL sessions against the same colony.
+- Operate and observe the swarm from the CLI or the local Queen Console web UI.
 
 ## How To Run
 
