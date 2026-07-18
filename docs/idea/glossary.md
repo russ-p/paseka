@@ -21,12 +21,12 @@
 | Техническое   | Bee Language   |
 | ------------- | -------------- |
 | Developer     | Beekeeper      |
-| Human Gateway | Queen Console  |
+| Human Gateway | Queen Console, Telegram Gate (planned) |
 | CLI           | Queen Shell    |
 | Dashboard     | Hive Dashboard |
 | Web UI        | Queen Console  |
 
-> Queen — это не агент и не оркестратор. Это персона интерфейса, через которую пасечник общается с ульем.
+> Queen — это не агент и не оркестратор. Это персона интерфейса, через которую пасечник общается с ульем. Human Gateway — любой HITL-гейт (Console сегодня; Telegram — [spec 010](../specs/010-telegram-human-gateway.md)).
 
 ---
 

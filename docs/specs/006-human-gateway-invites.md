@@ -117,6 +117,7 @@ Persisted on the invite at publish time. When a bus event matches, reactor marks
 | ------- | -------- |
 | CLI | `paseka invite list\|record\|accept\|reject` — [CLI](../guide/cli.md) |
 | Console | Pending invites; accept starts detached session |
+| Telegram | Planned async gate — [010](./010-telegram-human-gateway.md) |
 | Energy | Accept costs 1 honey from trace reserve |
 | Config | `.paseka/colony.yaml` → `auto_invites` |
 
@@ -126,6 +127,7 @@ Persisted on the invite at publish time. When a bus event matches, reactor marks
 - [bee routing](../reference/bee-routing.md) — `auto_invites` + `done_when` schema
 - [CLI](../guide/cli.md) — invite commands
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — colony reference flow using this platform
+- [010-telegram-human-gateway.md](./010-telegram-human-gateway.md) — planned Telegram Human Gateway surface
 
 ## Verification
 
