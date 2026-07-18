@@ -31,4 +31,22 @@ func TestApproveMessageStashOutcomes(t *testing.T) {
 	if restored != "Task approved and worktree merged. Local changes were restored." {
 		t.Fatalf("restored message = %q", restored)
 	}
+
+	conflicted := review.ApproveMessage(review.ApproveMessageOptions{
+		CommitSHA:    "abc",
+		StashOutcome: worktree.StashOutcomeRestoreConflicted,
+	})
+	wantConflicted := "Task approved and worktree merged. Warning: restoring local changes conflicted — resolve stash/working-tree conflicts manually."
+	if conflicted != wantConflicted {
+		t.Fatalf("conflicted message = %q", conflicted)
+	}
+
+	cliConflicted := review.CLIApproveMessage(review.ApproveMessageOptions{
+		CommitSHA:    "abc",
+		StashOutcome: worktree.StashOutcomeRestoreConflicted,
+	})
+	wantCLI := "Approved and worktree merged. Warning: restoring local changes conflicted — resolve stash/working-tree conflicts manually."
+	if cliConflicted != wantCLI {
+		t.Fatalf("cli conflicted message = %q", cliConflicted)
+	}
 }

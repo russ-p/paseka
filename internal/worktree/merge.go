@@ -106,9 +106,7 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 	}
 
 	if err := stashPop(colonyRoot); err != nil {
-		if hasConflicts, conflictErr := hasMergeConflicts(colonyRoot); conflictErr != nil {
-			return MergeResult{StashOutcome: StashOutcomeRestoreConflicted}, conflictErr
-		} else if hasConflicts {
+		if hasConflicts, _ := hasMergeConflicts(colonyRoot); hasConflicts {
 			result.StashOutcome = StashOutcomeRestoreConflicted
 			return result, nil
 		}

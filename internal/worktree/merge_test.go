@@ -123,6 +123,74 @@ func TestMergeDirtyRootMergeFailureLeavesStash(t *testing.T) {
 	}
 }
 
+func TestMergeDirtyRootPopConflictKeepsMergeSuccess(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := "merge-colony"
+	setupHome(t, repo, slug)
+	traceID := "trace-merge-pop-conflict"
+
+	sharedMain := filepath.Join(repo, "shared.txt")
+	if err := os.WriteFile(sharedMain, []byte("base version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "shared.txt")
+	runGit(t, repo, "commit", "-m", "main shared")
+
+	entry, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    traceID,
+		Slug:       slug,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wtPath := entry.Path
+
+	if err := os.WriteFile(filepath.Join(wtPath, "feature.txt"), []byte("new feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sharedWT := filepath.Join(wtPath, "shared.txt")
+	if err := os.WriteFile(sharedWT, []byte("merged version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, wtPath, "add", "feature.txt", "shared.txt")
+	runGit(t, wtPath, "commit", "-m", "worktree changes")
+
+	if err := os.WriteFile(sharedMain, []byte("local wip version\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "shared.txt")
+
+	res, err := worktree.Merge(worktree.MergeOptions{
+		ColonyRoot: repo,
+		TraceID:    traceID,
+		Slug:       slug,
+	})
+	if err != nil {
+		t.Fatalf("expected merge success despite pop conflict: %v", err)
+	}
+	if res.CommitSHA == "" {
+		t.Fatal("expected merge commit")
+	}
+	if res.StashOutcome != worktree.StashOutcomeRestoreConflicted {
+		t.Fatalf("stash outcome = %q, want restore_conflicted", res.StashOutcome)
+	}
+	if gitroot.IsInsideWorkTree(worktree.Path(repo, traceID)) {
+		t.Fatal("expected worktree removed")
+	}
+	if !fileExists(filepath.Join(repo, "feature.txt")) {
+		t.Fatal("expected merged feature.txt on colony root")
+	}
+
+	unmerged := gitOutput(t, repo, "diff", "--name-only", "--diff-filter=U")
+	if strings.TrimSpace(unmerged) == "" {
+		t.Fatal("expected unmerged files after conflicting stash pop")
+	}
+	if !strings.Contains(unmerged, "shared.txt") {
+		t.Fatalf("unmerged files = %q, want shared.txt", unmerged)
+	}
+}
+
 func TestMergeDirtyUntrackedRestoresLocalChanges(t *testing.T) {
 	repo, traceID, slug := setupMergeFixture(t)
 
