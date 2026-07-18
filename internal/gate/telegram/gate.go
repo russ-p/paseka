@@ -55,11 +55,30 @@ func (g *Gate) Run(ctx context.Context) error {
 		logging.F("username", g.Bot.Self.UserName),
 	)
 
+	notifier, err := NewNotifier(g.Colony, g.Config, g.Bot)
+	if err != nil {
+		return err
+	}
+	defer notifier.Close()
+
+	notifyCtx, cancelNotify := context.WithCancel(ctx)
+	defer cancelNotify()
+	go func() {
+		if err := notifier.Run(notifyCtx); err != nil && notifyCtx.Err() == nil {
+			log.Error("telegram notify pipeline stopped", logging.F("error", err.Error()))
+		}
+	}()
+
 	handler := &Handler{
 		Colony:     g.Colony,
 		Config:     g.Config,
 		Supervisor: g.Supervisor,
 		Bot:        g.Bot,
+		Invites: &InviteActions{
+			Colony: g.Colony,
+			Config: g.Config,
+			Bot:    g.Bot,
+		},
 	}
 
 	u := tgbotapi.NewUpdate(0)
@@ -70,9 +89,11 @@ func (g *Gate) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			g.Bot.StopReceivingUpdates()
+			cancelNotify()
 			return ctx.Err()
 		case update, ok := <-updates:
 			if !ok {
+				cancelNotify()
 				return ctx.Err()
 			}
 			handler.HandleUpdate(ctx, update)

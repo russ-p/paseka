@@ -15,6 +15,14 @@ const (
 	modeLongPoll    = "longpoll"
 	modeWebhook     = "webhook"
 	callbackRefresh = "gate:status:refresh"
+
+	callbackInviteAccept        = "inv:a:"
+	callbackInviteReject        = "inv:r:"
+	callbackInviteDefer         = "inv:d:"
+	callbackInviteConfirmAccept = "inv:ca:"
+	callbackInviteConfirmReject = "inv:cr:"
+	callbackInviteCancel        = "inv:x:"
+	callbackEnergyAdd           = "en:+:"
 )
 
 // Config is machine-local Telegram Human Gateway settings (~/.config/paseka/<slug>/telegram.yaml).
@@ -30,12 +38,20 @@ type Config struct {
 	Webhook        WebhookConfig  `yaml:"webhook"`
 }
 
-// NotifyConfig toggles outbound push categories (used by later slices).
+// NotifyConfig toggles outbound push categories.
 type NotifyConfig struct {
-	Invites       bool `yaml:"invites"`
-	WaitingReview bool `yaml:"waiting_review"`
-	Blocked       bool `yaml:"blocked"`
-	Failed        bool `yaml:"failed"`
+	Invites       *bool `yaml:"invites"`
+	WaitingReview *bool `yaml:"waiting_review"`
+	Blocked       *bool `yaml:"blocked"`
+	Failed        *bool `yaml:"failed"`
+}
+
+// InvitesEnabled reports whether pending invite push is on (default true).
+func (n NotifyConfig) InvitesEnabled() bool {
+	if n.Invites == nil {
+		return true
+	}
+	return *n.Invites
 }
 
 // CommandsConfig holds /task defaults for later slices.

@@ -134,6 +134,96 @@ func TestHandlerRefreshCallback(t *testing.T) {
 	}
 }
 
+func TestHandlerInvitesListsPending(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	repo := initTestRepo(t)
+	ctxColony, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := colony.UpsertInvite(ctxColony.Slug, colony.InviteEntry{
+		InviteID: "inv-test",
+		TraceID:  "trace-1",
+		Bee:      "drone",
+		Task:     "Grill feature",
+		Status:   colony.InviteStatusPending,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &mockBot{}
+	h := &tggate.Handler{
+		Colony: ctxColony,
+		Config: tggate.Config{
+			AllowFrom: []int64{1},
+			ChatIDs:   []int64{-100},
+		},
+		Bot: bot,
+	}
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}},
+			Text:     "/invites",
+			Chat:     &tgbotapi.Chat{ID: -100},
+			From:     &tgbotapi.User{ID: 1},
+		},
+	}
+	h.HandleUpdate(context.Background(), update)
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected 1 invite card, got %d", len(bot.sent))
+	}
+	msg, ok := bot.sent[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("expected MessageConfig, got %T", bot.sent[0])
+	}
+	if msg.Text == "" || msg.ReplyMarkup == nil {
+		t.Fatalf("invite card missing text or keyboard: %#v", msg)
+	}
+}
+
+func TestHandlerInviteAcceptShowsConfirm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	repo := initTestRepo(t)
+	ctxColony, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &mockBot{}
+	h := &tggate.Handler{
+		Colony: ctxColony,
+		Config: tggate.Config{
+			AllowFrom: []int64{1},
+			ChatIDs:   []int64{-100},
+		},
+		Bot: bot,
+	}
+	update := tgbotapi.Update{
+		CallbackQuery: &tgbotapi.CallbackQuery{
+			ID:   "cb2",
+			Data: "inv:a:inv-test",
+			From: &tgbotapi.User{ID: 1},
+			Message: &tgbotapi.Message{
+				MessageID: 8,
+				Chat:      &tgbotapi.Chat{ID: -100},
+			},
+		},
+	}
+	h.HandleUpdate(context.Background(), update)
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected confirm edit, got %d sends", len(bot.sent))
+	}
+	edit, ok := bot.sent[0].(tgbotapi.EditMessageTextConfig)
+	if !ok {
+		t.Fatalf("expected EditMessageTextConfig, got %T", bot.sent[0])
+	}
+	if edit.Text == "" || edit.ReplyMarkup == nil {
+		t.Fatal("expected confirm prompt with keyboard")
+	}
+}
+
 func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

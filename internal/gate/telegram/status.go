@@ -74,4 +74,5 @@ func FormatStatus(s Snapshot) string {
 const HelpText = `Paseka Human Gateway
 
 /status — colony snapshot (Refresh button)
+/invites — pending session invites
 /help — this message`
