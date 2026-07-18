@@ -104,7 +104,7 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 	if _, err := ledger.Apply(completed); err != nil {
 		return ApproveResult{}, err
 	}
-	if err := ActivateFinalReviewGate(ctx, client, ledger, in.TraceID); err != nil {
+	if err := ActivateFinalReviewGate(ctx, client, ledger, colonyCtx, in.TraceID); err != nil {
 		return ApproveResult{}, err
 	}
 	return result, nil

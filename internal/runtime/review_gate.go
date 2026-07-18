@@ -169,7 +169,7 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 }
 
 func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string) error {
-	if err := review.ActivateFinalReviewGate(ctx, r.bus, r.ledger, traceID); err != nil {
+	if err := review.ActivateFinalReviewGate(ctx, r.bus, r.ledger, r.colony, traceID); err != nil {
 		return err
 	}
 	if traceID == "" {

@@ -11,7 +11,7 @@ import (
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
-func TestApproveRequiredDoesNotCompleteFinalGateAlone(t *testing.T) {
+func TestApproveRequiredSkipsFinalGateWhenNothingToMerge(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	traceID := "trace-1"
 
@@ -51,6 +51,61 @@ func TestApproveRequiredDoesNotCompleteFinalGateAlone(t *testing.T) {
 	}
 	if snap.Tasks["task-1"].Status != protocol.TaskStatusCompleted {
 		t.Fatalf("task-1 status = %q", snap.Tasks["task-1"].Status)
+	}
+	if _, ok := snap.Tasks[taskledger.FinalReviewTaskID]; ok {
+		t.Fatal("expected no synthetic _review when approve closes a soft gate with nothing to merge")
+	}
+}
+
+func TestApproveRequiredOpensFinalGateWhenIsolatedProposal(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-1"
+
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Work", Bee: "builder", Review: protocol.TaskReviewRequired},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	mutation, err := protocol.NewEvent(traceID, "builder-1", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:      protocol.MutationCodeProposalIsolated,
+		TaskID:    "task-1",
+		Workspace: protocol.ProposalWorkspaceIsolated,
+		Diff:      "+line",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(mutation); err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: "task-1", Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(waiting); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
+		TraceID: traceID,
+		TaskID:  "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
 	}
 	final := snap.Tasks[taskledger.FinalReviewTaskID]
 	if final.Status != protocol.TaskStatusWaitingReview {

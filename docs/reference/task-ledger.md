@@ -88,7 +88,7 @@ When a `MUTATION/code.proposal.*` event arrives, the ledger records `proposalWor
 | `paseka proposal approve` | Merges trace worktree when `review: final` / `_review` and worktree exists | **R1:** records ack + `task.completed`; **no** merge, **no** auto-commit |
 | Beekeeper commit | Via merge approve on final gate | Manual git on colony root |
 
-When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes (isolated merge path).
+When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes **only if** the trace has an isolated merge candidate: at least one task recorded `proposalWorkspace: isolated` (from `MUTATION/code.proposal.isolated`), or the trace worktree branch has a non-empty merge diff vs the default branch. Scout-only / no-diff runs do **not** open a hollow merge gate. An explicit `review: final` task with nothing to merge is auto-completed (`Nothing to merge — skipped final review gate`) instead of entering `waiting_review`.
 
 Human actions (CLI and Queen Console Reviews use the same domain flows):
 
@@ -224,7 +224,7 @@ PRD (SIGNAL: feature.requested)
   → Builder run (traceId + taskId)
   → AFK tasks auto-complete when no colony commit-gate publisher opened an isolated code.proposal; otherwise wait for receiver task.completed
   → Review-marked tasks (`review: required`) enter waiting_review — isolated (guard/receiver) or root soft ack (main-guard)
-  → All AFK tasks done → final review gate (planned or synthesized)
+  → All AFK tasks done → final review gate when isolated merge candidate exists (planned or synthesized `_review`); otherwise skip / auto-complete empty final
   → Human approve → merge worktree → VERIFICATION task.completed
   → Task Reactor: next task.ready (if any)
   → … repeat …

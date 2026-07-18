@@ -133,3 +133,22 @@ func TestEligiblePlannedSkipsFinalUntilAFKDone(t *testing.T) {
 		t.Fatalf("eligible = %+v, want final review task", eligible)
 	}
 }
+
+func TestHasIsolatedProposal(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", ProposalWorkspace: protocol.ProposalWorkspaceRoot},
+		},
+	}
+	if taskledger.HasIsolatedProposal(trace) {
+		t.Fatal("root proposal must not count as isolated merge candidate")
+	}
+	trace.Tasks["task-1"] = taskledger.TaskSnapshot{
+		TaskID:            "task-1",
+		ProposalWorkspace: protocol.ProposalWorkspaceIsolated,
+	}
+	if !taskledger.HasIsolatedProposal(trace) {
+		t.Fatal("expected isolated proposal")
+	}
+}

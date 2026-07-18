@@ -63,6 +63,17 @@ func HasWaitingReview(trace TraceSnapshot) bool {
 	return false
 }
 
+// HasIsolatedProposal reports whether any task recorded an isolated code.proposal.
+// Used to decide whether a trace-level merge gate is warranted.
+func HasIsolatedProposal(trace TraceSnapshot) bool {
+	for _, task := range trace.Tasks {
+		if task.ProposalWorkspace == protocol.ProposalWorkspaceIsolated {
+			return true
+		}
+	}
+	return false
+}
+
 // ShouldSkipDispatch reports whether a ready task should bypass AFK dispatch.
 func ShouldSkipDispatch(task TaskSnapshot) bool {
 	return IsFinalReviewTask(task)
