@@ -34,7 +34,7 @@ func TestSessionPTYWebSocketRelay(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	createBody := `{"bee":"scout","task":"pty ws test"}`
+	createBody := `{"bee":"scout","body":"pty ws test"}`
 	createReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/sessions", bytes.NewBufferString(createBody))
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestSessionPTYWebSocketTextInput(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	createBody := `{"bee":"scout","task":"pty text input"}`
+	createBody := `{"bee":"scout","body":"pty text input"}`
 	createReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/sessions", bytes.NewBufferString(createBody))
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func TestSessionPTYWebSocketRejectsCrossOrigin(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	createBody := `{"bee":"scout","task":"pty origin test"}`
+	createBody := `{"bee":"scout","body":"pty origin test"}`
 	createReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/sessions", bytes.NewBufferString(createBody))
 	if err != nil {
 		t.Fatal(err)

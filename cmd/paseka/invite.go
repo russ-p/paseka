@@ -159,7 +159,7 @@ func newInviteRecordCmd() *cobra.Command {
 		inviteID    string
 		bee         string
 		intent      string
-		task        string
+		body        string
 		artifactRef string
 	)
 	cmd := &cobra.Command{
@@ -170,7 +170,7 @@ func newInviteRecordCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			payload, trace, err := resolveInviteRecordInput(fromStdin, traceID, inviteID, bee, intent, task, artifactRef, cmd.InOrStdin())
+			payload, trace, err := resolveInviteRecordInput(fromStdin, traceID, inviteID, bee, intent, body, artifactRef, cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
@@ -189,12 +189,12 @@ func newInviteRecordCmd() *cobra.Command {
 	cmd.Flags().StringVar(&inviteID, "invite-id", "", "invite id (generated when omitted)")
 	cmd.Flags().StringVar(&bee, "bee", "", "bee role")
 	cmd.Flags().StringVar(&intent, "intent", "", "session intent")
-	cmd.Flags().StringVar(&task, "task", "", "initial task text")
+	cmd.Flags().StringVar(&body, "body", "", "initial task body text")
 	cmd.Flags().StringVar(&artifactRef, "artifact-ref", "", "repo-relative artifact path for handoff invites")
 	return cmd
 }
 
-func resolveInviteRecordInput(fromStdin bool, traceID, inviteID, bee, intent, task, artifactRef string, stdin io.Reader) (protocol.SessionInvitePayload, string, error) {
+func resolveInviteRecordInput(fromStdin bool, traceID, inviteID, bee, intent, body, artifactRef string, stdin io.Reader) (protocol.SessionInvitePayload, string, error) {
 	if fromStdin {
 		data, err := io.ReadAll(stdin)
 		if err != nil {
@@ -218,15 +218,15 @@ func resolveInviteRecordInput(fromStdin bool, traceID, inviteID, bee, intent, ta
 		}
 		return payload, strings.TrimSpace(traceID), nil
 	}
-	if strings.TrimSpace(bee) == "" || strings.TrimSpace(task) == "" {
-		return protocol.SessionInvitePayload{}, "", fmt.Errorf("invite record: --bee and --task are required (or use --stdin)")
+	if strings.TrimSpace(bee) == "" || strings.TrimSpace(body) == "" {
+		return protocol.SessionInvitePayload{}, "", fmt.Errorf("invite record: --bee and --body are required (or use --stdin)")
 	}
 	return protocol.SessionInvitePayload{
 		Kind:        protocol.SignalSessionInvite,
 		InviteID:    strings.TrimSpace(inviteID),
 		Bee:         strings.TrimSpace(bee),
 		Intent:      strings.TrimSpace(intent),
-		Task:        strings.TrimSpace(task),
+		Task:        strings.TrimSpace(body),
 		Status:      protocol.InviteStatusPending,
 		ArtifactRef: strings.TrimSpace(artifactRef),
 	}, strings.TrimSpace(traceID), nil

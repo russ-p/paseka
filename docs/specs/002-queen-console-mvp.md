@@ -292,7 +292,7 @@ The Runs tab exposes recent headless adapter invocations:
 
 - trace id and agent id
 - bee and adapter
-- state, task, intent, workspace, run directory
+- state, task body, intent, workspace, run directory
 - summary from `result.json` or `result.txt`
 - optional LLM `usage` from `result.json` (`inputTokens`, `outputTokens`, cache read/write; shown as `—` when absent)
 - event stream from `events.ndjson`
@@ -319,7 +319,7 @@ The sessions page supports:
 Session launch supports:
 
 - choosing an interactive-capable bee
-- entering task text
+- entering task body text
 - using an advanced raw-prompt override
 - optionally setting trace id and per-bee intent (options from `GET /api/bees` → `intents` / `defaultIntent`)
 
@@ -339,7 +339,7 @@ Interactive chat should be introduced in two phases.
 Implemented. From the UI, the user can:
 
 - choose bee
-- enter task or prompt
+- enter task body or raw prompt
 - optionally set trace and per-bee intent (intent options follow the selected bee)
 - start the session
 
@@ -449,7 +449,7 @@ Implemented HTTP endpoints:
 - `GET /api/bees` — interactive bees with `role`, `adapter`, `promptTemplate`, `worktree`, `intents`, `defaultIntent`
 - `GET /api/colony/topology` — config-derived EDA graph JSON + Mermaid string ([007](./007-colony-eda-topology.md))
 - `GET /api/sessions`
-- `POST /api/sessions`
+- `POST /api/sessions` — body fields: `bee`, `body` (task body for template), `rawPrompt`, `useRawPrompt`, optional `traceId`, `intent`
 - `GET /api/sessions/:sessionId`
 - `GET /api/sessions/:sessionId/transcript`
 - `GET /api/sessions/:sessionId/pty` (WebSocket PTY relay)

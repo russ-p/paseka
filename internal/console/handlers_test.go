@@ -140,7 +140,7 @@ func TestConsoleAPIHandlers(t *testing.T) {
 		t.Fatalf("bees = %+v", bees)
 	}
 
-	createBody := `{"bee":"scout","task":"console hello"}`
+	createBody := `{"bee":"scout","body":"console hello"}`
 	createReq := httptest.NewRequest(http.MethodPost, "/api/sessions", bytes.NewBufferString(createBody))
 	createRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(createRec, createReq)
@@ -331,7 +331,7 @@ func TestRunsAPIHandlers(t *testing.T) {
 	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
-	if detail.Task != "headless task" || detail.Intent != "feature" {
+	if detail.Body != "headless task" || detail.Intent != "feature" {
 		t.Fatalf("detail = %+v", detail)
 	}
 	if detail.Usage == nil || detail.Usage.InputTokens != 8848 || detail.Usage.OutputTokens != 56 {

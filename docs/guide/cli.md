@@ -17,7 +17,7 @@ go build -o paseka ./cmd/paseka
 Most commands resolve the git repository and colony config from the current working directory. Use `--path` / `-C` to start resolution from another directory inside the repo:
 
 ```bash
-paseka bee run scout --task "survey" --path /path/to/repo
+paseka bee run scout --body "survey" --path /path/to/repo
 ```
 
 Resolution requires:
@@ -30,8 +30,8 @@ Resolution requires:
 | Flag / field | Name in docs | Description |
 | ------------ | ------------ | ----------- |
 | `--trace` | `traceId` | Flight trail — groups runs, worktrees, and bus events for one feature chain |
-| `--task` (bee run) | task body | Free-text task passed into the prompt template |
-| `--task` (proposal) | `taskId` | Structured subtask id (e.g. `task-1`) |
+| `--body` (bee run / chat) | task body | Free-text nectar passed into the prompt template (`{{.Task}}`) |
+| `--task` (task / proposal) | `taskId` | Structured subtask id in the task ledger (e.g. `task-1`) |
 | agent id | `agentId` | Unique id per adapter invocation (auto-generated for `bee run`) |
 
 ### NATS dependency
@@ -129,14 +129,14 @@ Dispatch one bee — a single non-interactive adapter invocation (AFK run).
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
-| `--task` | `-t` | * | Task body rendered into the prompt template |
+| `--body` | `-b` | * | Task body rendered into the prompt template |
 | `--prompt` | | * | Inline prompt override (skips template file) |
 | `--trace` | | | Flight trail id; generated if omitted |
 | `--intent` | | | Task intent for the bee role (vocabulary from bee `intents` or `<role>-intent-*` partials; default from bee config or discovered vocabulary) |
 | `--path` | `-C` | | Colony resolution start directory |
 | `--no-bus` | | | Skip NATS publish (file-only run) |
 
-\* Provide `--task` or `--prompt` for LLM bees. Script bees (`adapter: script`) do not require a prompt; they run the bee's `command:` and receive runtime context via `PASEKA_*` env vars (see [architecture overview](../architecture/overview.md) § Script adapter).
+\* Provide `--body` or `--prompt` for LLM bees. Script bees (`adapter: script`) do not require a prompt; they run the bee's `command:` and receive runtime context via `PASEKA_*` env vars (see [architecture overview](../architecture/overview.md) § Script adapter).
 
 **Behavior:**
 
@@ -147,10 +147,10 @@ Dispatch one bee — a single non-interactive adapter invocation (AFK run).
 - Prints status, trace, agent id, workspace, run dir, output, and diff summary
 
 ```bash
-paseka bee run scout --task "Plan auth for the API"
-paseka bee run builder --task "Implement login" --trace trace-abc123 --intent feature
-paseka bee run scout --prompt "Quick spike: {{.Task}}" --task "rate limiting"
-paseka bee run builder --task "hotfix" --no-bus
+paseka bee run scout --body "Plan auth for the API"
+paseka bee run builder --body "Implement login" --trace trace-abc123 --intent feature
+paseka bee run scout --prompt "Quick spike: {{.Task}}" --body "rate limiting"
+paseka bee run builder --body "hotfix" --no-bus
 ```
 
 ### `paseka bee chat <role> [prompt]`
@@ -164,20 +164,20 @@ Start an interactive human-in-the-loop session in a long-lived agent process.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
-| `--task` | `-t` | * | Task body for the prompt template |
+| `--body` | `-b` | * | Task body for the prompt template |
 | `--prompt` | | * | Inline prompt override |
 | `--trace` | | | Flight trail id; generated if omitted |
 | `--intent` | | | Task intent for the bee role (vocabulary from bee `intents` or `<role>-intent-*` partials) |
 | `--path` | `-C` | | Colony resolution start directory |
 | `--terminal` | | | `default` or `ghostty` (overrides `~/.config/paseka/<slug>/terminal.yaml`) |
 
-\* Provide a positional prompt, `--task`, or `--prompt`.
+\* Provide a positional prompt, `--body`, or `--prompt`.
 
 See [interactive sessions](interactive-sessions.md) for session architecture and Ghostty attach.
 
 ```bash
 paseka bee chat scout "Discuss the auth design"
-paseka bee chat builder --task "Walk through the login flow"
+paseka bee chat builder --body "Walk through the login flow"
 paseka bee chat scout "review PR" --terminal ghostty
 ```
 
@@ -209,7 +209,7 @@ Stop a session by id. Tries the in-process manager first, then signals a remote 
 
 ### `paseka session run <role>` (hidden)
 
-Internal entry point used when `bee chat --terminal ghostty` launches a new terminal window. Same flags as `bee chat` (`--path`, `--task`, `--trace`, `--prompt`).
+Internal entry point used when `bee chat --terminal ghostty` launches a new terminal window. Same flags as `bee chat` (`--path`, `--body`, `--trace`, `--prompt`).
 
 ---
 
@@ -686,8 +686,8 @@ paseka doctor
 ### One-shot scout → builder (no reactor)
 
 ```bash
-TRACE=$(paseka bee run scout --task "Plan user settings page" | awk '/trace:/ {print $2}')
-paseka bee run builder --trace "$TRACE" --task "Implement settings form"
+TRACE=$(paseka bee run scout --body "Plan user settings page" | awk '/trace:/ {print $2}')
+paseka bee run builder --trace "$TRACE" --body "Implement settings form"
 ```
 
 ### Choreographed run with reactor
@@ -729,7 +729,7 @@ TRACE=trace-$(date +%s)
 paseka signal --type SIGNAL --trace "$TRACE" \
   --payload '{"kind":"feature.requested","title":"…","body":"…"}'
 paseka bee run scout --intent classify --trace "$TRACE" \
-  --task "Classify the feature.requested on this trail"
+  --body "Classify the feature.requested on this trail"
 # With paseka run up and default auto_invites: invite list shows pending grilling invite
 paseka invite accept <inviteId>
 # Or manual path before accept:
@@ -742,7 +742,7 @@ paseka bee chat drone --intent breakdown --trace "$TRACE" "Break down docs/specs
 
 ```bash
 paseka invite list [--trace <id>] [--status pending|accepted|completed|incomplete]
-paseka invite record --trace "$TRACE" --bee drone --intent grilling --task "Grill: …"
+paseka invite record --trace "$TRACE" --bee drone --intent grilling --body "Grill: …"
 paseka invite accept <inviteId>          # detached session; costs 1 honey; attach with session attach
 paseka invite accept <inviteId> --attach # attach terminal immediately
 paseka invite reject <inviteId>

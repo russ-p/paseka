@@ -74,7 +74,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.TaskID}}` | `string` | Optional task id within the trace. From `DispatchRequest.TaskID` when dispatching a queued subtask. |
 | `{{.ColonyRoot}}` | `string` | Absolute path to the git repository root. |
 | `{{.Workspace}}` | `string` | Absolute cwd for the adapter: colony root, or `.paseka/worktrees/<traceId>/` when `worktree: true`. |
-| `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or bus event payload. |
+| `{{.Task}}` | `string` | Task body (nectar). From CLI `--body`, Queen Console session launch, or bus event payload. |
 | `{{.Intent}}` | `string` | Normalized task intent for partial routing within the bee's vocabulary. Empty or unknown caller input becomes the bee's default intent. |
 | `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [insight kinds](../reference/insight-kinds.md). |
@@ -87,7 +87,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | Variable | Set by |
 | -------- | ------ |
 | `Bee`, `TraceID`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile`, `Interactive`, `Adapter` | `internal/runtime.Dispatcher` at dispatch time; `Interactive` is `true` in `internal/sessions` for chat |
-| `Task` | `paseka bee run --task` (required unless using inline prompt) |
+| `Task` | `paseka bee run --body` (required unless using inline prompt) |
 | `Intent` / `IntentRaw` | `paseka bee run --intent`, `paseka task create --intent`, or `intent` on `task.plan` / `task.ready` payloads |
 | `Insights` | Runtime projection from prior narrative `INSIGHT` events on the trace, merged with any manual `DispatchRequest.Insights` |
 | `ResultFile` | Computed from colony root + trace + agent ids |
@@ -280,7 +280,7 @@ Intent: {{.Intent}}
 ### Inline one-shot prompt
 
 ```bash
-paseka bee run builder --prompt "Hotfix only: {{.Task}}" --task "null pointer in auth"
+paseka bee run builder --prompt "Hotfix only: {{.Task}}" --body "null pointer in auth"
 ```
 
 Renders to: `Hotfix only: null pointer in auth`
@@ -288,7 +288,7 @@ Renders to: `Hotfix only: null pointer in auth`
 ### CLI with task and trace
 
 ```bash
-paseka bee run builder --task "add OAuth login" --trace trace-auth-01
+paseka bee run builder --body "add OAuth login" --trace trace-auth-01
 ```
 
 `{{.Task}}` and `{{.TraceID}}` are filled; other fields come from runtime defaults.

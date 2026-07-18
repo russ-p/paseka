@@ -100,12 +100,12 @@ func printInitResult(res colony.InitResult) {
 	case "pi":
 		fmt.Println("  1. Ensure `pi` is in PATH (install Pi CLI)")
 		fmt.Println("  2. Optionally set api_key_env in ~/.config/paseka/<slug>/adapters/pi.yaml")
-		fmt.Println("  3. paseka bee run scout --task \"your task\"")
+		fmt.Println("  3. paseka bee run scout --body \"your task\"")
 		fmt.Println("  4. paseka bee chat scout \"discuss a feature\"  # interactive HITL")
 		fmt.Println("  5. paseka run    # start hive runtime (NATS reactor)")
 	default:
 		fmt.Println("  1. agent login   # or set CURSOR_API_KEY")
-		fmt.Println("  2. paseka bee run scout --task \"your task\"")
+		fmt.Println("  2. paseka bee run scout --body \"your task\"")
 		fmt.Println("  3. paseka bee chat scout \"discuss a feature\"  # interactive HITL")
 		fmt.Println("  4. paseka run    # start hive runtime (NATS reactor)")
 	}

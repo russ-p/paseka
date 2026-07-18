@@ -14,7 +14,7 @@ func (b Bee) ValidateAdapterRequirements() error {
 	return nil
 }
 
-// RequiresPrompt reports whether a bee run needs --task or --prompt (script bees do not).
+// RequiresPrompt reports whether a bee run needs --body or --prompt (script bees do not).
 func (b Bee) RequiresPrompt() bool {
 	adapter, err := b.ResolveAdapter()
 	if err != nil {

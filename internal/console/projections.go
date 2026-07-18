@@ -81,7 +81,7 @@ type RunView struct {
 	Workspace  string          `json:"workspace"`
 	ColonyRoot string          `json:"colonyRoot,omitempty"`
 	TaskID     string          `json:"taskId,omitempty"`
-	Task       string          `json:"task,omitempty"`
+	Body       string          `json:"body,omitempty"`
 	Intent     string          `json:"intent,omitempty"`
 	State      string          `json:"state"`
 	Summary    string          `json:"summary,omitempty"`
@@ -246,7 +246,7 @@ func runViewFromMeta(meta runs.RunMeta) RunView {
 		Workspace:  meta.Workspace,
 		ColonyRoot: meta.ColonyRoot,
 		TaskID:     meta.TaskID,
-		Task:       meta.Task,
+		Body:       meta.Task,
 		Intent:     meta.Intent,
 		State:      meta.State,
 		Summary:    meta.Summary,

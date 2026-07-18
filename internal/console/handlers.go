@@ -17,7 +17,7 @@ import (
 
 type createSessionRequest struct {
 	Bee          string `json:"bee"`
-	Task         string `json:"task"`
+	Body         string `json:"body"`
 	RawPrompt    string `json:"rawPrompt"`
 	TraceID      string `json:"traceId"`
 	Intent       string `json:"intent"`
@@ -402,10 +402,10 @@ func (a *api) createSession(w http.ResponseWriter, r *http.Request) {
 	if req.UseRawPrompt {
 		runReq.InlinePrompt = req.RawPrompt
 	} else {
-		runReq.Task = req.Task
+		runReq.Task = req.Body
 	}
 	if runReq.Task == "" && runReq.InlinePrompt == "" {
-		http.Error(w, "task or raw prompt is required", http.StatusBadRequest)
+		http.Error(w, "body or raw prompt is required", http.StatusBadRequest)
 		return
 	}
 

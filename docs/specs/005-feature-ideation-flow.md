@@ -121,7 +121,7 @@ Without (1)+(2), breakdown must not start. Default grill `auto_invites` use `don
 | Mode | When | How |
 | ---- | ---- | --- |
 | Interactive (preferred) | Beekeeper wants to quiz slice granularity | Second `session.invite` with `intent=breakdown` + `artifactRef` (default `auto_invites` on `spec.ready`) |
-| AFK | Spec is crisp; Beekeeper skips quiz | `paseka bee run drone --intent breakdown --task "…"` after accept, or future direct dispatch on `spec.ready` with Beekeeper opt-in |
+| AFK | Spec is crisp; Beekeeper skips quiz | `paseka bee run drone --intent breakdown --body "…"` after accept, or future direct dispatch on `spec.ready` with Beekeeper opt-in |
 
 Breakdown still follows [drone-intent-breakdown](../../.paseka/prompts/_partials/drone-intent-breakdown.md): one `INSIGHT/task.plan`, `task.ready` only when Beekeeper confirms immediate start.
 
@@ -155,7 +155,7 @@ Until invite→session is wired (or when Beekeeper prefers manual control), Beek
 ```bash
 paseka signal --type SIGNAL --trace "$TRACE" \
   --payload '{"kind":"feature.requested","title":"…","body":"…"}'
-paseka bee run scout --intent classify --trace "$TRACE" --task "Classify the feature.requested on this trail"
+paseka bee run scout --intent classify --trace "$TRACE" --body "Classify the feature.requested on this trail"
 paseka bee chat drone --intent grilling --trace "$TRACE" "Grill: …"
 # write docs/specs/… then:
 paseka bee chat drone --intent breakdown --trace "$TRACE" "Break down docs/specs/…"

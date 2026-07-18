@@ -1255,8 +1255,8 @@ function renderRunDetail(run) {
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
     .join('');
 
-  if (run.task) {
-    el.runDetailMeta.innerHTML += `<dt>Task</dt><dd>${escapeHtml(run.task)}</dd>`;
+  if (run.body) {
+    el.runDetailMeta.innerHTML += `<dt>Task body</dt><dd>${escapeHtml(run.body)}</dd>`;
   }
 
   if (run.summary) {
@@ -2611,15 +2611,15 @@ el.launchForm.addEventListener('submit', async (ev) => {
   el.launchError.classList.add('hidden');
   el.launchBtn.disabled = true;
   try {
-    const body = {
+    const payload = {
       bee: el.beeSelect.value,
       traceId: el.traceInput.value.trim(),
       intent: el.intentSelect.value,
       useRawPrompt: el.rawToggle.checked,
-      task: el.taskInput.value.trim(),
+      body: el.taskInput.value.trim(),
       rawPrompt: el.rawInput.value.trim(),
     };
-    const created = await api('/api/sessions', { method: 'POST', body: JSON.stringify(body) });
+    const created = await api('/api/sessions', { method: 'POST', body: JSON.stringify(payload) });
     await loadSessions();
     await selectSession(created.sessionId);
     el.taskInput.value = '';

@@ -4,7 +4,7 @@ Paseka supports two ways to run a bee:
 
 | Mode | CLI | Use case |
 | ---- | --- | -------- |
-| **AFK (one-shot)** | `paseka bee run <role> --task "…"` | Background work; runtime waits for exit, normalizes summary, and may auto-publish `INSIGHT/run.summary` |
+| **AFK (one-shot)** | `paseka bee run <role> --body "…"` | Background work; runtime waits for exit, normalizes summary, and may auto-publish `INSIGHT/run.summary` |
 | **Interactive (session)** | `paseka bee chat <role> "…"` | Human-in-the-loop dialogue in one long-lived agent process |
 
 Interactive sessions are a **parallel runtime path**. They do not change the existing `Adapter.Run()` contract used for AFK runs.
@@ -134,10 +134,10 @@ Entries are removed when the session exits. `paseka session stop` can signal the
 paseka bee chat scout "help me design the auth flow"
 
 # Task via template instead of positional prompt
-paseka bee chat builder --task "add retry logic to the NATS client"
+paseka bee chat builder --body "add retry logic to the NATS client"
 
 # Reuse a trace (e.g. continue work in the same worktree)
-paseka bee chat builder --trace trace-abc123 --task "finish the PR"
+paseka bee chat builder --trace trace-abc123 --body "finish the PR"
 ```
 
 ### Session management
@@ -153,7 +153,7 @@ paseka session stop <sessionId>    # stop local or remote (by PID)
 ### AFK vs chat
 
 ```bash
-paseka bee run scout --task "survey the repo"   # non-interactive, exits when done
+paseka bee run scout --body "survey the repo"   # non-interactive, exits when done
 paseka bee chat scout "let's discuss the repo"  # interactive PTY session
 ```
 

@@ -92,7 +92,7 @@ func newSessionStopCmd() *cobra.Command {
 func newSessionRunCmd() *cobra.Command {
 	var (
 		startDir     string
-		task         string
+		body         string
 		traceID      string
 		intent       string
 		inlinePrompt string
@@ -103,14 +103,14 @@ func newSessionRunCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if task == "" && inlinePrompt == "" {
-				return fmt.Errorf("provide --task or --prompt")
+			if body == "" && inlinePrompt == "" {
+				return fmt.Errorf("provide --body or --prompt")
 			}
 			res, err := sessions.DefaultManager.RunInteractive(cmd.Context(), sessions.RunRequest{
 				StartDir:     startDir,
 				Bee:          args[0],
 				TraceID:      traceID,
-				Task:         task,
+				Task:         body,
 				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 			})
@@ -125,7 +125,7 @@ func newSessionRunCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
+	cmd.Flags().StringVarP(&body, "body", "b", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override")

@@ -24,7 +24,7 @@ func newBeeCmd() *cobra.Command {
 func newBeeRunCmd() *cobra.Command {
 	var (
 		startDir     string
-		task         string
+		body         string
 		traceID      string
 		intent       string
 		inlinePrompt string
@@ -43,15 +43,15 @@ func newBeeRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if bee.RequiresPrompt() && task == "" && inlinePrompt == "" {
-				return fmt.Errorf("provide --task or --prompt")
+			if bee.RequiresPrompt() && body == "" && inlinePrompt == "" {
+				return fmt.Errorf("provide --body or --prompt")
 			}
 			d := runtime.NewDispatcher()
 			res, err := d.BeeRun(cmd.Context(), runtime.BeeRunRequest{
 				StartDir:     startDir,
 				Bee:          args[0],
 				TraceID:      traceID,
-				Task:         task,
+				Task:         body,
 				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 				NoBus:        noBus,
@@ -70,7 +70,7 @@ func newBeeRunCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository (default: current directory)")
-	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
+	cmd.Flags().StringVarP(&body, "body", "b", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
 	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
@@ -81,7 +81,7 @@ func newBeeRunCmd() *cobra.Command {
 func newBeeChatCmd() *cobra.Command {
 	var (
 		startDir     string
-		task         string
+		body         string
 		traceID      string
 		intent       string
 		inlinePrompt string
@@ -96,7 +96,7 @@ func newBeeChatCmd() *cobra.Command {
 			if len(args) > 1 && inlinePrompt == "" {
 				inlinePrompt = strings.Join(args[1:], " ")
 			}
-			if task == "" && inlinePrompt == "" {
+			if body == "" && inlinePrompt == "" {
 				ctxColony, err := colony.ResolveContext(startDir)
 				if err != nil {
 					return err
@@ -110,7 +110,7 @@ func newBeeChatCmd() *cobra.Command {
 					return err
 				}
 				if !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
-					return fmt.Errorf("provide a prompt argument, --task, --prompt, or configure system_template on the bee")
+					return fmt.Errorf("provide a prompt argument, --body, --prompt, or configure system_template on the bee")
 				}
 			}
 
@@ -118,8 +118,8 @@ func newBeeChatCmd() *cobra.Command {
 			if startDir != "" {
 				runArgs = append(runArgs, "--path", startDir)
 			}
-			if task != "" {
-				runArgs = append(runArgs, "--task", task)
+			if body != "" {
+				runArgs = append(runArgs, "--body", body)
 			}
 			if traceID != "" {
 				runArgs = append(runArgs, "--trace", traceID)
@@ -161,7 +161,7 @@ func newBeeChatCmd() *cobra.Command {
 				StartDir:     startDir,
 				Bee:          beeRole,
 				TraceID:      traceID,
-				Task:         task,
+				Task:         body,
 				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 			})
@@ -176,7 +176,7 @@ func newBeeChatCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().StringVarP(&task, "task", "t", "", "task body passed to the prompt template")
+	cmd.Flags().StringVarP(&body, "body", "b", "", "task body passed to the prompt template")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (generated if omitted)")
 	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
