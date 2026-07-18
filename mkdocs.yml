@@ -11,6 +11,11 @@ site_dir: site
 exclude_docs: |
   specs/**
 
+# Rewrite links to excluded docs (specs/**) and repo paths outside docs/
+# (../internal/..., etc.) to GitHub blob/tree URLs. See scripts/mkdocs_hooks.py.
+hooks:
+  - scripts/mkdocs_hooks.py
+
 theme:
   name: material
   language: en
@@ -54,7 +59,7 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
 
-# Links into the Go tree (../internal/...) are for local browsing; ignore on the site build.
+# Remaining unknown links (if any) are ignored; off-site targets are rewritten by hooks.
 validation:
   links:
     not_found: ignore

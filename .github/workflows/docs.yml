@@ -8,6 +8,7 @@ on:
       - mkdocs.yml
       - requirements-docs.txt
       - scripts/gen-llms-full.sh
+      - scripts/mkdocs_hooks.py
       - .github/workflows/docs.yml
   workflow_dispatch:
 
