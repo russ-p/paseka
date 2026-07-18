@@ -14,6 +14,7 @@ Index of the main docs. Feature specs under `specs/` are not listed here.
 | [008-bee-routing.md](008-bee-routing.md) | Bee routing: `subscribes` / `publishes`, Reactor, task vs direct dispatch |
 | [009-insight-kinds.md](009-insight-kinds.md) | `INSIGHT` taxonomy: difference from `VERIFICATION`, payload kinds, and projection into `{{.Insights}}` |
 | [010-bee-config.md](010-bee-config.md) | Bee role YAML (`.paseka/bees/<role>.yaml`): schema, adapters, `command` / `post_exec`, params, contracts |
+| [011-nuc.md](011-nuc.md) | Nuc portable bee packs: export/import bees and prompts between Colonies |
 | [999-backlog.md](999-backlog.md) | Deferred ideas and follow-ups outside the current MVP |
 
 Russian index: [README-RU.md](README-RU.md).

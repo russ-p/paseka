@@ -14,6 +14,7 @@
 | [008-bee-routing.md](008-bee-routing.md) | Маршрутизация пчёл: `subscribes` / `publishes`, Reactor, task vs direct dispatch |
 | [009-insight-kinds.md](009-insight-kinds.md) | Таксономия `INSIGHT`: отличие от `VERIFICATION`, виды payload и проекция в `{{.Insights}}` |
 | [010-bee-config.md](010-bee-config.md) | Конфиг роли пчелы (`.paseka/bees/<role>.yaml`): схема, адаптеры, `command` / `post_exec`, params, контракты |
+| [011-nuc.md](011-nuc.md) | Nuc — переносимые пакеты пчёл: export/import bees и prompts между Colony |
 | [999-backlog.md](999-backlog.md) | Отложенные идеи и follow-up'ы вне текущего MVP |
 
 Английский индекс: [README.md](README.md).

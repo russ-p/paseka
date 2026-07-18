@@ -10,6 +10,9 @@
 | Workspace               | Apiary              |
 | Project                 | Colony              |
 | Cluster (если появится) | Federation of Hives |
+| Portable bee pack       | **Nuc**             |
+
+> **Nuc** — переносимый «пакет пчёл»: bee YAML + prompts в одном файле для заселения другой Colony. Технически: `paseka nuc export|import`. См. [011-nuc.md](011-nuc.md).
 
 ---
 

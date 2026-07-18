@@ -53,6 +53,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newConsoleCmd())
 	root.AddCommand(newExportCmd())
 	root.AddCommand(newColonyCmd())
+	root.AddCommand(newNucCmd())
 	return root
 }
 
