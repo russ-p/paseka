@@ -11,7 +11,7 @@ Interactive sessions are a **parallel runtime path**. They do not change the exi
 
 **Honey reserve:** `paseka invite accept` consumes **1 honey** from the trace reserve (`energy.consume` / `session.start`). Ad-hoc `paseka bee chat` does **not** consume honey. Top up with `paseka energy add --trace <id> --amount <n>` when accept fails with honey exhausted.
 
-See also: [003-architecture.md](003-architecture.md) (adapters, runs layout), [001-brief.md](001-brief.md) (HITL paradigm).
+See also: [architecture overview](../architecture/overview.md) (adapters, runs layout), [Brief](../idea/brief.md) (HITL paradigm).
 
 ---
 
@@ -195,7 +195,7 @@ If Ghostty is not installed, set `terminal: default` or omit `terminal.yaml`.
 
 | Input | Maps to `agent` |
 | ----- | --------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
+| `command` (optional) | full argv; overrides `params` mapping (see [architecture overview](../architecture/overview.md)) |
 | `Workspace` | `--workspace <path>` |
 | `SystemPrompt` + `InitialPrompt` | merged into one positional prompt (newline-separated) |
 | `InitialPrompt` | task/kickoff portion before glue (no `-p`) |
@@ -226,7 +226,7 @@ Bees with `adapter: pi` launch the Pi CLI in its normal interactive UI (no `-p`,
 
 | Input | Maps to `pi` |
 | ----- | ------------ |
-| `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
+| `command` (optional) | full argv; overrides `params` mapping (see [architecture overview](../architecture/overview.md)) |
 | `Workspace` | process cwd |
 | `SystemPrompt` | `--append-system-prompt <system.txt>` (file path) |
 | `InitialPrompt` | positional prompt when provided |
@@ -262,7 +262,7 @@ Bees with `adapter: claude` launch the Claude Code CLI in its normal interactive
 
 | Input | Maps to `claude` |
 | ----- | ---------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see [003-architecture.md](003-architecture.md)) |
+| `command` (optional) | full argv; overrides `params` mapping (see [architecture overview](../architecture/overview.md)) |
 | `Workspace` | process cwd |
 | `SystemPrompt` | `--append-system-prompt-file <system.txt>` (file path, not inline) |
 | `InitialPrompt` | positional prompt when provided |

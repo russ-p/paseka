@@ -4,13 +4,13 @@
 
 **Draft (colony reference).** Design locked for colony choreography and event shapes. **Phases 0–1** (soft path + platform/colony SIGNAL boundary) and the **colony** parts of Phases 3–4 (`auto_invites` grill/breakdown rules, grilling → `spec.ready`) are done.
 
-**Platform** invite lifecycle (`session.invite` / `beekeeper.ready`, CLI/Console accept, `done_when` completion, session energy) lives in [006-human-gateway-invites.md](./006-human-gateway-invites.md) and [008-bee-routing.md](../008-bee-routing.md) §7–8 — not in this spec.
+**Platform** invite lifecycle (`session.invite` / `beekeeper.ready`, CLI/Console accept, `done_when` completion, session energy) lives in [006-human-gateway-invites.md](./006-human-gateway-invites.md) and [bee routing](../reference/bee-routing.md) §7–8 — not in this spec.
 
 ## Purpose
 
 **Reference colony choreography** — one example flow (feature ideation) with colony-owned `SIGNAL` kinds (`feature.*`, `spec.ready`) and payload shapes. It depends on the platform Human Gateway ([006](./006-human-gateway-invites.md)) for parking interactive work; it does **not** redefine invite protocol.
 
-Custom colonies use specialized bees, colony `SIGNAL` kinds, and `subscribes` / `auto_invites` rules — see [008-bee-routing.md](../008-bee-routing.md).
+Custom colonies use specialized bees, colony `SIGNAL` kinds, and `subscribes` / `auto_invites` rules — see [bee routing](../reference/bee-routing.md).
 
 Target path:
 
@@ -26,7 +26,7 @@ SIGNAL/feature.requested
   → existing colony implementation (builder / guard / receiver)
 ```
 
-This extends — does not replace — the short path in [005-task-ledger.md](../005-task-ledger.md) where a clear PRD already exists and Scout may emit `task.plan` directly.
+This extends — does not replace — the short path in [task ledger](../reference/task-ledger.md) where a clear PRD already exists and Scout may emit `task.plan` directly.
 
 ## Goals
 
@@ -40,11 +40,11 @@ This extends — does not replace — the short path in [005-task-ledger.md](../
 
 ## Non-Goals (this spec)
 
-- Do not redefine platform invite protocol, CLI/Console accept, or `done_when` mechanics — see [006](./006-human-gateway-invites.md) and [008](../008-bee-routing.md) §7–8.
+- Do not redefine platform invite protocol, CLI/Console accept, or `done_when` mechanics — see [006](./006-human-gateway-invites.md) and [008](../reference/bee-routing.md) §7–8.
 - Do not add a new top-level `EventType` (stay on `SIGNAL` / `INSIGHT` / `MUTATION` / `VERIFICATION`).
-- Do not make `INSIGHT` drive workflow routing (narrative only; see [009-insight-kinds.md](../009-insight-kinds.md)).
+- Do not make `INSIGHT` drive workflow routing (narrative only; see [insight kinds](../reference/insight-kinds.md)).
 - Do not AFK-dispatch `intent=grilling` via `task.ready` (grilling is interactive-by-contract).
-- Do not implement `confidence` budgets or `system.kill` here (see [999-backlog.md](../999-backlog.md)).
+- Do not implement `confidence` budgets or `system.kill` here (see [backlog](../plans/backlog.md)).
 - Do not invent a second task ledger for grill/breakdown meta-tasks (optional later; not MVP).
 - Do not require Object Store for MVP specs — a repo path under `docs/specs/` is enough.
 - Do not register `feature.*` / `spec.ready` as hardcoded validators or reactor special-cases in `internal/protocol` — those are colony choreography contracts, not platform primitives.
@@ -60,7 +60,7 @@ This extends — does not replace — the short path in [005-task-ledger.md](../
 | Interactive sessions | `bee chat` / Console + Human Gateway invites | Soft path or invite accept ([006](./006-human-gateway-invites.md)) |
 | Task ledger | `task.plan` → `task.ready` → implement | Starts after approved breakdown |
 | Spec files | `docs/specs/*.md` (convention) | Durable handoff after grilling |
-| Human Gateway | Platform invites / `auto_invites` / `done_when` | [006](./006-human-gateway-invites.md), [008](../008-bee-routing.md) §7–8 |
+| Human Gateway | Platform invites / `auto_invites` / `done_when` | [006](./006-human-gateway-invites.md), [008](../reference/bee-routing.md) §7–8 |
 
 ## Decisions
 
@@ -71,7 +71,7 @@ On colony events such as `feature.classified`, **`payload.decision`** is a class
 - bee **`subscribes`** dispatch (reactor AFK run selection by `type` + `payload.kind`);
 - the glossary **Flight Route** (NATS subject under `events.<EventType>[.<kind>]`).
 
-Colony **`auto_invites`** rules may **match** on `decision` (e.g. `match.decision: grill`) to publish a `session.invite` — that matching is platform routing ([008](../008-bee-routing.md) §7); the payload field itself is only Scout's classification output.
+Colony **`auto_invites`** rules may **match** on `decision` (e.g. `match.decision: grill`) to publish a `session.invite` — that matching is platform routing ([008](../reference/bee-routing.md) §7); the payload field itself is only Scout's classification output.
 
 **Platform routing** stays bee `subscribes` + colony `auto_invites` with `invite.done_when`. **Choreography** is bees and rules reacting to `SIGNAL` kinds and payload fields — Scout emits `feature.classified` with a `decision`; invite rules, other bees, and Beekeeper react.
 
@@ -114,7 +114,7 @@ After grilling reaches shared understanding, Drone **must**:
 2. Emit `SIGNAL/spec.ready` with `ref` = repo-relative path.
 3. Optionally emit `INSIGHT/context.note` summarizing the Bloom for `{{.Insights}}`.
 
-Without (1)+(2), breakdown must not start. Default grill `auto_invites` use `done_when` on `spec.ready` + file at `ref` ([008](../008-bee-routing.md) §8).
+Without (1)+(2), breakdown must not start. Default grill `auto_invites` use `done_when` on `spec.ready` + file at `ref` ([008](../reference/bee-routing.md) §8).
 
 ### 5. Breakdown may be interactive or AFK
 
@@ -270,7 +270,7 @@ default_intent: classify   # or keep survey default; classify only on this subsc
 
 ### Colony `auto_invites` (this flow)
 
-Platform schema and behavior: [008-bee-routing.md](../008-bee-routing.md) §7–8 and [006](./006-human-gateway-invites.md). This colony’s reference rules (grill + breakdown):
+Platform schema and behavior: [bee routing](../reference/bee-routing.md) §7–8 and [006](./006-human-gateway-invites.md). This colony’s reference rules (grill + breakdown):
 
 ```yaml
 # .paseka/colony.yaml — feature ideation reference
@@ -364,13 +364,13 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 
 ## Related docs
 
-- [001-brief.md](../001-brief.md) — HITL as Human Gateway, not blocking orchestrator
-- [005-task-ledger.md](../005-task-ledger.md) — ledger lifecycle after `task.plan`
-- [006-interactive-sessions.md](../006-interactive-sessions.md) — session runtime path
+- [Brief](../idea/brief.md) — HITL as Human Gateway, not blocking orchestrator
+- [task ledger](../reference/task-ledger.md) — ledger lifecycle after `task.plan`
+- [interactive sessions](../guide/interactive-sessions.md) — session runtime path
 - [006-human-gateway-invites.md](./006-human-gateway-invites.md) — platform invites, accept, `done_when`, energy
-- [008-bee-routing.md](../008-bee-routing.md) — `subscribes`, `auto_invites` §7, `done_when` §8
-- [009-insight-kinds.md](../009-insight-kinds.md) — INSIGHT vs SIGNAL routing rule
-- [010-bee-config.md](../010-bee-config.md) — bee YAML, intents
+- [bee routing](../reference/bee-routing.md) — `subscribes`, `auto_invites` §7, `done_when` §8
+- [insight kinds](../reference/insight-kinds.md) — INSIGHT vs SIGNAL routing rule
+- [bee config](../guide/bee-config.md) — bee YAML, intents
 - [002-queen-console-mvp.md](./002-queen-console-mvp.md) — Sessions UI to extend with invites
 
 ## Verification

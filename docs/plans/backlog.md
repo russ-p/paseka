@@ -1,20 +1,6 @@
 # Backlog
 
-## Recently shipped
-
-### Split `code.proposal` by workspace (isolated vs root)
-
-**Shipped** — see [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md) and canonical docs:
-
-- [003-architecture.md](003-architecture.md) §6 — dual proposal paths and shared-workspace invariant
-- [008-bee-routing.md](008-bee-routing.md) — kinds, alias matching, direct dispatch, AFK defer scope
-- [010-bee-config.md](010-bee-config.md) — `publishes` examples and worktree ↔ kind invariants
-- [005-task-ledger.md](005-task-ledger.md) — root soft gate (R1) vs isolated merge gate
-- [007-cli.md](007-cli.md) — `proposal approve` branches on workspace
-
-Kinds `code.proposal.isolated` / `code.proposal.root`, baseline delta, workspace-affine direct dispatch, AFK merge gate only for isolated, root human ack R1, and `paseka doctor` wiring checks are live.
-
-Deferred follow-ups from spec 008: `proposal_paths` allowlist, untracked files in proposal delta, alias removal timeline.
+Deferred ideas and follow-ups outside the current MVP. Shipped work belongs in [Changelog](changelog.md); design drafts are listed in [Specs index](specs-index.md).
 
 ## Deferred Ideas
 
@@ -44,7 +30,7 @@ Context:
 
 Backlog items:
 
-- **`confidence` (Pollen Quality)** — filter or weight events by confidence level; mentioned in [001-brief.md](001-brief.md) alongside `energyToken`.
+- **`confidence` (Pollen Quality)** — filter or weight events by confidence level; mentioned in [Brief](../idea/brief.md) alongside `energyToken`.
 - **`system.kill`** — bus signal to forcibly stop a trace or agent dispute avalanche; HITL energy injection exists via `paseka energy add`, but no kill primitive.
 - **Queen Console UI polish** — API fields (`energyBudget`, `energyRemaining`, `lowEnergy`) exist; richer badges, alerts, and beekeeper actions in the SPA are not done.
 - **Per-run proposal diff in Reviews** — final merge gate preview (`GET /api/traces/:traceId/merge-diff`) ships; side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks does not.
@@ -63,11 +49,19 @@ Why deferred:
 Exit criteria for revisiting:
 - Operators report false positives/negatives from flat `1`-token dispatch cost or exhausted traces that should not block.
 - Product brief items (`confidence`, `system.kill`) are specified with event shapes and CLI/console surfaces.
-- Eval harness ([specs/003-hive-evals.md](specs/003-hive-evals.md)) needs scenarios that depend on one of the deferred primitives.
+- Eval harness ([003-hive-evals](../specs/003-hive-evals.md)) needs scenarios that depend on one of the deferred primitives.
+
+### Code proposal workspaces — deferred follow-ups
+
+From [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md):
+
+- `proposal_paths` allowlist
+- Untracked files in proposal delta
+- Alias removal timeline for bare `code.proposal`
 
 ## Eval colony gotchas (Tier B)
 
-Context: wiring the side eval colony (`paseka-eval-colony`) and `runner/run-case.sh` against real NATS + `paseka run`. See [specs/003-hive-evals.md](specs/003-hive-evals.md).
+Context: wiring the side eval colony (`paseka-eval-colony`) and `runner/run-case.sh` against real NATS + `paseka run`. See [003-hive-evals](../specs/003-hive-evals.md).
 
 Gotchas observed while standing up Phase 2:
 
@@ -76,7 +70,7 @@ Gotchas observed while standing up Phase 2:
 - **Script bees run from the worktree checkout** — `scripts/*.sh` and bee YAML come from git `HEAD`. Uncommitted script changes are invisible inside `.paseka/worktrees/<traceId>/`.
 - **`paseka event emit` from script bees needs `-C "$PASEKA_COLONY_ROOT"`** — when cwd is the worktree, emit without `-C` fails colony/home resolution (`home config points to … but repo is …/worktrees/<traceId>`). Guard/receiver scripts must pass colony root explicitly.
 - **`paseka event emit` can fail the script even after a bus publish** — if audit log append to `.paseka/runs/<traceId>/<agentId>/events.ndjson` fails, emit exits non-zero and the adapter run is marked failed. During a normal adapter run the run dir exists; ad-hoc manual emits need a matching run dir.
-- **Fixed `trace` + JetStream state accumulates** — reusing `eval-01-add-function` across runs leaves task-ledger KV entries, depleted honey, and replay history unless wiped. Use `paseka purge --bus --trace <case-trace>` (stop `paseka run` first); see [007-cli.md](007-cli.md) § `paseka purge`.
+- **Fixed `trace` + JetStream state accumulates** — reusing `eval-01-add-function` across runs leaves task-ledger KV entries, depleted honey, and replay history unless wiped. Use `paseka purge --bus --trace <case-trace>` (stop `paseka run` first); see [CLI](../guide/cli.md) § `paseka purge`.
 - **Only one `paseka run` consumer per colony subject prefix** — starting a second reactor logs `consumer is already bound to a subscription`. Stop the previous runtime before `run-case.sh` starts another.
 - **Builder rework is async** — `verification.failed` → builder fix-up uses the direct dispatch path and can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop; treat `blocked` as a terminal status when honey runs out.
 - **Oracle scope** — `go test ./...` in the worktree also picks up packages under `cases/…/expect/`. Prefer a narrow path (e.g. `go test ./pkg/...`) in `case.yaml` `oracle.command` and in script-guard bees.

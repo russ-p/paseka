@@ -10,27 +10,47 @@ description: Maintain Paseka project documentation (README, docs/, AGENTS.md) fo
 1. **Audience first** — write for the reader of that file (humans vs agents vs deep dive).
 2. **One source of truth** — put detail once in `docs/`; other files link, do not duplicate.
 3. **Short entry points** — root README and `AGENTS.md` stay brief; prefer links over restating.
-4. **Keep indexes current** — every new/renamed/removed top-level doc updates `docs/README.md` and `docs/README-RU.md`.
+4. **Keep indexes current** — every new/renamed/removed published doc updates `docs/README.md`, `docs/README-RU.md`, and `mkdocs.yml` nav.
 5. **Default language: English** — Russian only for `*-RU.md` mirrors or historic/special docs (e.g. product brief).
+
+## Layout (immersion layers)
+
+```text
+docs/
+  idea/           # principles, glossary, historic brief
+  guide/          # how to use: layout, CLI, bee config, prompts, sessions, nuc
+  reference/      # routing, insight kinds, task ledger
+  architecture/   # adapters, IPC, worktrees, packages
+  plans/          # changelog, specs-index, backlog
+  specs/          # feature design drafts — NOT published on the site
+```
+
+Order for readers: **idea → guide → reference → architecture → plans**.
 
 ## File roles
 
 | Path | Audience | Role |
 |------|----------|------|
-| `README.md` | Humans | Short product blurb + quick start (clone, build, run). Link to `docs/` for depth. |
-| `README-RU.md` | Humans (RU) | Russian mirror of root README; same scope, same brevity. |
-| `docs/README.md` | Humans | Index of main docs under `docs/` (table: link + one-line description). |
+| `README.md` | Humans | Short product blurb + quick start. Link to `docs/` for depth. |
+| `README-RU.md` | Humans (RU) | Russian mirror of root README. |
+| `docs/README.md` | Humans | Index by immersion section (tables + one-line descriptions). |
 | `docs/README-RU.md` | Humans (RU) | Russian mirror of the docs index. |
-| `docs/NNN-*.md` | Humans + agents | Canonical design/dev docs. Numbered, English by default. |
-| `docs/specs/` | Humans + agents | Feature specs; **not** listed in `docs/README*` indexes. |
-| `AGENTS.md` | Coding agents | Minimal: what the project is, how to build/run/test, hard restrictions, links to arch and key docs. |
+| `docs/idea/` | Humans | Principles and vocabulary. |
+| `docs/guide/` | Humans + agents | How to configure and operate a colony. |
+| `docs/reference/` | Humans + agents | Event/routing/ledger contracts. |
+| `docs/architecture/` | Contributors | Runtime internals and package map. |
+| `docs/plans/changelog.md` | Humans | Shipped features; link to specs in repo + canonical docs. |
+| `docs/plans/specs-index.md` | Humans | Short status table for `docs/specs/` (bodies stay in git only). |
+| `docs/plans/backlog.md` | Humans + agents | Deferred ideas only (not shipped notes). |
+| `docs/specs/` | Humans + agents | Feature specs; **excluded from MkDocs**; do not list full bodies in indexes. |
+| `AGENTS.md` | Coding agents | Minimal: what the project is, build/run, hard restrictions, links to key docs. |
 
 ## Language
 
 - **English** is the default for new and maintained docs.
 - **Russian** (`README-RU.md`, `docs/README-RU.md`, or dedicated RU docs) for localization or historic content (e.g. brief).
 - When both EN and RU exist for the same entry point, update both or note the gap.
-- Do not invent RU copies of every `docs/NNN-*.md` unless asked; indexes may describe English docs in Russian.
+- Do not invent RU copies of every guide unless asked; indexes may describe English docs in Russian.
 
 ## Root README (`README.md` / `README-RU.md`)
 
@@ -45,17 +65,18 @@ Do **not** put architecture deep-dives, glossary, or full CLI reference here —
 
 ## Docs index (`docs/README.md` / `docs/README-RU.md`)
 
-- Table of main numbered docs only.
-- Exclude `docs/specs/` from the index (mention that specs live there if useful).
+- Sectioned tables matching immersion layers (and `mkdocs.yml` nav).
+- Specs: point to `plans/specs-index.md`, not a full listing of every spec body.
 - Cross-link EN ↔ RU indexes.
 - One-line description per row; match the doc’s actual purpose.
 
-## Numbered docs (`docs/NNN-name.md`)
+## Adding or moving docs
 
-- Use `NNN-kebab-name.md` (e.g. `003-architecture.md`).
-- Reserve high numbers for catch-alls (e.g. `999-backlog.md`).
+- Put new content in the correct folder (`idea` / `guide` / `reference` / `architecture` / `plans`).
 - Prefer updating an existing doc over adding overlapping ones.
-- After add/rename/remove: update both docs indexes.
+- After add/rename/remove: update both docs indexes **and** `mkdocs.yml` nav.
+- Keep `docs/specs/<NNN>-<slug>.md` paths stable — colony/Drone/`spec.ready` refs depend on them.
+- When a spec ships: add a [changelog](docs/plans/changelog.md) entry, update status in [specs-index](docs/plans/specs-index.md), move durable behavior into guide/reference/architecture.
 
 ## AGENTS.md
 
@@ -75,17 +96,21 @@ Do **not** paste long architecture, glossary, or CLI reference into `AGENTS.md`.
 When changing documentation:
 
 ```
-- [ ] Right file for the audience (README vs docs vs AGENTS.md)
+- [ ] Right folder for the audience (idea / guide / reference / architecture / plans)
 - [ ] English default; RU only where appropriate
 - [ ] No duplicated deep content across entry points
-- [ ] docs/README.md (+ RU) updated if docs set changed
+- [ ] docs/README.md (+ RU) and mkdocs.yml updated if docs set changed
+- [ ] Specs stay unpublished; changelog / specs-index updated when status changes
 - [ ] AGENTS.md still short; new detail lives in docs/ with a link
+- [ ] If agent-config guides changed: run scripts/gen-llms-full.sh
 ```
 
 ## Anti-patterns
 
 - Growing `AGENTS.md` into a second architecture doc
 - Putting full CLI/API reference in root README
-- Adding a doc under `docs/` without updating indexes
-- Listing every `specs/` file in `docs/README*`
-- Translating all numbered docs to Russian by default
+- Adding a published doc under `docs/` without updating indexes and nav
+- Listing every `specs/` file body in `docs/README*`
+- Moving `docs/specs/` paths without updating colony prompts and invite refs
+- Translating all guides to Russian by default
+- Putting shipped notes in backlog instead of changelog

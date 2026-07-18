@@ -7,11 +7,12 @@ docs="$root/docs"
 out="$docs/llms-full.txt"
 
 files=(
-  010-bee-config.md
-  004-prompt-templates.md
-  008-bee-routing.md
-  009-insight-kinds.md
-  003-architecture.md
+  guide/bee-config.md
+  guide/prompt-templates.md
+  reference/bee-routing.md
+  reference/insight-kinds.md
+  guide/colony-layout.md
+  architecture/overview.md
 )
 
 {

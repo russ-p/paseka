@@ -2,7 +2,7 @@
 
 Paseka renders bee prompts from version-controlled Markdown files under `.paseka/prompts/`. Templates use Go [`text/template`](https://pkg.go.dev/text/template) syntax. At dispatch time the runtime fills in context variables, writes the result to `.paseka/runs/<traceId>/<agentId>/prompt.txt` (and optionally `system.txt`), and passes rendered strings to the adapter.
 
-Implementation: [`internal/prompts`](../internal/prompts/prompts.go).
+Implementation: [`internal/prompts`](../../internal/prompts/prompts.go).
 
 ---
 
@@ -77,7 +77,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.Task}}` | `string` | Task body (nectar). From CLI `--task` or bus event payload. |
 | `{{.Intent}}` | `string` | Normalized task intent for partial routing within the bee's vocabulary. Empty or unknown caller input becomes the bee's default intent. |
 | `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
-| `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [009-insight-kinds.md](009-insight-kinds.md). |
+| `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [insight kinds](../reference/insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `result.txt` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
 | `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `script`). |
@@ -153,7 +153,7 @@ Builder Bee uses intent partials for mission-specific guidance while keeping one
 
 Each bee may define an intent vocabulary used for `{{.Intent}}` normalization and Queen Console intent pickers:
 
-1. **Explicit** — `intents:` and optional `default_intent:` in `bees/<role>.yaml` (see [010-bee-config.md](010-bee-config.md)).
+1. **Explicit** — `intents:` and optional `default_intent:` in `bees/<role>.yaml` (see [bee config](bee-config.md)).
 2. **Discovered** — when `intents` is omitted, runtime scans `_partials/<role>-intent-*.md` (e.g. `builder-intent-feature.md` → `feature`, `drone-intent-grilling.md` → `grilling`).
 
 At dispatch, empty or unknown caller input normalizes to the bee's default intent (`general` when present, otherwise the first discovered intent). The raw requested value remains in `{{.IntentRaw}}` when it differs from `{{.Intent}}`.
@@ -337,7 +337,7 @@ Bees include only the type partials they may publish. For example:
 
 `MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal.isolated` or `code.proposal.root` from **baseline-attributed workspace diffs** (tracked changes in the adapter cwd; review truth is working-tree `git diff`, not staged-only). Guard and main-guard prompts instruct disk review via `git diff`.
 
-See [009-insight-kinds.md](009-insight-kinds.md) for the full INSIGHT taxonomy and prompt-memory rules.
+See [insight kinds](../reference/insight-kinds.md) for the full INSIGHT taxonomy and prompt-memory rules.
 
 ```bash
 paseka event emit --stdin <<'EOF'
@@ -345,14 +345,14 @@ paseka event emit --stdin <<'EOF'
 EOF
 ```
 
-Use `{{.TraceID}}` and `{{.AgentID}}` inside partials so examples match the current run. See [005-task-ledger.md](005-task-ledger.md).
+Use `{{.TraceID}}` and `{{.AgentID}}` inside partials so examples match the current run. See [task ledger](../reference/task-ledger.md).
 
 ---
 
 ## 10. Related docs
 
-- [003-architecture.md](003-architecture.md) — colony layout, adapter contract, runs/worktrees
-- [010-bee-config.md](010-bee-config.md) — bee role YAML (`prompt_template` and other fields)
-- [005-task-ledger.md](005-task-ledger.md) — task queue protocol and lifecycle
-- [002-paseka-glossary.md](002-paseka-glossary.md) — bee language vs technical terms (`TraceID` / Flight Trail, `Task` / Nectar)
+- [architecture overview](../architecture/overview.md) — colony layout, adapter contract, runs/worktrees
+- [bee config](bee-config.md) — bee role YAML (`prompt_template` and other fields)
+- [task ledger](../reference/task-ledger.md) — task queue protocol and lifecycle
+- [glossary](../idea/glossary.md) — bee language vs technical terms (`TraceID` / Flight Trail, `Task` / Nectar)
 - Agent run file protocol — `request.json`, `result.txt`, `events.ndjson` under `.paseka/runs/`

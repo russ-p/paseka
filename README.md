@@ -42,6 +42,10 @@ go build -o paseka ./cmd/paseka
 
 Open http://127.0.0.1:8787 in your browser. Queen Console does not enforce authentication yet, so keep it bound to localhost or another trusted interface only. Use `--addr` only when you understand the exposure risk.
 
+## Documentation
+
+Guides are grouped by immersion depth under [`docs/`](docs/README.md): idea → guide → reference → architecture → plans.
+
 ## Technologies
 
 - Go

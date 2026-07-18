@@ -1,21 +1,47 @@
 # Paseka documentation
 
-Index of the main docs. Feature specs under `specs/` are not listed here.
+Docs are grouped by immersion depth. Feature specs under `specs/` are **not** published on the site; see [Specs index](plans/specs-index.md).
+
+## Idea & principles
 
 | Document | Description |
 | -------- | ----------- |
-| [001-brief.md](001-brief.md) | Product brief: choreographed AI swarm concept, EDA contracts, `traceId` / `energyToken`, stack (NATS + JetStream), HITL, and MVP next steps |
-| [002-paseka-glossary.md](002-paseka-glossary.md) | Bee glossary: branding, user-facing terms, agent roles, and domain model vocabulary |
-| [003-architecture.md](003-architecture.md) | Colony architecture: `.paseka/` and machine-local config, `paseka init`, adapters, worktree flow, package layout |
-| [004-prompt-templates.md](004-prompt-templates.md) | Prompt templates in `.paseka/prompts/`: `text/template`, partials, context variables, and render-at-dispatch |
-| [005-task-ledger.md](005-task-ledger.md) | Task Ledger: `traceId` → `taskId` → `agentId`, task lifecycle, and projected trace state |
-| [006-interactive-sessions.md](006-interactive-sessions.md) | Interactive HITL sessions: `bee chat`, SessionAdapter + PTY, session registry, and Ghostty attach |
-| [007-cli.md](007-cli.md) | Queen Shell (`paseka`) reference: init/run/status, bee run/chat, console, energy, and other CLI commands |
-| [008-bee-routing.md](008-bee-routing.md) | Bee routing: `subscribes` / `publishes`, Reactor, task vs direct dispatch |
-| [009-insight-kinds.md](009-insight-kinds.md) | `INSIGHT` taxonomy: difference from `VERIFICATION`, payload kinds, and projection into `{{.Insights}}` |
-| [010-bee-config.md](010-bee-config.md) | Bee role YAML (`.paseka/bees/<role>.yaml`): schema, adapters, `command` / `post_exec`, params, contracts |
-| [011-nuc.md](011-nuc.md) | Nuc portable bee packs: export/import bees and prompts between Colonies |
-| [999-backlog.md](999-backlog.md) | Deferred ideas and follow-ups outside the current MVP |
+| [Principles](idea/principles.md) | Choreography model, contracts, honey, HITL, colony vs machine |
+| [Glossary](idea/glossary.md) | Bee-language vocabulary and domain terms |
+| [Brief (RU)](idea/brief.md) | Historic product brief (concept, EDA, stack, HITL) |
+
+## Using Paseka
+
+| Document | Description |
+| -------- | ----------- |
+| [Colony layout](guide/colony-layout.md) | `.paseka/` vs machine-local config, slug, `paseka init` |
+| [CLI](guide/cli.md) | Queen Shell (`paseka`) command reference |
+| [Bee config](guide/bee-config.md) | Bee role YAML schema, adapters, routing fields |
+| [Prompt templates](guide/prompt-templates.md) | `.paseka/prompts/`, `text/template`, partials |
+| [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |
+| [Nuc packs](guide/nuc.md) | Export/import portable bee + prompt packs |
+
+## Reference
+
+| Document | Description |
+| -------- | ----------- |
+| [Bee routing](reference/bee-routing.md) | `subscribes` / `publishes`, Reactor, task vs direct dispatch |
+| [Insight kinds](reference/insight-kinds.md) | `INSIGHT` taxonomy and `{{.Insights}}` projection |
+| [Task ledger](reference/task-ledger.md) | `traceId` → `taskId` → `agentId`, task lifecycle |
+
+## Architecture
+
+| Document | Description |
+| -------- | ----------- |
+| [Overview](architecture/overview.md) | Adapters, run IPC, worktrees, package layout |
+
+## Plans
+
+| Document | Description |
+| -------- | ----------- |
+| [Changelog](plans/changelog.md) | Shipped features with links to specs and canonical docs |
+| [Specs index](plans/specs-index.md) | Short map of `docs/specs/` (bodies stay in the repo only) |
+| [Backlog](plans/backlog.md) | Deferred ideas and follow-ups |
 
 Russian index: [README-RU.md](README-RU.md).
 

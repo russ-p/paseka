@@ -1,3 +1,5 @@
+> Historic product brief (RU). Canonical short English entry: [Principles](principles.md). Shipped work and plans: [Changelog](../plans/changelog.md), [Specs index](../plans/specs-index.md).
+
 ## Product Brief: Хореографическая AI-система разработки (AI Swarm Development Kit)
 
 ### 1. Концепция продукта
@@ -32,7 +34,7 @@
 Человек встраивается в хореографию не как блокирующий шаг оркестратора, а как **«Агент-Судья» высшего уровня** через специальный UI-шлюз (Human Gateway):
 
 - **Асинхронное ревью**: Рой генерирует изменения в топик `mutation.code.proposal`, шлюз выводит разработчику Git Diff. Разработчик может апрувнуть его (коммит) или вбросить текстовый инсайт-коррекцию обратно в шину.
-- **Интерактивные сессии**: Для прямого диалога с агентом в рамках одной сессии — `paseka bee chat` (PTY, опционально Ghostty). См. [006-interactive-sessions.md](006-interactive-sessions.md).
+- **Интерактивные сессии**: Для прямого диалога с агентом в рамках одной сессии — `paseka bee chat` (PTY, опционально Ghostty). См. [interactive sessions](../guide/interactive-sessions.md).
 - **Управление энергией**: Возможность вручную добавить `energyToken` в затухающий процесс или принудительно погасить лавину споров агентов сигналом `system.kill`.
 - **Эффект «Тимлида»**: Разработчик может забросить абстрактную идею в шину и наблюдать за ходом дискуссии и эволюцией решений в фоновом режиме.
 

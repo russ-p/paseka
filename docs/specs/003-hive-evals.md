@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner, and at least two cases (`01-add-function`, `02-energy-exhausted`). Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [999-backlog.md](../999-backlog.md) § Eval colony gotchas.
+**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner, and at least two cases (`01-add-function`, `02-energy-exhausted`). Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [backlog](../plans/backlog.md) § Eval colony gotchas.
 
 Resolved since the original draft:
 
@@ -43,7 +43,7 @@ Relevant existing pieces:
 | Worktrees | `.paseka/worktrees/<traceId>/`, branch `paseka/<traceId>`, `BaseSHA` at create | Isolated mutation surface per case run |
 | Runs IPC | `.paseka/runs/<traceId>/<agentId>/` | Audit trail: prompts, events, status |
 | Task ledger | JetStream KV + `paseka task *` | Case work queue |
-| Routing | [008-bee-routing.md](../008-bee-routing.md) | `task.ready` → builder → `code.proposal` → guard → `verification.*` → builder |
+| Routing | [bee routing](../reference/bee-routing.md) | `task.ready` → builder → `code.proposal` → guard → `verification.*` → builder |
 | Honey reserve | `defaults.energy_budget` in `colony.yaml`; `TraceSnapshot.energyRemaining` in JetStream KV | Each dispatch consumes 1 token; exhausted traces block until `paseka energy add` |
 | Fixed trace | CLI `--trace` | Stable case identity across resets |
 | Purge | `paseka purge --runs --worktrees --state --bus --trace <traceId>` | Ephemeral cleanup between runs (bus wipe requires stopped reactor) |
@@ -345,17 +345,17 @@ Success criteria for the design:
 1. **Runner home** — today: standalone scripts in the eval colony. Promote to `paseka eval …` later?
 2. **Seed materialization** — copy `seed/` into colony root + commit each run (current runner) vs tags on a single eval-colony history?
 3. **Script bees** — **resolved:** first-class `adapter: script` in platform; eval colonies use script bees with `paseka event emit` for domain events.
-4. **JetStream wipe** — **resolved:** `paseka purge --bus --trace <traceId>` removes task-ledger KV, stream events, and object-store artifacts for one trace without restarting NATS. Stop `paseka run` before bus purge. See [007-cli.md](../007-cli.md) § `paseka purge`.
+4. **JetStream wipe** — **resolved:** `paseka purge --bus --trace <traceId>` removes task-ledger KV, stream events, and object-store artifacts for one trace without restarting NATS. Stop `paseka run` before bus purge. See [CLI](../guide/cli.md) § `paseka purge`.
 5. **Case language** — keep YAML only, or allow Markdown task bodies with YAML front matter?
 6. **Multi-sector cases** — defer until sectors are common in real colonies?
 7. **Event-chain scorer** — automate `expect_event_chain` against `paseka replay` (backlog follow-up).
 
 ## References
 
-- [003-architecture.md](../003-architecture.md) — colony layout, worktrees, runs IPC, script adapter
-- [005-task-ledger.md](../005-task-ledger.md) — trace / task / agent hierarchy
-- [007-cli.md](../007-cli.md) — `run`, `task`, `signal`, `replay`, `purge`
-- [008-bee-routing.md](../008-bee-routing.md) — builder/guard subscriptions
-- [010-bee-config.md](../010-bee-config.md) — `adapter: script` and bee schema
-- [001-brief.md](../001-brief.md) — event replay and energyToken vision
-- [999-backlog.md](../999-backlog.md) — eval colony gotchas and harness follow-ups
+- [architecture overview](../architecture/overview.md) — colony layout, worktrees, runs IPC, script adapter
+- [task ledger](../reference/task-ledger.md) — trace / task / agent hierarchy
+- [CLI](../guide/cli.md) — `run`, `task`, `signal`, `replay`, `purge`
+- [bee routing](../reference/bee-routing.md) — builder/guard subscriptions
+- [bee config](../guide/bee-config.md) — `adapter: script` and bee schema
+- [Brief](../idea/brief.md) — event replay and energyToken vision
+- [backlog](../plans/backlog.md) — eval colony gotchas and harness follow-ups

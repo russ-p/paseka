@@ -54,7 +54,7 @@ Reactor must not block on a PTY inside `paseka run`. Invites project state; acce
 
 ### 4. `auto_invites` is colony config, not bee `subscribes`
 
-Bee `subscribes` → AFK `Adapter.Run()`. `auto_invites` → pending `session.invite` only. Schema and behavior: [008-bee-routing.md](../008-bee-routing.md) §7–8.
+Bee `subscribes` → AFK `Adapter.Run()`. `auto_invites` → pending `session.invite` only. Schema and behavior: [bee routing](../reference/bee-routing.md) §7–8.
 
 ### 5. `done_when` is a per-invite completion contract
 
@@ -115,16 +115,16 @@ Persisted on the invite at publish time. When a bus event matches, reactor marks
 
 | Surface | Behavior |
 | ------- | -------- |
-| CLI | `paseka invite list\|record\|accept\|reject` — [007-cli.md](../007-cli.md) |
+| CLI | `paseka invite list\|record\|accept\|reject` — [CLI](../guide/cli.md) |
 | Console | Pending invites; accept starts detached session |
 | Energy | Accept costs 1 honey from trace reserve |
 | Config | `.paseka/colony.yaml` → `auto_invites` |
 
 ## Related docs
 
-- [006-interactive-sessions.md](../006-interactive-sessions.md) — `bee chat`, session attach
-- [008-bee-routing.md](../008-bee-routing.md) — `auto_invites` + `done_when` schema
-- [007-cli.md](../007-cli.md) — invite commands
+- [interactive sessions](../guide/interactive-sessions.md) — `bee chat`, session attach
+- [bee routing](../reference/bee-routing.md) — `auto_invites` + `done_when` schema
+- [CLI](../guide/cli.md) — invite commands
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — colony reference flow using this platform
 
 ## Verification

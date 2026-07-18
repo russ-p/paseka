@@ -213,5 +213,5 @@ Shipped in `internal/console` and AFK adapters:
 ## Related
 
 - [002-queen-console-mvp.md](./002-queen-console-mvp.md) — Queen Console baseline, runtime panel, projection rules
-- [006-interactive-sessions.md](../006-interactive-sessions.md) — session registry and PID handling
-- [003-architecture.md](../003-architecture.md) — adapter run dirs and colony state layout
+- [interactive sessions](../guide/interactive-sessions.md) — session registry and PID handling
+- [architecture overview](../architecture/overview.md) — adapter run dirs and colony state layout

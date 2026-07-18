@@ -2,9 +2,9 @@
 
 A **Nuc** is a single-file portable pack of shareable colony config: bee role YAML and prompt templates. Use it to move tuned bees and prompts between Colonies without copying secrets, adapters, or `colony.yaml`.
 
-Implementation: [`internal/nuc`](../internal/nuc/).
+Implementation: [`internal/nuc`](../../internal/nuc/).
 
-Related: [010-bee-config.md](010-bee-config.md), [004-prompt-templates.md](004-prompt-templates.md), [007-cli.md](007-cli.md).
+Related: [bee config](bee-config.md), [prompt templates](prompt-templates.md), [CLI](cli.md).
 
 ---
 

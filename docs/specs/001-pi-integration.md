@@ -47,7 +47,7 @@ Registration:
 - `internal/runtime/dispatch.go`
 - `internal/sessions/manager.go` (LLM adapters only)
 
-Bee configs select adapters through `.paseka/bees/<role>.yaml` via `adapter: …`, and adapter params are loaded through `internal/colony/params.go`. Canonical docs: [003-architecture.md](../003-architecture.md) §5.1, [006-interactive-sessions.md](../006-interactive-sessions.md) §8, [010-bee-config.md](../010-bee-config.md).
+Bee configs select adapters through `.paseka/bees/<role>.yaml` via `adapter: …`, and adapter params are loaded through `internal/colony/params.go`. Canonical docs: [architecture overview](../architecture/overview.md) §1, [interactive sessions](../guide/interactive-sessions.md) §8, [bee config](../guide/bee-config.md).
 
 ## Pi CLI Facts
 

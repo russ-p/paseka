@@ -2,7 +2,7 @@
 
 Paseka models a feature flow as a **trace** (`traceId`) containing one or more **tasks** (`taskId`). Each task may spawn one or more **agent runs** (`agentId`). The Task Ledger is the projected state of all tasks within a trace.
 
-Implementation: [`internal/protocol/task.go`](../internal/protocol/task.go), [`internal/taskledger`](../internal/taskledger/).
+Implementation: [`internal/protocol/task.go`](../../internal/protocol/task.go), [`internal/taskledger`](../../internal/taskledger/).
 
 ---
 
@@ -14,7 +14,7 @@ Implementation: [`internal/protocol/task.go`](../internal/protocol/task.go), [`i
 | `taskId` | One subtask within a trace | A unit of work in the task queue (nectar) |
 | `agentId` | One adapter invocation | A single bee run (Cursor CLI process) |
 
-Auto-generated `traceId` values use a compact time-ordered format: `trace-` + 16 lowercase hex chars (48-bit UTC ms + 16-bit random). Lexicographic sort matches creation order. Manual ids via `--trace` (e.g. `trace-auth-01`) are allowed and need not follow this layout. See [`internal/colony/traceid.go`](../internal/colony/traceid.go).
+Auto-generated `traceId` values use a compact time-ordered format: `trace-` + 16 lowercase hex chars (48-bit UTC ms + 16-bit random). Lexicographic sort matches creation order. Manual ids via `--trace` (e.g. `trace-auth-01`) are allowed and need not follow this layout. See [`internal/colony/traceid.go`](../../internal/colony/traceid.go).
 
 Relationship:
 
@@ -96,7 +96,7 @@ Human actions (CLI and Queen Console Reviews use the same domain flows):
 - `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework
 - `paseka task retry --trace <id> --task <id>` — re-publish `task.ready` for a `failed` or stuck `running` task (same bee, intent, body)
 
-For `review: final` / `_review`, Queen Console Reviews shows an accumulated worktree merge preview (`GET /api/traces/:traceId/merge-diff`) before approve. See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
+For `review: final` / `_review`, Queen Console Reviews shows an accumulated worktree merge preview (`GET /api/traces/:traceId/merge-diff`) before approve. See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ### Adapter failure
 
@@ -231,7 +231,7 @@ PRD (SIGNAL: feature.requested)
   → Trace merge gate completed
 ```
 
-**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md). Scout classify and Drone breakdown auto-complete on the ledger when they do not declare `code.proposal`. Drone grilling uses Human Gateway invites (not this defer gate). Scout classifies and must not emit `task.plan` for vague ideas; Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
+**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md). Scout classify and Drone breakdown auto-complete on the ledger when they do not declare `code.proposal`. Drone grilling uses Human Gateway invites (not this defer gate). Scout classifies and must not emit `task.plan` for vague ideas; Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
 
 ---
 
@@ -246,7 +246,7 @@ type Ledger interface {
 }
 ```
 
-**Current scope:** protocol types, pure reducer (`taskledger.ApplyEvent`), in-memory ledger for tests, and JetStream KV ledger (`taskledger.KVLedger`) used by `paseka run`. See [008-bee-routing.md](008-bee-routing.md) for declarative bee subscriptions.
+**Current scope:** protocol types, pure reducer (`taskledger.ApplyEvent`), in-memory ledger for tests, and JetStream KV ledger (`taskledger.KVLedger`) used by `paseka run`. See [bee routing](bee-routing.md) for declarative bee subscriptions.
 
 `ApplyResult.Ready` lists tasks that newly transitioned to `ready` after applying an event — the hook for a future scheduler to dispatch the next bee.
 
@@ -284,14 +284,14 @@ The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/
 
 The hive runtime updates this projection after `ledger.Apply(...)` and when task-queue dispatches start or finish.
 
-For human-friendly task injection from the CLI, use `paseka task create` to publish `task.plan` (and optionally `task.ready` with `--autorun`). See [007-cli.md](007-cli.md).
+For human-friendly task injection from the CLI, use `paseka task create` to publish `task.plan` (and optionally `task.ready` with `--autorun`). See [CLI](../guide/cli.md).
 
 ---
 
 ## 7. Related docs
 
-- [003-architecture.md](003-architecture.md) — colony layout, adapter contract, worktrees
-- [004-prompt-templates.md](004-prompt-templates.md) — template variables including `TaskID`
-- [002-paseka-glossary.md](002-paseka-glossary.md) — Task/Nectar, TraceID/Flight Trail
-- [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md) — Reviews UI and merge-diff preview
-- [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md) — classify → invite → grilling → `spec.ready` → breakdown before ledger work
+- [architecture overview](../architecture/overview.md) — colony layout, adapter contract, worktrees
+- [prompt templates](../guide/prompt-templates.md) — template variables including `TaskID`
+- [glossary](../idea/glossary.md) — Task/Nectar, TraceID/Flight Trail
+- [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md) — Reviews UI and merge-diff preview
+- [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) — classify → invite → grilling → `spec.ready` → breakdown before ledger work

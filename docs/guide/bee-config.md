@@ -2,9 +2,9 @@
 
 A **bee** is a named role bound to an adapter, prompt template, and optional routing / completion rules. Each file under `.paseka/bees/` defines one role.
 
-Implementation: [`internal/colony/bee.go`](../internal/colony/bee.go) (`Bee` struct, `LoadBee`), plus [`command.go`](../internal/colony/command.go), [`params.go`](../internal/colony/params.go), [`routing.go`](../internal/colony/routing.go), [`run_summary.go`](../internal/colony/run_summary.go), [`completion.go`](../internal/colony/completion.go), [`bee_validate.go`](../internal/colony/bee_validate.go).
+Implementation: [`internal/colony/bee.go`](../../internal/colony/bee.go) (`Bee` struct, `LoadBee`), plus [`command.go`](../../internal/colony/command.go), [`params.go`](../../internal/colony/params.go), [`routing.go`](../../internal/colony/routing.go), [`run_summary.go`](../../internal/colony/run_summary.go), [`completion.go`](../../internal/colony/completion.go), [`bee_validate.go`](../../internal/colony/bee_validate.go).
 
-Related: [008-bee-routing.md](008-bee-routing.md) (`subscribes` / `publishes`), [004-prompt-templates.md](004-prompt-templates.md), [003-architecture.md](003-architecture.md) (adapters, colony layout).
+Related: [bee routing](../reference/bee-routing.md) (`subscribes` / `publishes`), [prompt templates](prompt-templates.md), [architecture overview](../architecture/overview.md) (adapters, colony layout).
 
 ---
 
@@ -28,7 +28,7 @@ Related: [008-bee-routing.md](008-bee-routing.md) (`subscribes` / `publishes`), 
 1. Role must be non-empty and must not contain `/` or `..`.
 2. Base file is `.paseka/bees/<role>.yaml` (filename stem = role when `role:` is omitted).
 3. Event rules, `run_summary`, and adapter requirements are validated at load time.
-4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [004-prompt-templates.md](004-prompt-templates.md)).
+4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [prompt templates](prompt-templates.md)).
 
 `*.local.yaml` files are listed in `.paseka/.gitignore` and are skipped by `LoadAllBees`.
 
@@ -65,7 +65,7 @@ type Bee struct {
 | `role` | recommended | Role name. If empty, defaults to the filename stem (`builder.yaml` → `builder`). |
 | `adapter` | no | `cursor` (default), `pi`, `claude`, or `script`. Unknown names fail load. |
 | `prompt_template` | usually | Path relative to `.paseka/prompts/`. User/task turn. Optional for `adapter: script` (no colony default applied when omitted). |
-| `system_template` | no | Path relative to `.paseka/prompts/`. Role / standing instructions injected by the adapter (see [004-prompt-templates.md](004-prompt-templates.md)). |
+| `system_template` | no | Path relative to `.paseka/prompts/`. Role / standing instructions injected by the adapter (see [prompt templates](prompt-templates.md)). |
 | `sector` | no | Default sector name from `colony.yaml` `sectors`. Task `sector` wins when set. |
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
 | `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
@@ -73,7 +73,7 @@ type Bee struct {
 | `params` | no | Adapter flag map (`model`, `trust`, …). Ignored when `command` is set (runtime warns if both are present). |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |
-| `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [008-bee-routing.md](008-bee-routing.md). |
+| `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [bee routing](../reference/bee-routing.md). |
 | `publishes` | no | Advisory expected outputs; undeclared domain publishes warn only (MVP). |
 | `completion_contract` | no | Hard post-run event requirements; violation fails the run. |
 | `run_summary` | no | `auto` (default) \| `required` \| `disabled` — controls `INSIGHT/run.summary` synthesis/enforcement. |
@@ -175,7 +175,7 @@ publishes:
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
 
-Adapter drivers and flag mapping live in [003-architecture.md](003-architecture.md) §5. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
+Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
 
 Script bee example:
 
@@ -278,7 +278,7 @@ Subscriber mismatches (`guard` with `worktree: false`, `main-guard` with `worktr
 
 Fail closed: empty / missing `publishes` must **not** auto-publish mutations.
 
-Colony sector definitions remain in [003-architecture.md](003-architecture.md).
+Colony sector definitions remain in [architecture overview](../architecture/overview.md).
 
 ---
 
@@ -292,7 +292,7 @@ Controls runtime handling of `INSIGHT/run.summary`:
 | `required` | Run fails if no summary event is present after the adapter exits |
 | `disabled` | No synthesis; useful for script / oracle bees |
 
-Invalid values fail bee load. See also [008-bee-routing.md](008-bee-routing.md) §5 and [009-insight-kinds.md](009-insight-kinds.md).
+Invalid values fail bee load. See also [bee routing](../reference/bee-routing.md) §5 and [insight kinds](../reference/insight-kinds.md).
 
 ---
 
@@ -316,13 +316,13 @@ completion_contract:
 | `kind_one_of` | Allowed `payload.kind` values (required, non-empty) |
 | `count` | Exact match count among those kinds (default `1`) |
 
-Narrative INSIGHTs do not satisfy contracts unless listed. Full routing semantics: [008-bee-routing.md](008-bee-routing.md) §6.
+Narrative INSIGHTs do not satisfy contracts unless listed. Full routing semantics: [bee routing](../reference/bee-routing.md) §6.
 
 ---
 
 ## 10. Routing fields (`subscribes` / `publishes`)
 
-Documented in [008-bee-routing.md](008-bee-routing.md). Summary:
+Documented in [bee routing](../reference/bee-routing.md). Summary:
 
 - `subscribes[].dispatch`: `task` (task-ledger) or `direct` (reactor runs the bee on the event).
 - Empty `subscribes` → any `task.ready` dispatch allowed.
@@ -335,7 +335,7 @@ Documented in [008-bee-routing.md](008-bee-routing.md). Summary:
 
 ## 11. Prompt template resolution
 
-Precedence (highest wins), from [004-prompt-templates.md](004-prompt-templates.md):
+Precedence (highest wins), from [prompt templates](prompt-templates.md):
 
 1. Inline `prompt:` / CLI `--prompt`
 2. `bees/<role>.local.yaml` → `prompt_template`

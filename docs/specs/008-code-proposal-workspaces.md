@@ -4,7 +4,7 @@
 
 **Implemented** (grilling decisions locked). Design for splitting automatic `MUTATION` code proposals by workspace provenance so worktree review and colony-root config/docs edits do not cross-contaminate.
 
-Backlog: [999-backlog.md](../999-backlog.md) — *Split `code.proposal` by workspace* (**shipped**; see Recently shipped).
+Shipped — see [Changelog](../plans/changelog.md). Deferred follow-ups: [Backlog](../plans/backlog.md).
 
 ## Purpose
 
@@ -80,7 +80,7 @@ flowchart TD
 | 4 | `guard` (`worktree: true`) is direct-dispatched | `worktree.Ensure` from `HEAD` |
 | 5 | Guard reviews disk in clean worktree | Diff lived on root; WT empty → false rejects / confusion |
 
-Happy path in [003-architecture.md](../003-architecture.md) assumes proposal and guard share the same trace worktree. That must become an **enforceable** invariant for isolated proposals.
+Happy path in [architecture overview](../architecture/overview.md) assumes proposal and guard share the same trace worktree. That must become an **enforceable** invariant for isolated proposals.
 
 ## Current System Context
 
@@ -88,9 +88,9 @@ Happy path in [003-architecture.md](../003-architecture.md) assumes proposal and
 | --------- | -------- | ----- |
 | Diff capture | `internal/adapters` + `gitdiff.go` | Post-run `git diff HEAD` in `req.Workspace` (tracked changes only) |
 | Auto mutation | `internal/runtime/publish.go` | Always `kind: code.proposal` today |
-| Eligibility | `ShouldAutoPublishMutation` / bee `publishes` | [008-bee-routing.md](../008-bee-routing.md) §5 |
+| Eligibility | `ShouldAutoPublishMutation` / bee `publishes` | [bee routing](../reference/bee-routing.md) §5 |
 | Worktree ensure | `internal/worktree`, colony dispatch | Path `.paseka/worktrees/<traceId>/`, branch `paseka/<traceId>` from `HEAD` |
-| Sector | [003-architecture.md](../003-architecture.md) | Optional cwd under root or under worktree |
+| Sector | [architecture overview](../architecture/overview.md) | Optional cwd under root or under worktree |
 | Guard | `.paseka/bees/guard.yaml` | `subscribes: MUTATION/code.proposal`, `worktree: true` |
 | Hivewright | `.paseka/bees/hivewright.yaml` | Live colony: `worktree: false` + `code.proposal` |
 | main-guard | `.paseka/bees/main-guard.yaml` | `worktree: false`; publishes `review.note`; **not** subscribed to proposals yet |
@@ -149,7 +149,7 @@ Direct dispatch for a proposal must set adapter cwd to the **same workspace clas
 
 - Prompt/task context may embed summary + truncated diff for UX; review truth is **disk** (`git diff` in workspace).
 - Update guard prompts that say `git diff --staged` to match actual capture (`git diff` / workspace dirty state) in the same implementation pass.
-- Rework-cycle duplicate suppression ([008-bee-routing.md](../008-bee-routing.md) §4) keys by event identity for **both** proposal kinds (and alias), so each publisher→reviewer pass can run again on the same task.
+- Rework-cycle duplicate suppression ([bee routing](../reference/bee-routing.md) §4) keys by event identity for **both** proposal kinds (and alias), so each publisher→reviewer pass can run again on the same task.
 
 ### 6. Do not materialize root diffs into a worktree
 
@@ -401,21 +401,21 @@ on paseka proposal approve / Console approve:
 
 Canonical docs updated in migration step 8:
 
-- [003-architecture.md](../003-architecture.md) — worktree flow + dual proposal paths
-- [008-bee-routing.md](../008-bee-routing.md) — kinds, direct path table, AFK defer scope, alias matching
-- [010-bee-config.md](../010-bee-config.md) — `publishes` examples, invariants
-- [005-task-ledger.md](../005-task-ledger.md) — root soft gate vs isolated merge gate
-- [007-cli.md](../007-cli.md) — `proposal approve` R1 vs merge
-- [004-prompt-templates.md](../004-prompt-templates.md) — stop saying “staged diffs only”; guard prompt disk review
-- [009-insight-kinds.md](../009-insight-kinds.md) — MUTATION kind table if it lists `code.proposal`
+- [architecture overview](../architecture/overview.md) — worktree flow + dual proposal paths
+- [bee routing](../reference/bee-routing.md) — kinds, direct path table, AFK defer scope, alias matching
+- [bee config](../guide/bee-config.md) — `publishes` examples, invariants
+- [task ledger](../reference/task-ledger.md) — root soft gate vs isolated merge gate
+- [CLI](../guide/cli.md) — `proposal approve` R1 vs merge
+- [prompt templates](../guide/prompt-templates.md) — stop saying “staged diffs only”; guard prompt disk review
+- [insight kinds](../reference/insight-kinds.md) — MUTATION kind table if it lists `code.proposal`
 - Init bee templates under `internal/colony` / `.paseka/bees/`
 - Topology examples in [007-colony-eda-topology.md](./007-colony-eda-topology.md)
 
 ## References
 
-- [003-architecture.md](../003-architecture.md) — adapter workspace, worktree merge flow, sectors
-- [008-bee-routing.md](../008-bee-routing.md) — publishes / direct dispatch / AFK defer
-- [010-bee-config.md](../010-bee-config.md) — bee YAML knobs
-- [005-task-ledger.md](../005-task-ledger.md) — review gates and `waiting_review`
-- [007-cli.md](../007-cli.md) — `paseka proposal approve|reject`
-- [999-backlog.md](../999-backlog.md) — deferred item + worktrees-from-`HEAD` gotcha
+- [architecture overview](../architecture/overview.md) — adapter workspace, worktree merge flow, sectors
+- [bee routing](../reference/bee-routing.md) — publishes / direct dispatch / AFK defer
+- [bee config](../guide/bee-config.md) — bee YAML knobs
+- [task ledger](../reference/task-ledger.md) — review gates and `waiting_review`
+- [CLI](../guide/cli.md) — `paseka proposal approve|reject`
+- [backlog](../plans/backlog.md) — deferred item + worktrees-from-`HEAD` gotcha

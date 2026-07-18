@@ -101,7 +101,7 @@ Code proposals use `MUTATION` with explicit workspace provenance. They drive dir
 | `code.proposal.root` | Colony root (+ sector) | `hivewright` (`worktree: false`) | `main-guard` (`worktree: false`) |
 | `code.proposal` (alias) | Same as isolated | Legacy YAML | Matches isolated subscribers |
 
-Bare `code.proposal` is normalized to `code.proposal.isolated` on auto-publish write. Payload may include `workspace`, `baseSha`, `worktreePath` (isolated), `sector`, `diff` / `ref`, `summary`, `taskId`. See [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md).
+Bare `code.proposal` is normalized to `code.proposal.isolated` on auto-publish write. Payload may include `workspace`, `baseSha`, `worktreePath` (isolated), `sector`, `diff` / `ref`, `summary`, `taskId`. See [specs/008-code-proposal-workspaces.md](../specs/008-code-proposal-workspaces.md).
 
 ---
 
@@ -116,7 +116,7 @@ Workflow handoff remains `VERIFICATION`-driven:
 | `VERIFICATION/verification.failed` | `builder` | failure summary for fix-up |
 | `VERIFICATION/verification.success` | `receiver` (isolated defer) or ledger (root `review: required`) | approval / soft-gate advance |
 
-See [008-bee-routing.md](008-bee-routing.md).
+See [bee routing](bee-routing.md).
 
 ---
 
@@ -142,7 +142,7 @@ The `guard` bee requires exactly one `VERIFICATION` gate decision per run.
 
 ## Related docs
 
-- [003-architecture.md](003-architecture.md) — adapter contract and runs layout
-- [004-prompt-templates.md](004-prompt-templates.md) — template fields and partials
-- [005-task-ledger.md](005-task-ledger.md) — `task.plan` lifecycle
-- [008-bee-routing.md](008-bee-routing.md) — direct dispatch and advisory publishes
+- [architecture overview](../architecture/overview.md) — adapter contract and runs layout
+- [prompt templates](../guide/prompt-templates.md) — template fields and partials
+- [task ledger](task-ledger.md) — `task.plan` lifecycle
+- [bee routing](bee-routing.md) — direct dispatch and advisory publishes

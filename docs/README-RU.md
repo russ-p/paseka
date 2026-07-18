@@ -1,21 +1,47 @@
 # Документация Paseka
 
-Индекс основных документов. Спецификации фич (`specs/`) сюда не входят.
+Документы сгруппированы по глубине погружения. Спеки фич (`specs/`) **не** публикуются на сайте; см. [индекс спек](plans/specs-index.md).
+
+## Идея и принципы
 
 | Документ | Описание |
 | -------- | -------- |
-| [001-brief.md](001-brief.md) | Продуктовый бриф: концепция хореографического AI-роя, EDA-контракты, `traceId` / `energyToken`, стек (NATS + JetStream), HITL и шаги MVP |
-| [002-paseka-glossary.md](002-paseka-glossary.md) | Bee-глоссарий: брендинг, пользовательские термины, роли агентов и словарь доменной модели |
-| [003-architecture.md](003-architecture.md) | Архитектура колонии: `.paseka/` и machine-local конфиг, `paseka init`, адаптеры, worktree-поток, раскладка пакетов |
-| [004-prompt-templates.md](004-prompt-templates.md) | Шаблоны промптов в `.paseka/prompts/`: `text/template`, partials, переменные контекста и рендер при диспатче |
-| [005-task-ledger.md](005-task-ledger.md) | Task Ledger: связь `traceId` → `taskId` → `agentId`, жизненный цикл задач и проекция состояния трейса |
-| [006-interactive-sessions.md](006-interactive-sessions.md) | Интерактивные HITL-сессии: `bee chat`, SessionAdapter + PTY, реестр сессий и attach через Ghostty |
-| [007-cli.md](007-cli.md) | Справочник Queen Shell (`paseka`): команды init/run/status, bee run/chat, console, energy и прочий CLI |
-| [008-bee-routing.md](008-bee-routing.md) | Маршрутизация пчёл: `subscribes` / `publishes`, Reactor, task vs direct dispatch |
-| [009-insight-kinds.md](009-insight-kinds.md) | Таксономия `INSIGHT`: отличие от `VERIFICATION`, виды payload и проекция в `{{.Insights}}` |
-| [010-bee-config.md](010-bee-config.md) | Конфиг роли пчелы (`.paseka/bees/<role>.yaml`): схема, адаптеры, `command` / `post_exec`, params, контракты |
-| [011-nuc.md](011-nuc.md) | Nuc — переносимые пакеты пчёл: export/import bees и prompts между Colony |
-| [999-backlog.md](999-backlog.md) | Отложенные идеи и follow-up'ы вне текущего MVP |
+| [Principles](idea/principles.md) | Хореография, контракты, honey, HITL, colony vs machine |
+| [Glossary](idea/glossary.md) | Bee-глоссарий и доменный словарь |
+| [Brief (RU)](idea/brief.md) | Исторический продуктовый бриф |
+
+## Использование
+
+| Документ | Описание |
+| -------- | -------- |
+| [Colony layout](guide/colony-layout.md) | `.paseka/` и machine-local конфиг, slug, `paseka init` |
+| [CLI](guide/cli.md) | Справочник Queen Shell (`paseka`) |
+| [Bee config](guide/bee-config.md) | YAML роли пчелы, адаптеры, routing |
+| [Prompt templates](guide/prompt-templates.md) | `.paseka/prompts/`, `text/template`, partials |
+| [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |
+| [Nuc packs](guide/nuc.md) | Переносимые пакеты bees + prompts |
+
+## Справочник
+
+| Документ | Описание |
+| -------- | -------- |
+| [Bee routing](reference/bee-routing.md) | `subscribes` / `publishes`, Reactor, task vs direct |
+| [Insight kinds](reference/insight-kinds.md) | Таксономия `INSIGHT` и `{{.Insights}}` |
+| [Task ledger](reference/task-ledger.md) | `traceId` → `taskId` → `agentId`, жизненный цикл |
+
+## Архитектура
+
+| Документ | Описание |
+| -------- | -------- |
+| [Overview](architecture/overview.md) | Адаптеры, run IPC, worktrees, раскладка пакетов |
+
+## Планы
+
+| Документ | Описание |
+| -------- | -------- |
+| [Changelog](plans/changelog.md) | Сделанное: ссылки на specs и канонические docs |
+| [Specs index](plans/specs-index.md) | Краткая карта `docs/specs/` (тела только в репо) |
+| [Backlog](plans/backlog.md) | Отложенные идеи и follow-up'ы |
 
 Английский индекс: [README.md](README.md).
 

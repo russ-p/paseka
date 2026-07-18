@@ -134,11 +134,11 @@ Dispatch one bee — a single non-interactive adapter invocation (AFK run).
 | `--path` | `-C` | | Colony resolution start directory |
 | `--no-bus` | | | Skip NATS publish (file-only run) |
 
-\* Provide `--task` or `--prompt` for LLM bees. Script bees (`adapter: script`) do not require a prompt; they run the bee's `command:` and receive runtime context via `PASEKA_*` env vars (see [003-architecture.md](003-architecture.md) § Script adapter).
+\* Provide `--task` or `--prompt` for LLM bees. Script bees (`adapter: script`) do not require a prompt; they run the bee's `command:` and receive runtime context via `PASEKA_*` env vars (see [architecture overview](../architecture/overview.md) § Script adapter).
 
 **Behavior:**
 
-- Renders prompt from `.paseka/prompts/` (see [004-prompt-templates.md](004-prompt-templates.md))
+- Renders prompt from `.paseka/prompts/` (see [prompt templates](prompt-templates.md))
 - Writes run artifacts to `.paseka/runs/<traceId>/<agentId>/`
 - Builder bees with `worktree: true` run in `.paseka/worktrees/<traceId>/`
 - Publishes domain events (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`) to NATS when configured
@@ -171,7 +171,7 @@ Start an interactive human-in-the-loop session in a long-lived agent process.
 
 \* Provide a positional prompt, `--task`, or `--prompt`.
 
-See [006-interactive-sessions.md](006-interactive-sessions.md) for session architecture and Ghostty attach.
+See [interactive sessions](interactive-sessions.md) for session architecture and Ghostty attach.
 
 ```bash
 paseka bee chat scout "Discuss the auth design"
@@ -221,7 +221,7 @@ Start the long-running **Hive Runtime** — a NATS reactor that subscribes to co
 
 **Requires:** NATS with JetStream (`nats.url` in home config).
 
-Runs until interrupted (`Ctrl+C`). On `SIGNAL` / `task.ready` events, dispatches the configured bee and publishes resulting domain events. See [005-task-ledger.md](005-task-ledger.md).
+Runs until interrupted (`Ctrl+C`). On `SIGNAL` / `task.ready` events, dispatches the configured bee and publishes resulting domain events. See [task ledger](../reference/task-ledger.md).
 
 ```bash
 # Terminal 1
@@ -394,7 +394,7 @@ paseka signal --type SIGNAL --trace trace-1 \
   --payload '{"kind":"task.ready","taskId":"task-1","bee":"builder"}'
 ```
 
-Event contracts: [005-task-ledger.md](005-task-ledger.md), `.paseka/prompts/_partials/emit-howto.md` and type-scoped emit partials.
+Event contracts: [task ledger](../reference/task-ledger.md), `.paseka/prompts/_partials/emit-howto.md` and type-scoped emit partials.
 
 ---
 
@@ -489,13 +489,13 @@ paseka colony topology --out docs/colony-topology.mmd
 paseka colony topology -C /path/to/repo
 ```
 
-See [specs/007-colony-eda-topology.md](specs/007-colony-eda-topology.md) for graph semantics (subscribe/publish/invite edges, implicit `task.ready`, intent annotations).
+See [specs/007-colony-eda-topology.md](../specs/007-colony-eda-topology.md) for graph semantics (subscribe/publish/invite edges, implicit `task.ready`, intent annotations).
 
 ---
 
 ## `paseka nuc`
 
-Export and import portable **Nuc** packs (bee YAML + prompts) between Colonies. Full format and conflict policy: [011-nuc.md](011-nuc.md).
+Export and import portable **Nuc** packs (bee YAML + prompts) between Colonies. Full format and conflict policy: [nuc](nuc.md).
 
 ### `paseka nuc export`
 
@@ -547,7 +547,7 @@ paseka console --addr 127.0.0.1:8787
 
 Open the printed URL in a browser. Queen Console does not enforce authentication yet.
 
-Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) it shows a side-by-side worktree merge preview before approve. Prefer previewing there, then approve via the UI or `paseka proposal approve`. Full baseline: [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
+Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) it shows a side-by-side worktree merge preview before approve. Prefer previewing there, then approve via the UI or `paseka proposal approve`. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ---
 
@@ -697,9 +697,9 @@ paseka session stop <sessionId>
 
 ### Feature ideation (soft path)
 
-Manual Phase 0 flow for raw ideas → spec → task ledger. See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
+Manual Phase 0 flow for raw ideas → spec → task ledger. See [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md).
 
-Ideation `SIGNAL` kinds (`feature.requested`, `feature.classified`, `spec.ready`) are **colony choreography contracts** — field shapes are defined in the ideation spec and bee emit partials, not enforced by `internal/protocol`. Platform HITL kinds (`session.invite`, `beekeeper.ready`) are documented in [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
+Ideation `SIGNAL` kinds (`feature.requested`, `feature.classified`, `spec.ready`) are **colony choreography contracts** — field shapes are defined in the ideation spec and bee emit partials, not enforced by `internal/protocol`. Platform HITL kinds (`session.invite`, `beekeeper.ready`) are documented in [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md).
 
 ```bash
 TRACE=trace-$(date +%s)
@@ -732,7 +732,7 @@ Invite statuses: `pending`, `accepted`, `completed`, `incomplete`, `cancelled`, 
 
 Seed offline with `invite record`, or configure **`auto_invites`** in `.paseka/colony.yaml` so `paseka run` auto-publishes when a matching bus event arrives. With empty `auto_invites`, no auto-invite runs. Accept publishes `beekeeper.ready` and starts an interactive session on the **same** `traceId`.
 
-See [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md) and [008-bee-routing.md](008-bee-routing.md) §7–8.
+See [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) and [bee routing](../reference/bee-routing.md) §7–8.
 
 ---
 
@@ -740,10 +740,10 @@ See [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md) and
 
 | Doc | Topic |
 | --- | ----- |
-| [001-brief.md](001-brief.md) | Product vision, EDA, NATS role |
-| [003-architecture.md](003-architecture.md) | Colony layout, adapters, runs IPC |
-| [004-prompt-templates.md](004-prompt-templates.md) | Prompt template resolution |
-| [005-task-ledger.md](005-task-ledger.md) | Task lifecycle events on the bus |
-| [006-interactive-sessions.md](006-interactive-sessions.md) | `bee chat`, sessions, Ghostty |
-| [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md) | Feature ideation soft path (classify → grill → breakdown) |
-| [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md) | Session invites, auto_invites, done_when |
+| [Brief](../idea/brief.md) | Product vision, EDA, NATS role |
+| [architecture overview](../architecture/overview.md) | Colony layout, adapters, runs IPC |
+| [prompt templates](prompt-templates.md) | Prompt template resolution |
+| [task ledger](../reference/task-ledger.md) | Task lifecycle events on the bus |
+| [interactive sessions](interactive-sessions.md) | `bee chat`, sessions, Ghostty |
+| [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) | Feature ideation soft path (classify → grill → breakdown) |
+| [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) | Session invites, auto_invites, done_when |

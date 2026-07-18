@@ -69,15 +69,24 @@ validation:
 nav:
   - Home: README.md
   - Индекс (RU): README-RU.md
-  - Guides:
-      - Brief: 001-brief.md
-      - Glossary: 002-paseka-glossary.md
-      - Architecture: 003-architecture.md
-      - Prompt templates: 004-prompt-templates.md
-      - Task ledger: 005-task-ledger.md
-      - Interactive sessions: 006-interactive-sessions.md
-      - CLI: 007-cli.md
-      - Bee routing: 008-bee-routing.md
-      - Insight kinds: 009-insight-kinds.md
-      - Bee config: 010-bee-config.md
-      - Backlog: 999-backlog.md
+  - Idea & principles:
+      - Principles: idea/principles.md
+      - Glossary: idea/glossary.md
+      - Brief (RU): idea/brief.md
+  - Using Paseka:
+      - Colony layout: guide/colony-layout.md
+      - CLI: guide/cli.md
+      - Bee config: guide/bee-config.md
+      - Prompt templates: guide/prompt-templates.md
+      - Interactive sessions: guide/interactive-sessions.md
+      - Nuc packs: guide/nuc.md
+  - Reference:
+      - Bee routing: reference/bee-routing.md
+      - Insight kinds: reference/insight-kinds.md
+      - Task ledger: reference/task-ledger.md
+  - Architecture:
+      - Overview: architecture/overview.md
+  - Plans:
+      - Changelog: plans/changelog.md
+      - Specs index: plans/specs-index.md
+      - Backlog: plans/backlog.md

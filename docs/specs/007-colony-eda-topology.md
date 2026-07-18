@@ -16,7 +16,7 @@ This is an **observability** surface — not a second orchestrator and not a YAM
 
 - Answer “what *can* happen in this colony?” from declarative config alone.
 - Show bee `subscribes` / `publishes` and colony `auto_invites` on one bipartite graph.
-- Keep `intent` as **prompt vocabulary annotation**, never as routing nodes/edges ([008-bee-routing.md](../008-bee-routing.md) §1, §7).
+- Keep `intent` as **prompt vocabulary annotation**, never as routing nodes/edges ([bee routing](../reference/bee-routing.md) §1, §7).
 - Ship one Go projection consumed by Console API and CLI (single source of truth for Mermaid text).
 - Remain useful when `paseka run` / NATS are down (filesystem colony config only).
 
@@ -35,8 +35,8 @@ This is an **observability** surface — not a second orchestrator and not a YAM
 | Primitive | Location / behavior | Topology use |
 | --------- | ------------------- | ------------ |
 | Bee routing | `.paseka/bees/*.yaml` → `colony.LoadAllBees`, `SubscriptionRule`, `PublicationRule` | Bee↔event edges |
-| Implicit subscribe | Empty `subscribes` ⇒ any `task.ready` allowed ([008](../008-bee-routing.md) §2) | Synthetic implicit edge |
-| `auto_invites` | `.paseka/colony.yaml` ([008](../008-bee-routing.md) §7) | Invite-styled edges (not AFK dispatch) |
+| Implicit subscribe | Empty `subscribes` ⇒ any `task.ready` allowed ([008](../reference/bee-routing.md) §2) | Synthetic implicit edge |
+| `auto_invites` | `.paseka/colony.yaml` ([008](../reference/bee-routing.md) §7) | Invite-styled edges (not AFK dispatch) |
 | Intent vocabulary | Bee YAML / `_partials/<role>-intent-*.md` via `prompts.DiscoverIntents` | Annotations on bee nodes + invite edge labels |
 | `GET /api/bees` | `BeeView`: role, adapter, intents only | **Insufficient** — no `subscribes`/`publishes` |
 | Console SPA | Vendored `xterm`, `diff2html`, `cytoscape` | Topology tab renders structured graph; copy Mermaid available |
@@ -235,12 +235,12 @@ Not a task plan — guidance for breakdown only:
 3. CLI: `paseka colony topology` (or equivalent under existing colony commands).
 4. SPA: Topology tab + vendored cytoscape.js; copy Mermaid source control.
 5. Tests: fixture colony → golden edges / Mermaid; handler smoke test.
-6. Docs: short link from [008](../008-bee-routing.md) / Console MVP; no duplication of routing semantics.
+6. Docs: short link from [008](../reference/bee-routing.md) / Console MVP; no duplication of routing semantics.
 
 ## Related docs
 
-- [008-bee-routing.md](../008-bee-routing.md) — `subscribes` / `publishes`, `auto_invites`, role vs intent
-- [010-bee-config.md](../010-bee-config.md) — bee YAML schema
+- [bee routing](../reference/bee-routing.md) — `subscribes` / `publishes`, `auto_invites`, role vs intent
+- [bee config](../guide/bee-config.md) — bee YAML schema
 - [002-queen-console-mvp.md](./002-queen-console-mvp.md) — Console observability baseline
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — invite-heavy choreography example
 - [006-human-gateway-invites.md](./006-human-gateway-invites.md) — invite lifecycle (not redrawn as ledger)

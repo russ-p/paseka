@@ -370,7 +370,7 @@ Cross-process attach (session started by another `paseka` process or Ghostty win
 
 #### 8. Topology
 
-The Topology tab renders a **static, config-derived** EDA graph: bee nodes, event-kind nodes, subscribe/publish edges, and `auto_invites` invite edges. Data comes from `GET /api/colony/topology` (same projection as `paseka colony topology`). The SPA renders the structured `bees` / `events` / `edges` payload with vendored cytoscape.js (pan/zoom). Routing semantics live in [008](../008-bee-routing.md); graph shape and API are specified in [007](./007-colony-eda-topology.md).
+The Topology tab renders a **static, config-derived** EDA graph: bee nodes, event-kind nodes, subscribe/publish edges, and `auto_invites` invite edges. Data comes from `GET /api/colony/topology` (same projection as `paseka colony topology`). The SPA renders the structured `bees` / `events` / `edges` payload with vendored cytoscape.js (pan/zoom). Routing semantics live in [008](../reference/bee-routing.md); graph shape and API are specified in [007](./007-colony-eda-topology.md).
 
 This page answers:
 
@@ -678,7 +678,7 @@ Includes:
 - copy Mermaid source control
 - config-only projection (no NATS/`paseka run` required)
 
-See [007](./007-colony-eda-topology.md) for graph semantics; [008](../008-bee-routing.md) remains the routing deep-dive.
+See [007](./007-colony-eda-topology.md) for graph semantics; [008](../reference/bee-routing.md) remains the routing deep-dive.
 
 ### 11. Cross-Process Browser Attach (Deferred)
 

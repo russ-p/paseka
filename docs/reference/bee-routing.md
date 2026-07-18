@@ -2,9 +2,9 @@
 
 Declarative `subscribes` and `publishes` in `.paseka/bees/<role>.yaml` describe how bees participate in choreographed bus flows without giving each bee its own NATS consumer.
 
-Implementation: [`internal/colony/routing.go`](../internal/colony/routing.go), [`internal/runtime/reactor.go`](../internal/runtime/reactor.go).
+Implementation: [`internal/colony/routing.go`](../../internal/colony/routing.go), [`internal/runtime/reactor.go`](../../internal/runtime/reactor.go).
 
-For a static graph of how these rules connect in your colony config, see [spec 007: Colony EDA Topology](specs/007-colony-eda-topology.md) (Queen Console **Topology** tab and `paseka colony topology`) — observability only; routing semantics remain in this doc.
+For a static graph of how these rules connect in your colony config, see [spec 007: Colony EDA Topology](../specs/007-colony-eda-topology.md) (Queen Console **Topology** tab and `paseka colony topology`) — observability only; routing semantics remain in this doc.
 
 ---
 
@@ -94,7 +94,7 @@ Bees **without** `subscribes` behave as before: any `task.ready` dispatch is all
 
 ## 3. NATS subject mapping
 
-Subjects follow [`internal/bus/subject.go`](../internal/bus/subject.go):
+Subjects follow [`internal/bus/subject.go`](../../internal/bus/subject.go):
 
 ```text
 <prefix>.events.<EventType>[.<payload.kind>]
@@ -148,7 +148,7 @@ flowchart LR
    - Else if a colony bee explicitly declares `publishes: VERIFICATION/task.completed` **and** this run opened an **isolated** `code.proposal` (emitted `code.proposal.isolated` / alias, or non-empty diff with explicit isolated publish on the dispatched bee), set `waiting_review` and wait for the commit-gate publisher (typically receiver).
    - Else runtime publishes `VERIFICATION/task.completed` (fallback for scout, no-diff runs, colonies without a commit-gate publisher).
 
-**AFK defer scope:** only **isolated** proposals (`code.proposal.isolated` and alias) open the receiver commit-gate defer. `code.proposal.root` does **not** defer AFK completion — root human review uses the soft-ack path when `review: required` (see [005-task-ledger.md](005-task-ledger.md)).
+**AFK defer scope:** only **isolated** proposals (`code.proposal.isolated` and alias) open the receiver commit-gate defer. `code.proposal.root` does **not** defer AFK completion — root human review uses the soft-ack path when `review: required` (see [task ledger](task-ledger.md)).
 
 ### Direct path
 
@@ -173,7 +173,7 @@ After an adapter run, `Dispatcher.publishRunOutcome` compares emitted domain eve
 - **Undeclared** — log warning + append to `RunResult.Warnings`
 - Events are still published (no enforcement in MVP)
 
-Auto-generated `MUTATION/code.proposal.isolated` or `code.proposal.root` from workspace diffs is published **only** when the bee declares the matching kind in `publishes` and `worktree` matches the kind (see [010-bee-config.md](010-bee-config.md) § worktree invariants). Runtime captures a **baseline-attributed** tracked diff (MVP: tracked changes only). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
+Auto-generated `MUTATION/code.proposal.isolated` or `code.proposal.root` from workspace diffs is published **only** when the bee declares the matching kind in `publishes` and `worktree` matches the kind (see [bee config](../guide/bee-config.md) § worktree invariants). Runtime captures a **baseline-attributed** tracked diff (MVP: tracked changes only). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
 
 Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present.
 
@@ -200,7 +200,7 @@ completion_contract:
       count: 1
 ```
 
-Narrative `INSIGHT` events are optional and do not satisfy completion contracts. See [009-insight-kinds.md](009-insight-kinds.md).
+Narrative `INSIGHT` events are optional and do not satisfy completion contracts. See [insight kinds](insight-kinds.md).
 
 ---
 
@@ -208,9 +208,9 @@ Narrative `INSIGHT` events are optional and do not satisfy completion contracts.
 
 Bee `subscribes` imply `Adapter.Run()` dispatch. **Auto-invite** is separate colony choreography: when a bus event matches, `paseka run` publishes a pending `session.invite` for Beekeeper accept/reject.
 
-**`payload.decision` vs routing:** On colony events (e.g. `feature.classified`), `payload.decision` is a **classification tag** on the branch (`grill`, `plan`, …). Colony rules may match it via `auto_invites.match.decision`. That is distinct from (1) bee **`subscribes`** dispatch (`type` + `payload.kind` → AFK run) and (2) glossary **Flight Route** — the NATS subject (`events.<EventType>[.<kind>]`, §3). See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md).
+**`payload.decision` vs routing:** On colony events (e.g. `feature.classified`), `payload.decision` is a **classification tag** on the branch (`grill`, `plan`, …). Colony rules may match it via `auto_invites.match.decision`. That is distinct from (1) bee **`subscribes`** dispatch (`type` + `payload.kind` → AFK run) and (2) glossary **Flight Route** — the NATS subject (`events.<EventType>[.<kind>]`, §3). See [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md).
 
-Rules live in **`.paseka/colony.yaml`** (not bee YAML). Implementation: [`internal/colony/invite_rules.go`](../internal/colony/invite_rules.go), [`internal/invites/auto_invite.go`](../internal/invites/auto_invite.go), [`internal/runtime/invite_publisher.go`](../internal/runtime/invite_publisher.go).
+Rules live in **`.paseka/colony.yaml`** (not bee YAML). Implementation: [`internal/colony/invite_rules.go`](../../internal/colony/invite_rules.go), [`internal/invites/auto_invite.go`](../../internal/invites/auto_invite.go), [`internal/runtime/invite_publisher.go`](../../internal/runtime/invite_publisher.go).
 
 ```yaml
 auto_invites:
@@ -256,13 +256,13 @@ auto_invites:
 | `invite.done_when` | Optional completion contract persisted on the invite (see §8) |
 | `dedupe` | Skip when a **pending** invite on the trace matches those invite fields |
 
-`paseka init` seeds the grill and breakdown rules above (feature ideation reference). With **empty** `auto_invites`, no auto-invite runs. See [specs/005-feature-ideation-flow.md](specs/005-feature-ideation-flow.md) and [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md).
+`paseka init` seeds the grill and breakdown rules above (feature ideation reference). With **empty** `auto_invites`, no auto-invite runs. See [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) and [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md).
 
 ---
 
 ## 8. Invite `done_when` (completion contract)
 
-An invite is a **work contract**: required `task` (input) plus optional `done_when` (expected result). When a bus event matches a persisted invite's `done_when`, `paseka run` updates that invite by `inviteId` to `completed` (file exists at `ref`) or `incomplete` (missing file). Implementation: [`internal/invites/completion.go`](../internal/invites/completion.go), [`internal/runtime/invite_completer.go`](../internal/runtime/invite_completer.go).
+An invite is a **work contract**: required `task` (input) plus optional `done_when` (expected result). When a bus event matches a persisted invite's `done_when`, `paseka run` updates that invite by `inviteId` to `completed` (file exists at `ref`) or `incomplete` (missing file). Implementation: [`internal/invites/completion.go`](../../internal/invites/completion.go), [`internal/runtime/invite_completer.go`](../../internal/runtime/invite_completer.go).
 
 ```yaml
 invite:
@@ -287,9 +287,9 @@ Only **accepted** or **incomplete** invites with a `doneWhen` on the same trace 
 
 ## 9. Related docs
 
-- [specs/007-colony-eda-topology.md](specs/007-colony-eda-topology.md) — config-derived EDA graph (Console Topology tab, `paseka colony topology`)
-- [005-task-ledger.md](005-task-ledger.md) — task lifecycle events
-- [003-architecture.md](003-architecture.md) — colony layout and adapters
-- [010-bee-config.md](010-bee-config.md) — full bee YAML schema (`role`, `adapter`, contracts, …)
-- [009-insight-kinds.md](009-insight-kinds.md) — INSIGHT taxonomy and prompt memory projection
-- [specs/006-human-gateway-invites.md](specs/006-human-gateway-invites.md) — invite lifecycle, CLI/Console, energy
+- [specs/007-colony-eda-topology.md](../specs/007-colony-eda-topology.md) — config-derived EDA graph (Console Topology tab, `paseka colony topology`)
+- [task ledger](task-ledger.md) — task lifecycle events
+- [architecture overview](../architecture/overview.md) — colony layout and adapters
+- [bee config](../guide/bee-config.md) — full bee YAML schema (`role`, `adapter`, contracts, …)
+- [insight kinds](insight-kinds.md) — INSIGHT taxonomy and prompt memory projection
+- [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) — invite lifecycle, CLI/Console, energy

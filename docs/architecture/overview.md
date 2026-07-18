@@ -1,174 +1,10 @@
-# Architecture: Colony, Configuration, Adapters
+# Architecture overview
 
-Paseka treats a **git repository** as the center of work. Every colony (project) has declarative config in the repo and machine-local state under the user's config directory.
+Adapters, run IPC, worktrees / code proposals, end-to-end flow, and Go package layout.
 
----
+Colony config layout and `paseka init`: [Colony layout](../guide/colony-layout.md).
 
-## 1. Colony-centric model
-
-| Concept | Location | Role |
-| ------- | -------- | ---- |
-| **Colony** | Git repo root | Source of truth for code, history, and shareable hive config |
-| **Apiary** | Developer machine | Hosts Hive Runtime, NATS, and local adapter credentials |
-| **Bee** | Config + runtime | A role (Scout, Guard, Builder…) bound to an **adapter** that drives an external agent |
-
-The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — the **Cursor Agent CLI** (`agent`), the **Pi CLI** (`pi`), **Claude Code**, and **script** commands — reads their output, and publishes results to the NATS bus as contract events.
-
----
-
-## 2. Two-tier configuration
-
-### Project-local: `.paseka/` (in repo)
-
-Version-controlled colony definition. Safe to commit; no secrets.
-
-```
-.paseka/
-├── colony.yaml          # colony manifest: bees, routes, defaults
-├── bees/                # per-bee adapter bindings and non-secret params
-│   ├── scout.yaml
-│   └── builder.yaml
-├── prompts/             # prompt templates (committed); see §2.1
-│   ├── _partials/       # shared snippets (JSON contract, tone, etc.)
-│   ├── scout.md
-│   └── builder.md
-├── .gitignore           # ignores worktrees/, runs/, cache/, *.local.yaml
-├── runs/                # gitignored — per-agent file IPC (see §5.1)
-│   └── <traceId>/
-│       ├── <agentId>/
-│       │   ├── prompt.txt
-│       │   ├── system.txt   # optional — rendered system_template
-│       │   ├── result.txt
-│       │   ├── meta.json
-│       │   └── status.json
-│       └── tasks/
-│           └── <taskId>/
-│               ├── task.md
-│               └── runs.ndjson
-└── worktrees/           # gitignored — isolated mutation workspaces
-    └── <traceId>/
-```
-
-**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [008-bee-routing.md](008-bee-routing.md)).
-
-```yaml
-defaults:
-  prompt_template: default.md
-  system_template: default-system.md   # optional colony-wide role context
-  energy_budget: 12
-```
-
-Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`.
-
-Example sectors for monorepos or git-submodule layouts:
-
-```yaml
-sectors:
-  frontend:
-    path: frontend
-  backend-users:
-    path: backend/users
-```
-
-A **sector** is a named path inside the colony. Tasks may optionally set `sector`; bees may declare a default `sector` in `bees/*.yaml`. Runtime resolves the adapter workspace as `colonyRoot/<sector.path>` or `.paseka/worktrees/<traceId>/<sector.path>` when `worktree: true`. The colony root remains the audit boundary for `.paseka/runs/`.
-
-**`bees/*.yaml`** — one file per role: binds the bee to an adapter, prompt template(s), optional `command` / `post_exec`, sector/worktree, and routing rules. Full schema, examples, and variable substitution: [010-bee-config.md](010-bee-config.md). Event routing (`subscribes` / `publishes`): [008-bee-routing.md](008-bee-routing.md). Project-local overrides that must not be committed live in `*.local.yaml` (gitignored).
-
-### 2.1 Prompt templates
-
-Templates live in **`.paseka/prompts/`** — version-controlled, one colony, shareable across machines. Each bee may reference one or two templates from its `bees/<role>.yaml`:
-
-| Field | Artifact | Role |
-| ----- | -------- | ---- |
-| `system_template` (optional) | `system.txt` | Standing role context — injected by the adapter, not the first chat turn |
-| `prompt_template` | `prompt.txt` | User/task turn for AFK runs; optional kickoff for interactive chat |
-
-When `system_template` is unset, behavior matches the previous single-template model (full prompt as positional argv only). Full variable list, partials, and override precedence: [004-prompt-templates.md](004-prompt-templates.md). Bee YAML schema: [010-bee-config.md](010-bee-config.md).
-
-**Bee config → templates:**
-
-```yaml
-# .paseka/bees/builder.yaml
-role: builder
-adapter: cursor
-system_template: builder-system.md   # optional — role / standing instructions
-prompt_template: builder.md          # user/task turn
-worktree: true
-```
-
-**Rendering:** Go `text/template` at dispatch time. Runtime builds a **PromptContext** from bus event + colony state, writes `prompt.txt` (and `system.txt` when `system_template` is set) under `.paseka/runs/<traceId>/<agentId>/`, then passes rendered strings to the adapter.
-
-Colony-wide fallbacks when a bee omits a field: `defaults.prompt_template` and optional `defaults.system_template` in `colony.yaml`.
-
-Do **not** store prompts in `~/.config/paseka/` — they belong to the colony and should ride with the repo. Home config only holds secrets and runtime state.
-
-**Bee Language vs technical:** UI/docs may say «Scout Bee»; templates can use bee tone for HITL readability. Bus payloads and JSON partials stay technical (`SIGNAL`, `traceId`, etc.) — see [002-paseka-glossary.md](002-paseka-glossary.md).
-
-### Machine-local: `~/.config/paseka/<project-slug>/`
-
-Per-colony state on this machine. Not committed.
-
-```
-~/.config/paseka/<project-slug>/
-├── config.yaml          # secrets refs, NATS URL, adapter env
-├── state.json           # runtime: active worktrees, last traceId, hive status
-├── adapters/            # adapter-specific local overrides
-│   ├── cursor.yaml      # CLI binary path, API key env
-│   └── pi.yaml          # Pi CLI binary path, API key env
-```
-
-**Split rule:**
-
-| Kind | Project `.paseka/` | Home `~/.config/paseka/<slug>/` |
-| ---- | ------------------ | ------------------------------- |
-| Bee roles & adapter choice | yes | — |
-| Prompt templates (shareable) | yes | — |
-| API keys, tokens | — | yes (or env var refs) |
-| NATS connection override | — | yes |
-| Active worktrees registry | pointer only | authoritative state |
-| Active agent runs registry | pointer only | optional mirror in `state.json` |
-| Event replay cache | — | yes |
-
----
-
-## 3. Project slug
-
-Stable identifier for the home config directory.
-
-1. If `origin` remote exists → canonical slug from host/path (e.g. `github.com-acme-api` → `acme-api`, or full `github-com-acme-api`).
-2. Else → sanitized directory name of repo root (e.g. `paseka`).
-3. Collision on same machine → suffix with short hash of absolute repo path.
-
-Stored in `.paseka/colony.yaml` as `slug` after first `paseka init` so later commands resolve the same home path.
-
----
-
-## 4. `paseka init`
-
-Run from inside a git repository (or at repo root).
-
-```
-paseka init [--adapter cursor|pi]
-  │
-  ├─► resolve git root (fail if not a repo)
-  ├─► compute / persist project slug
-  ├─► create .paseka/colony.yaml (defaults)
-  ├─► create .paseka/prompts/ with starter templates (scout, builder, hivewright)
-  ├─► create .paseka/bees/ with starter bees (scout, builder, hivewright) for the selected adapter
-  ├─► create .paseka/.gitignore (worktrees/, runs/, *.local.yaml, cache/)
-  ├─► create ~/.config/paseka/<slug>/config.yaml
-  ├─► create ~/.config/paseka/<slug>/state.json (empty)
-  ├─► create ~/.config/paseka/<slug>/adapters/<adapter>.yaml (cursor by default; pi when --adapter pi)
-  └─► print next steps (adapter-specific auth / CLI setup, then `paseka run`)
-```
-
-`--adapter` selects which LLM adapter the starter bees use (`cursor` default; `pi` supported). Unknown adapter names fall back to `cursor`.
-
-`paseka init` is idempotent: existing files are preserved; missing pieces are added.
-
----
-
-## 5. Agent adapters
+## 1. Agent adapters
 
 An **adapter** is a thin driver: prepare workspace → invoke external tool → normalize result → emit bus events.
 
@@ -202,7 +38,7 @@ type RunResult struct {
 
 Adapters live under `internal/adapters/<name>/`. Registration is declarative via `adapter` field in bee config.
 
-### 5.1 File-based agent IPC (`runs/`)
+### 1.1 File-based agent IPC (`runs/`)
 
 Each spawned agent gets an isolated directory under the **colony root** (not inside a worktree), so results survive worktree cleanup and multiple agents can share one `traceId`.
 
@@ -252,7 +88,7 @@ Agents build one JSON object per event, pass it on stdin, and receive machine-re
 
 | Input (bee config + event) | Maps to `agent` flag |
 | ---------------------------- | -------------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see [010-bee-config.md](010-bee-config.md)) |
+| `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
 | `Workspace` | `--workspace <path>` (repo root or `.paseka/worktrees/<traceId>/`) |
 | `Prompt` | positional prompt argument (`system_template` + task, newline-separated, when system is set) |
 | `params.model` | `--model <id>` |
@@ -286,11 +122,11 @@ Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.pase
 
 ### Example: Pi adapter (CLI)
 
-**Decision:** invoke the **Pi CLI** (`pi`) for bees configured with `adapter: pi`. AFK runs use `pi -p`; interactive sessions use `pi` under a Paseka-owned PTY (see [006-interactive-sessions.md](006-interactive-sessions.md)).
+**Decision:** invoke the **Pi CLI** (`pi`) for bees configured with `adapter: pi`. AFK runs use `pi -p`; interactive sessions use `pi` under a Paseka-owned PTY (see [interactive sessions](../guide/interactive-sessions.md)).
 
 | Input (bee config + event) | Maps to `pi` flag |
 | ---------------------------- | ----------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see [010-bee-config.md](010-bee-config.md)) |
+| `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
 | `Workspace` | process cwd |
 | `Prompt` | positional prompt argument |
 | `params.model` | `--model <pattern>` |
@@ -413,16 +249,16 @@ EOF
 
 1. Non-zero exit → `failed` status (same as LLM adapters).
 2. Stdout (trimmed) → run summary when non-empty.
-3. Git diff in workspace → auto `MUTATION/code.proposal.isolated` or `code.proposal.root` when the bee declares the matching kind in `publishes` (worktree ↔ kind invariant; see §6).
+3. Git diff in workspace → auto `MUTATION/code.proposal.isolated` or `code.proposal.root` when the bee declares the matching kind in `publishes` (worktree ↔ kind invariant; see §2).
 4. Domain events are **not** synthesized from exit codes — the script must call `paseka event emit`.
 
 Go implementation: `internal/adapters/script/`.
 
 Future adapters (same contract): `aider`, custom wrappers.
 
-### 5.2 Interactive sessions (HITL)
+### 1.2 Interactive sessions (HITL)
 
-For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongside one-shot `Adapter.Run()`. See [006-interactive-sessions.md](006-interactive-sessions.md).
+For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongside one-shot `Adapter.Run()`. See [interactive sessions](../guide/interactive-sessions.md).
 
 | Mode | CLI | Adapter API |
 | ---- | --- | ----------- |
@@ -433,9 +269,9 @@ Interactive runs add `session.json` and `transcript.ndjson` under the same `.pas
 
 ---
 
-## 6. Worktrees and code proposals
+## 2. Worktrees and code proposals
 
-Code changes flow through two **proposal paths** distinguished by workspace provenance. Invariant: **a guard bee always reviews the same workspace that produced the diff.** See [specs/008-code-proposal-workspaces.md](specs/008-code-proposal-workspaces.md).
+Code changes flow through two **proposal paths** distinguished by workspace provenance. Invariant: **a guard bee always reviews the same workspace that produced the diff.** See [specs/008-code-proposal-workspaces.md](../specs/008-code-proposal-workspaces.md).
 
 | Path | Publisher | `MUTATION` kind | Reviewer cwd | Human approve |
 | ---- | --------- | --------------- | ------------ | ------------- |
@@ -499,9 +335,9 @@ Root proposals do **not** open the AFK receiver commit-gate defer (`waiting_revi
 
 **Direct dispatch workspace affinity:** isolated (+ alias) → ensure/reuse trace worktree (prefer existing dirty tree over fresh HEAD); root → colony root, never call worktree ensure.
 
-**Auto-publish:** runtime publishes a proposal only when the bee explicitly declares the matching kind in `publishes` and `worktree` matches the kind. Empty `publishes` never auto-publishes (fail closed). Mismatch → skip + warn; hard mismatches are `paseka doctor` errors (see [010-bee-config.md](010-bee-config.md)).
+**Auto-publish:** runtime publishes a proposal only when the bee explicitly declares the matching kind in `publishes` and `worktree` matches the kind. Empty `publishes` never auto-publishes (fail closed). Mismatch → skip + warn; hard mismatches are `paseka doctor` errors (see [bee config](../guide/bee-config.md)).
 
-**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...paseka/<traceId>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). See [specs/002-queen-console-mvp.md](specs/002-queen-console-mvp.md).
+**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...paseka/<traceId>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 **Registry:** `~/.config/paseka/<slug>/state.json` tracks active worktrees, base SHA, branch, and linked `traceId` for cleanup on `paseka doctor`.
 
@@ -509,9 +345,9 @@ Commands (later): `paseka worktree list`, `paseka worktree clean`.
 
 ---
 
-## 7. End-to-end flow
+## 3. End-to-end flow
 
-A single `traceId` may contain multiple tasks (`taskId`) managed by the Task Ledger. See [005-task-ledger.md](005-task-ledger.md) for the `task.plan → task.ready → task.completed` protocol.
+A single `traceId` may contain multiple tasks (`taskId`) managed by the Task Ledger. See [task ledger](../reference/task-ledger.md) for the `task.plan → task.ready → task.completed` protocol.
 
 ```mermaid
 flowchart LR
@@ -552,7 +388,7 @@ flowchart LR
 
 ---
 
-## 8. Package layout (target)
+## 4. Package layout (target)
 
 ```
 cmd/paseka/                 # Queen Shell
@@ -569,19 +405,19 @@ internal/
 
 ---
 
-## 9. Decisions (locked)
+## 5. Decisions (locked)
 
 | Topic | Decision |
 | ----- | -------- |
 | Worktree path | `.paseka/worktrees/<traceId>/` — colony-managed; registry in home `state.json` |
 | Cursor invocation | Cursor Agent CLI (`agent`) — port of `ai-tasks-run.sh` pattern |
-| Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §5.1 Pi adapter |
+| Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §1 Pi adapter |
 | Supported adapters | `cursor` (default), `pi` — selected per bee via `adapter:` in `bees/*.yaml` |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |
 | Prompt templates | `.paseka/prompts/` — committed; bee YAML references `prompt_template` and optional `system_template` |
 | Commit `.paseka/` | yes by default; `.gitignore` covers `worktrees/`, `runs/`, `*.local.yaml`, `cache/` |
 | Slug in colony.yaml | written at `paseka init`, reused on every run |
-| Interactive sessions | separate `SessionAdapter`; PTY in `internal/sessions/`; see [006-interactive-sessions.md](006-interactive-sessions.md) |
+| Interactive sessions | separate `SessionAdapter`; PTY in `internal/sessions/`; see [interactive sessions](../guide/interactive-sessions.md) |
 | Terminal UI for HITL | `~/.config/paseka/<slug>/terminal.yaml` — `default` or `ghostty` |
 
 ### `.paseka/.gitignore` (created by `paseka init`)
