@@ -15,6 +15,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [007-colony-eda-topology](../specs/007-colony-eda-topology.md) | Implemented | Config-derived EDA graph (Console + CLI) |
 | [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md) | Implemented | Isolated vs root code proposals |
 | [009-merge-autostash](../specs/009-merge-autostash.md) | Implemented | Autostash dirty root on merge approve |
-| [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md) | Draft | Telegram as async Human Gateway (notify + status/task/energy/invites) |
+| [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md) | Ready for breakdown | Telegram as async Human Gateway (notify + status/task/energy/invites) |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
