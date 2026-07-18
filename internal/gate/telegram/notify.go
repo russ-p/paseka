@@ -222,9 +222,12 @@ func (n *Notifier) pushTaskStatus(ctx context.Context, traceID string, task task
 	if !n.state.ShouldNotify(key) {
 		return nil
 	}
-	text := FormatTaskStatusCard(n.Colony, n.ledger, traceID, task, status)
+	text := FormatTaskStatusCard(n.Colony, n.Config, n.ledger, traceID, task, status)
 	var keyboard tgbotapi.InlineKeyboardMarkup
-	if status == protocol.TaskStatusBlocked && taskledger.IsEnergyBlockedTask(task) {
+	switch {
+	case status == protocol.TaskStatusWaitingReview:
+		keyboard = proposalKeyboardForTask(traceID, task)
+	case status == protocol.TaskStatusBlocked && taskledger.IsEnergyBlockedTask(task):
 		keyboard = energyTopUpKeyboard(traceID)
 	}
 	return n.broadcast(text, keyboard, key)
@@ -244,7 +247,7 @@ func (n *Notifier) broadcast(text string, keyboard tgbotapi.InlineKeyboardMarkup
 }
 
 // FormatTaskStatusCard renders a blocked/failed/waiting_review push card.
-func FormatTaskStatusCard(ctx colony.Context, ledger taskledger.Ledger, traceID string, task taskledger.TaskSnapshot, status protocol.TaskStatus) string {
+func FormatTaskStatusCard(ctx colony.Context, cfg Config, ledger taskledger.Ledger, traceID string, task taskledger.TaskSnapshot, status protocol.TaskStatus) string {
 	title := taskTitle(task)
 	lines := []string{
 		fmt.Sprintf("Task %s", status),
@@ -257,6 +260,9 @@ func FormatTaskStatusCard(ctx colony.Context, ledger taskledger.Ledger, traceID 
 	lines = append(lines, fmt.Sprintf("Title: %s", truncateText(title, maxInviteTaskLen)))
 	if summary := strings.TrimSpace(task.Summary); summary != "" && summary != title {
 		lines = append(lines, fmt.Sprintf("Summary: %s", truncateText(summary, maxInviteTaskLen)))
+	}
+	if status == protocol.TaskStatusWaitingReview {
+		lines = append(lines, proposalReviewLines(cfg, task)...)
 	}
 	if status == protocol.TaskStatusBlocked || taskledger.IsEnergyBlockedTask(task) {
 		lines = append(lines, honeyLine(ctx, ledger, traceID))

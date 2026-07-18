@@ -25,6 +25,7 @@ type Handler struct {
 	Invites    *InviteActions
 	Energy     *EnergyActions
 	Tasks      *TaskActions
+	Proposals  *ProposalActions
 }
 
 // HandleUpdate processes one Telegram update. Non-allowlisted traffic is silently ignored.
@@ -100,6 +101,31 @@ func (h *Handler) handleCallback(ctx context.Context, q *tgbotapi.CallbackQuery)
 		h.taskActions().Confirm(ctx, chatID, messageID, strings.TrimPrefix(data, callbackTaskConfirm))
 	case strings.HasPrefix(data, callbackTaskCancel):
 		h.taskActions().Cancel(chatID, messageID, strings.TrimPrefix(data, callbackTaskCancel))
+	case strings.HasPrefix(data, callbackProposalApprove):
+		traceID, taskID, ok := ParseProposalCallback(strings.TrimPrefix(data, callbackProposalApprove))
+		if ok {
+			h.proposalActions().showProposalConfirm(chatID, messageID, traceID, taskID, "approve")
+		}
+	case strings.HasPrefix(data, callbackProposalReject):
+		traceID, taskID, ok := ParseProposalCallback(strings.TrimPrefix(data, callbackProposalReject))
+		if ok {
+			h.proposalActions().showProposalConfirm(chatID, messageID, traceID, taskID, "reject")
+		}
+	case strings.HasPrefix(data, callbackProposalConfirmApprove):
+		traceID, taskID, ok := ParseProposalCallback(strings.TrimPrefix(data, callbackProposalConfirmApprove))
+		if ok {
+			h.proposalActions().executeApprove(ctx, chatID, messageID, traceID, taskID)
+		}
+	case strings.HasPrefix(data, callbackProposalConfirmReject):
+		traceID, taskID, ok := ParseProposalCallback(strings.TrimPrefix(data, callbackProposalConfirmReject))
+		if ok {
+			h.proposalActions().executeReject(ctx, chatID, messageID, traceID, taskID)
+		}
+	case strings.HasPrefix(data, callbackProposalCancel):
+		traceID, taskID, ok := ParseProposalCallback(strings.TrimPrefix(data, callbackProposalCancel))
+		if ok {
+			h.proposalActions().cancelProposalConfirm(chatID, messageID, traceID, taskID)
+		}
 	}
 }
 
@@ -133,6 +159,17 @@ func (h *Handler) taskActions() *TaskActions {
 		Config:  h.Config,
 		Bot:     h.Bot,
 		Pending: NewPendingTasks(),
+	}
+}
+
+func (h *Handler) proposalActions() *ProposalActions {
+	if h.Proposals != nil {
+		return h.Proposals
+	}
+	return &ProposalActions{
+		Colony: h.Colony,
+		Config: h.Config,
+		Bot:    h.Bot,
 	}
 }
 

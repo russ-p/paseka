@@ -305,6 +305,48 @@ func TestHandlerInviteAcceptShowsConfirm(t *testing.T) {
 	}
 }
 
+func TestHandlerProposalRejectShowsConfirm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	repo := initTestRepo(t)
+	ctxColony, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &mockBot{}
+	h := &tggate.Handler{
+		Colony: ctxColony,
+		Config: tggate.Config{
+			AllowFrom: []int64{1},
+			ChatIDs:   []int64{-100},
+		},
+		Bot: bot,
+	}
+	update := tgbotapi.Update{
+		CallbackQuery: &tgbotapi.CallbackQuery{
+			ID:   "cb-prop",
+			Data: "prop:r:trace-1/task-1",
+			From: &tgbotapi.User{ID: 1},
+			Message: &tgbotapi.Message{
+				MessageID: 9,
+				Chat:      &tgbotapi.Chat{ID: -100},
+			},
+		},
+	}
+	h.HandleUpdate(context.Background(), update)
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected confirm edit, got %d sends", len(bot.sent))
+	}
+	edit, ok := bot.sent[0].(tgbotapi.EditMessageTextConfig)
+	if !ok {
+		t.Fatalf("expected EditMessageTextConfig, got %T", bot.sent[0])
+	}
+	if edit.Text == "" || edit.ReplyMarkup == nil {
+		t.Fatal("expected confirm prompt with keyboard")
+	}
+}
+
 func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

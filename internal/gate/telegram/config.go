@@ -25,6 +25,12 @@ const (
 	callbackEnergyAdd           = "en:+:"
 	callbackTaskConfirm         = "task:c:"
 	callbackTaskCancel          = "task:x:"
+
+	callbackProposalApprove        = "prop:a:"
+	callbackProposalReject         = "prop:r:"
+	callbackProposalConfirmApprove = "prop:ca:"
+	callbackProposalConfirmReject  = "prop:cr:"
+	callbackProposalCancel         = "prop:x:"
 )
 
 // Config is machine-local Telegram Human Gateway settings (~/.config/paseka/<slug>/telegram.yaml).
