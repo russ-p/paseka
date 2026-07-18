@@ -69,7 +69,10 @@ func initTestRepo(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	runGit(t, dir, "add", "README.md")
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".paseka/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "README.md", ".gitignore")
 	runGit(t, dir, "commit", "-m", "init")
 	return dir
 }

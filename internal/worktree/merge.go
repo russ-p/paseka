@@ -19,10 +19,21 @@ type MergeOptions struct {
 	Message    string
 }
 
+// StashOutcome reports what happened to the colony root working tree during merge.
+type StashOutcome string
+
+const (
+	StashOutcomeNone              StashOutcome = "none"
+	StashOutcomeRestored          StashOutcome = "restored"
+	StashOutcomeLeftOnFailure     StashOutcome = "left_on_failure"
+	StashOutcomeRestoreConflicted StashOutcome = "restore_conflicted"
+)
+
 // MergeResult reports the merge outcome.
 type MergeResult struct {
-	CommitSHA string
-	Branch    string
+	CommitSHA    string
+	Branch       string
+	StashOutcome StashOutcome
 }
 
 // Merge merges the trace worktree branch into the colony default branch with a merge commit.
@@ -52,10 +63,17 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 		defaultBranch = "main"
 	}
 
-	if dirty, err := hasUncommittedChanges(colonyRoot); err != nil {
+	dirty, err := hasUncommittedChanges(colonyRoot)
+	if err != nil {
 		return MergeResult{}, err
-	} else if dirty {
-		return MergeResult{}, fmt.Errorf("worktree: colony root has uncommitted changes — commit or stash before merge")
+	}
+
+	stashed := false
+	if dirty {
+		if err := autostash(colonyRoot, opts.TraceID); err != nil {
+			return MergeResult{}, err
+		}
+		stashed = true
 	}
 
 	message := strings.TrimSpace(opts.Message)
@@ -64,21 +82,68 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 	}
 
 	if err := runGit(colonyRoot, "checkout", defaultBranch); err != nil {
-		return MergeResult{}, err
+		return failAfterStash(colonyRoot, stashed, err)
 	}
 	if err := runGit(colonyRoot, "merge", "--no-ff", "-m", message, branch); err != nil {
-		return MergeResult{}, err
+		return failAfterStash(colonyRoot, stashed, err)
 	}
 	commitSHA, err := revParse(colonyRoot, "HEAD")
 	if err != nil {
-		return MergeResult{}, err
+		return failAfterStash(colonyRoot, stashed, err)
 	}
 
 	if err := removeTraceWorktree(colonyRoot, opts.Slug, opts.TraceID); err != nil {
-		return MergeResult{}, err
+		return failAfterStash(colonyRoot, stashed, err)
 	}
 
-	return MergeResult{CommitSHA: commitSHA, Branch: defaultBranch}, nil
+	result := MergeResult{
+		CommitSHA:    commitSHA,
+		Branch:       defaultBranch,
+		StashOutcome: StashOutcomeNone,
+	}
+	if !stashed {
+		return result, nil
+	}
+
+	if err := stashPop(colonyRoot); err != nil {
+		if hasConflicts, conflictErr := hasMergeConflicts(colonyRoot); conflictErr != nil {
+			return MergeResult{StashOutcome: StashOutcomeRestoreConflicted}, conflictErr
+		} else if hasConflicts {
+			result.StashOutcome = StashOutcomeRestoreConflicted
+			return result, nil
+		}
+		return failAfterStash(colonyRoot, true, err)
+	}
+	result.StashOutcome = StashOutcomeRestored
+	return result, nil
+}
+
+func failAfterStash(colonyRoot string, stashed bool, cause error) (MergeResult, error) {
+	if !stashed {
+		return MergeResult{}, cause
+	}
+	return MergeResult{StashOutcome: StashOutcomeLeftOnFailure}, fmt.Errorf(
+		"%w — local changes were autostashed; run `git stash list` and `git stash pop` to restore",
+		cause,
+	)
+}
+
+func autostash(colonyRoot, traceID string) error {
+	msg := fmt.Sprintf("paseka: autostash before merge %s", traceID)
+	return runGit(colonyRoot, "stash", "push", "--include-untracked", "-m", msg)
+}
+
+func stashPop(colonyRoot string) error {
+	return runGit(colonyRoot, "stash", "pop")
+}
+
+func hasMergeConflicts(dir string) (bool, error) {
+	cmd := exec.Command("git", "-C", dir, "diff", "--name-only", "--diff-filter=U")
+	out, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	return len(strings.TrimSpace(string(out))) > 0, nil
 }
 
 func findWorktreeEntry(slug, traceID string) (colony.WorktreeEntry, bool, error) {

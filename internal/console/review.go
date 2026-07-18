@@ -107,7 +107,7 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		return ApproveTaskResponse{}, fmt.Errorf("nats url not configured")
 	}
 
-	commitSHA, err := review.Approve(ctx, colonyCtx, session.Client, session.Ledger, review.ApproveInput{
+	approveRes, err := review.Approve(ctx, colonyCtx, session.Client, session.Ledger, review.ApproveInput{
 		TraceID:      traceID,
 		TaskID:       taskID,
 		Summary:      req.Summary,
@@ -124,16 +124,15 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 	}
 	task := snap.Tasks[taskID]
 
-	msg := "Task approved."
-	if task.ProposalWorkspace == protocol.ProposalWorkspaceRoot {
-		msg = "Task approved (root proposal — no worktree merge)."
-	} else if commitSHA != "" {
-		msg = "Task approved and worktree merged."
-	}
+	msg := review.ApproveMessage(review.ApproveMessageOptions{
+		ProposalWorkspace: task.ProposalWorkspace,
+		CommitSHA:         approveRes.CommitSHA,
+		StashOutcome:      approveRes.StashOutcome,
+	})
 	return ApproveTaskResponse{
 		TraceID:   traceID,
 		TaskID:    taskID,
-		CommitSHA: commitSHA,
+		CommitSHA: approveRes.CommitSHA,
 		Message:   msg,
 	}, nil
 }

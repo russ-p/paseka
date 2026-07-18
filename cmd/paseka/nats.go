@@ -215,7 +215,7 @@ func newProposalApproveCmd() *cobra.Command {
 			if session.Client == nil || session.Ledger == nil {
 				return fmt.Errorf("nats url not configured")
 			}
-			commit, err := review.Approve(cmd.Context(), ctxColony, session.Client, session.Ledger, review.ApproveInput{
+			approveRes, err := review.Approve(cmd.Context(), ctxColony, session.Client, session.Ledger, review.ApproveInput{
 				TraceID:      traceID,
 				TaskID:       taskID,
 				Summary:      summary,
@@ -224,9 +224,19 @@ func newProposalApproveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			snap, err := session.Ledger.Snapshot(traceID)
+			if err != nil {
+				return err
+			}
+			task := snap.Tasks[taskID]
 			fmt.Printf("Approved task %s on trace %s\n", taskID, traceID)
-			if commit != "" {
-				fmt.Printf("  merge commit: %s\n", commit)
+			fmt.Printf("  %s\n", review.CLIApproveMessage(review.ApproveMessageOptions{
+				ProposalWorkspace: task.ProposalWorkspace,
+				CommitSHA:         approveRes.CommitSHA,
+				StashOutcome:      approveRes.StashOutcome,
+			}))
+			if approveRes.CommitSHA != "" {
+				fmt.Printf("  merge commit: %s\n", approveRes.CommitSHA)
 			}
 			return nil
 		},
