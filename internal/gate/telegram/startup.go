@@ -20,6 +20,7 @@ var builtinMenuCommands = []struct {
 	{name: "status", description: "Colony snapshot (Refresh button)"},
 	{name: "help", description: "Command list"},
 	{name: "invites", description: "Pending session invites"},
+	{name: "traces", description: "Recent colony traces"},
 }
 
 // replyKeyboardCommands are slash commands shown on the reply keyboard (no-arg only).

@@ -108,6 +108,7 @@ func FormatHelpText(commands CommandsConfig) string {
 		"/energy add <traceId> <n> — top up honey",
 		"/task <text> — inject task (preview + Confirm)",
 		"/invites — pending session invites",
+		"/traces — recent colony traces",
 	}
 	names := make([]string, 0, len(commands.Custom))
 	for name := range commands.Custom {

@@ -102,7 +102,7 @@ Use `commands.custom` for colony choreography entry points (e.g. Scout intake on
 | `kind` | yes | `payload.kind` (e.g. `feature.requested`) |
 | `static` | no | Extra string fields merged into payload |
 
-Reserved names: `start`, `status`, `help`, `invites`, `energy`, `task`.
+Reserved names: `start`, `status`, `help`, `invites`, `traces`, `energy`, `task`.
 
 Runtime notify dedup state: `~/.config/paseka/<slug>/telegram-notify-state.json` (created automatically).
 
@@ -143,6 +143,7 @@ Message the bot from an allowlisted user **and** chat:
 | `/task <text>` | Preview card → Confirm/Cancel → `task.plan` (+ `task.ready` if autorun) |
 | `/feature <text>` (example custom) | Preview → Confirm → `SIGNAL/feature.requested` on new trace (when configured) |
 | `/invites` | Pending invites with Accept / Reject / Defer |
+| `/traces` | Recent colony traces (activity + status hints; optional Console links) |
 | `/help` | Command list |
 
 The **reply keyboard** (refreshed on gate startup) offers one-tap `/status`, `/help`, and `/invites`. The Telegram **command menu** (tap `/` in the composer) lists the same no-arg built-ins. Parameterized commands (`/energy`, `/task`, custom emit commands) are available via `/help` and typed manually.
