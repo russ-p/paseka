@@ -145,6 +145,22 @@ Machine-local `telegram.yaml` (not colony shareable config):
 
 No `/task --bee` switch in MVP.
 
+### 10. Custom `emit: signal` commands
+
+Machine-local `commands.custom` maps Telegram slash commands to bus publishes (preview + Confirm). MVP supports **`emit: signal` only** — no gate-side `bee run`.
+
+| Key | Notes |
+| --- | ----- |
+| `commands.custom.<name>.description` | Required; shown in `/help` |
+| `commands.custom.<name>.emit` | Must be `signal` |
+| `commands.custom.<name>.type` | Must be `SIGNAL` |
+| `commands.custom.<name>.kind` | `payload.kind` (colony contract, e.g. `feature.requested`) |
+| `commands.custom.<name>.static` | Optional string map merged into payload |
+
+Confirm publishes on a **new** `traceId` with `title` (first line), `body` (full text), `source: telegram`, and `agentId: telegram`. AFK bees react when `paseka run` is active (e.g. Scout `intake` on `feature.requested` via reactor direct dispatch).
+
+Reserved command names: `start`, `status`, `help`, `invites`, `energy`, `task`.
+
 ## MVP surface
 
 ### Outbound notifications (push)
@@ -169,6 +185,7 @@ Message shape: short summary (trace, bee/task id, one-line task text, honey N/M 
 | `/energy add <traceId> <n>` | Arbitrary top-up |
 | Energy buttons | On blocked / insufficient-honey replies: **`+1` / `+5` / `+12`** (no confirm) |
 | `/task <text>` | Preview → Confirm → `task.plan` + autorun `task.ready` per gate defaults |
+| Custom `/name <text>` | When `commands.custom` defines `emit: signal` — preview → Confirm → publish `SIGNAL/<kind>` on new trace |
 | `/invites` | Pending invites with Accept / Reject / Defer buttons |
 | `/help` | Command list |
 | Invite buttons | Accept / Reject / Defer (Accept/Reject two-step; Defer immediate) |
@@ -217,6 +234,12 @@ commands:
   default_bee: builder
   default_intent: general
   default_review: none
+  custom:
+    feature:
+      description: "Intake idea/bug via Scout"
+      emit: signal
+      type: SIGNAL
+      kind: feature.requested
 console_base_url: ""           # optional; e.g. Tailscale/tunnel URL to Console
 ```
 

@@ -59,6 +59,14 @@ commands:
   default_bee: builder
   default_intent: general         # task intent for default_bee (see bee intents)
   default_review: none
+  custom:
+    feature:
+      description: "Intake idea/bug via Scout"
+      emit: signal
+      type: SIGNAL
+      kind: feature.requested
+      static:
+        priority: medium          # optional extra payload fields
 console_base_url: ""              # optional; e.g. Tailscale URL to Queen Console
 ```
 
@@ -70,7 +78,26 @@ console_base_url: ""              # optional; e.g. Tailscale URL to Queen Consol
 | `chat_ids` | yes | Non-empty; pushes go here; commands from chats outside this list are also ignored |
 | `mode` | no | Default `longpoll`. `webhook` is rejected at runtime until V2 |
 | `commands.*` | no | Defaults: bee `builder`, intent `general`, review `none`, autorun `true` |
+| `commands.custom.<name>` | no | Custom slash commands that publish bus `SIGNAL` events (`emit: signal` only). See below. |
 | `console_base_url` | no | When set, cards may include a Console deep-link |
+
+### Custom `emit: signal` commands
+
+Use `commands.custom` for colony choreography entry points (e.g. Scout intake on `feature.requested`). Each command:
+
+- Maps to `/name <text>` in Telegram (preview + Confirm, like `/task`)
+- Publishes one `SIGNAL` on a **new** `traceId` with `agentId: telegram`
+- Does **not** run bees itself — AFK dispatch needs `paseka run` (see [bee routing](../reference/bee-routing.md) §4)
+
+| Field | Required | Notes |
+| ----- | -------- | ----- |
+| `description` | yes | Shown in `/help` and preview |
+| `emit` | yes | Must be `signal` |
+| `type` | yes | Must be `SIGNAL` |
+| `kind` | yes | `payload.kind` (e.g. `feature.requested`) |
+| `static` | no | Extra string fields merged into payload |
+
+Reserved names: `start`, `status`, `help`, `invites`, `energy`, `task`.
 
 Runtime notify dedup state: `~/.config/paseka/<slug>/telegram-notify-state.json` (created automatically).
 
@@ -107,6 +134,7 @@ Message the bot from an allowlisted user **and** chat:
 | `/energy <traceId>` | Honey remaining/budget |
 | `/energy add <traceId> <n>` | Top up honey (`SIGNAL/energy.add`) |
 | `/task <text>` | Preview card → Confirm/Cancel → `task.plan` (+ `task.ready` if autorun) |
+| `/feature <text>` (example custom) | Preview → Confirm → `SIGNAL/feature.requested` on new trace (when configured) |
 | `/invites` | Pending invites with Accept / Reject / Defer |
 | `/help` | Command list |
 

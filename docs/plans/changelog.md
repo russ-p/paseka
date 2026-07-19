@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-07 — Telegram custom signal commands
+
+`paseka gate telegram` supports `commands.custom` in `telegram.yaml` — configurable slash commands that publish colony `SIGNAL` events (preview + Confirm). Example: `/feature` → `feature.requested` for Scout intake when `paseka run` is active.
+
+- Spec: [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md) §10
+- Canonical: [Telegram gateway](../guide/telegram-gateway.md)
+
 ## 2026-07 — SIGNAL direct dispatch
 
 Reactor direct dispatch now supports colony `SIGNAL` events (e.g. `feature.requested` → Scout `intake`). Platform SIGNAL kinds (`task.*`, `energy.*`, invite protocol) remain denylisted for direct AFK runs.

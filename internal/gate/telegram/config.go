@@ -4,11 +4,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/paseka/paseka/internal/colony"
 	"gopkg.in/yaml.v3"
 )
+
+var customCommandNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
+var reservedTelegramCommands = map[string]struct{}{
+	"start":   {},
+	"status":  {},
+	"help":    {},
+	"invites": {},
+	"energy":  {},
+	"task":    {},
+}
 
 const (
 	envBotToken     = "PASEKA_TELEGRAM_BOT_TOKEN"
@@ -25,6 +37,8 @@ const (
 	callbackEnergyAdd           = "en:+:"
 	callbackTaskConfirm         = "task:c:"
 	callbackTaskCancel          = "task:x:"
+	callbackSignalConfirm       = "sig:c:"
+	callbackSignalCancel        = "sig:x:"
 
 	callbackProposalApprove        = "prop:a:"
 	callbackProposalReject         = "prop:r:"
@@ -94,12 +108,22 @@ func (c CommandsConfig) AutorunEnabled() bool {
 	return *c.TaskAutorun
 }
 
-// CommandsConfig holds /task defaults for later slices.
+// CommandsConfig holds /task defaults and custom emit commands.
 type CommandsConfig struct {
-	DefaultBee    string `yaml:"default_bee"`
-	DefaultIntent string `yaml:"default_intent"`
-	DefaultReview string `yaml:"default_review"`
-	TaskAutorun   *bool  `yaml:"task_autorun"`
+	DefaultBee    string                         `yaml:"default_bee"`
+	DefaultIntent string                         `yaml:"default_intent"`
+	DefaultReview string                         `yaml:"default_review"`
+	TaskAutorun   *bool                          `yaml:"task_autorun"`
+	Custom        map[string]CustomCommandConfig `yaml:"custom"`
+}
+
+// CustomCommandConfig declares a Telegram slash command that publishes a bus event.
+type CustomCommandConfig struct {
+	Description string            `yaml:"description"`
+	Emit        string            `yaml:"emit"`
+	Type        string            `yaml:"type"`
+	Kind        string            `yaml:"kind"`
+	Static      map[string]string `yaml:"static,omitempty"`
 }
 
 // WebhookConfig is optional webhook transport settings.
@@ -136,6 +160,9 @@ func Load(slug string) (Config, error) {
 	}
 	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Commands.validateCustom(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -178,6 +205,38 @@ func (c *Config) validate() error {
 		return fmt.Errorf("telegram gate: chat_ids must be non-empty")
 	}
 	return nil
+}
+
+func (c CommandsConfig) validateCustom() error {
+	for name, cmd := range c.Custom {
+		if _, reserved := reservedTelegramCommands[name]; reserved {
+			return fmt.Errorf("telegram gate: commands.custom.%s: reserved command name", name)
+		}
+		if !customCommandNamePattern.MatchString(name) {
+			return fmt.Errorf("telegram gate: commands.custom.%s: invalid command name (use lowercase letters, digits, underscore; max 32 chars)", name)
+		}
+		if strings.TrimSpace(cmd.Description) == "" {
+			return fmt.Errorf("telegram gate: commands.custom.%s: description is required", name)
+		}
+		emit := strings.ToLower(strings.TrimSpace(cmd.Emit))
+		if emit != "signal" {
+			return fmt.Errorf("telegram gate: commands.custom.%s: emit must be %q", name, "signal")
+		}
+		typ := strings.ToUpper(strings.TrimSpace(cmd.Type))
+		if typ != "SIGNAL" {
+			return fmt.Errorf("telegram gate: commands.custom.%s: type must be SIGNAL", name)
+		}
+		if strings.TrimSpace(cmd.Kind) == "" {
+			return fmt.Errorf("telegram gate: commands.custom.%s: kind is required", name)
+		}
+	}
+	return nil
+}
+
+// CustomCommand returns a configured custom command by Telegram command name.
+func (c CommandsConfig) CustomCommand(name string) (CustomCommandConfig, bool) {
+	cmd, ok := c.Custom[name]
+	return cmd, ok
 }
 
 // BotToken returns the configured token, preferring PASEKA_TELEGRAM_BOT_TOKEN.

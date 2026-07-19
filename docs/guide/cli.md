@@ -539,7 +539,7 @@ Human Gateway surfaces outside Queen Console. MVP: Telegram only.
 
 ### `paseka gate telegram`
 
-Long-poll Telegram Bot API for one colony: push notifications, `/status` `/energy` `/task` `/invites` `/help`, invite and proposal buttons. Separate process from `paseka run`. Requires machine-local `~/.config/paseka/<slug>/telegram.yaml` and NATS.
+Long-poll Telegram Bot API for one colony: push notifications, `/status` `/energy` `/task` `/invites` `/help`, optional `commands.custom` `emit: signal` slash commands, invite and proposal buttons. Separate process from `paseka run`. Requires machine-local `~/.config/paseka/<slug>/telegram.yaml` and NATS.
 
 | Flag | Short | Default | Description |
 | ---- | ----- | ------- | ----------- |

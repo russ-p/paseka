@@ -70,12 +70,40 @@ func FormatStatus(s Snapshot) string {
 	return strings.Join(lines, "\n")
 }
 
-// HelpText is the /help response body.
-const HelpText = `Paseka Human Gateway
+// FormatHelpText renders the /help response body including configured custom commands.
+func FormatHelpText(commands CommandsConfig) string {
+	lines := []string{
+		"Paseka Human Gateway",
+		"",
+		"/status — colony snapshot (Refresh button)",
+		"/energy <traceId> — honey reserve (remaining/budget)",
+		"/energy add <traceId> <n> — top up honey",
+		"/task <text> — inject task (preview + Confirm)",
+		"/invites — pending session invites",
+	}
+	names := make([]string, 0, len(commands.Custom))
+	for name := range commands.Custom {
+		names = append(names, name)
+	}
+	sortCustomCommandNames(names)
+	for _, name := range names {
+		cmd := commands.Custom[name]
+		desc := strings.TrimSpace(cmd.Description)
+		if desc == "" {
+			desc = fmt.Sprintf("publish SIGNAL/%s", strings.TrimSpace(cmd.Kind))
+		}
+		lines = append(lines, fmt.Sprintf("/%s <text> — %s", name, desc))
+	}
+	lines = append(lines, "/help — this message")
+	return strings.Join(lines, "\n")
+}
 
-/status — colony snapshot (Refresh button)
-/energy <traceId> — honey reserve (remaining/budget)
-/energy add <traceId> <n> — top up honey
-/task <text> — inject task (preview + Confirm)
-/invites — pending session invites
-/help — this message`
+func sortCustomCommandNames(names []string) {
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[j] < names[i] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+}

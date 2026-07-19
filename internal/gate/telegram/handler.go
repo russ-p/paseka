@@ -25,6 +25,7 @@ type Handler struct {
 	Invites    *InviteActions
 	Energy     *EnergyActions
 	Tasks      *TaskActions
+	Signals    *SignalActions
 	Proposals  *ProposalActions
 }
 
@@ -57,6 +58,12 @@ func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 		h.energyActions().HandleCommand(ctx, chatID, update.Message.CommandArguments())
 	case "task":
 		h.taskActions().HandleCommand(ctx, chatID, update.Message.CommandArguments())
+	default:
+		if h.Config.Commands.Custom != nil {
+			if _, ok := h.Config.Commands.Custom[update.Message.Command()]; ok {
+				h.signalActions().HandleCommand(ctx, chatID, update.Message.Command(), update.Message.CommandArguments())
+			}
+		}
 	}
 }
 
@@ -101,6 +108,10 @@ func (h *Handler) handleCallback(ctx context.Context, q *tgbotapi.CallbackQuery)
 		h.taskActions().Confirm(ctx, chatID, messageID, strings.TrimPrefix(data, callbackTaskConfirm))
 	case strings.HasPrefix(data, callbackTaskCancel):
 		h.taskActions().Cancel(chatID, messageID, strings.TrimPrefix(data, callbackTaskCancel))
+	case strings.HasPrefix(data, callbackSignalConfirm):
+		h.signalActions().Confirm(ctx, chatID, messageID, strings.TrimPrefix(data, callbackSignalConfirm))
+	case strings.HasPrefix(data, callbackSignalCancel):
+		h.signalActions().Cancel(chatID, messageID, strings.TrimPrefix(data, callbackSignalCancel))
 	case strings.HasPrefix(data, callbackProposalApprove):
 		traceID, taskID, ok := ParseProposalCallback(strings.TrimPrefix(data, callbackProposalApprove))
 		if ok {
@@ -162,6 +173,18 @@ func (h *Handler) taskActions() *TaskActions {
 	}
 }
 
+func (h *Handler) signalActions() *SignalActions {
+	if h.Signals != nil {
+		return h.Signals
+	}
+	return &SignalActions{
+		Colony:  h.Colony,
+		Config:  h.Config,
+		Bot:     h.Bot,
+		Pending: NewPendingSignals(),
+	}
+}
+
 func (h *Handler) proposalActions() *ProposalActions {
 	if h.Proposals != nil {
 		return h.Proposals
@@ -214,7 +237,7 @@ func (h *Handler) sendStatus(chatID int64, editMessageID int) {
 }
 
 func (h *Handler) sendHelp(chatID int64) {
-	h.sendPlain(chatID, 0, HelpText)
+	h.sendPlain(chatID, 0, FormatHelpText(h.Config.Commands))
 }
 
 func (h *Handler) sendPlain(chatID int64, editMessageID int, text string) {

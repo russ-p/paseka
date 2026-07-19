@@ -94,6 +94,12 @@ func (g *Gate) Run(ctx context.Context) error {
 			Config: g.Config,
 			Bot:    g.Bot,
 		},
+		Signals: &SignalActions{
+			Colony:  g.Colony,
+			Config:  g.Config,
+			Bot:     g.Bot,
+			Pending: NewPendingSignals(),
+		},
 	}
 
 	u := tgbotapi.NewUpdate(0)

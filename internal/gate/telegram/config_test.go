@@ -107,6 +107,75 @@ commands:
 	}
 }
 
+func TestLoadRejectsReservedCustomCommandName(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    task:
+      description: "bad"
+      emit: signal
+      type: SIGNAL
+      kind: feature.requested
+`)
+	_, err := tggate.Load("tg-test")
+	if err == nil {
+		t.Fatal("expected error for reserved custom command name")
+	}
+}
+
+func TestLoadRejectsInvalidCustomEmit(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    feature:
+      description: "Intake"
+      emit: run
+      type: SIGNAL
+      kind: feature.requested
+`)
+	_, err := tggate.Load("tg-test")
+	if err == nil {
+		t.Fatal("expected error for invalid emit")
+	}
+}
+
+func TestLoadAcceptsCustomSignalCommand(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    feature:
+      description: "Intake idea/bug via Scout"
+      emit: signal
+      type: SIGNAL
+      kind: feature.requested
+      static:
+        priority: medium
+`)
+	cfg, err := tggate.Load("tg-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd, ok := cfg.Commands.CustomCommand("feature")
+	if !ok {
+		t.Fatal("expected feature custom command")
+	}
+	if cmd.Kind != "feature.requested" {
+		t.Fatalf("kind = %q", cmd.Kind)
+	}
+	if cmd.Static["priority"] != "medium" {
+		t.Fatalf("static priority = %q", cmd.Static["priority"])
+	}
+}
+
 func TestLoadAcceptsValidConfig(t *testing.T) {
 	writeTelegramYAML(t, "tg-test", `enabled: true
 bot_token: "yaml-token"
