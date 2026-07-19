@@ -35,7 +35,11 @@ func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 		h.handleCallback(ctx, update.CallbackQuery)
 		return
 	}
-	if update.Message == nil || !update.Message.IsCommand() {
+	if update.Message == nil {
+		return
+	}
+	command, args, ok := MessageCommand(update.Message)
+	if !ok {
 		return
 	}
 	userID := int64(0)
@@ -47,7 +51,7 @@ func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 		return
 	}
 
-	switch update.Message.Command() {
+	switch command {
 	case "start", "status":
 		h.sendStatus(chatID, 0)
 	case "help":
@@ -55,16 +59,41 @@ func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 	case "invites":
 		h.inviteActions().SendInvitesList(chatID)
 	case "energy":
-		h.energyActions().HandleCommand(ctx, chatID, update.Message.CommandArguments())
+		h.energyActions().HandleCommand(ctx, chatID, args)
 	case "task":
-		h.taskActions().HandleCommand(ctx, chatID, update.Message.CommandArguments())
+		h.taskActions().HandleCommand(ctx, chatID, args)
 	default:
 		if h.Config.Commands.Custom != nil {
-			if _, ok := h.Config.Commands.Custom[update.Message.Command()]; ok {
-				h.signalActions().HandleCommand(ctx, chatID, update.Message.Command(), update.Message.CommandArguments())
+			if _, ok := h.Config.Commands.Custom[command]; ok {
+				h.signalActions().HandleCommand(ctx, chatID, command, args)
 			}
 		}
 	}
+}
+
+// MessageCommand returns the slash command and arguments from a Telegram message.
+// Reply keyboard buttons send plain "/command" text without bot_command entities, so
+// both entity-based and plain-text slash commands are accepted.
+func MessageCommand(msg *tgbotapi.Message) (command string, args string, ok bool) {
+	if msg.IsCommand() {
+		return msg.Command(), msg.CommandArguments(), true
+	}
+	text := strings.TrimSpace(msg.Text)
+	if !strings.HasPrefix(text, "/") {
+		return "", "", false
+	}
+	parts := strings.SplitN(text, " ", 2)
+	command = strings.TrimPrefix(parts[0], "/")
+	if i := strings.Index(command, "@"); i != -1 {
+		command = command[:i]
+	}
+	if command == "" {
+		return "", "", false
+	}
+	if len(parts) > 1 {
+		args = parts[1]
+	}
+	return command, args, true
 }
 
 func (h *Handler) handleCallback(ctx context.Context, q *tgbotapi.CallbackQuery) {

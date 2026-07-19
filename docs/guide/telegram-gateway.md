@@ -122,6 +122,8 @@ Stop with Ctrl-C (SIGINT / SIGTERM). Telegram network failures do not take down 
 
 **One bot token = one colony slug** for MVP. Wrong-hive mutations are worse than managing a second BotFather token.
 
+On startup the gate **best-effort** registers the Telegram command menu (`setMyCommands` — built-ins plus `commands.custom`) and refreshes a compact **reply keyboard** in each allowlisted `chat_id` (stale keyboard removed first). Failures are logged only; long-poll and notify keep running.
+
 ---
 
 ## 4. Commands and buttons
@@ -137,6 +139,8 @@ Message the bot from an allowlisted user **and** chat:
 | `/feature <text>` (example custom) | Preview → Confirm → `SIGNAL/feature.requested` on new trace (when configured) |
 | `/invites` | Pending invites with Accept / Reject / Defer |
 | `/help` | Command list |
+
+The **reply keyboard** (refreshed on gate startup) offers one-tap `/status`, `/help`, `/invites`, `/energy`, and `/task`. The Telegram **command menu** (tap `/` in the composer) lists the same built-ins plus any configured custom commands.
 
 **Invite Accept / Reject** and **proposal Approve / Reject** use a two-step Confirm. **Defer** is immediate.
 
