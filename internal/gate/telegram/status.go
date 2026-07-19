@@ -49,6 +49,34 @@ func BuildSnapshot(ctx colony.Context, sup *runtime.Supervisor) (Snapshot, error
 	}, nil
 }
 
+// FormatWelcome renders the gate startup greeting with a compact status line.
+func FormatWelcome(s Snapshot) string {
+	reactor := "stopped"
+	if s.ReactorAlive {
+		reactor = "alive"
+	}
+	status := fmt.Sprintf("Reactor: %s · bees: %d", reactor, s.LiveBeeCount)
+	if s.PendingInvites > 0 {
+		status += fmt.Sprintf(" · invites: %d", s.PendingInvites)
+	}
+	return strings.Join([]string{
+		fmt.Sprintf("Welcome to Paseka · %s", s.Slug),
+		"",
+		status,
+		"",
+		"Use the buttons below or /help for commands.",
+	}, "\n")
+}
+
+// FormatWelcomeFallback renders a greeting when live status is unavailable.
+func FormatWelcomeFallback(slug string) string {
+	return strings.Join([]string{
+		fmt.Sprintf("Welcome to Paseka · %s", slug),
+		"",
+		"Use the buttons below or /help for commands.",
+	}, "\n")
+}
+
 // FormatStatus renders the /status message body.
 func FormatStatus(s Snapshot) string {
 	reactor := "stopped"
