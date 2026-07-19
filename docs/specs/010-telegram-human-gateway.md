@@ -129,8 +129,10 @@ Accept still costs **1 honey** (same as CLI/Console, [006](./006-human-gateway-i
 ### 8. Notify pipeline (live + reconcile, no spam)
 
 - Durable JetStream consumer name: `paseka-gate-telegram-<slug>` (via existing `SubscribeEvents`).
-- On startup: **reconcile** pending invites and tasks in `waiting_review` / `blocked` / `failed`.
-- Dedup via machine-local notify state (e.g. `telegram-notify-state.json` or a section in `state.json`): key by `invite:<id>` or `task:<traceId>:<taskId>:<status>`; push only on first sight or status change. Live bus handler and reconcile share the same dedup logic.
+- On startup: **reconcile** pending invites and tasks in `blocked` / `failed` / review-gated `waiting_review` (`review_required`, `review_final`). **`task.completed` is live-only** (not reconciled on restart).
+- Each notify category supports **`off`**, **`silent`** (`disable_notification`), or **`sound`** (default for invites/blocked/failed/review categories). `commit_gate` defaults to `off`; `completed` defaults to `silent`.
+- `waiting_review` is split by review policy: `review_required` (soft HITL), `review_final` (merge gate / `_review`), `commit_gate` (AFK defer without human review gate).
+- Dedup via machine-local notify state (e.g. `telegram-notify-state.json`): key by `invite:<id>` or `task:<traceId>:<taskId>:<status>` (or `:completed` for `task.completed`); push only on first sight or status change. Live bus handler and reconcile share the same dedup logic.
 
 ### 9. `/task` defaults live in gate config
 
@@ -225,10 +227,14 @@ allow_from:
 chat_ids:
   - -1001234567890             # push destinations (required, non-empty)
 notify:
-  invites: true
-  waiting_review: true
-  blocked: true
-  failed: true
+  invites: sound
+  blocked: sound
+  failed: sound
+  review_required: sound
+  review_final: sound
+  commit_gate: off
+  completed: silent
+  # waiting_review: true   # legacy → review_required + review_final
 commands:
   task_autorun: true
   default_bee: builder

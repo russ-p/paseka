@@ -60,44 +60,16 @@ type Config struct {
 	Webhook        WebhookConfig  `yaml:"webhook"`
 }
 
-// NotifyConfig toggles outbound push categories.
+// NotifyConfig controls outbound push categories and alert modes (off/silent/sound).
 type NotifyConfig struct {
-	Invites       *bool `yaml:"invites"`
-	WaitingReview *bool `yaml:"waiting_review"`
-	Blocked       *bool `yaml:"blocked"`
-	Failed        *bool `yaml:"failed"`
-}
-
-// InvitesEnabled reports whether pending invite push is on (default true).
-func (n NotifyConfig) InvitesEnabled() bool {
-	if n.Invites == nil {
-		return true
-	}
-	return *n.Invites
-}
-
-// WaitingReviewEnabled reports whether waiting_review task push is on (default true).
-func (n NotifyConfig) WaitingReviewEnabled() bool {
-	if n.WaitingReview == nil {
-		return true
-	}
-	return *n.WaitingReview
-}
-
-// BlockedEnabled reports whether blocked task push is on (default true).
-func (n NotifyConfig) BlockedEnabled() bool {
-	if n.Blocked == nil {
-		return true
-	}
-	return *n.Blocked
-}
-
-// FailedEnabled reports whether failed task push is on (default true).
-func (n NotifyConfig) FailedEnabled() bool {
-	if n.Failed == nil {
-		return true
-	}
-	return *n.Failed
+	Invites        *NotifyMode `yaml:"invites"`
+	WaitingReview  *NotifyMode `yaml:"waiting_review"` // legacy: maps to review_required + review_final
+	Blocked        *NotifyMode `yaml:"blocked"`
+	Failed         *NotifyMode `yaml:"failed"`
+	ReviewRequired *NotifyMode `yaml:"review_required"`
+	ReviewFinal    *NotifyMode `yaml:"review_final"`
+	CommitGate     *NotifyMode `yaml:"commit_gate"`
+	Completed      *NotifyMode `yaml:"completed"`
 }
 
 // AutorunEnabled reports whether /task should publish task.ready after Confirm (default true).
@@ -159,6 +131,7 @@ func Load(slug string) (Config, error) {
 		return Config{}, fmt.Errorf("telegram gate: parse config: %w", err)
 	}
 	cfg.applyDefaults()
+	cfg.Notify.applyLegacyWaitingReview()
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
 	}

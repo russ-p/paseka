@@ -90,3 +90,7 @@ func inviteNotifyKey(inviteID, status string) string {
 func taskNotifyKey(traceID, taskID, status string) string {
 	return fmt.Sprintf("task:%s:%s:%s", traceID, taskID, status)
 }
+
+func taskCompletedNotifyKey(traceID, taskID string) string {
+	return fmt.Sprintf("task:%s:%s:completed", traceID, taskID)
+}

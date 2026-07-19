@@ -64,7 +64,7 @@ func (n *Notifier) Close() {
 // Run reconciles pending state, then subscribes to live bus events until ctx ends.
 func (n *Notifier) Run(ctx context.Context) error {
 	log := logging.Component("gate.telegram.notify")
-	if n.Config.Notify.InvitesEnabled() {
+	if n.Config.Notify.Mode(NotifyCategoryInvites).Enabled() {
 		if err := n.ReconcilePendingInvites(ctx); err != nil {
 			log.Warn("invite reconcile failed", logging.F("error", err.Error()))
 		}
@@ -99,7 +99,8 @@ func (n *Notifier) ReconcilePendingInvites(ctx context.Context) error {
 	return nil
 }
 
-// ReconcileTaskStatuses pushes cards for blocked/failed/waiting_review tasks not yet deduped.
+// ReconcileTaskStatuses pushes cards for blocked/failed/review-gated tasks not yet deduped.
+// Completed tasks are live-only (not reconciled on gate restart).
 func (n *Notifier) ReconcileTaskStatuses(ctx context.Context) error {
 	board, err := console.ListTaskBoard(n.Colony)
 	if err != nil {
@@ -107,12 +108,13 @@ func (n *Notifier) ReconcileTaskStatuses(ctx context.Context) error {
 	}
 	for _, group := range board.Groups {
 		status := protocol.TaskStatus(group.Status)
-		if !n.shouldNotifyTaskStatus(status) {
-			continue
-		}
 		for _, item := range group.Tasks {
 			task := n.lookupTask(item.TraceID, item.TaskID)
 			task.Status = status
+			cat, ok := classifyTaskStatus(task, status)
+			if !ok || !n.Config.Notify.Mode(cat).Enabled() {
+				continue
+			}
 			if err := n.pushTaskStatus(ctx, item.TraceID, task, status); err != nil {
 				return err
 			}
@@ -128,13 +130,15 @@ func (n *Notifier) handleEvent(ev protocol.Event) error {
 		return n.handleInviteEvent(ev)
 	case ev.Type == protocol.EventSignal && kind == string(protocol.TaskEventStatus):
 		return n.handleTaskStatusEvent(ev)
+	case ev.Type == protocol.EventVerification && kind == string(protocol.TaskEventCompleted):
+		return n.handleTaskCompletedEvent(ev)
 	default:
 		return nil
 	}
 }
 
 func (n *Notifier) handleInviteEvent(ev protocol.Event) error {
-	if !n.Config.Notify.InvitesEnabled() {
+	if !n.Config.Notify.Mode(NotifyCategoryInvites).Enabled() {
 		return nil
 	}
 	var payload protocol.SessionInvitePayload
@@ -165,15 +169,36 @@ func (n *Notifier) handleTaskStatusEvent(ev protocol.Event) error {
 	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
 		return fmt.Errorf("telegram gate: parse task.status: %w", err)
 	}
-	if !n.shouldNotifyTaskStatus(payload.Status) {
-		return nil
-	}
 	task := n.lookupTask(ev.TraceID, payload.TaskID)
 	task.Status = payload.Status
 	if payload.Summary != "" {
 		task.Summary = payload.Summary
 	}
+	cat, ok := classifyTaskStatus(task, payload.Status)
+	if !ok || !n.Config.Notify.Mode(cat).Enabled() {
+		return nil
+	}
 	return n.pushTaskStatus(context.Background(), ev.TraceID, task, payload.Status)
+}
+
+func (n *Notifier) handleTaskCompletedEvent(ev protocol.Event) error {
+	mode := n.Config.Notify.Mode(NotifyCategoryCompleted)
+	if !mode.Enabled() {
+		return nil
+	}
+	var payload protocol.TaskCompletedPayload
+	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+		return fmt.Errorf("telegram gate: parse task.completed: %w", err)
+	}
+	if payload.TaskID == "" {
+		return nil
+	}
+	task := n.lookupTask(ev.TraceID, payload.TaskID)
+	task.Status = protocol.TaskStatusCompleted
+	if payload.Summary != "" {
+		task.Summary = payload.Summary
+	}
+	return n.pushTaskCompleted(context.Background(), ev.TraceID, task, payload, mode)
 }
 
 func (n *Notifier) lookupTask(traceID, taskID string) taskledger.TaskSnapshot {
@@ -191,21 +216,12 @@ func (n *Notifier) lookupTask(traceID, taskID string) taskledger.TaskSnapshot {
 	return task
 }
 
-func (n *Notifier) shouldNotifyTaskStatus(status protocol.TaskStatus) bool {
-	switch status {
-	case protocol.TaskStatusBlocked:
-		return n.Config.Notify.BlockedEnabled()
-	case protocol.TaskStatusFailed:
-		return n.Config.Notify.FailedEnabled()
-	case protocol.TaskStatusWaitingReview:
-		return n.Config.Notify.WaitingReviewEnabled()
-	default:
-		return false
-	}
-}
-
 func (n *Notifier) pushInvite(ctx context.Context, invite colony.InviteEntry) error {
 	if invite.Status != colony.InviteStatusPending {
+		return nil
+	}
+	mode := n.Config.Notify.Mode(NotifyCategoryInvites)
+	if !mode.Enabled() {
 		return nil
 	}
 	key := inviteNotifyKey(invite.InviteID, invite.Status)
@@ -214,10 +230,18 @@ func (n *Notifier) pushInvite(ctx context.Context, invite colony.InviteEntry) er
 	}
 	text := FormatInviteCard(n.Colony, n.ledger, invite)
 	keyboard := inviteActionKeyboard(invite.InviteID)
-	return n.broadcast(text, keyboard, key)
+	return n.broadcast(text, keyboard, key, mode.Silent())
 }
 
 func (n *Notifier) pushTaskStatus(ctx context.Context, traceID string, task taskledger.TaskSnapshot, status protocol.TaskStatus) error {
+	cat, ok := classifyTaskStatus(task, status)
+	if !ok {
+		return nil
+	}
+	mode := n.Config.Notify.Mode(cat)
+	if !mode.Enabled() {
+		return nil
+	}
 	key := taskNotifyKey(traceID, task.TaskID, string(status))
 	if !n.state.ShouldNotify(key) {
 		return nil
@@ -225,17 +249,27 @@ func (n *Notifier) pushTaskStatus(ctx context.Context, traceID string, task task
 	text := FormatTaskStatusCard(n.Colony, n.Config, n.ledger, traceID, task, status)
 	var keyboard tgbotapi.InlineKeyboardMarkup
 	switch {
-	case status == protocol.TaskStatusWaitingReview:
+	case status == protocol.TaskStatusWaitingReview && taskledger.IsReviewGate(task):
 		keyboard = proposalKeyboardForTask(traceID, task)
 	case status == protocol.TaskStatusBlocked && taskledger.IsEnergyBlockedTask(task):
 		keyboard = energyTopUpKeyboard(traceID)
 	}
-	return n.broadcast(text, keyboard, key)
+	return n.broadcast(text, keyboard, key, mode.Silent())
 }
 
-func (n *Notifier) broadcast(text string, keyboard tgbotapi.InlineKeyboardMarkup, dedupKey string) error {
+func (n *Notifier) pushTaskCompleted(ctx context.Context, traceID string, task taskledger.TaskSnapshot, payload protocol.TaskCompletedPayload, mode NotifyMode) error {
+	key := taskCompletedNotifyKey(traceID, task.TaskID)
+	if !n.state.ShouldNotify(key) {
+		return nil
+	}
+	text := FormatTaskCompletedCard(traceID, task, payload)
+	return n.broadcast(text, tgbotapi.InlineKeyboardMarkup{}, key, mode.Silent())
+}
+
+func (n *Notifier) broadcast(text string, keyboard tgbotapi.InlineKeyboardMarkup, dedupKey string, silent bool) error {
 	for _, chatID := range n.Config.ChatIDs {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.DisableNotification = silent
 		if len(keyboard.InlineKeyboard) > 0 {
 			msg.ReplyMarkup = keyboard
 		}
@@ -261,11 +295,36 @@ func FormatTaskStatusCard(ctx colony.Context, cfg Config, ledger taskledger.Ledg
 	if summary := strings.TrimSpace(task.Summary); summary != "" && summary != title {
 		lines = append(lines, fmt.Sprintf("Summary: %s", truncateText(summary, maxInviteTaskLen)))
 	}
-	if status == protocol.TaskStatusWaitingReview {
+	if status == protocol.TaskStatusWaitingReview && taskledger.IsReviewGate(task) {
 		lines = append(lines, proposalReviewLines(cfg, task)...)
 	}
 	if status == protocol.TaskStatusBlocked || taskledger.IsEnergyBlockedTask(task) {
 		lines = append(lines, honeyLine(ctx, ledger, traceID))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// FormatTaskCompletedCard renders a task.completed push card.
+func FormatTaskCompletedCard(traceID string, task taskledger.TaskSnapshot, payload protocol.TaskCompletedPayload) string {
+	title := taskTitle(task)
+	lines := []string{
+		"Task completed",
+		fmt.Sprintf("Trace: %s", traceID),
+		fmt.Sprintf("Task: %s", task.TaskID),
+	}
+	if task.Bee != "" {
+		lines = append(lines, fmt.Sprintf("Bee: %s", task.Bee))
+	}
+	lines = append(lines, fmt.Sprintf("Title: %s", truncateText(title, maxInviteTaskLen)))
+	summary := strings.TrimSpace(payload.Summary)
+	if summary == "" {
+		summary = strings.TrimSpace(task.Summary)
+	}
+	if summary != "" && summary != title {
+		lines = append(lines, fmt.Sprintf("Summary: %s", truncateText(summary, maxInviteTaskLen)))
+	}
+	if commit := strings.TrimSpace(payload.Commit); commit != "" {
+		lines = append(lines, fmt.Sprintf("Commit: %s", truncateText(commit, maxInviteTaskLen)))
 	}
 	return strings.Join(lines, "\n")
 }

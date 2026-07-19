@@ -50,10 +50,14 @@ chat_ids:
   - 123456789                     # push destinations (private chat id often equals user id)
   # - -1001234567890              # and/or a group
 notify:
-  invites: true
-  waiting_review: true
-  blocked: true
-  failed: true
+  invites: sound
+  blocked: sound
+  failed: sound
+  review_required: sound   # waiting_review + review: required (soft HITL)
+  review_final: sound      # waiting_review + review: final / _review (merge gate)
+  commit_gate: off         # waiting_review without review gate (AFK defer)
+  completed: silent        # VERIFICATION/task.completed (live bus only)
+  # waiting_review: true   # legacy: maps to review_required + review_final
 commands:
   task_autorun: true              # Confirm on /task also publishes task.ready
   default_bee: builder
@@ -77,6 +81,7 @@ console_base_url: ""              # optional; e.g. Tailscale URL to Queen Consol
 | `allow_from` | yes | Non-empty; inbound commands from others are **silently ignored** |
 | `chat_ids` | yes | Non-empty; pushes go here; commands from chats outside this list are also ignored |
 | `mode` | no | Default `longpoll`. `webhook` is rejected at runtime until V2 |
+| `notify.*` | no | Per-category push mode: `off`, `silent` (no sound), or `sound` (default for most). Legacy `waiting_review` maps to `review_required` + `review_final`. See example above. |
 | `commands.*` | no | Defaults: bee `builder`, intent `general`, review `none`, autorun `true` |
 | `commands.custom.<name>` | no | Custom slash commands that publish bus `SIGNAL` events (`emit: signal` only). See below. |
 | `console_base_url` | no | When set, cards may include a Console deep-link |
