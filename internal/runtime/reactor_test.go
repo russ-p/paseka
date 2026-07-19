@@ -110,6 +110,38 @@ func TestReactorDirectDispatchVerificationSuccess(t *testing.T) {
 	}
 }
 
+func TestReactorDirectDispatchSignalFeatureRequested(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "telegram", 0, protocol.EventSignal, map[string]any{
+		"kind":  "feature.requested",
+		"title": "OAuth callback",
+		"body":  "Add OAuth callback to the API.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{
+		"scout": {Role: "scout", DefaultIntent: "intake", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "feature.requested"}, Dispatch: colony.DispatchDirect},
+		}},
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("adapter calls = %d, want 1", rec.calls)
+	}
+	if rec.lastReq.Bee != "scout" {
+		t.Fatalf("bee = %q, want scout", rec.lastReq.Bee)
+	}
+	if !strings.Contains(rec.lastReq.Task, "OAuth callback") {
+		t.Fatalf("task body = %q", rec.lastReq.Task)
+	}
+}
+
 func TestReactorDirectDispatchVerificationFailed(t *testing.T) {
 	ev, err := protocol.NewEvent("trace-1", "agent-1", 0, protocol.EventVerification, protocol.VerificationPayload{
 		Kind:    protocol.VerificationFailed,

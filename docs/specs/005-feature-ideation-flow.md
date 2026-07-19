@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft (colony reference).** Design locked for colony choreography and event shapes. **Phases 0–1** (soft path + platform/colony SIGNAL boundary), **colony intake** (Scout `intake` on `feature.requested`), and the **colony** parts of Phases 3–4 (`auto_invites` grill/breakdown rules, grilling → `spec.ready`) are done.
+**Draft (colony reference).** Design locked for colony choreography and event shapes. **Phases 0–1** (soft path + platform/colony SIGNAL boundary), **colony intake** (Scout `intake` on `feature.requested` via reactor direct dispatch), and the **colony** parts of Phases 3–4 (`auto_invites` grill/breakdown rules, grilling → `spec.ready`) are done.
 
 **Platform** invite lifecycle (`session.invite` / `beekeeper.ready`, CLI/Console accept, `done_when` completion, session energy) lives in [006-human-gateway-invites.md](./006-human-gateway-invites.md) and [bee routing](../reference/bee-routing.md) §7–8 — not in this spec.
 

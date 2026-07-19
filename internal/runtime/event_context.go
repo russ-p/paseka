@@ -11,10 +11,32 @@ import (
 
 const maxDirectTaskBody = 8000
 
+// directSignalDenylist blocks platform SIGNAL kinds from AFK direct dispatch even when
+// misconfigured in bee subscribes.
+var directSignalDenylist = map[string]struct{}{
+	string(protocol.TaskEventReady):       {},
+	string(protocol.TaskEventStatus):      {},
+	string(protocol.SignalEnergyAdd):      {},
+	string(protocol.SignalEnergyConsume):  {},
+	string(protocol.SignalSessionInvite):  {},
+	string(protocol.SignalBeekeeperReady): {},
+}
+
 // eventDispatchContext builds task text and taskId for direct bee dispatch from a bus event.
 func eventDispatchContext(ev protocol.Event) (taskID, taskBody string, err error) {
 	kind := protocol.PayloadKind(ev.Payload)
 	switch ev.Type {
+	case protocol.EventSignal:
+		if _, denied := directSignalDenylist[kind]; denied {
+			return "", "", fmt.Errorf("runtime: unsupported SIGNAL kind %q for direct dispatch", kind)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			return "", "", fmt.Errorf("runtime: parse SIGNAL payload: %w", err)
+		}
+		taskID = signalPayloadString(payload, "taskId")
+		taskBody = formatSignalTask(kind, payload)
+
 	case protocol.EventMutation:
 		if !protocol.IsCodeProposalKind(kind) {
 			return "", "", fmt.Errorf("runtime: unsupported mutation kind %q", kind)
@@ -78,6 +100,40 @@ func proposalDispatchFields(ev protocol.Event) (sector, proposalKind string) {
 		proposalKind = kind
 	}
 	return sector, proposalKind
+}
+
+func signalPayloadString(payload map[string]any, key string) string {
+	v, ok := payload[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
+
+func formatSignalTask(kind string, payload map[string]any) string {
+	body := signalPayloadString(payload, "body")
+	title := signalPayloadString(payload, "title")
+	summary := signalPayloadString(payload, "summary")
+	message := signalPayloadString(payload, "message")
+
+	switch {
+	case body != "" && title != "":
+		return title + "\n\n" + body
+	case body != "":
+		return body
+	case title != "":
+		return title
+	case summary != "":
+		return summary
+	case message != "":
+		return message
+	default:
+		return fmt.Sprintf("Handle SIGNAL event (kind=%s)", kind)
+	}
 }
 
 func formatMutationTask(p protocol.MutationPayload) string {

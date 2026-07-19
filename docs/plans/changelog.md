@@ -2,6 +2,12 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-07 — SIGNAL direct dispatch
+
+Reactor direct dispatch now supports colony `SIGNAL` events (e.g. `feature.requested` → Scout `intake`). Platform SIGNAL kinds (`task.*`, `energy.*`, invite protocol) remain denylisted for direct AFK runs.
+
+- Canonical: [Bee routing](../reference/bee-routing.md) §4 Direct path
+
 ## 2026-07 — Prompt text flag `body`
 
 Hard rename of free-text prompt input to avoid collision with ledger `taskId`:

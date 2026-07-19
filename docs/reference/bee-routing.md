@@ -160,6 +160,10 @@ When a domain event arrives, reactor finds all bees with `dispatch: direct` subs
 | `MUTATION/code.proposal.root` | `main-guard` | Colony root (+ sector) | diff + summary; review truth is disk |
 | `VERIFICATION/verification.failed` | `builder` | Per bee/task rules | failure summary for fix-up |
 | `VERIFICATION/verification.success` | `receiver` | — | approval summary for commit gate |
+| `SIGNAL/feature.requested` (colony) | `scout` | Colony root | title/body from payload; bee `default_intent` (e.g. `intake`) |
+| `SIGNAL/spec.ready` (colony) | `drone` (when subscribed) | Colony root | body/summary/ref from payload |
+
+**Platform SIGNAL kinds** (`task.ready`, `task.status`, `energy.*`, `session.invite`, `beekeeper.ready`) are **not** valid direct-dispatch targets — they use the task ledger, energy subsystem, or Human Gateway. Runtime refuses them even if a bee misconfigures `dispatch: direct`.
 
 Duplicate runs are suppressed per `traceId + taskId + bee + type + kind` when `payload.taskId` is set, except for rework-cycle gates (`MUTATION/code.proposal.isolated`, `MUTATION/code.proposal.root`, `code.proposal` alias, `VERIFICATION/verification.failed`): those key by event identity so each publisher→reviewer pass can run again on the same task. Direct dispatch also skips when the publishing run's bee role matches the subscriber (prevents receiver self-loops if it mistakenly re-emits `verification.success`).
 
