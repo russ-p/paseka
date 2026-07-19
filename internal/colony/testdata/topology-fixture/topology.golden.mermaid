@@ -1,8 +1,10 @@
 flowchart LR
   subgraph events [Events]
     E_INSIGHT_star["INSIGHT/*"]
+    E_INSIGHT_task_plan["INSIGHT/task.plan"]
     E_MUTATION_code_proposal_isolated["MUTATION/code.proposal.isolated"]
     E_SIGNAL_feature_classified["SIGNAL/feature.classified"]
+    E_SIGNAL_feature_requested["SIGNAL/feature.requested"]
     E_SIGNAL_review_needed["SIGNAL/review.needed"]
     E_SIGNAL_task_ready["SIGNAL/task.ready"]
     E_VERIFICATION_verification_failed["VERIFICATION/verification.failed"]
@@ -12,7 +14,7 @@ flowchart LR
     B_builder["builder"]
     B_drone["drone\nintents: breakdown, grilling"]
     B_guard["guard"]
-    B_scout["scout\nintents: survey, general"]
+    B_scout["scout\nintents: intake, survey"]
   end
   E_INSIGHT_star -->|invite intent=survey| B_scout
   E_SIGNAL_feature_classified -->|invite intent=grilling| B_drone
@@ -20,8 +22,11 @@ flowchart LR
   B_builder -->|publish| E_MUTATION_code_proposal_isolated
   B_guard -->|publish| E_VERIFICATION_verification_failed
   B_guard -->|publish| E_VERIFICATION_verification_success
+  B_scout -->|publish| E_INSIGHT_task_plan
+  B_scout -->|publish| E_SIGNAL_feature_classified
+  B_scout -->|publish| E_SIGNAL_task_ready
   E_MUTATION_code_proposal_isolated -->|subscribe direct| B_builder
   E_MUTATION_code_proposal_isolated -->|subscribe direct| B_guard
+  E_SIGNAL_feature_requested -->|subscribe direct| B_scout
   E_SIGNAL_task_ready -->|subscribe task| B_builder
   E_SIGNAL_task_ready -->|subscribe task implicit| B_drone
-  E_SIGNAL_task_ready -->|subscribe task implicit| B_scout

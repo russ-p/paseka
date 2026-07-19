@@ -126,10 +126,8 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"):    builderIntentTestFixPartial,
 		PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"):    builderIntentRefactorPartial,
 		PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):        scoutIntentSurveyPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-plan.md"):          scoutIntentPlanPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-triage.md"):        scoutIntentTriagePartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-classify.md"):      scoutIntentClassifyPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-emit-classify.md"):        scoutEmitClassifyPartial,
+		PasekaPath(root, "prompts", "_partials", "scout-intent-intake.md"):        scoutIntentIntakePartial,
+		PasekaPath(root, "prompts", "_partials", "scout-emit-intake.md"):          scoutEmitIntakePartial,
 		PasekaPath(root, "prompts", "_partials", "cursor-interactive-kickoff.md"): cursorInteractiveKickoffPartial,
 	}
 
@@ -248,16 +246,24 @@ cache/
 	scoutBeeYAML = `role: scout
 adapter: cursor
 prompt_template: scout.md
-default_intent: survey
+default_intent: intake
 params:
   output_format: stream-json
   trust: true
   force: true
   plan: false
 worktree: false
+subscribes:
+  - type: SIGNAL
+    kind: feature.requested
+    dispatch: direct
 publishes:
+  - type: SIGNAL
+    kind: feature.classified
   - type: INSIGHT
     kind: task.plan
+  - type: SIGNAL
+    kind: task.ready
 `
 	builderBeeYAML = `role: builder
 adapter: cursor
@@ -306,7 +312,7 @@ Flight trail: {{.TraceID}}
 ## Task
 {{.Task}}
 `
-	scoutPrompt = `You are Scout Bee. Your job is problem discovery, not implementation.
+	scoutPrompt = `You are Scout Bee. Your job is problem discovery and intake routing, not implementation.
 
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
@@ -316,8 +322,8 @@ Requested intent: {{.IntentRaw}}{{end}}
 ## Rules
 - Do not edit files unless necessary to inspect behavior.
 - Do not invent work: only report problems with evidence (path, symbol, symptom).
-- Prefer finding over planning. Emit task.plan only when the task asks for a plan, the intent is plan, or findings map cleanly to vertical slices.
-- Never emit a vague plan ("improve the codebase"). Never emit task.ready unless the Beekeeper / task explicitly asks to start work.
+- For intake: classify the entry, then emit one-slice task.plan only when decision=plan or decision=triage.
+- Never emit a vague plan ("improve the codebase"). Emit task.ready only when the entry text explicitly asks to start now (e.g. "do now", "fix needed now", "фикс нужен сейчас").
 
 ## Task
 {{.Task}}
@@ -327,13 +333,9 @@ Requested intent: {{.IntentRaw}}{{end}}
 {{end}}
 
 ## Mission guidance
-{{if eq .Intent "plan"}}
-{{template "scout-intent-plan" .}}
-{{else if eq .Intent "classify"}}
-{{template "scout-intent-classify" .}}
-{{template "scout-emit-classify" .}}
-{{else if eq .Intent "triage"}}
-{{template "scout-intent-triage" .}}
+{{if eq .Intent "intake"}}
+{{template "scout-intent-intake" .}}
+{{template "scout-emit-intake" .}}
 {{else}}
 {{template "scout-intent-survey" .}}
 {{end}}
@@ -485,67 +487,54 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 | Maintainability | duplicated critical paths, stale contracts |
 | Debt with signal | TODO/FIXME that blocks a real path (not cosmetic) |
 `
-	scoutIntentPlanPartial = `Turn confirmed problems into an actionable task plan. Do not widen scope with new speculative work.
+	scoutIntentIntakePartial = `Intake a feature.requested entry — classify, then hand off clear work to the ledger. Do not implement.
 
 ### Method
-1. Start from the Task and Prior discoveries. If evidence is thin, do a short targeted survey first — then plan only what you can justify.
-2. Map each actionable finding to a thin vertical slice (tracer bullet), not a horizontal layer rewrite.
-3. Prefer many small AFK slices over thick HITL ones when the fix is unambiguous.
-4. Emit one INSIGHT/task.plan listing all slices in dependency order (blockers first). Use stable taskId values (001-short-description, …).
-5. Optionally emit INSIGHT/context.note for ordering rationale or source of findings.
-6. Emit SIGNAL/task.ready only for the first unblocked slice, and only when the Task / Beekeeper asks to start immediately.
-
-### Each planned task should state
-- Title and bee (builder unless another role is clearly better)
-- What to fix (end-to-end behavior), not a file shopping list
-- Acceptance criteria derived from the finding
-- Blocked-by (or none)
-`
-	scoutIntentTriagePartial = `Prioritize already-known findings. Prefer Prior discoveries and the Task over a fresh deep survey.
-
-### Method
-1. Collect candidate problems from Prior discoveries and the Task. Explore the codebase only to verify or disprove a candidate.
-2. Drop items without evidence or outside the stated scope.
-3. Rank survivors by severity × blast radius × fixability (critical blockers first; defer cosmetic debt).
-4. Publish a short ranked triage as INSIGHT/run.summary and, when useful, one INSIGHT/context.note or review.note per top finding that needs durable memory.
-5. Do not emit task.plan unless the Task explicitly asks for a plan after triage. Do not emit task.ready.
-`
-	scoutIntentClassifyPartial = `Classify a feature.requested idea — do not plan or implement.
-
-### Method
-1. Read the Task and Prior discoveries for the feature.requested title/body (or equivalent idea text).
+1. Read the Task and Prior discoveries for the feature.requested title/body (or equivalent entry text).
 2. Decide exactly one decision using evidence from the body and prior insights:
    - grill — vague product idea; acceptance criteria missing; needs interactive grilling before breakdown.
-   - plan — spec/PRD already clear enough for vertical slices; short path to task.plan is appropriate.
-   - triage — looks like bug, debt, or incident; not a new feature.
+   - plan — clear small feature or improve; one builder-sized slice; no grilling needed.
+   - triage — bug, regression, or incident; one builder-sized fix.
    - clarify — ambiguous whether feature vs bug; Beekeeper should choose next step.
    - reject — out of scope, duplicate, or non-actionable.
-3. Emit one SIGNAL/feature.classified with decision and rationale only (do not pick the next bee or intent — colony rules / Beekeeper react to decision).
-4. Optionally emit INSIGHT/run.summary with a one-line classification summary.
-5. Do not emit task.plan or task.ready when decision=grill.
-6. Do not emit task.plan unless decision=plan and the Task explicitly asks for a plan after classification.
+3. Emit one SIGNAL/feature.classified with decision and rationale only (do not set bee / intent on this event — colony rules / Beekeeper react to decision).
+4. When decision=plan: emit one INSIGHT/task.plan with a single task — bee: builder, intent: feature. Include title, body with acceptance criteria, and stable taskId (001-short-slug).
+5. When decision=triage: emit one INSIGHT/task.plan with a single task — bee: builder, intent: bugfix. Include reproduction/symptom in the body.
+6. When decision=grill, clarify, or reject: do not emit task.plan or task.ready.
+7. Start now: if title/body/task text explicitly asks to start immediately (e.g. "do now", "fix needed now", "фикс нужен сейчас", "start immediately"), emit SIGNAL/task.ready for that single planned task after task.plan. Otherwise publish task.plan only.
+8. Optionally emit INSIGHT/run.summary with a one-line intake summary.
 `
-	scoutEmitClassifyPartial = `## Publish events (classify only)
+	scoutEmitIntakePartial = `## Publish events (intake only)
 
-For classify, publish only these kinds. Do not emit task.plan or task.ready when decision=grill.
+Always emit feature.classified first. Then follow the decision branch below.
 
-| Event | payload.kind | Role |
+| Event | payload.kind | When |
 | ----- | ------------ | ---- |
-| SIGNAL | feature.classified | Classification decision (required) |
-| INSIGHT | run.summary | Short classification summary (optional) |
+| SIGNAL | feature.classified | Always (required) |
+| INSIGHT | task.plan | decision=plan or decision=triage (one builder task) |
+| SIGNAL | task.ready | Same slice, only when entry text asks to start now |
+| INSIGHT | run.summary | Optional one-line summary |
 
-### feature.classified — one classification decision
+Do not emit task.plan or task.ready when decision=grill, clarify, or reject.
 
-Emit one SIGNAL/feature.classified after classification. Set decision and rationale. Do not set bee / intent — who runs next is colony auto_invites (or Beekeeper), matching on decision. confidence is optional and advisory.
+### feature.classified — classification decision
+
+Emit one SIGNAL/feature.classified. Set decision and rationale. Do not set bee / intent.
 
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"grill","rationale":"Product idea without acceptance criteria; needs grilling before breakdown."}}
 EOF
 
-When decision=plan and the spec is already clear:
+When decision=plan (clear small feature):
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"plan","rationale":"PRD is clear enough for vertical-slice breakdown without grilling."}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"plan","rationale":"Single clear improvement; one builder slice is enough."}}
+EOF
+
+When decision=triage (bug):
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"triage","rationale":"Regression on Windows; one focused bugfix slice."}}
 EOF
 
 When decision=reject:
@@ -554,10 +543,34 @@ paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"reject","rationale":"Duplicate of an existing spec; no new work."}}
 EOF
 
+### task.plan — one builder slice (plan or triage)
+
+Emit one INSIGHT/task.plan with a single task in payload.tasks.
+
+Clear feature (decision=plan):
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-add-health-badge","title":"Add health badge to header","body":"## What to build\n\nShow colony health in the console header.\n\n## Acceptance criteria\n\n- [ ] Badge visible when NATS is connected\n- [ ] Badge shows disconnected state clearly\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"feature","dependsOn":[]}]}}
+EOF
+
+Bug (decision=triage):
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix","dependsOn":[]}]}}
+EOF
+
+### task.ready — start now only
+
+Emit only when title/body/task text explicitly requests immediate start. Use the same taskId, title, body, bee, and intent as the single planned task.
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix"}}
+EOF
+
 ### run.summary — optional
 
 paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Classified feature.requested as grill"}}
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Intake: triage bug, one builder slice planned"}}
 EOF
 `
 	emitHowtoPartial = `When you need to publish a bus event during a run:
@@ -671,14 +684,22 @@ api_key_env: ANTHROPIC_API_KEY
 	scoutBeePiYAML = `role: scout
 adapter: pi
 prompt_template: scout.md
-default_intent: survey
+default_intent: intake
 params:
   output_format: json
   plan: false
 worktree: false
+subscribes:
+  - type: SIGNAL
+    kind: feature.requested
+    dispatch: direct
 publishes:
+  - type: SIGNAL
+    kind: feature.classified
   - type: INSIGHT
     kind: task.plan
+  - type: SIGNAL
+    kind: task.ready
 `
 	builderBeePiYAML = `role: builder
 adapter: pi

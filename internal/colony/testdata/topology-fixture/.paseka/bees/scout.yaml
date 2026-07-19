@@ -2,6 +2,17 @@ role: scout
 adapter: cursor
 prompt_template: scout.md
 intents:
+  - intake
   - survey
-  - general
-default_intent: survey
+default_intent: intake
+subscribes:
+  - type: SIGNAL
+    kind: feature.requested
+    dispatch: direct
+publishes:
+  - type: SIGNAL
+    kind: feature.classified
+  - type: INSIGHT
+    kind: task.plan
+  - type: SIGNAL
+    kind: task.ready

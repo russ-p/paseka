@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft (colony reference).** Design locked for colony choreography and event shapes. **Phases 0–1** (soft path + platform/colony SIGNAL boundary) and the **colony** parts of Phases 3–4 (`auto_invites` grill/breakdown rules, grilling → `spec.ready`) are done.
+**Draft (colony reference).** Design locked for colony choreography and event shapes. **Phases 0–1** (soft path + platform/colony SIGNAL boundary), **colony intake** (Scout `intake` on `feature.requested`), and the **colony** parts of Phases 3–4 (`auto_invites` grill/breakdown rules, grilling → `spec.ready`) are done.
 
 **Platform** invite lifecycle (`session.invite` / `beekeeper.ready`, CLI/Console accept, `done_when` completion, session energy) lives in [006-human-gateway-invites.md](./006-human-gateway-invites.md) and [bee routing](../reference/bee-routing.md) §7–8 — not in this spec.
 
@@ -16,13 +16,13 @@ Target path:
 
 ```text
 SIGNAL/feature.requested
-  → Scout classify (AFK)
-  → SIGNAL/feature.classified (decision=grill)
-  → SIGNAL/session.invite (pending)          ← platform Human Gateway (006)
-    → Beekeeper accept → SIGNAL/beekeeper.ready
-  → Drone interactive grilling → docs/specs/… + SIGNAL/spec.ready
-  → session.invite (breakdown) → Beekeeper accept (optional soft path: manual bee chat)
-  → Drone breakdown → INSIGHT/task.plan → (optional) SIGNAL/task.ready
+  → Scout intake (AFK, subscribes direct)
+  → SIGNAL/feature.classified (decision tag)
+  ├─ grill → SIGNAL/session.invite (pending) → Drone grilling → spec.ready → breakdown → task.plan
+  ├─ plan  → INSIGHT/task.plan (one builder slice, intent=feature) → optional SIGNAL/task.ready
+  ├─ triage → INSIGHT/task.plan (one builder slice, intent=bugfix) → optional SIGNAL/task.ready
+  └─ clarify / reject → stop or Beekeeper
+
   → existing colony implementation (builder / guard / receiver)
 ```
 
@@ -53,10 +53,10 @@ This extends — does not replace — the short path in [task ledger](../referen
 
 | Primitive | Location / behavior | Ideation use |
 | --------- | ------------------- | ------------ |
-| `feature.requested` | Colony contract; envelope-only on bus; no reactor subscribers | Entry scent for ideas / PRDs |
-| Scout intents | `survey` (default), `plan`, `triage`, `classify` | `classify` routes without planning |
+| `feature.requested` | Colony contract; Scout `intake` via `subscribes` | Entry scent for ideas, bugs, improvements |
+| Scout intents | `intake` (default), `survey` (manual) | `intake` classifies and may emit one-slice `task.plan` |
 | Drone intents | `general`, `grilling`, `breakdown` | Grilling + breakdown already prompted |
-| Reactor dispatch | `task` + `direct` → AFK `Adapter.Run()` only | Classify is AFK; grilling is not |
+| Reactor dispatch | `task` + `direct` → AFK `Adapter.Run()` only | Intake is AFK; grilling is not |
 | Interactive sessions | `bee chat` / Console + Human Gateway invites | Soft path or invite accept ([006](./006-human-gateway-invites.md)) |
 | Task ledger | `task.plan` → `task.ready` → implement | Starts after approved breakdown |
 | Spec files | `docs/specs/*.md` (convention) | Durable handoff after grilling |
@@ -75,23 +75,25 @@ Colony **`auto_invites`** rules may **match** on `decision` (e.g. `match.decisio
 
 **Platform routing** stays bee `subscribes` + colony `auto_invites` with `invite.done_when`. **Choreography** is bees and rules reacting to `SIGNAL` kinds and payload fields — Scout emits `feature.classified` with a `decision`; invite rules, other bees, and Beekeeper react.
 
-### 1. Two entry paths after `feature.requested`
+### 1. Entry paths after `feature.requested`
 
 | Scout `decision` | When | Next |
 | ------------- | ---- | ---- |
 | `grill` | Idea / vague product ask; acceptance criteria missing | `session.invite` → Drone `grilling` ([006](./006-human-gateway-invites.md)) |
-| `plan` | Spec/PRD already clear enough for vertical slices | Scout (or Drone) may emit `task.plan` (existing short path) |
-| `triage` | Looks like bug / debt / incident | Scout `triage` intent; not this flow |
+| `plan` | Clear small feature or improve; one builder slice | Scout emits one `INSIGHT/task.plan` (`bee: builder`, `intent: feature`) |
+| `triage` | Bug / regression / incident; one builder fix | Scout emits one `INSIGHT/task.plan` (`bee: builder`, `intent: bugfix`) |
 | `clarify` | Ambiguous whether feature vs bug | `INSIGHT/context.note` + optional invite with `intent` unset; Beekeeper chooses |
 | `reject` | Out of scope / duplicate / non-actionable | Narrative insight only; no invite |
 
 Scout **must not** emit `task.plan` or `task.ready` when `decision=grill`.
 
+**Start now:** when title/body explicitly asks to start immediately (e.g. `do now`, `fix needed now`, `фикс нужен сейчас`), Scout emits `SIGNAL/task.ready` for the single planned slice after `task.plan`. Otherwise plan-only — Beekeeper kicks via `paseka task start` or later.
+
 ### 2. Workflow uses SIGNAL; memory uses INSIGHT
 
 | Kind | Type | Drives choreography? |
 | ---- | ---- | -------------------- |
-| `feature.requested` | `SIGNAL` | yes (Scout classify via `subscribes`) |
+| `feature.requested` | `SIGNAL` | yes (Scout `intake` via `subscribes`) |
 | `feature.classified` | `SIGNAL` | yes (`decision` tag → `auto_invites` / UI) |
 | `session.invite` | `SIGNAL` | yes — platform Human Gateway ([006](./006-human-gateway-invites.md)) |
 | `beekeeper.ready` | `SIGNAL` | yes — platform ([006](./006-human-gateway-invites.md)) |
@@ -102,7 +104,7 @@ Scout **must not** emit `task.plan` or `task.ready` when `decision=grill`.
 
 ### 3. HITL grilling parks on Human Gateway invites
 
-Interactive work is never auto-started from classify alone. This colony publishes (or auto-invites) a pending `session.invite`; Beekeeper accept starts the Drone grilling session. Invite parking-lot mechanics, accept/reject, energy, and completion are defined in [006-human-gateway-invites.md](./006-human-gateway-invites.md) — not duplicated here.
+Interactive work is never auto-started from intake alone when `decision=grill`. This colony publishes (or auto-invites) a pending `session.invite`; Beekeeper accept starts the Drone grilling session. Invite parking-lot mechanics, accept/reject, energy, and completion are defined in [006-human-gateway-invites.md](./006-human-gateway-invites.md) — not duplicated here.
 
 ### 4. Spec artifact is the grilling completion contract
 
@@ -131,7 +133,8 @@ Breakdown still follows [drone-intent-breakdown](../../.paseka/prompts/_partials
 | --- | ------ | ---- |
 | `drone` | `grilling` | **interactive only** |
 | `drone` | `breakdown` | interactive preferred; AFK allowed |
-| `scout` | `classify` | AFK (`direct` on `feature.requested`) |
+| `scout` | `intake` | AFK (`direct` on `feature.requested`) |
+| `scout` | `survey` | AFK (manual / exploratory only) |
 | `builder` | `feature` / … | AFK via `task.ready` (unchanged) |
 
 ### 7. Platform vs colony SIGNAL boundary
@@ -155,7 +158,7 @@ Until invite→session is wired (or when Beekeeper prefers manual control), Beek
 ```bash
 paseka signal --type SIGNAL --trace "$TRACE" \
   --payload '{"kind":"feature.requested","title":"…","body":"…"}'
-paseka bee run scout --intent classify --trace "$TRACE" --body "Classify the feature.requested on this trail"
+paseka bee run scout --intent intake --trace "$TRACE" --body "Intake the feature.requested on this trail"
 paseka bee chat drone --intent grilling --trace "$TRACE" "Grill: …"
 # write docs/specs/… then:
 paseka bee chat drone --intent breakdown --trace "$TRACE" "Break down docs/specs/…"
@@ -243,23 +246,31 @@ Who runs next is **not** on this payload — colony `auto_invites` (or Beekeeper
 
 ### Scout
 
-- Intent vocabulary entry `classify` (partial `scout-intent-classify.md`).
-- Subscribe (when routing lands):
+- Intent vocabulary: `intake` (default), `survey` (manual). Partials: `scout-intent-intake.md`, `scout-emit-intake.md`.
+- Subscribe on `feature.requested`:
 
 ```yaml
 # .paseka/bees/scout.yaml
+default_intent: intake
 subscribes:
   - type: SIGNAL
     kind: feature.requested
     dispatch: direct
-default_intent: classify   # or keep survey default; classify only on this subscription
+publishes:
+  - type: SIGNAL
+    kind: feature.classified
+  - type: INSIGHT
+    kind: task.plan
+  - type: SIGNAL
+    kind: task.ready
 ```
 
-- Classify partial rules:
+- Intake partial rules:
   - Prefer evidence from `body` + prior insights.
   - Emit **one** `feature.classified`.
-  - Optionally `INSIGHT/run.summary`.
-  - Never `task.plan` / `task.ready` when recommending `grill`.
+  - When `decision=plan` or `decision=triage`: emit **one** `task.plan` with a single builder task (`intent: feature` or `intent: bugfix`).
+  - Emit `task.ready` only when entry text explicitly asks to start now.
+  - Never `task.plan` / `task.ready` when `decision=grill`.
 
 ### Drone
 
@@ -324,16 +335,16 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 
 | Phase | Scope | Done when |
 | ----- | ----- | --------- |
-| **0 Soft** | Docs + Scout `classify` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand **(done)** |
+| **0 Soft** | Docs + Scout `intake` prompt + Drone grilling emit guidance for `spec.ready` | Beekeeper can run Phase 0 commands end-to-end by hand **(done)** |
 | **1 Boundary** | Document platform vs colony SIGNAL ownership; keep `feature.*` / `spec.ready` out of protocol | Colony ideation kinds stay out of `internal/protocol` **(done)** |
 | **2 Invites** | *Platform* — persist invites; CLI/Console accept; validate HITL kinds | See [006](./006-human-gateway-invites.md) **(done there)** |
-| **3 Auto-invite** | Colony grill `auto_invites` rule on `feature.classified` | Classify → pending grill invite while `paseka run` is up **(done)** |
+| **3 Auto-invite** | Colony grill `auto_invites` rule on `feature.classified` | Intake → pending grill invite while `paseka run` is up **(done)** |
 | **4 Hardening** | Colony: grilling → `spec.ready` + file verify via `done_when`; default `spec.ready` → breakdown auto-invite | Failed grilling without spec visible as `incomplete`; breakdown invite auto-created **(done)** |
 
 ## End-to-end scenario (happy path)
 
 1. Beekeeper publishes `SIGNAL/feature.requested` with title/body; new `traceId`.
-2. Scout AFK `classify` runs (`direct` or manual `bee run`).
+2. Scout AFK `intake` runs (`direct` subscribe or manual `bee run`).
 3. Scout publishes `SIGNAL/feature.classified` (`decision=grill`).
 4. Colony `auto_invites` → pending `session.invite` for Drone grilling ([006](./006-human-gateway-invites.md)).
 5. Beekeeper later accepts → interactive Drone grilling session on the same `traceId`.
@@ -358,9 +369,10 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 
 ## Open questions
 
-- After `decision=plan`, does Scout emit `task.plan` itself or invite Drone `breakdown` without grilling?
 - Should other colonies reuse `spec.ready` as a generic artifact-ready kind, or keep it ideation-specific?
 - Does accept always detach in Console, or offer attached Ghostty / in-browser xterm only? (platform; track in [006](./006-human-gateway-invites.md) / Console specs)
+
+**Resolved:** After `decision=plan` with a single clear slice, Scout emits `task.plan` directly (no Drone breakdown). Multi-slice work still goes through grill → spec → breakdown.
 
 ## Related docs
 
@@ -375,12 +387,12 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 
 ## Verification
 
-Colony soft path + classify / grilling prompts (Phases 0–1):
+Colony soft path + intake / grilling prompts (Phases 0–1):
 
 ```bash
 # Phase 0 soft path (manual)
 paseka signal … feature.requested
-paseka bee run scout --intent classify --trace "$TRACE" …
+paseka bee run scout --intent intake --trace "$TRACE" …
 paseka bee chat drone --intent grilling --trace "$TRACE" "…"
 # after docs/specs/… + spec.ready:
 paseka bee chat drone --intent breakdown --trace "$TRACE" "…"
@@ -390,7 +402,7 @@ Colony auto-invite rules (Phases 3–4) with `paseka run` up:
 
 ```bash
 paseka signal … feature.requested
-paseka bee run scout --intent classify --trace "$TRACE" …
+# Scout intake auto-runs when reactor is up (subscribes on feature.requested)
 paseka invite list   # pending grilling invite when grill auto_invites rule is present
 ```
 

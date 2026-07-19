@@ -728,8 +728,8 @@ Ideation `SIGNAL` kinds (`feature.requested`, `feature.classified`, `spec.ready`
 TRACE=trace-$(date +%s)
 paseka signal --type SIGNAL --trace "$TRACE" \
   --payload '{"kind":"feature.requested","title":"…","body":"…"}'
-paseka bee run scout --intent classify --trace "$TRACE" \
-  --body "Classify the feature.requested on this trail"
+paseka bee run scout --intent intake --trace "$TRACE" \
+  --body "Intake the feature.requested on this trail"
 # With paseka run up and default auto_invites: invite list shows pending grilling invite
 paseka invite accept <inviteId>
 # Or manual path before accept:
@@ -769,6 +769,6 @@ See [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) 
 | [task ledger](../reference/task-ledger.md) | Task lifecycle events on the bus |
 | [interactive sessions](interactive-sessions.md) | `bee chat`, sessions, Ghostty |
 | [Telegram gateway](telegram-gateway.md) | Setup and run `paseka gate telegram` |
-| [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) | Feature ideation soft path (classify → grill → breakdown) |
+| [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) | Feature ideation soft path (intake → grill → breakdown) |
 | [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) | Session invites, auto_invites, done_when |
 | [specs/010-telegram-human-gateway.md](../specs/010-telegram-human-gateway.md) | Telegram Human Gateway design |

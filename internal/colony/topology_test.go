@@ -32,7 +32,7 @@ func TestBuildTopologyGolden(t *testing.T) {
 
 	assertNoIntentNodes(t, topo)
 	assertNoBeeToBeeEdges(t, topo)
-	assertImplicitSubscribe(t, topo, "scout")
+	assertScoutIntakeSubscribe(t, topo)
 	assertInviteEdges(t, topo)
 
 	goldenPath := filepath.Join(root, "topology.golden.json")
@@ -154,6 +154,16 @@ func assertNoBeeToBeeEdges(t *testing.T, topo colony.Topology) {
 			t.Fatalf("bee-to-bee edge: %+v", edge)
 		}
 	}
+}
+
+func assertScoutIntakeSubscribe(t *testing.T, topo colony.Topology) {
+	t.Helper()
+	for _, edge := range topo.Edges {
+		if edge.Kind == "subscribe" && edge.To == "scout" && edge.From == "SIGNAL/feature.requested" && edge.Dispatch == colony.DispatchDirect {
+			return
+		}
+	}
+	t.Fatal("missing subscribe edge SIGNAL/feature.requested -> scout (direct)")
 }
 
 func assertImplicitSubscribe(t *testing.T, topo colony.Topology, role string) {

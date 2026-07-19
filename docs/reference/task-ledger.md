@@ -231,7 +231,7 @@ PRD (SIGNAL: feature.requested)
   → Trace merge gate completed
 ```
 
-**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md). Scout classify and Drone breakdown auto-complete on the ledger when they do not declare `code.proposal`. Drone grilling uses Human Gateway invites (not this defer gate). Scout classifies and must not emit `task.plan` for vague ideas; Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
+**Ideation path** (raw idea → grilling → spec → breakdown → same ledger): see [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md). Scout `intake` and Drone breakdown auto-complete on the ledger when they do not declare `code.proposal`. Drone grilling uses Human Gateway invites (not this defer gate). Scout intake emits one-slice `task.plan` for clear features/bugs (`decision=plan`/`triage`); vague ideas get `decision=grill` only. Drone interactive grilling produces `docs/specs/…` + `SIGNAL/spec.ready` before breakdown publishes `task.plan`.
 
 ---
 
@@ -294,4 +294,4 @@ For human-friendly task injection from the CLI, use `paseka task create` to publ
 - [prompt templates](../guide/prompt-templates.md) — template variables including `TaskID`
 - [glossary](../idea/glossary.md) — Task/Nectar, TraceID/Flight Trail
 - [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md) — Reviews UI and merge-diff preview
-- [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) — classify → invite → grilling → `spec.ready` → breakdown before ledger work
+- [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) — intake → invite → grilling → `spec.ready` → breakdown before ledger work

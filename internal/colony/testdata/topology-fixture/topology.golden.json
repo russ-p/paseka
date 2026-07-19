@@ -21,16 +21,21 @@
       "role": "scout",
       "adapter": "cursor",
       "intents": [
-        "survey",
-        "general"
+        "intake",
+        "survey"
       ],
-      "defaultIntent": "survey"
+      "defaultIntent": "intake"
     }
   ],
   "events": [
     {
       "type": "INSIGHT",
       "id": "INSIGHT/*"
+    },
+    {
+      "type": "INSIGHT",
+      "kind": "task.plan",
+      "id": "INSIGHT/task.plan"
     },
     {
       "type": "MUTATION",
@@ -41,6 +46,11 @@
       "type": "SIGNAL",
       "kind": "feature.classified",
       "id": "SIGNAL/feature.classified"
+    },
+    {
+      "type": "SIGNAL",
+      "kind": "feature.requested",
+      "id": "SIGNAL/feature.requested"
     },
     {
       "type": "SIGNAL",
@@ -104,6 +114,21 @@
       "to": "VERIFICATION/verification.success"
     },
     {
+      "kind": "publish",
+      "from": "scout",
+      "to": "INSIGHT/task.plan"
+    },
+    {
+      "kind": "publish",
+      "from": "scout",
+      "to": "SIGNAL/feature.classified"
+    },
+    {
+      "kind": "publish",
+      "from": "scout",
+      "to": "SIGNAL/task.ready"
+    },
+    {
       "kind": "subscribe",
       "from": "MUTATION/code.proposal.isolated",
       "to": "builder",
@@ -117,6 +142,12 @@
     },
     {
       "kind": "subscribe",
+      "from": "SIGNAL/feature.requested",
+      "to": "scout",
+      "dispatch": "direct"
+    },
+    {
+      "kind": "subscribe",
       "from": "SIGNAL/task.ready",
       "to": "builder",
       "dispatch": "task"
@@ -125,13 +156,6 @@
       "kind": "subscribe",
       "from": "SIGNAL/task.ready",
       "to": "drone",
-      "dispatch": "task",
-      "implicit": true
-    },
-    {
-      "kind": "subscribe",
-      "from": "SIGNAL/task.ready",
-      "to": "scout",
       "dispatch": "task",
       "implicit": true
     }
