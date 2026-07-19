@@ -61,6 +61,12 @@ func (g *Gate) Run(ctx context.Context) error {
 	}
 	defer notifier.Close()
 
+	presentCtx, cancelPresent := context.WithCancel(ctx)
+	defer cancelPresent()
+	go func() {
+		PresentOnStartup(presentCtx, g.Bot, g.Config, log)
+	}()
+
 	notifyCtx, cancelNotify := context.WithCancel(ctx)
 	defer cancelNotify()
 	go func() {
