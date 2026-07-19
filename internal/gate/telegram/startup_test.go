@@ -56,6 +56,7 @@ func TestBuildBotCommandsBuiltinOrderAndDescriptions(t *testing.T) {
 		{"status", "Colony snapshot (Refresh button)"},
 		{"help", "Command list"},
 		{"invites", "Pending session invites"},
+		{"traces", "Recent colony traces"},
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("got %d commands, want %d", len(commands), len(want))

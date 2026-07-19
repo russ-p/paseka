@@ -18,6 +18,7 @@ var reservedTelegramCommands = map[string]struct{}{
 	"status":  {},
 	"help":    {},
 	"invites": {},
+	"traces":  {},
 	"energy":  {},
 	"task":    {},
 }

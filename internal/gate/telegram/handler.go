@@ -58,6 +58,8 @@ func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 		h.sendHelp(chatID)
 	case "invites":
 		h.inviteActions().SendInvitesList(chatID)
+	case "traces":
+		h.sendTraces(chatID)
 	case "energy":
 		h.energyActions().HandleCommand(ctx, chatID, args)
 	case "task":
