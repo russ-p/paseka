@@ -42,7 +42,7 @@
 | -------- | -------- |
 | [Changelog](plans/changelog.md) | Сделанное: ссылки на specs и канонические docs |
 | [Specs index](plans/specs-index.md) | Краткая карта `docs/specs/` (тела только в репо) |
-| [Backlog](plans/backlog.md) | Отложенные идеи и follow-up'ы |
+| [Backlog](plans/backlog.md) | Отложенная работа и допущения реализации |
 
 Английский индекс: [README.md](README.md).
 

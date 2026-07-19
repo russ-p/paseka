@@ -42,7 +42,7 @@ Docs are grouped by immersion depth. Feature specs under `specs/` are **not** pu
 | -------- | ----------- |
 | [Changelog](plans/changelog.md) | Shipped features with links to specs and canonical docs |
 | [Specs index](plans/specs-index.md) | Short map of `docs/specs/` (bodies stay in the repo only) |
-| [Backlog](plans/backlog.md) | Deferred ideas and follow-ups |
+| [Backlog](plans/backlog.md) | Deferred work and implementation assumptions |
 
 Russian index: [README-RU.md](README-RU.md).
 

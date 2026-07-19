@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner, and at least two cases (`01-add-function`, `02-energy-exhausted`). Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [backlog](../plans/backlog.md) § Eval colony gotchas.
+**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner, and at least two cases (`01-add-function`, `02-energy-exhausted`). Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [backlog](../plans/backlog.md#eval-colony) (Assumptions).
 
 Resolved since the original draft:
 
@@ -358,4 +358,4 @@ Success criteria for the design:
 - [bee routing](../reference/bee-routing.md) — builder/guard subscriptions
 - [bee config](../guide/bee-config.md) — `adapter: script` and bee schema
 - [Brief](../idea/brief.md) — event replay and energyToken vision
-- [backlog](../plans/backlog.md) — eval colony gotchas and harness follow-ups
+- [backlog](../plans/backlog.md#eval-colony) — eval colony gotchas; [Eval harness](../plans/backlog.md#eval-harness) follow-ups

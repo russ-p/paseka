@@ -4,7 +4,7 @@
 
 **Implemented** (grilling decisions locked). Design for splitting automatic `MUTATION` code proposals by workspace provenance so worktree review and colony-root config/docs edits do not cross-contaminate.
 
-Shipped — see [Changelog](../plans/changelog.md). Deferred follow-ups: [Backlog](../plans/backlog.md).
+Shipped — see [Changelog](../plans/changelog.md). Deferred follow-ups: [Backlog — Code proposal workspaces](../plans/backlog.md#code-proposal-workspaces).
 
 ## Purpose
 
@@ -418,4 +418,4 @@ Canonical docs updated in migration step 8:
 - [bee config](../guide/bee-config.md) — bee YAML knobs
 - [task ledger](../reference/task-ledger.md) — review gates and `waiting_review`
 - [CLI](../guide/cli.md) — `paseka proposal approve|reject`
-- [backlog](../plans/backlog.md) — deferred item + worktrees-from-`HEAD` gotcha
+- [backlog](../plans/backlog.md#code-proposal-workspaces) — deferred follow-ups; [Eval colony](../plans/backlog.md#eval-colony) — worktrees-from-`HEAD` gotcha

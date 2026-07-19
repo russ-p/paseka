@@ -1,96 +1,180 @@
 # Backlog
 
-Deferred ideas and follow-ups outside the current MVP. Shipped work belongs in [Changelog](changelog.md); design drafts are listed in [Specs index](specs-index.md).
+Deferred ideas, follow-ups, bugs, and implementation assumptions outside the active change.
+Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-index.md).
 
-## Deferred Ideas
+## Deferred work
 
-Context:
-- The current AFK adapter flow still uses `result.txt` as a familiar run artifact inherited from the earliest bash-based prototype.
-- During the `run.summary` migration, the runtime should stop depending on this file for success semantics.
-- The file may still be useful as a human-readable log written by runtime after summary normalization.
+### Run artifacts
 
-Backlog item:
-- Consider renaming `result.txt` to `summary.md` or another clearer log-oriented filename after the runtime-first `INSIGHT/run.summary` migration is complete.
+AFK runs still expose `result.txt` as a familiar artifact from the early bash prototype. Success semantics should move fully to `INSIGHT/run.summary`; the file may remain a human-readable log afterward.
 
-Why deferred:
-- Renaming the file now would broaden the migration unnecessarily.
-- It would require coordinated updates across prompt templates, runtime context, docs, tests, and any external assumptions about run-directory layout.
-- Keeping `result.txt` temporarily as a compatibility log path reduces migration risk while the success model is being changed.
+#### Rename `result.txt` to a log-oriented name
 
-Exit criteria for revisiting:
-- AFK run success no longer depends on reading `result.txt`.
-- Runtime auto-publishes or enforces `INSIGHT/run.summary` consistently.
-- Prompt templates and docs no longer describe the file as the run-success handshake.
+- **Kind:** follow-up
+- **Source:** planning (run.summary migration)
+- **Summary:** After runtime-first `INSIGHT/run.summary` is complete, rename `result.txt` to `summary.md` (or similar) so the path reads as a log, not a success handshake.
+- **Why deferred:** Renaming now widens the migration across prompts, runtime context, docs, tests, and external assumptions about run-directory layout. Keeping `result.txt` as a compatibility log path reduces risk while success semantics change.
+- **Revisit when:** AFK success no longer depends on reading `result.txt`; runtime enforces or auto-publishes `INSIGHT/run.summary`; prompts and docs no longer treat the file as the run-success handshake.
 
-### energyToken follow-ups (out of MVP scope)
+### Energy and honey
 
-Context:
-- MVP shipped per-trace honey reserve (`energyToken`): `defaults.energy_budget` in `colony.yaml`, `energy.add` / `energy.consume` on the task ledger, dispatch gating in the reactor, and `paseka energy show|add`.
-- Loop protection moved from `maxReworkCycles` to energy depletion → `blocked` with summary `Honey reserve exhausted`.
+MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion → `blocked` (`Honey reserve exhausted`). These items need separate design or evidence before expanding the MVP.
 
-Backlog items:
+#### `confidence` (Pollen Quality)
 
-- **`confidence` (Pollen Quality)** — filter or weight events by confidence level; mentioned in [Brief](../idea/brief.md) alongside `energyToken`.
-- **`system.kill`** — bus signal to forcibly stop a trace or agent dispute avalanche; HITL energy injection exists via `paseka energy add`, but no kill primitive.
-- **Queen Console UI polish** — API fields (`energyBudget`, `energyRemaining`, `lowEnergy`) exist; richer badges, alerts, and beekeeper actions in the SPA are not done.
-- **Per-run proposal diff in Reviews** — final merge gate preview (`GET /api/traces/:traceId/merge-diff`) ships; side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks does not.
-- **Energy gate on `paseka bee run` / interactive chat** — one-shot `bee run` and `bee chat` bypass the reactor; only AFK/HITL paths through `paseka run` consume honey today.
-- **Per-bee cost multipliers** — every adapter dispatch costs `1`; no per-role or per-intent pricing.
-- **Honey ↔ LLM token billing** — AFK runs may persist optional LLM `usage` on `result.json` (orthogonal to honey); do not price honey from model tokens without a separate design.
-- **Interactive session usage** — `bee chat` / SessionAdapter do not yet surface Cursor stream-json `usage`.
-- **`paseka inspect` usage one-liner** — Console/API cover run + trace aggregates; CLI dump is optional.
+- **Kind:** idea
+- **Source:** [Brief](../idea/brief.md); planning (energyToken)
+- **Summary:** Filter or weight events by confidence level alongside honey.
+- **Why deferred:** Needs protocol and UX design (event shapes, CLI/Console) beyond the anti-loop MVP.
+- **Revisit when:** Product brief item is specified with event shapes and operator surfaces, or eval scenarios require confidence filtering.
 
-Why deferred:
-- MVP focused on the minimum anti-loop loop: shared trace budget, dispatch consume, HITL top-up, and durable ledger state.
-- `confidence` and `system.kill` need separate protocol and UX design before implementation.
-- Gating standalone bee invocations requires adapter-layer changes without a running reactor.
-- Per-bee costs add configuration surface (`bees/*.yaml` or routing rules) before there is evidence the flat cost is too coarse.
+#### `system.kill`
 
-Exit criteria for revisiting:
-- Operators report false positives/negatives from flat `1`-token dispatch cost or exhausted traces that should not block.
-- Product brief items (`confidence`, `system.kill`) are specified with event shapes and CLI/console surfaces.
-- Eval harness ([003-hive-evals](../specs/003-hive-evals.md)) needs scenarios that depend on one of the deferred primitives.
+- **Kind:** idea
+- **Source:** [Brief](../idea/brief.md); planning (energyToken)
+- **Summary:** Bus signal to forcibly stop a trace or agent dispute avalanche. HITL top-up exists (`paseka energy add`); no kill primitive yet.
+- **Why deferred:** Needs its own protocol and UX design; orthogonal to shared-budget MVP.
+- **Revisit when:** Spec covers event shape and CLI/Console/`gate` surfaces, or operators need an emergency stop beyond energy block.
 
-### Code proposal workspaces — deferred follow-ups
+#### Energy gate on `paseka bee run` / `bee chat`
 
-From [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md):
+- **Kind:** follow-up
+- **Source:** planning (energyToken)
+- **Summary:** One-shot `bee run` and `bee chat` bypass the reactor today; only paths through `paseka run` consume honey. Gate standalone invocations the same way.
+- **Why deferred:** Requires adapter-layer changes without a running reactor.
+- **Revisit when:** Operators need honey accounting for one-shot/interactive launches, or eval/product rules demand it.
 
-- `proposal_paths` allowlist
-- Untracked files in proposal delta
-- Alias removal timeline for bare `code.proposal`
+#### Per-bee cost multipliers
 
-## Eval colony gotchas (Tier B)
+- **Kind:** idea
+- **Source:** planning (energyToken)
+- **Summary:** Charge more than flat `1` per adapter dispatch (per-role or per-intent pricing in bee YAML or routing rules).
+- **Why deferred:** Extra configuration surface before evidence that flat cost is too coarse.
+- **Revisit when:** Operators report false positives/negatives from flat `1`-token cost or traces that block incorrectly.
 
-Context: wiring the side eval colony (`paseka-eval-colony`) and `runner/run-case.sh` against real NATS + `paseka run`. See [003-hive-evals](../specs/003-hive-evals.md).
+#### Honey ↔ LLM token billing
 
-Gotchas observed while standing up Phase 2:
+- **Kind:** idea
+- **Source:** planning (energyToken)
+- **Summary:** Optionally relate honey spend to LLM `usage` on AFK `result.json`. Do not price honey from model tokens without a separate design.
+- **Why deferred:** Orthogonal to anti-loop honey; mixing billing models needs an explicit decision.
+- **Revisit when:** Product wants cost visibility tied to model usage, with a written design.
 
-- **Always pass `-C` to `paseka` from runner scripts** — resolving from cwd alone can target the wrong git repo (e.g. parent `paseka` platform repo) and `purge` the wrong colony. Runner helpers must use `paseka … -C "${EVAL_ROOT}"`.
-- **Worktrees are created from `HEAD`, not the working tree** — seed code (`go.mod`, `pkg/`, …) must be **committed** before a trace worktree is created. Do not gitignore materialized seed files at the colony root.
+#### Interactive session usage
+
+- **Kind:** follow-up
+- **Source:** planning (energyToken / SessionAdapter)
+- **Summary:** Surface Cursor stream-json `usage` from `bee chat` / SessionAdapter (AFK may already persist optional usage on `result.json`).
+- **Why deferred:** Out of energy MVP scope; interactive path differs from AFK file IPC.
+- **Revisit when:** Console/CLI need session token usage, or billing/observability work starts.
+
+#### `paseka inspect` usage one-liner
+
+- **Kind:** follow-up
+- **Source:** planning (energyToken)
+- **Summary:** Optional CLI dump of run/trace usage aggregates (Console/API already cover much of this).
+- **Why deferred:** Nice-to-have; not required for honey MVP.
+- **Revisit when:** Operators want a terminal one-liner without opening Console.
+
+### Queen Console
+
+API fields for energy and merge-diff exist; SPA polish and per-run proposal preview are still thin.
+
+#### Energy UI polish
+
+- **Kind:** follow-up
+- **Source:** planning (energyToken / Queen Console)
+- **Summary:** Richer badges, alerts, and Beekeeper actions for `energyBudget`, `energyRemaining`, `lowEnergy` (API fields already exist).
+- **Why deferred:** MVP prioritized ledger + reactor gating over SPA chrome.
+- **Revisit when:** Operators need at-a-glance honey UX in Console beyond raw API fields.
+
+#### Per-run proposal diff in Reviews
+
+- **Kind:** follow-up
+- **Source:** [002-queen-console-mvp](../specs/002-queen-console-mvp.md); planning (reviews)
+- **Summary:** Side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks. Final merge gate preview (`GET /api/traces/:traceId/merge-diff`) already ships.
+- **Why deferred:** Final merge gate was enough for MVP; per-run preview is extra UI surface.
+- **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate.
+
+### Code proposal workspaces
+
+Leftovers from [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md).
+
+#### `proposal_paths` allowlist
+
+- **Kind:** follow-up
+- **Source:** [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md)
+- **Summary:** Restrict which paths may appear in a code proposal.
+- **Why deferred:** Not required for dual isolated/root proposal MVP.
+- **Revisit when:** Colonies need path policy to limit proposal scope.
+
+#### Untracked files in proposal delta
+
+- **Kind:** follow-up
+- **Source:** [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md)
+- **Summary:** Include or define behavior for untracked files in proposal deltas.
+- **Why deferred:** Deferred from 008 ship to keep delta semantics simple.
+- **Revisit when:** Real proposals lose important untracked files, or operators ask for explicit rules.
+
+#### Alias removal for bare `code.proposal`
+
+- **Kind:** follow-up
+- **Source:** [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md)
+- **Summary:** Timeline and migration to remove the bare `code.proposal` alias (today → isolated).
+- **Why deferred:** Alias keeps older colonies working while `.isolated` / `.root` settle.
+- **Revisit when:** Docs and colonies have moved to explicit kinds and the alias is a liability.
+
+### Eval harness
+
+Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony `paseka-eval-colony`. Gotchas from standing up Phase 2 are under [Assumptions and gotchas](#assumptions-and-gotchas).
+
+#### Task retry with edit
+
+- **Kind:** follow-up
+- **Source:** [003-hive-evals](../specs/003-hive-evals.md); planning (task ledger / Console)
+- **Summary:** Allow changing bee, intent, body, or sector when retrying a failed task (CLI flags or Console form). Today `paseka task retry` and Console Retry reuse the ledger snapshot as-is.
+- **Why deferred:** Snapshot reuse was enough for MVP retry; edit-on-retry needs UX and ledger rules.
+- **Revisit when:** Operators or eval cases need corrected retries without creating a new task.
+
+#### Trace reset helper
+
+- **Kind:** follow-up
+- **Source:** [003-hive-evals](../specs/003-hive-evals.md); planning (eval harness)
+- **Summary:** One command to seed energy and clear ledger for a fixed `--trace` (partially covered by `paseka purge --bus --trace`; a dedicated helper could also re-seed `defaults.energy_budget`).
+- **Why deferred:** Purge covers most wipe needs; a friendlier eval helper is polish.
+- **Revisit when:** Eval runners repeatedly need seed+wipe in one step.
+
+#### Event-chain scorer in runner
+
+- **Kind:** follow-up
+- **Source:** [003-hive-evals](../specs/003-hive-evals.md)
+- **Summary:** Assert `case.yaml` `expect_event_chain` against `paseka replay` output (today: oracle + human replay inspection only).
+- **Why deferred:** Phase 2 focused on colony wiring and oracle; automated chain scoring is Phase-adjacent polish.
+- **Revisit when:** Eval cases rely on event-chain assertions beyond manual replay.
+
+### Releases
+
+#### Windows release builds
+
+- **Kind:** idea
+- **Source:** planning (GoReleaser / cross-compile)
+- **Summary:** Make `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` work (Unix-only PTY/HITL today: e.g. `SIGWINCH`, review `Setsid`), then add `windows` to GoReleaser `builds.goos` so release assets include `.exe` archives.
+- **Why deferred:** Pipeline already ships linux/darwin from Ubuntu with `CGO_ENABLED=0`; Windows needs build tags/stubs before CI/release changes.
+- **Revisit when:** Local/CI Windows cross-build succeeds and release should publish `windows/amd64` (optionally `windows/arm64`).
+
+## Assumptions and gotchas
+
+### Eval colony
+
+Wiring the side eval colony (`paseka-eval-colony`) and `runner/run-case.sh` against real NATS + `paseka run`. See [003-hive-evals](../specs/003-hive-evals.md).
+
+- **Always pass `-C` to `paseka` from runner scripts** — resolving from cwd alone can target the wrong git repo (e.g. parent `paseka` platform) and `purge` the wrong colony. Use `paseka … -C "${EVAL_ROOT}"`.
+- **Worktrees are created from `HEAD`, not the working tree** — seed code (`go.mod`, `pkg/`, …) must be **committed** before a trace worktree is created. Do not gitignore materialized seed files at the colony root. Also relevant outside eval; see [008](../specs/008-code-proposal-workspaces.md).
 - **Script bees run from the worktree checkout** — `scripts/*.sh` and bee YAML come from git `HEAD`. Uncommitted script changes are invisible inside `.paseka/worktrees/<traceId>/`.
-- **`paseka event emit` from script bees needs `-C "$PASEKA_COLONY_ROOT"`** — when cwd is the worktree, emit without `-C` fails colony/home resolution (`home config points to … but repo is …/worktrees/<traceId>`). Guard/receiver scripts must pass colony root explicitly.
-- **`paseka event emit` can fail the script even after a bus publish** — if audit log append to `.paseka/runs/<traceId>/<agentId>/events.ndjson` fails, emit exits non-zero and the adapter run is marked failed. During a normal adapter run the run dir exists; ad-hoc manual emits need a matching run dir.
-- **Fixed `trace` + JetStream state accumulates** — reusing `eval-01-add-function` across runs leaves task-ledger KV entries, depleted honey, and replay history unless wiped. Use `paseka purge --bus --trace <case-trace>` (stop `paseka run` first); see [CLI](../guide/cli.md) § `paseka purge`.
-- **Only one `paseka run` consumer per colony subject prefix** — starting a second reactor logs `consumer is already bound to a subscription`. Stop the previous runtime before `run-case.sh` starts another.
-- **Builder rework is async** — `verification.failed` → builder fix-up uses the direct dispatch path and can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop; treat `blocked` as a terminal status when honey runs out.
+- **`paseka event emit` from script bees needs `-C "$PASEKA_COLONY_ROOT"`** — when cwd is the worktree, emit without `-C` fails colony/home resolution. Guard/receiver scripts must pass colony root explicitly.
+- **`paseka event emit` can fail after a successful bus publish** — if audit log append to `.paseka/runs/<traceId>/<agentId>/events.ndjson` fails, emit exits non-zero and the adapter run is marked failed. Normal adapter runs have a run dir; ad-hoc manual emits need a matching run dir.
+- **Fixed `trace` + JetStream state accumulates** — reusing case traces leaves ledger KV, depleted honey, and replay history. Use `paseka purge --bus --trace <case-trace>` (stop `paseka run` first); see [CLI](../guide/cli.md) § `paseka purge`.
+- **Only one `paseka run` consumer per colony subject prefix** — a second reactor logs `consumer is already bound to a subscription`. Stop the previous runtime before `run-case.sh` starts another.
+- **Builder rework is async** — `verification.failed` → builder fix-up via direct dispatch can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop; treat `blocked` as terminal when honey runs out.
 - **Oracle scope** — `go test ./...` in the worktree also picks up packages under `cases/…/expect/`. Prefer a narrow path (e.g. `go test ./pkg/...`) in `case.yaml` `oracle.command` and in script-guard bees.
-
-### Windows release builds
-
-Context:
-- GoReleaser release pipeline ships Linux and macOS binaries (`linux/*`, `darwin/*`) from a single Ubuntu runner with `CGO_ENABLED=0`.
-- Cross-compiling to Windows is supported by Go and GitHub Actions, but the codebase is not ready yet.
-
-Backlog item:
-- **Windows release builds** — `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` fails on Unix-only PTY/HITL code (`syscall.SIGWINCH` in `internal/sessions/manager.go`; also review `Setsid` in `internal/runtime/supervisor.go`).
-- Add build tags or stubs for sessions/PTY paths, then add `windows` to `.goreleaser.yaml` `builds.goos`.
-
-Exit criteria for revisiting:
-- `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` succeeds locally and in CI.
-- Release assets include `.exe` archives for `windows/amd64` (and optionally `windows/arm64`).
-
-Backlog follow-ups (eval harness):
-
-- **Task retry with edit** — allow changing bee, intent, body, or sector when retrying a failed task (CLI flags or Console form). Today `paseka task retry` and Queen Console Retry reuse the ledger snapshot as-is.
-- **Platform: optional trace reset helper** — seed energy + clear ledger for a fixed `--trace` in one command (partially covered by `paseka purge --bus --trace`; a dedicated helper could also re-seed `defaults.energy_budget`).
-- **Event-chain scorer in runner** — assert `case.yaml` `expect_event_chain` against `paseka replay` output (today: oracle + human replay inspection only).
