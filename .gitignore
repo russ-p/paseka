@@ -1,5 +1,6 @@
 /paseka
 /bin/
+.tmp/
 paseka-export-*.html
 /site/
 /.venv-docs/
