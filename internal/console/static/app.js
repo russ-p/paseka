@@ -529,7 +529,12 @@ function topologyElementsFrom(topo) {
 
   for (const ev of topo.events || []) {
     nodes.push({
-      data: { id: `event:${ev.id}`, label: ev.id, nodeType: 'event' },
+      data: {
+        id: `event:${ev.id}`,
+        label: ev.id,
+        nodeType: 'event',
+        eventType: ev.type || '',
+      },
     });
   }
 
@@ -604,6 +609,30 @@ function topologyCytoscapeStyle() {
       style: {
         'background-color': '#1a2233',
         'border-color': '#8b95a8',
+      },
+    },
+    {
+      selector: 'node[eventType = "SIGNAL"]',
+      style: {
+        'border-color': '#6ea8ff',
+      },
+    },
+    {
+      selector: 'node[eventType = "INSIGHT"]',
+      style: {
+        'border-color': '#c4a1ff',
+      },
+    },
+    {
+      selector: 'node[eventType = "MUTATION"]',
+      style: {
+        'border-color': '#f0c14b',
+      },
+    },
+    {
+      selector: 'node[eventType = "VERIFICATION"]',
+      style: {
+        'border-color': '#5fd38d',
       },
     },
     {
