@@ -138,6 +138,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	}
 	insights := MergeInsights(req.Insights, projectedInsights)
 
+	traceTitle, err := runs.ResolveTraceTitle(colonyRoot, req.TraceID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: resolve trace title: %w", err)
+	}
+
 	adapterName, err := bee.ResolveAdapter()
 	if err != nil {
 		return nil, err
@@ -151,6 +156,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	promptCtx := prompts.PromptContext(prompts.Context{
 		Bee:         bee.Role,
 		TraceID:     req.TraceID,
+		TraceTitle:  traceTitle,
 		AgentID:     agentID,
 		TaskID:      req.TaskID,
 		ColonyRoot:  colonyRoot,

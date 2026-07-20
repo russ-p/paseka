@@ -16,5 +16,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md) | Implemented | Isolated vs root code proposals |
 | [009-merge-autostash](../specs/009-merge-autostash.md) | Implemented | Autostash dirty root on merge approve |
 | [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md) | Implemented (MVP) | Telegram as async Human Gateway (notify + status/task/energy/invites/proposals) |
+| [011-trace-title](../specs/011-trace-title.md) | Implemented | `INSIGHT/trace.title` for Flight Trail display names |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

@@ -413,6 +413,17 @@ function escapeHtml(str) {
     .replaceAll('"', '&quot;');
 }
 
+function tracePrimaryLabel(trace) {
+  return trace?.title || trace?.traceId || '';
+}
+
+function traceIdSubline(trace) {
+  if (trace?.title && trace.traceId) {
+    return `<div class="id">${escapeHtml(trace.traceId)}</div>`;
+  }
+  return '';
+}
+
 function setTab(tab) {
   state.tab = tab;
   const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology'];
@@ -1344,9 +1355,10 @@ function renderDashboard() {
 
   renderDashboardList(el.dashboardTraces, d.recentTraces, (trace) => `
     <div class="top">
-      <span class="bee">${escapeHtml(trace.traceId)}</span>
+      <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
       <span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span>
     </div>
+    ${traceIdSubline(trace)}
     <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks</div>
   `, 'No recent traces.', (trace) => {
     navigateToTrace(trace.traceId).catch(console.error);
@@ -1432,9 +1444,10 @@ function renderTraces() {
     const bees = (trace.bees || []).join(', ') || '—';
     li.innerHTML = `
       <div class="top">
-        <span class="bee">${escapeHtml(trace.traceId)}</span>
+        <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
         <span class="badge ${badge}">${escapeHtml(badgeLabel)}</span>
       </div>
+      ${traceIdSubline(trace)}
       <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">
         ${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks · ${escapeHtml(bees)}
       </div>
@@ -1471,6 +1484,7 @@ function renderTraceDetail(detail) {
   if (detail.hasActive) flags.push('active');
   if (detail.hasFailures) flags.push('failures');
   el.traceDetailMeta.innerHTML = `
+    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)}</dd>` : ''}
     <dt>Trace</dt><dd>${escapeHtml(detail.traceId)}</dd>
     <dt>Last activity</dt><dd>${formatTime(detail.lastActivityAt)}</dd>
     <dt>Runs</dt><dd>${detail.runCount ?? (detail.runs || []).length}</dd>

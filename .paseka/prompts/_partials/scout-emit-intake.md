@@ -7,9 +7,10 @@ Always emit `feature.classified` first. Then follow the decision branch below.
 | `SIGNAL` | `feature.classified` | Always (required) |
 | `INSIGHT` | `task.plan` | `decision=plan` or `decision=triage` (one builder task) |
 | `SIGNAL` | `task.ready` | Same slice, only when entry text asks to start now |
+| `INSIGHT` | `trace.title` | Short Flight Trail name for Console (emit on every intake) |
 | `INSIGHT` | `run.summary` | Optional one-line summary |
 
-Do **not** emit `task.plan` or `task.ready` when `decision=grill`, `clarify`, or `reject`.
+Do **not** emit `task.plan` or `task.ready` when `decision=grill`, `clarify`, or `reject`. Still emit `trace.title` when the entry has a usable short name.
 
 ### `feature.classified` — classification decision
 
@@ -72,6 +73,16 @@ Emit **only** when title/body/task text explicitly requests immediate start. Use
 ```bash
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix"}}
+EOF
+```
+
+### `trace.title` — Flight Trail name (required on intake)
+
+Emit **one** `INSIGHT/trace.title` with a short human name (from `feature.requested` title/body or your refined label). Update when you sharpen the name during `plan` / `triage`.
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees in Queen Console header"}}
 EOF
 ```
 

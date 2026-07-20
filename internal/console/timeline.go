@@ -71,6 +71,7 @@ type EventFilter struct {
 // TraceSummaryView is a console projection of one trace.
 type TraceSummaryView struct {
 	TraceID         string               `json:"traceId"`
+	Title           string               `json:"title,omitempty"`
 	LastActivityAt  time.Time            `json:"lastActivityAt"`
 	RunCount        int                  `json:"runCount"`
 	TaskCount       int                  `json:"taskCount"`
@@ -155,7 +156,9 @@ func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
 	}
 	out := make([]TraceSummaryView, 0, len(summaries))
 	for _, s := range summaries {
-		out = append(out, traceSummaryViewFromRuns(s))
+		view := traceSummaryViewFromRuns(s)
+		enrichTraceTitle(ctx, &view)
+		out = append(out, view)
 	}
 	return out, nil
 }
@@ -192,6 +195,7 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 		TraceSummaryView: traceSummaryViewFromRuns(summary),
 	}
 	enrichTraceEnergy(ctx, &view.TraceSummaryView)
+	enrichTraceTitle(ctx, &view.TraceSummaryView)
 
 	taskSnap, err := loadTraceTasksOfflineFirst(ctx, traceID)
 	if err != nil {
@@ -393,6 +397,17 @@ func enrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
 	view.LowEnergy = snap.EnergyRemaining <= snap.EnergyBudget/4
 }
 
+func enrichTraceTitle(ctx colony.Context, view *TraceSummaryView) {
+	if view == nil || view.TraceID == "" {
+		return
+	}
+	title, err := runs.ResolveTraceTitle(ctx.ColonyRoot, view.TraceID)
+	if err != nil || title == "" {
+		return
+	}
+	view.Title = title
+}
+
 // loadTraceTasksOfflineFirst prefers the KV ledger when NATS is available.
 // If OpenLedger or LoadTrace fails (NATS/KV unavailable mid-request), it falls
 // back to filesystem projections so historical traces remain inspectable.
@@ -552,6 +567,12 @@ func RenderEventSummary(ev protocol.Event) (string, bool) {
 	}
 	kind := protocol.PayloadKind(ev.Payload)
 	switch kind {
+	case string(protocol.InsightTraceTitle):
+		var p protocol.TraceTitlePayload
+		if err := json.Unmarshal(ev.Payload, &p); err != nil || strings.TrimSpace(p.Title) == "" {
+			return "", false
+		}
+		return fmt.Sprintf("Trail title: %s", strings.TrimSpace(p.Title)), true
 	case string(protocol.TaskEventReady):
 		var p protocol.TaskReadyPayload
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {

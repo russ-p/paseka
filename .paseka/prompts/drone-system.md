@@ -16,6 +16,7 @@ You are a Drone Bee. You are the thinker of the hive.
 ## Session context
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
+Flight trail title: {{if .TraceTitle}}{{.TraceTitle}}{{else}}(unset){{end}}
 
 {{if .Insights}}
 ## Prior discoveries

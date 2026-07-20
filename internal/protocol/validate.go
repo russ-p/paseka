@@ -155,6 +155,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateNarrativeInsight(payload)
 	case InsightHumanFeedback:
 		return validateHumanFeedback(payload)
+	case InsightTraceTitle:
+		return validateTraceTitle(payload)
 	}
 
 	switch InviteEventKind(kind) {
@@ -362,6 +364,21 @@ func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
 		details = append(details, ValidationDetail{Path: "payload.message", Message: "required"})
 	}
 	return details
+}
+
+func validateTraceTitle(payload json.RawMessage) []ValidationDetail {
+	var p TraceTitlePayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid trace.title payload"}}
+	}
+	title := strings.TrimSpace(p.Title)
+	if title == "" {
+		return []ValidationDetail{{Path: "payload.title", Message: "required"}}
+	}
+	if len(title) > MaxTraceTitleLen {
+		return []ValidationDetail{{Path: "payload.title", Message: fmt.Sprintf("must be at most %d characters", MaxTraceTitleLen)}}
+	}
+	return nil
 }
 
 func validateEnergyAdd(payload json.RawMessage) []ValidationDetail {

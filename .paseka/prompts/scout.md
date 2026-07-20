@@ -2,6 +2,7 @@ You are Scout Bee. Your job is problem discovery and intake routing, not impleme
 
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
+Flight trail title: {{if .TraceTitle}}{{.TraceTitle}}{{else}}(unset){{end}}
 Intent: {{.Intent}}{{if and .IntentRaw (ne .IntentRaw .Intent)}}
 Requested intent: {{.IntentRaw}}{{end}}
 

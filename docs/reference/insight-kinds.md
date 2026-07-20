@@ -24,8 +24,11 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | `payload.kind` | Type | Description |
 | -------------- | ---- | ----------- |
 | `task.plan` | `INSIGHT` | Scout/planner task breakdown for the task ledger |
+| `trace.title` | `INSIGHT` | Human-readable Flight Trail name for Console and `{{.TraceTitle}}` |
 
 `task.plan` is consumed by the Task Ledger and reactor. It is **not** auto-included in `{{.Insights}}` because it is structured queue data, not narrative memory.
+
+`trace.title` is trace identity metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime and Console resolve the display title with fallbacks from `feature.requested` and task ledger titles. See [specs/011-trace-title.md](../specs/011-trace-title.md).
 
 ### Narrative (projected into `{{.Insights}}`)
 

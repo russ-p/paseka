@@ -14,7 +14,11 @@ const (
 	InsightReviewNote    InsightKind = "review.note"
 	InsightContextNote   InsightKind = "context.note"
 	InsightHumanFeedback InsightKind = "human.feedback"
+	InsightTraceTitle    InsightKind = "trace.title"
 )
+
+// MaxTraceTitleLen is the maximum length of payload.title on INSIGHT/trace.title.
+const MaxTraceTitleLen = 120
 
 // NarrativeInsightPayload is the shared shape for narrative INSIGHT events.
 type NarrativeInsightPayload struct {
@@ -29,6 +33,12 @@ type HumanFeedbackPayload struct {
 	Kind    InsightKind `json:"kind"`
 	TaskID  string      `json:"taskId"`
 	Message string      `json:"message"`
+}
+
+// TraceTitlePayload is emitted as INSIGHT with payload.kind=trace.title.
+type TraceTitlePayload struct {
+	Kind  InsightKind `json:"kind"`
+	Title string      `json:"title"`
 }
 
 // IsPromptMemoryInsightKind reports whether an INSIGHT kind should be projected into prompt memory.

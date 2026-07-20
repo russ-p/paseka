@@ -11,6 +11,17 @@ Runtime automatically projects selected narrative INSIGHT kinds into `{{.Insight
 | `context.note` | Trace/task context fact | yes |
 | `human.feedback` | Beekeeper HITL feedback | yes |
 | `task.plan` | Task ledger planning | no (operational) |
+| `trace.title` | Flight Trail display name | no (operational) |
+
+### `trace.title` — Flight Trail name (planner bees)
+
+Emit when classifying or planning work. Last event wins for Console display and `{{.TraceTitle}}`.
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees in Queen Console header"}}
+EOF
+```
 
 ### `run.summary` — narrative after work (runtime may auto-synthesize)
 

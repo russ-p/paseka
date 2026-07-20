@@ -47,6 +47,27 @@ func TestValidateTaskPlanRequiresTasks(t *testing.T) {
 	}
 }
 
+func TestValidateTraceTitle(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees header"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+
+	empty := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"trace.title","title":"   "}}`)
+	in2, err := ParseEventInput(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in2.Validate()
+	if len(details) != 1 || details[0].Path != "payload.title" {
+		t.Fatalf("details = %#v", details)
+	}
+}
+
 func TestValidateInvalidJSON(t *testing.T) {
 	_, err := ParseEventInput([]byte(`not-json`))
 	if err == nil {

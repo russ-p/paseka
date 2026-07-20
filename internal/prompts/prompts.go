@@ -15,6 +15,7 @@ const promptsSubdir = ".paseka/prompts"
 type Context struct {
 	Bee         string
 	TraceID     string
+	TraceTitle  string
 	AgentID     string
 	TaskID      string
 	ColonyRoot  string

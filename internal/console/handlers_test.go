@@ -413,6 +413,18 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	titleEv, err := protocol.NewEvent(traceID, agentID, 3, protocol.EventInsight, protocol.TraceTitlePayload{
+		Kind:  protocol.InsightTraceTitle,
+		Title: "Dashboard trail title",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	titleEv.CreatedAt = started.Add(50 * time.Second)
+	if err := d.AppendEvent(titleEv); err != nil {
+		t.Fatal(err)
+	}
+
 	taskDir, err := runs.NewTaskDir(repo, traceID, "task-dash")
 	if err != nil {
 		t.Fatal(err)
@@ -446,6 +458,9 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if len(dash.RecentTraces) == 0 {
 		t.Fatalf("expected recent traces, got %+v", dash)
 	}
+	if dash.RecentTraces[0].Title != "Dashboard trail title" {
+		t.Fatalf("dashboard trace title = %q", dash.RecentTraces[0].Title)
+	}
 	if len(dash.FailedRuns) == 0 {
 		t.Fatalf("expected failed runs, got %+v", dash)
 	}
@@ -469,6 +484,9 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if len(traces) == 0 || traces[0].TraceID != traceID {
 		t.Fatalf("traces = %+v", traces)
 	}
+	if traces[0].Title != "Dashboard trail title" {
+		t.Fatalf("trace title = %q", traces[0].Title)
+	}
 
 	traceReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID, nil)
 	traceRec := httptest.NewRecorder()
@@ -482,6 +500,9 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	}
 	if traceDetail.TraceID != traceID || len(traceDetail.Tasks) != 1 {
 		t.Fatalf("trace detail = %+v", traceDetail)
+	}
+	if traceDetail.Title != "Dashboard trail title" {
+		t.Fatalf("trace detail title = %q", traceDetail.Title)
 	}
 
 	eventsReq := httptest.NewRequest(http.MethodGet, "/api/events?type=SIGNAL&kind=task.ready", nil)

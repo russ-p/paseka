@@ -6,6 +6,7 @@ For breakdown, publish **only** these kinds. Do not emit `run.summary`, `review.
 | ----- | -------------- | ---- |
 | `INSIGHT` | `task.plan` | Register the full approved task ledger |
 | `SIGNAL` | `task.ready` | Kick the first runnable task (optional; see rule below) |
+| `INSIGHT` | `trace.title` | Flight Trail name (emit with breakdown) |
 | `INSIGHT` | `context.note` | Short trace fact for later bees (optional) |
 
 ### `task.plan` — full breakdown (one event, many tasks)
@@ -34,6 +35,16 @@ EOF
 ```
 
 If the Beekeeper approved the plan but did **not** ask to start immediately, publish `task.plan` only and stop.
+
+### `trace.title` — Flight Trail name
+
+Emit **one** `INSIGHT/trace.title` when publishing the breakdown (use spec title or a clearer short name for the whole trail).
+
+```bash
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees header indicator"}}
+EOF
+```
 
 ### `context.note` — optional trace context
 

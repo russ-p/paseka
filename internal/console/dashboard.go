@@ -83,7 +83,9 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		if i >= dashboardTraceLimit {
 			break
 		}
-		view.RecentTraces = append(view.RecentTraces, traceSummaryViewFromRuns(trace))
+		traceView := traceSummaryViewFromRuns(trace)
+		enrichTraceTitle(ctx, &traceView)
+		view.RecentTraces = append(view.RecentTraces, traceView)
 	}
 
 	view.TaskCounts = aggregateTaskCounts(ctx, traces)

@@ -221,9 +221,14 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, fmt.Errorf("sessions: discover intents: %w", err)
 	}
+	traceTitle, err := runs.ResolveTraceTitle(ctxColony.ColonyRoot, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: resolve trace title: %w", err)
+	}
 	promptCtx := prompts.PromptContext(prompts.Context{
 		Bee:         bee.Role,
 		TraceID:     traceID,
+		TraceTitle:  traceTitle,
 		AgentID:     agentID,
 		TaskID:      req.TaskID,
 		ColonyRoot:  ctxColony.ColonyRoot,

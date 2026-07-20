@@ -316,6 +316,7 @@ Flight trail: {{.TraceID}}
 
 Colony: {{.ColonyRoot}}
 Flight trail: {{.TraceID}}
+Flight trail title: {{if .TraceTitle}}{{.TraceTitle}}{{else}}(unset){{end}}
 Intent: {{.Intent}}{{if and .IntentRaw (ne .IntentRaw .Intent)}}
 Requested intent: {{.IntentRaw}}{{end}}
 
@@ -503,6 +504,7 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 6. When decision=grill, clarify, or reject: do not emit task.plan or task.ready.
 7. Start now: if title/body/task text explicitly asks to start immediately (e.g. "do now", "fix needed now", "фикс нужен сейчас", "start immediately"), emit SIGNAL/task.ready for that single planned task after task.plan. Otherwise publish task.plan only.
 8. Optionally emit INSIGHT/run.summary with a one-line intake summary.
+9. Emit INSIGHT/trace.title with a short Flight Trail name on every intake (from entry title/body or a refined label).
 `
 	scoutEmitIntakePartial = `## Publish events (intake only)
 
@@ -513,9 +515,10 @@ Always emit feature.classified first. Then follow the decision branch below.
 | SIGNAL | feature.classified | Always (required) |
 | INSIGHT | task.plan | decision=plan or decision=triage (one builder task) |
 | SIGNAL | task.ready | Same slice, only when entry text asks to start now |
+| INSIGHT | trace.title | Short Flight Trail name for Console (emit on every intake) |
 | INSIGHT | run.summary | Optional one-line summary |
 
-Do not emit task.plan or task.ready when decision=grill, clarify, or reject.
+Do not emit task.plan or task.ready when decision=grill, clarify, or reject. Still emit trace.title when the entry has a usable short name.
 
 ### feature.classified — classification decision
 
@@ -572,6 +575,14 @@ EOF
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Intake: triage bug, one builder slice planned"}}
 EOF
+
+### trace.title — Flight Trail name (required on intake)
+
+Emit one INSIGHT/trace.title with a short human name (from feature.requested title/body or your refined label).
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees in Queen Console header"}}
+EOF
 `
 	emitHowtoPartial = `When you need to publish a bus event during a run:
 
@@ -609,6 +620,15 @@ Runtime automatically projects selected narrative INSIGHT kinds into {{.Insights
 | context.note | Trace/task context fact | yes |
 | human.feedback | Beekeeper HITL feedback | yes |
 | task.plan | Task ledger planning | no (operational) |
+| trace.title | Flight Trail display name | no (operational) |
+
+### trace.title — Flight Trail name (planner bees)
+
+Emit when classifying or planning work. Last event wins for Console display and {{.TraceTitle}}.
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees in Queen Console header"}}
+EOF
 
 ### run.summary — narrative after work (runtime may auto-synthesize)
 
