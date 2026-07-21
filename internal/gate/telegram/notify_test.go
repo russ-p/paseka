@@ -212,9 +212,9 @@ func TestHandleTaskCompletedEvent(t *testing.T) {
 		state:  state,
 	}
 	payload, _ := json.Marshal(protocol.TaskCompletedPayload{
-		Kind:   protocol.TaskEventCompleted,
-		TaskID: "task-1",
-		Status: protocol.TaskStatusCompleted,
+		Kind:    protocol.TaskEventCompleted,
+		TaskID:  "task-1",
+		Status:  protocol.TaskStatusCompleted,
 		Summary: "Done",
 	})
 	ev := protocol.Event{
