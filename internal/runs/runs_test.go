@@ -17,7 +17,7 @@ func TestDirPaths(t *testing.T) {
 	if d.Root() != wantRoot {
 		t.Fatalf("Root() = %q, want %q", d.Root(), wantRoot)
 	}
-	if d.ResultPath() != filepath.Join(wantRoot, "result.txt") {
+	if d.ResultPath() != filepath.Join(wantRoot, "summary.md") {
 		t.Fatal("unexpected ResultPath")
 	}
 	if d.RequestPath() != filepath.Join(wantRoot, "request.json") {
@@ -31,6 +31,22 @@ func TestDirPaths(t *testing.T) {
 	}
 	if d.TranscriptPath() != filepath.Join(wantRoot, "transcript.ndjson") {
 		t.Fatal("unexpected TranscriptPath")
+	}
+}
+
+func TestReadResultLegacyFallback(t *testing.T) {
+	root := t.TempDir()
+	d := runs.Dir{ColonyRoot: root, TraceID: "t1", AgentID: "a1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(d.Root(), runs.LegacyResultFileName)
+	if err := os.WriteFile(legacyPath, []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := d.ReadResult()
+	if err != nil || got != "legacy" {
+		t.Fatalf("ReadResult() = %q, %v", got, err)
 	}
 }
 

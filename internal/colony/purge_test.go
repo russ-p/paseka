@@ -8,6 +8,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/worktree"
 )
 
@@ -15,11 +16,11 @@ func TestPurgeRuns(t *testing.T) {
 	repo := initTestRepo(t)
 	slug := setupPurgeHome(t, repo)
 
-	runDir := filepath.Join(repo, ".paseka", "runs", "trace-1", "agent-a")
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
+	d := runs.Dir{ColonyRoot: repo, TraceID: "trace-1", AgentID: "agent-a"}
+	if err := d.Prepare(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(runDir, "result.txt"), []byte("ok"), 0o644); err != nil {
+	if err := os.WriteFile(d.ResultPath(), []byte("ok"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

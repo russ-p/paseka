@@ -5,18 +5,6 @@ Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-inde
 
 ## Deferred work
 
-### Run artifacts
-
-AFK runs still expose `result.txt` as a familiar artifact from the early bash prototype. Success semantics should move fully to `INSIGHT/run.summary`; the file may remain a human-readable log afterward.
-
-#### Rename `result.txt` to a log-oriented name
-
-- **Kind:** follow-up
-- **Source:** planning (run.summary migration)
-- **Summary:** After runtime-first `INSIGHT/run.summary` is complete, rename `result.txt` to `summary.md` (or similar) so the path reads as a log, not a success handshake.
-- **Why deferred:** Renaming now widens the migration across prompts, runtime context, docs, tests, and external assumptions about run-directory layout. Keeping `result.txt` as a compatibility log path reduces risk while success semantics change.
-- **Revisit when:** AFK success no longer depends on reading `result.txt`; runtime enforces or auto-publishes `INSIGHT/run.summary`; prompts and docs no longer treat the file as the run-success handshake.
-
 ### Energy and honey
 
 MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion → `blocked` (`Honey reserve exhausted`). These items need separate design or evidence before expanding the MVP.

@@ -26,7 +26,7 @@ type CommandVars struct {
 	TaskID       string
 	ColonyRoot   string
 	Result       string // human-readable run summary text
-	ResultFile   string // path to result.txt
+	ResultFile   string // path to summary.md (human-readable run log)
 	Meta         string // path to meta.json
 	RunDir       string // .paseka/runs/<traceId>/<agentId>/
 }

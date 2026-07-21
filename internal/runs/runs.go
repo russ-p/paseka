@@ -17,16 +17,17 @@ import (
 var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[PX^_][^\x1b]*\x1b\\`)
 
 const (
-	ResultFileName     = "result.txt"
-	PromptFileName     = "prompt.txt"
-	SystemFileName     = "system.txt"
-	MetaFileName       = "meta.json"
-	StatusFileName     = "status.json"
-	RequestFileName    = "request.json"
-	EventsFileName     = "events.ndjson"
-	ResultJSONFileName = "result.json"
-	SessionFileName    = "session.json"
-	TranscriptFileName = "transcript.ndjson"
+	ResultFileName       = "summary.md"
+	LegacyResultFileName = "result.txt"
+	PromptFileName       = "prompt.txt"
+	SystemFileName       = "system.txt"
+	MetaFileName         = "meta.json"
+	StatusFileName       = "status.json"
+	RequestFileName      = "request.json"
+	EventsFileName       = "events.ndjson"
+	ResultJSONFileName   = "result.json"
+	SessionFileName      = "session.json"
+	TranscriptFileName   = "transcript.ndjson"
 )
 
 // Dir holds paths for one spawned agent run.
@@ -41,16 +42,18 @@ func (d Dir) Root() string {
 	return filepath.Join(d.ColonyRoot, ".paseka", "runs", d.TraceID, d.AgentID)
 }
 
-func (d Dir) ResultPath() string     { return filepath.Join(d.Root(), ResultFileName) }
-func (d Dir) PromptPath() string     { return filepath.Join(d.Root(), PromptFileName) }
-func (d Dir) SystemPath() string     { return filepath.Join(d.Root(), SystemFileName) }
-func (d Dir) MetaPath() string       { return filepath.Join(d.Root(), MetaFileName) }
-func (d Dir) StatusPath() string     { return filepath.Join(d.Root(), StatusFileName) }
-func (d Dir) RequestPath() string    { return filepath.Join(d.Root(), RequestFileName) }
-func (d Dir) EventsPath() string     { return filepath.Join(d.Root(), EventsFileName) }
-func (d Dir) ResultJSONPath() string { return filepath.Join(d.Root(), ResultJSONFileName) }
-func (d Dir) SessionPath() string    { return filepath.Join(d.Root(), SessionFileName) }
-func (d Dir) TranscriptPath() string { return filepath.Join(d.Root(), TranscriptFileName) }
+func (d Dir) ResultPath() string { return filepath.Join(d.Root(), ResultFileName) }
+
+func (d Dir) legacyResultPath() string { return filepath.Join(d.Root(), LegacyResultFileName) }
+func (d Dir) PromptPath() string       { return filepath.Join(d.Root(), PromptFileName) }
+func (d Dir) SystemPath() string       { return filepath.Join(d.Root(), SystemFileName) }
+func (d Dir) MetaPath() string         { return filepath.Join(d.Root(), MetaFileName) }
+func (d Dir) StatusPath() string       { return filepath.Join(d.Root(), StatusFileName) }
+func (d Dir) RequestPath() string      { return filepath.Join(d.Root(), RequestFileName) }
+func (d Dir) EventsPath() string       { return filepath.Join(d.Root(), EventsFileName) }
+func (d Dir) ResultJSONPath() string   { return filepath.Join(d.Root(), ResultJSONFileName) }
+func (d Dir) SessionPath() string      { return filepath.Join(d.Root(), SessionFileName) }
+func (d Dir) TranscriptPath() string   { return filepath.Join(d.Root(), TranscriptFileName) }
 
 // Meta is written by the runtime before launching an agent (legacy observers).
 type Meta struct {
@@ -71,7 +74,7 @@ func (d Dir) Prepare() error {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return fmt.Errorf("runs: mkdir %s: %w", root, err)
 	}
-	for _, path := range []string{d.ResultPath(), d.ResultJSONPath(), d.EventsPath()} {
+	for _, path := range []string{d.ResultPath(), d.legacyResultPath(), d.ResultJSONPath(), d.EventsPath()} {
 		_ = os.Remove(path)
 	}
 	return nil
@@ -239,6 +242,13 @@ func (d Dir) ReadResultJSON() (protocol.Result, error) {
 
 func (d Dir) ReadResult() (string, error) {
 	data, err := os.ReadFile(d.ResultPath())
+	if err == nil {
+		return string(data), nil
+	}
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+	data, err = os.ReadFile(d.legacyResultPath())
 	if err != nil {
 		return "", err
 	}

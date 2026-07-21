@@ -79,7 +79,7 @@ Interactive sessions reuse `.paseka/runs/<traceId>/<agentId>/` under the **colon
 .paseka/runs/<traceId>/<agentId>/
 ├── prompt.txt
 ├── system.txt          # optional — rendered system_template
-├── result.txt
+├── summary.md
 ├── meta.json
 ├── status.json
 ├── request.json

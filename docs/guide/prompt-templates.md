@@ -79,7 +79,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.Intent}}` | `string` | Normalized task intent for partial routing within the bee's vocabulary. Empty or unknown caller input becomes the bee's default intent. |
 | `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [insight kinds](../reference/insight-kinds.md). |
-| `{{.ResultFile}}` | `string` | Absolute path to the human-readable `result.txt` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
+| `{{.ResultFile}}` | `string` | Absolute path to the human-readable `summary.md` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
 | `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `script`). |
 
@@ -353,4 +353,4 @@ Use `{{.TraceID}}` and `{{.AgentID}}` inside partials so examples match the curr
 - [bee config](bee-config.md) — bee role YAML (`prompt_template` and other fields)
 - [task ledger](../reference/task-ledger.md) — task queue protocol and lifecycle
 - [glossary](../idea/glossary.md) — bee language vs technical terms (`TraceID` / Flight Trail, `Task` / Nectar)
-- Agent run file protocol — `request.json`, `result.txt`, `events.ndjson` under `.paseka/runs/`
+- Agent run file protocol — `request.json`, `summary.md`, `events.ndjson` under `.paseka/runs/`

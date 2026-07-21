@@ -38,7 +38,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │       ├── <agentId>/
 │       │   ├── prompt.txt
 │       │   ├── system.txt   # optional — rendered system_template
-│       │   ├── result.txt
+│       │   ├── summary.md
 │       │   ├── meta.json
 │       │   └── status.json
 │       └── tasks/

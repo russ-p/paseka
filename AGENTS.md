@@ -21,7 +21,7 @@ Work centers on a **git repository**. Configuration is split:
 
 ## Adapters
 
-Bees do not embed LLM logic. An **adapter** launches external agents via **Cursor Agent CLI** (`agent`); each invocation gets `.paseka/runs/<traceId>/<agentId>/` for file IPC (`prompt.txt`, `result.txt`, `meta.json`, `status.json`). AFK runs use `Adapter.Run()` (`paseka bee run`); interactive HITL sessions use `SessionAdapter` + PTY (`paseka bee chat`) — see [docs/guide/interactive-sessions.md](docs/guide/interactive-sessions.md). Worktrees under `.paseka/worktrees/<traceId>/` isolate code mutations until review.
+Bees do not embed LLM logic. An **adapter** launches external agents via **Cursor Agent CLI** (`agent`); each invocation gets `.paseka/runs/<traceId>/<agentId>/` for file IPC (`prompt.txt`, `summary.md`, `meta.json`, `status.json`). AFK runs use `Adapter.Run()` (`paseka bee run`); interactive HITL sessions use `SessionAdapter` + PTY (`paseka bee chat`) — see [docs/guide/interactive-sessions.md](docs/guide/interactive-sessions.md). Worktrees under `.paseka/worktrees/<traceId>/` isolate code mutations until review.
 
 ## Prompt templates
 

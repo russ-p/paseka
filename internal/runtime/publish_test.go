@@ -103,13 +103,13 @@ func TestDispatchAutoPublishesRunSummary(t *testing.T) {
 		t.Fatalf("events.ndjson missing run.summary: %s", data)
 	}
 
-	resultPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "result.txt")
+	resultPath := filepath.Join(root, ".paseka", "runs", "trace-abc", rec.lastReq.AgentID, "summary.md")
 	resultData, err := os.ReadFile(resultPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(resultData) != "implemented auth" {
-		t.Fatalf("result.txt = %q", resultData)
+		t.Fatalf("summary.md = %q", resultData)
 	}
 }
 

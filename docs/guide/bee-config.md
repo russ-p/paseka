@@ -251,7 +251,7 @@ Supports `$NAME` and `${NAME}`:
 | `$TASK_ID` / `${TASK_ID}` | dispatch + post_exec | task id when dispatched from ledger |
 | `$COLONY_ROOT` / `${COLONY_ROOT}` | dispatch + post_exec | git repo root |
 | `$RUN_DIR` / `${RUN_DIR}` | dispatch + post_exec | `.paseka/runs/<traceId>/<agentId>/` |
-| `$RESULT_FILE` / `${RESULT_FILE}` | dispatch + post_exec | path to `result.txt` |
+| `$RESULT_FILE` / `${RESULT_FILE}` | dispatch + post_exec | path to `summary.md` |
 | `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
 | `$META` / `${META}` | post_exec only | path to `meta.json` |
 

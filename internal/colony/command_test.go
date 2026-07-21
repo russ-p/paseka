@@ -172,7 +172,7 @@ func TestCommandRenderPostExecVars(t *testing.T) {
 		Prompt:     "do work",
 		Workspace:  "/tmp/wt",
 		Result:     "all done",
-		ResultFile: "/tmp/runs/result.txt",
+		ResultFile: "/tmp/runs/summary.md",
 		Meta:       "/tmp/runs/meta.json",
 		RunDir:     "/tmp/runs",
 	})

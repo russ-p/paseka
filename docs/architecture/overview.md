@@ -46,7 +46,7 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 .paseka/runs/<traceId>/<agentId>/
 ├── prompt.txt         # runtime → agent: rendered prompt_template (audit / replay)
 ├── system.txt         # optional — rendered system_template (adapter injection)
-├── result.txt         # runtime log: human-readable summary (not a success contract)
+├── summary.md         # runtime log: human-readable summary (not a success contract)
 ├── meta.json          # runtime → observers: bee, adapter, workspace, startedAt
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
 ├── session.json       # interactive only: pid, state, session metadata
@@ -66,11 +66,11 @@ Task ledger projection (updated by `paseka run`):
 | `traceId` | Whole flight trail — one bloom/nectar chain | runtime (`colony.NewTraceID`: `trace-` + 16 hex, time-ordered) |
 | `agentId` | Single adapter invocation (one `agent` process) | runtime (random hex) |
 
-**Why colony root, not worktree:** code edits happen in `.paseka/worktrees/<traceId>/`, but agent I/O and audit trail live in `.paseka/runs/<traceId>/<agentId>/`. Prompt uses an **absolute path** to `result.txt` so Cursor CLI writing from a worktree cwd still lands in the colony runs dir.
+**Why colony root, not worktree:** code edits happen in `.paseka/worktrees/<traceId>/`, but agent I/O and audit trail live in `.paseka/runs/<traceId>/<agentId>/`. Prompt uses an **absolute path** to `summary.md` so Cursor CLI writing from a worktree cwd still lands in the colony runs dir.
 
 Entire `runs/` tree is **gitignored** — ephemeral, machine-local artifacts.
 
-Implementation: `internal/runs/` prepares directories and files; adapters may still read legacy `result.txt` content for summary normalization, but run success no longer depends on it. Runtime auto-synthesizes `INSIGHT/run.summary` when policy allows. Domain events are published by agents through `paseka event emit --stdin`, not by parsing assistant stdout.
+Implementation: `internal/runs/` prepares directories and files; adapters may still read legacy `result.txt` content for summary normalization, but run success no longer depends on it. Runtime writes new runs to `summary.md`. Runtime auto-synthesizes `INSIGHT/run.summary` when policy allows. Domain events are published by agents through `paseka event emit --stdin`, not by parsing assistant stdout.
 
 **Event publish path (MVP):**
 
@@ -111,7 +111,7 @@ agent -p --trust --force \
 
 1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
-3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
+3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `agent` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root). Pre-existing dirty files are not attributed to the run.
 5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
@@ -161,9 +161,9 @@ pi -p --mode json \
 
 1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
-3. **Log artifact** — runtime writes normalized summary to `result.txt` for human inspection.
+3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `pi` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root).
-5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `result.txt` only.
+5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `summary.md` only.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 **Event publishing boundary:** Pi stdout/JSON is **not** parsed into domain bus events (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`). Agents must publish domain events explicitly via `paseka event emit --stdin` — same contract as Cursor.
@@ -234,7 +234,7 @@ publishes:
 | `PASEKA_RUN_DIR` | `.paseka/runs/<traceId>/<agentId>/` |
 | `PASEKA_BEE` | bee role name |
 | `PASEKA_EVENT_LOG` | path to `events.ndjson` |
-| `PASEKA_RESULT_FILE` | path to `result.txt` |
+| `PASEKA_RESULT_FILE` | path to `summary.md` |
 | `PASEKA_PROMPT_FILE` | path to `prompt.txt` |
 
 **Emitting events:** scripts publish domain events the same way LLM agents do — pipe JSON to `paseka event emit --stdin`:

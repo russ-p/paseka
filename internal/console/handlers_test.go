@@ -202,7 +202,7 @@ func TestConsoleAPIHandlers(t *testing.T) {
 
 	d := runs.Dir{ColonyRoot: repo, TraceID: created.TraceID, AgentID: created.AgentID}
 	if _, err := os.Stat(d.ResultPath()); err != nil {
-		t.Fatalf("expected result.txt: %v", err)
+		t.Fatalf("expected summary.md: %v", err)
 	}
 }
 

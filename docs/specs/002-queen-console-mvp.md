@@ -47,7 +47,7 @@ Paseka already exposes most of the state a Web UI needs:
   - `meta.json`
   - `status.json`
   - `request.json`
-  - `result.txt`
+  - `summary.md`
   - `events.ndjson`
   - `session.json` for interactive runs
   - `transcript.ndjson` for interactive runs
@@ -293,7 +293,7 @@ The Runs tab exposes recent headless adapter invocations:
 - trace id and agent id
 - bee and adapter
 - state, task body, intent, workspace, run directory
-- summary from `result.json` or `result.txt`
+- summary from `result.json` or `summary.md` (legacy `result.txt` still read when present)
 - optional LLM `usage` from `result.json` (`inputTokens`, `outputTokens`, cache read/write; shown as `—` when absent)
 - event stream from `events.ndjson`
 - whether the run has an associated session
@@ -529,7 +529,7 @@ Combine:
 
 - `request.json`
 - `status.json`
-- `result.txt`
+- `summary.md`
 - `result.json`, when present
 - `events.ndjson`
 - `session.json` and `transcript.ndjson`, when present

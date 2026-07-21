@@ -227,7 +227,7 @@ func TestManagerStartDetachedCapturesOutput(t *testing.T) {
 
 	result, err := d.ReadResult()
 	if err != nil || result == "" {
-		t.Fatalf("result.txt = %q err=%v", result, err)
+		t.Fatalf("summary.md = %q err=%v", result, err)
 	}
 
 	st, err := colony.LoadState(slug)
