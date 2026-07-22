@@ -220,6 +220,14 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, view)
 		return
 	}
+	if len(parts) >= 3 && parts[1] == "energy" && parts[2] == "add" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.handleTraceEnergyAdd(w, r, traceID)
+		return
+	}
 	if suffix == "tasks" || (len(parts) > 1 && parts[1] == "tasks") {
 		a.handleTraceTasks(w, r, traceID, parts[1:])
 		return
@@ -243,6 +251,20 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, view)
+}
+
+func (a *api) handleTraceEnergyAdd(w http.ResponseWriter, r *http.Request, traceID string) {
+	var req EnergyAddRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	res, err := AddTraceEnergy(r.Context(), a.ctx, traceID, req.Amount)
+	if err != nil {
+		writeEnergyError(w, err)
+		return
+	}
+	writeJSON(w, res)
 }
 
 func (a *api) handleTraceEvents(w http.ResponseWriter, r *http.Request, traceID string) {
@@ -787,6 +809,17 @@ func (a *api) rejectTask(w http.ResponseWriter, r *http.Request, traceID, taskID
 		return
 	}
 	writeJSON(w, res)
+}
+
+func writeEnergyError(w http.ResponseWriter, err error) {
+	msg := err.Error()
+	status := http.StatusInternalServerError
+	if strings.Contains(strings.ToLower(msg), "not configured") {
+		status = http.StatusServiceUnavailable
+	} else if strings.Contains(msg, "required") || strings.Contains(msg, "positive") || strings.Contains(msg, "invalid") {
+		status = http.StatusBadRequest
+	}
+	http.Error(w, msg, status)
 }
 
 func writeReviewError(w http.ResponseWriter, err error) {

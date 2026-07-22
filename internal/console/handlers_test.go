@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
+	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/worktree"
 )
 
@@ -756,6 +758,102 @@ func TestTraceMergeDiffAPIHandler(t *testing.T) {
 	if !missing.MissingWorktree {
 		t.Fatalf("expected missingWorktree, got %+v", missing)
 	}
+}
+
+func TestEnergyAddAPIHandler(t *testing.T) {
+	repo := initConsoleRepo(t)
+
+	t.Run("validation", func(t *testing.T) {
+		ctxColony := setupConsoleHome(t, repo)
+		srv := console.NewServer(console.Options{
+			Addr:     "127.0.0.1:0",
+			Colony:   ctxColony,
+			Sessions: sessions.NewManager(),
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/traces/trace-energy/energy/add", bytes.NewBufferString(`{"amount":0}`))
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("validation status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "positive") {
+			t.Fatalf("validation body = %q", rec.Body.String())
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		ctxColony := setupConsoleHome(t, repo)
+		srv := console.NewServer(console.Options{
+			Addr:     "127.0.0.1:0",
+			Colony:   ctxColony,
+			Sessions: sessions.NewManager(),
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/traces/trace-energy/energy/add", bytes.NewBufferString(`{"amount":1}`))
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("unavailable status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("happy", func(t *testing.T) {
+		url := os.Getenv("PASEKA_NATS_URL")
+		if url == "" {
+			url = "nats://127.0.0.1:4222"
+		}
+		ctxColony := setupConsoleHomeWithNATS(t, repo, url)
+		client, err := bus.ConnectColony(ctxColony, true)
+		if err != nil {
+			t.Skipf("nats unavailable: %v", err)
+		}
+		if client == nil {
+			t.Skip("nats url not configured")
+		}
+		defer client.Close()
+
+		traceID := "trace-console-energy-" + time.Now().Format("150405")
+		kv, err := client.JetStream().KeyValue(bus.TaskLedgerBucket(ctxColony.Slug))
+		if err != nil {
+			t.Fatalf("kv: %v", err)
+		}
+		ledger := taskledger.NewKVLedger(kv)
+		if err := ledger.SeedEnergy(traceID, 10); err != nil {
+			t.Fatal(err)
+		}
+
+		srv := console.NewServer(console.Options{
+			Addr:     "127.0.0.1:0",
+			Colony:   ctxColony,
+			Sessions: sessions.NewManager(),
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/energy/add", bytes.NewBufferString(`{"amount":5}`))
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("add status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var res console.EnergyAddResponse
+		if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
+			t.Fatal(err)
+		}
+		if res.TraceID != traceID || res.Amount != 5 {
+			t.Fatalf("response = %+v", res)
+		}
+		if res.EnergyRemaining != 15 || res.EnergyBudget != 10 {
+			t.Fatalf("energy = remaining %d budget %d, want 15/10", res.EnergyRemaining, res.EnergyBudget)
+		}
+
+		snap, err := ledger.Snapshot(traceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snap.EnergyRemaining != 15 {
+			t.Fatalf("ledger remaining = %d, want 15", snap.EnergyRemaining)
+		}
+	})
 }
 
 func TestTraceDetailFallsBackWhenNATSUnavailable(t *testing.T) {
