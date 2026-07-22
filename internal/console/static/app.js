@@ -1494,13 +1494,8 @@ function renderTraceDetail(detail) {
   `;
 
   const hasEnergy = detail.energyBudget > 0 || detail.energyRemaining > 0;
-  el.traceEnergyWrap.classList.toggle('hidden', !hasEnergy);
-  if (hasEnergy) {
-    const low = detail.lowEnergy ? ' <span class="badge warn">low</span>' : '';
-    el.traceEnergy.innerHTML = `
-      <span>${detail.energyRemaining} / ${detail.energyBudget} remaining</span>${low}
-    `;
-  }
+  el.traceEnergyWrap.classList.remove('hidden');
+  renderTraceEnergy(detail, hasEnergy);
 
   const hasUsage = !!detail.usage && (detail.usage.runCountWithUsage > 0);
   el.traceUsageWrap.classList.toggle('hidden', !hasUsage);
@@ -1524,6 +1519,58 @@ function renderTraceDetail(detail) {
   renderTraceTasks(detail.tasks || []);
   renderTraceRuns(detail.runs || []);
   renderTraceEvents(detail.recentEvents || []);
+}
+
+function renderTraceEnergy(detail, hasEnergy) {
+  const low = detail.lowEnergy ? ' <span class="badge warn">low</span>' : '';
+  const stats = hasEnergy
+    ? `<span>${detail.energyRemaining} / ${detail.energyBudget} remaining</span>${low}`
+    : '<span class="muted">Honey reserve unavailable — top up when NATS and the task ledger are connected</span>';
+  el.traceEnergy.innerHTML = `
+    ${stats}
+    <span class="trace-energy-topup">
+      <button type="button" class="secondary trace-energy-add" data-amount="1">+1</button>
+      <button type="button" class="secondary trace-energy-add" data-amount="5">+5</button>
+      <button type="button" class="secondary trace-energy-add" data-amount="12">+12</button>
+    </span>
+  `;
+  for (const btn of el.traceEnergy.querySelectorAll('.trace-energy-add')) {
+    btn.addEventListener('click', () => {
+      const amount = Number(btn.dataset.amount);
+      addTraceEnergy(amount).catch(console.error);
+    });
+  }
+}
+
+async function addTraceEnergy(amount) {
+  const traceId = state.selectedTraceId;
+  if (!traceId) return;
+  for (const btn of el.traceEnergy.querySelectorAll('.trace-energy-add')) {
+    btn.disabled = true;
+  }
+  try {
+    const res = await api(`/api/traces/${encodeURIComponent(traceId)}/energy/add`, {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    });
+    if (state.selectedTraceDetail && state.selectedTraceId === traceId) {
+      state.selectedTraceDetail.energyBudget = res.energyBudget;
+      state.selectedTraceDetail.energyRemaining = res.energyRemaining;
+      state.selectedTraceDetail.lowEnergy = res.lowEnergy;
+      renderTraceDetail(state.selectedTraceDetail);
+    }
+    await loadTraces();
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    const unavailable = /not configured|nats/i.test(msg);
+    alert(unavailable
+      ? `${msg}\n\nEnsure NATS is configured and the task ledger is available.`
+      : msg);
+  } finally {
+    for (const btn of el.traceEnergy.querySelectorAll('.trace-energy-add')) {
+      btn.disabled = false;
+    }
+  }
 }
 
 function renderTraceTasks(tasks) {
@@ -2305,7 +2352,9 @@ async function acceptInvite(inviteId) {
     }
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
-    alert(msg.includes('honey reserve') ? `${msg}\n\nTop up with: paseka energy add --trace <id> --amount 1` : msg);
+    alert(msg.includes('honey reserve')
+      ? `${msg}\n\nTop up from the Trace view Energy section (+1/+5/+12), or: paseka energy add --trace <id> --amount 1`
+      : msg);
   }
 }
 

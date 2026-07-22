@@ -262,6 +262,7 @@ The list panel shows recent traces with activity and failure state. Selecting a 
 
 - trace summary (counts, bees, active/failure flags)
 - energy budget/remaining when the task ledger is available (Honey Reserve; not LLM tokens)
+- honey top-up controls (`+1` / `+5` / `+12`) calling `POST /api/traces/:traceId/energy/add` when NATS and the ledger are available
 - optional LLM usage aggregate summed from runs that report `usage` on `result.json` (`runCountWithUsage` vs `runCount`)
 - active worktree metadata for that trace
 - tasks in that trace (click → Tasks tab)
@@ -439,6 +440,8 @@ Implemented HTTP endpoints:
   | `truncated` | bool | Diff body capped at 1 MiB |
   | `empty` | bool | No changes between branches |
   | `missingWorktree` | bool | Trace branch not found — preview unavailable |
+
+- `POST /api/traces/:traceId/energy/add` — body `{ "amount": <positive int> }`; publishes `SIGNAL/energy.add` via shared `tasks.AddEnergy` (`agentId: console`). Returns updated `energyBudget`, `energyRemaining`, `lowEnergy`. Requires NATS and task ledger KV (503 when unavailable).
 
 - `GET /api/traces/:traceId/events`
 - `GET /api/traces/:traceId/tasks`

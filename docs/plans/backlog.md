@@ -67,15 +67,7 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 
 ### Queen Console
 
-API fields for energy and merge-diff exist; SPA polish and per-run proposal preview are still thin.
-
-#### Energy UI polish
-
-- **Kind:** follow-up
-- **Source:** planning (energyToken / Queen Console)
-- **Summary:** Richer badges, alerts, and Beekeeper actions for `energyBudget`, `energyRemaining`, `lowEnergy` (API fields already exist).
-- **Why deferred:** MVP prioritized ledger + reactor gating over SPA chrome.
-- **Revisit when:** Operators need at-a-glance honey UX in Console beyond raw API fields.
+API fields for energy and merge-diff exist; per-run proposal preview is still thin.
 
 #### Per-run proposal diff in Reviews
 

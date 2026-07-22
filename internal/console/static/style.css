@@ -354,6 +354,17 @@ header h1 {
   font-size: 0.9rem;
 }
 
+.trace-energy-topup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.trace-energy-topup button {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.85rem;
+}
+
 .compact-meta {
   margin-bottom: 0;
 }
