@@ -105,6 +105,18 @@ Leftovers from [008-code-proposal-workspaces](../specs/008-code-proposal-workspa
 - **Why deferred:** Alias keeps older colonies working while `.isolated` / `.root` settle.
 - **Revisit when:** Docs and colonies have moved to explicit kinds and the alias is a liability.
 
+### Task ledger / routing
+
+Hardcoded role defaults and dispatch assumptions that fight multi-bee choreography.
+
+#### Remove hardcoded `builder` fallback on `task.ready`
+
+- **Kind:** follow-up
+- **Source:** planning (docs/wrap-up bee choreography); `internal/runtime/reactor.go` (`dispatchReady`)
+- **Summary:** When `task.Bee` is empty, reactor silently dispatches `builder`. Prefer fail-closed (reject / skip with a clear error) or a colony-declared default role — so colonies without a builder, or with specialized AFK bees (e.g. scribe), are not forced through a magic role name.
+- **Why deferred:** Current colonies and prompts almost always set `bee` explicitly; the fallback only bites empty/`omitempty` plans and hides misconfigured breakdowns.
+- **Revisit when:** Adding non-builder AFK task bees, tightening `task.plan` validation, or colonies that omit `builder`.
+
 ### Eval harness
 
 Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony `paseka-eval-colony`. Gotchas from standing up Phase 2 are under [Assumptions and gotchas](#assumptions-and-gotchas).
@@ -144,6 +156,10 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 - **Revisit when:** Local/CI Windows cross-build succeeds and release should publish `windows/amd64` (optionally `windows/arm64`).
 
 ## Assumptions and gotchas
+
+### Task ledger
+
+- **Empty `task.Bee` falls back to `builder`** — `dispatchReady` in `internal/runtime/reactor.go` hardcodes `builder` when the ledger task has no bee. Plans should always set `bee` explicitly; see [Remove hardcoded `builder` fallback on `task.ready`](#remove-hardcoded-builder-fallback-on-taskready).
 
 ### Eval colony
 
