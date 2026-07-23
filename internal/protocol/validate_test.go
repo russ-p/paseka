@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -43,6 +44,37 @@ func TestValidateTaskPlanRequiresTasks(t *testing.T) {
 	}
 	details := in.Validate()
 	if len(details) != 1 || details[0].Path != "payload.tasks" {
+		t.Fatalf("details = %#v", details)
+	}
+}
+
+func TestValidateTraceSummary(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"trace.summary","summary":"Implemented OAuth callback and added focused tests"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+
+	empty := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"trace.summary","summary":"   "}}`)
+	in2, err := ParseEventInput(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in2.Validate()
+	if len(details) != 1 || details[0].Path != "payload.summary" {
+		t.Fatalf("details = %#v", details)
+	}
+
+	over := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"trace.summary","summary":"` + strings.Repeat("x", MaxTraceSummaryLen+1) + `"}}`)
+	in3, err := ParseEventInput(over)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in3.Validate()
+	if len(details) != 1 || details[0].Path != "payload.summary" {
 		t.Fatalf("details = %#v", details)
 	}
 }
