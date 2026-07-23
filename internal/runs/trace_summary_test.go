@@ -118,3 +118,34 @@ func TestResolveTraceSummaryEmpty(t *testing.T) {
 		t.Fatalf("summary = %q, want empty", got)
 	}
 }
+
+func TestResolveTraceSummaryIgnoresRunSummary(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-no-run-fallback"
+	at := time.Now().UTC()
+
+	d := Dir{ColonyRoot: root, TraceID: traceID, AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	runSummary, err := protocol.NewEvent(traceID, "builder", 1, protocol.EventInsight, protocol.NarrativeInsightPayload{
+		Kind:    protocol.InsightRunSummary,
+		Summary: "Task run outcome only",
+		TaskID:  "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runSummary.CreatedAt = at
+	if err := d.AppendEvent(runSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveTraceSummary(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("summary = %q, want empty (no run.summary fallback)", got)
+	}
+}

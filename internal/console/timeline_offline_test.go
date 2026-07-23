@@ -128,3 +128,71 @@ func TestGetTraceAlignsTaskCountWithLoadedTasks(t *testing.T) {
 		t.Fatalf("TaskCount=%d len(Tasks)=%d", view.TaskCount, len(view.Tasks))
 	}
 }
+
+func TestCollectRecentInsightsExcludesTraceSummary(t *testing.T) {
+	repo := t.TempDir()
+	traceID := "trace-insights"
+	started := time.Now().UTC()
+
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         "agent-1",
+		Bee:             "builder",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusCompleted,
+		StartedAt:       started,
+		FinishedAt:      started.Add(time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	traceSummary, err := protocol.NewEvent(traceID, "builder", 1, protocol.EventInsight, protocol.TraceSummaryPayload{
+		Kind:    protocol.InsightTraceSummary,
+		Summary: "Trail outcome description",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	traceSummary.CreatedAt = started
+	if err := d.AppendEvent(traceSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	runSummary, err := protocol.NewEvent(traceID, "builder", 2, protocol.EventInsight, protocol.NarrativeInsightPayload{
+		Kind:    protocol.InsightRunSummary,
+		Summary: "Task run narrative",
+		TaskID:  "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runSummary.CreatedAt = started.Add(time.Second)
+	if err := d.AppendEvent(runSummary); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: "test"}
+	insights, err := CollectRecentInsights(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 1 {
+		t.Fatalf("insights = %+v, want 1 narrative highlight", insights)
+	}
+	if insights[0].PayloadKind != string(protocol.InsightRunSummary) {
+		t.Fatalf("payloadKind = %q, want run.summary", insights[0].PayloadKind)
+	}
+}
