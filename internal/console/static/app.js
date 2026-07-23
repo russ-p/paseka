@@ -424,6 +424,11 @@ function traceIdSubline(trace) {
   return '';
 }
 
+function traceSummarySubline(trace) {
+  if (!trace?.summary) return '';
+  return `<div class="muted trace-summary-subline">${escapeHtml(trace.summary)}</div>`;
+}
+
 function setTab(tab) {
   state.tab = tab;
   const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology'];
@@ -1358,6 +1363,7 @@ function renderDashboard() {
       <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
       <span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span>
     </div>
+    ${traceSummarySubline(trace)}
     ${traceIdSubline(trace)}
     <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks</div>
   `, 'No recent traces.', (trace) => {
@@ -1447,6 +1453,7 @@ function renderTraces() {
         <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
         <span class="badge ${badge}">${escapeHtml(badgeLabel)}</span>
       </div>
+      ${traceSummarySubline(trace)}
       ${traceIdSubline(trace)}
       <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">
         ${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks · ${escapeHtml(bees)}
@@ -1484,7 +1491,7 @@ function renderTraceDetail(detail) {
   if (detail.hasActive) flags.push('active');
   if (detail.hasFailures) flags.push('failures');
   el.traceDetailMeta.innerHTML = `
-    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)}</dd>` : ''}
+    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)}${traceSummarySubline(detail)}</dd>` : (detail.summary ? `<dt>Summary</dt><dd class="muted">${escapeHtml(detail.summary)}</dd>` : '')}
     <dt>Trace</dt><dd>${escapeHtml(detail.traceId)}</dd>
     <dt>Last activity</dt><dd>${formatTime(detail.lastActivityAt)}</dd>
     <dt>Runs</dt><dd>${detail.runCount ?? (detail.runs || []).length}</dd>
