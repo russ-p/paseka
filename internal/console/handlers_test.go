@@ -542,6 +542,152 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestTraceSummaryProjection(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-8 * time.Minute)
+	withSummary := "trace-with-summary"
+	withoutSummary := "trace-without-summary"
+	agentID := "agent-summary"
+
+	for _, spec := range []struct {
+		traceID string
+		summary string
+		title   string
+	}{
+		{withSummary, "Implemented OAuth callback and added focused tests", "Trail with summary"},
+		{withoutSummary, "", "Trail without summary"},
+	} {
+		d := runs.Dir{ColonyRoot: repo, TraceID: spec.traceID, AgentID: agentID}
+		if err := d.Prepare(); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.WriteRequest(protocol.Request{
+			ProtocolVersion: protocol.Version,
+			TraceID:         spec.traceID,
+			AgentID:         agentID,
+			Bee:             "scout",
+			Adapter:         "cursor",
+			Workspace:       repo,
+			ColonyRoot:      repo,
+			CreatedAt:       started,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+			ProtocolVersion: protocol.Version,
+			State:           protocol.StatusCompleted,
+			StartedAt:       started,
+			FinishedAt:      started.Add(time.Minute),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		titleEv, err := protocol.NewEvent(spec.traceID, agentID, 1, protocol.EventInsight, protocol.TraceTitlePayload{
+			Kind:  protocol.InsightTraceTitle,
+			Title: spec.title,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		titleEv.CreatedAt = started.Add(10 * time.Second)
+		if err := d.AppendEvent(titleEv); err != nil {
+			t.Fatal(err)
+		}
+
+		if spec.summary != "" {
+			summaryEv, err := protocol.NewEvent(spec.traceID, agentID, 2, protocol.EventInsight, protocol.TraceSummaryPayload{
+				Kind:    protocol.InsightTraceSummary,
+				Summary: spec.summary,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			summaryEv.CreatedAt = started.Add(20 * time.Second)
+			if err := d.AppendEvent(summaryEv); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	dashReq := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
+	dashRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(dashRec, dashReq)
+	if dashRec.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d body=%s", dashRec.Code, dashRec.Body.String())
+	}
+	var dash console.DashboardView
+	if err := json.NewDecoder(dashRec.Body).Decode(&dash); err != nil {
+		t.Fatal(err)
+	}
+	dashByID := map[string]console.TraceSummaryView{}
+	for _, trace := range dash.RecentTraces {
+		dashByID[trace.TraceID] = trace
+	}
+	if dashByID[withSummary].Summary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("dashboard summary = %q", dashByID[withSummary].Summary)
+	}
+	if dashByID[withoutSummary].Summary != "" {
+		t.Fatalf("dashboard summary without emit = %q", dashByID[withoutSummary].Summary)
+	}
+
+	tracesReq := httptest.NewRequest(http.MethodGet, "/api/traces", nil)
+	tracesRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(tracesRec, tracesReq)
+	if tracesRec.Code != http.StatusOK {
+		t.Fatalf("traces status = %d body=%s", tracesRec.Code, tracesRec.Body.String())
+	}
+	var traces []console.TraceSummaryView
+	if err := json.NewDecoder(tracesRec.Body).Decode(&traces); err != nil {
+		t.Fatal(err)
+	}
+	listByID := map[string]console.TraceSummaryView{}
+	for _, trace := range traces {
+		listByID[trace.TraceID] = trace
+	}
+	if listByID[withSummary].Summary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("list summary = %q", listByID[withSummary].Summary)
+	}
+	if listByID[withoutSummary].Summary != "" {
+		t.Fatalf("list summary without emit = %q", listByID[withoutSummary].Summary)
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+withSummary, nil)
+	detailRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(detailRec, detailReq)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
+	}
+	var detail console.TraceDetailView
+	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Summary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("detail summary = %q", detail.Summary)
+	}
+
+	omitReq := httptest.NewRequest(http.MethodGet, "/api/traces/"+withoutSummary, nil)
+	omitRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(omitRec, omitReq)
+	if omitRec.Code != http.StatusOK {
+		t.Fatalf("omit detail status = %d body=%s", omitRec.Code, omitRec.Body.String())
+	}
+	var detailMap map[string]json.RawMessage
+	if err := json.Unmarshal(omitRec.Body.Bytes(), &detailMap); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := detailMap["summary"]; ok {
+		t.Fatalf("expected summary omitted from JSON, got %s", omitRec.Body.String())
+	}
+}
+
 func TestTraceDetailAPIHandler(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)
@@ -1110,6 +1256,23 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 		}
 	}
 
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "builder-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	summaryEv, err := protocol.NewEvent(traceID, "builder-1", 1, protocol.EventInsight, protocol.TraceSummaryPayload{
+		Kind:    protocol.InsightTraceSummary,
+		Summary: "Implemented OAuth callback and added focused tests",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summaryEv.CreatedAt = started
+	if err := d.AppendEvent(summaryEv); err != nil {
+		t.Fatal(err)
+	}
+
 	srv := console.NewServer(console.Options{
 		Addr:     "127.0.0.1:0",
 		Colony:   ctxColony,
@@ -1162,6 +1325,36 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 	}
 	if !finalDetail.IsFinal {
 		t.Fatalf("final task detail = %+v", finalDetail)
+	}
+	if finalDetail.TraceSummary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("final traceSummary = %q", finalDetail.TraceSummary)
+	}
+
+	var finalQueueItem *console.ReviewQueueItem
+	for i := range queue.Items {
+		if queue.Items[i].TaskID == finalID {
+			finalQueueItem = &queue.Items[i]
+			break
+		}
+	}
+	if finalQueueItem == nil {
+		t.Fatal("final queue item not found")
+	}
+	if finalQueueItem.TraceSummary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("queue traceSummary = %q", finalQueueItem.TraceSummary)
+	}
+	var requiredQueueItem *console.ReviewQueueItem
+	for i := range queue.Items {
+		if queue.Items[i].TaskID == requiredID {
+			requiredQueueItem = &queue.Items[i]
+			break
+		}
+	}
+	if requiredQueueItem == nil {
+		t.Fatal("required queue item not found")
+	}
+	if requiredQueueItem.TraceSummary != "" {
+		t.Fatalf("required queue traceSummary = %q, want omitted", requiredQueueItem.TraceSummary)
 	}
 
 	approveReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+requiredID+"/approve", bytes.NewBufferString(`{"summary":"looks good"}`))

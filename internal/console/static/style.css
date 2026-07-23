@@ -146,6 +146,12 @@ header h1 {
   font-size: 0.95rem;
 }
 
+.trace-summary-subline {
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+
 .tabs {
   display: flex;
   gap: 0.5rem;

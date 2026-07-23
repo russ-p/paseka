@@ -10,6 +10,7 @@ import (
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
 	"github.com/paseka/paseka/internal/protocol"
+	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/worktree"
 )
@@ -62,11 +63,16 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 	if ShouldMergeOnApprove(task, bees) {
 		wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
 		if gitroot.IsInsideWorkTree(wtPath) {
+			traceSummary, err := runs.ResolveTraceSummary(colonyCtx.ColonyRoot, in.TraceID)
+			if err != nil {
+				return ApproveResult{}, err
+			}
+			mergeMessage := ComposeMergeMessage(in.TraceID, in.MergeMessage, traceSummary).FormatMessage()
 			mergeRes, err := worktree.Merge(worktree.MergeOptions{
 				ColonyRoot: colonyCtx.ColonyRoot,
 				TraceID:    in.TraceID,
 				Slug:       colonyCtx.Slug,
-				Message:    in.MergeMessage,
+				Message:    mergeMessage,
 			})
 			if err != nil {
 				return ApproveResult{StashOutcome: mergeRes.StashOutcome}, err

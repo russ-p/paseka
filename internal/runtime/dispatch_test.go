@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
+	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runtime"
 )
@@ -138,6 +139,87 @@ func TestDispatchTaskIDPassthrough(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"taskId": "task-1"`) {
 		t.Fatalf("request.json missing taskId: %s", data)
+	}
+}
+
+func TestDispatchIsLastWorkTaskPromptGating(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	emitInsight := `{{if .IsLastWorkTask}}MUST_EMIT_TRACE_SUMMARY{{end}}`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/_partials/emit-insight.md"), []byte(emitInsight), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/builder.md"),
+		[]byte("Task: {{.Task}}\n{{template \"emit-insight\" .}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot:     root,
+		Bee:            "builder",
+		TraceID:        "trace-abc",
+		TaskID:         "task-2",
+		Task:           "finish trail",
+		IsLastWorkTask: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_TRACE_SUMMARY") {
+		t.Fatalf("prompt missing last-work-task guidance: %q", rec.lastReq.Prompt)
+	}
+
+	rec.calls = 0
+	_, err = d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot:     root,
+		Bee:            "builder",
+		TraceID:        "trace-abc",
+		TaskID:         "task-1",
+		Task:           "earlier slice",
+		IsLastWorkTask: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_TRACE_SUMMARY") {
+		t.Fatalf("prompt must not include last-work-task guidance: %q", rec.lastReq.Prompt)
+	}
+}
+
+func TestDispatchColonyBeeCLIIgnoresIsLastWorkTask(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	emitInsight := `{{if .IsLastWorkTask}}MUST_EMIT_TRACE_SUMMARY{{end}}`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/_partials/emit-insight.md"), []byte(emitInsight), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/builder.md"),
+		[]byte("Task: {{.Task}}\n{{template \"emit-insight\" .}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	ctxColony := colony.Context{ColonyRoot: root, Slug: "test"}
+
+	_, err := d.DispatchColonyBee(context.Background(), ctxColony, runtime.ColonyDispatchRequest{
+		Bee:            "builder",
+		TraceID:        "trace-cli",
+		TaskID:         "task-1",
+		Task:           "ad-hoc run",
+		IsLastWorkTask: true,
+	}, runtime.DispatchModeCLI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_TRACE_SUMMARY") {
+		t.Fatalf("CLI dispatch must not gate trace.summary: %q", rec.lastReq.Prompt)
 	}
 }
 

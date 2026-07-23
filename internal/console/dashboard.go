@@ -85,6 +85,7 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		}
 		traceView := traceSummaryViewFromRuns(trace)
 		enrichTraceTitle(ctx, &traceView)
+		enrichTraceSummary(ctx, &traceView)
 		view.RecentTraces = append(view.RecentTraces, traceView)
 	}
 

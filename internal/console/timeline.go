@@ -72,6 +72,7 @@ type EventFilter struct {
 type TraceSummaryView struct {
 	TraceID         string               `json:"traceId"`
 	Title           string               `json:"title,omitempty"`
+	Summary         string               `json:"summary,omitempty"`
 	LastActivityAt  time.Time            `json:"lastActivityAt"`
 	RunCount        int                  `json:"runCount"`
 	TaskCount       int                  `json:"taskCount"`
@@ -158,6 +159,7 @@ func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
 	for _, s := range summaries {
 		view := traceSummaryViewFromRuns(s)
 		enrichTraceTitle(ctx, &view)
+		enrichTraceSummary(ctx, &view)
 		out = append(out, view)
 	}
 	return out, nil
@@ -196,6 +198,7 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	}
 	enrichTraceEnergy(ctx, &view.TraceSummaryView)
 	enrichTraceTitle(ctx, &view.TraceSummaryView)
+	enrichTraceSummary(ctx, &view.TraceSummaryView)
 
 	taskSnap, err := loadTraceTasksOfflineFirst(ctx, traceID)
 	if err != nil {
@@ -406,6 +409,17 @@ func enrichTraceTitle(ctx colony.Context, view *TraceSummaryView) {
 		return
 	}
 	view.Title = title
+}
+
+func enrichTraceSummary(ctx colony.Context, view *TraceSummaryView) {
+	if view == nil || view.TraceID == "" {
+		return
+	}
+	summary, err := runs.ResolveTraceSummary(ctx.ColonyRoot, view.TraceID)
+	if err != nil || summary == "" {
+		return
+	}
+	view.Summary = summary
 }
 
 // loadTraceTasksOfflineFirst prefers the KV ledger when NATS is available.

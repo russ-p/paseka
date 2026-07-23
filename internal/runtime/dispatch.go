@@ -22,19 +22,20 @@ import (
 
 // DispatchRequest is input for spawning one bee/agent run.
 type DispatchRequest struct {
-	ColonyRoot   string
-	Bee          string
-	TraceID      string
-	AgentID      string
-	Task         string
-	TaskID       string
-	Sector       string
-	SectorPath   string
-	Intent       string
-	Insights     []string
-	InlinePrompt string
-	Workspace    string
-	AdapterExtra adapters.RunParams
+	ColonyRoot     string
+	Bee            string
+	TraceID        string
+	AgentID        string
+	Task           string
+	TaskID         string
+	Sector         string
+	SectorPath     string
+	Intent         string
+	Insights       []string
+	InlinePrompt   string
+	Workspace      string
+	AdapterExtra   adapters.RunParams
+	IsLastWorkTask bool // set by AFK ledger task dispatch only
 }
 
 // Dispatcher renders prompts and runs adapters.
@@ -154,21 +155,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	}
 
 	promptCtx := prompts.PromptContext(prompts.Context{
-		Bee:         bee.Role,
-		TraceID:     req.TraceID,
-		TraceTitle:  traceTitle,
-		AgentID:     agentID,
-		TaskID:      req.TaskID,
-		ColonyRoot:  colonyRoot,
-		Workspace:   workspace,
-		Sector:      req.Sector,
-		SectorPath:  req.SectorPath,
-		Task:        req.Task,
-		IntentRaw:   req.Intent,
-		Insights:    insights,
-		ResultFile:  resultFile,
-		Interactive: false,
-		Adapter:     adapterName,
+		Bee:            bee.Role,
+		TraceID:        req.TraceID,
+		TraceTitle:     traceTitle,
+		AgentID:        agentID,
+		TaskID:         req.TaskID,
+		ColonyRoot:     colonyRoot,
+		Workspace:      workspace,
+		Sector:         req.Sector,
+		SectorPath:     req.SectorPath,
+		Task:           req.Task,
+		IntentRaw:      req.Intent,
+		Insights:       insights,
+		ResultFile:     resultFile,
+		Interactive:    false,
+		IsLastWorkTask: req.IsLastWorkTask,
+		Adapter:        adapterName,
 	}, knownIntents, defaultIntent)
 
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{

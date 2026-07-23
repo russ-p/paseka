@@ -40,6 +40,21 @@ func TestValidateReviewNote(t *testing.T) {
 	}
 }
 
+func TestProjectInsightsExcludesTraceSummary(t *testing.T) {
+	now := time.Now().UTC()
+	events := []Event{
+		mustInsightEvent(t, now, `{"kind":"trace.summary","summary":"Trail outcome description"}`),
+		mustInsightEvent(t, now.Add(time.Second), `{"kind":"run.summary","summary":"Task run outcome","taskId":"task-1"}`),
+	}
+	got := ProjectInsights(events, DefaultInsightProjectionOptions("task-1"))
+	if len(got) != 1 {
+		t.Fatalf("got %d insights, want 1: %#v", len(got), got)
+	}
+	if got[0] != "Summary (agent-1): Task run outcome" {
+		t.Fatalf("got %q", got[0])
+	}
+}
+
 func TestProjectInsightsExcludesTaskPlan(t *testing.T) {
 	now := time.Now().UTC()
 	events := []Event{

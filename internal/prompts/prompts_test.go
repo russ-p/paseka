@@ -212,6 +212,40 @@ func TestRenderInsights(t *testing.T) {
 	}
 }
 
+func TestRenderEmitInsightLastWorkTask(t *testing.T) {
+	root := t.TempDir()
+	writePromptTree(t, root)
+	emitInsight := `{{if .IsLastWorkTask}}must emit trace.summary{{else}}no trail summary duty{{end}}`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/_partials/emit-insight.md"), []byte(emitInsight), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/builder.md"),
+		[]byte("{{template \"emit-insight\" .}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader, err := prompts.NewLoader(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := loader.Render("builder.md", prompts.Context{IsLastWorkTask: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "must emit trace.summary") {
+		t.Fatalf("got %q", got)
+	}
+
+	got, err = loader.Render("builder.md", prompts.Context{IsLastWorkTask: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "no trail summary duty") {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestRejectPathEscape(t *testing.T) {
 	root := t.TempDir()
 	writePromptTree(t, root)

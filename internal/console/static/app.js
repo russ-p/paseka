@@ -127,6 +127,8 @@ const el = {
   taskApproveSummary: document.getElementById('task-approve-summary'),
   taskMergeMessageLabel: document.getElementById('task-merge-message-label'),
   taskMergeMessage: document.getElementById('task-merge-message'),
+  taskMergeBodyPreviewWrap: document.getElementById('task-merge-body-preview-wrap'),
+  taskMergeBodyPreview: document.getElementById('task-merge-body-preview'),
   taskRejectForm: document.getElementById('task-reject-form'),
   taskRejectFeedback: document.getElementById('task-reject-feedback'),
   taskReviewError: document.getElementById('task-review-error'),
@@ -153,6 +155,8 @@ const el = {
   reviewApproveSummary: document.getElementById('review-approve-summary'),
   reviewMergeMessageLabel: document.getElementById('review-merge-message-label'),
   reviewMergeMessage: document.getElementById('review-merge-message'),
+  reviewMergeBodyPreviewWrap: document.getElementById('review-merge-body-preview-wrap'),
+  reviewMergeBodyPreview: document.getElementById('review-merge-body-preview'),
   reviewRejectForm: document.getElementById('review-reject-form'),
   reviewRejectFeedback: document.getElementById('review-reject-feedback'),
   reviewOpenTimelineBtn: document.getElementById('review-open-timeline-btn'),
@@ -422,6 +426,11 @@ function traceIdSubline(trace) {
     return `<div class="id">${escapeHtml(trace.traceId)}</div>`;
   }
   return '';
+}
+
+function traceSummarySubline(trace) {
+  if (!trace?.summary) return '';
+  return `<div class="muted trace-summary-subline">${escapeHtml(trace.summary)}</div>`;
 }
 
 function setTab(tab) {
@@ -1358,6 +1367,7 @@ function renderDashboard() {
       <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
       <span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span>
     </div>
+    ${traceSummarySubline(trace)}
     ${traceIdSubline(trace)}
     <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks</div>
   `, 'No recent traces.', (trace) => {
@@ -1447,6 +1457,7 @@ function renderTraces() {
         <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
         <span class="badge ${badge}">${escapeHtml(badgeLabel)}</span>
       </div>
+      ${traceSummarySubline(trace)}
       ${traceIdSubline(trace)}
       <div class="muted" style="font-size:0.8rem;margin-top:0.25rem">
         ${formatTime(trace.lastActivityAt)} · ${trace.taskCount} tasks · ${escapeHtml(bees)}
@@ -1484,7 +1495,7 @@ function renderTraceDetail(detail) {
   if (detail.hasActive) flags.push('active');
   if (detail.hasFailures) flags.push('failures');
   el.traceDetailMeta.innerHTML = `
-    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)}</dd>` : ''}
+    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)}${traceSummarySubline(detail)}</dd>` : (detail.summary ? `<dt>Summary</dt><dd class="muted">${escapeHtml(detail.summary)}</dd>` : '')}
     <dt>Trace</dt><dd>${escapeHtml(detail.traceId)}</dd>
     <dt>Last activity</dt><dd>${formatTime(detail.lastActivityAt)}</dd>
     <dt>Runs</dt><dd>${detail.runCount ?? (detail.runs || []).length}</dd>
@@ -1851,8 +1862,14 @@ function renderReviewDetail(item) {
     el.reviewActionsWrap.classList.remove('hidden');
     el.reviewFinalHint.classList.toggle('hidden', !item.isFinal);
     el.reviewMergeMessageLabel.classList.toggle('hidden', !item.isFinal);
+    updateMergeBodyPreview(
+      { isFinal: item.isFinal, traceSummary: item.traceSummary },
+      el.reviewMergeBodyPreviewWrap,
+      el.reviewMergeBodyPreview,
+    );
   } else {
     el.reviewActionsWrap.classList.add('hidden');
+    el.reviewMergeBodyPreviewWrap.classList.add('hidden');
   }
 }
 
@@ -1958,12 +1975,23 @@ async function loadReviewMergeDiff(traceId) {
   }
 }
 
+function updateMergeBodyPreview({ isFinal, traceSummary }, wrapEl, previewEl) {
+  const show = !!(isFinal && traceSummary);
+  wrapEl.classList.toggle('hidden', !show);
+  previewEl.textContent = show ? traceSummary : '';
+}
+
 function updateTaskReviewUI(task) {
   const canReview = task && task.canApprove && task.canReject;
   el.taskApproveBtn.classList.toggle('hidden', !canReview);
   el.taskRejectBtn.classList.toggle('hidden', !canReview);
   el.taskReviewActions.classList.toggle('hidden', !canReview);
   el.taskMergeMessageLabel.classList.toggle('hidden', !(canReview && task.isFinal));
+  updateMergeBodyPreview(
+    { isFinal: !!(canReview && task?.isFinal), traceSummary: task?.traceSummary },
+    el.taskMergeBodyPreviewWrap,
+    el.taskMergeBodyPreview,
+  );
   el.taskReviewError.classList.add('hidden');
 }
 
@@ -2077,6 +2105,7 @@ async function selectReview(traceId, taskId) {
     title: detail.title,
     review: detail.review,
     summary: detail.summary,
+    traceSummary: detail.traceSummary,
     bee: detail.bee,
     sector: detail.sector,
     runCount: detail.runCount,

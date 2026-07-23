@@ -71,12 +71,13 @@ type TaskBoardView struct {
 // TaskDetailView is a full task inspection view.
 type TaskDetailView struct {
 	TaskListItem
-	Body    string        `json:"body,omitempty"`
-	Intent  string        `json:"intent,omitempty"`
-	Summary string        `json:"summary,omitempty"`
-	Commit  string        `json:"commit,omitempty"`
-	Runs    []TaskRunView `json:"runs"`
-	Source  string        `json:"source"`
+	Body         string        `json:"body,omitempty"`
+	Intent       string        `json:"intent,omitempty"`
+	Summary      string        `json:"summary,omitempty"`
+	TraceSummary string        `json:"traceSummary,omitempty"`
+	Commit       string        `json:"commit,omitempty"`
+	Runs         []TaskRunView `json:"runs"`
+	Source       string        `json:"source"`
 }
 
 // CreateTaskRequest is the JSON body for POST /api/tasks.
@@ -171,6 +172,11 @@ func GetTask(ctx colony.Context, traceID, taskID string) (TaskDetailView, bool, 
 		Summary:      task.Summary,
 		Commit:       task.Commit,
 		Source:       string(source),
+	}
+	if taskledger.IsFinalReviewTask(task) {
+		if traceSummary, err := runs.ResolveTraceSummary(ctx.ColonyRoot, traceID); err == nil {
+			view.TraceSummary = traceSummary
+		}
 	}
 
 	taskDir, err := runs.NewTaskDir(ctx.ColonyRoot, traceID, taskID)

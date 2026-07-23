@@ -11,6 +11,32 @@ import (
 	"github.com/paseka/paseka/internal/worktree"
 )
 
+func TestMergeComposedMessageWithBody(t *testing.T) {
+	repo, traceID, slug := setupMergeFixture(t)
+
+	message := "paseka: merge trace " + traceID + "\n\nImplemented OAuth callback and added focused tests"
+	res, err := worktree.Merge(worktree.MergeOptions{
+		ColonyRoot: repo,
+		TraceID:    traceID,
+		Slug:       slug,
+		Message:    message,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.CommitSHA == "" {
+		t.Fatal("expected merge commit")
+	}
+
+	fullMessage := gitOutput(t, repo, "log", "-1", "--format=%B")
+	if !strings.Contains(fullMessage, "paseka: merge trace "+traceID) {
+		t.Fatalf("commit subject missing: %q", fullMessage)
+	}
+	if !strings.Contains(fullMessage, "Implemented OAuth callback and added focused tests") {
+		t.Fatalf("commit body missing: %q", fullMessage)
+	}
+}
+
 func TestMergeCleanRoot(t *testing.T) {
 	repo, traceID, slug := setupMergeFixture(t)
 

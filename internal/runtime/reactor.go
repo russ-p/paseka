@@ -306,12 +306,13 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 
 	startedAt := time.Now().UTC()
 	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
-		Bee:     bee,
-		TraceID: traceID,
-		TaskID:  task.TaskID,
-		Task:    body,
-		Sector:  task.Sector,
-		Intent:  task.Intent,
+		Bee:            bee,
+		TraceID:        traceID,
+		TaskID:         task.TaskID,
+		Task:           body,
+		Sector:         task.Sector,
+		Intent:         task.Intent,
+		IsLastWorkTask: taskledger.IsLastWorkTask(snap, task.TaskID),
 	}, DispatchModeTask)
 	if err != nil {
 		if setErr := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(nil, err)); setErr != nil {

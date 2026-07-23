@@ -25,10 +25,13 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | -------------- | ---- | ----------- |
 | `task.plan` | `INSIGHT` | Scout/planner task breakdown for the task ledger |
 | `trace.title` | `INSIGHT` | Human-readable Flight Trail name for Console and `{{.TraceTitle}}` |
+| `trace.summary` | `INSIGHT` | Human-readable Flight Trail description for Console subtitle and merge commit body |
 
 `task.plan` is consumed by the Task Ledger and reactor. It is **not** auto-included in `{{.Insights}}` because it is structured queue data, not narrative memory.
 
 `trace.title` is trace identity metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime and Console resolve the display title with fallbacks from `feature.requested` and task ledger titles. See [specs/011-trace-title.md](../specs/011-trace-title.md).
+
+`trace.summary` is operational trail metadata (last-write-wins). It is **not** projected into `{{.Insights}}` or dashboard Recent insights. Runtime resolves the latest `INSIGHT/trace.summary` by `createdAt`, then `seq`. Payload shape: `{ "kind": "trace.summary", "summary": "<prose>" }` (max 800 characters after trim). Bees on the sole incomplete non-final AFK work task receive must-emit guidance via `{{.IsLastWorkTask}}` in emit partials. See [specs/012-trace-summary.md](../specs/012-trace-summary.md).
 
 ### Narrative (projected into `{{.Insights}}`)
 

@@ -21,6 +21,7 @@ type ReviewQueueItem struct {
 	Title             string    `json:"title"`
 	Review            string    `json:"review"`
 	Summary           string    `json:"summary,omitempty"`
+	TraceSummary      string    `json:"traceSummary,omitempty"`
 	Bee               string    `json:"bee,omitempty"`
 	Sector            string    `json:"sector,omitempty"`
 	RunCount          int       `json:"runCount"`
@@ -89,6 +90,11 @@ func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
 			item := taskItemFromSnapshot(ctx, trace.TraceID, snap, task)
 			qi := reviewQueueItemFromTask(item)
 			qi.Summary = task.Summary
+			if taskledger.IsFinalReviewTask(task) {
+				if traceSummary, err := runs.ResolveTraceSummary(ctx.ColonyRoot, trace.TraceID); err == nil {
+					qi.TraceSummary = traceSummary
+				}
+			}
 			queue = append(queue, qi)
 		}
 	}
