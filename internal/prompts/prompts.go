@@ -13,22 +13,23 @@ const promptsSubdir = ".paseka/prompts"
 
 // Context is passed to prompt templates at dispatch time.
 type Context struct {
-	Bee         string
-	TraceID     string
-	TraceTitle  string
-	AgentID     string
-	TaskID      string
-	ColonyRoot  string
-	Workspace   string
-	Sector      string
-	SectorPath  string
-	Task        string
-	Intent      string // normalized intent for partial routing
-	IntentRaw   string // caller-supplied intent before normalization
-	Insights    []string
-	ResultFile  string
-	Interactive bool   // true for paseka bee chat / session runs
-	Adapter     string // resolved adapter name (cursor, pi, claude, script)
+	Bee            string
+	TraceID        string
+	TraceTitle     string
+	AgentID        string
+	TaskID         string
+	ColonyRoot     string
+	Workspace      string
+	Sector         string
+	SectorPath     string
+	Task           string
+	Intent         string // normalized intent for partial routing
+	IntentRaw      string // caller-supplied intent before normalization
+	Insights       []string
+	ResultFile     string
+	Interactive    bool   // true for paseka bee chat / session runs
+	IsLastWorkTask bool   // true at AFK ledger dispatch when sole incomplete non-final task
+	Adapter        string // resolved adapter name (cursor, pi, claude, script)
 }
 
 // PromptContext builds a template context with normalized intent fields.

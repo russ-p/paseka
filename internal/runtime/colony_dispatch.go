@@ -23,14 +23,15 @@ const (
 
 // ColonyDispatchRequest dispatches one bee using a resolved colony context.
 type ColonyDispatchRequest struct {
-	Bee          string
-	TraceID      string
-	Task         string
-	TaskID       string
-	Sector       string
-	Intent       string
-	Insights     []string
-	InlinePrompt string
+	Bee            string
+	TraceID        string
+	Task           string
+	TaskID         string
+	Sector         string
+	Intent         string
+	Insights       []string
+	InlinePrompt   string
+	IsLastWorkTask bool // AFK ledger task dispatch only; ignored for CLI/direct
 	// ProposalKind, when set, resolves adapter cwd from the proposal MUTATION kind
 	// (isolated/alias → trace worktree; root → colony root) instead of bee.Worktree.
 	ProposalKind string
@@ -89,20 +90,26 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 	adapterExtra := colony.AdapterExtra(ctxColony, adapterName)
 
+	isLastWorkTask := false
+	if mode == DispatchModeTask {
+		isLastWorkTask = req.IsLastWorkTask
+	}
+
 	result, err := d.Dispatch(ctx, DispatchRequest{
-		ColonyRoot:   ctxColony.ColonyRoot,
-		Bee:          req.Bee,
-		TraceID:      req.TraceID,
-		AgentID:      agentID,
-		TaskID:       req.TaskID,
-		Task:         req.Task,
-		Sector:       effectiveSector,
-		SectorPath:   sectorRel,
-		Intent:       req.Intent,
-		Insights:     req.Insights,
-		InlinePrompt: req.InlinePrompt,
-		Workspace:    workspace,
-		AdapterExtra: adapterExtra,
+		ColonyRoot:     ctxColony.ColonyRoot,
+		Bee:            req.Bee,
+		TraceID:        req.TraceID,
+		AgentID:        agentID,
+		TaskID:         req.TaskID,
+		Task:           req.Task,
+		Sector:         effectiveSector,
+		SectorPath:     sectorRel,
+		Intent:         req.Intent,
+		Insights:       req.Insights,
+		InlinePrompt:   req.InlinePrompt,
+		Workspace:      workspace,
+		AdapterExtra:   adapterExtra,
+		IsLastWorkTask: isLastWorkTask,
 	})
 	if err != nil {
 		return nil, err

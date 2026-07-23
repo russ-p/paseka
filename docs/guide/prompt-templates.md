@@ -81,13 +81,15 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [insight kinds](../reference/insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `summary.md` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
+| `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` guidance in emit partials. |
 | `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `script`). |
 
 ### Field sources (MVP)
 
 | Variable | Set by |
 | -------- | ------ |
-| `Bee`, `TraceID`, `TraceTitle`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile`, `Interactive`, `Adapter` | `internal/runtime.Dispatcher` at dispatch time; `Interactive` is `true` in `internal/sessions` for chat |
+| `Bee`, `TraceID`, `TraceTitle`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile`, `Interactive`, `IsLastWorkTask`, `Adapter` | `internal/runtime.Dispatcher` at dispatch time; `Interactive` is `true` in `internal/sessions` for chat |
+| `IsLastWorkTask` | `taskledger.IsLastWorkTask` at AFK ledger task dispatch (`DispatchModeTask`) only; always `false` for CLI `bee run`, direct signal dispatch, and chat |
 | `TraceTitle` | `runs.ResolveTraceTitle` from prior trace events and task projections |
 | `Task` | `paseka bee run --body` (required unless using inline prompt) |
 | `Intent` / `IntentRaw` | `paseka bee run --intent`, `paseka task create --intent`, or `intent` on `task.plan` / `task.ready` payloads |

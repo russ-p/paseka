@@ -594,8 +594,8 @@ For **isolated** final merge gates, preview the accumulated worktree diff in Que
 | ---- | ----- | -------- | ------- | ----------- |
 | `--trace` | | yes | | Flight trail id |
 | `--task` | | yes | | Review task id (e.g. `task-1`, `_review`, or a `review: final` task) |
-| `--summary` | | | `approved by human` | Completion summary |
-| `--merge-message` | | | | Merge commit message (isolated final gate only; ignored for root R1) |
+| `--summary` | | | `approved by human` | `VERIFICATION/task.completed` completion note (not `INSIGHT/trace.summary`) |
+| `--merge-message` | | | | Merge commit **subject** for isolated final gate (optional HITL body); distinct from `INSIGHT/trace.summary`, which supplies the default merge **body** |
 | `--path` | `-C` | | | Colony resolution start directory |
 
 ### `paseka proposal reject`
