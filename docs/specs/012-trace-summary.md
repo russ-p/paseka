@@ -2,9 +2,9 @@
 
 ## Status
 
-**Approved**
+**Implemented**
 
-Operational `INSIGHT` kind for a human-readable Flight Trail description in Queen Console and as the merge-commit body. Follow-up to the narrative-summary non-goal in [011-trace-title](011-trace-title.md).
+Shipped as operational `INSIGHT/trace.summary` for Queen Console subtitle and default merge-commit body. Follow-up to the narrative-summary non-goal in [011-trace-title](011-trace-title.md).
 
 ## Problem Statement
 
@@ -102,20 +102,21 @@ No soft fallback from narrative `run.summary` (UI or merge). Empty → no Consol
 
 ### Merge commit composition
 
-- Compose in the **review approve** layer so Console, CLI, and Telegram share one behavior before `worktree.Merge`.
+- Compose in the **review approve** layer so Console, CLI, and Telegram share one behavior before worktree merge.
 - **Subject:** trimmed `MergeMessage` / `--merge-message` if non-empty; else existing default (`paseka: merge trace <traceId>`).
-- **Body:** resolved `trace.summary` when the subject message does **not** already contain a non-empty body.
-- **Already has body:** after the subject (first line / first paragraph), trimmed remainder is non-empty → do **not** append `trace.summary` (HITL override).
+- **Body:** resolved `trace.summary` when the HITL merge message does **not** already contain a non-empty body.
+- **HITL split:** first line (or first paragraph before a blank line) is subject; any non-empty trimmed remainder is an explicit body that overrides `trace.summary`.
+- **Formatted message:** subject only, or `subject + "\n\n" + body` passed as a single merge message (shipped choice).
 - Applies to every merge-on-approve path (Console, CLI, Telegram), including default subject with no explicit merge message.
 - Non-merge approves (root / soft gates) unchanged — no commit body.
-- Exact `git merge -m` argv shape (single message with `\n\n` vs multiple `-m`) is an implementation choice; prefer minimal API change. Spec requires subject/body semantics only.
 
-### Protocol and docs touchpoints (implementation)
+### Protocol and docs touchpoints (shipped)
 
-- Register kind in protocol validation (mirror `trace.title`).
-- Document under operational insights in the insight-kinds reference.
-- Colony prompt partials/init templates: conditional must-emit via `IsLastWorkTask`.
-- Console API/SPA + review approve compose + resolve helper analogous to trace title resolution.
+- Protocol validation accepts `trace.summary` (max 800 after trim); rejects empty/whitespace.
+- Operational insight documented in the insight-kinds reference; CLI notes distinguish `--summary` vs `--merge-message` vs trail summary.
+- Colony emit partials/init templates: conditional must-emit via `IsLastWorkTask`.
+- Console: `summary` on trace projections; `traceSummary` on review queue items for body preview.
+- Review compose + resolve helper (last-write-wins, analogous to `trace.title` resolve).
 
 ## Testing Decisions
 
@@ -145,5 +146,6 @@ No soft fallback from narrative `run.summary` (UI or merge). Empty → no Consol
 ## Further Notes
 
 - Closes the deferred narrative-summary non-goal called out in [011-trace-title](011-trace-title.md).
-- Neighbor contracts: [insight-kinds](../reference/insight-kinds.md), [task ledger](../reference/task-ledger.md) final review / `_review`, merge approve CLI/Console, [prompt templates](../guide/prompt-templates.md).
+- Canonical docs after ship: [insight-kinds](../reference/insight-kinds.md), [prompt templates](../guide/prompt-templates.md) (`IsLastWorkTask`), [CLI](../guide/cli.md) approve flags.
+- Neighbor contracts: [task ledger](../reference/task-ledger.md) final review / `_review`.
 - Possible follow-ups: `{{.TraceSummary}}`, mid-trail optional updates, clear/sentinel, richer “last task” enums for parallel leaves.

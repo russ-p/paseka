@@ -17,6 +17,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [009-merge-autostash](../specs/009-merge-autostash.md) | Implemented | Autostash dirty root on merge approve |
 | [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md) | Implemented (MVP) | Telegram as async Human Gateway (notify + status/task/energy/invites/proposals) |
 | [011-trace-title](../specs/011-trace-title.md) | Implemented | `INSIGHT/trace.title` for Flight Trail display names |
-| [012-trace-summary](../specs/012-trace-summary.md) | Approved | `INSIGHT/trace.summary` for Console subtitle + merge body |
+| [012-trace-summary](../specs/012-trace-summary.md) | Implemented | `INSIGHT/trace.summary` for Console subtitle + merge body |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
