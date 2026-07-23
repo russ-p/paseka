@@ -127,6 +127,8 @@ const el = {
   taskApproveSummary: document.getElementById('task-approve-summary'),
   taskMergeMessageLabel: document.getElementById('task-merge-message-label'),
   taskMergeMessage: document.getElementById('task-merge-message'),
+  taskMergeBodyPreviewWrap: document.getElementById('task-merge-body-preview-wrap'),
+  taskMergeBodyPreview: document.getElementById('task-merge-body-preview'),
   taskRejectForm: document.getElementById('task-reject-form'),
   taskRejectFeedback: document.getElementById('task-reject-feedback'),
   taskReviewError: document.getElementById('task-review-error'),
@@ -153,6 +155,8 @@ const el = {
   reviewApproveSummary: document.getElementById('review-approve-summary'),
   reviewMergeMessageLabel: document.getElementById('review-merge-message-label'),
   reviewMergeMessage: document.getElementById('review-merge-message'),
+  reviewMergeBodyPreviewWrap: document.getElementById('review-merge-body-preview-wrap'),
+  reviewMergeBodyPreview: document.getElementById('review-merge-body-preview'),
   reviewRejectForm: document.getElementById('review-reject-form'),
   reviewRejectFeedback: document.getElementById('review-reject-feedback'),
   reviewOpenTimelineBtn: document.getElementById('review-open-timeline-btn'),
@@ -1858,8 +1862,14 @@ function renderReviewDetail(item) {
     el.reviewActionsWrap.classList.remove('hidden');
     el.reviewFinalHint.classList.toggle('hidden', !item.isFinal);
     el.reviewMergeMessageLabel.classList.toggle('hidden', !item.isFinal);
+    updateMergeBodyPreview(
+      { isFinal: item.isFinal, traceSummary: item.traceSummary },
+      el.reviewMergeBodyPreviewWrap,
+      el.reviewMergeBodyPreview,
+    );
   } else {
     el.reviewActionsWrap.classList.add('hidden');
+    el.reviewMergeBodyPreviewWrap.classList.add('hidden');
   }
 }
 
@@ -1965,12 +1975,23 @@ async function loadReviewMergeDiff(traceId) {
   }
 }
 
+function updateMergeBodyPreview({ isFinal, traceSummary }, wrapEl, previewEl) {
+  const show = !!(isFinal && traceSummary);
+  wrapEl.classList.toggle('hidden', !show);
+  previewEl.textContent = show ? traceSummary : '';
+}
+
 function updateTaskReviewUI(task) {
   const canReview = task && task.canApprove && task.canReject;
   el.taskApproveBtn.classList.toggle('hidden', !canReview);
   el.taskRejectBtn.classList.toggle('hidden', !canReview);
   el.taskReviewActions.classList.toggle('hidden', !canReview);
   el.taskMergeMessageLabel.classList.toggle('hidden', !(canReview && task.isFinal));
+  updateMergeBodyPreview(
+    { isFinal: !!(canReview && task?.isFinal), traceSummary: task?.traceSummary },
+    el.taskMergeBodyPreviewWrap,
+    el.taskMergeBodyPreview,
+  );
   el.taskReviewError.classList.add('hidden');
 }
 
@@ -2084,6 +2105,7 @@ async function selectReview(traceId, taskId) {
     title: detail.title,
     review: detail.review,
     summary: detail.summary,
+    traceSummary: detail.traceSummary,
     bee: detail.bee,
     sector: detail.sector,
     runCount: detail.runCount,

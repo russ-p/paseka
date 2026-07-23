@@ -1256,6 +1256,23 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 		}
 	}
 
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "builder-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	summaryEv, err := protocol.NewEvent(traceID, "builder-1", 1, protocol.EventInsight, protocol.TraceSummaryPayload{
+		Kind:    protocol.InsightTraceSummary,
+		Summary: "Implemented OAuth callback and added focused tests",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summaryEv.CreatedAt = started
+	if err := d.AppendEvent(summaryEv); err != nil {
+		t.Fatal(err)
+	}
+
 	srv := console.NewServer(console.Options{
 		Addr:     "127.0.0.1:0",
 		Colony:   ctxColony,
@@ -1308,6 +1325,36 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 	}
 	if !finalDetail.IsFinal {
 		t.Fatalf("final task detail = %+v", finalDetail)
+	}
+	if finalDetail.TraceSummary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("final traceSummary = %q", finalDetail.TraceSummary)
+	}
+
+	var finalQueueItem *console.ReviewQueueItem
+	for i := range queue.Items {
+		if queue.Items[i].TaskID == finalID {
+			finalQueueItem = &queue.Items[i]
+			break
+		}
+	}
+	if finalQueueItem == nil {
+		t.Fatal("final queue item not found")
+	}
+	if finalQueueItem.TraceSummary != "Implemented OAuth callback and added focused tests" {
+		t.Fatalf("queue traceSummary = %q", finalQueueItem.TraceSummary)
+	}
+	var requiredQueueItem *console.ReviewQueueItem
+	for i := range queue.Items {
+		if queue.Items[i].TaskID == requiredID {
+			requiredQueueItem = &queue.Items[i]
+			break
+		}
+	}
+	if requiredQueueItem == nil {
+		t.Fatal("required queue item not found")
+	}
+	if requiredQueueItem.TraceSummary != "" {
+		t.Fatalf("required queue traceSummary = %q, want omitted", requiredQueueItem.TraceSummary)
 	}
 
 	approveReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+requiredID+"/approve", bytes.NewBufferString(`{"summary":"looks good"}`))

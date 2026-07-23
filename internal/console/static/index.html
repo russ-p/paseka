@@ -269,6 +269,10 @@
             Merge commit message <span class="hint">(final gate)</span>
             <input type="text" id="task-merge-message" placeholder="Merge trace changes">
           </label>
+          <div id="task-merge-body-preview-wrap" class="hidden">
+            <span class="label">Merge commit body <span class="hint">(from flight trail summary)</span></span>
+            <pre id="task-merge-body-preview" class="transcript merge-body-preview"></pre>
+          </div>
           <button type="submit" id="task-approve-submit-btn">Approve</button>
         </form>
         <form id="task-reject-form" class="review-form">
@@ -328,6 +332,10 @@
             Merge commit message
             <input type="text" id="review-merge-message" placeholder="Merge trace changes">
           </label>
+          <div id="review-merge-body-preview-wrap" class="hidden">
+            <span class="label">Merge commit body <span class="hint">(from flight trail summary)</span></span>
+            <pre id="review-merge-body-preview" class="transcript merge-body-preview"></pre>
+          </div>
           <button type="submit" id="review-approve-btn">Approve</button>
         </form>
         <form id="review-reject-form" class="review-form">
