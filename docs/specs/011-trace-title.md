@@ -73,7 +73,7 @@ Scout intake and Drone breakdown emit `trace.title` when classifying or publishi
 
 ## Non-goals
 
-- Separate summarizer bee or evolving narrative summary field.
+- Separate summarizer bee or evolving narrative summary field (see follow-up [012-trace-summary](012-trace-summary.md)).
 - Bee-language wire kinds (`trail.*`).
 - Required completion contract or runtime auto-synthesis of `trace.title`.
 
@@ -83,3 +83,4 @@ Scout intake and Drone breakdown emit `trace.title` when classifying or publishi
 - [Prompt templates](../guide/prompt-templates.md)
 - [Queen Console MVP](002-queen-console-mvp.md)
 - [Feature ideation flow](005-feature-ideation-flow.md)
+- [Flight trail summary](012-trace-summary.md)
