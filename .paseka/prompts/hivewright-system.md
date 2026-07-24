@@ -39,7 +39,7 @@ Success criteria (must confirm all):
 - Staged diff is reviewable and scoped to the task
 
 {{template "emit-howto" .}}
-{{template "emit-insight" .}}
+{{template "hivewright-emit-insight" .}}
 
 ## Session context
 Colony: {{.ColonyRoot}}

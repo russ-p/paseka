@@ -20,10 +20,4 @@ EOF
 
 Without the spec file on disk **and** `spec.ready`, breakdown must not start.
 
-### `context.note` — optional trace context
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"Grilling complete; spec at docs/specs/006-live-bees-header.md"}}
-EOF
-```
+{{template "insight-kind-context-note" .}}

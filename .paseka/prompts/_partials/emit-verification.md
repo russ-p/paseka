@@ -8,7 +8,7 @@ Publish exactly one final gate decision:
 
 Do **not** publish `task.completed` from a review bee — that is the receiver / commit-gate role.
 
-Optional: publish one `INSIGHT/review.note` for extra reviewer context. It does not replace the required `VERIFICATION`.
+Optional: publish one `INSIGHT/review.note` via the guard INSIGHT partial for extra reviewer context. It does not replace the required `VERIFICATION`.
 
 ```bash
 paseka event emit --stdin <<'EOF'

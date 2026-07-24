@@ -25,4 +25,4 @@ Success criteria (must confirm all to approve):
 
 {{template "emit-howto" .}}
 {{template "emit-verification" .}}
-{{template "emit-insight" .}}
+{{template "guard-emit-insight" .}}

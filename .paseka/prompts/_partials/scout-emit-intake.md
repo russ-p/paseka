@@ -76,20 +76,7 @@ paseka event emit --stdin <<'EOF'
 EOF
 ```
 
-### `trace.title` — Flight Trail name (required on intake)
+Emit **one** `INSIGHT/trace.title` on every intake when the entry has a usable short name (from `feature.requested` title/body or your refined label). Update when you sharpen the name during `plan` / `triage`.
 
-Emit **one** `INSIGHT/trace.title` with a short human name (from `feature.requested` title/body or your refined label). Update when you sharpen the name during `plan` / `triage`.
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees in Queen Console header"}}
-EOF
-```
-
-### `run.summary` — optional
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Intake: triage bug, one builder slice planned"}}
-EOF
-```
+{{template "insight-kind-trace-title" .}}
+{{template "insight-kind-run-summary" .}}

@@ -72,4 +72,4 @@ Analyze the changes against the following categories. For each category, scan AL
 
 {{template "emit-howto" .}}
 {{template "emit-verification" .}}
-{{template "emit-insight" .}}
+{{template "guard-emit-insight" .}}

@@ -36,20 +36,7 @@ EOF
 
 If the Beekeeper approved the plan but did **not** ask to start immediately, publish `task.plan` only and stop.
 
-### `trace.title` — Flight Trail name
-
 Emit **one** `INSIGHT/trace.title` when publishing the breakdown (use spec title or a clearer short name for the whole trail).
 
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees header indicator"}}
-EOF
-```
-
-### `context.note` — optional trace context
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"Breakdown sourced from docs/specs/004-live-bees-indicator.md; first AFK slice is 001-live-status-api"}}
-EOF
-```
+{{template "insight-kind-trace-title" .}}
+{{template "insight-kind-context-note" .}}

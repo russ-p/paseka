@@ -35,6 +35,6 @@ Success criteria (must confirm all):
 - Related tests (if any) pass
 
 {{template "emit-howto" .}}
-{{template "emit-insight" .}}
+{{template "builder-emit-insight" .}}
 
 Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit `run.summary`, runtime will synthesize one from the normalized run outcome when possible.

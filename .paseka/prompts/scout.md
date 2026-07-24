@@ -25,6 +25,7 @@ Requested intent: {{.IntentRaw}}{{end}}
 {{template "scout-emit-intake" .}}
 {{else}}
 {{template "scout-intent-survey" .}}
+{{template "scout-emit-survey" .}}
 {{end}}
 
 ## Human summary shape
@@ -32,7 +33,6 @@ For each finding: severity | location | symptom | why it matters | fix direction
 End with top-N ranked list. Optionally note what you deliberately skipped (out of scope / no evidence).
 
 {{template "emit-howto" .}}
-{{template "emit-insight" .}}
 {{template "emit-signal" .}}
 
 Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit `run.summary`, runtime will synthesize one from the normalized run outcome when possible.
