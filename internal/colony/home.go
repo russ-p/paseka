@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/paseka/paseka/internal/gitroot"
 	"gopkg.in/yaml.v3"
 )
+
+const envNATSURL = "PASEKA_NATS_URL"
 
 // HomeConfig is machine-local colony state under ~/.config/paseka/<slug>/.
 type HomeConfig struct {
@@ -20,6 +23,14 @@ type HomeConfig struct {
 // NATSConfig holds NATS connection settings.
 type NATSConfig struct {
 	URL string `yaml:"url"`
+}
+
+// EffectiveURL returns the NATS server URL, preferring PASEKA_NATS_URL over config.
+func (c NATSConfig) EffectiveURL() string {
+	if v := strings.TrimSpace(os.Getenv(envNATSURL)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.URL)
 }
 
 // CursorAdapterConfig is ~/.config/paseka/<slug>/adapters/cursor.yaml.

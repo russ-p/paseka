@@ -110,7 +110,7 @@ Per-colony state on this machine. Not committed.
 
 ```
 ~/.config/paseka/<project-slug>/
-├── config.yaml                 # secrets refs, NATS URL, adapter env
+├── config.yaml                 # secrets refs, NATS URL, adapter env (overridable via PASEKA_NATS_URL)
 ├── state.json                  # runtime: active worktrees, last traceId, hive status
 ├── telegram.yaml               # optional: Telegram Human Gateway (not created by init)
 ├── telegram-notify-state.json  # optional: gate notify dedup (runtime)
