@@ -20,7 +20,7 @@ func ConfigFromContext(ctx colony.Context, manifest colony.Colony) Config {
 		prefix = "paseka." + ctx.Slug
 	}
 	return Config{
-		URL:           strings.TrimSpace(ctx.Home.NATS.URL),
+		URL:           ctx.Home.NATS.EffectiveURL(),
 		SubjectPrefix: prefix,
 		Slug:          ctx.Slug,
 	}

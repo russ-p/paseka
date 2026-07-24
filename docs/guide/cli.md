@@ -102,7 +102,7 @@ Bootstrap `.paseka/` in the current git repository and machine-local home config
 **Creates (if missing):**
 
 - `.paseka/colony.yaml`, `bees/`, `prompts/`, scout and builder bee definitions (using the selected adapter)
-- `~/.config/paseka/<slug>/config.yaml` (includes `nats.url`)
+- `~/.config/paseka/<slug>/config.yaml` (includes `nats.url`; non-empty `PASEKA_NATS_URL` overrides it)
 - `~/.config/paseka/<slug>/adapters/cursor.yaml` (default adapter)
 - `~/.config/paseka/<slug>/adapters/pi.yaml` (when `--adapter pi`)
 - `~/.config/paseka/<slug>/adapters/claude.yaml` (optional Claude adapter config)
@@ -221,7 +221,7 @@ Start the long-running **Hive Runtime** — a NATS reactor that subscribes to co
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Requires:** NATS with JetStream (`nats.url` in home config).
+**Requires:** NATS with JetStream (`nats.url` in home config, or `PASEKA_NATS_URL`).
 
 Runs until interrupted (`Ctrl+C`). On `SIGNAL` / `task.ready` events, dispatches the configured bee and publishes resulting domain events. See [task ledger](../reference/task-ledger.md).
 
