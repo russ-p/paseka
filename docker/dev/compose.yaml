@@ -1,0 +1,38 @@
+# Homelab / server apiary container.
+# From this directory:
+#   cp .env.example .env   # edit secrets + paths
+#   docker compose up --build
+#
+# Full guide: docs/guide/homelab-deployment.md
+
+name: paseka-dev
+
+services:
+  paseka-dev:
+    build:
+      context: ../..
+      dockerfile: docker/dev/Dockerfile
+      args:
+        DEV_UID: ${DEV_UID:-1000}
+        DEV_GID: ${DEV_GID:-1000}
+    image: paseka-dev:local
+    working_dir: /home/dev/workspace
+    environment:
+      HOME: /home/dev
+      XDG_CONFIG_HOME: /home/dev/.config
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      PASEKA_NATS_URL: ${PASEKA_NATS_URL:-nats://host.docker.internal:4222}
+    ports:
+      - "${PASEKA_CONSOLE_PORT:-8787}:8787"
+    extra_hosts:
+      # Reach NATS (or other services) on the Docker host
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Colony git repository (must match colony_root inside container)
+      - ${PASEKA_REPO:?set PASEKA_REPO in .env}:/home/dev/workspace
+      # Machine-local paseka home (~/.config/paseka/<slug>/)
+      - ${PASEKA_HOME:?set PASEKA_HOME in .env}:/home/dev/.config/paseka
+      # Cursor Agent / IDE state
+      - ${CURSOR_HOME:-${HOME}/.cursor}:/home/dev/.cursor
+      # Cursor auth + CLI config (auth.json, …)
+      - ${CURSOR_CONFIG:-${HOME}/.config/cursor}:/home/dev/.config/cursor

@@ -21,6 +21,7 @@
 | [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |
 | [Telegram gateway](guide/telegram-gateway.md) | Настройка и запуск `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Переносимые пакеты bees + prompts |
+| [Homelab deployment](guide/homelab-deployment.md) | Сервер/apiary в контейнере, Queen Console, внешний NATS |
 
 ## Справочник
 

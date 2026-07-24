@@ -1,0 +1,16 @@
+# Build context for docker/dev (repository root)
+.git
+.paseka/runs
+.paseka/worktrees
+.paseka/cache
+site
+dist
+bin
+docs
+.cursor
+.idea
+.vscode
+**/node_modules
+*.exe
+.env
+docker/dev/.env

@@ -46,6 +46,8 @@ Resolution requires:
 
 Default NATS URL after `paseka init`: `nats://127.0.0.1:4222` (see `docker-compose.yml`).
 
+Non-empty **`PASEKA_NATS_URL`** overrides `nats.url` in home `config.yaml` (useful for containers and shared NATS hosts). Homelab / server container setup: [Homelab deployment](homelab-deployment.md).
+
 ---
 
 ## Command tree

@@ -45,6 +45,8 @@ go build -o paseka ./cmd/paseka
 
 Open http://127.0.0.1:8787 in your browser. Queen Console does not enforce authentication yet, so keep it bound to localhost or another trusted interface only. Use `--addr` only when you understand the exposure risk.
 
+To run an always-on apiary on a separate machine (container + Console, reuse host NATS), see [Homelab deployment](docs/guide/homelab-deployment.md) and [`docker/dev/`](docker/dev/).
+
 ## Documentation
 
 Guides are grouped by immersion depth under [`docs/`](docs/README.md): idea → guide → reference → architecture → plans.

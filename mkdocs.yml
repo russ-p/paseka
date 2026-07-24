@@ -81,6 +81,7 @@ nav:
       - Interactive sessions: guide/interactive-sessions.md
       - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
+      - Homelab deployment: guide/homelab-deployment.md
   - Reference:
       - Bee routing: reference/bee-routing.md
       - Insight kinds: reference/insight-kinds.md

@@ -6,3 +6,4 @@ paseka-export-*.html
 /.venv-docs/
 /docs/llms-full.txt
 **/__pycache__/
+docker/dev/.env

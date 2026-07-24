@@ -45,6 +45,8 @@ go build -o paseka ./cmd/paseka
 
 Откройте http://127.0.0.1:8787 в браузере. Queen Console пока не требует аутентификацию, поэтому оставляйте её доступной только на localhost или другом доверенном интерфейсе. Используйте `--addr`, только если понимаете риск внешнего доступа.
 
+Постоянный apiary на отдельной машине (контейнер + Console, внешний NATS): [Homelab deployment](docs/guide/homelab-deployment.md) и [`docker/dev/`](docker/dev/).
+
 ## Документация
 
 Гайды сгруппированы по глубине погружения в [`docs/`](docs/README-RU.md): idea → guide → reference → architecture → plans.

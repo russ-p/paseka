@@ -14,6 +14,8 @@ For adapters, run directories, worktrees, and package layout see [Architecture o
 
 The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — the **Cursor Agent CLI** (`agent`), the **Pi CLI** (`pi`), **Claude Code**, and **script** commands — reads their output, and publishes results to the NATS bus as contract events.
 
+To run the apiary on a separate always-on host (containerized toolbelt + Queen Console, reuse an existing NATS), see [Homelab deployment](homelab-deployment.md).
+
 ---
 
 ## 2. Two-tier configuration

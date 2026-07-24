@@ -21,6 +21,7 @@ Docs are grouped by immersion depth. Feature specs under `specs/` are **not** pu
 | [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |
 | [Telegram gateway](guide/telegram-gateway.md) | Setup and run `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Export/import portable bee + prompt packs |
+| [Homelab deployment](guide/homelab-deployment.md) | Server/apiary container, Queen Console, reuse NATS |
 
 ## Reference
 
