@@ -360,6 +360,7 @@ func TestTopologyTabStaticContract(t *testing.T) {
 		`id="topology-diagram"`,
 		`id="topology-copy-btn"`,
 		`id="topology-refresh-btn"`,
+		`id="topology-reset-btn"`,
 		`/vendor/cytoscape/cytoscape.min.js`,
 	} {
 		if !strings.Contains(htmlSrc, needle) {
@@ -377,6 +378,13 @@ func TestTopologyTabStaticContract(t *testing.T) {
 		"function renderTopology()",
 		"function renderTopologyCytoscape(topo)",
 		"function layoutTopologyBipartite(cy, topo)",
+		"function topologyPositionsStorageKey()",
+		"paseka:topology:positions:",
+		"localStorage.setItem(key, JSON.stringify(positions))",
+		"localStorage.removeItem(key)",
+		"dragfree",
+		"function resetTopologyLayout()",
+		"topology-reset-btn",
 		"async function copyTopologyMermaid()",
 		"api('/api/colony/topology')",
 		"cytoscape({",

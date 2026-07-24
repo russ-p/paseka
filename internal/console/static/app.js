@@ -168,6 +168,7 @@ const el = {
   topologyLayout: document.getElementById('topology-layout'),
   topologyCopyBtn: document.getElementById('topology-copy-btn'),
   topologyRefreshBtn: document.getElementById('topology-refresh-btn'),
+  topologyResetBtn: document.getElementById('topology-reset-btn'),
   topologyError: document.getElementById('topology-error'),
   topologyLoading: document.getElementById('topology-loading'),
   topologySummary: document.getElementById('topology-summary'),
@@ -517,6 +518,62 @@ function destroyTopologyCy() {
   }
 }
 
+function topologyPositionsStorageKey() {
+  const slug = (state.runtime && state.runtime.slug) || '';
+  if (!slug) return null;
+  return `paseka:topology:positions:${slug}`;
+}
+
+function loadTopologyPositions() {
+  const key = topologyPositionsStorageKey();
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveTopologyPositions(cy) {
+  const key = topologyPositionsStorageKey();
+  if (!key || !cy) return;
+  const positions = {};
+  cy.nodes().forEach((node) => {
+    const pos = node.position();
+    positions[node.id()] = { x: pos.x, y: pos.y };
+  });
+  try {
+    localStorage.setItem(key, JSON.stringify(positions));
+  } catch (err) {
+    console.warn('Failed to save topology positions', err);
+  }
+}
+
+function clearTopologyPositions() {
+  const key = topologyPositionsStorageKey();
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch (err) {
+    console.warn('Failed to clear topology positions', err);
+  }
+}
+
+function applyTopologySavedPositions(cy, saved) {
+  if (!cy || !saved) return;
+  for (const [id, pos] of Object.entries(saved)) {
+    if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
+    const node = cy.getElementById(id);
+    if (node.nonempty()) {
+      node.position({ x: pos.x, y: pos.y });
+    }
+  }
+}
+
 function topologyBeeLabel(bee) {
   if (!bee.intents || bee.intents.length === 0) return bee.role;
   return `${bee.role}\nintents: ${bee.intents.join(', ')}`;
@@ -808,8 +865,10 @@ function layoutTopologyBipartite(cy, topo) {
   const eventMeasure = topologyPlaceRow(cy, eventsOrdered, 240, gap);
   const eventY = beeRow.maxH / 2 + 160 + eventMeasure.maxH / 2;
   topologyPlaceRow(cy, eventsOrdered, eventY, gap);
+}
 
-  cy.fit(undefined, 48);
+function fitTopologyCy(cy) {
+  if (cy) cy.fit(undefined, 48);
 }
 
 function renderTopologyCytoscape(topo) {
@@ -837,6 +896,22 @@ function renderTopologyCytoscape(topo) {
   });
 
   layoutTopologyBipartite(state.topologyCy, topo);
+  const saved = loadTopologyPositions();
+  if (saved) {
+    applyTopologySavedPositions(state.topologyCy, saved);
+  }
+  fitTopologyCy(state.topologyCy);
+
+  state.topologyCy.on('dragfree', 'node', () => {
+    saveTopologyPositions(state.topologyCy);
+  });
+}
+
+function resetTopologyLayout() {
+  clearTopologyPositions();
+  if (!state.topologyCy || !state.topology) return;
+  layoutTopologyBipartite(state.topologyCy, state.topology);
+  fitTopologyCy(state.topologyCy);
 }
 
 function renderTopology() {
@@ -2533,6 +2608,10 @@ el.tabTopology.addEventListener('click', () => setTab('topology'));
 
 el.topologyRefreshBtn.addEventListener('click', () => {
   loadTopology().catch(console.error);
+});
+
+el.topologyResetBtn.addEventListener('click', () => {
+  resetTopologyLayout();
 });
 
 el.topologyCopyBtn.addEventListener('click', () => {
