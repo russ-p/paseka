@@ -159,12 +159,37 @@ header h1 {
 }
 
 .tab {
+  position: relative;
   width: auto;
   padding: 0.35rem 0.85rem;
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
   font-weight: 500;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.35rem;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: #6b4a18;
+  color: var(--warn);
+  border: 1px solid #8a6428;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.1rem;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: normal;
+  pointer-events: none;
+}
+
+.tab-badge[hidden] {
+  display: none;
 }
 
 .tab.active {

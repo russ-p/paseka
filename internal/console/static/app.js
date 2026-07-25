@@ -40,7 +40,7 @@ const state = {
   dashboardPollTimer: null,
   tracesPollTimer: null,
   tasksPollTimer: null,
-  reviewsPollTimer: null,
+  attentionPollTimer: null,
   topology: null,
   topologyLoading: false,
   topologyError: '',
@@ -56,7 +56,9 @@ const el = {
   tabTimeline: document.getElementById('tab-timeline'),
   tabTasks: document.getElementById('tab-tasks'),
   tabReviews: document.getElementById('tab-reviews'),
+  reviewsTabBadge: document.getElementById('reviews-tab-badge'),
   tabSessions: document.getElementById('tab-sessions'),
+  sessionsTabBadge: document.getElementById('sessions-tab-badge'),
   tabRuns: document.getElementById('tab-runs'),
   tabTopology: document.getElementById('tab-topology'),
   dashboardLayout: document.getElementById('dashboard-layout'),
@@ -369,6 +371,35 @@ function renderRuntime() {
   renderColonyIdentity();
 }
 
+function formatAttentionCount(count) {
+  const n = Number(count) || 0;
+  if (n <= 0) return '';
+  if (n > 9) return '9+';
+  return String(n);
+}
+
+function setTabBadge(badgeEl, tabBtn, label, count) {
+  const n = Number(count) || 0;
+  const text = formatAttentionCount(n);
+  if (!text) {
+    badgeEl.hidden = true;
+    badgeEl.textContent = '';
+    tabBtn.setAttribute('aria-label', label);
+    return;
+  }
+  badgeEl.hidden = false;
+  badgeEl.textContent = text;
+  tabBtn.setAttribute('aria-label', `${label}, ${n} pending`);
+}
+
+function renderTabBadges() {
+  const inviteCount = Array.isArray(state.invites) ? state.invites.length : 0;
+  const reviewCount = state.reviews?.count
+    ?? (Array.isArray(state.reviews?.items) ? state.reviews.items.length : 0);
+  setTabBadge(el.sessionsTabBadge, el.tabSessions, 'Sessions', inviteCount);
+  setTabBadge(el.reviewsTabBadge, el.tabReviews, 'Reviews', reviewCount);
+}
+
 function renderAgents() {
   const ag = state.agents || { count: 0, afk: 0, sessions: 0, items: [] };
   el.agentsBadge.textContent = String(ag.count);
@@ -475,7 +506,6 @@ function setTab(tab) {
   stopDashboardPolling();
   stopTracesPolling();
   stopTasksPolling();
-  stopReviewsPolling();
   if (tab !== 'sessions') {
     detachSessionTerminal();
     setTerminalWide(false);
@@ -501,7 +531,7 @@ function setTab(tab) {
   } else if (tab === 'tasks') {
     startTasksPolling();
   } else if (tab === 'reviews') {
-    startReviewsPolling();
+    loadReviews().catch(console.error);
   } else if (tab === 'topology') {
     loadTopology().catch(console.error);
   }
@@ -2162,6 +2192,7 @@ async function loadReviews() {
     state.selectedReviewDetail = item || null;
     renderReviewDetail(state.selectedReviewDetail);
   }
+  renderTabBadges();
 }
 
 async function selectReview(traceId, taskId) {
@@ -2211,19 +2242,15 @@ async function rejectReview(traceId, taskId, feedback) {
   });
 }
 
-function stopReviewsPolling() {
-  if (state.reviewsPollTimer) {
-    clearInterval(state.reviewsPollTimer);
-    state.reviewsPollTimer = null;
-  }
+async function refreshAttention() {
+  await Promise.all([loadInvites(), loadReviews()]);
 }
 
-function startReviewsPolling() {
-  stopReviewsPolling();
-  state.reviewsPollTimer = setInterval(() => {
-    loadReviews().catch(console.error);
+function startAttentionPolling() {
+  if (state.attentionPollTimer) return;
+  state.attentionPollTimer = setInterval(() => {
+    refreshAttention().catch(console.error);
   }, 5000);
-  loadReviews().catch(console.error);
 }
 
 async function loadTasks() {
@@ -2444,6 +2471,7 @@ async function loadBees() {
 async function loadInvites() {
   state.invites = await api('/api/invites');
   renderInvites();
+  renderTabBadges();
 }
 
 async function acceptInvite(inviteId) {
@@ -2918,8 +2946,9 @@ async function init() {
   try {
     await loadHeaderStatus();
     startRuntimePolling();
+    startAttentionPolling();
     await loadBees();
-    await loadInvites();
+    await refreshAttention();
     await loadSessions();
     await loadRuns();
     setTab('dashboard');
