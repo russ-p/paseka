@@ -31,6 +31,7 @@ type Defaults struct {
 	PromptTemplate string `yaml:"prompt_template"`
 	SystemTemplate string `yaml:"system_template"`
 	EnergyBudget   int    `yaml:"energy_budget,omitempty"`
+	DefaultBee     string `yaml:"default_bee,omitempty"`
 }
 
 // BeeLocalOverlay holds optional per-machine overrides from bees/<role>.local.yaml.
@@ -45,6 +46,22 @@ func (c Colony) ResolvedEnergyBudget() int {
 		return c.Defaults.EnergyBudget
 	}
 	return protocol.DefaultEnergyBudget
+}
+
+// ResolvedDefaultBee returns the colony default task role when task.bee is empty.
+func (c Colony) ResolvedDefaultBee() string {
+	return EffectiveTaskBee("", c.Defaults)
+}
+
+// EffectiveTaskBee returns taskBee when set, otherwise the colony default bee.
+func EffectiveTaskBee(taskBee string, defaults Defaults) string {
+	if bee := strings.TrimSpace(taskBee); bee != "" {
+		return bee
+	}
+	if bee := strings.TrimSpace(defaults.DefaultBee); bee != "" {
+		return bee
+	}
+	return protocol.DefaultBee
 }
 
 // Bee binds a role to an adapter and prompt template.

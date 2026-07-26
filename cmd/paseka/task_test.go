@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
@@ -54,7 +55,7 @@ func TestTaskReadyEventIncludesIntent(t *testing.T) {
 		Title:  "Fix bug",
 		Bee:    "builder",
 		Intent: "bugfix",
-	})
+	}, colony.Defaults{})
 	if err != nil {
 		t.Fatal(err)
 	}

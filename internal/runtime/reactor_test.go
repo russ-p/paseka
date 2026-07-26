@@ -418,6 +418,62 @@ func TestReactorTaskReadyDispatchWithSubscribe(t *testing.T) {
 	}
 }
 
+func TestReactorTaskReadyDispatchUsesColonyDefaultBee(t *testing.T) {
+	root := t.TempDir()
+	bees := map[string]colony.Bee{
+		"scribe": {Role: "scribe", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "task.ready"}, Dispatch: colony.DispatchTask},
+		}},
+	}
+	mustWriteTestColony(t, root, bees)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/colony.yaml"), []byte(`defaults:
+  default_bee: scribe
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "document",
+			Body:   "write docs",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := protocol.NewEvent("trace-1", "reactor", 0, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d := runtime.NewDispatcher()
+	reg := runtime.NewBeeRegistryFromBees(bees)
+	d.SetBeeRegistry(reg)
+	r := runtime.NewTestReactor(runtime.TestReactorOptions{
+		ColonyRoot: root,
+		Dispatcher: d,
+		Registry:   reg,
+		Ledger:     taskledger.NewMemoryLedger(),
+	})
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ready); err != nil {
+		t.Fatal(err)
+	}
+	if rec.lastReq.Bee != "scribe" {
+		t.Fatalf("bee = %q, want scribe", rec.lastReq.Bee)
+	}
+}
+
 func TestReactorSyncsTaskProjection(t *testing.T) {
 	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
 		Kind: protocol.TaskEventPlan,

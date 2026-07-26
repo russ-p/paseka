@@ -88,7 +88,7 @@ func TestShouldMergeOnApproveMatrix(t *testing.T) {
 		Review:            protocol.TaskReviewFinal,
 		ProposalWorkspace: protocol.ProposalWorkspaceIsolated,
 	}
-	if !review.ShouldMergeOnApprove(finalIsolated, bees) {
+	if !review.ShouldMergeOnApprove(finalIsolated, bees, colony.Defaults{}) {
 		t.Fatal("isolated final gate should merge when worktree present")
 	}
 
@@ -98,7 +98,7 @@ func TestShouldMergeOnApproveMatrix(t *testing.T) {
 		Bee:               "hivewright",
 		ProposalWorkspace: protocol.ProposalWorkspaceRoot,
 	}
-	if review.ShouldMergeOnApprove(finalRoot, bees) {
+	if review.ShouldMergeOnApprove(finalRoot, bees, colony.Defaults{}) {
 		t.Fatal("root proposal must never merge on approve")
 	}
 
@@ -107,7 +107,7 @@ func TestShouldMergeOnApproveMatrix(t *testing.T) {
 		Review:            protocol.TaskReviewRequired,
 		ProposalWorkspace: protocol.ProposalWorkspaceRoot,
 	}
-	if review.ShouldMergeOnApprove(requiredRoot, bees) {
+	if review.ShouldMergeOnApprove(requiredRoot, bees, colony.Defaults{}) {
 		t.Fatal("root required review must not merge")
 	}
 }

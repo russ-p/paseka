@@ -255,7 +255,7 @@ Create a new task by publishing `task.plan`. Generates `traceId` and `taskId` wh
 | `--file` | | * | Read task body from file |
 | `--trace` | | | Flight trail id (generated when omitted) |
 | `--task` | | | Task id (generated when omitted) |
-| `--bee` | | | Bee role (default: `builder`) |
+| `--bee` | | | Bee role (default: `defaults.default_bee` from `colony.yaml`, fallback `builder`) |
 | `--intent` | | | Task intent for the bee role (vocabulary from bee `intents` or `<role>-intent-*` partials) |
 | `--depends-on` | | | Task dependencies (repeatable or comma-separated) |
 | `--review` | | | Review policy: `none`, `required`, `final` |

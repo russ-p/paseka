@@ -89,7 +89,7 @@ func taskBeeName(task taskledger.TaskSnapshot) string {
 	if task.Bee != "" {
 		return task.Bee
 	}
-	return "builder"
+	return protocol.DefaultBee
 }
 
 func kindOrDash(kind string) string {

@@ -1,8 +1,10 @@
 package tasks_test
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
@@ -45,6 +47,19 @@ func TestTasksToStart(t *testing.T) {
 	}
 	if len(started) != 1 || started[0].TaskID != "a" {
 		t.Fatalf("default start = %+v", started)
+	}
+}
+
+func TestReadyEventUsesColonyDefaultBee(t *testing.T) {
+	ev, err := tasks.ReadyEvent("trace-1", "cli", taskledger.TaskSnapshot{
+		TaskID: "task-1",
+		Title:  "Write docs",
+	}, colony.Defaults{DefaultBee: "scribe"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ev.Payload), `"bee":"scribe"`) {
+		t.Fatalf("payload = %s", ev.Payload)
 	}
 }
 

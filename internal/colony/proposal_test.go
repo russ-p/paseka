@@ -22,7 +22,7 @@ func TestValidateTaskReviewPolicyRejectsFinalOnRootBee(t *testing.T) {
 		TaskID: "task-1",
 		Bee:    "hivewright",
 		Review: protocol.TaskReviewFinal,
-	}, bees)
+	}, bees, colony.Defaults{})
 	if err == nil || !strings.Contains(err.Error(), "review:final") {
 		t.Fatalf("ValidateTaskReviewPolicy() err = %v, want review:final rejection", err)
 	}

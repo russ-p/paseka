@@ -58,9 +58,13 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 	if err != nil {
 		return ApproveResult{}, err
 	}
+	manifest, err := colony.LoadColony(colonyCtx.ColonyRoot)
+	if err != nil {
+		return ApproveResult{}, err
+	}
 
 	result := ApproveResult{}
-	if ShouldMergeOnApprove(task, bees) {
+	if ShouldMergeOnApprove(task, bees, manifest.Defaults) {
 		wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
 		if gitroot.IsInsideWorkTree(wtPath) {
 			traceSummary, err := runs.ResolveTraceSummary(colonyCtx.ColonyRoot, in.TraceID)

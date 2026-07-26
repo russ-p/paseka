@@ -10,6 +10,9 @@ const (
 	// DefaultEnergyBudget is the per-trace honey reserve when colony.yaml omits energy_budget.
 	DefaultEnergyBudget = 12
 
+	// DefaultBee is the task role when colony.yaml omits defaults.default_bee and task.bee is empty.
+	DefaultBee = "builder"
+
 	// HoneyReserveExhaustedSummary is published on task.status when dispatch is blocked.
 	HoneyReserveExhaustedSummary = "Honey reserve exhausted"
 )

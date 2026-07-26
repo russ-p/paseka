@@ -148,6 +148,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 			Defaults: Defaults{
 				PromptTemplate: "default.md",
 				EnergyBudget:   protocol.DefaultEnergyBudget,
+				DefaultBee:     protocol.DefaultBee,
 			},
 			AutoInvites: DefaultAutoInviteRules(),
 		}
@@ -173,6 +174,9 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 	}
 	if manifest.Defaults.EnergyBudget == 0 {
 		manifest.Defaults.EnergyBudget = protocol.DefaultEnergyBudget
+	}
+	if strings.TrimSpace(manifest.Defaults.DefaultBee) == "" {
+		manifest.Defaults.DefaultBee = protocol.DefaultBee
 	}
 	if len(manifest.AutoInvites) == 0 {
 		manifest.AutoInvites = DefaultAutoInviteRules()

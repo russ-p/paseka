@@ -138,14 +138,11 @@ func DiagnoseCodeProposal(bees map[string]Bee) CodeProposalDiagnosis {
 }
 
 // ValidateTaskReviewPolicy rejects review: final on tasks whose bee publishes root proposals.
-func ValidateTaskReviewPolicy(spec protocol.TaskSpec, bees map[string]Bee) error {
+func ValidateTaskReviewPolicy(spec protocol.TaskSpec, bees map[string]Bee, defaults Defaults) error {
 	if protocol.NormalizeTaskReviewPolicy(spec.Review) != protocol.TaskReviewFinal {
 		return nil
 	}
-	beeName := strings.TrimSpace(spec.Bee)
-	if beeName == "" {
-		beeName = "builder"
-	}
+	beeName := EffectiveTaskBee(spec.Bee, defaults)
 	bee, ok := bees[beeName]
 	if !ok {
 		return nil

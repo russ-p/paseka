@@ -58,6 +58,7 @@ defaults:
   prompt_template: default.md
   system_template: default-system.md   # optional colony-wide role context
   energy_budget: 12
+  default_bee: builder                 # task role when task.bee is omitted
 ```
 
 Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`.

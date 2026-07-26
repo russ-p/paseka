@@ -89,10 +89,11 @@ func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot) bool {
 	case protocol.ProposalWorkspaceIsolated:
 		return false
 	}
-	beeName := task.Bee
-	if beeName == "" {
-		beeName = "builder"
+	manifest, err := r.loadColonyManifest()
+	if err != nil {
+		return false
 	}
+	beeName := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
 	bee, ok := r.registry.Bee(beeName)
 	if !ok {
 		return false
@@ -109,8 +110,12 @@ func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event) error {
 	if err := unmarshalPayload(ev.Payload, &payload); err != nil {
 		return nil
 	}
+	manifest, err := r.loadColonyManifest()
+	if err != nil {
+		return err
+	}
 	for _, spec := range payload.Tasks {
-		if err := colony.ValidateTaskReviewPolicy(spec, r.registry.Bees()); err != nil {
+		if err := colony.ValidateTaskReviewPolicy(spec, r.registry.Bees(), manifest.Defaults); err != nil {
 			return err
 		}
 	}

@@ -35,14 +35,18 @@ func (r *Reactor) ensureEnergySeeded(ctx context.Context, traceID string) error 
 }
 
 func (r *Reactor) resolvedEnergyBudget() (int, error) {
-	if r.colony.ColonyRoot == "" {
-		return protocol.DefaultEnergyBudget, nil
-	}
-	manifest, err := colony.LoadColony(r.colony.ColonyRoot)
+	manifest, err := r.loadColonyManifest()
 	if err != nil {
 		return 0, err
 	}
 	return manifest.ResolvedEnergyBudget(), nil
+}
+
+func (r *Reactor) loadColonyManifest() (colony.Colony, error) {
+	if r.colony.ColonyRoot == "" {
+		return colony.Colony{}, nil
+	}
+	return colony.LoadColony(r.colony.ColonyRoot)
 }
 
 func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string) (bool, error) {

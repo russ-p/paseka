@@ -128,24 +128,18 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 		taskID = id
 	}
-	bee := in.Bee
-	if bee == "" {
-		bee = "builder"
-	}
-	if in.Sector != "" {
-		manifest, err := colony.LoadColony(session.Colony.ColonyRoot)
-		if err != nil {
-			return CreateResult{}, err
-		}
-		if _, err := manifest.ResolveSector(in.Sector); err != nil {
-			return CreateResult{}, err
-		}
-	}
 
 	manifest, err := colony.LoadColony(session.Colony.ColonyRoot)
 	if err != nil {
 		return CreateResult{}, err
 	}
+	bee := colony.EffectiveTaskBee(in.Bee, manifest.Defaults)
+	if in.Sector != "" {
+		if _, err := manifest.ResolveSector(in.Sector); err != nil {
+			return CreateResult{}, err
+		}
+	}
+
 	if session.Ledger != nil {
 		if err := session.Ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget()); err != nil {
 			return CreateResult{}, err
@@ -171,7 +165,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 	if err != nil {
 		return CreateResult{}, err
 	}
-	if err := colony.ValidateTaskReviewPolicy(spec, bees); err != nil {
+	if err := colony.ValidateTaskReviewPolicy(spec, bees, manifest.Defaults); err != nil {
 		return CreateResult{}, err
 	}
 	planEv, err := PlanEvent(traceID, agentID, spec)
@@ -190,7 +184,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 			Bee:    bee,
 			Sector: in.Sector,
 			Intent: in.Intent,
-		})
+		}, manifest.Defaults)
 		if err != nil {
 			return CreateResult{}, err
 		}
@@ -227,10 +221,14 @@ func Start(ctx context.Context, session *LedgerSession, traceID, taskID, agentID
 	if agentID == "" {
 		agentID = "cli"
 	}
+	manifest, err := colony.LoadColony(session.Colony.ColonyRoot)
+	if err != nil {
+		return nil, err
+	}
 
 	var started []taskledger.TaskSnapshot
 	for _, task := range toStart {
-		ev, err := ReadyEvent(traceID, agentID, task)
+		ev, err := ReadyEvent(traceID, agentID, task, manifest.Defaults)
 		if err != nil {
 			return nil, err
 		}
@@ -265,8 +263,12 @@ func Retry(ctx context.Context, session *LedgerSession, traceID, taskID, agentID
 	if agentID == "" {
 		agentID = "cli"
 	}
+	manifest, err := colony.LoadColony(session.Colony.ColonyRoot)
+	if err != nil {
+		return taskledger.TaskSnapshot{}, err
+	}
 
-	ev, err := ReadyEvent(traceID, agentID, task)
+	ev, err := ReadyEvent(traceID, agentID, task, manifest.Defaults)
 	if err != nil {
 		return taskledger.TaskSnapshot{}, err
 	}
@@ -304,11 +306,8 @@ func PlanEvent(traceID, agentID string, spec protocol.TaskSpec) (protocol.Event,
 }
 
 // ReadyEvent builds a SIGNAL/task.ready event.
-func ReadyEvent(traceID, agentID string, task taskledger.TaskSnapshot) (protocol.Event, error) {
-	bee := task.Bee
-	if bee == "" {
-		bee = "builder"
-	}
+func ReadyEvent(traceID, agentID string, task taskledger.TaskSnapshot, defaults colony.Defaults) (protocol.Event, error) {
+	bee := colony.EffectiveTaskBee(task.Bee, defaults)
 	return protocol.NewEvent(traceID, agentID, 0, protocol.EventSignal, protocol.TaskReadyPayload{
 		Kind:   protocol.TaskEventReady,
 		TaskID: task.TaskID,

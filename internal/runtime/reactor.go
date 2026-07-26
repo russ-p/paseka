@@ -261,10 +261,11 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		r.mu.Unlock()
 	}()
 
-	bee := task.Bee
-	if bee == "" {
-		bee = "builder"
+	manifest, err := r.loadColonyManifest()
+	if err != nil {
+		return err
 	}
+	bee := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
 	if !r.registry.CanDispatchTaskReady(bee) {
 		logDispatchSkip("bee not subscribed to task.ready", traceID, task.TaskID, bee)
 		return nil
