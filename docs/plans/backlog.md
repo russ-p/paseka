@@ -57,14 +57,6 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Out of energy MVP scope; interactive path differs from AFK file IPC.
 - **Revisit when:** Console/CLI need session token usage, or billing/observability work starts.
 
-#### `paseka inspect` usage one-liner
-
-- **Kind:** follow-up
-- **Source:** planning (energyToken)
-- **Summary:** Optional CLI dump of run/trace usage aggregates (Console/API already cover much of this).
-- **Why deferred:** Nice-to-have; not required for honey MVP.
-- **Revisit when:** Operators want a terminal one-liner without opening Console.
-
 ### Queen Console
 
 API fields for energy and merge-diff exist; per-run proposal preview is still thin.

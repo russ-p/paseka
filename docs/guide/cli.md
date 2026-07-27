@@ -38,7 +38,7 @@ Resolution requires:
 
 | Command | NATS required? |
 | ------- | -------------- |
-| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export` | No |
+| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
 | `paseka run`, `doctor`, `replay`, `signal`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
@@ -70,6 +70,8 @@ paseka
 │   ├── show
 │   └── start
 ├── doctor
+├── inspect
+│   └── usage
 ├── replay <traceId>
 ├── signal
 ├── proposal
@@ -440,6 +442,27 @@ Same stdin input as `emit`, but validates only and does not publish.
 paseka event validate --stdin <<'EOF'
 {"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint"}]}}
 EOF
+```
+
+---
+
+## `paseka inspect`
+
+Filesystem projections for flight trails and runs (no NATS).
+
+### `paseka inspect usage`
+
+Show LLM token usage from `result.json` projections — trace aggregate by default, or one run with `--agent`. Mirrors Queen Console trace/run usage fields (`inputTokens`, `outputTokens`, cache read/write). Only Cursor AFK runs report usage today; others print `usage: (none)`.
+
+| Flag | Short | Required | Description |
+| ---- | ----- | -------- | ----------- |
+| `--trace` | | yes | Flight trail id |
+| `--agent` | | | Agent id (single run; omit for trace aggregate) |
+| `--path` | `-C` | | Colony resolution start directory |
+
+```bash
+paseka inspect usage --trace trace-1
+paseka inspect usage --trace trace-1 --agent agent-abc
 ```
 
 ---

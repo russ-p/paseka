@@ -44,6 +44,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newTaskCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newInspectCmd())
 	root.AddCommand(newReplayCmd())
 	root.AddCommand(newSignalCmd())
 	root.AddCommand(newEventCmd())
