@@ -52,6 +52,9 @@ func HasReadyTask(trace TraceSnapshot) bool {
 // PromoteFirstEligible transitions the first eligible planned task to ready when
 // no task is already ready. Returns the promoted task and true on success.
 func PromoteFirstEligible(trace TraceSnapshot, now time.Time) (TraceSnapshot, TaskSnapshot, bool) {
+	if trace.Killed {
+		return trace, TaskSnapshot{}, false
+	}
 	if HasReadyTask(trace) {
 		return trace, TaskSnapshot{}, false
 	}

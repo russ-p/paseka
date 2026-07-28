@@ -18,5 +18,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [010-telegram-human-gateway](../specs/010-telegram-human-gateway.md) | Implemented (MVP) | Telegram as async Human Gateway (notify + status/task/energy/invites/proposals) |
 | [011-trace-title](../specs/011-trace-title.md) | Implemented | `INSIGHT/trace.title` for Flight Trail display names |
 | [012-trace-summary](../specs/012-trace-summary.md) | Implemented | `INSIGHT/trace.summary` for Console subtitle + merge body |
+| [013-system-kill](../specs/013-system-kill.md) | Implemented | Hard `SIGNAL/system.kill` + `paseka kill` |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

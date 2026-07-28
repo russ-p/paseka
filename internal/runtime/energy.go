@@ -81,6 +81,9 @@ func (r *Reactor) unblockEnergyBlockedTasks(ctx context.Context, traceID string)
 	if err != nil {
 		return err
 	}
+	if snap.Killed {
+		return nil
+	}
 	if snap.EnergyRemaining <= 0 {
 		return nil
 	}

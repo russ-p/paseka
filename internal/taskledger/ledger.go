@@ -28,6 +28,7 @@ type TraceSnapshot struct {
 	TraceID         string                  `json:"traceId"`
 	EnergyBudget    int                     `json:"energyBudget,omitempty"`
 	EnergyRemaining int                     `json:"energyRemaining,omitempty"`
+	Killed          bool                    `json:"killed,omitempty"`
 	Tasks           map[string]TaskSnapshot `json:"tasks"`
 }
 

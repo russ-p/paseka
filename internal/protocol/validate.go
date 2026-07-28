@@ -140,6 +140,11 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateEnergyConsume(payload)
 	}
 
+	switch SystemEventKind(kind) {
+	case SignalSystemKill:
+		return validateSystemKill(payload)
+	}
+
 	switch VerificationKind(kind) {
 	case VerificationSuccess, VerificationFailed:
 		return validateVerification(payload)
@@ -182,6 +187,10 @@ func expectedEventType(kind string) EventType {
 	}
 	switch EnergyEventKind(kind) {
 	case SignalEnergyAdd, SignalEnergyConsume:
+		return EventSignal
+	}
+	switch SystemEventKind(kind) {
+	case SignalSystemKill:
 		return EventSignal
 	}
 	switch VerificationKind(kind) {
@@ -416,6 +425,14 @@ func validateEnergyConsume(payload json.RawMessage) []ValidationDetail {
 	}
 	if p.Amount <= 0 {
 		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
+	}
+	return nil
+}
+
+func validateSystemKill(payload json.RawMessage) []ValidationDetail {
+	var p SystemKillPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid system.kill payload"}}
 	}
 	return nil
 }

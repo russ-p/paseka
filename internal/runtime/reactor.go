@@ -24,8 +24,8 @@ type Reactor struct {
 	ledger          taskledger.Ledger
 	registry        *BeeRegistry
 	mu              sync.Mutex
-	inflight        map[string]struct{}
-	directInflight  map[string]struct{}
+	inflight        map[string]context.CancelFunc
+	directInflight  map[string]context.CancelFunc
 	directProcessed map[string]struct{}
 	recentLocal     map[string]time.Time // fingerprints of events applied before publish
 	asyncDispatch   bool
@@ -80,8 +80,8 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		dispatcher:      d,
 		ledger:          taskledger.NewKVLedger(kv),
 		registry:        registry,
-		inflight:        make(map[string]struct{}),
-		directInflight:  make(map[string]struct{}),
+		inflight:        make(map[string]context.CancelFunc),
+		directInflight:  make(map[string]context.CancelFunc),
 		directProcessed: make(map[string]struct{}),
 		recentLocal:     make(map[string]time.Time),
 		asyncDispatch:   true,
@@ -137,6 +137,9 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
 			return err
 		}
+	}
+	if systemKillDetected(ev) {
+		r.cancelInflightForTrace(ev.TraceID)
 	}
 	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
 		return err
@@ -196,6 +199,9 @@ func (r *Reactor) takeLocalEcho(ev protocol.Event) bool {
 }
 
 func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot) error {
+	if r.traceKilled(ev.TraceID) {
+		return nil
+	}
 	dispatched := false
 
 	for _, task := range ready {
@@ -253,13 +259,15 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		logDispatchSkip("already running", traceID, task.TaskID, taskBeeName(task))
 		return nil
 	}
-	r.inflight[key] = struct{}{}
 	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.inflight, key)
-		r.mu.Unlock()
-	}()
+
+	if r.traceKilled(traceID) {
+		logDispatchSkip("trace killed", traceID, task.TaskID, taskBeeName(task))
+		return nil
+	}
+
+	dispatchCtx, endInflight := r.beginTaskInflight(traceID, task.TaskID)
+	defer endInflight()
 
 	manifest, err := r.loadColonyManifest()
 	if err != nil {
@@ -281,10 +289,10 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	}
 	if taskledger.ShouldSkipDispatch(task) {
 		logDispatchSkip("final review gate — no AFK dispatch", traceID, task.TaskID, bee)
-		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
+		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
 	}
 
-	ok, err := r.gateDispatchEnergy(ctx, traceID, task.TaskID, "task.dispatch")
+	ok, err := r.gateDispatchEnergy(dispatchCtx, traceID, task.TaskID, "task.dispatch")
 	if err != nil {
 		return err
 	}
@@ -293,7 +301,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
-	if err := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusRunning, ""); err != nil {
+	if err := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusRunning, ""); err != nil {
 		return err
 	}
 
@@ -306,7 +314,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	}
 
 	startedAt := time.Now().UTC()
-	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
+	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
 		Bee:            bee,
 		TraceID:        traceID,
 		TaskID:         task.TaskID,
@@ -316,7 +324,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		IsLastWorkTask: taskledger.IsLastWorkTask(snap, task.TaskID),
 	}, DispatchModeTask)
 	if err != nil {
-		if setErr := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(nil, err)); setErr != nil {
+		if setErr := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(nil, err)); setErr != nil {
 			return setErr
 		}
 		return nil
@@ -331,7 +339,10 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 			status = res.Result.Status
 		}
 		logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, status)
-		if setErr := r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(res, nil)); setErr != nil {
+		if r.traceKilled(traceID) {
+			return nil
+		}
+		if setErr := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(res, nil)); setErr != nil {
 			return setErr
 		}
 		return nil
@@ -345,22 +356,27 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		if runOpenedRootProposal(r.registry, bee, res.Result) {
 			return nil
 		}
-		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
+		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
 	}
 	if ev, ok := runEmittedTaskCompleted(res.Result, task.TaskID); ok {
-		return r.applyTaskCompletedEvent(ctx, traceID, ev)
+		return r.applyTaskCompletedEvent(dispatchCtx, traceID, ev)
 	}
 	if shouldDeferAFKCompletion(r.registry, bee, res.Result) {
 		afkSummary := summary
 		if afkSummary == "" {
 			afkSummary = "Awaiting AFK verification gate"
 		}
-		return r.setTaskStatus(ctx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, afkSummary)
+		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, afkSummary)
 	}
-	return r.completeTask(ctx, traceID, task.TaskID, summary, "")
+	return r.completeTask(dispatchCtx, traceID, task.TaskID, summary, "")
 }
 
 func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {
+	if r.traceKilled(ev.TraceID) {
+		logDispatchSkip("trace killed", ev.TraceID, "", beeRole)
+		return nil
+	}
+
 	taskID, taskBody, err := eventDispatchContext(ev)
 	if err != nil {
 		runtimeLog.Warn("direct dispatch skipped",
@@ -387,15 +403,12 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		logDispatchSkip("already running", ev.TraceID, taskID, beeRole)
 		return nil
 	}
-	r.directInflight[key] = struct{}{}
 	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.directInflight, key)
-		r.mu.Unlock()
-	}()
 
-	ok, err := r.gateDispatchEnergy(ctx, ev.TraceID, taskID, "direct.dispatch")
+	dispatchCtx, endInflight := r.beginDirectInflight(key)
+	defer endInflight()
+
+	ok, err := r.gateDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
 	if err != nil {
 		return err
 	}
@@ -406,7 +419,7 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 
 	proposalSector, proposalKind := proposalDispatchFields(ev)
 
-	res, err := r.dispatcher.DispatchColonyBee(ctx, r.colony, ColonyDispatchRequest{
+	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
 		Bee:          beeRole,
 		TraceID:      ev.TraceID,
 		TaskID:       taskID,
@@ -487,11 +500,12 @@ func (r *Reactor) ApplyAndSyncForTest(ctx context.Context, ev protocol.Event) er
 
 // TestReactorOptions configures a reactor without NATS (unit tests).
 type TestReactorOptions struct {
-	ColonyRoot  string
-	Dispatcher  *Dispatcher
-	Registry    *BeeRegistry
-	Ledger      taskledger.Ledger
-	AutoInvites []colony.AutoInviteRule
+	ColonyRoot    string
+	Dispatcher    *Dispatcher
+	Registry      *BeeRegistry
+	Ledger        taskledger.Ledger
+	AutoInvites   []colony.AutoInviteRule
+	AsyncDispatch bool
 }
 
 // NewTestReactor builds a reactor with injected dependencies.
@@ -509,11 +523,11 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		dispatcher:      opts.Dispatcher,
 		ledger:          opts.Ledger,
 		registry:        opts.Registry,
-		inflight:        make(map[string]struct{}),
-		directInflight:  make(map[string]struct{}),
+		inflight:        make(map[string]context.CancelFunc),
+		directInflight:  make(map[string]context.CancelFunc),
 		directProcessed: make(map[string]struct{}),
 		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   false,
+		asyncDispatch:   opts.AsyncDispatch,
 		autoInvites:     autoInvites,
 	}
 }

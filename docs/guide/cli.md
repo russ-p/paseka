@@ -497,6 +497,25 @@ paseka energy add --trace trace-1 --amount 5
 
 ---
 
+## `paseka kill`
+
+Hard-kill a trace (`SIGNAL` / `system.kill`). Cancels non-terminal tasks, stops new AFK dispatch, and cancels in-flight adapter processes for that `traceId`. Does not stop interactive sessions — use `paseka session stop` for those.
+
+When `paseka run` is active, the command publishes and waits for the ledger projection. When the reactor is stopped, the CLI applies the event locally after publish.
+
+| Flag | Short | Required | Description |
+| ---- | ----- | -------- | ----------- |
+| `--trace` | | yes | Flight trail id |
+| `--reason` | | | Optional summary recorded on cancelled tasks |
+| `--path` | `-C` | | Colony resolution start directory |
+
+```bash
+paseka kill --trace trace-1
+paseka kill --trace trace-1 --reason "dispute avalanche"
+```
+
+---
+
 ## `paseka colony`
 
 Colony configuration projections (filesystem only — no NATS).

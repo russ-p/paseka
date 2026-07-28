@@ -174,6 +174,7 @@ Also cover:
 
 - guard success on first proposal (no rework)
 - honey exhaustion → `blocked` (energy budget)
+- `paseka kill` / `system.kill` → tasks `cancelled`, trace `killed` (hard stop while honey remains)
 - human reject path (`INSIGHT/human.feedback`) when review policy requires it
 
 ### Oracle and scoring

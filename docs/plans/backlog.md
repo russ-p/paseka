@@ -17,13 +17,13 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Needs protocol and UX design (event shapes, CLI/Console) beyond the anti-loop MVP.
 - **Revisit when:** Product brief item is specified with event shapes and operator surfaces, or eval scenarios require confidence filtering.
 
-#### `system.kill`
+#### New trace from interrupted worktree
 
-- **Kind:** idea
-- **Source:** [Brief](../idea/brief.md); planning (energyToken)
-- **Summary:** Bus signal to forcibly stop a trace or agent dispute avalanche. HITL top-up exists (`paseka energy add`); no kill primitive yet.
-- **Why deferred:** Needs its own protocol and UX design; orthogonal to shared-budget MVP.
-- **Revisit when:** Spec covers event shape and CLI/Console/`gate` surfaces, or operators need an emergency stop beyond energy block.
+- **Kind:** follow-up
+- **Source:** planning (`system.kill` / hard kill)
+- **Summary:** After a hard kill (or late-stage avalanche), good early work may already live in `.paseka/worktrees/<traceId>/`. Need an operator path to start a **new** `traceId` that reuses that worktree (or grafts its branch/diff) instead of discarding progress and redoing from `HEAD`.
+- **Why deferred:** Orthogonal to kill protocol itself; needs worktree registry + trace bootstrap design (identity, honey budget, which tasks/events to carry).
+- **Revisit when:** `system.kill` ships and operators hit “early stages were fine, last stage blew up” without a clean continue path.
 
 #### Energy gate on `paseka bee run` / `bee chat`
 

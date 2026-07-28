@@ -51,6 +51,7 @@ flowchart LR
 | `completed` | Task gate passed (AFK success or human approval) |
 | `failed` | Adapter run failed or dispatch error; retry with `paseka task retry` or Queen Console |
 | `blocked` | Cannot proceed (manual intervention or honey reserve exhausted) |
+| `cancelled` | Trace hard-killed via `system.kill`; task will not dispatch again on this trace |
 
 Task lifecycle events use `payload.kind` inside existing top-level event types — no new `EventType` values.
 
@@ -64,6 +65,8 @@ Each trace carries a shared honey reserve on the task ledger snapshot:
 | `energyRemaining` | Tokens left; each adapter dispatch consumes `1` |
 
 When `energyRemaining` reaches `0`, further dispatches set the task to `blocked` with summary `Honey reserve exhausted`. Top up with `paseka energy add --trace <id> --amount <n>` (`SIGNAL` / `energy.add`). Runtime audit events use `SIGNAL` / `energy.consume`.
+
+Hard-kill a trace with `paseka kill --trace <id> [--reason …]` (`SIGNAL` / `system.kill`). Sets `killed` on the trace snapshot, cancels non-terminal tasks, stops new dispatches, and cancels in-flight AFK adapter processes. `energy.add` after kill tops up honey but does not redispatch killed tasks. See [Spec 013](../specs/013-system-kill.md).
 
 `energy.add` only increments `energyRemaining`; it does not set `energyBudget`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml`. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
 

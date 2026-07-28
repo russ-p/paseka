@@ -18,6 +18,7 @@ var directSignalDenylist = map[string]struct{}{
 	string(protocol.TaskEventStatus):      {},
 	string(protocol.SignalEnergyAdd):      {},
 	string(protocol.SignalEnergyConsume):  {},
+	string(protocol.SignalSystemKill):     {},
 	string(protocol.SignalSessionInvite):  {},
 	string(protocol.SignalBeekeeperReady): {},
 }

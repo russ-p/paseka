@@ -48,6 +48,7 @@ const (
 	TaskStatusCompleted     TaskStatus = "completed"
 	TaskStatusFailed        TaskStatus = "failed"
 	TaskStatusBlocked       TaskStatus = "blocked"
+	TaskStatusCancelled     TaskStatus = "cancelled"
 )
 
 // TaskSpec describes one planned task inside a trace.

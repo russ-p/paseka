@@ -17,7 +17,7 @@ Paseka is a local, event-driven runtime for AI coding agents (bees) that work in
 ## Budget and stability
 
 - Each trace has a shared **honey reserve** (`energyToken`). Every adapter dispatch consumes energy so runaway LLM loops burn out instead of looping forever.
-- Confidence / kill primitives are still design follow-ups — see [Backlog](../plans/backlog.md).
+- **`system.kill`** hard-stops a trace (cancel in-flight AFK, block further dispatch). Confidence filtering remains a backlog follow-up — see [Backlog](../plans/backlog.md).
 
 ## Human in the loop
 
@@ -26,6 +26,7 @@ The beekeeper is a first-class participant, not a blocked approval step in an or
 - Review mutations (Queen Console / CLI).
 - Interactive sessions (`paseka bee chat`).
 - Top up or inspect honey for a trace.
+- Hard-kill a runaway trace (`paseka kill` / `system.kill`).
 
 ## Colony vs machine
 
