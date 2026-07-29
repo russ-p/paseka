@@ -135,6 +135,18 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 - **Why deferred:** Pipeline already ships linux/darwin from Ubuntu with `CGO_ENABLED=0`; Windows needs build tags/stubs before CI/release changes.
 - **Revisit when:** Local/CI Windows cross-build succeeds and release should publish `windows/amd64` (optionally `windows/arm64`).
 
+### Colony ingress
+
+Named entry points into colony choreography without a workflow DAG executor. Today: raw `paseka signal`, `task create`, and Telegram `commands.custom` `emit: signal` ([010](../specs/010-telegram-human-gateway.md)).
+
+#### Cue layer (`paseka cue run`)
+
+- **Kind:** idea
+- **Source:** planning (colony ingress / CLI–Console parity with Telegram custom commands); same pattern as [custom emit:signal](../guide/telegram-gateway.md#custom-emit-signal-commands)
+- **Summary:** Shareable named cues (e.g. `.paseka/cues/`) that wrap a first bus publish — typically `SIGNAL/feature.requested` or a `task create` seed — as thin CLI/Console ingress (`paseka cue run idea-to-pr "…"`). Bee language favorite: **Forage Cue** (Experience Layer); technical: `cue`. Naming still open at spec time — other candidates worth weighing: recipe / Comb Recipe, trailhead / Trailhead, starter / Bloom Starter, spark / New Bloom; avoid generic `preset` (collides in perception with [Nuc](../guide/nuc.md)). Bundled cues document reference-colony entry sequences; they must not own next steps (no DAG executor). Prefer unifying with Telegram `commands.custom` so gate slash commands and CLI share one cue definition.
+- **Why deferred:** Telegram custom commands already cover phone ingress; CLI still has `signal` / `task create`. Needs a small authoring surface and colony vs machine-local ownership decision before a spec.
+- **Revisit when:** Operators want named scenario shortcuts from CLI/Console, or duplicating Telegram custom cues in docs becomes painful.
+
 ## Assumptions and gotchas
 
 ### Eval colony
