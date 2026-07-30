@@ -20,6 +20,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [012-trace-summary](../specs/012-trace-summary.md) | Implemented | `INSIGHT/trace.summary` for Console subtitle + merge body |
 | [013-system-kill](../specs/013-system-kill.md) | Implemented | Hard `SIGNAL/system.kill` + `paseka kill` |
 | [014-artifacts-protocol](../specs/014-artifacts-protocol.md) | Draft | Trace comb + `SIGNAL/artifact.written`, per-run hash baseline, flush delta on success |
-| [015-deferred-event-emit](../specs/015-deferred-event-emit.md) | Draft | General deferred `event emit` buffer (design; 014 does not depend on it) |
+| [015-deferred-event-emit](../specs/015-deferred-event-emit.md) | Approved | General deferred `event emit` buffer (`--defer`, flush on success; 014 does not depend on it) |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
