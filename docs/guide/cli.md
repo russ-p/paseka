@@ -70,6 +70,11 @@ paseka
 │   ├── show
 │   └── start
 ├── doctor
+├── event
+│   ├── emit
+│   ├── validate
+│   ├── pending
+│   └── flush
 ├── inspect
 │   └── usage
 ├── replay <traceId>
@@ -408,11 +413,18 @@ Event contracts: [task ledger](../reference/task-ledger.md), `.paseka/prompts/_p
 
 Validate and publish bus events with machine-readable feedback. This is the intended agent publish path.
 
+By default, `emit` publishes to JetStream immediately. With **`--defer`**, the event is validated and appended to a per-run pending queue (`.paseka/runs/<traceId>/<agentId>/pending.ndjson`); runtime flushes FIFO on **successful** AFK or interactive session completion. Failed or cancelled runs leave pending on disk for inspect / manual flush. **`--defer` requires an existing run directory** for the event's `traceId` and `agentId` — missing run dir fails closed.
+
+Trail comb artifacts ([014](../specs/014-artifacts-protocol.md)) use runtime scan flush on success and do **not** depend on this buffer. See [015](../specs/015-deferred-event-emit.md) for the general deferred-emit contract.
+
+**Live-only kinds** (CLI rejects `--defer`): `system.kill`, `energy.add`, `energy.consume`, `session.invite`, `beekeeper.ready`, `task.status`.
+
 ### `paseka event emit`
 
 | Flag | Short | Required | Default | Description |
 | ---- | ----- | -------- | ------- | ----------- |
 | `--stdin` | | yes | | Read one JSON event object from stdin |
+| `--defer` | | | `false` | Queue for flush on successful run/session completion instead of publishing now |
 | `--agent` | | | `agent` | Default agent id when omitted from JSON |
 | `--path` | `-C` | | | Colony resolution start directory |
 
@@ -422,16 +434,36 @@ paseka event emit --stdin <<'EOF'
 EOF
 ```
 
-Success response:
+End-of-run handoff (deferred until successful exit):
+
+```bash
+paseka event emit --defer --stdin <<'EOF'
+{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint","bee":"builder"}]}}
+EOF
+```
+
+Live success response:
 
 ```json
 {"ok":true,"traceId":"trace-1","type":"VERIFICATION","kind":"verification.success","subject":"paseka.events.VERIFICATION.verification.success","eventLogPath":"/path/to/.paseka/runs/trace-1/agent-1/events.ndjson"}
+```
+
+Deferred success response:
+
+```json
+{"ok":true,"deferred":true,"traceId":"trace-1","type":"INSIGHT","kind":"task.plan","pendingPath":"/path/to/.paseka/runs/trace-1/agent-1/pending.ndjson"}
 ```
 
 Validation failure:
 
 ```json
 {"ok":false,"error":"schema_validation_failed","details":[{"path":"payload.summary","message":"required"}]}
+```
+
+Defer denied (live-only kind):
+
+```json
+{"ok":false,"error":"defer_denied","details":[{"path":"payload.kind","message":"kind \"session.invite\" cannot be deferred; use live emit"}]}
 ```
 
 ### `paseka event validate`
@@ -442,6 +474,36 @@ Same stdin input as `emit`, but validates only and does not publish.
 paseka event validate --stdin <<'EOF'
 {"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"Add endpoint"}]}}
 EOF
+```
+
+### `paseka event pending`
+
+Show deferred event count and kinds for a run (does not read raw `pending.ndjson` by hand).
+
+| Flag | Short | Required | Description |
+| ---- | ----- | -------- | ----------- |
+| `--trace` | | yes | Flight trail id |
+| `--agent` | | yes | Agent run id |
+| `--path` | `-C` | | Colony resolution start directory |
+
+```bash
+paseka event pending --trace trace-1 --agent agent-1
+```
+
+### `paseka event flush`
+
+Publish pending events FIFO, or discard without publishing. Uses the same flush path as runtime on successful completion. Mid-flush publish errors stop at the first failure; already-published events stay on the bus and remaining items stay queued for retry.
+
+| Flag | Short | Required | Description |
+| ---- | ----- | -------- | ----------- |
+| `--trace` | | yes | Flight trail id |
+| `--agent` | | yes | Agent run id |
+| `--discard` | | | Clear pending queue without publishing |
+| `--path` | `-C` | | Colony resolution start directory |
+
+```bash
+paseka event flush --trace trace-1 --agent agent-1
+paseka event flush --trace trace-1 --agent agent-1 --discard
 ```
 
 ---

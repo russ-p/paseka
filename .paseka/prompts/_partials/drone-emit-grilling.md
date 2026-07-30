@@ -13,7 +13,7 @@ After shared understanding and writing the spec file, publish **only** these kin
 2. Emit **one** `SIGNAL/spec.ready` with `ref` = repo-relative path to that file.
 
 ```bash
-paseka event emit --stdin <<'EOF'
+paseka event emit --defer --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"spec.ready","ref":"docs/specs/006-live-bees-header.md","title":"Live bees header"}}
 EOF
 ```

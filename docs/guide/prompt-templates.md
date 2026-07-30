@@ -218,7 +218,7 @@ bee config + CLI flags
   Runtime normalizes summary, writes log artifact, may auto-publish `INSIGHT/run.summary`
 ```
 
-Bus events are published separately through `paseka event emit --stdin` as described in the emit partials. Each bee includes `emit-howto` plus only the type partials it may publish. Runtime may also synthesize `INSIGHT/run.summary` after a successful AFK run when the bee policy allows.
+Bus events are published separately through `paseka event emit --stdin` (live by default; `--defer` for end-of-run handoffs) as described in the emit partials. Each bee includes `emit-howto` plus only the type partials it may publish. Runtime may also synthesize `INSIGHT/run.summary` after a successful AFK run when the bee policy allows.
 
 ---
 
@@ -313,7 +313,7 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
 | Partial | Role |
 | ------- | ---- |
-| `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (no type enumeration) |
+| `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (live default, `--defer` for handoffs; no type enumeration) |
 | `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) |
 | `emit-signal` | `SIGNAL` kinds (`task.ready`) |
 | `scout-emit-intake` | `SIGNAL/feature.classified`, `INSIGHT/task.plan`, `SIGNAL/task.ready` (Scout `intake` intent only) |
