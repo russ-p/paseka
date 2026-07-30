@@ -197,6 +197,7 @@ Prior art: `ProcessEventInput` publish/validate paths; runtime auto-publish orde
 
 ## Further Notes
 
+- **014 coexistence follow-up:** scan-flush skip when a deferred `artifact.written` is present is tracked in [backlog](../plans/backlog.md#014-scan--deferred-artifactwritten-coexistence), not the first 015 implementation slices.
 - Closest shipped analogy: runtime auto-publish of `code.proposal` **after** adapter exit — deferred emit extends that “boundary visibility” idea to **bee-authored** events.
 - Naming: user-facing “queued events” / “flush on success”; wire stays standard domain events after publish.
 - If the colony later rejects building 015, move status to **Deprecated** with pointer to 014-only flush so the trade-off discussion is not lost.

@@ -135,6 +135,18 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 - **Why deferred:** Pipeline already ships linux/darwin from Ubuntu with `CGO_ENABLED=0`; Windows needs build tags/stubs before CI/release changes.
 - **Revisit when:** Local/CI Windows cross-build succeeds and release should publish `windows/amd64` (optionally `windows/arm64`).
 
+### Deferred emit and artifacts
+
+General deferred `event emit` buffer ([015](../specs/015-deferred-event-emit.md)) and trail comb protocol ([014](../specs/014-artifacts-protocol.md)).
+
+#### 014 scan ↔ deferred `artifact.written` coexistence
+
+- **Kind:** follow-up
+- **Source:** [015-deferred-event-emit](../specs/015-deferred-event-emit.md) (decision §1 / US 8, 20, 21, 23); planning (015 task breakdown)
+- **Summary:** When both 014 scan flush and 015 deferred emit ship, skip scan-synthesized `artifact.written` for a run if a deferred `artifact.written` is already pending/flushed for that run; no silent merge of multiple deferred artifact lines (batch only via one event with `artifacts[]`).
+- **Why deferred:** First 015 ship is the general defer/flush path; 014 scan flush is not a dependency and may land on a different schedule. Coexistence needs both mechanisms present to verify.
+- **Revisit when:** 014 scan flush and 015 deferred emit are both implemented (or one is about to land on top of the other).
+
 ### Colony ingress
 
 Named entry points into colony choreography without a workflow DAG executor. Today: raw `paseka signal`, `task create`, and Telegram `commands.custom` `emit: signal` ([010](../specs/010-telegram-human-gateway.md)).
