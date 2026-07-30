@@ -316,14 +316,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*adapte
 	}
 
 	if result.Status == string(protocol.StatusCompleted) {
-		if err := bus.FlushPendingForRun(ctx, colony.Context{ColonyRoot: colonyRoot}, req.TraceID, agentID); err != nil {
+		if err := d.flushDeferredEvents(ctx, colonyRoot, req.TraceID, agentID); err != nil {
+			msg := "runtime: flush deferred events: " + err.Error()
 			if d.busRequired {
-				return result, fmt.Errorf("runtime: flush deferred events: %w", err)
+				return result, fmt.Errorf("%s", msg)
 			}
-			result.Warnings = append(result.Warnings, "runtime: flush deferred events: "+err.Error())
+			result.Warnings = append(result.Warnings, msg)
+			_ = runDir.AppendStatusNote(msg)
 		}
 	} else if warn, ok := bus.PendingWarning(colonyRoot, req.TraceID, agentID); ok {
 		result.Warnings = append(result.Warnings, warn)
+		_ = runDir.AppendStatusNote(warn)
 	}
 
 	runEvents, readErr := runDir.ReadEvents()

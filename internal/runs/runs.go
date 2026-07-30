@@ -142,6 +142,24 @@ func (d Dir) WriteStatus(state protocol.RunStatus, exitCode int, startedAt, fini
 	})
 }
 
+// AppendStatusNote appends a human-readable note to status.json error text.
+func (d Dir) AppendStatusNote(note string) error {
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return nil
+	}
+	snap, err := d.ReadStatus()
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(snap.Error) != "" {
+		snap.Error += "; " + note
+	} else {
+		snap.Error = note
+	}
+	return d.WriteStatusSnapshot(snap)
+}
+
 func (d Dir) ReadStatus() (protocol.StatusSnapshot, error) {
 	data, err := os.ReadFile(d.StatusPath())
 	if err != nil {
