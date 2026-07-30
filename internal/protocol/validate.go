@@ -42,6 +42,8 @@ type EventCLIResult struct {
 	Kind         string             `json:"kind,omitempty"`
 	Subject      string             `json:"subject,omitempty"`
 	EventLogPath string             `json:"eventLogPath,omitempty"`
+	Deferred     bool               `json:"deferred,omitempty"`
+	PendingPath  string             `json:"pendingPath,omitempty"`
 	Error        string             `json:"error,omitempty"`
 	Details      []ValidationDetail `json:"details,omitempty"`
 }

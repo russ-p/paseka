@@ -53,7 +53,7 @@ Emit **one** `INSIGHT/task.plan` with a single task in `payload.tasks`.
 Clear feature (`decision=plan`):
 
 ```bash
-paseka event emit --stdin <<'EOF'
+paseka event emit --defer --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-add-health-badge","title":"Add health badge to header","body":"## What to build\n\nShow colony health in the console header.\n\n## Acceptance criteria\n\n- [ ] Badge visible when NATS is connected\n- [ ] Badge shows disconnected state clearly\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"feature","dependsOn":[]}]}}
 EOF
 ```
@@ -61,7 +61,7 @@ EOF
 Bug (`decision=triage`):
 
 ```bash
-paseka event emit --stdin <<'EOF'
+paseka event emit --defer --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix","dependsOn":[]}]}}
 EOF
 ```
