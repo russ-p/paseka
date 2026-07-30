@@ -15,7 +15,9 @@ import (
 // ProcessEventInput validates stdin JSON and optionally publishes to NATS.
 // When publish is true and colonyRoot is set, the event is also appended to
 // .paseka/runs/<traceId>/<agentId>/events.ndjson for the emitting agent run.
-func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultAgentID string, publish bool, colonyRoot string) (protocol.EventCLIResult, error) {
+// When deferEmit is true, the event is validated and appended to pending.ndjson
+// instead of publishing; colonyRoot and an existing run directory are required.
+func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultAgentID string, publish bool, deferEmit bool, colonyRoot string) (protocol.EventCLIResult, error) {
 	in, err := protocol.ParseEventInput(raw)
 	if err != nil {
 		var verr *protocol.ValidationError
@@ -54,6 +56,55 @@ func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultA
 	subject := ""
 	if client != nil {
 		subject = EventSubject(client.Config().SubjectPrefix, ev)
+	}
+
+	if deferEmit {
+		if IsDeferDenied(kind) {
+			return protocol.EventCLIResult{
+				OK:      false,
+				Error:   "defer_denied",
+				TraceID: ev.TraceID,
+				Type:    ev.Type,
+				Kind:    kind,
+				Details: []protocol.ValidationDetail{{
+					Path:    "payload.kind",
+					Message: fmt.Sprintf("kind %q cannot be deferred; use live emit", kind),
+				}},
+			}, nil
+		}
+		if colonyRoot == "" {
+			return protocol.EventCLIResult{
+				OK:    false,
+				Error: "run_required",
+				Details: []protocol.ValidationDetail{{
+					Path:    "",
+					Message: "colony root is required for deferred emit",
+				}},
+			}, nil
+		}
+		pendingPath, err := deferEvent(colonyRoot, ev)
+		if err != nil {
+			return protocol.EventCLIResult{
+				OK:      false,
+				Error:   "defer_failed",
+				TraceID: ev.TraceID,
+				Type:    ev.Type,
+				Kind:    kind,
+				Details: []protocol.ValidationDetail{{
+					Path:    "",
+					Message: err.Error(),
+				}},
+			}, nil
+		}
+		return protocol.EventCLIResult{
+			OK:          true,
+			Deferred:    true,
+			TraceID:     ev.TraceID,
+			Type:        ev.Type,
+			Kind:        kind,
+			Subject:     subject,
+			PendingPath: pendingPath,
+		}, nil
 	}
 
 	if !publish {

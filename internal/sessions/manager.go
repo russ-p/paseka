@@ -17,6 +17,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/prompts"
@@ -508,6 +509,23 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 
 	resultText := buildSessionResultText(entry.RunDir)
 	_ = entry.RunDir.WriteResultText(resultText)
+
+	if state == adapters.SessionCompleted {
+		ctxColony := colony.Context{ColonyRoot: entry.Handle.ColonyRoot, Slug: entry.Slug}
+		if err := bus.FlushPendingForRun(context.Background(), ctxColony, entry.Handle.TraceID, entry.Handle.AgentID); err != nil {
+			logging.Component("sessions").Warn("flush deferred events failed",
+				logging.F("bee", entry.Handle.Bee),
+				logging.F("trace", entry.Handle.TraceID),
+				logging.F("agent", entry.Handle.AgentID),
+				logging.F("error", err.Error()),
+			)
+		}
+	} else if warn, ok := bus.PendingWarning(entry.Handle.ColonyRoot, entry.Handle.TraceID, entry.Handle.AgentID); ok {
+		logging.Component("sessions").Warn(warn,
+			logging.F("trace", entry.Handle.TraceID),
+			logging.F("agent", entry.Handle.AgentID),
+		)
+	}
 
 	if bee, _, beeErr := colony.LoadBee(entry.Handle.ColonyRoot, entry.Handle.Bee); beeErr == nil {
 		prompt, _ := os.ReadFile(entry.RunDir.PromptPath())
