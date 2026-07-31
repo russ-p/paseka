@@ -2,8 +2,7 @@
 
 ## Status
 
-**(Approved)**
-Design locked after grilling. Implementation may follow later; **014 MVP does not depend on this buffer** and ships artifacts-only scan flush first. This spec is the contract for when the colony chooses to build the general deferred-emit path.
+**Implemented.** General deferred `paseka event emit --defer` buffer with per-run `pending.ndjson`, success flush (FIFO, before `run.summary`), `event pending` / `event flush` / `--discard`, and live-only deny-list. **014 MVP does not depend on this buffer** — artifacts use scan flush first; 014/015 coexistence follow-up is in [backlog](../plans/backlog.md).
 
 ## Problem Statement
 
