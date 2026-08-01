@@ -154,10 +154,10 @@ Named entry points into colony choreography without a workflow DAG executor. Tod
 #### Cue layer (`paseka cue run`)
 
 - **Kind:** idea
-- **Source:** planning (colony ingress / CLI–Console parity with Telegram custom commands); same pattern as [custom emit:signal](../guide/telegram-gateway.md#custom-emit-signal-commands)
-- **Summary:** Shareable named cues (e.g. `.paseka/cues/`) that wrap a first bus publish — typically `SIGNAL/feature.requested` or a `task create` seed — as thin CLI/Console ingress (`paseka cue run idea-to-pr "…"`). Bee language favorite: **Forage Cue** (Experience Layer); technical: `cue`. Naming still open at spec time — other candidates worth weighing: recipe / Comb Recipe, trailhead / Trailhead, starter / Bloom Starter, spark / New Bloom; avoid generic `preset` (collides in perception with [Nuc](../guide/nuc.md)). Bundled cues document reference-colony entry sequences; they must not own next steps (no DAG executor). Prefer unifying with Telegram `commands.custom` so gate slash commands and CLI share one cue definition.
-- **Why deferred:** Telegram custom commands already cover phone ingress; CLI still has `signal` / `task create`. Needs a small authoring surface and colony vs machine-local ownership decision before a spec.
-- **Revisit when:** Operators want named scenario shortcuts from CLI/Console, or duplicating Telegram custom cues in docs becomes painful.
+- **Source:** [016-cue-layer](../specs/016-cue-layer.md)
+- **Summary:** Design moved to [016](../specs/016-cue-layer.md) (includes per-cue `energy_budget` seed override). Implement when scheduled; remove this backlog row on ship.
+- **Why deferred:** Spec is Approved; not yet in an implementation slot.
+- **Revisit when:** Implementation is scheduled or starts.
 
 ## Assumptions and gotchas
 
