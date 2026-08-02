@@ -135,6 +135,60 @@ func (a *api) handleReviewQueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, view)
 }
 
+func (a *api) handleCues(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	list, err := ListCues(a.ctx.ColonyRoot)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, list)
+}
+
+func (a *api) handleCueByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/cues/")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	parts := strings.Split(path, "/")
+	cueID := parts[0]
+	if cueID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "run" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.runCue(w, r, cueID)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func (a *api) runCue(w http.ResponseWriter, r *http.Request, cueID string) {
+	var req RunCueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	res, err := RunCue(r.Context(), a.ctx, cueID, req)
+	if err != nil {
+		writeCueError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, res)
+}
+
 func (a *api) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -855,6 +909,19 @@ func writeTaskError(w http.ResponseWriter, err error) {
 	if strings.Contains(strings.ToLower(msg), "not configured") {
 		status = http.StatusServiceUnavailable
 	} else if isTaskClientError(err) {
+		status = http.StatusBadRequest
+	}
+	http.Error(w, msg, status)
+}
+
+func writeCueError(w http.ResponseWriter, err error) {
+	msg := err.Error()
+	status := http.StatusInternalServerError
+	if strings.Contains(strings.ToLower(msg), "not configured") {
+		status = http.StatusServiceUnavailable
+	} else if strings.Contains(msg, "not found") {
+		status = http.StatusNotFound
+	} else if strings.Contains(msg, "required") || strings.Contains(msg, "invalid") || strings.Contains(msg, "empty") {
 		status = http.StatusBadRequest
 	}
 	http.Error(w, msg, status)
