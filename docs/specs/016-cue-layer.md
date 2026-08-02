@@ -2,7 +2,7 @@
 
 ## Status
 
-**Approved.** Design locked in planning (colony ingress / CLI–Console–Telegram parity, including per-cue `energy_budget`). Not yet scheduled for implementation.
+**Implemented.** Colony ingress via `.paseka/cues/`; CLI `paseka cue list|run`, Queen Console Run cue API/UI, Telegram `cue:`, Nuc export/import with `--cues`, optional per-cue `energy_budget`. Durable docs: [cues guide](../guide/cues.md).
 
 ## Problem Statement
 
@@ -215,7 +215,7 @@ CLI sketch:
 
 ## Further Notes
 
-- Design owner for the former backlog idea [Cue layer](../plans/backlog.md#cue-layer-paseka-cue-run).
+- Design shipped as [Forage Cues guide](../guide/cues.md).
 - Complements [005 ideation](005-feature-ideation-flow.md) entry paths and [010 Telegram custom emit](010-telegram-human-gateway.md) without replacing raw `paseka signal` (power users / evals keep it).
 - Honey model background: [task ledger](../reference/task-ledger.md) (`energyBudget` vs `energy.add`).
 - Related durable docs after ship: [telegram gateway](../guide/telegram-gateway.md), [CLI](../guide/cli.md), [colony layout](../guide/colony-layout.md), [nuc](../guide/nuc.md), [glossary](../idea/glossary.md).

@@ -41,7 +41,7 @@ Resolution requires:
 | `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
-| `paseka run`, `doctor`, `replay`, `signal`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
+| `paseka run`, `doctor`, `replay`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
 | `paseka task list`, `paseka task show`, `export` | Optional — prefers JetStream KV, falls back to filesystem projection |
 
 Default NATS URL after `paseka init`: `nats://127.0.0.1:4222` (see `docker-compose.yml`).
@@ -78,6 +78,9 @@ paseka
 ├── inspect
 │   └── usage
 ├── replay <traceId>
+├── cue
+│   ├── list
+│   └── run <id> <text>
 ├── signal
 ├── proposal
 │   ├── approve
@@ -379,6 +382,39 @@ Prints event type, `payload.kind`, and agent id per event. Does not re-execute b
 
 ```bash
 paseka replay trace-abc123
+```
+
+---
+
+## `paseka cue`
+
+Run colony **Forage Cue** shortcuts from `.paseka/cues/<id>.yaml`. Publishes `signal` or `task` ingress immediately (no confirm). Full authoring, Console, Telegram, and honey rules: [Forage Cues](cues.md).
+
+Requires NATS (same as `paseka signal` / `task create`).
+
+### `paseka cue list`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+
+Lists cues sorted by id (id + optional description).
+
+### `paseka cue run`
+
+| Flag | Short | Required | Description |
+| ---- | ----- | -------- | ----------- |
+| `<id>` | | yes | Cue id (filename without `.yaml`) |
+| `<text>` | | yes | Operator text (`Text` / `Title` / `Body` in templates) |
+| `--trace` | | | Attach to existing flight trail (new trace when omitted; cue `energy_budget` ignored when trail already seeded) |
+| `--set` | | | Template override `key=val` (repeatable; unused keys ignored) |
+| `--path` | `-C` | | Colony resolution start directory |
+
+```bash
+paseka cue list
+paseka cue run feature "OAuth callback returns 500 on refresh"
+paseka cue run hotfix "Fix nil deref in token refresh"
+paseka cue run feature "Follow-up" --trace trace-abc123
 ```
 
 ---

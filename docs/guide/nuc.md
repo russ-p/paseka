@@ -1,10 +1,10 @@
 # Nuc — portable bee packs
 
-A **Nuc** is a single-file portable pack of shareable colony config: bee role YAML and prompt templates. Use it to move tuned bees and prompts between Colonies without copying secrets, adapters, or `colony.yaml`.
+A **Nuc** is a single-file portable pack of shareable colony config: bee role YAML, prompt templates, and optional **Forage Cues**. Use it to move tuned bees, prompts, and ingress shortcuts between Colonies without copying secrets, adapters, or `colony.yaml`.
 
 Implementation: [`internal/nuc`](../../internal/nuc/).
 
-Related: [bee config](bee-config.md), [prompt templates](prompt-templates.md), [CLI](cli.md).
+Related: [bee config](bee-config.md), [prompt templates](prompt-templates.md), [Forage Cues](cues.md), [CLI](cli.md).
 
 ---
 
@@ -15,6 +15,7 @@ Related: [bee config](bee-config.md), [prompt templates](prompt-templates.md), [
 | `.paseka/bees/<role>.yaml` | `colony.yaml`, `*.local.yaml` |
 | `.paseka/prompts/*.md` referenced by exported bees | `~/.config/paseka/` adapters and secrets |
 | `.paseka/prompts/_partials/*.md` when any prompt is exported | NATS URL, machine-local state |
+| `.paseka/cues/<id>.yaml` (all when present, or `--cues` filter) | |
 
 ---
 
@@ -39,6 +40,14 @@ spec:
       You are Scout Bee...
     _partials/emit-insight.md: |
       ...
+  cues:
+    feature: |
+      description: Intake an idea or bug for Scout classification
+      emit: signal
+      type: SIGNAL
+      kind: feature.requested
+      title: "{{.Title}}"
+      body: "{{.Body}}"
 ```
 
 | Field | Required | Meaning |
@@ -49,6 +58,7 @@ spec:
 | `metadata.description` | no | Optional note |
 | `spec.bees` | yes | Map of role → raw bee YAML body |
 | `spec.prompts` | no | Map of path (relative to `.paseka/prompts/`) → markdown body |
+| `spec.cues` | no | Map of cue id → raw cue YAML body |
 
 Prompt paths must not be absolute or contain `..`.
 
@@ -57,7 +67,7 @@ Prompt paths must not be absolute or contain `..`.
 ## 3. CLI
 
 ```bash
-paseka nuc export [-o file] [--bees role,...] [--name name] [--description text] [-C path]
+paseka nuc export [-o file] [--bees role,...] [--cues id,...] [--name name] [--description text] [-C path]
 paseka nuc import <file|url|-> [--force] [--dry-run] [-v] [-C path]
 ```
 
@@ -69,6 +79,7 @@ Reads the current Colony and writes a nuc document.
 | ---- | ----- | ------- | ----------- |
 | `--output` | `-o` | stdout | Write nuc file; prints path when set |
 | `--bees` | | all roles | Comma-separated bee roles to export |
+| `--cues` | | all cues when present | Comma-separated cue ids to export |
 | `--name` | | colony slug | `metadata.name` |
 | `--description` | | | `metadata.description` |
 | `--path` | `-C` | cwd | Colony resolution start directory |
@@ -78,6 +89,7 @@ When any prompt is exported, all `_partials/*.md` files are included (partials a
 ```bash
 paseka nuc export -o minimal.nuc.yaml
 paseka nuc export --bees scout,builder -o scout-builder.nuc.yaml
+paseka nuc export --cues feature,hotfix -o entry-points.nuc.yaml
 paseka nuc export | less
 ```
 
@@ -110,7 +122,7 @@ Import is **per file**, not field-level:
 | Mode | Flag | Behavior |
 | ---- | ---- | -------- |
 | skip | default | Existing path is left untouched; missing paths are created |
-| override | `--force` | Existing path is replaced with nuc contents |
+| override | `--force` | Existing path is replaced with nuc contents (bees, prompts, cues) |
 
 There is **no merge**. Bee YAML lists (`subscribes`, `publishes`, `intents`) and markdown prompts are not merged field-by-field. Colonies keep `.paseka/` in git — use version control to review, diff, or revert imports.
 

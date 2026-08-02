@@ -21,6 +21,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [013-system-kill](../specs/013-system-kill.md) | Implemented | Hard `SIGNAL/system.kill` + `paseka kill` |
 | [014-artifacts-protocol](../specs/014-artifacts-protocol.md) | Draft | Trace comb + `SIGNAL/artifact.written`, per-run hash baseline, flush delta on success |
 | [015-deferred-event-emit](../specs/015-deferred-event-emit.md) | Implemented | General deferred `event emit` buffer (`--defer`, flush on success; 014 does not depend on it) |
-| [016-cue-layer](../specs/016-cue-layer.md) | Approved | Named Forage Cue ingress (`.paseka/cues/`); CLI + Console + Telegram `cue:`; optional per-cue `energy_budget` |
+| [016-cue-layer](../specs/016-cue-layer.md) | Implemented | Named Forage Cue ingress (`.paseka/cues/`); CLI + Console + Telegram `cue:`; optional per-cue `energy_budget` |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

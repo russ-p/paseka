@@ -16,6 +16,7 @@ Docs are grouped by immersion depth. Feature specs under `specs/` are **not** pu
 | -------- | ----------- |
 | [Colony layout](guide/colony-layout.md) | `.paseka/` vs machine-local config, slug, `paseka init` |
 | [CLI](guide/cli.md) | Queen Shell (`paseka`) command reference |
+| [Forage Cues](guide/cues.md) | Named ingress shortcuts (`.paseka/cues/`), CLI, Console, Telegram |
 | [Bee config](guide/bee-config.md) | Bee role YAML schema, adapters, routing fields |
 | [Prompt templates](guide/prompt-templates.md) | `.paseka/prompts/`, `text/template`, partials |
 | [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |

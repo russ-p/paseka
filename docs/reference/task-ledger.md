@@ -68,7 +68,7 @@ When `energyRemaining` reaches `0`, further dispatches set the task to `blocked`
 
 Hard-kill a trace with `paseka kill --trace <id> [--reason …]` (`SIGNAL` / `system.kill`). Sets `killed` on the trace snapshot, cancels non-terminal tasks, stops new dispatches, and cancels in-flight AFK adapter processes. `energy.add` after kill tops up honey but does not redispatch killed tasks. See [Spec 013](../specs/013-system-kill.md).
 
-`energy.add` only increments `energyRemaining`; it does not set `energyBudget`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml`. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
+`energy.add` only increments `energyRemaining`; it does not set `energyBudget`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml`. **Forage Cues** may override the initial seed on a fresh trail with per-cue `energy_budget` (ledger `SeedEnergy`, not `energy.add`) — see [Forage Cues](../guide/cues.md) § Honey. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
 
 ### Review policy
 

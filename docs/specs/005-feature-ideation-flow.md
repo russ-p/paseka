@@ -156,6 +156,8 @@ Runtime and `internal/protocol` own **platform** kinds ([006](./006-human-gatewa
 Until invite→session is wired (or when Beekeeper prefers manual control), Beekeeper may:
 
 ```bash
+paseka cue run feature "Live bees indicator in Console header"
+# or hand-written:
 paseka signal --type SIGNAL --trace "$TRACE" \
   --payload '{"kind":"feature.requested","title":"…","body":"…"}'
 paseka bee run scout --intent intake --trace "$TRACE" --body "Intake the feature.requested on this trail"
@@ -164,7 +166,7 @@ paseka bee chat drone --intent grilling --trace "$TRACE" "Grill: …"
 paseka bee chat drone --intent breakdown --trace "$TRACE" "Break down docs/specs/…"
 ```
 
-Phase 0 still uses the colony event shapes below when emitting by hand so later phases stay compatible. Soft path remains valid even after Human Gateway invites ship.
+Everyday intake: [Forage Cues](../guide/cues.md) (`paseka cue run feature`). Phase 0 still uses the colony event shapes below when emitting by hand so later phases stay compatible. Soft path remains valid even after Human Gateway invites ship.
 
 ## Event payloads
 
@@ -326,7 +328,7 @@ Platform CLI/Console invite UX: [006](./006-human-gateway-invites.md). For this 
 
 | Surface | Colony behavior |
 | ------- | --------------- |
-| Inject idea | Form or `paseka signal` / Console event inject → `feature.requested` |
+| Inject idea | `paseka cue run feature`, Console **Run cue**, Telegram `/feature` (`cue:`), or `paseka signal` / Console event inject → `feature.requested` |
 | Pending grill invite | After `feature.classified` (`decision=grill`) when grill `auto_invites` rule is present |
 | Spec link | On `spec.ready`, timeline shows `ref`; breakdown invite from second rule |
 | Soft path | Phase 0 manual `bee chat` commands (this spec) |
