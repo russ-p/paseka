@@ -147,18 +147,6 @@ General deferred `event emit` buffer ([015](../specs/015-deferred-event-emit.md)
 - **Why deferred:** First 015 ship is the general defer/flush path; 014 scan flush is not a dependency and may land on a different schedule. Coexistence needs both mechanisms present to verify.
 - **Revisit when:** 014 scan flush and 015 deferred emit are both implemented (or one is about to land on top of the other).
 
-### Colony ingress
-
-Named entry points into colony choreography without a workflow DAG executor. Today: raw `paseka signal`, `task create`, and Telegram `commands.custom` `emit: signal` ([010](../specs/010-telegram-human-gateway.md)).
-
-#### Cue layer (`paseka cue run`)
-
-- **Kind:** idea
-- **Source:** [016-cue-layer](../specs/016-cue-layer.md)
-- **Summary:** Design moved to [016](../specs/016-cue-layer.md) (includes per-cue `energy_budget` seed override). Implement when scheduled; remove this backlog row on ship.
-- **Why deferred:** Spec is Approved; not yet in an implementation slot.
-- **Revisit when:** Implementation is scheduled or starts.
-
 ## Assumptions and gotchas
 
 ### Eval colony

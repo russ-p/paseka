@@ -11,8 +11,11 @@
 | Project                 | Colony              |
 | Cluster (если появится) | Federation of Hives |
 | Portable bee pack       | **Nuc**             |
+| Cue                     | **Forage Cue**      |
 
 > **Nuc** — переносимый «пакет пчёл»: bee YAML + prompts в одном файле для заселения другой Colony. Технически: `paseka nuc export|import`. См. [nuc](../guide/nuc.md).
+
+> **Forage Cue** — именованная точка входа в хореографию Colony (`.paseka/cues/<id>.yaml`): публикует `signal` или `task` без DAG-исполнителя. Технически: `paseka cue`, Queen Console **Run cue**, Telegram `cue:`. См. [cues](../guide/cues.md).
 
 ---
 

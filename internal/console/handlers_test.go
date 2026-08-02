@@ -1219,6 +1219,142 @@ func TestTasksAPIHandlers(t *testing.T) {
 	}
 }
 
+func TestCuesAPIHandlers(t *testing.T) {
+	repo := initConsoleRepo(t)
+	writeConsoleCue(t, repo, "alpha.yaml", `description: First cue
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	writeConsoleCue(t, repo, "beta.yaml", `description: Second cue
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	ctxColony := setupConsoleHome(t, repo)
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/cues", nil)
+	listRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listed []console.CueView
+	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].ID != "alpha" || listed[1].ID != "beta" {
+		t.Fatalf("cues = %+v", listed)
+	}
+	if listed[0].Description != "First cue" || listed[1].Description != "Second cue" {
+		t.Fatalf("descriptions = %+v", listed)
+	}
+
+	runReq := httptest.NewRequest(http.MethodPost, "/api/cues/alpha/run", bytes.NewBufferString(`{"text":"OAuth fix"}`))
+	runRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(runRec, runReq)
+	if runRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("run without nats status = %d body=%s", runRec.Code, runRec.Body.String())
+	}
+
+	missingReq := httptest.NewRequest(http.MethodPost, "/api/cues/missing/run", bytes.NewBufferString(`{"text":"hello"}`))
+	missingRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(missingRec, missingReq)
+	if missingRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing cue without nats status = %d body=%s", missingRec.Code, missingRec.Body.String())
+	}
+
+	methodReq := httptest.NewRequest(http.MethodPost, "/api/cues", nil)
+	methodRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(methodRec, methodReq)
+	if methodRec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /api/cues status = %d", methodRec.Code)
+	}
+}
+
+func TestCuesAPIRunWithNATS(t *testing.T) {
+	url := os.Getenv("PASEKA_NATS_URL")
+	if url == "" {
+		url = "nats://127.0.0.1:4222"
+	}
+	repo := initConsoleRepo(t)
+	writeConsoleCue(t, repo, "cheap.yaml", `description: Cheap ingress
+emit: signal
+type: SIGNAL
+kind: feature.requested
+energy_budget: 3
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	ctxColony := setupConsoleHomeWithNATS(t, repo, url)
+	client, err := bus.ConnectColony(ctxColony, true)
+	if err != nil {
+		t.Skipf("nats unavailable: %v", err)
+	}
+	if client == nil {
+		t.Skip("nats url not configured")
+	}
+	defer client.Close()
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	traceID := "trace-console-cue-" + time.Now().Format("150405")
+	runReq := httptest.NewRequest(http.MethodPost, "/api/cues/cheap/run", bytes.NewBufferString(
+		`{"text":"Fix login","traceId":"`+traceID+`"}`,
+	))
+	runRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(runRec, runReq)
+	if runRec.Code != http.StatusCreated {
+		t.Fatalf("run status = %d body=%s", runRec.Code, runRec.Body.String())
+	}
+	var res console.RunCueResponse
+	if err := json.NewDecoder(runRec.Body).Decode(&res); err != nil {
+		t.Fatal(err)
+	}
+	if res.TraceID != traceID || res.Kind != "feature.requested" || res.EventType != "SIGNAL" {
+		t.Fatalf("run response = %+v", res)
+	}
+
+	kv, err := client.JetStream().KeyValue(bus.TaskLedgerBucket(ctxColony.Slug))
+	if err != nil {
+		t.Fatalf("kv: %v", err)
+	}
+	ledger := taskledger.NewKVLedger(kv)
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 3 {
+		t.Fatalf("energy budget = %d, want 3", snap.EnergyBudget)
+	}
+}
+
+func writeConsoleCue(t *testing.T, repo, name, body string) {
+	t.Helper()
+	dir := filepath.Join(repo, ".paseka", "cues")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReviewQueueAPIHandlers(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)

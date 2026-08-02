@@ -196,7 +196,7 @@ func TestHandlerTracesListsRecentTrace(t *testing.T) {
 }
 
 func TestFormatHelpTextIncludesTraces(t *testing.T) {
-	text := tggate.FormatHelpText(tggate.CommandsConfig{})
+	text := tggate.FormatHelpText(tggate.CommandsConfig{}, "")
 	if !strings.Contains(text, "/traces — recent colony traces") {
 		t.Fatalf("missing /traces help line:\n%s", text)
 	}

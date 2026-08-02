@@ -46,6 +46,9 @@ const state = {
   topologyError: '',
   topologyMermaid: '',
   topologyCy: null,
+  cues: [],
+  selectedCueId: null,
+  cueModalOpen: false,
 };
 
 const el = {
@@ -215,6 +218,17 @@ const el = {
   agentsBadge: document.getElementById('agents-badge'),
   agentsMeta: document.getElementById('agents-meta'),
   agentsDetail: document.getElementById('agents-detail'),
+  runCueBtn: document.getElementById('run-cue-btn'),
+  dashboardRunCueBtn: document.getElementById('dashboard-run-cue-btn'),
+  cueModal: document.getElementById('cue-modal'),
+  cueModalClose: document.getElementById('cue-modal-close'),
+  cuePickerList: document.getElementById('cue-picker-list'),
+  cueRunForm: document.getElementById('cue-run-form'),
+  cueTextInput: document.getElementById('cue-text-input'),
+  cueTraceInput: document.getElementById('cue-trace-input'),
+  cueRunBtn: document.getElementById('cue-run-btn'),
+  cueRunError: document.getElementById('cue-run-error'),
+  toastContainer: document.getElementById('toast-container'),
 };
 
 async function api(path, options = {}) {
@@ -1539,6 +1553,125 @@ async function navigateToTrace(traceId) {
   await selectTrace(traceId);
 }
 
+function showToast(message, traceId) {
+  if (!el.toastContainer) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.appendChild(document.createTextNode(message));
+  if (traceId) {
+    toast.appendChild(document.createTextNode(' '));
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'toast-link';
+    link.textContent = traceId;
+    link.addEventListener('click', () => {
+      navigateToTrace(traceId).catch(console.error);
+      toast.remove();
+    });
+    toast.appendChild(link);
+  }
+  el.toastContainer.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 250);
+  }, 8000);
+}
+
+async function loadCues() {
+  state.cues = await api('/api/cues');
+  if (!state.selectedCueId && state.cues.length) {
+    state.selectedCueId = state.cues[0].id;
+  }
+  renderCuePicker();
+}
+
+function renderCuePicker() {
+  if (!el.cuePickerList) return;
+  el.cuePickerList.innerHTML = '';
+  const cues = state.cues || [];
+  if (!cues.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No cues found in .paseka/cues/.';
+    el.cuePickerList.appendChild(li);
+    state.selectedCueId = null;
+    el.cueRunBtn.disabled = true;
+    return;
+  }
+  for (const cue of cues) {
+    const li = document.createElement('li');
+    li.className = 'session-item';
+    if (cue.id === state.selectedCueId) {
+      li.classList.add('selected');
+    }
+    const desc = cue.description ? `<div class="muted" style="font-size:0.85rem;margin-top:0.2rem">${escapeHtml(cue.description)}</div>` : '';
+    li.innerHTML = `<div class="top"><span class="bee">${escapeHtml(cue.id)}</span></div>${desc}`;
+    li.addEventListener('click', () => {
+      state.selectedCueId = cue.id;
+      renderCuePicker();
+      el.cueRunBtn.disabled = !el.cueTextInput.value.trim();
+      el.cueTextInput.focus();
+    });
+    el.cuePickerList.appendChild(li);
+  }
+  el.cueRunBtn.disabled = !state.selectedCueId || !el.cueTextInput.value.trim();
+}
+
+function openCueModal() {
+  if (!el.cueModal) return;
+  state.cueModalOpen = true;
+  el.cueModal.classList.remove('hidden');
+  el.cueRunError.classList.add('hidden');
+  el.cueRunError.textContent = '';
+  el.cueTextInput.value = '';
+  el.cueTraceInput.value = '';
+  state.selectedCueId = null;
+  loadCues().catch((err) => {
+    el.cueRunError.textContent = err.message;
+    el.cueRunError.classList.remove('hidden');
+  });
+  el.cueTextInput.focus();
+}
+
+function closeCueModal() {
+  if (!el.cueModal) return;
+  state.cueModalOpen = false;
+  el.cueModal.classList.add('hidden');
+}
+
+async function runSelectedCue() {
+  if (!state.selectedCueId) return;
+  const text = el.cueTextInput.value.trim();
+  if (!text) {
+    el.cueRunError.textContent = 'Text is required';
+    el.cueRunError.classList.remove('hidden');
+    return;
+  }
+  el.cueRunError.classList.add('hidden');
+  el.cueRunBtn.disabled = true;
+  try {
+    const body = {
+      text,
+      traceId: el.cueTraceInput.value.trim(),
+    };
+    const res = await api(`/api/cues/${encodeURIComponent(state.selectedCueId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    closeCueModal();
+    showToast('Cue published — trace', res.traceId);
+    if (state.tab === 'dashboard') {
+      loadDashboard().catch(console.error);
+    }
+  } catch (err) {
+    el.cueRunError.textContent = err.message;
+    el.cueRunError.classList.remove('hidden');
+  } finally {
+    el.cueRunBtn.disabled = !state.selectedCueId || !el.cueTextInput.value.trim();
+  }
+}
+
 function renderTraces() {
   el.traceList.innerHTML = '';
   if (!state.traces.length) {
@@ -2648,6 +2781,20 @@ el.topologyCopyBtn.addEventListener('click', () => {
 
 el.dashboardRefreshBtn.addEventListener('click', () => {
   loadDashboard().catch(console.error);
+});
+
+el.runCueBtn?.addEventListener('click', () => openCueModal());
+el.dashboardRunCueBtn?.addEventListener('click', () => openCueModal());
+el.cueModalClose?.addEventListener('click', () => closeCueModal());
+el.cueModal?.addEventListener('click', (ev) => {
+  if (ev.target === el.cueModal) closeCueModal();
+});
+el.cueTextInput?.addEventListener('input', () => {
+  el.cueRunBtn.disabled = !state.selectedCueId || !el.cueTextInput.value.trim();
+});
+el.cueRunForm?.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  runSelectedCue().catch(console.error);
 });
 
 el.tracesRefreshBtn.addEventListener('click', () => {

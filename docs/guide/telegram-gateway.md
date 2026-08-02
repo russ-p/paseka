@@ -66,11 +66,14 @@ commands:
   custom:
     feature:
       description: "Intake idea/bug via Scout"
+      cue: feature              # preferred — loads .paseka/cues/feature.yaml
+    legacy:
+      description: "Inline emit (still supported)"
       emit: signal
       type: SIGNAL
       kind: feature.requested
       static:
-        priority: medium          # optional extra payload fields
+        priority: medium
 console_base_url: ""              # optional; e.g. Tailscale URL to Queen Console
 ```
 
@@ -83,24 +86,25 @@ console_base_url: ""              # optional; e.g. Tailscale URL to Queen Consol
 | `mode` | no | Default `longpoll`. `webhook` is rejected at runtime until V2 |
 | `notify.*` | no | Per-category push mode: `off`, `silent` (no sound), or `sound` (default for most). Legacy `waiting_review` maps to `review_required` + `review_final`. See example above. |
 | `commands.*` | no | Defaults: bee `builder`, intent `general`, review `none`, autorun `true` |
-| `commands.custom.<name>` | no | Custom slash commands that publish bus `SIGNAL` events (`emit: signal` only). See below. |
+| `commands.custom.<name>` | no | Custom slash commands — `cue: <id>` (preferred) or inline `emit: signal`. See below. |
 | `console_base_url` | no | When set, cards may include a Console deep-link |
 
-### Custom `emit: signal` commands
+### Custom commands (`cue:` or inline `emit`)
 
-Use `commands.custom` for colony choreography entry points (e.g. Scout intake on `feature.requested`). Each command:
+Use `commands.custom` for colony choreography entry points. Each command maps to `/name <text>` in Telegram (preview + Confirm, like `/task`). AFK dispatch needs `paseka run` (see [bee routing](../reference/bee-routing.md) §4).
 
-- Maps to `/name <text>` in Telegram (preview + Confirm, like `/task`)
-- Publishes one `SIGNAL` on a **new** `traceId` with `agentId: telegram`
-- Does **not** run bees itself — AFK dispatch needs `paseka run` (see [bee routing](../reference/bee-routing.md) §4)
+**Preferred — Forage Cue** (`cue: <id>`): loads `.paseka/cues/<id>.yaml` from the colony repo. One definition shared with `paseka cue` and Queen Console **Run cue**. See [Forage Cues](cues.md).
 
 | Field | Required | Notes |
 | ----- | -------- | ----- |
-| `description` | yes | Shown in `/help` and preview |
-| `emit` | yes | Must be `signal` |
-| `type` | yes | Must be `SIGNAL` |
-| `kind` | yes | `payload.kind` (e.g. `feature.requested`) |
-| `static` | no | Extra string fields merged into payload |
+| `description` | yes* | Shown in `/help` and preview (*optional when `cue` is set — falls back to cue `description`) |
+| `cue` | yes* | Cue id (alternative to inline emit below) |
+| `emit` | yes* | Must be `signal` when not using `cue` |
+| `type` | yes* | Must be `SIGNAL` when inline |
+| `kind` | yes* | `payload.kind` (e.g. `feature.requested`) when inline |
+| `static` | no | Extra string fields merged into payload (inline only) |
+
+**Legacy — inline `emit: signal`:** same behavior as before [016](../specs/016-cue-layer.md); migration to `cue:` is optional.
 
 Reserved names: `start`, `status`, `help`, `invites`, `traces`, `energy`, `task`.
 

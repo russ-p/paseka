@@ -73,6 +73,18 @@ header {
   flex-wrap: wrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .runtime-panel,
 .agents-panel {
   min-width: 220px;
@@ -1009,4 +1021,87 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 #transcript-wrap.inactive-only {
   margin-top: 0.75rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(8, 10, 16, 0.72);
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal-panel {
+  width: min(100%, 32rem);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.cue-picker-list {
+  margin-bottom: 1rem;
+}
+
+.cue-picker-list .session-item.selected {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.cue-picker-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.cue-run-form label {
+  margin-bottom: 0.65rem;
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(100vw - 2rem, 28rem);
+}
+
+.toast {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #1a2030;
+  color: var(--text);
+  font-size: 0.9rem;
+  opacity: 0;
+  transform: translateY(0.5rem);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }

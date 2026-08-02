@@ -58,5 +58,13 @@ func (d Document) Validate() error {
 			return err
 		}
 	}
+	for id, body := range d.Spec.Cues {
+		if err := validateCueID(id); err != nil {
+			return err
+		}
+		if strings.TrimSpace(body) == "" {
+			return fmt.Errorf("nuc: cue %q body is empty", id)
+		}
+	}
 	return nil
 }

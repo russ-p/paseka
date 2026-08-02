@@ -6,6 +6,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/cues"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
 )
@@ -99,7 +100,7 @@ func FormatStatus(s Snapshot) string {
 }
 
 // FormatHelpText renders the /help response body including configured custom commands.
-func FormatHelpText(commands CommandsConfig) string {
+func FormatHelpText(commands CommandsConfig, colonyRoot string) string {
 	lines := []string{
 		"Paseka Human Gateway",
 		"",
@@ -117,14 +118,29 @@ func FormatHelpText(commands CommandsConfig) string {
 	sortCustomCommandNames(names)
 	for _, name := range names {
 		cmd := commands.Custom[name]
-		desc := strings.TrimSpace(cmd.Description)
-		if desc == "" {
-			desc = fmt.Sprintf("publish SIGNAL/%s", strings.TrimSpace(cmd.Kind))
-		}
+		desc := CustomCommandHelpDescription(cmd, colonyRoot)
 		lines = append(lines, fmt.Sprintf("/%s <text> — %s", name, desc))
 	}
 	lines = append(lines, "/help — this message")
 	return strings.Join(lines, "\n")
+}
+
+// CustomCommandHelpDescription prefers gate description, then cue description, then a generic fallback.
+func CustomCommandHelpDescription(cmd CustomCommandConfig, colonyRoot string) string {
+	if desc := strings.TrimSpace(cmd.Description); desc != "" {
+		return desc
+	}
+	if cmd.UsesCue() {
+		if colonyRoot != "" {
+			if cue, err := cues.Load(colonyRoot, cmd.CueID()); err == nil {
+				if desc := strings.TrimSpace(cue.Description); desc != "" {
+					return desc
+				}
+			}
+		}
+		return fmt.Sprintf("run cue %s", cmd.CueID())
+	}
+	return fmt.Sprintf("publish SIGNAL/%s", strings.TrimSpace(cmd.Kind))
 }
 
 func sortCustomCommandNames(names []string) {

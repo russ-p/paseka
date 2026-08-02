@@ -91,12 +91,24 @@ type CommandsConfig struct {
 }
 
 // CustomCommandConfig declares a Telegram slash command that publishes a bus event.
+// Use either inline emit/type/kind or cue: <id> referencing .paseka/cues/<id>.yaml.
 type CustomCommandConfig struct {
 	Description string            `yaml:"description"`
+	Cue         string            `yaml:"cue,omitempty"`
 	Emit        string            `yaml:"emit"`
 	Type        string            `yaml:"type"`
 	Kind        string            `yaml:"kind"`
 	Static      map[string]string `yaml:"static,omitempty"`
+}
+
+// UsesCue reports whether the command delegates to a colony Forage Cue.
+func (c CustomCommandConfig) UsesCue() bool {
+	return strings.TrimSpace(c.Cue) != ""
+}
+
+// CueID returns the configured cue id.
+func (c CustomCommandConfig) CueID() string {
+	return strings.TrimSpace(c.Cue)
 }
 
 // WebhookConfig is optional webhook transport settings.
@@ -189,6 +201,12 @@ func (c CommandsConfig) validateCustom() error {
 		if !customCommandNamePattern.MatchString(name) {
 			return fmt.Errorf("telegram gate: commands.custom.%s: invalid command name (use lowercase letters, digits, underscore; max 32 chars)", name)
 		}
+		if cmd.UsesCue() {
+			if err := validateCustomCueCommand(name, cmd); err != nil {
+				return err
+			}
+			continue
+		}
 		if strings.TrimSpace(cmd.Description) == "" {
 			return fmt.Errorf("telegram gate: commands.custom.%s: description is required", name)
 		}
@@ -203,6 +221,23 @@ func (c CommandsConfig) validateCustom() error {
 		if strings.TrimSpace(cmd.Kind) == "" {
 			return fmt.Errorf("telegram gate: commands.custom.%s: kind is required", name)
 		}
+	}
+	return nil
+}
+
+func validateCustomCueCommand(name string, cmd CustomCommandConfig) error {
+	cueID := cmd.CueID()
+	if cueID == "" {
+		return fmt.Errorf("telegram gate: commands.custom.%s: cue id is required", name)
+	}
+	if !customCommandNamePattern.MatchString(cueID) {
+		return fmt.Errorf("telegram gate: commands.custom.%s: invalid cue id %q (use lowercase letters, digits, underscore; max 32 chars)", name, cueID)
+	}
+	if strings.TrimSpace(cmd.Emit) != "" || strings.TrimSpace(cmd.Type) != "" || strings.TrimSpace(cmd.Kind) != "" {
+		return fmt.Errorf("telegram gate: commands.custom.%s: use either cue or inline emit/type/kind, not both", name)
+	}
+	if len(cmd.Static) > 0 {
+		return fmt.Errorf("telegram gate: commands.custom.%s: static is only valid with inline emit", name)
 	}
 	return nil
 }

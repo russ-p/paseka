@@ -19,6 +19,9 @@
         <p class="colony-identity" id="colony-identity" hidden></p>
         <p class="subtitle" id="subtitle">Sessions — launch, attach, and observe interactive bees</p>
       </div>
+      <div class="header-actions">
+        <button type="button" id="run-cue-btn" class="secondary">Run cue</button>
+      </div>
       <div class="header-panels">
         <section class="runtime-panel" id="runtime-panel" aria-label="Hive runtime">
           <div class="runtime-status">
@@ -57,7 +60,10 @@
     <section class="panel dashboard-panel">
       <div class="panel-header">
         <h2>Colony snapshot</h2>
-        <button type="button" id="dashboard-refresh-btn" class="secondary">Refresh</button>
+        <div class="panel-header-actions">
+          <button type="button" id="dashboard-run-cue-btn" class="secondary">Run cue</button>
+          <button type="button" id="dashboard-refresh-btn" class="secondary">Refresh</button>
+        </div>
       </div>
       <div class="stat-grid" id="dashboard-stats"></div>
       <div class="dashboard-sections">
@@ -473,6 +479,31 @@
       <div id="topology-diagram" class="topology-diagram" aria-label="Colony topology diagram"></div>
     </section>
   </main>
+
+  <div id="cue-modal" class="modal-overlay hidden" role="dialog" aria-labelledby="cue-modal-title" aria-modal="true">
+    <div class="modal-panel cue-modal-panel">
+      <div class="panel-header">
+        <h2 id="cue-modal-title">Run cue</h2>
+        <button type="button" id="cue-modal-close" class="secondary">Close</button>
+      </div>
+      <p class="muted cue-picker-hint">Select a cue mnemonic, enter text, then run.</p>
+      <ul id="cue-picker-list" class="session-list cue-picker-list"></ul>
+      <form id="cue-run-form" class="cue-run-form">
+        <label>
+          Text
+          <textarea id="cue-text-input" rows="3" placeholder="Cue text (title + body)" required></textarea>
+        </label>
+        <label>
+          Trace ID <span class="hint">(optional)</span>
+          <input type="text" id="cue-trace-input" placeholder="new trail when omitted">
+        </label>
+        <button type="submit" id="cue-run-btn" disabled>Run cue</button>
+        <p id="cue-run-error" class="error hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>

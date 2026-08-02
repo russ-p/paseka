@@ -55,6 +55,8 @@ func TestInitScaffold(t *testing.T) {
 		".paseka/prompts/_partials/emit-signal.md",
 		".paseka/prompts/_partials/emit-verification.md",
 		".paseka/prompts/_partials/emit-task-completed.md",
+		".paseka/cues/feature.yaml",
+		".paseka/cues/hotfix.yaml",
 	} {
 		if _, err := os.Stat(filepath.Join(repo, rel)); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)

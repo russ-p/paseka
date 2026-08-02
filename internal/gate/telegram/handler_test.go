@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -284,6 +285,63 @@ func TestHandlerCustomSignalShowsPreview(t *testing.T) {
 	}
 	if msg.ReplyMarkup == nil {
 		t.Fatal("expected confirm keyboard")
+	}
+}
+
+func TestHandlerCustomCueShowsPreview(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	repo := initTestRepo(t)
+	ctxColony, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &mockBot{}
+	h := &tggate.Handler{
+		Colony: ctxColony,
+		Config: tggate.Config{
+			AllowFrom: []int64{1},
+			ChatIDs:   []int64{-100},
+			Commands: tggate.CommandsConfig{
+				Custom: map[string]tggate.CustomCommandConfig{
+					"feature": {
+						Cue: "feature",
+					},
+				},
+			},
+		},
+		Bot: bot,
+		Signals: &tggate.SignalActions{
+			Colony: ctxColony,
+			Config: tggate.Config{Commands: tggate.CommandsConfig{Custom: map[string]tggate.CustomCommandConfig{
+				"feature": {Cue: "feature"},
+			}}},
+			Bot:     bot,
+			Pending: tggate.NewPendingSignals(),
+		},
+	}
+	update := tgbotapi.Update{
+		Message: &tgbotapi.Message{
+			Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}},
+			Text:     "/feature Add OAuth callback",
+			Chat:     &tgbotapi.Chat{ID: -100},
+			From:     &tgbotapi.User{ID: 1},
+		},
+	}
+	h.HandleUpdate(context.Background(), update)
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected preview card, got %d sends", len(bot.sent))
+	}
+	msg, ok := bot.sent[0].(tgbotapi.MessageConfig)
+	if !ok {
+		t.Fatalf("expected MessageConfig, got %T", bot.sent[0])
+	}
+	if msg.ReplyMarkup == nil {
+		t.Fatal("expected confirm keyboard")
+	}
+	if !strings.Contains(msg.Text, "Cue: feature") {
+		t.Fatalf("expected cue preview, got:\n%s", msg.Text)
 	}
 }
 

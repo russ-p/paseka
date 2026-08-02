@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Forage Cues (cue layer)
+
+Named colony ingress shortcuts (`.paseka/cues/<id>.yaml`) publish `signal` or `task` choreography without hand-writing emit JSON. One definition drives Queen Shell (`paseka cue list|run`), Queen Console **Run cue** (`GET/POST /api/cues`), and Telegram `commands.custom` with `cue: <id>`. Optional per-cue `energy_budget` seeds a smaller initial honey reserve on fresh trails; `paseka init` scaffolds `feature` and `hotfix`. Nuc export/import includes cues with `--cues` filter.
+
+- Spec: [016-cue-layer](../specs/016-cue-layer.md)
+- Canonical: [Forage Cues](guide/cues.md), [CLI](guide/cli.md) (`paseka cue`), [Telegram gateway](guide/telegram-gateway.md), [Colony layout](guide/colony-layout.md), [Nuc packs](guide/nuc.md), [Task ledger](reference/task-ledger.md)
+
 ## 2026-07 — Deferred event emit buffer
 
 Bees can stage bus events until a run or session completes successfully. `paseka event emit --defer` validates and appends to per-run `pending.ndjson`; runtime flushes FIFO on success (before `run.summary` synthesis). Operators inspect with `paseka event pending` and recover with `paseka event flush` or `--discard`. Platform control kinds (`system.kill`, `energy.*`, `session.invite`, `beekeeper.ready`, `task.status`) are live-only.

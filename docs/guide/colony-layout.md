@@ -34,6 +34,9 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │   ├── _partials/       # shared snippets (JSON contract, tone, etc.)
 │   ├── scout.md
 │   └── builder.md
+├── cues/                # Forage Cue ingress shortcuts (committed); see [cues](cues.md)
+│   ├── feature.yaml
+│   └── hotfix.yaml
 ├── .gitignore           # ignores worktrees/, runs/, cache/, *.local.yaml
 ├── runs/                # gitignored — per-agent file IPC (architecture overview)
 │   └── <traceId>/
@@ -61,7 +64,7 @@ defaults:
   default_bee: builder                 # task role when task.bee is omitted
 ```
 
-Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`.
+Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`. Per-cue **initial** reserve overrides on fresh trails: [Forage Cues](cues.md) § Honey.
 
 Example sectors for monorepos or git-submodule layouts:
 
@@ -162,6 +165,7 @@ paseka init [--adapter cursor|pi]
   ├─► create .paseka/colony.yaml (defaults)
   ├─► create .paseka/prompts/ with starter templates (scout, builder, hivewright)
   ├─► create .paseka/bees/ with starter bees (scout, builder, hivewright) for the selected adapter
+  ├─► create .paseka/cues/ with starter cues (feature, hotfix) when missing
   ├─► create .paseka/.gitignore (worktrees/, runs/, *.local.yaml, cache/)
   ├─► create ~/.config/paseka/<slug>/config.yaml
   ├─► create ~/.config/paseka/<slug>/state.json (empty)
