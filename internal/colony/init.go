@@ -95,6 +95,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 	for _, d := range []string{
 		PasekaPath(root, "bees"),
 		PasekaPath(root, "prompts", "_partials"),
+		PasekaPath(root, "cues"),
 	} {
 		if err := mkdirAll(d); err != nil {
 			return err
@@ -129,6 +130,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "_partials", "scout-intent-intake.md"):        scoutIntentIntakePartial,
 		PasekaPath(root, "prompts", "_partials", "scout-emit-intake.md"):          scoutEmitIntakePartial,
 		PasekaPath(root, "prompts", "_partials", "cursor-interactive-kickoff.md"): cursorInteractiveKickoffPartial,
+		PasekaPath(root, "cues", "feature.yaml"):                                  featureCueYAML,
 	}
 
 	for path, content := range files {
@@ -779,5 +781,12 @@ publishes:
 `
 	piAdapterYAML = `binary: pi
 # api_key_env: GEMINI_API_KEY   # optional; passed as --api-key when set in env
+`
+	featureCueYAML = `description: Intake an idea or bug for Scout classification
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
 `
 )
