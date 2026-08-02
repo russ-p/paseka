@@ -20,7 +20,7 @@ type Cue struct {
 	TitleTemplate   string
 	BodyTemplate    string
 	PayloadTemplate string
-	// Task fields (validated on load; run supports signal only in this slice).
+	// Task fields (validated on load; used when emit is task).
 	Bee     string
 	Intent  string
 	Review  string

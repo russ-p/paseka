@@ -131,6 +131,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 		PasekaPath(root, "prompts", "_partials", "scout-emit-intake.md"):          scoutEmitIntakePartial,
 		PasekaPath(root, "prompts", "_partials", "cursor-interactive-kickoff.md"): cursorInteractiveKickoffPartial,
 		PasekaPath(root, "cues", "feature.yaml"):                                  featureCueYAML,
+		PasekaPath(root, "cues", "hotfix.yaml"):                                   hotfixCueYAML,
 	}
 
 	for path, content := range files {
@@ -786,6 +787,17 @@ publishes:
 emit: signal
 type: SIGNAL
 kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
+`
+
+	hotfixCueYAML = `description: Urgent fix via builder (small honey reserve)
+emit: task
+bee: builder
+intent: bugfix
+review: none
+autorun: true
+energy_budget: 3
 title: "{{.Title}}"
 body: "{{.Body}}"
 `

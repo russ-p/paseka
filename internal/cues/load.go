@@ -14,7 +14,7 @@ import (
 type rawCue struct {
 	Description     string            `yaml:"description"`
 	Emit            string            `yaml:"emit"`
-	EnergyBudget    int               `yaml:"energy_budget"`
+	EnergyBudget    *int              `yaml:"energy_budget"`
 	Type            string            `yaml:"type"`
 	Kind            string            `yaml:"kind"`
 	Static          map[string]string `yaml:"static"`
@@ -110,15 +110,16 @@ func validateCue(id string, raw rawCue) (Cue, error) {
 	default:
 		return Cue{}, fmt.Errorf("cue %q: emit must be signal or task", id)
 	}
-	if raw.EnergyBudget < 0 {
-		return Cue{}, fmt.Errorf("cue %q: energy_budget must be a positive integer", id)
+	if raw.EnergyBudget != nil {
+		if *raw.EnergyBudget <= 0 {
+			return Cue{}, fmt.Errorf("cue %q: energy_budget must be a positive integer", id)
+		}
 	}
 
 	cue := Cue{
 		ID:              id,
 		Description:     strings.TrimSpace(raw.Description),
 		Emit:            emit,
-		EnergyBudget:    raw.EnergyBudget,
 		Static:          copyStringMap(raw.Static),
 		TitleTemplate:   strings.TrimSpace(raw.Title),
 		BodyTemplate:    strings.TrimSpace(raw.Body),
@@ -127,6 +128,9 @@ func validateCue(id string, raw rawCue) (Cue, error) {
 		Intent:          strings.TrimSpace(raw.Intent),
 		Review:          strings.TrimSpace(raw.Review),
 		Autorun:         raw.Autorun,
+	}
+	if raw.EnergyBudget != nil {
+		cue.EnergyBudget = *raw.EnergyBudget
 	}
 
 	switch emit {

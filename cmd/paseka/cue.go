@@ -94,11 +94,14 @@ func newCueRunCmd() *cobra.Command {
 
 			fmt.Printf("Published %s/%s\n", res.EventType, res.Kind)
 			fmt.Printf("Trace: %s\n", res.TraceID)
+			if res.TaskID != "" {
+				fmt.Printf("Task: %s\n", res.TaskID)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().StringVar(&traceID, "trace", "", "attach publish to an existing flight trail (new trace when omitted)")
+	cmd.Flags().StringVar(&traceID, "trace", "", "attach publish to an existing flight trail (new trace when omitted; cue energy_budget is ignored when the trail is already seeded)")
 	cmd.Flags().StringArrayVar(&setFlags, "set", nil, "template variable override (key=val, repeatable)")
 	return cmd
 }
