@@ -145,6 +145,89 @@ commands:
 	}
 }
 
+func TestLoadAcceptsCustomCueCommand(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    feature:
+      description: "Intake idea/bug via Scout"
+      cue: feature
+`)
+	cfg, err := tggate.Load("tg-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd, ok := cfg.Commands.CustomCommand("feature")
+	if !ok {
+		t.Fatal("expected feature custom command")
+	}
+	if !cmd.UsesCue() || cmd.CueID() != "feature" {
+		t.Fatalf("cue command = %+v", cmd)
+	}
+}
+
+func TestLoadAcceptsCueWithoutGateDescription(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    feature:
+      cue: feature
+`)
+	cfg, err := tggate.Load("tg-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd, ok := cfg.Commands.CustomCommand("feature")
+	if !ok {
+		t.Fatal("expected feature custom command")
+	}
+	if cmd.CueID() != "feature" {
+		t.Fatalf("cue id = %q", cmd.CueID())
+	}
+}
+
+func TestLoadRejectsCueWithInlineEmit(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    feature:
+      description: "Intake"
+      cue: feature
+      emit: signal
+      type: SIGNAL
+      kind: feature.requested
+`)
+	_, err := tggate.Load("tg-test")
+	if err == nil {
+		t.Fatal("expected error for cue with inline emit")
+	}
+}
+
+func TestLoadRejectsReservedCustomCueCommandName(t *testing.T) {
+	writeTelegramYAML(t, "tg-test", `enabled: true
+bot_token: "tok"
+allow_from: [1]
+chat_ids: [-1]
+commands:
+  custom:
+    task:
+      cue: hotfix
+`)
+	_, err := tggate.Load("tg-test")
+	if err == nil {
+		t.Fatal("expected error for reserved custom command name with cue")
+	}
+}
+
 func TestLoadAcceptsCustomSignalCommand(t *testing.T) {
 	writeTelegramYAML(t, "tg-test", `enabled: true
 bot_token: "tok"

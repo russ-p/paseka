@@ -9,6 +9,8 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/cues"
+	"github.com/paseka/paseka/internal/tasks"
 )
 
 const maxSignalTitleLen = 200
@@ -87,11 +89,63 @@ func (a *SignalActions) HandleCommand(ctx context.Context, chatID int64, command
 		a.sendText(chatID, 0, "signal preview failed: "+err.Error())
 		return
 	}
-	body := FormatSignalPreview(cmd, text)
+	body, err := a.formatPreview(cmd, text)
+	if err != nil {
+		a.sendText(chatID, 0, "signal preview failed: "+err.Error())
+		return
+	}
 	keyboard := signalPreviewKeyboard(pendingID)
 	msg := tgbotapi.NewMessage(chatID, body)
 	msg.ReplyMarkup = keyboard
 	_, _ = a.Bot.Send(msg)
+}
+
+func (a *SignalActions) formatPreview(cmd CustomCommandConfig, text string) (string, error) {
+	if cmd.UsesCue() {
+		cue, err := cues.Load(a.Colony.ColonyRoot, cmd.CueID())
+		if err != nil {
+			return "", err
+		}
+		return FormatCuePreview(cue, text), nil
+	}
+	return FormatSignalPreview(cmd, text), nil
+}
+
+// FormatCuePreview renders the cue-based confirm card body.
+func FormatCuePreview(cue cues.Cue, text string) string {
+	lines := []string{
+		"Cue preview",
+		fmt.Sprintf("Cue: %s", cue.ID),
+	}
+	if desc := strings.TrimSpace(cue.Description); desc != "" {
+		lines = append(lines, fmt.Sprintf("Description: %s", desc))
+	}
+	switch cue.Emit {
+	case cues.EmitSignal:
+		lines = append(lines,
+			fmt.Sprintf("Type: %s", cue.SignalType),
+			fmt.Sprintf("Kind: %s", cue.SignalKind),
+		)
+	case cues.EmitTask:
+		lines = append(lines,
+			fmt.Sprintf("Bee: %s", cue.Bee),
+			fmt.Sprintf("Intent: %s", cue.Intent),
+		)
+		if review := strings.TrimSpace(cue.Review); review != "" {
+			lines = append(lines, fmt.Sprintf("Review: %s", review))
+		}
+		autorunLabel := "no"
+		if cue.Autorun {
+			autorunLabel = "yes"
+		}
+		lines = append(lines, fmt.Sprintf("Autorun: %s", autorunLabel))
+	}
+	lines = append(lines,
+		fmt.Sprintf("Text: %s", truncateText(text, maxTaskPreviewLen)),
+		"",
+		"Confirm to publish on a new trace.",
+	)
+	return strings.Join(lines, "\n")
 }
 
 // FormatSignalPreview renders the custom signal confirm card body.
@@ -116,7 +170,7 @@ func signalPreviewKeyboard(pendingID string) tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
-// Confirm publishes the configured SIGNAL for a pending preview.
+// Confirm publishes the configured SIGNAL or cue for a pending preview.
 func (a *SignalActions) Confirm(ctx context.Context, chatID int64, messageID int, pendingID string) {
 	pending, ok := a.pending().Take(pendingID)
 	if !ok {
@@ -126,6 +180,10 @@ func (a *SignalActions) Confirm(ctx context.Context, chatID int64, messageID int
 	cmd, ok := a.Config.Commands.CustomCommand(pending.Command)
 	if !ok {
 		a.sendText(chatID, messageID, "signal publish failed: command config missing")
+		return
+	}
+	if cmd.UsesCue() {
+		a.confirmCue(ctx, chatID, messageID, cmd, pending.Text)
 		return
 	}
 	traceID, err := colony.NewTraceID()
@@ -159,6 +217,35 @@ func (a *SignalActions) Confirm(ctx context.Context, chatID int64, messageID int
 		return
 	}
 	msg := fmt.Sprintf("Published SIGNAL/%s\nTrace: %s", strings.TrimSpace(cmd.Kind), traceID)
+	a.sendText(chatID, messageID, msg)
+}
+
+func (a *SignalActions) confirmCue(ctx context.Context, chatID int64, messageID int, cmd CustomCommandConfig, text string) {
+	session, err := tasks.OpenLedger(a.Colony)
+	if err != nil {
+		a.sendText(chatID, messageID, "cue publish failed: "+err.Error())
+		return
+	}
+	defer session.Close()
+	if session.Client == nil {
+		a.sendText(chatID, messageID, "cue publish failed: nats url not configured")
+		return
+	}
+	res, err := cues.Run(ctx, session.Client, session.Ledger, cues.RunInput{
+		ColonyRoot: a.Colony.ColonyRoot,
+		CueID:      cmd.CueID(),
+		Text:       text,
+		Source:     "telegram",
+		AgentID:    "telegram",
+	})
+	if err != nil {
+		a.sendText(chatID, messageID, "cue publish failed: "+err.Error())
+		return
+	}
+	msg := fmt.Sprintf("Published %s/%s\nTrace: %s", res.EventType, res.Kind, res.TraceID)
+	if res.TaskID != "" {
+		msg += fmt.Sprintf("\nTask: %s", res.TaskID)
+	}
 	a.sendText(chatID, messageID, msg)
 }
 

@@ -268,7 +268,7 @@ func (h *Handler) sendStatus(chatID int64, editMessageID int) {
 }
 
 func (h *Handler) sendHelp(chatID int64) {
-	h.sendPlain(chatID, 0, FormatHelpText(h.Config.Commands))
+	h.sendPlain(chatID, 0, FormatHelpText(h.Config.Commands, h.Colony.ColonyRoot))
 }
 
 func (h *Handler) sendPlain(chatID int64, editMessageID int, text string) {
