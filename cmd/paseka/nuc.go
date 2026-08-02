@@ -28,31 +28,26 @@ func newNucExportCmd() *cobra.Command {
 		startDir    string
 		outPath     string
 		beesFilter  string
+		cuesFilter  string
 		name        string
 		description string
 	)
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export colony bees and prompts into a nuc file",
+		Short: "Export colony bees, prompts, and cues into a nuc file",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := colony.ResolveContext(startDir)
 			if err != nil {
 				return err
 			}
-			var bees []string
-			if beesFilter != "" {
-				for _, part := range strings.Split(beesFilter, ",") {
-					part = strings.TrimSpace(part)
-					if part != "" {
-						bees = append(bees, part)
-					}
-				}
-			}
+			bees := splitCommaList(beesFilter)
+			cues := splitCommaList(cuesFilter)
 			doc, err := nuc.ExportFromColony(nuc.ExportOptions{
 				ColonyRoot:  ctx.ColonyRoot,
 				Name:        name,
 				Description: description,
 				Bees:        bees,
+				Cues:        cues,
 			})
 			if err != nil {
 				return err
@@ -75,6 +70,7 @@ func newNucExportCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVarP(&outPath, "output", "o", "", "write nuc file (default: stdout)")
 	cmd.Flags().StringVar(&beesFilter, "bees", "", "comma-separated bee roles to export (default: all)")
+	cmd.Flags().StringVar(&cuesFilter, "cues", "", "comma-separated cue ids to export (default: all when present)")
 	cmd.Flags().StringVar(&name, "name", "", "nuc metadata.name (default: colony slug)")
 	cmd.Flags().StringVar(&description, "description", "", "nuc metadata.description")
 	return cmd
@@ -117,10 +113,24 @@ func newNucImportCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing bee and prompt files")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing bee, prompt, and cue files")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show import plan without writing files")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "list created, skipped, and overwritten paths")
 	return cmd
+}
+
+func splitCommaList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func readNucSource(source string) ([]byte, error) {

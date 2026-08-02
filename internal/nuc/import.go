@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/cues"
 )
 
 type fileAction string
@@ -63,10 +64,32 @@ func Import(doc Document, opts ImportOptions) (ImportResult, error) {
 		appendAction(&res, action, dest)
 	}
 
+	cuesDir := cues.Dir(opts.ColonyRoot)
+	cueIDs := make([]string, 0, len(doc.Spec.Cues))
+	for id := range doc.Spec.Cues {
+		cueIDs = append(cueIDs, id)
+	}
+	sort.Strings(cueIDs)
+
+	for _, id := range cueIDs {
+		body := doc.Spec.Cues[id]
+		dest := filepath.Join(cuesDir, id+".yaml")
+		action, err := writeColonyFile(dest, []byte(body), opts.Force, opts.DryRun)
+		if err != nil {
+			return res, fmt.Errorf("nuc: cue %q: %w", id, err)
+		}
+		appendAction(&res, action, dest)
+	}
+
 	if !opts.DryRun {
 		for _, role := range roles {
 			if _, _, err := colony.LoadBee(opts.ColonyRoot, role); err != nil {
 				return res, fmt.Errorf("nuc: validate bee %q after import: %w", role, err)
+			}
+		}
+		for _, id := range cueIDs {
+			if _, err := cues.Load(opts.ColonyRoot, id); err != nil {
+				return res, fmt.Errorf("nuc: validate cue %q after import: %w", id, err)
 			}
 		}
 	}

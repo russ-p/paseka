@@ -20,6 +20,17 @@ func validateBeeRole(role string) error {
 	return nil
 }
 
+func validateCueID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("nuc: cue id is required")
+	}
+	if strings.Contains(id, "/") || strings.Contains(id, "\\") || strings.Contains(id, "..") {
+		return fmt.Errorf("nuc: invalid cue id %q", id)
+	}
+	return nil
+}
+
 func validatePromptPath(ref string) error {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {

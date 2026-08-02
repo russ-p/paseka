@@ -49,6 +49,15 @@ func TestRoundTripExportImport(t *testing.T) {
 			t.Fatalf("prompt %q mismatch", ref)
 		}
 	}
+	for id, wantBody := range doc.Spec.Cues {
+		got, err := os.ReadFile(filepath.Join(importRoot, ".paseka", "cues", id+".yaml"))
+		if err != nil {
+			t.Fatalf("read cue %q: %v", id, err)
+		}
+		if string(got) != wantBody {
+			t.Fatalf("cue %q mismatch:\nwant:\n%s\ngot:\n%s", id, wantBody, got)
+		}
+	}
 }
 
 func TestImportSkipVsForce(t *testing.T) {
@@ -154,6 +163,47 @@ func TestExportBeesFilter(t *testing.T) {
 	}
 }
 
+func TestExportCuesFilter(t *testing.T) {
+	src := setupNucFixture(t)
+
+	doc, err := nuc.ExportFromColony(nuc.ExportOptions{
+		ColonyRoot: src,
+		Name:       "filtered",
+		Cues:       []string{"feature"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Spec.Cues) != 1 {
+		t.Fatalf("cues: %+v", doc.Spec.Cues)
+	}
+	if _, ok := doc.Spec.Cues["feature"]; !ok {
+		t.Fatal("expected feature only")
+	}
+	if _, ok := doc.Spec.Cues["hotfix"]; ok {
+		t.Fatal("hotfix should be filtered out")
+	}
+}
+
+func TestExportIncludesAllCuesByDefault(t *testing.T) {
+	src := setupNucFixture(t)
+
+	doc, err := nuc.ExportFromColony(nuc.ExportOptions{
+		ColonyRoot: src,
+		Name:       "all-cues",
+		Bees:       []string{"scout"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Spec.Bees) != 1 {
+		t.Fatalf("bees: %+v", doc.Spec.Bees)
+	}
+	if len(doc.Spec.Cues) != 2 {
+		t.Fatalf("expected both cues, got %+v", doc.Spec.Cues)
+	}
+}
+
 func setupNucFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -163,6 +213,24 @@ func setupNucFixture(t *testing.T) string {
 	mustWrite(t, filepath.Join(root, ".paseka", "prompts", "scout.md"), "scout prompt\n")
 	mustWrite(t, filepath.Join(root, ".paseka", "prompts", "builder.md"), "builder prompt\n")
 	mustWrite(t, filepath.Join(root, ".paseka", "prompts", "_partials", "emit-howto.md"), "emit howto\n")
+	mustMkdir(t, filepath.Join(root, ".paseka", "cues"))
+	mustWrite(t, filepath.Join(root, ".paseka", "cues", "feature.yaml"), `description: Feature intake
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	mustWrite(t, filepath.Join(root, ".paseka", "cues", "hotfix.yaml"), `description: Hotfix task
+emit: task
+bee: builder
+intent: bugfix
+review: none
+autorun: true
+energy_budget: 3
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
 	return root
 }
 

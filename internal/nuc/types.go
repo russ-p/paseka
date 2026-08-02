@@ -23,6 +23,7 @@ type Metadata struct {
 type Spec struct {
 	Bees    map[string]string `yaml:"bees"`
 	Prompts map[string]string `yaml:"prompts"`
+	Cues    map[string]string `yaml:"cues,omitempty"`
 }
 
 // ExportOptions configures colony → nuc export.
@@ -31,6 +32,7 @@ type ExportOptions struct {
 	Name        string
 	Description string
 	Bees        []string // empty = all roles
+	Cues        []string // empty = all cues when present
 }
 
 // ImportOptions configures nuc → colony import.

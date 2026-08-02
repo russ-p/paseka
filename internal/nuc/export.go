@@ -79,7 +79,86 @@ func ExportFromColony(opts ExportOptions) (Document, error) {
 		}
 	}
 
+	allCues, err := listColonyCues(opts.ColonyRoot)
+	if err != nil {
+		return Document{}, err
+	}
+	cueIDs, err := selectExportCues(allCues, opts.Cues)
+	if err != nil {
+		return Document{}, err
+	}
+	if len(cueIDs) > 0 {
+		doc.Spec.Cues = make(map[string]string, len(cueIDs))
+		for _, id := range cueIDs {
+			doc.Spec.Cues[id] = allCues[id]
+		}
+	}
+
 	return doc, nil
+}
+
+func listColonyCues(colonyRoot string) (map[string]string, error) {
+	dir := colony.PasekaPath(colonyRoot, "cues")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("nuc: list cues: %w", err)
+	}
+
+	out := make(map[string]string)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".yaml")
+		if err := validateCueID(id); err != nil {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("nuc: read cue %q: %w", id, err)
+		}
+		out[id] = string(data)
+	}
+	return out, nil
+}
+
+func selectExportCues(all map[string]string, filter []string) ([]string, error) {
+	if len(filter) == 0 {
+		if len(all) == 0 {
+			return nil, nil
+		}
+		ids := make([]string, 0, len(all))
+		for id := range all {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		return ids, nil
+	}
+
+	ids := make([]string, 0, len(filter))
+	seen := make(map[string]struct{}, len(filter))
+	for _, id := range filter {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		if _, ok := all[id]; !ok {
+			return nil, fmt.Errorf("nuc: unknown cue %q", id)
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("nuc: --cues filter matched no cues")
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 func selectExportRoles(all map[string]colony.Bee, filter []string) ([]string, error) {
