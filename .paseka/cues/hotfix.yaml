@@ -1,0 +1,9 @@
+description: Urgent fix via builder (small honey reserve)
+emit: task
+bee: builder
+intent: bugfix
+review: none
+autorun: true
+energy_budget: 3
+title: "{{.Title}}"
+body: "{{.Body}}"

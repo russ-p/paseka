@@ -1,0 +1,6 @@
+description: Intake an idea or bug for Scout classification
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
