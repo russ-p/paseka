@@ -12,12 +12,13 @@ import (
 
 // PurgeTarget selects which artifact classes to remove.
 type PurgeTarget struct {
-	Runs      bool
-	Worktrees bool
-	Cache     bool
-	State     bool
-	Bus       bool
-	TraceID   string
+	Runs         bool
+	Worktrees    bool
+	Cache        bool
+	State        bool
+	Bus          bool
+	TraceID      string
+	ReseedEnergy bool
 }
 
 // Any reports whether at least one target is selected.
@@ -66,8 +67,9 @@ type BusPurgeResult struct {
 
 // PurgeResult reports what was removed.
 type PurgeResult struct {
-	Removed []string
-	Bus     *BusPurgeResult
+	Removed        []string
+	Bus            *BusPurgeResult
+	EnergyReseeded int
 }
 
 // PlanPurge lists paths and flags that would be affected.

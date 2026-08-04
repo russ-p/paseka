@@ -4,6 +4,7 @@ package colony_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +26,7 @@ func TestPurgeBusTrace(t *testing.T) {
 	repo := initTestRepo(t)
 	slug := "colony-purge-bus"
 	setupPurgeHomeWithNATS(t, repo, slug, url)
-	writeColonyManifest(t, repo, slug, "paseka.colony-purge-bus")
+	writeColonyManifest(t, repo, slug, "paseka.colony-purge-bus", 0)
 
 	ctx, err := colony.ResolveContext(repo)
 	if err != nil {
@@ -160,6 +161,72 @@ func TestPurgeBusTrace(t *testing.T) {
 	}
 }
 
+func TestPurgeBusReseedEnergy(t *testing.T) {
+	url := os.Getenv("PASEKA_NATS_URL")
+	if url == "" {
+		url = "nats://127.0.0.1:4222"
+	}
+
+	repo := initTestRepo(t)
+	slug := "colony-purge-reseed"
+	setupPurgeHomeWithNATS(t, repo, slug, url)
+	writeColonyManifest(t, repo, slug, "paseka.colony-purge-reseed", 7)
+
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := bus.Config{
+		URL:           url,
+		SubjectPrefix: "paseka.colony-purge-reseed",
+		Slug:          slug,
+	}
+	client, err := bus.ConnectFull(cfg)
+	if err != nil {
+		t.Skipf("nats unavailable: %v", err)
+	}
+
+	traceID := "trace-colony-reseed-" + time.Now().Format("150405")
+
+	kv, err := client.JetStream().KeyValue(bus.TaskLedgerBucket(slug))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewKVLedger(kv)
+	if err := ledger.SeedEnergy(traceID, 3); err != nil {
+		t.Fatal(err)
+	}
+	client.Close()
+
+	res, err := purge.Execute(ctx, colony.PurgeTarget{Bus: true, TraceID: traceID, ReseedEnergy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.EnergyReseeded != 7 {
+		t.Fatalf("energy reseeded = %d, want 7", res.EnergyReseeded)
+	}
+
+	verifyClient, err := bus.ConnectFull(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer verifyClient.Close()
+
+	verifyKV, err := verifyClient.JetStream().KeyValue(bus.TaskLedgerBucket(slug))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifyLedger := taskledger.NewKVLedger(verifyKV)
+	snap, err := verifyLedger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 7 || snap.EnergyRemaining != 7 {
+		t.Fatalf("snapshot after reseed = budget %d remaining %d, want 7/7", snap.EnergyBudget, snap.EnergyRemaining)
+	}
+}
+
 func setupPurgeHomeWithNATS(t *testing.T, repo, slug, natsURL string) {
 	t.Helper()
 	base := t.TempDir()
@@ -181,13 +248,16 @@ func setupPurgeHomeWithNATS(t *testing.T, repo, slug, natsURL string) {
 	}
 }
 
-func writeColonyManifest(t *testing.T, repo, slug, prefix string) {
+func writeColonyManifest(t *testing.T, repo, slug, prefix string, energyBudget int) {
 	t.Helper()
 	dir := filepath.Join(repo, ".paseka")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := "slug: " + slug + "\nnats:\n  subject_prefix: " + prefix + "\n"
+	if energyBudget > 0 {
+		manifest += "defaults:\n  energy_budget: " + fmt.Sprintf("%d", energyBudget) + "\n"
+	}
 	if err := os.WriteFile(filepath.Join(dir, "colony.yaml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}

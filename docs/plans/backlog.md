@@ -111,11 +111,12 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 
 #### Trace reset helper
 
-- **Kind:** follow-up
+- **Status:** shipped as `paseka purge --bus --trace <id> --reseed-energy` (seeds colony `defaults.energy_budget` after bus wipe). For filesystem artifacts, combine with `--runs`, `--worktrees`, and `--state` as needed.
+- **Kind:** follow-up (narrowed)
 - **Source:** [003-hive-evals](../specs/003-hive-evals.md); planning (eval harness)
-- **Summary:** One command to seed energy and clear ledger for a fixed `--trace` (partially covered by `paseka purge --bus --trace`; a dedicated helper could also re-seed `defaults.energy_budget`).
-- **Why deferred:** Purge covers most wipe needs; a friendlier eval helper is polish.
-- **Revisit when:** Eval runners repeatedly need seed+wipe in one step.
+- **Summary:** ~~One command to seed energy and clear ledger for a fixed `--trace`~~ Covered by `purge --bus --reseed-energy`; optional dedicated alias or eval-runner wrapper remains polish.
+- **Why deferred:** Core wipe+seed path shipped; a friendlier eval helper or custom budget override is optional polish.
+- **Revisit when:** Eval runners need a single named command beyond `purge --bus --reseed-energy`.
 
 #### Event-chain scorer in runner
 

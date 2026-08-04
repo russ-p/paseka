@@ -5,10 +5,27 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/tasks"
 )
+
+func validateReseedEnergy(target colony.PurgeTarget) error {
+	if !target.ReseedEnergy {
+		return nil
+	}
+	if !target.Bus {
+		return fmt.Errorf("--reseed-energy requires --bus")
+	}
+	if target.TraceID == "" {
+		return fmt.Errorf("--reseed-energy requires --trace")
+	}
+	return nil
+}
 
 // Plan lists filesystem and bus artifacts that would be removed.
 func Plan(ctx colony.Context, target colony.PurgeTarget) (colony.PurgePlan, error) {
+	if err := validateReseedEnergy(target); err != nil {
+		return colony.PurgePlan{}, err
+	}
 	plan, err := colony.PlanPurge(ctx, target)
 	if err != nil {
 		return plan, err
@@ -29,6 +46,9 @@ func Plan(ctx colony.Context, target colony.PurgeTarget) (colony.PurgePlan, erro
 
 // Execute removes selected colony artifacts, including bus state when requested.
 func Execute(ctx colony.Context, target colony.PurgeTarget) (colony.PurgeResult, error) {
+	if err := validateReseedEnergy(target); err != nil {
+		return colony.PurgeResult{}, err
+	}
 	res, err := colony.Purge(ctx, target)
 	if err != nil {
 		return res, err
@@ -44,7 +64,33 @@ func Execute(ctx colony.Context, target colony.PurgeTarget) (colony.PurgeResult,
 		return res, err
 	}
 	res.Bus = busRes
+	if target.ReseedEnergy {
+		budget, err := reseedEnergy(ctx, target.TraceID)
+		if err != nil {
+			return res, err
+		}
+		res.EnergyReseeded = budget
+	}
 	return res, nil
+}
+
+func reseedEnergy(ctx colony.Context, traceID string) (int, error) {
+	session, err := tasks.OpenLedger(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer session.Close()
+	if session.Ledger == nil {
+		return 0, fmt.Errorf("nats url not configured (--reseed-energy requires NATS)")
+	}
+	if err := tasks.EnsureEnergySeeded(session.Ledger, ctx.ColonyRoot, traceID); err != nil {
+		return 0, err
+	}
+	snap, err := session.Ledger.Snapshot(traceID)
+	if err != nil {
+		return 0, err
+	}
+	return snap.EnergyBudget, nil
 }
 
 func planBus(ctx colony.Context, traceID string) (*colony.BusPurgePlan, error) {

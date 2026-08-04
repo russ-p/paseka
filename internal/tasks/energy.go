@@ -117,7 +117,7 @@ func consumeEnergy(ctx context.Context, slug, colonyRoot string, ledger taskledg
 	if amount <= 0 {
 		amount = 1
 	}
-	if err := ensureEnergySeeded(ledger, colonyRoot, in.TraceID); err != nil {
+	if err := EnsureEnergySeeded(ledger, colonyRoot, in.TraceID); err != nil {
 		return taskledger.TraceSnapshot{}, err
 	}
 	before, err := ledger.Snapshot(in.TraceID)
@@ -160,7 +160,8 @@ func consumeEnergy(ctx context.Context, slug, colonyRoot string, ledger taskledg
 	return waitForEnergyDecrease(ledger, in.TraceID, before.EnergyRemaining, amount)
 }
 
-func ensureEnergySeeded(ledger taskledger.Ledger, colonyRoot, traceID string) error {
+// EnsureEnergySeeded seeds the trace honey reserve from colony defaults when not yet seeded.
+func EnsureEnergySeeded(ledger taskledger.Ledger, colonyRoot, traceID string) error {
 	snap, err := ledger.Snapshot(traceID)
 	if err != nil {
 		return err
