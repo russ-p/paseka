@@ -11,6 +11,25 @@ import (
 	"github.com/paseka/paseka/internal/purge"
 )
 
+func TestPurgeReseedEnergyRequiresBusAndTrace(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+
+	_, err := purge.Plan(ctx, colony.PurgeTarget{ReseedEnergy: true})
+	if err == nil || !strings.Contains(err.Error(), "--reseed-energy requires --bus") {
+		t.Fatalf("plan without bus error = %v", err)
+	}
+	_, err = purge.Plan(ctx, colony.PurgeTarget{ReseedEnergy: true, Bus: true})
+	if err == nil || !strings.Contains(err.Error(), "--reseed-energy requires --trace") {
+		t.Fatalf("plan without trace error = %v", err)
+	}
+	_, err = purge.Execute(ctx, colony.PurgeTarget{ReseedEnergy: true})
+	if err == nil || !strings.Contains(err.Error(), "--reseed-energy requires --bus") {
+		t.Fatalf("execute without bus error = %v", err)
+	}
+}
+
 func TestPurgeBusRequiresTrace(t *testing.T) {
 	repo := initTestRepo(t)
 	slug := setupPurgeHome(t, repo)

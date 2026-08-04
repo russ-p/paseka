@@ -793,6 +793,7 @@ Remove ephemeral colony artifacts. Without `--yes`, shows a plan and asks for co
 | `--state` | | Reset `~/.config/paseka/<slug>/state.json` worktree registry |
 | `--bus` | | Remove JetStream task-ledger KV, stream events, and object-store artifacts for `--trace` (requires NATS) |
 | `--trace` | | Flight trail id (required with `--bus`) |
+| `--reseed-energy` | | After `--bus` purge, seed honey to colony `defaults.energy_budget` (requires `--bus` and `--trace`) |
 | `--all` | | Purge runs, worktrees, cache, and state (does **not** include `--bus`) |
 | `--yes` | `-y` | Skip confirmation prompt |
 | `--path` | `-C` | Colony resolution start directory |
@@ -803,9 +804,14 @@ At least one target flag (`--runs`, `--worktrees`, `--cache`, `--state`, `--all`
 
 **Stop the reactor first:** Stop `paseka run` before `purge --bus` so the reactor is not reading or writing task-ledger KV while keys and stream messages are deleted. Running bus purge against an active reactor can cause races and stale in-memory state.
 
+**`--reseed-energy`:** Operator hygiene for retrying work on a fixed trace — after a successful `--bus` purge, seeds the trace honey reserve (`budget` and `remaining`) to the colony `defaults.energy_budget` (same source as reactor first seed). Works with the reactor stopped; verify with `paseka energy show --trace <id>`. Not an eval harness command.
+
 ```bash
 paseka purge --runs --yes
 paseka purge --all
+
+# Reset bus state and reseed honey for a fixed trace (retry after failed run)
+paseka purge --bus --trace my-trace --reseed-energy --yes
 
 # Eval case reset (filesystem + bus for one fixed trace)
 paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes

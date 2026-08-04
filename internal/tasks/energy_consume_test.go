@@ -69,7 +69,7 @@ func TestEnsureEnergySeededUsesColonyBudget(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	manifest := colony.Colony{Defaults: colony.Defaults{EnergyBudget: 7}}
 	_ = manifest
-	if err := ensureEnergySeeded(ledger, "", "trace-1"); err != nil {
+	if err := EnsureEnergySeeded(ledger, "", "trace-1"); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := ledger.Snapshot("trace-1")

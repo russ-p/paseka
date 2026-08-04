@@ -21,6 +21,7 @@ func newPurgeCmd() *cobra.Command {
 		purgeBus       bool
 		purgeAll       bool
 		traceID        string
+		reseedEnergy   bool
 		yes            bool
 	)
 	cmd := &cobra.Command{
@@ -32,7 +33,11 @@ Use flags to select what to remove. Without --yes, a summary is shown and
 confirmation is required before anything is deleted.
 
 --bus removes JetStream task-ledger KV, stream events, and artifacts for one
-trace. It requires --trace and a configured NATS URL. --bus is not included in --all.`,
+trace. It requires --trace and a configured NATS URL. --bus is not included in --all.
+
+With --reseed-energy (requires --bus and --trace), after a successful bus purge
+seeds the trace honey reserve to the colony defaults.energy_budget so operators
+can retry work on a fixed trace without starting a new flight trail.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if purgeAll {
 				purgeRuns = true
@@ -43,13 +48,22 @@ trace. It requires --trace and a configured NATS URL. --bus is not included in -
 			if purgeBus && traceID == "" {
 				return fmt.Errorf("--trace is required with --bus")
 			}
+			if reseedEnergy {
+				if !purgeBus {
+					return fmt.Errorf("--reseed-energy requires --bus")
+				}
+				if traceID == "" {
+					return fmt.Errorf("--reseed-energy requires --trace")
+				}
+			}
 			target := colony.PurgeTarget{
-				Runs:      purgeRuns,
-				Worktrees: purgeWorktrees,
-				Cache:     purgeCache,
-				State:     purgeState,
-				Bus:       purgeBus,
-				TraceID:   traceID,
+				Runs:         purgeRuns,
+				Worktrees:    purgeWorktrees,
+				Cache:        purgeCache,
+				State:        purgeState,
+				Bus:          purgeBus,
+				TraceID:      traceID,
+				ReseedEnergy: reseedEnergy,
 			}
 			if !target.Any() {
 				return fmt.Errorf("specify at least one target: --runs, --worktrees, --cache, --state, --all, or --bus")
@@ -64,14 +78,19 @@ trace. It requires --trace and a configured NATS URL. --bus is not included in -
 			if err != nil {
 				return err
 			}
-			if colony.PlanEmpty(plan) {
+			if colony.PlanEmpty(plan) && !reseedEnergy {
 				fmt.Println("Nothing to purge.")
 				return nil
 			}
 
 			fmt.Printf("Colony: %s\n\n", ctx.ColonyRoot)
-			fmt.Println("Will remove:")
-			fmt.Println(colony.FormatPlan(plan))
+			if !colony.PlanEmpty(plan) {
+				fmt.Println("Will remove:")
+				fmt.Println(colony.FormatPlan(plan))
+			}
+			if reseedEnergy {
+				fmt.Printf("\nWill reseed honey for trace %s to colony defaults.energy_budget after bus purge.\n", traceID)
+			}
 
 			if !yes {
 				if !confirmPurge() {
@@ -96,12 +115,13 @@ trace. It requires --trace and a configured NATS URL. --bus is not included in -
 	cmd.Flags().BoolVar(&purgeBus, "bus", false, "remove JetStream KV, stream events, and artifacts for --trace (requires NATS)")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (required with --bus)")
 	cmd.Flags().BoolVar(&purgeAll, "all", false, "purge runs, worktrees, cache, and state")
+	cmd.Flags().BoolVar(&reseedEnergy, "reseed-energy", false, "after --bus purge, seed honey to colony defaults.energy_budget (requires --bus and --trace)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation prompt")
 	return cmd
 }
 
 func printPurgeResult(res colony.PurgeResult) {
-	if len(res.Removed) == 0 && res.Bus == nil {
+	if len(res.Removed) == 0 && res.Bus == nil && res.EnergyReseeded == 0 {
 		fmt.Println("Nothing removed.")
 		return
 	}
@@ -125,6 +145,9 @@ func printPurgeResult(res colony.PurgeResult) {
 		if len(res.Bus.KeysRemoved) == 0 && res.Bus.EventsRemoved == 0 && len(res.Bus.ObjectsRemoved) == 0 {
 			fmt.Println("  (nothing removed)")
 		}
+	}
+	if res.EnergyReseeded > 0 {
+		fmt.Printf("\nHoney reseeded: budget=%d remaining=%d\n", res.EnergyReseeded, res.EnergyReseeded)
 	}
 }
 
