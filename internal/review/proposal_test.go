@@ -52,7 +52,7 @@ func TestApproveRootRequiredDoesNotMerge(t *testing.T) {
 	approveRes, err := review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
 		TraceID: traceID,
 		TaskID:  "task-1",
-	})
+	}, review.WriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/review"
@@ -40,7 +41,7 @@ func TestApproveRequiredSkipsFinalGateWhenNothingToMerge(t *testing.T) {
 	_, err = review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
 		TraceID: traceID,
 		TaskID:  "task-1",
-	})
+	}, review.WriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestApproveRequiredOpensFinalGateWhenIsolatedProposal(t *testing.T) {
 	_, err = review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
 		TraceID: traceID,
 		TaskID:  "task-1",
-	})
+	}, review.WriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,12 +143,49 @@ func TestApproveRequiredSkipsMerge(t *testing.T) {
 	approveRes, err := review.Approve(context.Background(), colonyCtx(t), nil, ledger, review.ApproveInput{
 		TraceID: traceID,
 		TaskID:  "task-1",
-	})
+	}, review.WriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if approveRes.CommitSHA != "" {
 		t.Fatalf("commit = %q, want empty (no merge for required review)", approveRes.CommitSHA)
+	}
+}
+
+func TestRejectRequiresPublisher(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-1"
+
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Work", Review: protocol.TaskReviewRequired},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: "task-1", Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(waiting); err != nil {
+		t.Fatal(err)
+	}
+
+	var nilClient *bus.Client
+	var pub bus.Publisher = nilClient
+	err = review.Reject(context.Background(), pub, ledger, review.RejectInput{
+		TraceID: traceID,
+		TaskID:  "task-1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "nats client is required") {
+		t.Fatalf("Reject typed-nil publisher err = %v", err)
 	}
 }
 

@@ -142,7 +142,7 @@ func (a *ProposalActions) executeApprove(ctx context.Context, chatID int64, mess
 		TraceID: traceID,
 		TaskID:  taskID,
 		AgentID: "telegram",
-	})
+	}, review.WriteOptions{})
 	if err != nil {
 		a.sendText(chatID, messageID, "approve failed: "+err.Error())
 		return

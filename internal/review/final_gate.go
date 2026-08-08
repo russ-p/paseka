@@ -16,7 +16,7 @@ import (
 // (an isolated code.proposal and/or a non-empty worktree merge diff).
 // When AFK work is done but there is nothing to merge, any planned/ready/waiting
 // final-review task is auto-completed instead of leaving a hollow HITL gate.
-func ActivateFinalReviewGate(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, colonyCtx colony.Context, traceID string) error {
+func ActivateFinalReviewGate(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, colonyCtx colony.Context, traceID string, opts WriteOptions) error {
 	if ledger == nil || traceID == "" {
 		return nil
 	}
@@ -31,7 +31,7 @@ func ActivateFinalReviewGate(ctx context.Context, client *bus.Client, ledger tas
 	needsMerge := needsIsolatedMerge(snap, colonyCtx, traceID)
 	if final, ok := taskledger.FindFinalReviewTask(snap); ok {
 		if !needsMerge {
-			return completeEmptyFinalGate(ctx, client, ledger, traceID, final)
+			return completeEmptyFinalGate(ctx, pub, ledger, traceID, final, opts)
 		}
 		if taskledger.HasWaitingReview(snap) && final.Status != protocol.TaskStatusWaitingReview {
 			return nil
@@ -42,7 +42,7 @@ func ActivateFinalReviewGate(ctx context.Context, client *bus.Client, ledger tas
 			if err != nil {
 				return err
 			}
-			return publishAndApply(ctx, client, ledger, ev)
+			return WriteEvent(ctx, pub, ledger, ev, opts)
 		}
 		return nil
 	}
@@ -63,14 +63,14 @@ func ActivateFinalReviewGate(ctx context.Context, client *bus.Client, ledger tas
 	if err != nil {
 		return err
 	}
-	if err := publishAndApply(ctx, client, ledger, planEv); err != nil {
+	if err := WriteEvent(ctx, pub, ledger, planEv, opts); err != nil {
 		return err
 	}
 	ev, err := statusEvent(traceID, taskledger.FinalReviewTaskID, protocol.TaskStatusWaitingReview, "All tasks completed — awaiting human review and merge")
 	if err != nil {
 		return err
 	}
-	return publishAndApply(ctx, client, ledger, ev)
+	return WriteEvent(ctx, pub, ledger, ev, opts)
 }
 
 func needsIsolatedMerge(snap taskledger.TraceSnapshot, colonyCtx colony.Context, traceID string) bool {
@@ -91,7 +91,7 @@ func needsIsolatedMerge(snap taskledger.TraceSnapshot, colonyCtx colony.Context,
 	return !diff.Missing && !diff.Empty
 }
 
-func completeEmptyFinalGate(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, traceID string, final taskledger.TaskSnapshot) error {
+func completeEmptyFinalGate(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, traceID string, final taskledger.TaskSnapshot, opts WriteOptions) error {
 	switch final.Status {
 	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusBlocked:
 		return nil
@@ -106,7 +106,7 @@ func completeEmptyFinalGate(ctx context.Context, client *bus.Client, ledger task
 	if err != nil {
 		return err
 	}
-	return publishAndApply(ctx, client, ledger, completed)
+	return WriteEvent(ctx, pub, ledger, completed, opts)
 }
 
 func statusEvent(traceID, taskID string, status protocol.TaskStatus, summary string) (protocol.Event, error) {
@@ -116,14 +116,4 @@ func statusEvent(traceID, taskID string, status protocol.TaskStatus, summary str
 		Status:  status,
 		Summary: summary,
 	})
-}
-
-func publishAndApply(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, ev protocol.Event) error {
-	if client != nil {
-		if err := client.PublishEvent(ctx, ev); err != nil {
-			return err
-		}
-	}
-	_, err := ledger.Apply(ev)
-	return err
 }

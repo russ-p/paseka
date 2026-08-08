@@ -31,7 +31,7 @@ type ApproveResult struct {
 }
 
 // Approve merges the trace worktree when present and completes the review task.
-func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, ledger taskledger.Ledger, in ApproveInput) (ApproveResult, error) {
+func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, ledger taskledger.Ledger, in ApproveInput, opts WriteOptions) (ApproveResult, error) {
 	if in.TraceID == "" || in.TaskID == "" {
 		return ApproveResult{}, fmt.Errorf("trace and task id are required")
 	}
@@ -106,15 +106,10 @@ func Approve(ctx context.Context, colonyCtx colony.Context, client *bus.Client, 
 	if err != nil {
 		return ApproveResult{}, err
 	}
-	if client != nil {
-		if err := client.PublishEvent(ctx, completed); err != nil {
-			return ApproveResult{}, err
-		}
-	}
-	if _, err := ledger.Apply(completed); err != nil {
+	if err := WriteEvent(ctx, pub, ledger, completed, opts); err != nil {
 		return ApproveResult{}, err
 	}
-	if err := ActivateFinalReviewGate(ctx, client, ledger, colonyCtx, in.TraceID); err != nil {
+	if err := ActivateFinalReviewGate(ctx, pub, ledger, colonyCtx, in.TraceID, opts); err != nil {
 		return ApproveResult{}, err
 	}
 	return result, nil
@@ -129,7 +124,7 @@ type RejectInput struct {
 }
 
 // Reject publishes human feedback for a review-gated task.
-func Reject(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, in RejectInput) error {
+func Reject(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, in RejectInput) error {
 	if in.TraceID == "" || in.TaskID == "" {
 		return fmt.Errorf("trace and task id are required")
 	}
@@ -151,7 +146,7 @@ func Reject(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, i
 	if !taskledger.IsReviewGate(task) {
 		return fmt.Errorf("task %q is not a review gate task", in.TaskID)
 	}
-	if client == nil {
+	if !publisherAvailable(pub) {
 		return fmt.Errorf("nats client is required")
 	}
 	feedback := strings.TrimSpace(in.Feedback)
@@ -170,5 +165,5 @@ func Reject(ctx context.Context, client *bus.Client, ledger taskledger.Ledger, i
 	if err != nil {
 		return err
 	}
-	return client.PublishEvent(ctx, ev)
+	return pub.PublishEvent(ctx, ev)
 }

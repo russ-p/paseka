@@ -120,7 +120,7 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		Summary:      req.Summary,
 		MergeMessage: req.MergeMessage,
 		AgentID:      "console",
-	})
+	}, review.WriteOptions{})
 	if err != nil {
 		return ApproveTaskResponse{}, err
 	}

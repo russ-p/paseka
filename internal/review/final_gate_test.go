@@ -35,7 +35,7 @@ func TestActivateFinalReviewGateSkipsWhenNothingToMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID); err != nil {
+	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID, review.WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,7 +85,7 @@ func TestActivateFinalReviewGateSynthesizesWhenIsolatedProposal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID); err != nil {
+	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID, review.WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +125,7 @@ func TestActivateFinalReviewGateAutoCompletesEmptyExplicitFinal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID); err != nil {
+	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID, review.WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -179,7 +179,7 @@ func TestActivateFinalReviewGateAutoCompletesHollowWaitingReview(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID); err != nil {
+	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID, review.WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 

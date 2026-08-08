@@ -220,7 +220,7 @@ func newProposalApproveCmd() *cobra.Command {
 				TaskID:       taskID,
 				Summary:      summary,
 				MergeMessage: mergeMessage,
-			})
+			}, review.WriteOptions{})
 			if err != nil {
 				return err
 			}
