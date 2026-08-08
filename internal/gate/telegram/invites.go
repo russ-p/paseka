@@ -9,7 +9,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/sessions"
@@ -36,7 +36,7 @@ func (a *InviteActions) sessions() *sessions.Manager {
 
 // SendInvitesList posts one card per pending invite.
 func (a *InviteActions) SendInvitesList(chatID int64) {
-	list, err := console.ListInvites(a.Colony, colony.InviteStatusPending)
+	list, err := hiveview.ListInvites(a.Colony, colony.InviteStatusPending)
 	if err != nil {
 		a.sendText(chatID, 0, "invites unavailable: "+err.Error())
 		return

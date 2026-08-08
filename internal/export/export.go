@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/runs"
 )
 
@@ -23,9 +23,9 @@ type TraceExportData struct {
 	Slug       string
 	ColonyRoot string
 	ExportedAt time.Time
-	Trace      console.TraceDetailView
-	Runs       []console.RunView
-	Events     []console.EventFeedItem
+	Trace      hiveview.TraceDetailView
+	Runs       []hiveview.RunView
+	Events     []hiveview.EventFeedItem
 }
 
 // ExportTrace writes a self-contained HTML report for one flight trail.
@@ -35,7 +35,7 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 		return "", fmt.Errorf("trace id is required")
 	}
 
-	detail, ok, err := console.GetTrace(ctx, traceID)
+	detail, ok, err := hiveview.GetTrace(ctx, traceID)
 	if err != nil {
 		return "", err
 	}
@@ -47,10 +47,10 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	feedItems := console.BuildEventFeedItems(ctx.ColonyRoot, traceID, events)
+	feedItems := hiveview.BuildEventFeedItems(ctx.ColonyRoot, traceID, events)
 
-	runsView := append([]console.RunView(nil), detail.Runs...)
-	console.SortRunsAsc(runsView)
+	runsView := append([]hiveview.RunView(nil), detail.Runs...)
+	hiveview.SortRunsAsc(runsView)
 
 	outDir := opts.OutputDir
 	if outDir == "" {

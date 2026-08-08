@@ -5,6 +5,7 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
@@ -24,14 +25,14 @@ type NATSStatusView struct {
 
 // DashboardView is the colony-wide snapshot for the Queen Console dashboard.
 type DashboardView struct {
-	Runtime         RuntimeView        `json:"runtime"`
-	NATS            NATSStatusView     `json:"nats"`
-	ActiveSessions  int                `json:"activeSessions"`
-	ActiveWorktrees int                `json:"activeWorktrees"`
-	TaskCounts      map[string]int     `json:"taskCounts"`
-	RecentTraces    []TraceSummaryView `json:"recentTraces"`
-	FailedRuns      []RunView          `json:"failedRuns"`
-	RecentInsights  []InsightHighlight `json:"recentInsights"`
+	Runtime         hiveview.RuntimeView        `json:"runtime"`
+	NATS            NATSStatusView              `json:"nats"`
+	ActiveSessions  int                         `json:"activeSessions"`
+	ActiveWorktrees int                         `json:"activeWorktrees"`
+	TaskCounts      map[string]int              `json:"taskCounts"`
+	RecentTraces    []hiveview.TraceSummaryView `json:"recentTraces"`
+	FailedRuns      []hiveview.RunView          `json:"failedRuns"`
+	RecentInsights  []hiveview.InsightHighlight `json:"recentInsights"`
 }
 
 // GetDashboard aggregates colony-wide observability data.
@@ -47,7 +48,7 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		TaskCounts: map[string]int{},
 	}
 
-	rt, err := GetRuntime(ctx, sup)
+	rt, err := hiveview.GetRuntime(ctx, sup)
 	if err != nil {
 		return DashboardView{}, err
 	}
@@ -83,15 +84,15 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		if i >= dashboardTraceLimit {
 			break
 		}
-		traceView := traceSummaryViewFromRuns(trace)
-		enrichTraceTitle(ctx, &traceView)
-		enrichTraceSummary(ctx, &traceView)
+		traceView := hiveview.TraceSummaryFromRuns(trace)
+		hiveview.EnrichTraceTitle(ctx, &traceView)
+		hiveview.EnrichTraceSummary(ctx, &traceView)
 		view.RecentTraces = append(view.RecentTraces, traceView)
 	}
 
 	view.TaskCounts = aggregateTaskCounts(ctx, traces)
 
-	runsList, err := ListRuns(ctx)
+	runsList, err := hiveview.ListRuns(ctx)
 	if err != nil {
 		return DashboardView{}, err
 	}
@@ -105,7 +106,7 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		view.FailedRuns = view.FailedRuns[:dashboardTraceLimit]
 	}
 
-	insights, err := CollectRecentInsights(ctx, dashboardTraceLimit)
+	insights, err := hiveview.CollectRecentInsights(ctx, dashboardTraceLimit)
 	if err != nil {
 		return DashboardView{}, err
 	}

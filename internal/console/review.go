@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/review"
 	"github.com/paseka/paseka/internal/runs"
@@ -66,7 +67,7 @@ type RejectTaskResponse struct {
 
 // ListReviewQueue returns tasks awaiting human review across recent traces.
 func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
-	traceSummaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, taskBoardTraceLimit)
+	traceSummaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, hiveview.TaskBoardTraceLimit)
 	if err != nil {
 		return ReviewQueueView{}, err
 	}
@@ -87,7 +88,7 @@ func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
 			if task.Status != protocol.TaskStatusWaitingReview || !taskledger.IsReviewGate(task) {
 				continue
 			}
-			item := taskItemFromSnapshot(ctx, trace.TraceID, snap, task)
+			item := hiveview.TaskItemFromSnapshot(ctx, trace.TraceID, snap, task)
 			qi := reviewQueueItemFromTask(item)
 			qi.Summary = task.Summary
 			if taskledger.IsFinalReviewTask(task) {
@@ -175,7 +176,7 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 	}, nil
 }
 
-func reviewQueueItemFromTask(item TaskListItem) ReviewQueueItem {
+func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
 	return ReviewQueueItem{
 		TraceID:           item.TraceID,
 		TaskID:            item.TaskID,
@@ -190,16 +191,6 @@ func reviewQueueItemFromTask(item TaskListItem) ReviewQueueItem {
 		CanApprove:        item.CanApprove,
 		CanReject:         item.CanReject,
 	}
-}
-
-func reviewActionsForTask(task taskledger.TaskSnapshot) (canApprove, canReject bool) {
-	if task.Status != protocol.TaskStatusWaitingReview {
-		return false, false
-	}
-	if !taskledger.IsReviewGate(task) {
-		return false, false
-	}
-	return true, true
 }
 
 func validateReviewTaskTarget(colonyCtx colony.Context, session *tasks.LedgerSession, traceID, taskID string) error {

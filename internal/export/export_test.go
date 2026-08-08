@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
@@ -33,20 +33,20 @@ func TestRenderHTMLContainsTraceData(t *testing.T) {
 		Slug:       "demo-hive",
 		ColonyRoot: "/tmp/colony",
 		ExportedAt: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC),
-		Trace: console.TraceDetailView{
-			TraceSummaryView: console.TraceSummaryView{
+		Trace: hiveview.TraceDetailView{
+			TraceSummaryView: hiveview.TraceSummaryView{
 				TraceID:        "trace-test-1",
 				LastActivityAt: time.Date(2026, 7, 10, 11, 0, 0, 0, time.UTC),
 				RunCount:       1,
 				TaskCount:      1,
 			},
-			Tasks: []console.TaskSummaryView{{
+			Tasks: []hiveview.TaskSummaryView{{
 				TaskID: "task-1",
 				Title:  "Survey codebase",
 				Status: "ready",
 				Bee:    "scout",
 			}},
-			Runs: []console.RunView{{
+			Runs: []hiveview.RunView{{
 				TraceID:   "trace-test-1",
 				AgentID:   "agent-1",
 				Bee:       "scout",
@@ -54,7 +54,7 @@ func TestRenderHTMLContainsTraceData(t *testing.T) {
 				StartedAt: time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC),
 			}},
 		},
-		Events: []console.EventFeedItem{{
+		Events: []hiveview.EventFeedItem{{
 			Type:        protocol.EventSignal,
 			PayloadKind: "task.ready",
 			CreatedAt:   time.Date(2026, 7, 10, 10, 5, 0, 0, time.UTC),

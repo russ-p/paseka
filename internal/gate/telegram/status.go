@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
 	"github.com/paseka/paseka/internal/cues"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
 )
@@ -26,17 +26,17 @@ func BuildSnapshot(ctx colony.Context, sup *runtime.Supervisor) (Snapshot, error
 		sup = runtime.DefaultSupervisor()
 	}
 
-	rt, err := console.GetRuntime(ctx, sup)
+	rt, err := hiveview.GetRuntime(ctx, sup)
 	if err != nil {
 		return Snapshot{}, err
 	}
 
-	agents, err := console.GetAgents(ctx, sessions.NewManager())
+	agents, err := hiveview.GetAgents(ctx, sessions.NewManager())
 	if err != nil {
 		return Snapshot{}, err
 	}
 
-	invites, err := console.ListInvites(ctx, colony.InviteStatusPending)
+	invites, err := hiveview.ListInvites(ctx, colony.InviteStatusPending)
 	if err != nil {
 		return Snapshot{}, err
 	}

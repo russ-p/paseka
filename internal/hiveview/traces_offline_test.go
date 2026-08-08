@@ -1,4 +1,4 @@
-package console
+package hiveview
 
 import (
 	"fmt"

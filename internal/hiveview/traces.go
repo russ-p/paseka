@@ -1,4 +1,4 @@
-package console
+package hiveview
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ const (
 	maxEventScanEvents    = 500
 )
 
-// EventLink points to a related console resource.
+// EventLink points to a related hive resource.
 type EventLink struct {
 	Kind      string `json:"kind"`
 	TraceID   string `json:"traceId,omitempty"`
@@ -32,7 +32,7 @@ type EventLink struct {
 	SessionID string `json:"sessionId,omitempty"`
 }
 
-// EventFeedItem is a normalized timeline row for the console UI.
+// EventFeedItem is a normalized timeline row for trace event feeds.
 type EventFeedItem struct {
 	ID          string             `json:"id"`
 	CreatedAt   time.Time          `json:"createdAt"`
@@ -68,7 +68,7 @@ type EventFilter struct {
 	AfterCursor string
 }
 
-// TraceSummaryView is a console projection of one trace.
+// TraceSummaryView is a projection of one trace.
 type TraceSummaryView struct {
 	TraceID         string               `json:"traceId"`
 	Title           string               `json:"title,omitempty"`
@@ -102,7 +102,7 @@ type WorktreeView struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// TraceDetailView aggregates one trace for the console.
+// TraceDetailView aggregates one trace for inspection UIs and export.
 type TraceDetailView struct {
 	TraceSummaryView
 	Tasks        []TaskSummaryView `json:"tasks"`
@@ -157,9 +157,9 @@ func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
 	}
 	out := make([]TraceSummaryView, 0, len(summaries))
 	for _, s := range summaries {
-		view := traceSummaryViewFromRuns(s)
-		enrichTraceTitle(ctx, &view)
-		enrichTraceSummary(ctx, &view)
+		view := TraceSummaryFromRuns(s)
+		EnrichTraceTitle(ctx, &view)
+		EnrichTraceSummary(ctx, &view)
 		out = append(out, view)
 	}
 	return out, nil
@@ -194,11 +194,11 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	}
 
 	view := TraceDetailView{
-		TraceSummaryView: traceSummaryViewFromRuns(summary),
+		TraceSummaryView: TraceSummaryFromRuns(summary),
 	}
-	enrichTraceEnergy(ctx, &view.TraceSummaryView)
-	enrichTraceTitle(ctx, &view.TraceSummaryView)
-	enrichTraceSummary(ctx, &view.TraceSummaryView)
+	EnrichTraceEnergy(ctx, &view.TraceSummaryView)
+	EnrichTraceTitle(ctx, &view.TraceSummaryView)
+	EnrichTraceSummary(ctx, &view.TraceSummaryView)
 
 	taskSnap, err := loadTraceTasksOfflineFirst(ctx, traceID)
 	if err != nil {
@@ -369,7 +369,7 @@ func CollectRecentInsights(ctx colony.Context, limit int) ([]InsightHighlight, e
 	return out, nil
 }
 
-func traceSummaryViewFromRuns(s runs.TraceSummary) TraceSummaryView {
+func TraceSummaryFromRuns(s runs.TraceSummary) TraceSummaryView {
 	return TraceSummaryView{
 		TraceID:        s.TraceID,
 		LastActivityAt: s.LastActivityAt,
@@ -382,7 +382,8 @@ func traceSummaryViewFromRuns(s runs.TraceSummary) TraceSummaryView {
 	}
 }
 
-func enrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
+// EnrichTraceEnergy fills honey reserve fields from the task ledger when available.
+func EnrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
 	if view == nil || view.TraceID == "" {
 		return
 	}
@@ -400,7 +401,7 @@ func enrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
 	view.LowEnergy = snap.EnergyRemaining <= snap.EnergyBudget/4
 }
 
-func enrichTraceTitle(ctx colony.Context, view *TraceSummaryView) {
+func EnrichTraceTitle(ctx colony.Context, view *TraceSummaryView) {
 	if view == nil || view.TraceID == "" {
 		return
 	}
@@ -411,7 +412,7 @@ func enrichTraceTitle(ctx colony.Context, view *TraceSummaryView) {
 	view.Title = title
 }
 
-func enrichTraceSummary(ctx colony.Context, view *TraceSummaryView) {
+func EnrichTraceSummary(ctx colony.Context, view *TraceSummaryView) {
 	if view == nil || view.TraceID == "" {
 		return
 	}
@@ -458,13 +459,6 @@ func BuildEventFeedItems(colonyRoot, traceID string, events []protocol.Event) []
 		}))
 	}
 	return items
-}
-
-// SortRunsAsc sorts runs oldest-first by StartedAt.
-func SortRunsAsc(out []RunView) {
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].StartedAt.Before(out[j].StartedAt)
-	})
 }
 
 func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {

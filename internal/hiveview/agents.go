@@ -1,4 +1,4 @@
-package console
+package hiveview
 
 import (
 	"os"
@@ -27,7 +27,7 @@ type AgentItem struct {
 	RunDir    string `json:"runDir"`
 }
 
-// AgentsView is the Queen Console projection of live agent processes.
+// AgentsView is a projection of live agent processes.
 type AgentsView struct {
 	Count    int         `json:"count"`
 	AFK      int         `json:"afk"`

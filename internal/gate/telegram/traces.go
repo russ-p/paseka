@@ -5,13 +5,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 )
 
 const defaultTracesLimit = 20
 
 func (h *Handler) sendTraces(chatID int64) {
-	list, err := console.ListTraces(h.Colony, defaultTracesLimit)
+	list, err := hiveview.ListTraces(h.Colony, defaultTracesLimit)
 	if err != nil {
 		h.sendPlain(chatID, 0, "traces unavailable: "+err.Error())
 		return
@@ -20,7 +20,7 @@ func (h *Handler) sendTraces(chatID int64) {
 }
 
 // FormatTracesList renders the /traces response body.
-func FormatTracesList(cfg Config, traces []console.TraceSummaryView, now time.Time) string {
+func FormatTracesList(cfg Config, traces []hiveview.TraceSummaryView, now time.Time) string {
 	if len(traces) == 0 {
 		return "No traces yet."
 	}
@@ -31,7 +31,7 @@ func FormatTracesList(cfg Config, traces []console.TraceSummaryView, now time.Ti
 	return strings.Join(lines, "\n")
 }
 
-func formatTraceListLine(cfg Config, trace console.TraceSummaryView, now time.Time) string {
+func formatTraceListLine(cfg Config, trace hiveview.TraceSummaryView, now time.Time) string {
 	parts := []string{trace.TraceID, formatShortActivityTime(trace.LastActivityAt, now)}
 	if hint := formatTraceStatusHint(trace); hint != "" {
 		parts = append(parts, hint)
@@ -43,7 +43,7 @@ func formatTraceListLine(cfg Config, trace console.TraceSummaryView, now time.Ti
 	return line
 }
 
-func formatTraceStatusHint(trace console.TraceSummaryView) string {
+func formatTraceStatusHint(trace hiveview.TraceSummaryView) string {
 	if trace.HasActive {
 		return "active"
 	}

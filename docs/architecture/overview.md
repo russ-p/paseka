@@ -388,20 +388,31 @@ flowchart LR
 
 ---
 
-## 4. Package layout (target)
+## 4. Package layout
 
 ```
-cmd/paseka/                 # Queen Shell
+cmd/paseka/                 # Queen Shell CLI
 internal/
-  colony/                   # load .paseka + home config, slug resolution
+  protocol/                 # event contracts (leaf types)
+  taskledger/               # trace/task projection store (KV)
+  tasks/                    # task ops (create, start, retry, energy CLI paths)
+  hiveview/                 # shared read models (traces, tasks, runs, agents, invites)
+  console/                  # Queen Console HTTP API + embedded SPA (transport)
+  gate/telegram/            # Telegram Human Gateway (transport)
+  export/                   # trace HTML export (uses hiveview)
+  colony/                   # load .paseka + home config, slug resolution, state registry
   prompts/                  # load + render .paseka/prompts/*.md templates
   runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
-  adapters/                 # adapter registry + cursor/, pi/, …
+  adapters/                 # adapter registry + cursor/, pi/, claude/, script/
   sessions/                 # interactive PTY sessions, terminal attach
   worktree/                 # create, diff, merge, cleanup
-  bus/                      # NATS, message contracts
-  runtime/                  # dispatch: colony → prompts → adapter (AFK)
+  bus/                      # NATS transport, JetStream, emit/defer
+  runtime/                  # reactor + dispatch: colony → prompts → adapter (AFK)
+  review/                   # HITL approve/reject + merge
+  invites/                  # Human Gateway invite lifecycle
 ```
+
+**Layering:** `hiveview` holds transport-agnostic projections consumed by Queen Console, Telegram Gate, and HTML export. `console` is HTTP/SPA wiring and mutations; it must not be imported by other UIs.
 
 ---
 

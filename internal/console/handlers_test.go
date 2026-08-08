@@ -16,6 +16,7 @@ import (
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
@@ -69,7 +70,7 @@ func TestRuntimeAPIHandlers(t *testing.T) {
 	if statusRec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", statusRec.Code, statusRec.Body.String())
 	}
-	var stopped console.RuntimeView
+	var stopped hiveview.RuntimeView
 	if err := json.NewDecoder(statusRec.Body).Decode(&stopped); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +87,7 @@ func TestRuntimeAPIHandlers(t *testing.T) {
 	if startRec.Code != http.StatusOK {
 		t.Fatalf("start status = %d body=%s", startRec.Code, startRec.Body.String())
 	}
-	var started console.RuntimeView
+	var started hiveview.RuntimeView
 	if err := json.NewDecoder(startRec.Body).Decode(&started); err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func TestRuntimeAPIHandlers(t *testing.T) {
 	if stopRec.Code != http.StatusOK {
 		t.Fatalf("stop status = %d body=%s", stopRec.Code, stopRec.Body.String())
 	}
-	var stoppedAgain console.RuntimeView
+	var stoppedAgain hiveview.RuntimeView
 	if err := json.NewDecoder(stopRec.Body).Decode(&stoppedAgain); err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +313,7 @@ func TestRunsAPIHandlers(t *testing.T) {
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
 	}
-	var list []console.RunView
+	var list []hiveview.RunView
 	if err := json.NewDecoder(listRec.Body).Decode(&list); err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +330,7 @@ func TestRunsAPIHandlers(t *testing.T) {
 	if detailRec.Code != http.StatusOK {
 		t.Fatalf("detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
 	}
-	var detail console.RunView
+	var detail hiveview.RunView
 	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +480,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if tracesRec.Code != http.StatusOK {
 		t.Fatalf("traces status = %d body=%s", tracesRec.Code, tracesRec.Body.String())
 	}
-	var traces []console.TraceSummaryView
+	var traces []hiveview.TraceSummaryView
 	if err := json.NewDecoder(tracesRec.Body).Decode(&traces); err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +497,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if traceRec.Code != http.StatusOK {
 		t.Fatalf("trace detail status = %d body=%s", traceRec.Code, traceRec.Body.String())
 	}
-	var traceDetail console.TraceDetailView
+	var traceDetail hiveview.TraceDetailView
 	if err := json.NewDecoder(traceRec.Body).Decode(&traceDetail); err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +514,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if eventsRec.Code != http.StatusOK {
 		t.Fatalf("events status = %d body=%s", eventsRec.Code, eventsRec.Body.String())
 	}
-	var feed console.EventFeedPage
+	var feed hiveview.EventFeedPage
 	if err := json.NewDecoder(eventsRec.Body).Decode(&feed); err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +534,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if traceEventsRec.Code != http.StatusOK {
 		t.Fatalf("trace events status = %d body=%s", traceEventsRec.Code, traceEventsRec.Body.String())
 	}
-	var traceFeed console.EventFeedPage
+	var traceFeed hiveview.EventFeedPage
 	if err := json.NewDecoder(traceEventsRec.Body).Decode(&traceFeed); err != nil {
 		t.Fatal(err)
 	}
@@ -627,7 +628,7 @@ func TestTraceSummaryProjection(t *testing.T) {
 	if err := json.NewDecoder(dashRec.Body).Decode(&dash); err != nil {
 		t.Fatal(err)
 	}
-	dashByID := map[string]console.TraceSummaryView{}
+	dashByID := map[string]hiveview.TraceSummaryView{}
 	for _, trace := range dash.RecentTraces {
 		dashByID[trace.TraceID] = trace
 	}
@@ -644,11 +645,11 @@ func TestTraceSummaryProjection(t *testing.T) {
 	if tracesRec.Code != http.StatusOK {
 		t.Fatalf("traces status = %d body=%s", tracesRec.Code, tracesRec.Body.String())
 	}
-	var traces []console.TraceSummaryView
+	var traces []hiveview.TraceSummaryView
 	if err := json.NewDecoder(tracesRec.Body).Decode(&traces); err != nil {
 		t.Fatal(err)
 	}
-	listByID := map[string]console.TraceSummaryView{}
+	listByID := map[string]hiveview.TraceSummaryView{}
 	for _, trace := range traces {
 		listByID[trace.TraceID] = trace
 	}
@@ -665,7 +666,7 @@ func TestTraceSummaryProjection(t *testing.T) {
 	if detailRec.Code != http.StatusOK {
 		t.Fatalf("detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
 	}
-	var detail console.TraceDetailView
+	var detail hiveview.TraceDetailView
 	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
@@ -794,7 +795,7 @@ func TestTraceDetailAPIHandler(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var detail console.TraceDetailView
+	var detail hiveview.TraceDetailView
 	if err := json.NewDecoder(rec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
@@ -1037,7 +1038,7 @@ func TestTraceDetailFallsBackWhenNATSUnavailable(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var detail console.TraceDetailView
+	var detail hiveview.TraceDetailView
 	if err := json.NewDecoder(rec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
@@ -1152,7 +1153,7 @@ func TestTasksAPIHandlers(t *testing.T) {
 	if boardRec.Code != http.StatusOK {
 		t.Fatalf("board status = %d body=%s", boardRec.Code, boardRec.Body.String())
 	}
-	var board console.TaskBoardView
+	var board hiveview.TaskBoardView
 	if err := json.NewDecoder(boardRec.Body).Decode(&board); err != nil {
 		t.Fatal(err)
 	}
@@ -1172,7 +1173,7 @@ func TestTasksAPIHandlers(t *testing.T) {
 	if traceTasksRec.Code != http.StatusOK {
 		t.Fatalf("trace tasks status = %d body=%s", traceTasksRec.Code, traceTasksRec.Body.String())
 	}
-	var traceTasks []console.TaskListItem
+	var traceTasks []hiveview.TaskListItem
 	if err := json.NewDecoder(traceTasksRec.Body).Decode(&traceTasks); err != nil {
 		t.Fatal(err)
 	}
@@ -1186,7 +1187,7 @@ func TestTasksAPIHandlers(t *testing.T) {
 	if detailRec.Code != http.StatusOK {
 		t.Fatalf("task detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
 	}
-	var detail console.TaskDetailView
+	var detail hiveview.TaskDetailView
 	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
@@ -1435,7 +1436,7 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 	if detailRec.Code != http.StatusOK {
 		t.Fatalf("task detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
 	}
-	var detail console.TaskDetailView
+	var detail hiveview.TaskDetailView
 	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
 		t.Fatal(err)
 	}
@@ -1455,7 +1456,7 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 	if finalDetailRec.Code != http.StatusOK {
 		t.Fatalf("final detail status = %d body=%s", finalDetailRec.Code, finalDetailRec.Body.String())
 	}
-	var finalDetail console.TaskDetailView
+	var finalDetail hiveview.TaskDetailView
 	if err := json.NewDecoder(finalDetailRec.Body).Decode(&finalDetail); err != nil {
 		t.Fatal(err)
 	}
@@ -1545,7 +1546,7 @@ func TestListRunsProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	list, err := console.ListRuns(ctxColony)
+	list, err := hiveview.ListRuns(ctxColony)
 	if err != nil {
 		t.Fatal(err)
 	}

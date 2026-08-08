@@ -9,7 +9,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
@@ -102,7 +102,7 @@ func (n *Notifier) ReconcilePendingInvites(ctx context.Context) error {
 // ReconcileTaskStatuses pushes cards for blocked/failed/review-gated tasks not yet deduped.
 // Completed tasks are live-only (not reconciled on gate restart).
 func (n *Notifier) ReconcileTaskStatuses(ctx context.Context) error {
-	board, err := console.ListTaskBoard(n.Colony)
+	board, err := hiveview.ListTaskBoard(n.Colony)
 	if err != nil {
 		return err
 	}

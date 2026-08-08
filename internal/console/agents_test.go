@@ -10,6 +10,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
@@ -51,7 +52,7 @@ func TestAgentsAPIHandlers(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var view console.AgentsView
+	var view hiveview.AgentsView
 	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestAgentsAPIHandlers(t *testing.T) {
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("status after kill = %d body=%s", rec2.Code, rec2.Body.String())
 	}
-	var afterKill console.AgentsView
+	var afterKill hiveview.AgentsView
 	if err := json.NewDecoder(rec2.Body).Decode(&afterKill); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +137,7 @@ func TestAgentsAPIMixedAFKAndSession(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var view console.AgentsView
+	var view hiveview.AgentsView
 	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +199,7 @@ func TestAgentsAPISessionDeadPIDExcluded(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var view console.AgentsView
+	var view hiveview.AgentsView
 	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestAgentsAPIRegistersLiveSession(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var view console.AgentsView
+	var view hiveview.AgentsView
 	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
 		t.Fatal(err)
 	}

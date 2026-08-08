@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 )
 
 func TestFormatMarkdownPreservesNewlines(t *testing.T) {
@@ -31,10 +31,10 @@ func TestRenderHTMLFormatsRunSummary(t *testing.T) {
 	data := TraceExportData{
 		Slug:       "demo",
 		ColonyRoot: "/tmp",
-		Trace: console.TraceDetailView{
-			TraceSummaryView: console.TraceSummaryView{TraceID: "trace-1"},
+		Trace: hiveview.TraceDetailView{
+			TraceSummaryView: hiveview.TraceSummaryView{TraceID: "trace-1"},
 		},
-		Runs: []console.RunView{{
+		Runs: []hiveview.RunView{{
 			AgentID: "agent-1",
 			Bee:     "scout",
 			State:   "completed",

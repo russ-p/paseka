@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/console"
+	"github.com/paseka/paseka/internal/hiveview"
 )
 
 type htmlEventView struct {
@@ -41,8 +41,8 @@ type htmlPageData struct {
 	WorktreeBaseSHA string
 	WorktreeCreated string
 	HasWorktree     bool
-	Tasks           []console.TaskSummaryView
-	Runs            []console.RunView
+	Tasks           []hiveview.TaskSummaryView
+	Runs            []hiveview.RunView
 	Events          []htmlEventView
 }
 

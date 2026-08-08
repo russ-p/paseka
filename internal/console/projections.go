@@ -16,7 +16,6 @@ import (
 
 const (
 	recentSessionLimit = 50
-	recentRunLimit     = 50
 )
 
 var interactiveAdapters = map[string]bool{
@@ -52,45 +51,10 @@ type SessionView struct {
 	Active     bool       `json:"active"`
 }
 
-// InviteView is a console projection of one Human Gateway invite.
-type InviteView struct {
-	InviteID    string    `json:"inviteId"`
-	TraceID     string    `json:"traceId"`
-	Bee         string    `json:"bee"`
-	Intent      string    `json:"intent,omitempty"`
-	Task        string    `json:"task"`
-	Status      string    `json:"status"`
-	ArtifactRef string    `json:"artifactRef,omitempty"`
-	SessionID   string    `json:"sessionId,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-}
-
 // TranscriptPage is a cursor-based transcript slice.
 type TranscriptPage struct {
 	Entries    []runs.TranscriptEntry `json:"entries"`
 	NextCursor int                    `json:"nextCursor"`
-}
-
-// RunView is a console projection of one headless adapter run.
-type RunView struct {
-	TraceID    string          `json:"traceId"`
-	AgentID    string          `json:"agentId"`
-	Bee        string          `json:"bee"`
-	Adapter    string          `json:"adapter"`
-	Workspace  string          `json:"workspace"`
-	ColonyRoot string          `json:"colonyRoot,omitempty"`
-	TaskID     string          `json:"taskId,omitempty"`
-	Body       string          `json:"body,omitempty"`
-	Intent     string          `json:"intent,omitempty"`
-	State      string          `json:"state"`
-	Summary    string          `json:"summary,omitempty"`
-	Usage      *protocol.Usage `json:"usage,omitempty"`
-	RunDir     string          `json:"runDir"`
-	StartedAt  time.Time       `json:"startedAt"`
-	FinishedAt *time.Time      `json:"finishedAt,omitempty"`
-	HasEvents  bool            `json:"hasEvents"`
-	HasSession bool            `json:"hasSession"`
 }
 
 // EventsPage is a cursor-based events.ndjson slice.
@@ -211,58 +175,6 @@ func GetSession(ctx colony.Context, mgr *sessions.Manager, sessionID string) (Se
 	return SessionView{}, false, nil
 }
 
-// ListRuns returns recent headless adapter runs from the filesystem.
-func ListRuns(ctx colony.Context) ([]RunView, error) {
-	metas, err := runs.ScanRecentRuns(ctx.ColonyRoot, recentRunLimit)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]RunView, 0, len(metas))
-	for _, meta := range metas {
-		out = append(out, runViewFromMeta(meta))
-	}
-	sortRuns(out)
-	return out, nil
-}
-
-// GetRun returns one run by trace and agent identifiers.
-func GetRun(ctx colony.Context, traceID, agentID string) (RunView, bool, error) {
-	meta, ok, err := runs.FindRun(ctx.ColonyRoot, traceID, agentID)
-	if err != nil {
-		return RunView{}, false, err
-	}
-	if !ok {
-		return RunView{}, false, nil
-	}
-	return runViewFromMeta(meta), true, nil
-}
-
-func runViewFromMeta(meta runs.RunMeta) RunView {
-	view := RunView{
-		TraceID:    meta.TraceID,
-		AgentID:    meta.AgentID,
-		Bee:        meta.Bee,
-		Adapter:    meta.Adapter,
-		Workspace:  meta.Workspace,
-		ColonyRoot: meta.ColonyRoot,
-		TaskID:     meta.TaskID,
-		Body:       meta.Task,
-		Intent:     meta.Intent,
-		State:      meta.State,
-		Summary:    meta.Summary,
-		Usage:      meta.Usage,
-		RunDir:     meta.RunDir,
-		StartedAt:  meta.StartedAt,
-		HasEvents:  meta.HasEvents,
-		HasSession: meta.HasSession,
-	}
-	if !meta.FinishedAt.IsZero() {
-		finished := meta.FinishedAt
-		view.FinishedAt = &finished
-	}
-	return view
-}
-
 func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView {
 	state := string(h.State)
 	if state == "" {
@@ -336,40 +248,4 @@ func sortSessions(out []SessionView) {
 		}
 		return out[i].StartedAt.After(out[j].StartedAt)
 	})
-}
-
-func sortRuns(out []RunView) {
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].StartedAt.After(out[j].StartedAt)
-	})
-}
-
-// ListInvites returns pending Human Gateway invites for the console.
-func ListInvites(ctx colony.Context, status string) ([]InviteView, error) {
-	if status == "" {
-		status = colony.InviteStatusPending
-	}
-	entries, err := colony.ListInvites(ctx.Slug, status, "")
-	if err != nil {
-		return nil, err
-	}
-	out := make([]InviteView, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, InviteView{
-			InviteID:    e.InviteID,
-			TraceID:     e.TraceID,
-			Bee:         e.Bee,
-			Intent:      e.Intent,
-			Task:        e.Task,
-			Status:      e.Status,
-			ArtifactRef: e.ArtifactRef,
-			SessionID:   e.SessionID,
-			CreatedAt:   e.CreatedAt,
-			UpdatedAt:   e.UpdatedAt,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
-	return out, nil
 }

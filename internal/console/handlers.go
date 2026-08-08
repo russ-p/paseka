@@ -9,6 +9,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
@@ -33,7 +34,7 @@ type api struct {
 func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		view, err := GetRuntime(a.ctx, a.runtime)
+		view, err := hiveview.GetRuntime(a.ctx, a.runtime)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -49,7 +50,7 @@ func (a *api) handleAgents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	view, err := GetAgents(a.ctx, a.sessions)
+	view, err := hiveview.GetAgents(a.ctx, a.sessions)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -192,7 +193,7 @@ func (a *api) runCue(w http.ResponseWriter, r *http.Request, cueID string) {
 func (a *api) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		view, err := ListTaskBoard(a.ctx)
+		view, err := hiveview.ListTaskBoard(a.ctx)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -230,7 +231,7 @@ func (a *api) handleTraces(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := ListTraces(a.ctx, 20)
+	list, err := hiveview.ListTraces(a.ctx, 20)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -295,7 +296,7 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	view, ok, err := GetTrace(a.ctx, traceID)
+	view, ok, err := hiveview.GetTrace(a.ctx, traceID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -322,9 +323,9 @@ func (a *api) handleTraceEnergyAdd(w http.ResponseWriter, r *http.Request, trace
 }
 
 func (a *api) handleTraceEvents(w http.ResponseWriter, r *http.Request, traceID string) {
-	filter := ParseEventFilter(r.URL.Query())
+	filter := hiveview.ParseEventFilter(r.URL.Query())
 	filter.TraceID = traceID
-	page, err := ListEventFeed(a.ctx, filter)
+	page, err := hiveview.ListEventFeed(a.ctx, filter)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -337,8 +338,8 @@ func (a *api) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	filter := ParseEventFilter(r.URL.Query())
-	page, err := ListEventFeed(a.ctx, filter)
+	filter := hiveview.ParseEventFilter(r.URL.Query())
+	page, err := hiveview.ListEventFeed(a.ctx, filter)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -351,7 +352,7 @@ func (a *api) handleRuns(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := ListRuns(a.ctx)
+	list, err := hiveview.ListRuns(a.ctx)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -396,7 +397,7 @@ func (a *api) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	view, ok, err := GetRun(a.ctx, traceID, agentID)
+	view, ok, err := hiveview.GetRun(a.ctx, traceID, agentID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -409,7 +410,7 @@ func (a *api) handleRunByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) handleRunEvents(w http.ResponseWriter, r *http.Request, traceID, agentID string) {
-	view, ok, err := GetRun(a.ctx, traceID, agentID)
+	view, ok, err := hiveview.GetRun(a.ctx, traceID, agentID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -517,7 +518,7 @@ func (a *api) handleInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	list, err := ListInvites(a.ctx, status)
+	list, err := hiveview.ListInvites(a.ctx, status)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -619,7 +620,7 @@ func (a *api) rejectInvite(w http.ResponseWriter, r *http.Request, inviteID stri
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, InviteView{
+	writeJSON(w, hiveview.InviteView{
 		InviteID:    invite.InviteID,
 		TraceID:     invite.TraceID,
 		Bee:         invite.Bee,
@@ -742,7 +743,7 @@ func (a *api) handleTraceTasks(w http.ResponseWriter, r *http.Request, traceID s
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		list, err := ListTraceTasks(a.ctx, traceID)
+		list, err := hiveview.ListTraceTasks(a.ctx, traceID)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -771,7 +772,7 @@ func (a *api) handleTraceTasks(w http.ResponseWriter, r *http.Request, traceID s
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		view, ok, err := GetTask(a.ctx, traceID, taskID)
+		view, ok, err := hiveview.GetTask(a.ctx, traceID, taskID)
 		if err != nil {
 			writeError(w, err)
 			return

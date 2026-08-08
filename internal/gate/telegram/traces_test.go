@@ -8,8 +8,8 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
 	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
@@ -23,7 +23,7 @@ func TestFormatTracesListEmpty(t *testing.T) {
 
 func TestFormatTracesListRendersStatusHintsAndTimes(t *testing.T) {
 	now := time.Date(2026, 7, 19, 15, 0, 0, 0, time.UTC)
-	text := tggate.FormatTracesList(tggate.Config{}, []console.TraceSummaryView{
+	text := tggate.FormatTracesList(tggate.Config{}, []hiveview.TraceSummaryView{
 		{
 			TraceID:        "trace-active",
 			LastActivityAt: now.Add(-30 * time.Minute),
@@ -59,7 +59,7 @@ func TestFormatTracesListIncludesConsoleDeepLinks(t *testing.T) {
 	now := time.Now().UTC()
 	text := tggate.FormatTracesList(tggate.Config{
 		ConsoleBaseURL: "https://console.example/",
-	}, []console.TraceSummaryView{
+	}, []hiveview.TraceSummaryView{
 		{
 			TraceID:        "trace-abc",
 			LastActivityAt: now,
