@@ -1,4 +1,4 @@
-package tasks
+package energy_test
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/energy"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
-func TestAddEnergyAppliesWhenReactorStopped(t *testing.T) {
+func TestAddAppliesWhenReactorStopped(t *testing.T) {
 	slug := "energy-add-stopped"
 	root := t.TempDir()
 	setupEnergyHome(t, slug, root)
@@ -23,7 +24,7 @@ func TestAddEnergyAppliesWhenReactorStopped(t *testing.T) {
 	var applyCount atomic.Int32
 	wrapped := &applyCountingLedger{Ledger: ledger, onApply: func() { applyCount.Add(1) }}
 
-	snap, err := addEnergy(context.Background(), slug, wrapped, &noopPublisher{}, AddEnergyInput{
+	snap, err := energy.Add(context.Background(), slug, wrapped, &noopPublisher{}, energy.AddInput{
 		TraceID: "trace-1",
 		Amount:  5,
 	})
@@ -38,7 +39,7 @@ func TestAddEnergyAppliesWhenReactorStopped(t *testing.T) {
 	}
 }
 
-func TestAddEnergyDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
+func TestAddDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
 	slug := "energy-add-running"
 	root := t.TempDir()
 	setupEnergyHome(t, slug, root)
@@ -65,7 +66,7 @@ func TestAddEnergyDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
 		onApply: func() { cliApplyCount.Add(1) },
 	}
 
-	snap, err := addEnergy(context.Background(), slug, wrapped, &reactorSimPublisher{ledger: memory}, AddEnergyInput{
+	snap, err := energy.Add(context.Background(), slug, wrapped, &reactorSimPublisher{ledger: memory}, energy.AddInput{
 		TraceID: "trace-1",
 		Amount:  3,
 	})
@@ -80,6 +81,53 @@ func TestAddEnergyDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
 	}
 }
 
+func TestConsumeSeedsAndDecrements(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	pub := &stubPublisher{}
+	ctx := context.Background()
+	snap, err := energy.Consume(ctx, "test-colony", "", ledger, pub, energy.ConsumeInput{
+		TraceID: "trace-1",
+		Amount:  1,
+		Reason:  "session.start",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyRemaining != protocol.DefaultEnergyBudget-1 {
+		t.Fatalf("remaining = %d", snap.EnergyRemaining)
+	}
+	if len(pub.published) != 1 {
+		t.Fatalf("published = %d", len(pub.published))
+	}
+}
+
+func TestConsumeExhausted(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trace-1", 1); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
+		Kind:   protocol.SignalEnergyConsume,
+		Amount: 1,
+		Reason: "task.dispatch",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(ev); err != nil {
+		t.Fatal(err)
+	}
+	pub := &stubPublisher{}
+	_, err = energy.Consume(context.Background(), "test-colony", "", ledger, pub, energy.ConsumeInput{
+		TraceID: "trace-1",
+		Amount:  1,
+		Reason:  "session.start",
+	})
+	if err != energy.ErrHoneyReserveExhausted {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 type noopPublisher struct{}
 
 func (noopPublisher) PublishEvent(context.Context, protocol.Event) error { return nil }
@@ -91,6 +139,15 @@ type reactorSimPublisher struct {
 func (p *reactorSimPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
 	_, err := p.ledger.Apply(ev)
 	return err
+}
+
+type stubPublisher struct {
+	published []protocol.Event
+}
+
+func (s *stubPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
+	s.published = append(s.published, ev)
+	return nil
 }
 
 type applyCountingLedger struct {

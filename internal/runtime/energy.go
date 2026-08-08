@@ -2,44 +2,17 @@ package runtime
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/energy"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 )
 
 const energyDispatchCost = 1
 
-// ValidateEnergyAddAmount checks CLI/API honey injection amounts.
-func ValidateEnergyAddAmount(amount int) error {
-	if amount <= 0 {
-		return fmt.Errorf("energy amount must be positive")
-	}
-	return nil
-}
-
 func (r *Reactor) ensureEnergySeeded(ctx context.Context, traceID string) error {
-	snap, err := r.ledger.Snapshot(traceID)
-	if err != nil {
-		return err
-	}
-	if snap.EnergyBudget > 0 {
-		return nil
-	}
-	budget, err := r.resolvedEnergyBudget()
-	if err != nil {
-		return err
-	}
-	return r.ledger.SeedEnergy(traceID, budget)
-}
-
-func (r *Reactor) resolvedEnergyBudget() (int, error) {
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
-		return 0, err
-	}
-	return manifest.ResolvedEnergyBudget(), nil
+	return energy.EnsureSeeded(r.ledger, r.colony.ColonyRoot, traceID)
 }
 
 func (r *Reactor) loadColonyManifest() (colony.Colony, error) {

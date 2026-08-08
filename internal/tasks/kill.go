@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/paseka/paseka/internal/energy"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 )
@@ -53,7 +54,7 @@ func killTrace(ctx context.Context, slug string, ledger taskledger.Ledger, pub e
 		return taskledger.TraceSnapshot{}, err
 	}
 
-	reactorRunning, err := isReactorRunning(slug)
+	reactorRunning, err := energy.ReactorAlive(slug)
 	if err != nil {
 		return taskledger.TraceSnapshot{}, err
 	}

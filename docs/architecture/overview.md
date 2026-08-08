@@ -395,6 +395,7 @@ cmd/paseka/                 # Queen Shell CLI
 internal/
   protocol/                 # event contracts (leaf types)
   taskledger/               # trace/task projection store (KV)
+  energy/                   # honey reserve seed + CLI publish helpers
   tasks/                    # task ops (create, start, retry, energy CLI paths)
   hiveview/                 # shared read models (traces, tasks, runs, agents, invites)
   console/                  # Queen Console HTTP API + embedded SPA (transport)

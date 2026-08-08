@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/paseka/paseka/internal/energy"
 	"github.com/paseka/paseka/internal/tasks"
 )
 
@@ -28,7 +28,7 @@ func AddTraceEnergy(ctx context.Context, colonyCtx colony.Context, traceID strin
 	if traceID == "" {
 		return EnergyAddResponse{}, fmt.Errorf("trace id is required")
 	}
-	if err := runtime.ValidateEnergyAddAmount(amount); err != nil {
+	if err := energy.ValidateAddAmount(amount); err != nil {
 		return EnergyAddResponse{}, err
 	}
 
