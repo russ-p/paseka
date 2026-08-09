@@ -415,6 +415,8 @@ internal/
 
 **Layering:** `hiveview` holds transport-agnostic projections consumed by Queen Console, Telegram Gate, and HTML export. `console` is HTTP/SPA wiring and mutations; it must not be imported by other UIs.
 
+**Runtime dispatch:** `Reactor` owns Task vs Direct choreography (`dispatch_task.go`, `dispatch_direct.go`) after ledger apply. `Dispatcher.Dispatch` is a thin orchestrator over **Prepare → Run → Finalize** (`dispatch_stages.go`): render prompts and run dir, adapter invocation, then deferred flush / run.summary / publish.
+
 ---
 
 ## 5. Decisions (locked)

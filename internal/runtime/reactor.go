@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -133,27 +132,7 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		r.syncTaskProjection(res.Trace)
 	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
-	if energyAddDetected(ev) {
-		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
-			return err
-		}
-	}
-	if systemKillDetected(ev) {
-		r.cancelInflightForTrace(ev.TraceID)
-	}
-	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
-		return err
-	}
-	if err := r.handleVerificationSuccess(ctx, ev); err != nil {
-		return err
-	}
-	if err := r.handleInviteCompletion(ctx, ev); err != nil {
-		return err
-	}
-	if err := r.handleAutoInvite(ctx, ev); err != nil {
-		return err
-	}
-	if err := r.handleInviteProjection(ev); err != nil {
+	if err := r.handlePostApplySideEffects(ctx, ev); err != nil {
 		return err
 	}
 	if err := r.executeDispatches(ctx, ev, res.Ready); err != nil {
@@ -251,206 +230,28 @@ func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot) error {
-	key := traceID + ":" + task.TaskID
-	r.mu.Lock()
-	if _, ok := r.inflight[key]; ok {
-		r.mu.Unlock()
-		logDispatchSkip("already running", traceID, task.TaskID, taskBeeName(task))
-		return nil
+func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event) error {
+	if energyAddDetected(ev) {
+		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
+			return err
+		}
 	}
-	r.mu.Unlock()
-
-	if r.traceKilled(traceID) {
-		logDispatchSkip("trace killed", traceID, task.TaskID, taskBeeName(task))
-		return nil
+	if systemKillDetected(ev) {
+		r.cancelInflightForTrace(ev.TraceID)
 	}
-
-	dispatchCtx, endInflight := r.beginTaskInflight(traceID, task.TaskID)
-	defer endInflight()
-
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
+	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
 		return err
 	}
-	bee := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
-	if !r.registry.CanDispatchTaskReady(bee) {
-		logDispatchSkip("bee not subscribed to task.ready", traceID, task.TaskID, bee)
-		return nil
-	}
-
-	snap, err := r.ledger.Snapshot(traceID)
-	if err != nil {
+	if err := r.handleVerificationSuccess(ctx, ev); err != nil {
 		return err
 	}
-	taskSnap := snap.Tasks[task.TaskID]
-	if taskSnap.TaskID != "" {
-		task = taskSnap
-	}
-	if taskledger.ShouldSkipDispatch(task) {
-		logDispatchSkip("final review gate — no AFK dispatch", traceID, task.TaskID, bee)
-		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
-	}
-
-	ok, err := r.gateDispatchEnergy(dispatchCtx, traceID, task.TaskID, "task.dispatch")
-	if err != nil {
+	if err := r.handleInviteCompletion(ctx, ev); err != nil {
 		return err
 	}
-	if !ok {
-		logDispatchSkip("honey reserve exhausted", traceID, task.TaskID, bee)
-		return nil
-	}
-
-	if err := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusRunning, ""); err != nil {
+	if err := r.handleAutoInvite(ctx, ev); err != nil {
 		return err
 	}
-
-	body := task.Body
-	if body == "" {
-		body = task.Title
-	}
-	if body == "" {
-		body = fmt.Sprintf("Execute task %s", task.TaskID)
-	}
-
-	startedAt := time.Now().UTC()
-	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
-		Bee:            bee,
-		TraceID:        traceID,
-		TaskID:         task.TaskID,
-		Task:           body,
-		Sector:         task.Sector,
-		Intent:         task.Intent,
-		IsLastWorkTask: taskledger.IsLastWorkTask(snap, task.TaskID),
-	}, DispatchModeTask)
-	if err != nil {
-		if setErr := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(nil, err)); setErr != nil {
-			return setErr
-		}
-		return nil
-	}
-	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt)
-	if res.Result == nil || res.Result.Status != string(protocol.StatusCompleted) {
-		if res.Result != nil {
-			r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, res.Result.Status, time.Now().UTC())
-		}
-		status := "unknown"
-		if res.Result != nil {
-			status = res.Result.Status
-		}
-		logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, status)
-		if r.traceKilled(traceID) {
-			return nil
-		}
-		if setErr := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(res, nil)); setErr != nil {
-			return setErr
-		}
-		return nil
-	}
-	logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted))
-	finishedAt := time.Now().UTC()
-	r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted), finishedAt)
-
-	summary := strings.TrimSpace(res.Result.Summary)
-	if protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired {
-		if runOpenedRootProposal(r.registry, bee, res.Result) {
-			return nil
-		}
-		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
-	}
-	if ev, ok := runEmittedTaskCompleted(res.Result, task.TaskID); ok {
-		return r.applyTaskCompletedEvent(dispatchCtx, traceID, ev)
-	}
-	if shouldDeferAFKCompletion(r.registry, bee, res.Result) {
-		afkSummary := summary
-		if afkSummary == "" {
-			afkSummary = "Awaiting AFK verification gate"
-		}
-		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, afkSummary)
-	}
-	return r.completeTask(dispatchCtx, traceID, task.TaskID, summary, "")
-}
-
-func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {
-	if r.traceKilled(ev.TraceID) {
-		logDispatchSkip("trace killed", ev.TraceID, "", beeRole)
-		return nil
-	}
-
-	taskID, taskBody, err := eventDispatchContext(ev)
-	if err != nil {
-		runtimeLog.Warn("direct dispatch skipped",
-			logging.F("bee", beeRole),
-			logging.F("error", err.Error()),
-		)
-		return nil
-	}
-
-	if publisherBee := r.publisherBee(ev); publisherBee != "" && publisherBee == beeRole {
-		logDispatchSkip("publisher is same bee role", ev.TraceID, taskID, beeRole)
-		return nil
-	}
-
-	key := directDispatchKey(ev, beeRole)
-	r.mu.Lock()
-	if _, ok := r.directProcessed[key]; ok {
-		r.mu.Unlock()
-		logDispatchSkip("already processed", ev.TraceID, taskID, beeRole)
-		return nil
-	}
-	if _, ok := r.directInflight[key]; ok {
-		r.mu.Unlock()
-		logDispatchSkip("already running", ev.TraceID, taskID, beeRole)
-		return nil
-	}
-	r.mu.Unlock()
-
-	dispatchCtx, endInflight := r.beginDirectInflight(key)
-	defer endInflight()
-
-	ok, err := r.gateDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
-	if err != nil {
-		return err
-	}
-	if !ok {
-		logDispatchSkip("honey reserve exhausted", ev.TraceID, taskID, beeRole)
-		return nil
-	}
-
-	proposalSector, proposalKind := proposalDispatchFields(ev)
-
-	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
-		Bee:          beeRole,
-		TraceID:      ev.TraceID,
-		TaskID:       taskID,
-		Task:         taskBody,
-		Sector:       proposalSector,
-		ProposalKind: proposalKind,
-	}, DispatchModeDirect)
-	if err != nil {
-		return err
-	}
-	r.mu.Lock()
-	r.directProcessed[key] = struct{}{}
-	r.mu.Unlock()
-	status := "unknown"
-	if res.Result != nil {
-		status = res.Result.Status
-	}
-	logDispatchDone(DispatchModeDirect, beeRole, ev.TraceID, taskID, res.AgentID, status)
-	return nil
-}
-
-// publisherBee resolves the bee role that emitted an event from its run metadata.
-func (r *Reactor) publisherBee(ev protocol.Event) string {
-	if r.colony.ColonyRoot == "" || ev.TraceID == "" || ev.AgentID == "" {
-		return ""
-	}
-	meta, ok, err := runs.FindRun(r.colony.ColonyRoot, ev.TraceID, ev.AgentID)
-	if err != nil || !ok {
-		return ""
-	}
-	return strings.TrimSpace(meta.Bee)
+	return r.handleInviteProjection(ev)
 }
 
 // PublishEvent injects a domain event onto the bus (used by paseka signal).
@@ -543,48 +344,5 @@ func (r *Reactor) syncTaskProjection(trace taskledger.TraceSnapshot) {
 	}
 	if err := runs.SyncTraceTasks(r.colony.ColonyRoot, trace); err != nil {
 		runtimeLog.Warn("task projection sync failed", logging.F("error", err.Error()))
-	}
-}
-
-func taskDispatchFailureSummary(res *BeeRunResult, dispatchErr error) string {
-	if dispatchErr != nil {
-		return fmt.Sprintf("dispatch error: %v", dispatchErr)
-	}
-	if res != nil && res.Result != nil {
-		result := res.Result
-		if result.Err != nil {
-			return fmt.Sprintf("adapter %s: %v", result.Status, result.Err)
-		}
-		if strings.TrimSpace(result.Summary) != "" {
-			return result.Status + ": " + strings.TrimSpace(result.Summary)
-		}
-		if result.Status != "" {
-			return "adapter " + result.Status
-		}
-	}
-	return "adapter failed"
-}
-
-func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time) {
-	if res == nil || taskID == "" {
-		return
-	}
-	if err := runs.AppendTaskRun(r.colony.ColonyRoot, traceID, taskID, runs.TaskRunEntry{
-		AgentID:   res.AgentID,
-		Bee:       bee,
-		RunDir:    res.RunDir,
-		StartedAt: startedAt,
-		RunStatus: "running",
-	}); err != nil {
-		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
-	}
-}
-
-func (r *Reactor) recordTaskRunFinish(traceID, taskID, agentID, runStatus string, finishedAt time.Time) {
-	if taskID == "" || agentID == "" {
-		return
-	}
-	if err := runs.UpdateTaskRunStatus(r.colony.ColonyRoot, traceID, taskID, agentID, runStatus, finishedAt); err != nil {
-		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
 	}
 }
