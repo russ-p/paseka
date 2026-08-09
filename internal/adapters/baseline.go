@@ -2,9 +2,12 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/paseka/paseka/internal/gitroot"
 )
 
 // WorkspaceBaseline captures tracked dirty state before an adapter run.
@@ -14,18 +17,24 @@ type WorkspaceBaseline struct {
 }
 
 // CaptureWorkspaceBaseline records HEAD and hashes of files dirty vs HEAD.
+// workspace may be the git root or a sector subdirectory; paths are always
+// resolved against the repository toplevel.
 func CaptureWorkspaceBaseline(ctx context.Context, workspace string) (WorkspaceBaseline, error) {
-	baseSHA, err := gitRevParse(ctx, workspace, "HEAD")
+	root, err := gitroot.Find(workspace)
 	if err != nil {
 		return WorkspaceBaseline{}, err
 	}
-	files, err := gitDiffNameOnly(ctx, workspace)
+	baseSHA, err := gitRevParse(ctx, root, "HEAD")
+	if err != nil {
+		return WorkspaceBaseline{}, err
+	}
+	files, err := gitDiffNameOnly(ctx, root)
 	if err != nil {
 		return WorkspaceBaseline{}, err
 	}
 	hashes := make(map[string]string, len(files))
 	for _, file := range files {
-		hash, err := gitHashObject(ctx, workspace, file)
+		hash, err := gitHashObject(ctx, root, file)
 		if err != nil {
 			return WorkspaceBaseline{}, err
 		}
@@ -38,14 +47,19 @@ func CaptureWorkspaceBaseline(ctx context.Context, workspace string) (WorkspaceB
 }
 
 // AttributableDiff returns git diff HEAD for tracked files whose content changed since baseline.
+// workspace may be the git root or a sector subdirectory.
 func AttributableDiff(ctx context.Context, workspace string, baseline WorkspaceBaseline) (string, error) {
-	files, err := gitDiffNameOnly(ctx, workspace)
+	root, err := gitroot.Find(workspace)
+	if err != nil {
+		return "", err
+	}
+	files, err := gitDiffNameOnly(ctx, root)
 	if err != nil {
 		return "", err
 	}
 	var attributable []string
 	for _, file := range files {
-		hash, err := gitHashObject(ctx, workspace, file)
+		hash, err := gitHashObject(ctx, root, file)
 		if err != nil {
 			return "", err
 		}
@@ -57,27 +71,21 @@ func AttributableDiff(ctx context.Context, workspace string, baseline WorkspaceB
 	if len(attributable) == 0 {
 		return "", nil
 	}
-	return gitDiffFiles(ctx, workspace, attributable)
+	return gitDiffFiles(ctx, root, attributable)
 }
 
-func gitRevParse(ctx context.Context, workspace, ref string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", ref)
-	cmd.Dir = workspace
-	out, err := cmd.Output()
+func gitRevParse(ctx context.Context, repoRoot, ref string) (string, error) {
+	out, err := gitOutput(exec.CommandContext(ctx, "git", "rev-parse", ref), repoRoot)
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func gitDiffNameOnly(ctx context.Context, workspace string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "git", "diff", "HEAD", "--name-only")
-	cmd.Dir = workspace
-	out, err := cmd.Output()
+func gitDiffNameOnly(ctx context.Context, repoRoot string) ([]string, error) {
+	out, err := gitOutput(exec.CommandContext(ctx, "git", "diff", "HEAD", "--name-only"), repoRoot)
 	if err != nil {
-		cmd = exec.CommandContext(ctx, "git", "diff", "--name-only")
-		cmd.Dir = workspace
-		out, err = cmd.Output()
+		out, err = gitOutput(exec.CommandContext(ctx, "git", "diff", "--name-only"), repoRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -92,29 +100,35 @@ func gitDiffNameOnly(ctx context.Context, workspace string) ([]string, error) {
 	return files, nil
 }
 
-func gitHashObject(ctx context.Context, workspace, file string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "hash-object", file)
-	cmd.Dir = workspace
-	out, err := cmd.Output()
+func gitHashObject(ctx context.Context, repoRoot, file string) (string, error) {
+	out, err := gitOutput(exec.CommandContext(ctx, "git", "hash-object", file), repoRoot)
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func gitDiffFiles(ctx context.Context, workspace string, files []string) (string, error) {
+func gitDiffFiles(ctx context.Context, repoRoot string, files []string) (string, error) {
 	args := append([]string{"diff", "HEAD", "--"}, files...)
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = workspace
-	out, err := cmd.Output()
+	out, err := gitOutput(exec.CommandContext(ctx, "git", args...), repoRoot)
 	if err != nil {
 		args = append([]string{"diff", "--"}, files...)
-		cmd = exec.CommandContext(ctx, "git", args...)
-		cmd.Dir = workspace
-		out, err = cmd.Output()
+		out, err = gitOutput(exec.CommandContext(ctx, "git", args...), repoRoot)
 		if err != nil {
 			return "", err
 		}
 	}
 	return string(out), nil
+}
+
+func gitOutput(cmd *exec.Cmd, dir string) ([]byte, error) {
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
+			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+		}
+		return nil, err
+	}
+	return out, nil
 }

@@ -74,6 +74,43 @@ func TestAttributableDiffEmptyWhenOnlyPreExistingDirty(t *testing.T) {
 	}
 }
 
+// Sector workspaces are subdirectory cwds; git still reports repo-root-relative paths.
+func TestAttributableDiffFromSectorWorkspace(t *testing.T) {
+	repo := initGitRepo(t)
+	sector := filepath.Join(repo, "fizman-server")
+	if err := os.MkdirAll(sector, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tracked := filepath.Join(sector, "Report.java")
+	if err := os.WriteFile(tracked, []byte("class Report {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "fizman-server/Report.java")
+	runGit(t, repo, "commit", "-m", "add sector file")
+
+	ctx := context.Background()
+	baseline, err := adapters.CaptureWorkspaceBaseline(ctx, sector)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(tracked, []byte("class Report { int x; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "fizman-server/Report.java")
+
+	diff, err := adapters.AttributableDiff(ctx, sector, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "fizman-server/Report.java") {
+		t.Fatalf("attributable diff missing sector file: %q", diff)
+	}
+	if !strings.Contains(diff, "int x") {
+		t.Fatalf("attributable diff missing content: %q", diff)
+	}
+}
+
 func initGitRepo(t *testing.T) string {
 	t.Helper()
 	repo := t.TempDir()
