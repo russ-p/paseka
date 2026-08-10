@@ -1,12 +1,9 @@
 package cursor
 
 import (
-	"context"
-	"errors"
 	"testing"
 
 	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/protocol"
 )
 
 func TestAdapterName(t *testing.T) {
@@ -57,26 +54,4 @@ func TestBuildArgs(t *testing.T) {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, args[i], want[i], args)
 		}
 	}
-}
-
-func TestResolveStatusProcessOutcome(t *testing.T) {
-	t.Run("completed on clean exit", func(t *testing.T) {
-		status, msg := resolveStatus(nil, nil)
-		if status != protocol.StatusCompleted || msg != "" {
-			t.Fatalf("status=%q msg=%q", status, msg)
-		}
-	})
-	t.Run("failed on run error", func(t *testing.T) {
-		runErr := errors.New("exit 1")
-		status, _ := resolveStatus(nil, runErr)
-		if status != protocol.StatusFailed {
-			t.Fatalf("status=%q", status)
-		}
-	})
-	t.Run("cancelled on context cancel", func(t *testing.T) {
-		status, _ := resolveStatus(context.Canceled, nil)
-		if status != protocol.StatusCancelled {
-			t.Fatalf("status=%q", status)
-		}
-	})
 }

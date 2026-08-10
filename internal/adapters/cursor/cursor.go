@@ -125,7 +125,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	if len(req.Command) > 0 {
 		outputFormat = adapters.FlagValue(args, "--output-format")
 	}
-	if isStreamFormat(outputFormat) {
+	if adapters.IsStreamFormat(outputFormat) {
 		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
 		events = parsed.Events
 		streamSummary = strings.TrimSpace(parsed.Summary)
@@ -137,7 +137,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	fileSummary, _ := runDir.ReadResult()
 	fileSummary = strings.TrimSpace(fileSummary)
-	summary := pickSummary(fileSummary, streamSummary)
+	summary := adapters.PickSummary(fileSummary, streamSummary)
 
 	artifacts := []adapters.Artifact{
 		{Kind: "stdout", Content: stdoutStr},
@@ -151,12 +151,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		})
 	}
 
-	diff, diffErr := gitDiff(ctx, req.Workspace)
+	diff, diffErr := adapters.GitDiff(ctx, req.Workspace)
 	if diffErr == nil && diff != "" {
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := resolveStatus(ctx.Err(), runErr)
+	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -191,55 +191,16 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	result := &adapters.RunResult{
 		Status:    string(status),
 		Summary:   summary,
-		Output:    pickOutput(summary, stdoutStr),
+		Output:    adapters.PickOutput(summary, stdoutStr),
 		Events:    events,
 		Artifacts: artifacts,
 		Usage:     streamUsage,
 		ExitCode:  exitCode,
 	}
 	if status == protocol.StatusFailed {
-		result.Err = buildRunError(exitCode, runErr, stderrStr, statusErr)
+		result.Err = adapters.BuildRunError("cursor: agent run failed", exitCode, runErr, stderrStr, statusErr)
 	}
 	return result, nil
-}
-
-func resolveStatus(ctxErr, runErr error) (protocol.RunStatus, string) {
-	if ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return protocol.StatusCancelled, ctxErr.Error()
-		}
-		return protocol.StatusFailed, ctxErr.Error()
-	}
-	if runErr != nil {
-		return protocol.StatusFailed, runErr.Error()
-	}
-	return protocol.StatusCompleted, ""
-}
-
-func buildRunError(exitCode int, runErr error, stderr, statusErr string) error {
-	msg := statusErr
-	if msg == "" && runErr != nil {
-		msg = runErr.Error()
-	}
-	err := fmt.Errorf("cursor: agent run failed (exit %d): %s", exitCode, msg)
-	if stderr != "" {
-		err = fmt.Errorf("%w\nstderr: %s", err, stderr)
-	}
-	return err
-}
-
-func isStreamFormat(format string) bool {
-	if format == "" {
-		return true
-	}
-	return format == "stream-json"
-}
-
-func pickSummary(fileSummary, streamSummary string) string {
-	if fileSummary != "" {
-		return fileSummary
-	}
-	return streamSummary
 }
 
 // JoinPrompt merges system_template and task prompt for Cursor CLI positional args.
@@ -286,26 +247,4 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 		args = append(args, prompt)
 	}
 	return args
-}
-
-func gitDiff(ctx context.Context, workspace string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "diff", "HEAD")
-	cmd.Dir = workspace
-	out, err := cmd.Output()
-	if err != nil {
-		cmd = exec.CommandContext(ctx, "git", "diff")
-		cmd.Dir = workspace
-		out, err = cmd.Output()
-		if err != nil {
-			return "", err
-		}
-	}
-	return string(out), nil
-}
-
-func pickOutput(summary, stdout string) string {
-	if summary != "" {
-		return summary
-	}
-	return stdout
 }

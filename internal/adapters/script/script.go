@@ -117,7 +117,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := resolveStatus(ctx.Err(), runErr)
+	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -151,44 +151,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	result := &adapters.RunResult{
 		Status:    string(status),
 		Summary:   summary,
-		Output:    pickOutput(summary, stdoutStr),
+		Output:    adapters.PickOutput(summary, stdoutStr),
 		Artifacts: artifacts,
 		ExitCode:  exitCode,
 	}
 	if status == protocol.StatusFailed {
-		result.Err = buildRunError(exitCode, runErr, stderrStr, statusErr)
+		result.Err = adapters.BuildRunError("script: command failed", exitCode, runErr, stderrStr, statusErr)
 	}
 	return result, nil
-}
-
-func resolveStatus(ctxErr, runErr error) (protocol.RunStatus, string) {
-	if ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return protocol.StatusCancelled, ctxErr.Error()
-		}
-		return protocol.StatusFailed, ctxErr.Error()
-	}
-	if runErr != nil {
-		return protocol.StatusFailed, runErr.Error()
-	}
-	return protocol.StatusCompleted, ""
-}
-
-func buildRunError(exitCode int, runErr error, stderr, statusErr string) error {
-	msg := statusErr
-	if msg == "" && runErr != nil {
-		msg = runErr.Error()
-	}
-	err := fmt.Errorf("script: command failed (exit %d): %s", exitCode, msg)
-	if stderr != "" {
-		err = fmt.Errorf("%w\nstderr: %s", err, stderr)
-	}
-	return err
-}
-
-func pickOutput(summary, stdout string) string {
-	if summary != "" {
-		return summary
-	}
-	return stdout
 }

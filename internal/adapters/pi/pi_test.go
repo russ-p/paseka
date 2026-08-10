@@ -3,7 +3,6 @@ package pi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,28 +101,6 @@ func TestParseJSONSummary(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestResolveStatusProcessOutcome(t *testing.T) {
-	t.Run("completed on clean exit", func(t *testing.T) {
-		status, msg := resolveStatus(nil, nil)
-		if status != protocol.StatusCompleted || msg != "" {
-			t.Fatalf("status=%q msg=%q", status, msg)
-		}
-	})
-	t.Run("failed on run error", func(t *testing.T) {
-		runErr := errors.New("exit 1")
-		status, _ := resolveStatus(nil, runErr)
-		if status != protocol.StatusFailed {
-			t.Fatalf("status=%q", status)
-		}
-	})
-	t.Run("cancelled on context cancel", func(t *testing.T) {
-		status, _ := resolveStatus(context.Canceled, nil)
-		if status != protocol.StatusCancelled {
-			t.Fatalf("status=%q", status)
-		}
-	})
 }
 
 func TestAdapterRunEndToEnd(t *testing.T) {
