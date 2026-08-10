@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +129,7 @@ func TestInspectUsageCLI(t *testing.T) {
 
 func initInspectFixtureRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	runGitInspect(t, dir, "init")
 	runGitInspect(t, dir, "config", "user.email", "test@test.com")
@@ -146,22 +145,6 @@ func initInspectFixtureRepo(t *testing.T) string {
 	runGitInspect(t, dir, "add", ".paseka")
 	runGitInspect(t, dir, "commit", "-m", "inspect fixture")
 
-	home := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", home)
-	homeDir := filepath.Join(home, "paseka", res.Slug)
-	if err := os.MkdirAll(filepath.Join(homeDir, "adapters"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg := "colony_root: " + res.ColonyRoot + "\nslug: " + res.Slug + "\n"
-	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(homeDir, "state.json"), []byte("{}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(homeDir, "adapters", "cursor.yaml"), []byte("binary: agent\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	return res.ColonyRoot
 }
 

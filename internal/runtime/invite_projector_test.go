@@ -46,6 +46,7 @@ func TestHandleInviteProjection(t *testing.T) {
 
 func initInviteTestRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	cmd := exec.Command("git", "init")
 	cmd.Dir = dir

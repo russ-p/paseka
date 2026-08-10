@@ -164,6 +164,7 @@ func (l *applyCountingLedger) Apply(ev protocol.Event) (taskledger.ApplyResult, 
 
 func setupEnergyHome(t *testing.T, slug, root string) {
 	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	home, err := colony.HomeDir(slug)
 	if err != nil {
 		t.Fatal(err)
