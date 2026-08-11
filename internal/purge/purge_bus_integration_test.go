@@ -1,6 +1,6 @@
 //go:build integration
 
-package colony_test
+package purge_test
 
 import (
 	"context"
@@ -90,7 +90,7 @@ func TestPurgeBusTrace(t *testing.T) {
 	}
 	client.Close()
 
-	purgePlan, err := purge.Plan(ctx, colony.PurgeTarget{Bus: true, TraceID: traceID})
+	purgePlan, err := purge.Plan(ctx, purge.PurgeTarget{Bus: true, TraceID: traceID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestPurgeBusTrace(t *testing.T) {
 		t.Fatalf("plan bus = %#v", purgePlan.Bus)
 	}
 
-	res, err := purge.Execute(ctx, colony.PurgeTarget{Bus: true, TraceID: traceID})
+	res, err := purge.Execute(ctx, purge.PurgeTarget{Bus: true, TraceID: traceID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestPurgeBusReseedEnergy(t *testing.T) {
 	}
 	client.Close()
 
-	res, err := purge.Execute(ctx, colony.PurgeTarget{Bus: true, TraceID: traceID, ReseedEnergy: true})
+	res, err := purge.Execute(ctx, purge.PurgeTarget{Bus: true, TraceID: traceID, ReseedEnergy: true})
 	if err != nil {
 		t.Fatal(err)
 	}

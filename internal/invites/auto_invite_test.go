@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
@@ -89,7 +91,7 @@ func TestBuildInviteDefaultsBeeIntent(t *testing.T) {
 
 func TestAutoInviteFromEventMatch(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +116,7 @@ func TestAutoInviteFromEventMatch(t *testing.T) {
 	if len(stub.published) != 1 {
 		t.Fatalf("published = %d", len(stub.published))
 	}
-	invites, err := colony.ListInvites(res.Slug, colony.InviteStatusPending, "trace-1")
+	invites, err := homestate.ListInvites(res.Slug, protocol.InviteStatusPending, "trace-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,17 +133,17 @@ func TestAutoInviteFromEventMatch(t *testing.T) {
 
 func TestAutoInviteFromEventIdempotent(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-existing",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
 		Task:     "Review item",
-		Status:   colony.InviteStatusPending,
+		Status:   protocol.InviteStatusPending,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +167,7 @@ func TestAutoInviteFromEventIdempotent(t *testing.T) {
 
 func TestAutoInviteSkipsNonMatchingDecision(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +188,7 @@ func TestAutoInviteSkipsNonMatchingDecision(t *testing.T) {
 
 func TestAutoInviteEmptyRulesNoInvite(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}

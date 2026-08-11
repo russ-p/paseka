@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 // Entry describes a colony-managed worktree.
@@ -76,7 +76,7 @@ func Ensure(opts EnsureOptions) (Entry, error) {
 	}
 
 	if opts.Slug != "" {
-		if err := colony.RegisterWorktree(opts.Slug, colony.WorktreeEntry{
+		if err := homestate.RegisterWorktree(opts.Slug, homestate.WorktreeEntry{
 			TraceID:   entry.TraceID,
 			Path:      entry.Path,
 			BaseSHA:   entry.BaseSHA,

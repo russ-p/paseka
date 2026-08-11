@@ -3,6 +3,8 @@ package colony
 import (
 	"fmt"
 	"strings"
+
+	"github.com/paseka/paseka/internal/protocol"
 )
 
 // AutoInviteRule publishes a pending session.invite when a bus event matches.
@@ -188,9 +190,7 @@ func (s AutoInviteInviteSpec) validate(ruleIdx int) error {
 	if status == "" {
 		return nil
 	}
-	switch status {
-	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted, InviteStatusIncomplete:
-	default:
+	if !protocol.IsInviteStatus(protocol.InviteStatus(status)) {
 		return fmt.Errorf("colony: auto_invites[%d].invite.status: invalid %q", ruleIdx, status)
 	}
 	return nil

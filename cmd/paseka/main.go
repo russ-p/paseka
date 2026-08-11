@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/spf13/cobra"
 )
@@ -68,7 +68,7 @@ func newInitCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Initialize .paseka colony config in the current git repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := colony.Init(colony.InitOptions{StartDir: startDir, Adapter: adapter})
+			res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: startDir, Adapter: adapter})
 			if err != nil {
 				return err
 			}
@@ -81,7 +81,7 @@ func newInitCmd() *cobra.Command {
 	return cmd
 }
 
-func printInitResult(res colony.InitResult) {
+func printInitResult(res colonyinit.InitResult) {
 	fmt.Printf("Colony initialized at %s\n", res.ColonyRoot)
 	fmt.Printf("Slug: %s\n", res.Slug)
 	fmt.Printf("Adapter: %s\n", res.Adapter)

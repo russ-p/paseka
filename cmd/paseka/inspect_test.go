@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
@@ -135,7 +135,7 @@ func initInspectFixtureRepo(t *testing.T) string {
 	runGitInspect(t, dir, "config", "user.email", "test@test.com")
 	runGitInspect(t, dir, "config", "user.name", "test")
 
-	res, err := colony.Init(colony.InitOptions{StartDir: dir})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/runtime"
 )
 
@@ -42,7 +43,7 @@ func TestBeeRunUsesWorktreeForBuilder(t *testing.T) {
 		t.Fatalf("binary = %q", rec.lastReq.Params.Binary)
 	}
 
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
 	}

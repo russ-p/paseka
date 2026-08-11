@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 // SpawnFunc launches a detached `paseka run` and returns the child PID.
@@ -38,7 +39,7 @@ func (s *Supervisor) Start(ctx colony.Context) (RuntimeStatus, error) {
 		return current, nil
 	}
 	if current.Status == RuntimeStatusStale {
-		if err := colony.ClearRuntime(ctx.Slug); err != nil {
+		if err := homestate.ClearRuntime(ctx.Slug); err != nil {
 			return RuntimeStatus{}, err
 		}
 	}
@@ -73,14 +74,14 @@ func (s *Supervisor) Start(ctx colony.Context) (RuntimeStatus, error) {
 
 	if colony.ProcessAlive(pid) {
 		now := time.Now().UTC()
-		entry := colony.RuntimeEntry{
+		entry := homestate.RuntimeEntry{
 			PID:             pid,
 			StartedAt:       now,
 			ColonyRoot:      ctx.ColonyRoot,
 			Status:          RuntimeStatusRunning,
 			LastHeartbeatAt: now,
 		}
-		if err := colony.RegisterRuntime(ctx.Slug, entry); err != nil {
+		if err := homestate.RegisterRuntime(ctx.Slug, entry); err != nil {
 			return RuntimeStatus{}, err
 		}
 		return ResolveStatus(ctx.Slug)
@@ -90,7 +91,7 @@ func (s *Supervisor) Start(ctx colony.Context) (RuntimeStatus, error) {
 
 // Stop sends SIGTERM to the registered runtime and waits for exit.
 func (s *Supervisor) Stop(ctx colony.Context) (RuntimeStatus, error) {
-	entry, err := colony.RuntimeRegistry(ctx.Slug)
+	entry, err := homestate.RuntimeRegistry(ctx.Slug)
 	if err != nil {
 		return RuntimeStatus{}, err
 	}
@@ -98,12 +99,12 @@ func (s *Supervisor) Stop(ctx colony.Context) (RuntimeStatus, error) {
 		return RuntimeStatus{Status: RuntimeStatusStopped}, nil
 	}
 	if !colony.ProcessAlive(entry.PID) {
-		_ = colony.ClearRuntime(ctx.Slug)
+		_ = homestate.ClearRuntime(ctx.Slug)
 		return RuntimeStatus{Status: RuntimeStatusStopped}, nil
 	}
 
 	entry.Status = RuntimeStatusStopping
-	if err := colony.RegisterRuntime(ctx.Slug, *entry); err != nil {
+	if err := homestate.RegisterRuntime(ctx.Slug, *entry); err != nil {
 		return RuntimeStatus{}, err
 	}
 
@@ -118,7 +119,7 @@ func (s *Supervisor) Stop(ctx colony.Context) (RuntimeStatus, error) {
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if !colony.ProcessAlive(entry.PID) {
-			_ = colony.ClearRuntime(ctx.Slug)
+			_ = homestate.ClearRuntime(ctx.Slug)
 			return RuntimeStatus{Status: RuntimeStatusStopped}, nil
 		}
 		time.Sleep(100 * time.Millisecond)

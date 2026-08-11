@@ -17,7 +17,19 @@ const (
 	InviteStatusCancelled  InviteStatus = "cancelled"
 	InviteStatusCompleted  InviteStatus = "completed"
 	InviteStatusIncomplete InviteStatus = "incomplete"
+	InviteStatusDeferred   InviteStatus = "deferred"
 )
+
+// IsInviteStatus reports whether status is a known invite lifecycle value.
+func IsInviteStatus(status InviteStatus) bool {
+	switch status {
+	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled,
+		InviteStatusCompleted, InviteStatusIncomplete, InviteStatusDeferred:
+		return true
+	default:
+		return false
+	}
+}
 
 // BeekeeperAction is the Beekeeper response to a pending invite.
 type BeekeeperAction string

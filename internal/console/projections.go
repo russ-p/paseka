@@ -8,6 +8,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
@@ -106,7 +107,7 @@ func ListInteractiveBees(colonyRoot string) ([]BeeView, error) {
 func ListSessions(ctx colony.Context, mgr *sessions.Manager) ([]SessionView, error) {
 	byID := map[string]SessionView{}
 
-	activeEntries, err := colony.ListSessions(ctx.Slug)
+	activeEntries, err := homestate.ListSessions(ctx.Slug)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +151,7 @@ func GetSession(ctx colony.Context, mgr *sessions.Manager, sessionID string) (Se
 		return view, true, nil
 	}
 
-	if reg, err := colony.FindSession(ctx.Slug, sessionID); err == nil {
+	if reg, err := homestate.FindSession(ctx.Slug, sessionID); err == nil {
 		view := sessionViewFromRegistry(reg, ctx.ColonyRoot)
 		view.Active = true
 		view.State = string(adapters.SessionActive)
@@ -196,7 +197,7 @@ func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView 
 	}
 }
 
-func sessionViewFromRegistry(e colony.SessionEntry, colonyRoot string) SessionView {
+func sessionViewFromRegistry(e homestate.SessionEntry, colonyRoot string) SessionView {
 	runDir := e.RunDir
 	if runDir == "" {
 		runDir = runs.Dir{

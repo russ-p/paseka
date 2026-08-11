@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
@@ -113,7 +113,7 @@ func TestAgentsAPIMixedAFKAndSession(t *testing.T) {
 	writeLiveAFKRun(t, repo, "trace-mixed", "agent-afk", "drone", started, afkChild.Process.Pid)
 
 	sessStarted := started.Add(time.Minute)
-	if err := colony.RegisterSession(ctxColony.Slug, colony.SessionEntry{
+	if err := homestate.RegisterSession(ctxColony.Slug, homestate.SessionEntry{
 		SessionID: "sess-mixed",
 		TraceID:   "trace-sess-mixed",
 		AgentID:   "agent-sess",
@@ -123,7 +123,7 @@ func TestAgentsAPIMixedAFKAndSession(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = colony.UnregisterSession(ctxColony.Slug, "sess-mixed") })
+	t.Cleanup(func() { _ = homestate.UnregisterSession(ctxColony.Slug, "sess-mixed") })
 
 	srv := console.NewServer(console.Options{
 		Addr:     "127.0.0.1:0",
@@ -167,7 +167,7 @@ func TestAgentsAPISessionDeadPIDExcluded(t *testing.T) {
 	_ = child.Process.Kill()
 	_ = child.Wait()
 
-	if err := colony.RegisterSession(ctxColony.Slug, colony.SessionEntry{
+	if err := homestate.RegisterSession(ctxColony.Slug, homestate.SessionEntry{
 		SessionID: "sess-dead",
 		TraceID:   "trace-dead-sess",
 		AgentID:   "agent-dead-sess",
@@ -177,9 +177,9 @@ func TestAgentsAPISessionDeadPIDExcluded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = colony.UnregisterSession(ctxColony.Slug, "sess-dead") })
+	t.Cleanup(func() { _ = homestate.UnregisterSession(ctxColony.Slug, "sess-dead") })
 
-	entries, err := colony.ListSessions(ctxColony.Slug)
+	entries, err := homestate.ListSessions(ctxColony.Slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestAgentsAPIRegistersLiveSession(t *testing.T) {
 	})
 
 	started := time.Now().UTC()
-	if err := colony.RegisterSession(ctxColony.Slug, colony.SessionEntry{
+	if err := homestate.RegisterSession(ctxColony.Slug, homestate.SessionEntry{
 		SessionID: "sess-1",
 		TraceID:   "trace-sess",
 		AgentID:   "agent-sess",
@@ -234,7 +234,7 @@ func TestAgentsAPIRegistersLiveSession(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = colony.UnregisterSession(ctxColony.Slug, "sess-1") })
+	t.Cleanup(func() { _ = homestate.UnregisterSession(ctxColony.Slug, "sess-1") })
 
 	srv := console.NewServer(console.Options{
 		Addr:     "127.0.0.1:0",

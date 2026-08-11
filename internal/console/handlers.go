@@ -11,6 +11,7 @@ import (
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/invites"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
@@ -518,7 +519,7 @@ func (a *api) handleInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	list, err := hiveview.ListInvites(a.ctx, status)
+	list, err := hiveview.ListInvites(a.ctx, protocol.InviteStatus(status))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -626,7 +627,7 @@ func (a *api) rejectInvite(w http.ResponseWriter, r *http.Request, inviteID stri
 		Bee:         invite.Bee,
 		Intent:      invite.Intent,
 		Task:        invite.Task,
-		Status:      invite.Status,
+		Status:      string(invite.Status),
 		ArtifactRef: invite.ArtifactRef,
 		SessionID:   invite.SessionID,
 		CreatedAt:   invite.CreatedAt,

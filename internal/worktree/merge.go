@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 // MergeOptions configures merging a trace worktree branch into the default branch.
@@ -144,20 +144,20 @@ func hasMergeConflicts(dir string) (bool, error) {
 	return len(strings.TrimSpace(string(out))) > 0, nil
 }
 
-func findWorktreeEntry(slug, traceID string) (colony.WorktreeEntry, bool, error) {
+func findWorktreeEntry(slug, traceID string) (homestate.WorktreeEntry, bool, error) {
 	if slug == "" {
-		return colony.WorktreeEntry{}, false, nil
+		return homestate.WorktreeEntry{}, false, nil
 	}
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
-		return colony.WorktreeEntry{}, false, err
+		return homestate.WorktreeEntry{}, false, err
 	}
 	for _, w := range st.Worktrees {
 		if w.TraceID == traceID {
 			return w, true, nil
 		}
 	}
-	return colony.WorktreeEntry{}, false, nil
+	return homestate.WorktreeEntry{}, false, nil
 }
 
 func hasUncommittedChanges(dir string) (bool, error) {
@@ -184,7 +184,7 @@ func removeTraceWorktree(colonyRoot, slug, traceID string) error {
 		return err
 	}
 	if slug != "" {
-		return colony.UnregisterWorktree(slug, traceID)
+		return homestate.UnregisterWorktree(slug, traceID)
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/ids"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/sessions"
@@ -29,7 +30,7 @@ type Service struct {
 
 // AcceptResult summarizes an accepted invite.
 type AcceptResult struct {
-	Invite    colony.InviteEntry
+	Invite    homestate.InviteEntry
 	SessionID string
 	TraceID   string
 }
@@ -42,11 +43,11 @@ type RecordInput struct {
 
 // Accept starts an interactive session for a pending invite.
 func (s *Service) Accept(ctx context.Context, inviteID string, attach bool) (*AcceptResult, error) {
-	invite, err := colony.FindInvite(s.Colony.Slug, inviteID)
+	invite, err := homestate.FindInvite(s.Colony.Slug, inviteID)
 	if err != nil {
 		return nil, err
 	}
-	if invite.Status != colony.InviteStatusPending {
+	if invite.Status != protocol.InviteStatusPending {
 		return nil, fmt.Errorf("invites: invite %q is %s, not pending", inviteID, invite.Status)
 	}
 
@@ -80,10 +81,10 @@ func (s *Service) Accept(ctx context.Context, inviteID string, attach bool) (*Ac
 		return nil, err
 	}
 
-	invite.Status = colony.InviteStatusAccepted
+	invite.Status = protocol.InviteStatusAccepted
 	invite.SessionID = res.SessionID
 	invite.UpdatedAt = time.Now().UTC()
-	if err := colony.UpsertInvite(s.Colony.Slug, invite); err != nil {
+	if err := homestate.UpsertInvite(s.Colony.Slug, invite); err != nil {
 		return nil, err
 	}
 
@@ -95,45 +96,45 @@ func (s *Service) Accept(ctx context.Context, inviteID string, attach bool) (*Ac
 }
 
 // Reject cancels or defers a pending invite.
-func (s *Service) Reject(ctx context.Context, inviteID string, deferInvite bool) (colony.InviteEntry, error) {
-	invite, err := colony.FindInvite(s.Colony.Slug, inviteID)
+func (s *Service) Reject(ctx context.Context, inviteID string, deferInvite bool) (homestate.InviteEntry, error) {
+	invite, err := homestate.FindInvite(s.Colony.Slug, inviteID)
 	if err != nil {
-		return colony.InviteEntry{}, err
+		return homestate.InviteEntry{}, err
 	}
-	if invite.Status != colony.InviteStatusPending {
-		return colony.InviteEntry{}, fmt.Errorf("invites: invite %q is %s, not pending", inviteID, invite.Status)
+	if invite.Status != protocol.InviteStatusPending {
+		return homestate.InviteEntry{}, fmt.Errorf("invites: invite %q is %s, not pending", inviteID, invite.Status)
 	}
 
 	action := protocol.BeekeeperReject
-	status := colony.InviteStatusCancelled
+	status := protocol.InviteStatusCancelled
 	if deferInvite {
 		action = protocol.BeekeeperDefer
-		status = colony.InviteStatusDeferred
+		status = protocol.InviteStatusDeferred
 	}
 	if err := s.publishReady(ctx, invite, action); err != nil {
-		return colony.InviteEntry{}, err
+		return homestate.InviteEntry{}, err
 	}
 
 	invite.Status = status
 	invite.UpdatedAt = time.Now().UTC()
-	if err := colony.UpsertInvite(s.Colony.Slug, invite); err != nil {
-		return colony.InviteEntry{}, err
+	if err := homestate.UpsertInvite(s.Colony.Slug, invite); err != nil {
+		return homestate.InviteEntry{}, err
 	}
 	return invite, nil
 }
 
 // Record upserts a pending invite from validated payload fields.
-func (s *Service) Record(in RecordInput) (colony.InviteEntry, error) {
+func (s *Service) Record(in RecordInput) (homestate.InviteEntry, error) {
 	traceID := strings.TrimSpace(in.TraceID)
 	if traceID == "" {
-		return colony.InviteEntry{}, fmt.Errorf("invites: traceId is required")
+		return homestate.InviteEntry{}, fmt.Errorf("invites: traceId is required")
 	}
 	payload := in.Payload
 	payload.Kind = protocol.SignalSessionInvite
 	if strings.TrimSpace(payload.InviteID) == "" {
 		id, err := ids.Prefixed("inv-")
 		if err != nil {
-			return colony.InviteEntry{}, err
+			return homestate.InviteEntry{}, err
 		}
 		payload.InviteID = id
 	}
@@ -143,7 +144,7 @@ func (s *Service) Record(in RecordInput) (colony.InviteEntry, error) {
 
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return colony.InviteEntry{}, err
+		return homestate.InviteEntry{}, err
 	}
 	eventInput := protocol.EventInput{
 		TraceID: traceID,
@@ -151,15 +152,15 @@ func (s *Service) Record(in RecordInput) (colony.InviteEntry, error) {
 		Payload: raw,
 	}
 	if details := eventInput.Validate(); len(details) > 0 {
-		return colony.InviteEntry{}, &protocol.ValidationError{
+		return homestate.InviteEntry{}, &protocol.ValidationError{
 			Code:    "schema_validation_failed",
 			Details: details,
 		}
 	}
 
 	entry := entryFromPayload(traceID, payload)
-	if err := colony.UpsertInvite(s.Colony.Slug, entry); err != nil {
-		return colony.InviteEntry{}, err
+	if err := homestate.UpsertInvite(s.Colony.Slug, entry); err != nil {
+		return homestate.InviteEntry{}, err
 	}
 	return entry, nil
 }
@@ -204,7 +205,7 @@ func (s *Service) PublishPending(ctx context.Context, traceID string, payload pr
 	}
 
 	entry := entryFromPayload(traceID, payload)
-	if err := colony.UpsertInvite(s.Colony.Slug, entry); err != nil {
+	if err := homestate.UpsertInvite(s.Colony.Slug, entry); err != nil {
 		return protocol.Event{}, err
 	}
 
@@ -237,7 +238,7 @@ func (s *Service) AutoInviteFromEvent(ctx context.Context, ev protocol.Event, ru
 		if err != nil {
 			return protocol.Event{}, false, err
 		}
-		pending, err := colony.ListInvites(s.Colony.Slug, colony.InviteStatusPending, traceID)
+		pending, err := homestate.ListInvites(s.Colony.Slug, protocol.InviteStatusPending, traceID)
 		if err != nil {
 			return protocol.Event{}, false, err
 		}
@@ -263,10 +264,10 @@ func (s *Service) ProjectEvent(ev protocol.Event) error {
 		return fmt.Errorf("invites: parse session.invite: %w", err)
 	}
 	entry := entryFromPayload(ev.TraceID, payload)
-	return colony.UpsertInvite(s.Colony.Slug, entry)
+	return homestate.UpsertInvite(s.Colony.Slug, entry)
 }
 
-func (s *Service) publishReady(ctx context.Context, invite colony.InviteEntry, action protocol.BeekeeperAction) error {
+func (s *Service) publishReady(ctx context.Context, invite homestate.InviteEntry, action protocol.BeekeeperAction) error {
 	payload := protocol.BeekeeperReadyPayload{
 		Kind:     protocol.SignalBeekeeperReady,
 		InviteID: invite.InviteID,
@@ -316,12 +317,12 @@ func (s *Service) publisher() EventPublisher {
 	return nil
 }
 
-func entryFromPayload(traceID string, payload protocol.SessionInvitePayload) colony.InviteEntry {
-	status := string(payload.Status)
+func entryFromPayload(traceID string, payload protocol.SessionInvitePayload) homestate.InviteEntry {
+	status := payload.Status
 	if status == "" {
-		status = colony.InviteStatusPending
+		status = protocol.InviteStatusPending
 	}
-	return colony.InviteEntry{
+	return homestate.InviteEntry{
 		InviteID:    payload.InviteID,
 		TraceID:     traceID,
 		Bee:         payload.Bee,

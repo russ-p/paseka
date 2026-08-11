@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
+	"github.com/paseka/paseka/internal/protocol"
 )
 
 // InviteView is a projection of one Human Gateway invite.
@@ -22,11 +24,11 @@ type InviteView struct {
 }
 
 // ListInvites returns Human Gateway invites for the colony.
-func ListInvites(ctx colony.Context, status string) ([]InviteView, error) {
+func ListInvites(ctx colony.Context, status protocol.InviteStatus) ([]InviteView, error) {
 	if status == "" {
-		status = colony.InviteStatusPending
+		status = protocol.InviteStatusPending
 	}
-	entries, err := colony.ListInvites(ctx.Slug, status, "")
+	entries, err := homestate.ListInvites(ctx.Slug, status, "")
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func ListInvites(ctx colony.Context, status string) ([]InviteView, error) {
 			Bee:         e.Bee,
 			Intent:      e.Intent,
 			Task:        e.Task,
-			Status:      e.Status,
+			Status:      string(e.Status),
 			ArtifactRef: e.ArtifactRef,
 			SessionID:   e.SessionID,
 			CreatedAt:   e.CreatedAt,

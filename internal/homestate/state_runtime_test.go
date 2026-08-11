@@ -1,4 +1,4 @@
-package colony_test
+package homestate_test
 
 import (
 	"os"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 func TestRuntimeRegistry(t *testing.T) {
@@ -14,7 +15,7 @@ func TestRuntimeRegistry(t *testing.T) {
 	_ = home
 
 	started := time.Now().UTC().Truncate(time.Second)
-	entry := colony.RuntimeEntry{
+	entry := homestate.RuntimeEntry{
 		PID:             os.Getpid(),
 		StartedAt:       started,
 		ColonyRoot:      "/tmp/colony",
@@ -22,11 +23,11 @@ func TestRuntimeRegistry(t *testing.T) {
 		Status:          "running",
 		LastHeartbeatAt: started,
 	}
-	if err := colony.RegisterRuntime(slug, entry); err != nil {
+	if err := homestate.RegisterRuntime(slug, entry); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := colony.RuntimeRegistry(slug)
+	got, err := homestate.RuntimeRegistry(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,10 +36,10 @@ func TestRuntimeRegistry(t *testing.T) {
 	}
 
 	later := started.Add(30 * time.Second)
-	if err := colony.TouchRuntimeHeartbeat(slug, entry.PID, later); err != nil {
+	if err := homestate.TouchRuntimeHeartbeat(slug, entry.PID, later); err != nil {
 		t.Fatal(err)
 	}
-	got, err = colony.RuntimeRegistry(slug)
+	got, err = homestate.RuntimeRegistry(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,18 +47,18 @@ func TestRuntimeRegistry(t *testing.T) {
 		t.Fatalf("heartbeat = %v want %v", got.LastHeartbeatAt, later)
 	}
 
-	if err := colony.UnregisterRuntimeIfPID(slug, entry.PID+1); err != nil {
+	if err := homestate.UnregisterRuntimeIfPID(slug, entry.PID+1); err != nil {
 		t.Fatal(err)
 	}
-	got, err = colony.RuntimeRegistry(slug)
+	got, err = homestate.RuntimeRegistry(slug)
 	if err != nil || got == nil {
 		t.Fatalf("expected entry to remain: %+v err=%v", got, err)
 	}
 
-	if err := colony.UnregisterRuntimeIfPID(slug, entry.PID); err != nil {
+	if err := homestate.UnregisterRuntimeIfPID(slug, entry.PID); err != nil {
 		t.Fatal(err)
 	}
-	got, err = colony.RuntimeRegistry(slug)
+	got, err = homestate.RuntimeRegistry(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestRuntimeRegistry(t *testing.T) {
 func TestRuntimeRegistryStalePID(t *testing.T) {
 	slug, _ := setupStateHome(t)
 	stalePID := 99999999
-	if err := colony.RegisterRuntime(slug, colony.RuntimeEntry{
+	if err := homestate.RegisterRuntime(slug, homestate.RuntimeEntry{
 		PID:        stalePID,
 		StartedAt:  time.Now().UTC(),
 		ColonyRoot: "/tmp/colony",
@@ -80,14 +81,14 @@ func TestRuntimeRegistryStalePID(t *testing.T) {
 	if colony.ProcessAlive(stalePID) {
 		t.Fatalf("expected stale pid %d to be absent", stalePID)
 	}
-	got, err := colony.RuntimeRegistry(slug)
+	got, err := homestate.RuntimeRegistry(slug)
 	if err != nil || got == nil || got.PID != stalePID {
 		t.Fatalf("registry = %+v err=%v", got, err)
 	}
-	if err := colony.ClearRuntime(slug); err != nil {
+	if err := homestate.ClearRuntime(slug); err != nil {
 		t.Fatal(err)
 	}
-	got, err = colony.RuntimeRegistry(slug)
+	got, err = homestate.RuntimeRegistry(slug)
 	if err != nil || got != nil {
 		t.Fatalf("expected cleared registry, got %+v err=%v", got, err)
 	}

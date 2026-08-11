@@ -1,4 +1,4 @@
-package colony
+package colonyinit
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
 	"github.com/paseka/paseka/internal/protocol"
 	"gopkg.in/yaml.v3"
@@ -45,17 +46,17 @@ func Init(opts InitOptions) (InitResult, error) {
 
 	origin, _ := gitroot.OriginURL(repoRoot)
 
-	manifest, err := LoadColony(repoRoot)
+	manifest, err := colony.LoadColony(repoRoot)
 	if err != nil {
 		return InitResult{}, err
 	}
 
-	baseSlug := ResolveSlug(repoRoot, manifest, origin)
-	homeBase, err := HomeBase()
+	baseSlug := colony.ResolveSlug(repoRoot, manifest, origin)
+	homeBase, err := colony.HomeBase()
 	if err != nil {
 		return InitResult{}, err
 	}
-	slug, err := UniqueHomeSlug(baseSlug, repoRoot, homeBase)
+	slug, err := colony.UniqueHomeSlug(baseSlug, repoRoot, homeBase)
 	if err != nil {
 		return InitResult{}, err
 	}
@@ -70,7 +71,7 @@ func Init(opts InitOptions) (InitResult, error) {
 		return InitResult{}, err
 	}
 
-	homeDir, err := HomeDir(slug)
+	homeDir, err := colony.HomeDir(slug)
 	if err != nil {
 		return InitResult{}, err
 	}
@@ -90,12 +91,12 @@ func (r *InitResult) track(created bool, path string, err error) error {
 	return nil
 }
 
-func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter string) error {
+func (r *InitResult) scaffoldProject(slug string, manifest colony.Colony, adapter string) error {
 	root := r.ColonyRoot
 	for _, d := range []string{
-		PasekaPath(root, "bees"),
-		PasekaPath(root, "prompts", "_partials"),
-		PasekaPath(root, "cues"),
+		colony.PasekaPath(root, "bees"),
+		colony.PasekaPath(root, "prompts", "_partials"),
+		colony.PasekaPath(root, "cues"),
 	} {
 		if err := mkdirAll(d); err != nil {
 			return err
@@ -107,31 +108,31 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 	}
 
 	files := map[string]string{
-		PasekaPath(root, ".gitignore"):                                            gitignoreContent,
-		PasekaPath(root, "bees", "scout.yaml"):                                    scoutBeeYAMLFor(adapter),
-		PasekaPath(root, "bees", "builder.yaml"):                                  builderBeeYAMLFor(adapter),
-		PasekaPath(root, "bees", "hivewright.yaml"):                               hivewrightBeeYAMLFor(adapter),
-		PasekaPath(root, "prompts", "default.md"):                                 defaultPrompt,
-		PasekaPath(root, "prompts", "scout.md"):                                   scoutPrompt,
-		PasekaPath(root, "prompts", "builder.md"):                                 builderPrompt,
-		PasekaPath(root, "prompts", "hivewright-system.md"):                       hivewrightSystemPrompt,
-		PasekaPath(root, "prompts", "hivewright-task.md"):                         hivewrightTaskPrompt,
-		PasekaPath(root, "prompts", "_partials", "emit-howto.md"):                 emitHowtoPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-insight.md"):               emitInsightPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-signal.md"):                emitSignalPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-verification.md"):          emitVerificationPartial,
-		PasekaPath(root, "prompts", "_partials", "emit-task-completed.md"):        emitTaskCompletedPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):     builderIntentGeneralPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):     builderIntentFeaturePartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):      builderIntentBugfixPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"):    builderIntentTestFixPartial,
-		PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"):    builderIntentRefactorPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):        scoutIntentSurveyPartial,
-		PasekaPath(root, "prompts", "_partials", "scout-intent-intake.md"):        scoutIntentIntakePartial,
-		PasekaPath(root, "prompts", "_partials", "scout-emit-intake.md"):          scoutEmitIntakePartial,
-		PasekaPath(root, "prompts", "_partials", "cursor-interactive-kickoff.md"): cursorInteractiveKickoffPartial,
-		PasekaPath(root, "cues", "feature.yaml"):                                  featureCueYAML,
-		PasekaPath(root, "cues", "hotfix.yaml"):                                   hotfixCueYAML,
+		colony.PasekaPath(root, ".gitignore"):                                            gitignoreContent,
+		colony.PasekaPath(root, "bees", "scout.yaml"):                                    scoutBeeYAMLFor(adapter),
+		colony.PasekaPath(root, "bees", "builder.yaml"):                                  builderBeeYAMLFor(adapter),
+		colony.PasekaPath(root, "bees", "hivewright.yaml"):                               hivewrightBeeYAMLFor(adapter),
+		colony.PasekaPath(root, "prompts", "default.md"):                                 defaultPrompt,
+		colony.PasekaPath(root, "prompts", "scout.md"):                                   scoutPrompt,
+		colony.PasekaPath(root, "prompts", "builder.md"):                                 builderPrompt,
+		colony.PasekaPath(root, "prompts", "hivewright-system.md"):                       hivewrightSystemPrompt,
+		colony.PasekaPath(root, "prompts", "hivewright-task.md"):                         hivewrightTaskPrompt,
+		colony.PasekaPath(root, "prompts", "_partials", "emit-howto.md"):                 emitHowtoPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "emit-insight.md"):               emitInsightPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "emit-signal.md"):                emitSignalPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "emit-verification.md"):          emitVerificationPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "emit-task-completed.md"):        emitTaskCompletedPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "builder-intent-general.md"):     builderIntentGeneralPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "builder-intent-feature.md"):     builderIntentFeaturePartial,
+		colony.PasekaPath(root, "prompts", "_partials", "builder-intent-bugfix.md"):      builderIntentBugfixPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "builder-intent-test-fix.md"):    builderIntentTestFixPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "builder-intent-refactor.md"):    builderIntentRefactorPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "scout-intent-survey.md"):        scoutIntentSurveyPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "scout-intent-intake.md"):        scoutIntentIntakePartial,
+		colony.PasekaPath(root, "prompts", "_partials", "scout-emit-intake.md"):          scoutEmitIntakePartial,
+		colony.PasekaPath(root, "prompts", "_partials", "cursor-interactive-kickoff.md"): cursorInteractiveKickoffPartial,
+		colony.PasekaPath(root, "cues", "feature.yaml"):                                  featureCueYAML,
+		colony.PasekaPath(root, "cues", "hotfix.yaml"):                                   hotfixCueYAML,
 	}
 
 	for path, content := range files {
@@ -143,17 +144,17 @@ func (r *InitResult) scaffoldProject(slug string, manifest Colony, adapter strin
 	return nil
 }
 
-func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) error {
-	path := PasekaPath(root, "colony.yaml")
+func (r *InitResult) writeColonyManifest(root, slug string, manifest colony.Colony) error {
+	path := colony.PasekaPath(root, "colony.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		c := Colony{
+		c := colony.Colony{
 			Slug: slug,
-			Defaults: Defaults{
+			Defaults: colony.Defaults{
 				PromptTemplate: "default.md",
 				EnergyBudget:   protocol.DefaultEnergyBudget,
 				DefaultBee:     protocol.DefaultBee,
 			},
-			AutoInvites: DefaultAutoInviteRules(),
+			AutoInvites: colony.DefaultAutoInviteRules(),
 		}
 		data, err := yaml.Marshal(c)
 		if err != nil {
@@ -182,7 +183,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 		manifest.Defaults.DefaultBee = protocol.DefaultBee
 	}
 	if len(manifest.AutoInvites) == 0 {
-		manifest.AutoInvites = DefaultAutoInviteRules()
+		manifest.AutoInvites = colony.DefaultAutoInviteRules()
 	}
 	data, err := yaml.Marshal(manifest)
 	if err != nil {
@@ -196,7 +197,7 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest Colony) err
 }
 
 func (r *InitResult) scaffoldHome(slug, repoRoot, adapter string) error {
-	homeDir, err := HomeDir(slug)
+	homeDir, err := colony.HomeDir(slug)
 	if err != nil {
 		return err
 	}
@@ -802,3 +803,22 @@ title: "{{.Title}}"
 body: "{{.Body}}"
 `
 )
+
+func writeFileIfMissing(path string, content []byte, perm os.FileMode) (created bool, err error) {
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(path, content, perm); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func mkdirAll(path string) error {
+	return os.MkdirAll(path, 0o755)
+}

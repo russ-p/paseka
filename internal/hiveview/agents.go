@@ -8,6 +8,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
@@ -140,7 +141,7 @@ func scanLiveAFKRuns(colonyRoot string) ([]AgentItem, error) {
 func collectLiveSessions(ctx colony.Context, mgr *sessions.Manager) ([]AgentItem, error) {
 	byID := map[string]AgentItem{}
 
-	activeEntries, err := colony.ListSessions(ctx.Slug)
+	activeEntries, err := homestate.ListSessions(ctx.Slug)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func collectLiveSessions(ctx colony.Context, mgr *sessions.Manager) ([]AgentItem
 	return out, nil
 }
 
-func agentItemFromSessionEntry(e colony.SessionEntry, colonyRoot string) AgentItem {
+func agentItemFromSessionEntry(e homestate.SessionEntry, colonyRoot string) AgentItem {
 	runDir := e.RunDir
 	if runDir == "" {
 		runDir = runs.Dir{

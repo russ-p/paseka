@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
@@ -75,12 +76,12 @@ func BuildInvite(ev protocol.Event, rule colony.AutoInviteRule, traceEvents []pr
 }
 
 // HasPendingDedupe reports whether a pending invite already matches dedupe keys.
-func HasPendingDedupe(invites []colony.InviteEntry, payload protocol.SessionInvitePayload, keys []string) bool {
+func HasPendingDedupe(invites []homestate.InviteEntry, payload protocol.SessionInvitePayload, keys []string) bool {
 	if len(keys) == 0 {
 		return false
 	}
 	for _, inv := range invites {
-		if inv.Status != colony.InviteStatusPending {
+		if inv.Status != protocol.InviteStatusPending {
 			continue
 		}
 		if inviteMatchesDedupe(inv, payload, keys) {
@@ -90,7 +91,7 @@ func HasPendingDedupe(invites []colony.InviteEntry, payload protocol.SessionInvi
 	return false
 }
 
-func inviteMatchesDedupe(inv colony.InviteEntry, payload protocol.SessionInvitePayload, keys []string) bool {
+func inviteMatchesDedupe(inv homestate.InviteEntry, payload protocol.SessionInvitePayload, keys []string) bool {
 	for _, key := range keys {
 		switch strings.TrimSpace(key) {
 		case "bee":

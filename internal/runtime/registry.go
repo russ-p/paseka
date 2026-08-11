@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 const (
@@ -40,7 +41,7 @@ func RegisterSelf(ctx colony.Context) error {
 		prefix = "paseka." + ctx.Slug
 	}
 	now := time.Now().UTC()
-	return colony.RegisterRuntime(ctx.Slug, colony.RuntimeEntry{
+	return homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
 		PID:             os.Getpid(),
 		StartedAt:       now,
 		ColonyRoot:      ctx.ColonyRoot,
@@ -52,12 +53,12 @@ func RegisterSelf(ctx colony.Context) error {
 
 // UnregisterSelf removes the runtime registry entry when it still refers to this process.
 func UnregisterSelf(ctx colony.Context) error {
-	return colony.UnregisterRuntimeIfPID(ctx.Slug, os.Getpid())
+	return homestate.UnregisterRuntimeIfPID(ctx.Slug, os.Getpid())
 }
 
 // TouchHeartbeat updates the runtime heartbeat timestamp for this process.
 func TouchHeartbeat(ctx colony.Context) error {
-	return colony.TouchRuntimeHeartbeat(ctx.Slug, os.Getpid(), time.Now().UTC())
+	return homestate.TouchRuntimeHeartbeat(ctx.Slug, os.Getpid(), time.Now().UTC())
 }
 
 // RunHeartbeat periodically updates runtime heartbeat in state.json until ctx is cancelled.
@@ -76,7 +77,7 @@ func RunHeartbeat(ctx context.Context, ctxColony colony.Context) {
 
 // ResolveStatus inspects the runtime registry and OS process table.
 func ResolveStatus(slug string) (RuntimeStatus, error) {
-	entry, err := colony.RuntimeRegistry(slug)
+	entry, err := homestate.RuntimeRegistry(slug)
 	if err != nil {
 		return RuntimeStatus{}, err
 	}

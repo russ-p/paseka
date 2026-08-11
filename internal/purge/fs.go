@@ -1,4 +1,4 @@
-package colony
+package purge
 
 import (
 	"fmt"
@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 // PurgeTarget selects which artifact classes to remove.
@@ -72,12 +74,11 @@ type PurgeResult struct {
 	EnergyReseeded int
 }
 
-// PlanPurge lists paths and flags that would be affected.
-func PlanPurge(ctx Context, target PurgeTarget) (PurgePlan, error) {
+func planFS(ctx colony.Context, target PurgeTarget) (PurgePlan, error) {
 	var plan PurgePlan
 
 	if target.Runs {
-		runsRoot := PasekaPath(ctx.ColonyRoot, "runs")
+		runsRoot := colony.PasekaPath(ctx.ColonyRoot, "runs")
 		entries, err := listChildDirs(runsRoot)
 		if err != nil {
 			return plan, err
@@ -86,7 +87,7 @@ func PlanPurge(ctx Context, target PurgeTarget) (PurgePlan, error) {
 	}
 
 	if target.Worktrees {
-		wtRoot := PasekaPath(ctx.ColonyRoot, "worktrees")
+		wtRoot := colony.PasekaPath(ctx.ColonyRoot, "worktrees")
 		entries, err := listChildDirs(wtRoot)
 		if err != nil {
 			return plan, err
@@ -95,14 +96,14 @@ func PlanPurge(ctx Context, target PurgeTarget) (PurgePlan, error) {
 	}
 
 	if target.Cache {
-		cacheRoot := PasekaPath(ctx.ColonyRoot, "cache")
+		cacheRoot := colony.PasekaPath(ctx.ColonyRoot, "cache")
 		if fi, err := os.Stat(cacheRoot); err == nil && fi.IsDir() {
 			plan.Cache = true
 		}
 	}
 
 	if target.State {
-		st, err := LoadState(ctx.Slug)
+		st, err := homestate.LoadState(ctx.Slug)
 		if err != nil {
 			return plan, err
 		}
@@ -112,12 +113,11 @@ func PlanPurge(ctx Context, target PurgeTarget) (PurgePlan, error) {
 	return plan, nil
 }
 
-// Purge removes selected colony artifacts.
-func Purge(ctx Context, target PurgeTarget) (PurgeResult, error) {
+func purgeFS(ctx colony.Context, target PurgeTarget) (PurgeResult, error) {
 	var res PurgeResult
 
 	if target.Worktrees {
-		wtRoot := PasekaPath(ctx.ColonyRoot, "worktrees")
+		wtRoot := colony.PasekaPath(ctx.ColonyRoot, "worktrees")
 		entries, err := listChildDirs(wtRoot)
 		if err != nil {
 			return res, err
@@ -135,7 +135,7 @@ func Purge(ctx Context, target PurgeTarget) (PurgeResult, error) {
 	}
 
 	if target.Runs {
-		runsRoot := PasekaPath(ctx.ColonyRoot, "runs")
+		runsRoot := colony.PasekaPath(ctx.ColonyRoot, "runs")
 		entries, err := listChildDirs(runsRoot)
 		if err != nil {
 			return res, err
@@ -150,7 +150,7 @@ func Purge(ctx Context, target PurgeTarget) (PurgeResult, error) {
 	}
 
 	if target.Cache {
-		cacheRoot := PasekaPath(ctx.ColonyRoot, "cache")
+		cacheRoot := colony.PasekaPath(ctx.ColonyRoot, "cache")
 		if _, err := os.Stat(cacheRoot); err == nil {
 			if err := os.RemoveAll(cacheRoot); err != nil {
 				return res, fmt.Errorf("purge cache: %w", err)
@@ -160,7 +160,7 @@ func Purge(ctx Context, target PurgeTarget) (PurgeResult, error) {
 	}
 
 	if target.State || target.Worktrees {
-		if err := SaveState(ctx.Slug, State{}); err != nil {
+		if err := homestate.SaveState(ctx.Slug, homestate.State{}); err != nil {
 			return res, err
 		}
 		if target.State {

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
@@ -43,7 +45,7 @@ func TestHandleAutoInviteEmptyRules(t *testing.T) {
 
 func TestHandleAutoInviteMatch(t *testing.T) {
 	repo := initInviteTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func TestHandleAutoInviteMatch(t *testing.T) {
 	if protocol.PayloadKind(stub.published[0].Payload) != string(protocol.SignalSessionInvite) {
 		t.Fatalf("kind = %q", protocol.PayloadKind(stub.published[0].Payload))
 	}
-	pending, err := colony.ListInvites(res.Slug, colony.InviteStatusPending, "trace-auto")
+	pending, err := homestate.ListInvites(res.Slug, protocol.InviteStatusPending, "trace-auto")
 	if err != nil {
 		t.Fatal(err)
 	}

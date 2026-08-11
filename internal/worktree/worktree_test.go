@@ -9,6 +9,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/worktree"
 )
 
@@ -49,7 +50,7 @@ func TestEnsureCreatesWorktree(t *testing.T) {
 		t.Fatalf("reuse path = %q, want %q", entry2.Path, entry.Path)
 	}
 
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
 	}

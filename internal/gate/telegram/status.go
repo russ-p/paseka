@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/cues"
 	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/runtime"
@@ -36,7 +37,7 @@ func BuildSnapshot(ctx colony.Context, sup *runtime.Supervisor) (Snapshot, error
 		return Snapshot{}, err
 	}
 
-	invites, err := hiveview.ListInvites(ctx, colony.InviteStatusPending)
+	invites, err := hiveview.ListInvites(ctx, protocol.InviteStatusPending)
 	if err != nil {
 		return Snapshot{}, err
 	}

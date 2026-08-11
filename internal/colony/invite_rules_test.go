@@ -2,10 +2,12 @@ package colony_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,7 +30,7 @@ func TestDefaultGrillRuleDoneWhenValid(t *testing.T) {
 
 func TestInitScaffoldIncludesAutoInvites(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,5 +120,28 @@ func TestLoadColonyRejectsInvalidAutoInvite(t *testing.T) {
 	}
 	if _, err := colony.LoadColony(dir); err == nil {
 		t.Fatal("expected validation error for missing invite.bee")
+	}
+}
+
+func initTestRepo(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@test.com")
+	runGit(t, dir, "config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "README.md")
+	runGit(t, dir, "commit", "-m", "init")
+	return dir
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }

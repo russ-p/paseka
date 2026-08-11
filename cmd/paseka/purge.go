@@ -56,7 +56,7 @@ can retry work on a fixed trace without starting a new flight trail.`,
 					return fmt.Errorf("--reseed-energy requires --trace")
 				}
 			}
-			target := colony.PurgeTarget{
+			target := purge.PurgeTarget{
 				Runs:         purgeRuns,
 				Worktrees:    purgeWorktrees,
 				Cache:        purgeCache,
@@ -78,15 +78,15 @@ can retry work on a fixed trace without starting a new flight trail.`,
 			if err != nil {
 				return err
 			}
-			if colony.PlanEmpty(plan) && !reseedEnergy {
+			if purge.PlanEmpty(plan) && !reseedEnergy {
 				fmt.Println("Nothing to purge.")
 				return nil
 			}
 
 			fmt.Printf("Colony: %s\n\n", ctx.ColonyRoot)
-			if !colony.PlanEmpty(plan) {
+			if !purge.PlanEmpty(plan) {
 				fmt.Println("Will remove:")
-				fmt.Println(colony.FormatPlan(plan))
+				fmt.Println(purge.FormatPlan(plan))
 			}
 			if reseedEnergy {
 				fmt.Printf("\nWill reseed honey for trace %s to colony defaults.energy_budget after bus purge.\n", traceID)
@@ -120,7 +120,7 @@ can retry work on a fixed trace without starting a new flight trail.`,
 	return cmd
 }
 
-func printPurgeResult(res colony.PurgeResult) {
+func printPurgeResult(res purge.PurgeResult) {
 	if len(res.Removed) == 0 && res.Bus == nil && res.EnergyReseeded == 0 {
 		fmt.Println("Nothing removed.")
 		return

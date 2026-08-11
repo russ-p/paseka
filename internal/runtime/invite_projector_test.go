@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
 func TestHandleInviteProjection(t *testing.T) {
 	repo := initInviteTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +37,7 @@ func TestHandleInviteProjection(t *testing.T) {
 	if err := r.handleInviteProjection(ev); err != nil {
 		t.Fatal(err)
 	}
-	invites, err := colony.ListInvites(res.Slug, colony.InviteStatusPending, "trace-proj")
+	invites, err := homestate.ListInvites(res.Slug, protocol.InviteStatusPending, "trace-proj")
 	if err != nil {
 		t.Fatal(err)
 	}

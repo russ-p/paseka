@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
 func TestRecordValidatesPayload(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +30,7 @@ func TestRecordValidatesPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	invites, err := colony.ListInvites(res.Slug, colony.InviteStatusPending, "")
+	invites, err := homestate.ListInvites(res.Slug, protocol.InviteStatusPending, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,18 +47,18 @@ func TestRecordValidatesPayload(t *testing.T) {
 
 func TestRejectPendingInviteRequiresBus(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := colony.InviteEntry{
+	entry := homestate.InviteEntry{
 		InviteID: "inv-test",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Task:     "Grill",
-		Status:   colony.InviteStatusPending,
+		Status:   protocol.InviteStatusPending,
 	}
-	if err := colony.UpsertInvite(res.Slug, entry); err != nil {
+	if err := homestate.UpsertInvite(res.Slug, entry); err != nil {
 		t.Fatal(err)
 	}
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}

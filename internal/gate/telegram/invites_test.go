@@ -7,18 +7,19 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
 func TestFormatInviteCardIncludesHoneyLine(t *testing.T) {
 	ctx := colony.Context{Slug: "test", ColonyRoot: ""}
-	invite := colony.InviteEntry{
+	invite := homestate.InviteEntry{
 		InviteID: "inv-abc",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
 		Task:     "Review feature",
-		Status:   colony.InviteStatusPending,
+		Status:   protocol.InviteStatusPending,
 	}
 	text := tggate.FormatInviteCard(ctx, nil, invite)
 	if !strings.Contains(text, fmt.Sprintf("honey: 0/%d", protocol.DefaultEnergyBudget)) {
@@ -34,7 +35,7 @@ func TestFormatInviteCardIncludesHoneyLine(t *testing.T) {
 
 func TestFormatInviteCardTruncatesLongTask(t *testing.T) {
 	longTask := strings.Repeat("x", 300)
-	invite := colony.InviteEntry{InviteID: "inv-1", TraceID: "trace-1", Bee: "b", Task: longTask, Status: colony.InviteStatusPending}
+	invite := homestate.InviteEntry{InviteID: "inv-1", TraceID: "trace-1", Bee: "b", Task: longTask, Status: protocol.InviteStatusPending}
 	text := tggate.FormatInviteCard(colony.Context{}, nil, invite)
 	if len(text) > 500 {
 		t.Fatalf("card too long: %d chars", len(text))

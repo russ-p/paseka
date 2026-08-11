@@ -19,6 +19,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/prompts"
 	"github.com/paseka/paseka/internal/protocol"
@@ -422,7 +423,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	m.sessions[sessionID] = active
 	m.mu.Unlock()
 
-	if err := colony.RegisterSession(ctxColony.Slug, colony.SessionEntry{
+	if err := homestate.RegisterSession(ctxColony.Slug, homestate.SessionEntry{
 		SessionID: sessionID,
 		TraceID:   traceID,
 		AgentID:   agentID,
@@ -555,8 +556,8 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		}
 	}
 
-	_ = colony.UnregisterSession(entry.Slug, sessionID)
-	_ = colony.MarkInviteIncompleteOnSessionEnd(entry.Slug, sessionID)
+	_ = homestate.UnregisterSession(entry.Slug, sessionID)
+	_ = homestate.MarkInviteIncompleteOnSessionEnd(entry.Slug, sessionID)
 
 	m.mu.Lock()
 	delete(m.sessions, sessionID)
@@ -641,7 +642,7 @@ func (m *Manager) Get(sessionID string) (Entry, bool) {
 
 // StopRemote sends SIGTERM to a session PID from the colony registry.
 func StopRemote(slug, sessionID string) error {
-	entry, err := colony.FindSession(slug, sessionID)
+	entry, err := homestate.FindSession(slug, sessionID)
 	if err != nil {
 		return err
 	}
@@ -655,8 +656,8 @@ func StopRemote(slug, sessionID string) error {
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
 		return fmt.Errorf("sessions: signal pid %d: %w", entry.PID, err)
 	}
-	_ = colony.UnregisterSession(slug, sessionID)
-	_ = colony.MarkInviteIncompleteOnSessionEnd(slug, sessionID)
+	_ = homestate.UnregisterSession(slug, sessionID)
+	_ = homestate.MarkInviteIncompleteOnSessionEnd(slug, sessionID)
 	return nil
 }
 

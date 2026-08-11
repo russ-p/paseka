@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/runtime"
 )
 
@@ -22,7 +23,7 @@ func TestResolveStatusStoppedAndRunning(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	if err := colony.RegisterRuntime(ctx.Slug, colony.RuntimeEntry{
+	if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
 		PID:             os.Getpid(),
 		StartedAt:       now,
 		ColonyRoot:      ctx.ColonyRoot,
@@ -32,7 +33,7 @@ func TestResolveStatusStoppedAndRunning(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = colony.ClearRuntime(ctx.Slug) })
+	t.Cleanup(func() { _ = homestate.ClearRuntime(ctx.Slug) })
 
 	st, err = runtime.ResolveStatus(ctx.Slug)
 	if err != nil {
@@ -46,7 +47,7 @@ func TestResolveStatusStoppedAndRunning(t *testing.T) {
 func TestSupervisorStartSingleton(t *testing.T) {
 	ctx := setupSupervisorHome(t)
 	pid := os.Getpid()
-	if err := colony.RegisterRuntime(ctx.Slug, colony.RuntimeEntry{
+	if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
 		PID:        pid,
 		StartedAt:  time.Now().UTC(),
 		ColonyRoot: ctx.ColonyRoot,
@@ -54,7 +55,7 @@ func TestSupervisorStartSingleton(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = colony.ClearRuntime(ctx.Slug) })
+	t.Cleanup(func() { _ = homestate.ClearRuntime(ctx.Slug) })
 
 	spawned := 0
 	sup := &runtime.Supervisor{
@@ -78,7 +79,7 @@ func TestSupervisorStartSingleton(t *testing.T) {
 func TestSupervisorStartClearsStale(t *testing.T) {
 	ctx := setupSupervisorHome(t)
 	stalePID := 99999999
-	if err := colony.RegisterRuntime(ctx.Slug, colony.RuntimeEntry{
+	if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
 		PID:        stalePID,
 		StartedAt:  time.Now().UTC(),
 		ColonyRoot: ctx.ColonyRoot,
@@ -91,7 +92,7 @@ func TestSupervisorStartClearsStale(t *testing.T) {
 	sup := &runtime.Supervisor{
 		Spawn: func(exe, colonyRoot string) (int, error) {
 			spawned = true
-			if err := colony.RegisterRuntime(ctx.Slug, colony.RuntimeEntry{
+			if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
 				PID:        os.Getpid(),
 				StartedAt:  time.Now().UTC(),
 				ColonyRoot: colonyRoot,
@@ -112,12 +113,12 @@ func TestSupervisorStartClearsStale(t *testing.T) {
 	if st.Status != runtime.RuntimeStatusRunning || !st.Alive {
 		t.Fatalf("status = %+v", st)
 	}
-	_ = colony.ClearRuntime(ctx.Slug)
+	_ = homestate.ClearRuntime(ctx.Slug)
 }
 
 func TestSupervisorStopClearsStale(t *testing.T) {
 	ctx := setupSupervisorHome(t)
-	if err := colony.RegisterRuntime(ctx.Slug, colony.RuntimeEntry{
+	if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
 		PID:        99999999,
 		StartedAt:  time.Now().UTC(),
 		ColonyRoot: ctx.ColonyRoot,
@@ -134,7 +135,7 @@ func TestSupervisorStopClearsStale(t *testing.T) {
 	if st.Status != runtime.RuntimeStatusStopped {
 		t.Fatalf("status = %+v", st)
 	}
-	got, err := colony.RuntimeRegistry(ctx.Slug)
+	got, err := homestate.RuntimeRegistry(ctx.Slug)
 	if err != nil || got != nil {
 		t.Fatalf("registry = %+v err=%v", got, err)
 	}

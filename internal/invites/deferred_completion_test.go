@@ -9,13 +9,15 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 )
 
 func TestDeferredSpecReadyCompletesInviteOnFlushNotQueue(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,13 +28,13 @@ func TestDeferredSpecReadyCompletesInviteOnFlushNotQueue(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte("# test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-grill",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
 		Task:     "Grill feature",
-		Status:   colony.InviteStatusAccepted,
+		Status:   protocol.InviteStatusAccepted,
 		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
@@ -59,11 +61,11 @@ func TestDeferredSpecReadyCompletesInviteOnFlushNotQueue(t *testing.T) {
 	}
 
 	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
-	invite, err := colony.FindInvite(res.Slug, "inv-grill")
+	invite, err := homestate.FindInvite(res.Slug, "inv-grill")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invite.Status != colony.InviteStatusAccepted {
+	if invite.Status != protocol.InviteStatusAccepted {
 		t.Fatalf("status after queue = %q, want accepted", invite.Status)
 	}
 	_, ok, err := svc.CompleteFromEvent(context.Background(), protocol.Event{})
@@ -93,11 +95,11 @@ func TestDeferredSpecReadyCompletesInviteOnFlushNotQueue(t *testing.T) {
 	if !ok {
 		t.Fatal("expected invite completion after flush publish")
 	}
-	invite, err = colony.FindInvite(res.Slug, "inv-grill")
+	invite, err = homestate.FindInvite(res.Slug, "inv-grill")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invite.Status != colony.InviteStatusCompleted {
+	if invite.Status != protocol.InviteStatusCompleted {
 		t.Fatalf("status after flush = %q", invite.Status)
 	}
 }

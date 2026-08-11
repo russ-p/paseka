@@ -8,6 +8,7 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/sessions"
@@ -40,10 +41,11 @@ func newInviteListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if status == "" {
-				status = colony.InviteStatusPending
+			filter := protocol.InviteStatus(status)
+			if filter == "" {
+				filter = protocol.InviteStatusPending
 			}
-			entries, err := colony.ListInvites(ctxColony.Slug, status, traceID)
+			entries, err := homestate.ListInvites(ctxColony.Slug, filter, traceID)
 			if err != nil {
 				return err
 			}

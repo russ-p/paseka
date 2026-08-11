@@ -10,7 +10,10 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/protocol"
+	"github.com/paseka/paseka/internal/colonyinit"
 	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	"github.com/paseka/paseka/internal/homestate"
 )
 
 type mockBot struct {
@@ -143,12 +146,12 @@ func TestHandlerInvitesListsPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(ctxColony.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(ctxColony.Slug, homestate.InviteEntry{
 		InviteID: "inv-test",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Task:     "Grill feature",
-		Status:   colony.InviteStatusPending,
+		Status:   protocol.InviteStatusPending,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +475,7 @@ func initTestRepo(t *testing.T) string {
 	}
 	runGit(t, dir, "add", "README.md")
 	runGit(t, dir, "commit", "-m", "init")
-	res, err := colony.Init(colony.InitOptions{StartDir: dir})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/sessions"
 )
@@ -128,7 +128,7 @@ func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 		t.Fatalf("state = %q", sess.State)
 	}
 
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestManagerStartDetachedCapturesOutput(t *testing.T) {
 		t.Fatalf("summary.md = %q err=%v", result, err)
 	}
 
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestColonySessionRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entry := colony.SessionEntry{
+	entry := homestate.SessionEntry{
 		SessionID: "sess-1",
 		TraceID:   "trace-1",
 		AgentID:   "sess-1",
@@ -343,17 +343,17 @@ func TestColonySessionRegistry(t *testing.T) {
 		PID:       9999,
 		StartedAt: time.Now().UTC(),
 	}
-	if err := colony.RegisterSession(slug, entry); err != nil {
+	if err := homestate.RegisterSession(slug, entry); err != nil {
 		t.Fatal(err)
 	}
-	list, err := colony.ListSessions(slug)
+	list, err := homestate.ListSessions(slug)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
-	if err := colony.UnregisterSession(slug, "sess-1"); err != nil {
+	if err := homestate.UnregisterSession(slug, "sess-1"); err != nil {
 		t.Fatal(err)
 	}
-	list, _ = colony.ListSessions(slug)
+	list, _ = homestate.ListSessions(slug)
 	if len(list) != 0 {
 		t.Fatalf("expected empty list, got %+v", list)
 	}

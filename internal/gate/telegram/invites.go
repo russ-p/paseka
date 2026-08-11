@@ -10,6 +10,7 @@ import (
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/sessions"
@@ -36,7 +37,7 @@ func (a *InviteActions) sessions() *sessions.Manager {
 
 // SendInvitesList posts one card per pending invite.
 func (a *InviteActions) SendInvitesList(chatID int64) {
-	list, err := hiveview.ListInvites(a.Colony, colony.InviteStatusPending)
+	list, err := hiveview.ListInvites(a.Colony, protocol.InviteStatusPending)
 	if err != nil {
 		a.sendText(chatID, 0, "invites unavailable: "+err.Error())
 		return
@@ -48,20 +49,20 @@ func (a *InviteActions) SendInvitesList(chatID int64) {
 	ledger, closeLedger := a.ledgerSession()
 	defer closeLedger()
 	for _, view := range list {
-		entry := colony.InviteEntry{
+		entry := homestate.InviteEntry{
 			InviteID:    view.InviteID,
 			TraceID:     view.TraceID,
 			Bee:         view.Bee,
 			Intent:      view.Intent,
 			Task:        view.Task,
-			Status:      view.Status,
+			Status:      protocol.InviteStatus(view.Status),
 			ArtifactRef: view.ArtifactRef,
 		}
 		a.sendInviteCard(chatID, 0, entry, ledger)
 	}
 }
 
-func (a *InviteActions) sendInviteCard(chatID int64, editMessageID int, invite colony.InviteEntry, ledger taskledger.Ledger) {
+func (a *InviteActions) sendInviteCard(chatID int64, editMessageID int, invite homestate.InviteEntry, ledger taskledger.Ledger) {
 	text := FormatInviteCard(a.Colony, ledger, invite)
 	keyboard := inviteActionKeyboard(invite.InviteID)
 	if editMessageID > 0 {
@@ -76,7 +77,7 @@ func (a *InviteActions) sendInviteCard(chatID int64, editMessageID int, invite c
 }
 
 // FormatInviteCard renders a pending invite push/list card.
-func FormatInviteCard(ctx colony.Context, ledger taskledger.Ledger, invite colony.InviteEntry) string {
+func FormatInviteCard(ctx colony.Context, ledger taskledger.Ledger, invite homestate.InviteEntry) string {
 	task := truncateText(invite.Task, maxInviteTaskLen)
 	lines := []string{
 		"Session invite",
@@ -171,12 +172,12 @@ func (a *InviteActions) showInviteConfirm(chatID int64, messageID int, inviteID,
 }
 
 func (a *InviteActions) cancelInviteConfirm(chatID int64, messageID int, inviteID string) {
-	invite, err := colony.FindInvite(a.Colony.Slug, inviteID)
+	invite, err := homestate.FindInvite(a.Colony.Slug, inviteID)
 	if err != nil {
 		a.sendText(chatID, messageID, "Invite not found.")
 		return
 	}
-	if invite.Status != colony.InviteStatusPending {
+	if invite.Status != protocol.InviteStatusPending {
 		a.sendText(chatID, messageID, fmt.Sprintf("Invite %s is %s.", inviteID, invite.Status))
 		return
 	}
@@ -212,7 +213,7 @@ func (a *InviteActions) executeAccept(ctx context.Context, chatID int64, message
 	res, err := svc.Accept(ctx, inviteID, false)
 	if err != nil {
 		if isHoneyExhausted(err) {
-			invite, findErr := colony.FindInvite(a.Colony.Slug, inviteID)
+			invite, findErr := homestate.FindInvite(a.Colony.Slug, inviteID)
 			if findErr != nil {
 				a.sendText(chatID, messageID, "accept failed: "+err.Error())
 				return

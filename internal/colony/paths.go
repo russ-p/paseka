@@ -32,22 +32,3 @@ func PasekaPath(colonyRoot string, parts ...string) string {
 	all := append([]string{colonyRoot, pasekaDir}, parts...)
 	return filepath.Join(all...)
 }
-
-func writeFileIfMissing(path string, content []byte, perm os.FileMode) (created bool, err error) {
-	if _, err := os.Stat(path); err == nil {
-		return false, nil
-	} else if !os.IsNotExist(err) {
-		return false, err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return false, err
-	}
-	if err := os.WriteFile(path, content, perm); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func mkdirAll(path string) error {
-	return os.MkdirAll(path, 0o755)
-}

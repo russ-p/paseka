@@ -9,7 +9,7 @@ import (
 	"github.com/paseka/paseka/internal/tasks"
 )
 
-func validateReseedEnergy(target colony.PurgeTarget) error {
+func validateReseedEnergy(target PurgeTarget) error {
 	if !target.ReseedEnergy {
 		return nil
 	}
@@ -23,11 +23,11 @@ func validateReseedEnergy(target colony.PurgeTarget) error {
 }
 
 // Plan lists filesystem and bus artifacts that would be removed.
-func Plan(ctx colony.Context, target colony.PurgeTarget) (colony.PurgePlan, error) {
+func Plan(ctx colony.Context, target PurgeTarget) (PurgePlan, error) {
 	if err := validateReseedEnergy(target); err != nil {
-		return colony.PurgePlan{}, err
+		return PurgePlan{}, err
 	}
-	plan, err := colony.PlanPurge(ctx, target)
+	plan, err := planFS(ctx, target)
 	if err != nil {
 		return plan, err
 	}
@@ -46,11 +46,11 @@ func Plan(ctx colony.Context, target colony.PurgeTarget) (colony.PurgePlan, erro
 }
 
 // Execute removes selected colony artifacts, including bus state when requested.
-func Execute(ctx colony.Context, target colony.PurgeTarget) (colony.PurgeResult, error) {
+func Execute(ctx colony.Context, target PurgeTarget) (PurgeResult, error) {
 	if err := validateReseedEnergy(target); err != nil {
-		return colony.PurgeResult{}, err
+		return PurgeResult{}, err
 	}
-	res, err := colony.Purge(ctx, target)
+	res, err := purgeFS(ctx, target)
 	if err != nil {
 		return res, err
 	}
@@ -94,7 +94,7 @@ func reseedEnergy(ctx colony.Context, traceID string) (int, error) {
 	return snap.EnergyBudget, nil
 }
 
-func planBus(ctx colony.Context, traceID string) (*colony.BusPurgePlan, error) {
+func planBus(ctx colony.Context, traceID string) (*BusPurgePlan, error) {
 	client, err := connectBus(ctx)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func planBus(ctx colony.Context, traceID string) (*colony.BusPurgePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	return colony.BusPurgePlanFromTrace(
+	return BusPurgePlanFromTrace(
 		busPlan.TraceID,
 		busPlan.TaskLedgerKey,
 		busPlan.EventCount,
@@ -113,7 +113,7 @@ func planBus(ctx colony.Context, traceID string) (*colony.BusPurgePlan, error) {
 	), nil
 }
 
-func purgeBus(ctx colony.Context, traceID string) (*colony.BusPurgeResult, error) {
+func purgeBus(ctx colony.Context, traceID string) (*BusPurgeResult, error) {
 	client, err := connectBus(ctx)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func purgeBus(ctx colony.Context, traceID string) (*colony.BusPurgeResult, error
 	if err != nil {
 		return nil, err
 	}
-	return &colony.BusPurgeResult{
+	return &BusPurgeResult{
 		KeysRemoved:    busRes.KeysRemoved,
 		EventsRemoved:  busRes.EventsRemoved,
 		ObjectsRemoved: busRes.ObjectsRemoved,

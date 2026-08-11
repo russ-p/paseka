@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
@@ -47,7 +48,7 @@ func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event) (pro
 		return protocol.Event{}, false, nil
 	}
 
-	entries, err := colony.ListInvites(s.Colony.Slug, "", traceID)
+	entries, err := homestate.ListInvites(s.Colony.Slug, "", traceID)
 	if err != nil {
 		return protocol.Event{}, false, err
 	}
@@ -57,7 +58,7 @@ func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event) (pro
 			continue
 		}
 		switch invite.Status {
-		case colony.InviteStatusAccepted, colony.InviteStatusIncomplete:
+		case protocol.InviteStatusAccepted, protocol.InviteStatusIncomplete:
 		default:
 			continue
 		}
@@ -69,9 +70,9 @@ func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event) (pro
 		ref, _ := payloadString(payload, refField)
 		ref = strings.TrimSpace(ref)
 
-		status := colony.InviteStatusIncomplete
+		status := protocol.InviteStatusIncomplete
 		if ref != "" && artifactRefExists(s.Colony.ColonyRoot, traceID, ref) {
-			status = colony.InviteStatusCompleted
+			status = protocol.InviteStatusCompleted
 			if from := strings.TrimSpace(invite.DoneWhen.SetArtifactRef.From); from != "" {
 				if artifactRef, ok := payloadString(payload, from); ok {
 					invite.ArtifactRef = strings.TrimSpace(artifactRef)
@@ -80,7 +81,7 @@ func (s *Service) CompleteFromEvent(ctx context.Context, ev protocol.Event) (pro
 		}
 		invite.Status = status
 		invite.UpdatedAt = time.Now().UTC()
-		if err := colony.UpsertInvite(s.Colony.Slug, invite); err != nil {
+		if err := homestate.UpsertInvite(s.Colony.Slug, invite); err != nil {
 			return protocol.Event{}, false, err
 		}
 		published, err := s.publishInviteStatusEvent(ctx, invite)
@@ -109,14 +110,14 @@ func artifactRefExists(colonyRoot, traceID, ref string) bool {
 	return false
 }
 
-func (s *Service) publishInviteStatusEvent(ctx context.Context, invite colony.InviteEntry) (protocol.Event, error) {
+func (s *Service) publishInviteStatusEvent(ctx context.Context, invite homestate.InviteEntry) (protocol.Event, error) {
 	payload := protocol.SessionInvitePayload{
 		Kind:        protocol.SignalSessionInvite,
 		InviteID:    invite.InviteID,
 		Bee:         invite.Bee,
 		Intent:      invite.Intent,
 		Task:        invite.Task,
-		Status:      protocol.InviteStatus(invite.Status),
+		Status:      invite.Status,
 		ArtifactRef: invite.ArtifactRef,
 		DoneWhen:    doneWhenToProtocol(invite.DoneWhen),
 	}

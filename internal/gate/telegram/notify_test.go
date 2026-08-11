@@ -9,6 +9,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 )
@@ -92,12 +93,12 @@ func TestNotifierPushInviteDedup(t *testing.T) {
 		Bot:    bot,
 		state:  state,
 	}
-	invite := colony.InviteEntry{
+	invite := homestate.InviteEntry{
 		InviteID: "inv-dedup",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Task:     "Task",
-		Status:   colony.InviteStatusPending,
+		Status:   protocol.InviteStatusPending,
 	}
 	if err := n.pushInvite(context.Background(), invite); err != nil {
 		t.Fatal(err)

@@ -6,6 +6,7 @@ import (
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
@@ -60,7 +61,7 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 	}
 	view.NATS = nats
 
-	st, err := colony.LoadState(ctx.Slug)
+	st, err := homestate.LoadState(ctx.Slug)
 	if err != nil {
 		return DashboardView{}, err
 	}

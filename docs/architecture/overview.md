@@ -401,7 +401,10 @@ internal/
   console/                  # Queen Console HTTP API + embedded SPA (transport)
   gate/telegram/            # Telegram Human Gateway (transport)
   export/                   # trace HTML export (uses hiveview)
-  colony/                   # load .paseka + home config, slug resolution, state registry
+  colony/                   # load .paseka + home config, bee schema, slug resolution
+  colonyinit/               # paseka init scaffolds (.paseka/, home config, default bees)
+  homestate/                # machine-local state.json registry (runtime, sessions, invites, worktrees)
+  purge/                    # FS + bus purge (runs, worktrees, cache, trace artifacts)
   prompts/                  # load + render .paseka/prompts/*.md templates
   runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
   adapters/                 # adapter registry + cursor/, pi/, claude/, script/

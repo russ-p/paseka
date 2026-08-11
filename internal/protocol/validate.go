@@ -456,10 +456,10 @@ func validateSessionInvite(payload json.RawMessage) []ValidationDetail {
 	}
 	if strings.TrimSpace(string(p.Status)) == "" {
 		details = append(details, ValidationDetail{Path: "payload.status", Message: "required"})
-	} else if !isInviteStatus(p.Status) {
+	} else if !IsInviteStatus(p.Status) {
 		details = append(details, ValidationDetail{
 			Path:    "payload.status",
-			Message: "must be one of pending, accepted, cancelled, completed",
+			Message: "must be one of pending, accepted, cancelled, completed, incomplete, deferred",
 		})
 	}
 	return details
@@ -483,15 +483,6 @@ func validateBeekeeperReady(payload json.RawMessage) []ValidationDetail {
 		})
 	}
 	return details
-}
-
-func isInviteStatus(status InviteStatus) bool {
-	switch status {
-	case InviteStatusPending, InviteStatusAccepted, InviteStatusCancelled, InviteStatusCompleted, InviteStatusIncomplete:
-		return true
-	default:
-		return false
-	}
 }
 
 func isBeekeeperAction(action BeekeeperAction) bool {

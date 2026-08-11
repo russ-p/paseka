@@ -1,12 +1,15 @@
 package energy
 
-import "github.com/paseka/paseka/internal/colony"
+import (
+	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
+)
 
 const runtimeStatusRunning = "running"
 
 // ReactorAlive reports whether the hive reactor process is alive and running.
 func ReactorAlive(slug string) (bool, error) {
-	entry, err := colony.RuntimeRegistry(slug)
+	entry, err := homestate.RuntimeRegistry(slug)
 	if err != nil {
 		return false, err
 	}

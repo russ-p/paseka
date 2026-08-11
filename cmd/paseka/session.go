@@ -5,6 +5,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/sessions"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +32,7 @@ func newSessionListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			entries, err := colony.ListSessions(ctxColony.Slug)
+			entries, err := homestate.ListSessions(ctxColony.Slug)
 			if err != nil {
 				return err
 			}

@@ -1,4 +1,4 @@
-package colony
+package homestate
 
 import (
 	"encoding/json"
@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/protocol"
 )
 
 // State is persisted runtime state under ~/.config/paseka/<slug>/state.json.
@@ -39,27 +42,18 @@ type SessionEntry struct {
 
 // InviteEntry tracks one Human Gateway session invite.
 type InviteEntry struct {
-	InviteID    string          `json:"inviteId"`
-	TraceID     string          `json:"traceId"`
-	Bee         string          `json:"bee"`
-	Intent      string          `json:"intent,omitempty"`
-	Task        string          `json:"task"`
-	Status      string          `json:"status"`
-	ArtifactRef string          `json:"artifactRef,omitempty"`
-	DoneWhen    *InviteDoneWhen `json:"doneWhen,omitempty"`
-	SessionID   string          `json:"sessionId,omitempty"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	InviteID    string                 `json:"inviteId"`
+	TraceID     string                 `json:"traceId"`
+	Bee         string                 `json:"bee"`
+	Intent      string                 `json:"intent,omitempty"`
+	Task        string                 `json:"task"`
+	Status      protocol.InviteStatus  `json:"status"`
+	ArtifactRef string                 `json:"artifactRef,omitempty"`
+	DoneWhen    *colony.InviteDoneWhen `json:"doneWhen,omitempty"`
+	SessionID   string                 `json:"sessionId,omitempty"`
+	CreatedAt   time.Time              `json:"createdAt"`
+	UpdatedAt   time.Time              `json:"updatedAt"`
 }
-
-const (
-	InviteStatusPending    = "pending"
-	InviteStatusAccepted   = "accepted"
-	InviteStatusCancelled  = "cancelled"
-	InviteStatusCompleted  = "completed"
-	InviteStatusIncomplete = "incomplete"
-	InviteStatusDeferred   = "deferred"
-)
 
 // WorktreeEntry tracks one colony-managed git worktree.
 type WorktreeEntry struct {
@@ -85,7 +79,7 @@ func LoadState(slug string) (State, error) {
 	}
 	var st State
 	if err := json.Unmarshal(data, &st); err != nil {
-		return State{}, fmt.Errorf("colony: parse state: %w", err)
+		return State{}, fmt.Errorf("homestate: parse state: %w", err)
 	}
 	return st, nil
 }
@@ -248,7 +242,7 @@ func FindSession(slug, sessionID string) (SessionEntry, error) {
 			return s, nil
 		}
 	}
-	return SessionEntry{}, fmt.Errorf("colony: session %q not found", sessionID)
+	return SessionEntry{}, fmt.Errorf("homestate: session %q not found", sessionID)
 }
 
 // UpsertInvite stores or updates an invite entry by inviteId.
@@ -278,7 +272,7 @@ func UpsertInvite(slug string, entry InviteEntry) error {
 }
 
 // ListInvites returns invite entries, optionally filtered by status and traceId.
-func ListInvites(slug, status, traceID string) ([]InviteEntry, error) {
+func ListInvites(slug string, status protocol.InviteStatus, traceID string) ([]InviteEntry, error) {
 	st, err := LoadState(slug)
 	if err != nil {
 		return nil, err
@@ -307,7 +301,7 @@ func FindInviteBySessionID(slug, sessionID string) (InviteEntry, error) {
 			return inv, nil
 		}
 	}
-	return InviteEntry{}, fmt.Errorf("colony: invite for session %q not found", sessionID)
+	return InviteEntry{}, fmt.Errorf("homestate: invite for session %q not found", sessionID)
 }
 
 // MarkInviteIncompleteOnSessionEnd marks an accepted invite incomplete when its session ends.
@@ -316,10 +310,10 @@ func MarkInviteIncompleteOnSessionEnd(slug, sessionID string) error {
 	if err != nil {
 		return nil
 	}
-	if inv.Status != InviteStatusAccepted {
+	if inv.Status != protocol.InviteStatusAccepted {
 		return nil
 	}
-	inv.Status = InviteStatusIncomplete
+	inv.Status = protocol.InviteStatusIncomplete
 	return UpsertInvite(slug, inv)
 }
 
@@ -334,11 +328,11 @@ func FindInvite(slug, inviteID string) (InviteEntry, error) {
 			return inv, nil
 		}
 	}
-	return InviteEntry{}, fmt.Errorf("colony: invite %q not found", inviteID)
+	return InviteEntry{}, fmt.Errorf("homestate: invite %q not found", inviteID)
 }
 
 func statePath(slug string) (string, error) {
-	homeDir, err := HomeDir(slug)
+	homeDir, err := colony.HomeDir(slug)
 	if err != nil {
 		return "", err
 	}

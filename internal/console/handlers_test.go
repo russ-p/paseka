@@ -17,6 +17,7 @@ import (
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/console"
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
@@ -38,7 +39,7 @@ func TestRuntimeAPIHandlers(t *testing.T) {
 			}
 			go func() { _ = child.Wait() }()
 			pid := child.Process.Pid
-			if err := colony.RegisterRuntime(ctxColony.Slug, colony.RuntimeEntry{
+			if err := homestate.RegisterRuntime(ctxColony.Slug, homestate.RuntimeEntry{
 				PID:        pid,
 				StartedAt:  time.Now().UTC(),
 				ColonyRoot: colonyRoot,
@@ -51,7 +52,7 @@ func TestRuntimeAPIHandlers(t *testing.T) {
 		},
 	}
 	t.Cleanup(func() {
-		_ = colony.ClearRuntime(ctxColony.Slug)
+		_ = homestate.ClearRuntime(ctxColony.Slug)
 		if child != nil && child.Process != nil {
 			_ = child.Process.Kill()
 		}
@@ -773,7 +774,7 @@ func TestTraceDetailAPIHandler(t *testing.T) {
 	}
 
 	wtCreated := started.Add(3 * time.Minute)
-	if err := colony.RegisterWorktree(ctxColony.Slug, colony.WorktreeEntry{
+	if err := homestate.RegisterWorktree(ctxColony.Slug, homestate.WorktreeEntry{
 		TraceID:   traceID,
 		Path:      filepath.Join(repo, ".paseka", "worktrees", traceID),
 		BaseSHA:   "abc123",

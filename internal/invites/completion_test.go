@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 )
 
@@ -21,7 +23,7 @@ func defaultGrillDoneWhen() *colony.InviteDoneWhen {
 
 func TestCompleteFromEventMarksCompleted(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,13 +34,13 @@ func TestCompleteFromEventMarksCompleted(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte("# test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-grill",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
 		Task:     "Grill feature",
-		Status:   colony.InviteStatusAccepted,
+		Status:   protocol.InviteStatusAccepted,
 		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
@@ -60,11 +62,11 @@ func TestCompleteFromEventMarksCompleted(t *testing.T) {
 	if !ok {
 		t.Fatal("expected completion")
 	}
-	invite, err := colony.FindInvite(res.Slug, "inv-grill")
+	invite, err := homestate.FindInvite(res.Slug, "inv-grill")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invite.Status != colony.InviteStatusCompleted {
+	if invite.Status != protocol.InviteStatusCompleted {
 		t.Fatalf("status = %q", invite.Status)
 	}
 	if invite.ArtifactRef != "docs/specs/001-test.md" {
@@ -74,17 +76,17 @@ func TestCompleteFromEventMarksCompleted(t *testing.T) {
 
 func TestCompleteFromEventMissingFileIncomplete(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-grill",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
 		Task:     "Grill feature",
-		Status:   colony.InviteStatusAccepted,
+		Status:   protocol.InviteStatusAccepted,
 		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
@@ -106,18 +108,18 @@ func TestCompleteFromEventMissingFileIncomplete(t *testing.T) {
 	if !ok {
 		t.Fatal("expected update")
 	}
-	invite, err := colony.FindInvite(res.Slug, "inv-grill")
+	invite, err := homestate.FindInvite(res.Slug, "inv-grill")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invite.Status != colony.InviteStatusIncomplete {
+	if invite.Status != protocol.InviteStatusIncomplete {
 		t.Fatalf("status = %q", invite.Status)
 	}
 }
 
 func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,13 +130,13 @@ func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte("# test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-grill",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
 		Task:     "Grill feature",
-		Status:   colony.InviteStatusIncomplete,
+		Status:   protocol.InviteStatusIncomplete,
 		DoneWhen: defaultGrillDoneWhen(),
 	}); err != nil {
 		t.Fatal(err)
@@ -156,27 +158,27 @@ func TestCompleteFromEventUpgradesIncomplete(t *testing.T) {
 	if !ok {
 		t.Fatal("expected completion")
 	}
-	invite, err := colony.FindInvite(res.Slug, "inv-grill")
+	invite, err := homestate.FindInvite(res.Slug, "inv-grill")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invite.Status != colony.InviteStatusCompleted {
+	if invite.Status != protocol.InviteStatusCompleted {
 		t.Fatalf("status = %q", invite.Status)
 	}
 }
 
 func TestCompleteFromEventNoDoneWhenNoOp(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-grill",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "grilling",
-		Status:   colony.InviteStatusAccepted,
+		Status:   protocol.InviteStatusAccepted,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +196,7 @@ func TestCompleteFromEventNoDoneWhenNoOp(t *testing.T) {
 
 func TestCompleteFromEventWrongDoneWhenNoOp(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,12 +207,12 @@ func TestCompleteFromEventWrongDoneWhenNoOp(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte("# test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID: "inv-bd",
 		TraceID:  "trace-1",
 		Bee:      "drone",
 		Intent:   "breakdown",
-		Status:   colony.InviteStatusAccepted,
+		Status:   protocol.InviteStatusAccepted,
 		DoneWhen: &colony.InviteDoneWhen{
 			When:        colony.EventRule{Type: "SIGNAL", Kind: "task.ready"},
 			RequireFile: colony.InviteStringField{From: "ref"},
@@ -232,28 +234,28 @@ func TestCompleteFromEventWrongDoneWhenNoOp(t *testing.T) {
 
 func TestMarkInviteIncompleteOnSessionEnd(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.UpsertInvite(res.Slug, colony.InviteEntry{
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
 		InviteID:  "inv-grill",
 		TraceID:   "trace-1",
 		Bee:       "drone",
 		Intent:    "grilling",
-		Status:    colony.InviteStatusAccepted,
+		Status:    protocol.InviteStatusAccepted,
 		SessionID: "sess-1",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := colony.MarkInviteIncompleteOnSessionEnd(res.Slug, "sess-1"); err != nil {
+	if err := homestate.MarkInviteIncompleteOnSessionEnd(res.Slug, "sess-1"); err != nil {
 		t.Fatal(err)
 	}
-	invite, err := colony.FindInvite(res.Slug, "inv-grill")
+	invite, err := homestate.FindInvite(res.Slug, "inv-grill")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if invite.Status != colony.InviteStatusIncomplete {
+	if invite.Status != protocol.InviteStatusIncomplete {
 		t.Fatalf("status = %q", invite.Status)
 	}
 }
@@ -280,7 +282,7 @@ func TestSampleRuleIncludesDoneWhen(t *testing.T) {
 
 func TestAutoInviteFromDocReadyBreakdown(t *testing.T) {
 	repo := initTestRepo(t)
-	res, err := colony.Init(colony.InitOptions{StartDir: repo})
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +307,7 @@ func TestAutoInviteFromDocReadyBreakdown(t *testing.T) {
 	if !ok {
 		t.Fatal("expected breakdown invite")
 	}
-	invites, err := colony.ListInvites(res.Slug, colony.InviteStatusPending, "trace-bd")
+	invites, err := homestate.ListInvites(res.Slug, protocol.InviteStatusPending, "trace-bd")
 	if err != nil {
 		t.Fatal(err)
 	}

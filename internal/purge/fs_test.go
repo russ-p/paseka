@@ -1,4 +1,4 @@
-package colony_test
+package purge_test
 
 import (
 	"os"
@@ -8,6 +8,8 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/paseka/paseka/internal/homestate"
+	"github.com/paseka/paseka/internal/purge"
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/worktree"
 )
@@ -25,7 +27,7 @@ func TestPurgeRuns(t *testing.T) {
 	}
 
 	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
-	plan, err := colony.PlanPurge(ctx, colony.PurgeTarget{Runs: true})
+	plan, err := purge.Plan(ctx, purge.PurgeTarget{Runs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +35,7 @@ func TestPurgeRuns(t *testing.T) {
 		t.Fatalf("plan runs = %+v", plan.Runs)
 	}
 
-	res, err := colony.Purge(ctx, colony.PurgeTarget{Runs: true})
+	res, err := purge.Execute(ctx, purge.PurgeTarget{Runs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +60,7 @@ func TestPurgeWorktrees(t *testing.T) {
 	}
 
 	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
-	plan, err := colony.PlanPurge(ctx, colony.PurgeTarget{Worktrees: true})
+	plan, err := purge.Plan(ctx, purge.PurgeTarget{Worktrees: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestPurgeWorktrees(t *testing.T) {
 		t.Fatalf("plan worktrees = %+v", plan.Worktrees)
 	}
 
-	res, err := colony.Purge(ctx, colony.PurgeTarget{Worktrees: true})
+	res, err := purge.Execute(ctx, purge.PurgeTarget{Worktrees: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +84,7 @@ func TestPurgeWorktrees(t *testing.T) {
 		t.Fatal("git still considers path a worktree")
 	}
 
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +97,7 @@ func TestPurgeStateOnly(t *testing.T) {
 	repo := initTestRepo(t)
 	slug := setupPurgeHome(t, repo)
 
-	if err := colony.RegisterWorktree(slug, colony.WorktreeEntry{
+	if err := homestate.RegisterWorktree(slug, homestate.WorktreeEntry{
 		TraceID: "trace-old",
 		Path:    "/tmp/gone",
 	}); err != nil {
@@ -103,7 +105,7 @@ func TestPurgeStateOnly(t *testing.T) {
 	}
 
 	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
-	plan, err := colony.PlanPurge(ctx, colony.PurgeTarget{State: true})
+	plan, err := purge.Plan(ctx, purge.PurgeTarget{State: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,12 +113,12 @@ func TestPurgeStateOnly(t *testing.T) {
 		t.Fatal("expected state in plan")
 	}
 
-	_, err = colony.Purge(ctx, colony.PurgeTarget{State: true})
+	_, err = purge.Execute(ctx, purge.PurgeTarget{State: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	st, err := colony.LoadState(slug)
+	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +137,7 @@ func TestPurgeCache(t *testing.T) {
 	}
 
 	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
-	plan, err := colony.PlanPurge(ctx, colony.PurgeTarget{Cache: true})
+	plan, err := purge.Plan(ctx, purge.PurgeTarget{Cache: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +145,7 @@ func TestPurgeCache(t *testing.T) {
 		t.Fatal("expected cache in plan")
 	}
 
-	res, err := colony.Purge(ctx, colony.PurgeTarget{Cache: true})
+	res, err := purge.Execute(ctx, purge.PurgeTarget{Cache: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,15 +155,15 @@ func TestPurgeCache(t *testing.T) {
 }
 
 func TestFormatBusPurgePlan(t *testing.T) {
-	plan := colony.PurgePlan{
-		Bus: &colony.BusPurgePlan{
+	plan := purge.PurgePlan{
+		Bus: &purge.BusPurgePlan{
 			TraceID:       "trace-bus",
 			TaskLedgerKey: true,
 			EventCount:    2,
 			Artifacts:     []string{"trace-bus-agent-1.diff"},
 		},
 	}
-	out := colony.FormatPlan(plan)
+	out := purge.FormatPlan(plan)
 	if !strings.Contains(out, "bus (trace trace-bus)") {
 		t.Fatalf("format plan = %q", out)
 	}
@@ -177,39 +179,19 @@ func TestFormatBusPurgePlan(t *testing.T) {
 }
 
 func TestPlanEmptyBus(t *testing.T) {
-	empty := colony.PurgePlan{Bus: &colony.BusPurgePlan{TraceID: "trace-bus"}}
-	if !colony.PlanEmpty(empty) {
+	empty := purge.PurgePlan{Bus: &purge.BusPurgePlan{TraceID: "trace-bus"}}
+	if !purge.PlanEmpty(empty) {
 		t.Fatal("expected empty bus plan")
 	}
-	populated := colony.PurgePlan{Bus: &colony.BusPurgePlan{TraceID: "trace-bus", EventCount: 1}}
-	if colony.PlanEmpty(populated) {
+	populated := purge.PurgePlan{Bus: &purge.BusPurgePlan{TraceID: "trace-bus", EventCount: 1}}
+	if purge.PlanEmpty(populated) {
 		t.Fatal("expected non-empty bus plan")
 	}
 }
 
 func TestBusPurgePlanFromTrace(t *testing.T) {
-	plan := colony.BusPurgePlanFromTrace("trace-bus", true, 2, []string{"trace-bus-agent-1.diff"})
+	plan := purge.BusPurgePlanFromTrace("trace-bus", true, 2, []string{"trace-bus-agent-1.diff"})
 	if plan.TraceID != "trace-bus" || !plan.TaskLedgerKey || plan.EventCount != 2 {
 		t.Fatalf("plan = %#v", plan)
 	}
-}
-
-func setupPurgeHome(t *testing.T, repo string) string {
-	t.Helper()
-	base := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", base)
-
-	slug := "purge-test"
-	homeDir, err := colony.HomeDir(slug)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(homeDir, "adapters"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg := []byte("colony_root: " + repo + "\nslug: " + slug + "\n")
-	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), cfg, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return slug
 }

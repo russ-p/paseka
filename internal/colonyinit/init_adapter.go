@@ -1,4 +1,4 @@
-package colony
+package colonyinit
 
 import (
 	"fmt"

@@ -16,15 +16,15 @@ func TestPurgeReseedEnergyRequiresBusAndTrace(t *testing.T) {
 	slug := setupPurgeHome(t, repo)
 	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
 
-	_, err := purge.Plan(ctx, colony.PurgeTarget{ReseedEnergy: true})
+	_, err := purge.Plan(ctx, purge.PurgeTarget{ReseedEnergy: true})
 	if err == nil || !strings.Contains(err.Error(), "--reseed-energy requires --bus") {
 		t.Fatalf("plan without bus error = %v", err)
 	}
-	_, err = purge.Plan(ctx, colony.PurgeTarget{ReseedEnergy: true, Bus: true})
+	_, err = purge.Plan(ctx, purge.PurgeTarget{ReseedEnergy: true, Bus: true})
 	if err == nil || !strings.Contains(err.Error(), "--reseed-energy requires --trace") {
 		t.Fatalf("plan without trace error = %v", err)
 	}
-	_, err = purge.Execute(ctx, colony.PurgeTarget{ReseedEnergy: true})
+	_, err = purge.Execute(ctx, purge.PurgeTarget{ReseedEnergy: true})
 	if err == nil || !strings.Contains(err.Error(), "--reseed-energy requires --bus") {
 		t.Fatalf("execute without bus error = %v", err)
 	}
@@ -35,11 +35,11 @@ func TestPurgeBusRequiresTrace(t *testing.T) {
 	slug := setupPurgeHome(t, repo)
 	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
 
-	_, err := purge.Plan(ctx, colony.PurgeTarget{Bus: true})
+	_, err := purge.Plan(ctx, purge.PurgeTarget{Bus: true})
 	if err == nil || !strings.Contains(err.Error(), "--trace is required with --bus") {
 		t.Fatalf("plan error = %v", err)
 	}
-	_, err = purge.Execute(ctx, colony.PurgeTarget{Bus: true})
+	_, err = purge.Execute(ctx, purge.PurgeTarget{Bus: true})
 	if err == nil || !strings.Contains(err.Error(), "--trace is required with --bus") {
 		t.Fatalf("purge error = %v", err)
 	}
@@ -54,7 +54,7 @@ func TestPurgeBusRequiresNATS(t *testing.T) {
 		Home:       colony.HomeConfig{ColonyRoot: repo, Slug: slug},
 	}
 
-	_, err := purge.Plan(ctx, colony.PurgeTarget{Bus: true, TraceID: "trace-1"})
+	_, err := purge.Plan(ctx, purge.PurgeTarget{Bus: true, TraceID: "trace-1"})
 	if err == nil || !strings.Contains(err.Error(), "nats url not configured") {
 		t.Fatalf("plan error = %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
@@ -87,7 +88,7 @@ func (n *Notifier) Run(ctx context.Context) error {
 
 // ReconcilePendingInvites pushes cards for pending invites not yet deduped.
 func (n *Notifier) ReconcilePendingInvites(ctx context.Context) error {
-	entries, err := colony.ListInvites(n.Colony.Slug, colony.InviteStatusPending, "")
+	entries, err := homestate.ListInvites(n.Colony.Slug, protocol.InviteStatusPending, "")
 	if err != nil {
 		return err
 	}
@@ -152,13 +153,13 @@ func (n *Notifier) handleInviteEvent(ev protocol.Event) error {
 	if err := svc.ProjectEvent(ev); err != nil {
 		return err
 	}
-	entry := colony.InviteEntry{
+	entry := homestate.InviteEntry{
 		InviteID:    payload.InviteID,
 		TraceID:     ev.TraceID,
 		Bee:         payload.Bee,
 		Intent:      payload.Intent,
 		Task:        payload.Task,
-		Status:      string(payload.Status),
+		Status:      payload.Status,
 		ArtifactRef: payload.ArtifactRef,
 	}
 	return n.pushInvite(context.Background(), entry)
@@ -216,15 +217,15 @@ func (n *Notifier) lookupTask(traceID, taskID string) taskledger.TaskSnapshot {
 	return task
 }
 
-func (n *Notifier) pushInvite(ctx context.Context, invite colony.InviteEntry) error {
-	if invite.Status != colony.InviteStatusPending {
+func (n *Notifier) pushInvite(ctx context.Context, invite homestate.InviteEntry) error {
+	if invite.Status != protocol.InviteStatusPending {
 		return nil
 	}
 	mode := n.Config.Notify.Mode(NotifyCategoryInvites)
 	if !mode.Enabled() {
 		return nil
 	}
-	key := inviteNotifyKey(invite.InviteID, invite.Status)
+	key := inviteNotifyKey(invite.InviteID, string(invite.Status))
 	if !n.state.ShouldNotify(key) {
 		return nil
 	}

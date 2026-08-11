@@ -11,6 +11,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/energy"
+	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 )
@@ -44,7 +45,7 @@ func TestAddDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
 	root := t.TempDir()
 	setupEnergyHome(t, slug, root)
 
-	if err := colony.RegisterRuntime(slug, colony.RuntimeEntry{
+	if err := homestate.RegisterRuntime(slug, homestate.RuntimeEntry{
 		PID:             os.Getpid(),
 		StartedAt:       time.Now().UTC(),
 		ColonyRoot:      root,
@@ -53,7 +54,7 @@ func TestAddDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = colony.ClearRuntime(slug) })
+	t.Cleanup(func() { _ = homestate.ClearRuntime(slug) })
 
 	memory := taskledger.NewMemoryLedger()
 	if err := memory.SeedEnergy("trace-1", 12); err != nil {
