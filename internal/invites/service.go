@@ -15,16 +15,10 @@ import (
 	"github.com/paseka/paseka/internal/sessions"
 )
 
-// EventPublisher publishes protocol events (satisfied by bus.Client).
-type EventPublisher interface {
-	PublishEvent(context.Context, protocol.Event) error
-}
-
 // Service coordinates invite persistence, bus publish, and session launch.
 type Service struct {
 	Colony    colony.Context
-	Bus       *bus.Client
-	Publisher EventPublisher
+	Publisher bus.Publisher
 	Sessions  *sessions.Manager
 }
 
@@ -307,14 +301,11 @@ func (s *Service) publishReady(ctx context.Context, invite homestate.InviteEntry
 	return pub.PublishEvent(ctx, ev)
 }
 
-func (s *Service) publisher() EventPublisher {
-	if s.Publisher != nil {
-		return s.Publisher
+func (s *Service) publisher() bus.Publisher {
+	if !bus.PublisherAvailable(s.Publisher) {
+		return nil
 	}
-	if s.Bus != nil {
-		return s.Bus
-	}
-	return nil
+	return s.Publisher
 }
 
 func entryFromPayload(traceID string, payload protocol.SessionInvitePayload) homestate.InviteEntry {

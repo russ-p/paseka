@@ -116,7 +116,7 @@ func (a *TaskActions) Confirm(ctx context.Context, chatID int64, messageID int, 
 		return
 	}
 	defer session.Close()
-	if session.Client == nil {
+	if session.Publisher == nil {
 		a.sendText(chatID, messageID, "task create failed: nats url not configured")
 		return
 	}

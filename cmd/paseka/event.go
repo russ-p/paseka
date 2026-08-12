@@ -157,8 +157,9 @@ func runEventCommand(cmd *cobra.Command, startDir, agentID string, publish bool,
 	}
 
 	var (
-		client     *bus.Client
-		colonyRoot string
+		pub           bus.Publisher
+		subjectPrefix string
+		colonyRoot    string
 	)
 	if publish || deferEmit {
 		ctxColony, err := colony.ResolveContext(startDir)
@@ -167,17 +168,19 @@ func runEventCommand(cmd *cobra.Command, startDir, agentID string, publish bool,
 		}
 		colonyRoot = ctxColony.ColonyRoot
 		if publish && !deferEmit {
-			client, err = bus.ConnectColony(ctxColony, false)
+			client, err := bus.ConnectColony(ctxColony, false)
 			if err != nil {
 				return err
 			}
 			if client != nil {
 				defer client.Close()
+				pub = client
+				subjectPrefix = client.Config().SubjectPrefix
 			}
 		}
 	}
 
-	result, err := bus.ProcessEventInput(cmd.Context(), client, raw, agentID, publish && !deferEmit, deferEmit, colonyRoot)
+	result, err := bus.ProcessEventInput(cmd.Context(), pub, subjectPrefix, raw, agentID, publish && !deferEmit, deferEmit, colonyRoot)
 	if err != nil {
 		return err
 	}

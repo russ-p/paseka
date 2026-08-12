@@ -275,9 +275,9 @@ func (a *InviteActions) inviteService() (*invites.Service, func(), error) {
 		return nil, nil, fmt.Errorf("nats url not configured")
 	}
 	svc := &invites.Service{
-		Colony:   a.Colony,
-		Bus:      client,
-		Sessions: a.sessions(),
+		Colony:    a.Colony,
+		Publisher: client,
+		Sessions:  a.sessions(),
 	}
 	return svc, func() { client.Close() }, nil
 }

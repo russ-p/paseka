@@ -53,11 +53,11 @@ func RunCue(ctx context.Context, colonyCtx colony.Context, cueID string, req Run
 		return RunCueResponse{}, err
 	}
 	defer session.Close()
-	if session.Client == nil {
+	if session.Publisher == nil {
 		return RunCueResponse{}, fmt.Errorf("nats url not configured (cue run requires NATS)")
 	}
 
-	res, err := cues.Run(ctx, session.Client, session.Ledger, cues.RunInput{
+	res, err := cues.Run(ctx, session.Publisher, session.Ledger, cues.RunInput{
 		ColonyRoot: colonyCtx.ColonyRoot,
 		CueID:      cueID,
 		Text:       req.Text,

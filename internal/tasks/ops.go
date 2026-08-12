@@ -20,12 +20,12 @@ const (
 	SourceFS Source = "filesystem"
 )
 
-// LedgerSession holds a connected task ledger and NATS client for mutations.
+// LedgerSession holds a connected task ledger and event publisher for mutations.
 type LedgerSession struct {
-	Colony colony.Context
-	Client *bus.Client
-	Ledger taskledger.Ledger
-	close  func()
+	Colony    colony.Context
+	Publisher bus.Publisher
+	Ledger    taskledger.Ledger
+	close     func()
 }
 
 // Close releases the NATS connection when present.
@@ -50,10 +50,10 @@ func OpenLedger(ctx colony.Context) (*LedgerSession, error) {
 		return nil, fmt.Errorf("task ledger kv: %w", err)
 	}
 	return &LedgerSession{
-		Colony: ctx,
-		Client: client,
-		Ledger: taskledger.NewKVLedger(kv),
-		close:  func() { client.Close() },
+		Colony:    ctx,
+		Publisher: client,
+		Ledger:    taskledger.NewKVLedger(kv),
+		close:     func() { client.Close() },
 	}, nil
 }
 
@@ -103,7 +103,7 @@ type CreateResult struct {
 
 // Create publishes task.plan and optionally task.ready for a new task.
 func Create(ctx context.Context, session *LedgerSession, in CreateInput) (CreateResult, error) {
-	if session == nil || session.Client == nil {
+	if session == nil || session.Publisher == nil {
 		return CreateResult{}, fmt.Errorf("nats url not configured (task create requires NATS)")
 	}
 
@@ -172,7 +172,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 	if err != nil {
 		return CreateResult{}, err
 	}
-	if err := session.Client.PublishEvent(ctx, planEv); err != nil {
+	if err := session.Publisher.PublishEvent(ctx, planEv); err != nil {
 		return CreateResult{}, err
 	}
 
@@ -188,7 +188,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		if err != nil {
 			return CreateResult{}, err
 		}
-		if err := session.Client.PublishEvent(ctx, readyEv); err != nil {
+		if err := session.Publisher.PublishEvent(ctx, readyEv); err != nil {
 			return CreateResult{}, err
 		}
 	}
@@ -203,7 +203,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 
 // Start publishes task.ready for one eligible task in a trace.
 func Start(ctx context.Context, session *LedgerSession, traceID, taskID, agentID string) ([]taskledger.TaskSnapshot, error) {
-	if session == nil || session.Client == nil {
+	if session == nil || session.Publisher == nil {
 		return nil, fmt.Errorf("nats url not configured (task start requires JetStream KV)")
 	}
 	if traceID == "" {
@@ -232,7 +232,7 @@ func Start(ctx context.Context, session *LedgerSession, traceID, taskID, agentID
 		if err != nil {
 			return nil, err
 		}
-		if err := session.Client.PublishEvent(ctx, ev); err != nil {
+		if err := session.Publisher.PublishEvent(ctx, ev); err != nil {
 			return nil, err
 		}
 		started = append(started, task)
@@ -242,7 +242,7 @@ func Start(ctx context.Context, session *LedgerSession, traceID, taskID, agentID
 
 // Retry publishes task.ready to re-queue a failed or stuck running task.
 func Retry(ctx context.Context, session *LedgerSession, traceID, taskID, agentID string) (taskledger.TaskSnapshot, error) {
-	if session == nil || session.Client == nil {
+	if session == nil || session.Publisher == nil {
 		return taskledger.TaskSnapshot{}, fmt.Errorf("nats url not configured (task retry requires JetStream KV)")
 	}
 	if traceID == "" {
@@ -272,7 +272,7 @@ func Retry(ctx context.Context, session *LedgerSession, traceID, taskID, agentID
 	if err != nil {
 		return taskledger.TaskSnapshot{}, err
 	}
-	if err := session.Client.PublishEvent(ctx, ev); err != nil {
+	if err := session.Publisher.PublishEvent(ctx, ev); err != nil {
 		return taskledger.TaskSnapshot{}, err
 	}
 	return task, nil

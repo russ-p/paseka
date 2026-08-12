@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/cues"
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
 )

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
@@ -118,8 +117,8 @@ func (d *Dispatcher) mutationFromRun(
 		payload.WorktreePath = worktreeRelPath(req.ColonyRoot, req.TraceID)
 	}
 
-	if pub, ok := d.publisher.(*bus.Client); ok && len(diff) > 64*1024 {
-		ref, storeErr := pub.StoreArtifact(fmt.Sprintf("%s-%s.diff", req.TraceID, req.AgentID), []byte(diff))
+	if d.artifacts != nil && len(diff) > 64*1024 {
+		ref, storeErr := d.artifacts.StoreArtifact(fmt.Sprintf("%s-%s.diff", req.TraceID, req.AgentID), []byte(diff))
 		if storeErr == nil {
 			payload.Ref = ref
 			payload.Diff = ""

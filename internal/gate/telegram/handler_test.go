@@ -10,10 +10,10 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/colonyinit"
 	tggate "github.com/paseka/paseka/internal/gate/telegram"
 	"github.com/paseka/paseka/internal/homestate"
+	"github.com/paseka/paseka/internal/protocol"
 )
 
 type mockBot struct {

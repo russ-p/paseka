@@ -94,9 +94,9 @@ func newInviteAcceptCmd() *cobra.Command {
 			defer client.Close()
 
 			svc := &invites.Service{
-				Colony:   ctxColony,
-				Bus:      client,
-				Sessions: sessions.DefaultManager,
+				Colony:    ctxColony,
+				Publisher: client,
+				Sessions:  sessions.DefaultManager,
 			}
 			res, err := svc.Accept(cmd.Context(), args[0], attach)
 			if err != nil {
@@ -139,7 +139,7 @@ func newInviteRejectCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			svc := &invites.Service{Colony: ctxColony, Bus: client}
+			svc := &invites.Service{Colony: ctxColony, Publisher: client}
 			invite, err := svc.Reject(cmd.Context(), args[0], deferIt)
 			if err != nil {
 				return err

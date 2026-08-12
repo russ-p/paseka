@@ -13,29 +13,21 @@ import (
 func (s *Service) consumeSessionEnergy(ctx context.Context, traceID string) error {
 	pub := s.publisher()
 	var client *bus.Client
-	if pub == nil {
-		var err error
-		client, err = bus.ConnectColony(s.Colony, false)
-		if err != nil {
-			return err
-		}
-		if client == nil {
-			return nil
-		}
-		defer client.Close()
-		pub = client
-	} else if s.Bus == nil {
-		var err error
-		client, err = bus.ConnectColony(s.Colony, false)
-		if err != nil {
-			return err
-		}
-		if client == nil {
-			return nil
-		}
-		defer client.Close()
+	if c, ok := pub.(*bus.Client); ok && c != nil {
+		client = c
 	} else {
-		client = s.Bus
+		var err error
+		client, err = bus.ConnectColony(s.Colony, false)
+		if err != nil {
+			return err
+		}
+		if client == nil {
+			return nil
+		}
+		defer client.Close()
+		if pub == nil {
+			pub = client
+		}
 	}
 
 	kv, err := client.JetStream().KeyValue(bus.TaskLedgerBucket(s.Colony.Slug))

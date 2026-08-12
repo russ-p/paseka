@@ -45,7 +45,7 @@ func TestProcessEventInputDeferQueuesWithoutPublish(t *testing.T) {
 	runDir := prepareRun(t, root, "trace-1", "agent-1")
 
 	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"context.note","summary":"queued"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, raw, "agent-1", true, true, root)
+	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", true, true, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestProcessEventInputDeferDenyList(t *testing.T) {
 	prepareRun(t, root, "trace-1", "agent-1")
 
 	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"SIGNAL","payload":{"kind":"task.status","taskId":"t1","status":"blocked"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, raw, "agent-1", true, true, root)
+	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", true, true, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestProcessEventInputDeferDenyList(t *testing.T) {
 func TestProcessEventInputDeferRequiresRunDir(t *testing.T) {
 	root := t.TempDir()
 	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"context.note","summary":"x"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, raw, "agent-1", true, true, root)
+	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", true, true, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestProcessEventInputLiveEmitUnchanged(t *testing.T) {
 	runDir := prepareRun(t, root, "trace-1", "agent-1")
 
 	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"ok"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, raw, "agent-1", true, false, root)
+	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", true, false, root)
 	if err != nil {
 		t.Fatal(err)
 	}

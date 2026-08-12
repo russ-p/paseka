@@ -572,9 +572,9 @@ func (a *api) acceptInvite(w http.ResponseWriter, r *http.Request, inviteID stri
 	defer client.Close()
 
 	svc := &invites.Service{
-		Colony:   a.ctx,
-		Bus:      client,
-		Sessions: a.sessions,
+		Colony:    a.ctx,
+		Publisher: client,
+		Sessions:  a.sessions,
 	}
 	res, err := svc.Accept(r.Context(), inviteID, false)
 	if err != nil {
@@ -615,7 +615,7 @@ func (a *api) rejectInvite(w http.ResponseWriter, r *http.Request, inviteID stri
 	}
 	defer client.Close()
 
-	svc := &invites.Service{Colony: a.ctx, Bus: client}
+	svc := &invites.Service{Colony: a.ctx, Publisher: client}
 	invite, err := svc.Reject(r.Context(), inviteID, false)
 	if err != nil {
 		writeError(w, err)

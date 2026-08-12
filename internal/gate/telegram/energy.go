@@ -79,7 +79,7 @@ func (a *EnergyActions) Add(ctx context.Context, chatID int64, editMessageID int
 		return
 	}
 	defer session.Close()
-	if session.Client == nil || session.Ledger == nil {
+	if session.Publisher == nil || session.Ledger == nil {
 		a.sendText(chatID, editMessageID, "energy add failed: nats url not configured")
 		return
 	}

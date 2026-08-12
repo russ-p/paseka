@@ -20,10 +20,10 @@ type KillTraceInput struct {
 // KillTrace publishes SIGNAL/system.kill. When the hive reactor is not running,
 // the event is also applied to the ledger so CLI callers see immediate state.
 func KillTrace(ctx context.Context, session *LedgerSession, in KillTraceInput) (taskledger.TraceSnapshot, error) {
-	if session == nil || session.Client == nil || session.Ledger == nil {
+	if session == nil || session.Publisher == nil || session.Ledger == nil {
 		return taskledger.TraceSnapshot{}, fmt.Errorf("nats url not configured")
 	}
-	return killTrace(ctx, session.Colony.Slug, session.Ledger, session.Client, in)
+	return killTrace(ctx, session.Colony.Slug, session.Ledger, session.Publisher, in)
 }
 
 func killTrace(ctx context.Context, slug string, ledger taskledger.Ledger, pub eventPublisher, in KillTraceInput) (taskledger.TraceSnapshot, error) {

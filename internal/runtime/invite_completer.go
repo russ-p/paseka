@@ -8,7 +8,7 @@ import (
 )
 
 func (r *Reactor) handleInviteCompletion(ctx context.Context, ev protocol.Event) error {
-	svc := &invites.Service{Colony: r.colony, Bus: r.bus}
+	svc := &invites.Service{Colony: r.colony, Publisher: r.bus}
 	if r.invitePublisher != nil {
 		svc.Publisher = r.invitePublisher
 	}

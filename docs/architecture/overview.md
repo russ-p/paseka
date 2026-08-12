@@ -410,13 +410,15 @@ internal/
   adapters/                 # adapter registry + cursor/, pi/, claude/, script/
   sessions/                 # interactive PTY sessions, terminal attach
   worktree/                 # create, diff, merge, cleanup
-  bus/                      # NATS transport, JetStream, emit/defer
+  bus/                      # NATS transport; Publisher, TraceReplayer, ArtifactStore seams
   runtime/                  # reactor + dispatch: colony → prompts → adapter (AFK)
   review/                   # HITL approve/reject + merge
   invites/                  # Human Gateway invite lifecycle
 ```
 
 **Layering:** `hiveview` holds transport-agnostic projections consumed by Queen Console, Telegram Gate, and HTML export. `console` is HTTP/SPA wiring and mutations; it must not be imported by other UIs.
+
+**Bus seams:** `bus.Publisher`, `bus.TraceReplayer`, and `bus.ArtifactStore` are the narrow interfaces consumers depend on. `*bus.Client` (Connect, SubscribeEvents, JetStream KV) stays at composition roots: CLI, Queen Console handlers, Gate, and `NewReactor`.
 
 **Runtime dispatch:** `Reactor` owns Task vs Direct choreography (`dispatch_task.go`, `dispatch_direct.go`) after ledger apply. `Dispatcher.Dispatch` is a thin orchestrator over **Prepare → Run → Finalize** (`dispatch_stages.go`): render prompts and run dir, adapter invocation, then deferred flush / run.summary / publish.
 

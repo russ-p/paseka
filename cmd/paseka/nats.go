@@ -212,10 +212,10 @@ func newProposalApproveCmd() *cobra.Command {
 				return err
 			}
 			defer session.Close()
-			if session.Client == nil || session.Ledger == nil {
+			if session.Publisher == nil || session.Ledger == nil {
 				return fmt.Errorf("nats url not configured")
 			}
-			approveRes, err := review.Approve(cmd.Context(), ctxColony, session.Client, session.Ledger, review.ApproveInput{
+			approveRes, err := review.Approve(cmd.Context(), ctxColony, session.Publisher, session.Ledger, review.ApproveInput{
 				TraceID:      traceID,
 				TaskID:       taskID,
 				Summary:      summary,
@@ -268,10 +268,10 @@ func newProposalRejectCmd() *cobra.Command {
 				return err
 			}
 			defer session.Close()
-			if session.Client == nil || session.Ledger == nil {
+			if session.Publisher == nil || session.Ledger == nil {
 				return fmt.Errorf("nats url not configured")
 			}
-			if err := review.Reject(cmd.Context(), session.Client, session.Ledger, review.RejectInput{
+			if err := review.Reject(cmd.Context(), session.Publisher, session.Ledger, review.RejectInput{
 				TraceID:  traceID,
 				TaskID:   taskID,
 				Feedback: feedback,

@@ -2,7 +2,6 @@ package review
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/protocol"
@@ -29,7 +28,7 @@ func WriteEvent(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger
 	if opts.AfterApply != nil {
 		opts.AfterApply(ev)
 	}
-	if publisherAvailable(pub) {
+	if bus.PublisherAvailable(pub) {
 		if err := pub.PublishEvent(ctx, ev); err != nil {
 			return err
 		}
@@ -38,14 +37,5 @@ func WriteEvent(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger
 }
 
 func publisherAvailable(pub bus.Publisher) bool {
-	if pub == nil {
-		return false
-	}
-	val := reflect.ValueOf(pub)
-	switch val.Kind() {
-	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice:
-		return !val.IsNil()
-	default:
-		return true
-	}
+	return bus.PublisherAvailable(pub)
 }

@@ -52,7 +52,7 @@ func TestDeferredSpecReadyCompletesInviteOnFlushNotQueue(t *testing.T) {
 		"kind": "spec.ready",
 		"ref":  "docs/specs/001-test.md",
 	})
-	queueResult, err := bus.ProcessEventInput(context.Background(), nil, []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"SIGNAL","payload":`+string(raw)+`}`), "agent-1", true, true, res.ColonyRoot)
+	queueResult, err := bus.ProcessEventInput(context.Background(), nil, "", []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"SIGNAL","payload":`+string(raw)+`}`), "agent-1", true, true, res.ColonyRoot)
 	if err != nil {
 		t.Fatal(err)
 	}

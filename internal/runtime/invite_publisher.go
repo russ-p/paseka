@@ -13,15 +13,15 @@ func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event) error
 	}
 
 	var traceEvents []protocol.Event
-	if r.bus != nil {
+	if r.replayer != nil {
 		var err error
-		traceEvents, err = r.bus.ReplayTrace(ev.TraceID)
+		traceEvents, err = r.replayer.ReplayTrace(ev.TraceID)
 		if err != nil {
 			return err
 		}
 	}
 
-	svc := &invites.Service{Colony: r.colony, Bus: r.bus}
+	svc := &invites.Service{Colony: r.colony, Publisher: r.bus}
 	if r.invitePublisher != nil {
 		svc.Publisher = r.invitePublisher
 	}

@@ -14,7 +14,7 @@ import (
 
 func TestProcessEventInputValidateOnly(t *testing.T) {
 	raw := []byte(`{"traceId":"trace-1","type":"VERIFICATION","payload":{"kind":"verification.success","summary":"ok"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, raw, "agent-1", false, false, "")
+	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestProcessEventInputValidateOnly(t *testing.T) {
 
 func TestProcessEventInputValidationFailure(t *testing.T) {
 	raw := []byte(`{"traceId":"trace-1","type":"VERIFICATION","payload":{"kind":"verification.success"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, raw, "agent-1", false, false, "")
+	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}

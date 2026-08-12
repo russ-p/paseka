@@ -22,19 +22,19 @@ type ConsumeEnergyInput = energy.ConsumeInput
 // AddEnergy publishes SIGNAL/energy.add. When the hive reactor is not running,
 // the event is also applied to the ledger so CLI callers see immediate state.
 func AddEnergy(ctx context.Context, session *LedgerSession, in AddEnergyInput) (taskledger.TraceSnapshot, error) {
-	if session == nil || session.Client == nil || session.Ledger == nil {
+	if session == nil || session.Publisher == nil || session.Ledger == nil {
 		return taskledger.TraceSnapshot{}, fmt.Errorf("nats url not configured")
 	}
-	return energy.Add(ctx, session.Colony.Slug, session.Ledger, session.Client, in)
+	return energy.Add(ctx, session.Colony.Slug, session.Ledger, session.Publisher, in)
 }
 
 // ConsumeEnergy publishes SIGNAL/energy.consume. When the hive reactor is not running,
 // the event is also applied to the ledger so CLI callers see immediate state.
 func ConsumeEnergy(ctx context.Context, session *LedgerSession, in ConsumeEnergyInput) (taskledger.TraceSnapshot, error) {
-	if session == nil || session.Client == nil || session.Ledger == nil {
+	if session == nil || session.Publisher == nil || session.Ledger == nil {
 		return taskledger.TraceSnapshot{}, fmt.Errorf("nats url not configured")
 	}
-	return energy.Consume(ctx, session.Colony.Slug, session.Colony.ColonyRoot, session.Ledger, session.Client, in)
+	return energy.Consume(ctx, session.Colony.Slug, session.Colony.ColonyRoot, session.Ledger, session.Publisher, in)
 }
 
 // EnsureEnergySeeded seeds the trace honey reserve from colony defaults when not yet seeded.

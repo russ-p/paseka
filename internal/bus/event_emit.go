@@ -17,7 +17,7 @@ import (
 // .paseka/runs/<traceId>/<agentId>/events.ndjson for the emitting agent run.
 // When deferEmit is true, the event is validated and appended to pending.ndjson
 // instead of publishing; colonyRoot and an existing run directory are required.
-func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultAgentID string, publish bool, deferEmit bool, colonyRoot string) (protocol.EventCLIResult, error) {
+func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string, raw []byte, defaultAgentID string, publish bool, deferEmit bool, colonyRoot string) (protocol.EventCLIResult, error) {
 	in, err := protocol.ParseEventInput(raw)
 	if err != nil {
 		var verr *protocol.ValidationError
@@ -54,8 +54,8 @@ func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultA
 
 	kind := protocol.PayloadKind(ev.Payload)
 	subject := ""
-	if client != nil {
-		subject = EventSubject(client.Config().SubjectPrefix, ev)
+	if subjectPrefix != "" {
+		subject = EventSubject(subjectPrefix, ev)
 	}
 
 	if deferEmit {
@@ -117,7 +117,7 @@ func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultA
 		}, nil
 	}
 
-	if client == nil {
+	if pub == nil {
 		return protocol.EventCLIResult{
 			OK:    false,
 			Error: "nats_not_configured",
@@ -128,7 +128,7 @@ func ProcessEventInput(ctx context.Context, client *Client, raw []byte, defaultA
 		}, nil
 	}
 
-	if err := client.PublishEvent(ctx, ev); err != nil {
+	if err := pub.PublishEvent(ctx, ev); err != nil {
 		return protocol.EventCLIResult{
 			OK:    false,
 			Error: "publish_failed",

@@ -227,11 +227,11 @@ func (a *SignalActions) confirmCue(ctx context.Context, chatID int64, messageID 
 		return
 	}
 	defer session.Close()
-	if session.Client == nil {
+	if session.Publisher == nil {
 		a.sendText(chatID, messageID, "cue publish failed: nats url not configured")
 		return
 	}
-	res, err := cues.Run(ctx, session.Client, session.Ledger, cues.RunInput{
+	res, err := cues.Run(ctx, session.Publisher, session.Ledger, cues.RunInput{
 		ColonyRoot: a.Colony.ColonyRoot,
 		CueID:      cmd.CueID(),
 		Text:       text,

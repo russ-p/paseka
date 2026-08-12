@@ -79,7 +79,7 @@ func newCueRunCmd() *cobra.Command {
 			}
 			defer session.Close()
 
-			res, err := cues.Run(cmd.Context(), session.Client, session.Ledger, cues.RunInput{
+			res, err := cues.Run(cmd.Context(), session.Publisher, session.Ledger, cues.RunInput{
 				ColonyRoot: ctxColony.ColonyRoot,
 				CueID:      args[0],
 				Text:       strings.Join(args[1:], " "),

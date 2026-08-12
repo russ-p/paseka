@@ -37,7 +37,7 @@ func AddTraceEnergy(ctx context.Context, colonyCtx colony.Context, traceID strin
 		return EnergyAddResponse{}, err
 	}
 	defer session.Close()
-	if session.Client == nil || session.Ledger == nil {
+	if session.Publisher == nil || session.Ledger == nil {
 		return EnergyAddResponse{}, fmt.Errorf("nats url not configured")
 	}
 

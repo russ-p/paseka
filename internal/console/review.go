@@ -110,11 +110,11 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		return ApproveTaskResponse{}, err
 	}
 	defer session.Close()
-	if session.Client == nil || session.Ledger == nil {
+	if session.Publisher == nil || session.Ledger == nil {
 		return ApproveTaskResponse{}, fmt.Errorf("nats url not configured")
 	}
 
-	approveRes, err := review.Approve(ctx, colonyCtx, session.Client, session.Ledger, review.ApproveInput{
+	approveRes, err := review.Approve(ctx, colonyCtx, session.Publisher, session.Ledger, review.ApproveInput{
 		TraceID:      traceID,
 		TaskID:       taskID,
 		Summary:      req.Summary,
@@ -155,11 +155,11 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 	if err := validateReviewTaskTarget(colonyCtx, session, traceID, taskID); err != nil {
 		return RejectTaskResponse{}, err
 	}
-	if session.Client == nil || session.Ledger == nil {
+	if session.Publisher == nil || session.Ledger == nil {
 		return RejectTaskResponse{}, fmt.Errorf("nats url not configured")
 	}
 
-	if err := review.Reject(ctx, session.Client, session.Ledger, review.RejectInput{
+	if err := review.Reject(ctx, session.Publisher, session.Ledger, review.RejectInput{
 		TraceID:  traceID,
 		TaskID:   taskID,
 		Feedback: req.Feedback,

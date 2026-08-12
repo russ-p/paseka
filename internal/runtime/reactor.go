@@ -8,7 +8,6 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/logging"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/runs"
@@ -19,6 +18,7 @@ import (
 type Reactor struct {
 	colony          colony.Context
 	bus             *bus.Client
+	replayer        bus.TraceReplayer
 	dispatcher      *Dispatcher
 	ledger          taskledger.Ledger
 	registry        *BeeRegistry
@@ -28,7 +28,7 @@ type Reactor struct {
 	directProcessed map[string]struct{}
 	recentLocal     map[string]time.Time // fingerprints of events applied before publish
 	asyncDispatch   bool
-	invitePublisher invites.EventPublisher // test override for auto-invite publish
+	invitePublisher bus.Publisher // test override for auto-invite publish
 	autoInvites     []colony.AutoInviteRule
 }
 
@@ -71,11 +71,13 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 
 	d := NewDispatcher()
 	d.SetPublisher(busClient, true)
+	d.SetArtifactStore(busClient)
 	d.SetBeeRegistry(registry)
 
 	return &Reactor{
 		colony:          ctxColony,
 		bus:             busClient,
+		replayer:        busClient,
 		dispatcher:      d,
 		ledger:          taskledger.NewKVLedger(kv),
 		registry:        registry,
@@ -262,11 +264,6 @@ func (r *Reactor) PublishEvent(ctx context.Context, event protocol.Event) error 
 // Ledger returns the reactor task ledger.
 func (r *Reactor) Ledger() taskledger.Ledger {
 	return r.ledger
-}
-
-// BusClient returns the underlying bus client for replay/doctor helpers.
-func (r *Reactor) BusClient() *bus.Client {
-	return r.bus
 }
 
 // Registry returns the bee routing registry.

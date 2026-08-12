@@ -122,7 +122,7 @@ func (a *ProposalActions) executeApprove(ctx context.Context, chatID int64, mess
 		return
 	}
 	defer session.Close()
-	if session.Client == nil || session.Ledger == nil {
+	if session.Publisher == nil || session.Ledger == nil {
 		a.sendText(chatID, messageID, "approve failed: nats url not configured")
 		return
 	}
@@ -138,7 +138,7 @@ func (a *ProposalActions) executeApprove(ctx context.Context, chatID int64, mess
 		return
 	}
 
-	approveRes, err := review.Approve(ctx, a.Colony, session.Client, session.Ledger, review.ApproveInput{
+	approveRes, err := review.Approve(ctx, a.Colony, session.Publisher, session.Ledger, review.ApproveInput{
 		TraceID: traceID,
 		TaskID:  taskID,
 		AgentID: "telegram",
@@ -166,12 +166,12 @@ func (a *ProposalActions) executeReject(ctx context.Context, chatID int64, messa
 		return
 	}
 	defer session.Close()
-	if session.Client == nil || session.Ledger == nil {
+	if session.Publisher == nil || session.Ledger == nil {
 		a.sendText(chatID, messageID, "reject failed: nats url not configured")
 		return
 	}
 
-	if err := review.Reject(ctx, session.Client, session.Ledger, review.RejectInput{
+	if err := review.Reject(ctx, session.Publisher, session.Ledger, review.RejectInput{
 		TraceID:  traceID,
 		TaskID:   taskID,
 		AgentID:  "telegram",
