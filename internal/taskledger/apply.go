@@ -127,12 +127,16 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 					if payload.TaskID == "" {
 						return ApplyResult{}, fmt.Errorf("taskledger: task.status missing taskId")
 					}
+					if payload.Status == "" {
+						return ApplyResult{}, fmt.Errorf("taskledger: task.status missing status")
+					}
+					// system.kill is sticky: late runtime task.status must not change the trace.
+					if trace.Killed {
+						return ApplyResult{Trace: trace}, nil
+					}
 					task, ok := trace.Tasks[payload.TaskID]
 					if !ok {
 						task = TaskSnapshot{TaskID: payload.TaskID}
-					}
-					if payload.Status == "" {
-						return ApplyResult{}, fmt.Errorf("taskledger: task.status missing status")
 					}
 					task.Status = payload.Status
 					// Always assign summary (including "") so unblock/clear transitions
@@ -212,6 +216,10 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		}
 		if payload.TaskID == "" {
 			return ApplyResult{}, fmt.Errorf("taskledger: task.completed missing taskId")
+		}
+		// system.kill is sticky: late task.completed must not change the trace.
+		if trace.Killed {
+			return ApplyResult{Trace: trace}, nil
 		}
 		task, ok := trace.Tasks[payload.TaskID]
 		if !ok {

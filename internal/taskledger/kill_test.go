@@ -126,3 +126,94 @@ func TestApplyEventEnergyAddDoesNotUnkill(t *testing.T) {
 		t.Fatal("kill flag cleared")
 	}
 }
+
+func TestApplyEventTaskStatusIgnoredWhenKilled(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Killed:  true,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCancelled, Summary: "eval hard stop"},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:    protocol.TaskEventStatus,
+		TaskID:  "task-1",
+		Status:  protocol.TaskStatusWaitingReview,
+		Summary: "late finalize",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Fatal("expected no change for late task.status after kill")
+	}
+	task := res.Trace.Tasks["task-1"]
+	if task.Status != protocol.TaskStatusCancelled {
+		t.Fatalf("status = %q, want cancelled", task.Status)
+	}
+	if task.Summary != "eval hard stop" {
+		t.Fatalf("summary = %q, want kill reason", task.Summary)
+	}
+}
+
+func TestApplyEventTaskCompletedIgnoredWhenKilled(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Killed:  true,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCancelled, Summary: "eval hard stop"},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:    protocol.TaskEventCompleted,
+		TaskID:  "task-1",
+		Status:  protocol.TaskStatusCompleted,
+		Summary: "late complete",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Fatal("expected no change for late task.completed after kill")
+	}
+	task := res.Trace.Tasks["task-1"]
+	if task.Status != protocol.TaskStatusCancelled {
+		t.Fatalf("status = %q, want cancelled", task.Status)
+	}
+}
+
+func TestApplyEventTaskCompletedIgnoredForUnknownTaskWhenKilled(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Killed:  true,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCancelled, Summary: "eval hard stop"},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: "task-ghost",
+		Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Fatal("expected no change for late task.completed on unknown task after kill")
+	}
+	if _, ok := res.Trace.Tasks["task-ghost"]; ok {
+		t.Fatal("late completed must not insert a task on a killed trace")
+	}
+}

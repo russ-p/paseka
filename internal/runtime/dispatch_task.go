@@ -86,6 +86,11 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		IsLastWorkTask: taskledger.IsLastWorkTask(snap, task.TaskID),
 	}, DispatchModeTask)
 	if err != nil {
+		// Kill may cancel finalize after a completed adapter run (busRequired); do not
+		// publish failed over cancelled (mirrors the non-completed / success gates below).
+		if r.traceKilled(traceID) {
+			return nil
+		}
 		if setErr := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(nil, err)); setErr != nil {
 			return setErr
 		}
@@ -112,6 +117,12 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	logDispatchDone(DispatchModeTask, bee, traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted))
 	finishedAt := time.Now().UTC()
 	r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, string(protocol.StatusCompleted), finishedAt)
+
+	// Kill may land after the adapter returns completed but before finalize; do not
+	// overwrite cancelled (mirrors the failure-path gate above).
+	if r.traceKilled(traceID) {
+		return nil
+	}
 
 	summary := strings.TrimSpace(res.Result.Summary)
 	if protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired {
