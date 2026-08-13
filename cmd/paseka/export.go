@@ -10,21 +10,29 @@ import (
 
 func newExportCmd() *cobra.Command {
 	var (
-		startDir string
-		traceID  string
+		startDir   string
+		traceID    string
+		formatFlag string
 	)
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export a flight trail as a self-contained HTML report",
+		Short: "Export a flight trail as a self-contained HTML or Markdown report",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" {
 				return fmt.Errorf("--trace is required")
+			}
+			format, err := export.ParseFormat(formatFlag)
+			if err != nil {
+				return err
 			}
 			ctx, err := colony.ResolveContext(startDir)
 			if err != nil {
 				return err
 			}
-			path, err := export.ExportTrace(ctx, export.Options{TraceID: traceID})
+			path, err := export.ExportTrace(ctx, export.Options{
+				TraceID: traceID,
+				Format:  format,
+			})
 			if err != nil {
 				return err
 			}
@@ -34,6 +42,7 @@ func newExportCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
+	cmd.Flags().StringVar(&formatFlag, "format", "html", "export renderer (html, md)")
 	_ = cmd.MarkFlagRequired("trace")
 	return cmd
 }

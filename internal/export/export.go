@@ -12,10 +12,11 @@ import (
 	"github.com/paseka/paseka/internal/runs"
 )
 
-// Options configures a trace HTML export.
+// Options configures a trace export.
 type Options struct {
 	TraceID   string
 	OutputDir string
+	Format    Format
 }
 
 // TraceExportData is the view model passed to the HTML renderer.
@@ -28,7 +29,7 @@ type TraceExportData struct {
 	Events     []hiveview.EventFeedItem
 }
 
-// ExportTrace writes a self-contained HTML report for one flight trail.
+// ExportTrace writes a self-contained trace report for one flight trail.
 func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 	traceID := strings.TrimSpace(opts.TraceID)
 	if traceID == "" {
@@ -61,7 +62,12 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 		outDir = wd
 	}
 
-	filename := OutputFilename(ctx.Slug, traceID)
+	format := opts.Format
+	if format == "" {
+		format = FormatHTML
+	}
+
+	filename := OutputFilename(ctx.Slug, traceID, format)
 	outPath := filepath.Join(outDir, filename)
 
 	data := TraceExportData{
@@ -73,12 +79,20 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 		Events:     feedItems,
 	}
 
-	html, err := RenderHTML(data)
+	var content []byte
+	switch format {
+	case FormatHTML:
+		content, err = RenderHTML(data)
+	case FormatMarkdown:
+		content, err = RenderMarkdown(data)
+	default:
+		return "", fmt.Errorf("unsupported export format %q", format)
+	}
 	if err != nil {
 		return "", err
 	}
 
-	if err := os.WriteFile(outPath, html, 0o644); err != nil {
+	if err := os.WriteFile(outPath, content, 0o644); err != nil {
 		return "", err
 	}
 
@@ -89,9 +103,13 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 	return abs, nil
 }
 
-// OutputFilename returns the default export filename for a slug and trace id.
-func OutputFilename(slug, traceID string) string {
-	return fmt.Sprintf("paseka-export-%s-%s.html", sanitizeFilename(slug), sanitizeFilename(traceID))
+// OutputFilename returns the default export filename for a slug, trace id, and format.
+func OutputFilename(slug, traceID string, format Format) string {
+	ext := "html"
+	if format == FormatMarkdown {
+		ext = "md"
+	}
+	return fmt.Sprintf("paseka-export-%s-%s.%s", sanitizeFilename(slug), sanitizeFilename(traceID), ext)
 }
 
 func sanitizeFilename(s string) string {
