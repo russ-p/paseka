@@ -12,5 +12,5 @@ Intake a `feature.requested` entry — classify, then hand off clear work to the
 4. When `decision=plan`: emit **one** `INSIGHT/task.plan` with a **single** task — `bee: builder`, `intent: feature`. Include title, body with acceptance criteria, and stable `taskId` (`001-short-slug`).
 5. When `decision=triage`: emit **one** `INSIGHT/task.plan` with a **single** task — `bee: builder`, `intent: bugfix`. Include reproduction/symptom in the body.
 6. When `decision=grill`, `clarify`, or `reject`: do **not** emit `task.plan` or `task.ready`.
-7. **Start now:** if title/body/task text explicitly asks to start immediately (e.g. "do now", "fix needed now", "фикс нужен сейчас", "start immediately"), emit `SIGNAL/task.ready` for that single planned task after `task.plan`. Otherwise publish `task.plan` only.
+7. **Start now:** if title/body/task text explicitly asks to start immediately (e.g. "do now", "fix needed now", "фикс нужен сейчас", "start immediately"), emit deferred `SIGNAL/task.ready` (`taskId` only) immediately after deferred `task.plan`. Otherwise publish `task.plan` only.
 8. Optionally emit `INSIGHT/run.summary` with a one-line intake summary.

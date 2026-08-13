@@ -6,7 +6,7 @@ Always emit `feature.classified` first. Then follow the decision branch below.
 | ----- | -------------- | ---- |
 | `SIGNAL` | `feature.classified` | Always (required) |
 | `INSIGHT` | `task.plan` | `decision=plan` or `decision=triage` (one builder task) |
-| `SIGNAL` | `task.ready` | Same slice, only when entry text asks to start now |
+| `SIGNAL` | `task.ready` | Same slice, only when entry text asks to start now (`--defer` after `task.plan`) |
 | `INSIGHT` | `trace.title` | Short Flight Trail name for Console (emit on every intake) |
 | `INSIGHT` | `run.summary` | Optional one-line summary |
 
@@ -68,11 +68,11 @@ EOF
 
 ### `task.ready` — start now only
 
-Emit **only** when title/body/task text explicitly requests immediate start. Use the same `taskId`, title, body, `bee`, and `intent` as the single planned task.
+Emit **only** when title/body/task text explicitly requests immediate start. Use **`--defer` immediately after** the `task.plan` above (same flush, FIFO). Payload: `kind` + `taskId` only — do not copy title/body from plan.
 
 ```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix"}}
+paseka event emit --defer --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path"}}
 EOF
 ```
 

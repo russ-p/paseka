@@ -29,7 +29,18 @@ type TraceSnapshot struct {
 	EnergyBudget    int                     `json:"energyBudget,omitempty"`
 	EnergyRemaining int                     `json:"energyRemaining,omitempty"`
 	Killed          bool                    `json:"killed,omitempty"`
+	PendingReady    *PendingReadySnapshot   `json:"pendingReady,omitempty"`
 	Tasks           map[string]TaskSnapshot `json:"tasks"`
+}
+
+// PendingReadySnapshot parks a task.ready kick until the matching task.plan registers the task.
+type PendingReadySnapshot struct {
+	TaskID string `json:"taskId"`
+	Title  string `json:"title,omitempty"`
+	Body   string `json:"body,omitempty"`
+	Bee    string `json:"bee,omitempty"`
+	Sector string `json:"sector,omitempty"`
+	Intent string `json:"intent,omitempty"`
 }
 
 // ApplyResult is the outcome of applying one bus event to a trace ledger.

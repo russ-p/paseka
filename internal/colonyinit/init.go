@@ -510,7 +510,7 @@ Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit
 4. When decision=plan: emit one INSIGHT/task.plan with a single task — bee: builder, intent: feature. Include title, body with acceptance criteria, and stable taskId (001-short-slug).
 5. When decision=triage: emit one INSIGHT/task.plan with a single task — bee: builder, intent: bugfix. Include reproduction/symptom in the body.
 6. When decision=grill, clarify, or reject: do not emit task.plan or task.ready.
-7. Start now: if title/body/task text explicitly asks to start immediately (e.g. "do now", "fix needed now", "фикс нужен сейчас", "start immediately"), emit SIGNAL/task.ready for that single planned task after task.plan. Otherwise publish task.plan only.
+7. Start now: if title/body/task text explicitly asks to start immediately (e.g. "do now", "fix needed now", "фикс нужен сейчас", "start immediately"), emit deferred SIGNAL/task.ready (taskId only) immediately after deferred task.plan. Otherwise publish task.plan only.
 8. Optionally emit INSIGHT/run.summary with a one-line intake summary.
 9. Emit INSIGHT/trace.title with a short Flight Trail name on every intake (from entry title/body or a refined label).
 `
@@ -522,7 +522,7 @@ Always emit feature.classified first. Then follow the decision branch below.
 | ----- | ------------ | ---- |
 | SIGNAL | feature.classified | Always (required) |
 | INSIGHT | task.plan | decision=plan or decision=triage (one builder task) |
-| SIGNAL | task.ready | Same slice, only when entry text asks to start now |
+| SIGNAL | task.ready | Same slice, only when entry text asks to start now (--defer after task.plan) |
 | INSIGHT | trace.title | Short Flight Trail name for Console (emit on every intake) |
 | INSIGHT | run.summary | Optional one-line summary |
 
@@ -560,22 +560,22 @@ Emit one INSIGHT/task.plan with a single task in payload.tasks.
 
 Clear feature (decision=plan):
 
-paseka event emit --stdin <<'EOF'
+paseka event emit --defer --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-add-health-badge","title":"Add health badge to header","body":"## What to build\n\nShow colony health in the console header.\n\n## Acceptance criteria\n\n- [ ] Badge visible when NATS is connected\n- [ ] Badge shows disconnected state clearly\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"feature","dependsOn":[]}]}}
 EOF
 
 Bug (decision=triage):
 
-paseka event emit --stdin <<'EOF'
+paseka event emit --defer --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix","dependsOn":[]}]}}
 EOF
 
 ### task.ready — start now only
 
-Emit only when title/body/task text explicitly requests immediate start. Use the same taskId, title, body, bee, and intent as the single planned task.
+Emit only when title/body/task text explicitly requests immediate start. Use --defer immediately after task.plan (same flush, FIFO). Payload: kind + taskId only — do not copy title/body from plan.
 
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix"}}
+paseka event emit --defer --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path"}}
 EOF
 
 ### run.summary — optional
@@ -595,16 +595,33 @@ EOF
 	emitHowtoPartial = `When you need to publish a bus event during a run:
 
 1. Build one valid JSON object for the event.
-2. Validate and publish it with Paseka CLI via stdin.
+2. Validate and publish it with Paseka CLI via stdin (paseka event emit --stdin).
 3. If validation fails, inspect the returned JSON error, fix the event, and retry once.
-4. After successful publish, continue with a normal human-readable summary.
+4. After successful publish (or successful defer), continue with a normal human-readable summary.
 
 Do not print raw event JSON in the final answer.
 Do not write event JSON directly to files.
 
-Use this command form:
+### Live vs deferred emit
+
+By default, event emit publishes to the bus immediately (live). Add --defer to queue the event in the run's pending buffer; runtime flushes the queue to the bus only after successful run or session completion (FIFO).
+
+| Use --defer | Use live (default) |
+| ----------- | ------------------ |
+| Handoffs after this bee finishes (task.plan, task.ready kick after plan, context.note, spec.ready) | Mid-run control (feature.classified, session.invite, energy, kill) |
+| Bundle ledger at successful exit (task.plan then task.ready when starting now) | Debugging with immediate timeline feedback |
+
+Hard-deny for --defer: system.kill, energy.add, energy.consume, session.invite, beekeeper.ready, task.status.
+
+Use this command form (live):
 
 paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"Short narrative context"}}
+EOF
+
+For end-of-run handoffs, prefer defer:
+
+paseka event emit --defer --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"context.note","summary":"Short narrative context"}}
 EOF
 
@@ -614,7 +631,7 @@ Each event JSON object must include:
 - type — the event type your bee role may publish (see role-specific emit guidance below)
 - payload — event-specific object with required payload.kind
 
-If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing.`
+If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing. Deferred success includes "deferred": true and does not publish to the bus until flush.`
 	emitInsightPartial = `## INSIGHT events
 
 Use type: INSIGHT for context, audit, and dashboard narrative. INSIGHT events do not drive workflow routing.
@@ -687,8 +704,10 @@ Use type: SIGNAL to mark operational signals on the bus.
 
 ### task.ready — mark a task ready to run
 
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder","sector":"backend-users"}}
+Emit after task.plan in the same run, using --defer so both flush FIFO on success. Payload needs only kind and taskId (optional bee if not set in plan). Do not copy title/body.
+
+paseka event emit --defer --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"task-1"}}
 EOF`
 	emitVerificationPartial = `## VERIFICATION events (review gate)
 

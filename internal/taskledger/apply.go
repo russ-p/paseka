@@ -43,7 +43,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 			if spec.TaskID == "" {
 				continue
 			}
-			if _, exists := trace.Tasks[spec.TaskID]; exists {
+			if existing, exists := trace.Tasks[spec.TaskID]; exists && existing.Status != "" {
 				continue
 			}
 			trace.Tasks[spec.TaskID] = TaskSnapshot{
@@ -58,6 +58,13 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				DependsOn: append([]string(nil), spec.DependsOn...),
 				UpdatedAt: now,
 			}
+			changed = true
+		}
+		var promoted []TaskSnapshot
+		var promotedChanged bool
+		trace, promoted, promotedChanged = tryPromotePendingReady(trace, now)
+		if promotedChanged {
+			ready = append(ready, promoted...)
 			changed = true
 		}
 
@@ -162,24 +169,15 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 					return ApplyResult{}, fmt.Errorf("taskledger: task.ready missing taskId")
 				}
 				task, ok := trace.Tasks[payload.TaskID]
-				if !ok {
-					task = TaskSnapshot{TaskID: payload.TaskID}
+				if !ok || task.Status == "" {
+					trace.PendingReady = pendingReadyFromPayload(payload)
+					if ok {
+						delete(trace.Tasks, payload.TaskID)
+					}
+					changed = true
+					break
 				}
-				if payload.Title != "" {
-					task.Title = payload.Title
-				}
-				if payload.Body != "" {
-					task.Body = payload.Body
-				}
-				if payload.Bee != "" {
-					task.Bee = payload.Bee
-				}
-				if payload.Sector != "" {
-					task.Sector = payload.Sector
-				}
-				if payload.Intent != "" {
-					task.Intent = payload.Intent
-				}
+				task = applyReadyOverlays(task, payload)
 				if task.Status == protocol.TaskStatusReady {
 					task.UpdatedAt = now
 					trace.Tasks[payload.TaskID] = task
@@ -195,7 +193,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 					break
 				}
 				if !HasReadyTask(trace) {
-					if first, ok := FirstEligiblePlanned(trace); ok && first.TaskID == payload.TaskID {
+					if first, eligible := FirstEligiblePlanned(trace); eligible && first.TaskID == payload.TaskID {
 						task.Status = protocol.TaskStatusReady
 						ready = append(ready, task)
 						changed = true
@@ -243,6 +241,14 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		trace.Tasks[payload.TaskID] = task
 		changed = true
 
+		var pendingReady []TaskSnapshot
+		var pendingPromoted bool
+		trace, pendingReady, pendingPromoted = tryPromotePendingReady(trace, now)
+		if pendingPromoted {
+			ready = append(ready, pendingReady...)
+			changed = true
+		}
+
 		// Promote at most one eligible planned task to ready.
 		var candidate TaskSnapshot
 		var promoted bool
@@ -275,6 +281,12 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		}
 		task.UpdatedAt = now
 		trace.Tasks[payload.TaskID] = task
+		changed = true
+	}
+
+	var dropped bool
+	trace, dropped = dropStalePendingReady(trace)
+	if dropped {
 		changed = true
 	}
 

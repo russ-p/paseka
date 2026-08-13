@@ -313,12 +313,12 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
 | Partial | Role |
 | ------- | ---- |
-| `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (live default, `--defer` for handoffs; no type enumeration) |
+| `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (live default, `--defer` for handoffs including `task.plan` + post-plan `task.ready`; no type enumeration) |
 | `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) |
-| `emit-signal` | `SIGNAL` kinds (`task.ready`) |
-| `scout-emit-intake` | `SIGNAL/feature.classified`, `INSIGHT/task.plan`, `SIGNAL/task.ready` (Scout `intake` intent only) |
+| `emit-signal` | `SIGNAL` kinds (`task.ready` — defer after plan, `taskId` only) |
+| `scout-emit-intake` | `SIGNAL/feature.classified`, deferred `INSIGHT/task.plan`, deferred `SIGNAL/task.ready` (Scout `intake` intent only) |
 | `drone-emit-grilling` | `SIGNAL/spec.ready` + optional `context.note` (Drone `grilling` intent only) |
-| `drone-emit-breakdown` | `INSIGHT/task.plan`, `SIGNAL/task.ready`, optional `context.note` (Drone `breakdown` intent only) |
+| `drone-emit-breakdown` | deferred `INSIGHT/task.plan`, deferred `SIGNAL/task.ready`, optional `context.note` (Drone `breakdown` intent only) |
 | `emit-verification` | Review-gate `VERIFICATION` kinds (`verification.success`, `verification.failed`) |
 | `emit-task-completed` | Commit-gate `VERIFICATION/task.completed` (receiver only) |
 | `cursor-interactive-kickoff` | Brief greet-and-wait footer for interactive Cursor chat (`hivewright-task`, `drone-task`) |

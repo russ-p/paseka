@@ -87,7 +87,7 @@ Colony **`auto_invites`** rules may **match** on `decision` (e.g. `match.decisio
 
 Scout **must not** emit `task.plan` or `task.ready` when `decision=grill`.
 
-**Start now:** when title/body explicitly asks to start immediately (e.g. `do now`, `fix needed now`, `фикс нужен сейчас`), Scout emits `SIGNAL/task.ready` for the single planned slice after `task.plan`. Otherwise plan-only — Beekeeper kicks via `paseka task start` or later.
+**Start now:** when title/body explicitly asks to start immediately (e.g. `do now`, `fix needed now`, `фикс нужен сейчас`), Scout emits deferred `SIGNAL/task.ready` (`taskId` only) immediately after deferred `INSIGHT/task.plan` (FIFO flush on successful run exit). Otherwise plan-only — Beekeeper kicks via `paseka task start` or later.
 
 ### 2. Workflow uses SIGNAL; memory uses INSIGHT
 

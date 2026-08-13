@@ -29,6 +29,7 @@ func applySystemKill(trace TraceSnapshot, reason string, now time.Time) TraceSna
 		summary = protocol.TraceKilledSummary
 	}
 	trace.Killed = true
+	trace.PendingReady = nil
 	for id, task := range trace.Tasks {
 		if !IsKillableTaskStatus(task.Status) {
 			continue

@@ -16,9 +16,9 @@ By default, `event emit` publishes to the bus **immediately** (live). Add **`--d
 
 | Use `--defer` | Use live (default) |
 | ------------- | ------------------ |
-| Handoffs meant for after this bee finishes (`task.plan`, `context.note`, `spec.ready`, optional `artifact.written`) | Need another bee or human reaction **during** this run/session |
-| Invite `done_when` should complete at run boundary, not mid-session | Mid-run control (`task.ready`, `feature.classified`, `session.invite`, energy, kill) |
-| Bundle ledger + narrative at successful exit | Debugging with immediate timeline feedback |
+| Handoffs meant for after this bee finishes (`task.plan`, `task.ready` kick after plan, `context.note`, `spec.ready`, optional `artifact.written`) | Need another bee or human reaction **during** this run/session |
+| Invite `done_when` should complete at run boundary, not mid-session | Mid-run control (`feature.classified`, `session.invite`, energy, kill) |
+| Bundle ledger + narrative at successful exit (emit `task.plan` then `task.ready` in that order when starting now) | Debugging with immediate timeline feedback |
 
 **Hard-deny for `--defer`** (live-only platform kinds): `system.kill`, `energy.add`, `energy.consume`, `session.invite`, `beekeeper.ready`, `task.status`.
 

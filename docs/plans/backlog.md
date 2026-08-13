@@ -5,6 +5,16 @@ Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-inde
 
 ## Deferred work
 
+### Task ledger
+
+#### `autorun` flag on `task.plan`
+
+- **Kind:** idea
+- **Source:** `task.ready` race fix planning
+- **Summary:** Single `INSIGHT/task.plan` payload field (e.g. `autorun: true`) that runtime translates into a follow-up `SIGNAL/task.ready` on the bus after plan apply — instead of bees emitting two deferred events.
+- **Why deferred:** CLI/cues/Telegram already use plan+ready as two events; deferred FIFO pair matches `task create --autorun` without new protocol surface. Ledger `pendingReady` covers out-of-order emits.
+- **Revisit when:** Product wants one-event autostart from bees without relying on prompt discipline, with explicit bus observability for the synthesized ready.
+
 ### Energy and honey
 
 MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion → `blocked` (`Honey reserve exhausted`). These items need separate design or evidence before expanding the MVP.

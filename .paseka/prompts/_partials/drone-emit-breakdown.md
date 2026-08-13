@@ -28,9 +28,11 @@ Emit `SIGNAL/task.ready` **only if** both are true:
 
 Do **not** emit `task.ready` for later tasks — the ledger/reactor unlocks them after prior tasks complete.
 
+Use **`--defer` immediately after** the `task.plan` above (same flush, FIFO). Payload: `kind` + `taskId` only — do not copy title/body from plan.
+
 ```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-live-status-api","title":"Live bee status API slice","body":"## Parent\n\ndocs/specs/004-live-bees-indicator.md\n\n## What to build\n\nEnd-to-end path that exposes current bee run status over the API and is verifiable with a focused test.\n\n## Acceptance criteria\n\n- [ ] Status endpoint returns active bee runs for a trace\n- [ ] Focused test covers the happy path\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"feature"}}
+paseka event emit --defer --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-live-status-api"}}
 EOF
 ```
 

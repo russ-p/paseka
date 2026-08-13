@@ -447,3 +447,174 @@ func TestApplyEventMutationSetsProposalWorkspace(t *testing.T) {
 		t.Fatalf("proposalWorkspace = %q, want root", res.Trace.Tasks["task-1"].ProposalWorkspace)
 	}
 }
+
+func TestApplyEventTaskReadyBeforePlanPromotesOnPlan(t *testing.T) {
+	readyEv, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind: protocol.TaskEventReady, TaskID: "task-1", Bee: "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(taskledger.TraceSnapshot{TraceID: "trace-1"}, readyEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.PendingReady == nil || res.Trace.PendingReady.TaskID != "task-1" {
+		t.Fatalf("pending = %+v", res.Trace.PendingReady)
+	}
+	if _, ok := res.Trace.Tasks["task-1"]; ok {
+		t.Fatal("expected no ghost task before plan")
+	}
+	if len(res.Ready) != 0 {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+
+	planEv, err := protocol.NewEvent("trace-1", "scout", 2, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Backend", Bee: "builder", DependsOn: []string{}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, planEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.PendingReady != nil {
+		t.Fatalf("pending = %+v, want cleared", res.Trace.PendingReady)
+	}
+	if res.Trace.Tasks["task-1"].Status != protocol.TaskStatusReady {
+		t.Fatalf("status = %q", res.Trace.Tasks["task-1"].Status)
+	}
+	if len(res.Ready) != 1 || res.Ready[0].TaskID != "task-1" {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+}
+
+func TestApplyEventTaskReadyBeforePlanKeepsPendingForLaterSlice(t *testing.T) {
+	readyEv, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind: protocol.TaskEventReady, TaskID: "task-b",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(taskledger.TraceSnapshot{TraceID: "trace-1"}, readyEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	planEv, err := protocol.NewEvent("trace-1", "scout", 2, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-a", Title: "A"},
+			{TaskID: "task-b", Title: "B", DependsOn: []string{"task-a"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, planEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.PendingReady == nil || res.Trace.PendingReady.TaskID != "task-b" {
+		t.Fatalf("pending = %+v", res.Trace.PendingReady)
+	}
+	if res.Trace.Tasks["task-a"].Status != protocol.TaskStatusPlanned {
+		t.Fatalf("task-a status = %q", res.Trace.Tasks["task-a"].Status)
+	}
+	if res.Trace.Tasks["task-b"].Status != protocol.TaskStatusPlanned {
+		t.Fatalf("task-b status = %q", res.Trace.Tasks["task-b"].Status)
+	}
+	if len(res.Ready) != 0 {
+		t.Fatalf("ready = %+v", res.Ready)
+	}
+
+	done, err := protocol.NewEvent("trace-1", "guard", 3, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind: protocol.TaskEventCompleted, TaskID: "task-a", Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, done)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.PendingReady != nil {
+		t.Fatalf("pending = %+v, want cleared after first task completed", res.Trace.PendingReady)
+	}
+	if res.Trace.Tasks["task-b"].Status != protocol.TaskStatusReady {
+		t.Fatalf("task-b status = %q", res.Trace.Tasks["task-b"].Status)
+	}
+}
+
+func TestApplyEventTaskReadyWithoutPlanLeavesPending(t *testing.T) {
+	readyEv, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind: protocol.TaskEventReady, TaskID: "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(taskledger.TraceSnapshot{TraceID: "trace-1"}, readyEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.PendingReady == nil {
+		t.Fatal("expected pending ready")
+	}
+	if len(res.Trace.Tasks) != 0 {
+		t.Fatalf("tasks = %+v", res.Trace.Tasks)
+	}
+}
+
+func TestApplyEventSystemKillClearsPendingReady(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		PendingReady: &taskledger.PendingReadySnapshot{
+			TaskID: "task-1",
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind: protocol.SignalSystemKill,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.PendingReady != nil {
+		t.Fatalf("pending = %+v", res.Trace.PendingReady)
+	}
+}
+
+func TestApplyEventTaskPlanOverwritesGhostTask(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1"},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Backend", Bee: "builder"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.Tasks["task-1"].Status != protocol.TaskStatusPlanned {
+		t.Fatalf("status = %q", res.Trace.Tasks["task-1"].Status)
+	}
+	if res.Trace.Tasks["task-1"].Title != "Backend" {
+		t.Fatalf("title = %q", res.Trace.Tasks["task-1"].Title)
+	}
+}

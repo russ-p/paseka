@@ -173,15 +173,30 @@ Runtime or Task Reactor marks a task as ready for dispatch. Emitted when:
 - A task has no dependencies and is first in the queue, or
 - All `dependsOn` tasks have `status: completed`.
 
+Canonical task fields (`title`, `body`, `bee`, `intent`, `sector`) live on the task ledger from `task.plan`. `task.ready` only needs to identify the task; optional fields overlay the ledger snapshot when set.
+
+Bees should emit **`task.plan` then `task.ready` both with `--defer`** (FIFO flush on successful run exit) when starting immediately — same ordering as `paseka task create --autorun`. Payload: `kind` + `taskId` only in prompts; do not duplicate the plan body.
+
+If `task.ready` arrives before `task.plan` (e.g. live ready + deferred plan), the ledger parks the kick on `pendingReady` until the matching task registers; no dispatch until then. Cleared on `system.kill`. No TTL.
+
 ```json
 {
   "traceId": "trace-auth-01",
   "type": "SIGNAL",
   "payload": {
     "kind": "task.ready",
+    "taskId": "task-1"
+  }
+}
+```
+
+Optional overlay fields when not already on the ledger from `task.plan`:
+
+```json
+{
+  "payload": {
+    "kind": "task.ready",
     "taskId": "task-1",
-    "title": "Add backend endpoint",
-    "body": "POST /api/auth/login with JWT",
     "bee": "builder",
     "sector": "backend-users",
     "intent": "feature"

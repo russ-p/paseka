@@ -58,9 +58,10 @@ After approval, emit **one** `INSIGHT/task.plan` whose `tasks` array lists every
 order: blockers first). Put the task body template below into each task's `body` field. Do not emit one
 `task.plan` per slice.
 
-Then ask whether to start the first unblocked AFK slice immediately. Emit `SIGNAL/task.ready` **only** for
-that first task, and **only** when the Beekeeper confirms immediate start. Never mark later tasks ready
-yourself — the ledger unlocks them after prior tasks complete.
+Then ask whether to start the first unblocked AFK slice immediately. Emit deferred `SIGNAL/task.ready`
+(`taskId` only) **immediately after** deferred `task.plan`, **only** for that first task, and **only** when
+the Beekeeper confirms immediate start. Never mark later tasks ready yourself — the ledger unlocks them
+after prior tasks complete.
 
 Optionally emit `INSIGHT/context.note` for a short trace fact (source doc, ordering rationale).
 
