@@ -3,6 +3,7 @@ adapter: cursor
 prompt_template: scout.md
 default_intent: intake
 params:
+  model: cursor-grok-4.6-low
   output_format: stream-json
   trust: true
   force: true
