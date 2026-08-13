@@ -130,14 +130,6 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 
 `paseka export` today writes a self-contained HTML report from `hiveview` trail data (overview, tasks, runs, event timeline). Split render format from payload depth so agent-friendly exports can grow without tying UI chrome to audit content.
 
-#### Export `--format` (HTML | Markdown)
-
-- **Kind:** idea
-- **Source:** planning (trace export / agent analysis)
-- **Summary:** Add a CLI `--format` flag that only selects the renderer (`html` default, `md` for Markdown). Same `TraceExportData` → `RenderHTML` / `RenderMarkdown`; filename extension follows the format. Markdown should keep run/event summaries as-is (no HTML conversion) and put raw event JSON in fenced blocks.
-- **Why deferred:** Orthogonal to payload expansion; current HTML path is enough for human browsing.
-- **Revisit when:** Operators want a file suitable for pasting into an agent chat, or Console/docs need a non-HTML trail dump.
-
 #### Export data scope / richer payload
 
 - **Kind:** idea

@@ -763,19 +763,25 @@ paseka proposal reject --trace trace-1 --task task-1 --feedback "Use the existin
 
 ## `paseka export`
 
-Write a self-contained HTML report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first) with expandable raw JSON per event. Styling matches Queen Console (dark theme, JetBrains Mono from CDN with system fallbacks).
+Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | yes | Flight trail id |
+| `--format` | | | Export renderer: `html` (default) or `md` |
 | `--path` | `-C` | | Colony resolution start directory |
 
-**Output file:** `paseka-export-<slug>-<traceId>.html` in the current working directory.
+**Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
+
+**HTML** styling matches Queen Console (dark theme, JetBrains Mono from CDN with system fallbacks). Run and event summaries are rendered as Markdown inside the page; raw events are expandable JSON.
+
+**Markdown** keeps run and event summaries as-is (no HTML conversion) and puts each raw event in a fenced `json` code block.
 
 Data is read from `.paseka/runs/` (same as Queen Console). Task and energy fields prefer JetStream KV when NATS is configured; otherwise filesystem projections are used.
 
 ```bash
 paseka export --trace trace-abc123
+paseka export --trace trace-abc123 --format md
 paseka export --trace trace-abc123 -C /path/to/repo
 ```
 

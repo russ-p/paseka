@@ -14,15 +14,20 @@ import (
 )
 
 func TestOutputFilename(t *testing.T) {
-	got := OutputFilename("my-project", "trace-abc123")
+	got := OutputFilename("my-project", "trace-abc123", FormatHTML)
 	want := "paseka-export-my-project-trace-abc123.html"
 	if got != want {
 		t.Fatalf("OutputFilename() = %q, want %q", got, want)
 	}
+	got = OutputFilename("my-project", "trace-abc123", FormatMarkdown)
+	want = "paseka-export-my-project-trace-abc123.md"
+	if got != want {
+		t.Fatalf("OutputFilename(md) = %q, want %q", got, want)
+	}
 }
 
 func TestOutputFilenameSanitizesUnsafeChars(t *testing.T) {
-	got := OutputFilename("org/repo", "trace:bad")
+	got := OutputFilename("org/repo", "trace:bad", FormatHTML)
 	if strings.Contains(got, "/") || strings.Contains(got, ":") {
 		t.Fatalf("OutputFilename() = %q, expected sanitized", got)
 	}
@@ -165,5 +170,89 @@ func TestExportTraceWritesFile(t *testing.T) {
 }
 
 func exportOptions(traceID, outDir string) Options {
-	return Options{TraceID: traceID, OutputDir: outDir}
+	return Options{TraceID: traceID, OutputDir: outDir, Format: FormatHTML}
+}
+
+func TestExportTraceWritesMarkdownFile(t *testing.T) {
+	repo := t.TempDir()
+	slug := "export-md-test"
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	homeDir := filepath.Join(home, "paseka", slug)
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte("colony_root: "+repo+"\nslug: "+slug+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, "state.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	traceID := "trace-export-md"
+	started := time.Now().UTC().Add(-time.Minute)
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         "agent-1",
+		Bee:             "scout",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusCompleted,
+		StartedAt:       started,
+		FinishedAt:      started.Add(time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(protocol.Event{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         "agent-1",
+		Seq:             1,
+		Type:            protocol.EventInsight,
+		CreatedAt:       started.Add(2 * time.Second),
+		Payload:         []byte(`{"kind":"narrative","text":"hello markdown export"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	outDir := t.TempDir()
+	path, err := ExportTrace(ctx, Options{TraceID: traceID, OutputDir: outDir, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatalf("ExportTrace: %v", err)
+	}
+	if !strings.HasSuffix(path, "paseka-export-"+slug+"-"+traceID+".md") {
+		t.Fatalf("unexpected path %q", path)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, want := range []string{
+		"# Paseka export",
+		traceID,
+		"## Overview",
+		"## Tasks",
+		"## Runs",
+		"## Timeline",
+		"INSIGHT",
+		"```json",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("markdown export missing %q", want)
+		}
+	}
 }
