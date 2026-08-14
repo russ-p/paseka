@@ -95,13 +95,13 @@ func reseedEnergy(ctx colony.Context, traceID string) (int, error) {
 }
 
 func planBus(ctx colony.Context, traceID string) (*BusPurgePlan, error) {
-	client, err := connectBus(ctx)
+	purger, closer, err := connectBus(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	defer closer()
 
-	busPlan, err := client.PlanPurgeTrace(traceID)
+	busPlan, err := purger.PlanPurgeTrace(traceID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +114,13 @@ func planBus(ctx colony.Context, traceID string) (*BusPurgePlan, error) {
 }
 
 func purgeBus(ctx colony.Context, traceID string) (*BusPurgeResult, error) {
-	client, err := connectBus(ctx)
+	purger, closer, err := connectBus(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	defer closer()
 
-	busRes, err := client.PurgeTrace(traceID)
+	busRes, err := purger.PurgeTrace(traceID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,13 +131,13 @@ func purgeBus(ctx colony.Context, traceID string) (*BusPurgeResult, error) {
 	}, nil
 }
 
-func connectBus(ctx colony.Context) (*bus.Client, error) {
+func connectBus(ctx colony.Context) (bus.TracePurger, func(), error) {
 	client, err := bus.ConnectColony(ctx, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if client == nil {
-		return nil, fmt.Errorf("nats url not configured (--bus requires NATS)")
+		return nil, nil, fmt.Errorf("nats url not configured (--bus requires NATS)")
 	}
-	return client, nil
+	return client, client.Close, nil
 }

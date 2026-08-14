@@ -19,12 +19,13 @@ import (
 
 // Notifier pushes invite notifications from the bus and startup reconcile with dedup.
 type Notifier struct {
-	Colony colony.Context
-	Config Config
-	Bot    BotAPI
-	state  *NotifyState
-	ledger taskledger.Ledger
-	bus    *bus.Client
+	Colony     colony.Context
+	Config     Config
+	Bot        BotAPI
+	state      *NotifyState
+	ledger     taskledger.Ledger
+	subscriber bus.EventSubscriber
+	close      func()
 }
 
 // NewNotifier prepares notify dedup state and NATS for the gate process.
@@ -45,20 +46,21 @@ func NewNotifier(ctx colony.Context, cfg Config, bot BotAPI) (*Notifier, error) 
 		ledger = taskledger.NewKVLedger(kv)
 	}
 	return &Notifier{
-		Colony: ctx,
-		Config: cfg,
-		Bot:    bot,
-		state:  state,
-		ledger: ledger,
-		bus:    client,
+		Colony:     ctx,
+		Config:     cfg,
+		Bot:        bot,
+		state:      state,
+		ledger:     ledger,
+		subscriber: client,
+		close:      client.Close,
 	}, nil
 }
 
 // Close releases the NATS connection.
 func (n *Notifier) Close() {
-	if n.bus != nil {
-		n.bus.Close()
-		n.bus = nil
+	if n.close != nil {
+		n.close()
+		n.close = nil
 	}
 }
 
@@ -75,7 +77,7 @@ func (n *Notifier) Run(ctx context.Context) error {
 	}
 
 	durable := GateConsumerName(n.Colony.Slug)
-	sub, err := n.bus.SubscribeEvents(durable, n.handleEvent)
+	sub, err := n.subscriber.SubscribeEvents(durable, n.handleEvent)
 	if err != nil {
 		return err
 	}

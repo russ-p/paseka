@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/invites"
 	"github.com/paseka/paseka/internal/protocol"
 )
@@ -21,8 +22,8 @@ func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event) error
 		}
 	}
 
-	svc := &invites.Service{Colony: r.colony, Publisher: r.bus}
-	if r.invitePublisher != nil {
+	svc := &invites.Service{Colony: r.colony, Publisher: r.publisher}
+	if bus.PublisherAvailable(r.invitePublisher) {
 		svc.Publisher = r.invitePublisher
 	}
 	published, ok, err := svc.AutoInviteFromEvent(ctx, ev, r.autoInvites, traceEvents)

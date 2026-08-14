@@ -11,8 +11,20 @@ import (
 // EventHandler processes one domain event from the bus.
 type EventHandler func(event protocol.Event) error
 
+// Subscription is a live bus event subscription.
+type Subscription interface {
+	Unsubscribe() error
+}
+
+// EventSubscriber subscribes to colony domain events.
+type EventSubscriber interface {
+	SubscribeEvents(durable string, handler EventHandler) (Subscription, error)
+}
+
+var _ EventSubscriber = (*Client)(nil)
+
 // SubscribeEvents creates a durable JetStream subscription for colony events.
-func (c *Client) SubscribeEvents(durable string, handler EventHandler) (*nats.Subscription, error) {
+func (c *Client) SubscribeEvents(durable string, handler EventHandler) (Subscription, error) {
 	if durable == "" {
 		durable = "paseka-reactor-" + sanitizeName(c.cfg.Slug)
 	}

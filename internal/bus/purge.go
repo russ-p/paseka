@@ -31,6 +31,14 @@ type PurgeTraceResult struct {
 	ObjectsRemoved []string `json:"objectsRemoved,omitempty"`
 }
 
+// TracePurger plans and removes bus artifacts for one trace.
+type TracePurger interface {
+	PlanPurgeTrace(traceID string) (PurgeTracePlan, error)
+	PurgeTrace(traceID string) (PurgeTraceResult, error)
+}
+
+var _ TracePurger = (*Client)(nil)
+
 // PlanPurgeTrace lists bus artifacts that would be removed for one trace.
 func (c *Client) PlanPurgeTrace(traceID string) (PurgeTracePlan, error) {
 	if traceID == "" {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/review"
@@ -160,8 +161,8 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 	}
 	// Remember before publish so the JetStream echo cannot re-apply.
 	r.rememberLocalEvent(completed)
-	if r.bus != nil {
-		if err := r.bus.PublishEvent(ctx, completed); err != nil {
+	if bus.PublisherAvailable(r.publisher) {
+		if err := r.publisher.PublishEvent(ctx, completed); err != nil {
 			return err
 		}
 	}
@@ -174,7 +175,7 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 }
 
 func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string) error {
-	if err := review.ActivateFinalReviewGate(ctx, r.bus, r.ledger, r.colony, traceID, review.WriteOptions{
+	if err := review.ActivateFinalReviewGate(ctx, r.publisher, r.ledger, r.colony, traceID, review.WriteOptions{
 		AfterApply: r.rememberLocalEvent,
 	}); err != nil {
 		return err
@@ -202,8 +203,8 @@ func (r *Reactor) applyAndSync(ctx context.Context, ev protocol.Event) error {
 		r.syncTaskProjection(res.Trace)
 	}
 	r.rememberLocalEvent(ev)
-	if r.bus != nil {
-		if err := r.bus.PublishEvent(ctx, ev); err != nil {
+	if bus.PublisherAvailable(r.publisher) {
+		if err := r.publisher.PublishEvent(ctx, ev); err != nil {
 			return err
 		}
 	}

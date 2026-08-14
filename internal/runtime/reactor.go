@@ -17,7 +17,10 @@ import (
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
 type Reactor struct {
 	colony          colony.Context
-	bus             *bus.Client
+	publisher       bus.Publisher
+	subscriber      bus.EventSubscriber
+	close           func()
+	subjectPrefix   string
 	replayer        bus.TraceReplayer
 	dispatcher      *Dispatcher
 	ledger          taskledger.Ledger
@@ -76,7 +79,10 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 
 	return &Reactor{
 		colony:          ctxColony,
-		bus:             busClient,
+		publisher:       busClient,
+		subscriber:      busClient,
+		close:           busClient.Close,
+		subjectPrefix:   busClient.Config().SubjectPrefix,
 		replayer:        busClient,
 		dispatcher:      d,
 		ledger:          taskledger.NewKVLedger(kv),
@@ -92,17 +98,22 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 
 // Run blocks until ctx is cancelled, consuming bus events and dispatching ready tasks.
 func (r *Reactor) Run(ctx context.Context) error {
-	subject := bus.EventsWildcard(r.bus.Config().SubjectPrefix)
+	if r.close != nil {
+		defer r.close()
+	}
+	if r.subscriber == nil {
+		return fmt.Errorf("runtime: bus subscriber not configured")
+	}
+	subject := bus.EventsWildcard(r.subjectPrefix)
 	runtimeLog.Info("listening",
 		logging.F("subject", subject),
 		logging.F("colony", r.colony.Slug),
 	)
-	sub, err := r.bus.SubscribeEvents("", r.handleEvent)
+	sub, err := r.subscriber.SubscribeEvents("", r.handleEvent)
 	if err != nil {
 		return err
 	}
 	defer sub.Unsubscribe()
-	defer r.bus.Close()
 
 	<-ctx.Done()
 	return ctx.Err()
@@ -258,7 +269,10 @@ func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Ev
 
 // PublishEvent injects a domain event onto the bus (used by paseka signal).
 func (r *Reactor) PublishEvent(ctx context.Context, event protocol.Event) error {
-	return r.bus.PublishEvent(ctx, event)
+	if !bus.PublisherAvailable(r.publisher) {
+		return fmt.Errorf("runtime: bus publisher not configured")
+	}
+	return r.publisher.PublishEvent(ctx, event)
 }
 
 // Ledger returns the reactor task ledger.
