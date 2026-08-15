@@ -8,13 +8,17 @@ Scout and Drone breakdown prompts now defer both `task.plan` and post-plan `task
 
 - Canonical: [Task ledger](reference/task-ledger.md), [Prompt templates](guide/prompt-templates.md)
 
+## 2026-08 — Export `--include` (richer payload)
+
+`paseka export` accepts composable `--include` slices independent of `--format`: `usage` (trace aggregate + per-run tokens), `durations` (wall-clock per run), `bees` (committed `.paseka/bees/*.yaml` for trail roles), `colony` (`.paseka/colony.yaml`), and `cues` (all colony cues). Default export stays trail-only with no config snapshots.
+
+- Canonical: [CLI](guide/cli.md) (`paseka export`)
+
 ## 2026-08 — Export `--format` (HTML | Markdown)
 
 `paseka export` now accepts `--format html` (default) or `--format md`. Both renderers share the same `TraceExportData` (overview, tasks, runs, event timeline); the output filename extension matches the format. Markdown keeps run and event summaries verbatim and fences raw event JSON for agent-friendly trail dumps.
 
 - Canonical: [CLI](guide/cli.md) (`paseka export`)
-
-Deferred from that work: richer export payload / scope ladder — see [Backlog](backlog.md).
 
 ## 2026-08 — Forage Cues (cue layer)
 

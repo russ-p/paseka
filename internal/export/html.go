@@ -23,27 +23,40 @@ type htmlEventView struct {
 	RawJSON     template.HTML
 }
 
+type htmlRunView struct {
+	Run          hiveview.RunView
+	DurationLine string
+	UsageLine    string
+}
+
 type htmlPageData struct {
-	Slug            string
-	ColonyRoot      string
-	TraceID         string
-	ExportedAt      string
-	LastActivityAt  string
-	RunCount        int
-	TaskCount       int
-	Bees            string
-	EnergyBudget    int
-	EnergyRemaining int
-	LowEnergy       bool
-	HasEnergy       bool
-	WorktreePath    string
-	WorktreeBranch  string
-	WorktreeBaseSHA string
-	WorktreeCreated string
-	HasWorktree     bool
-	Tasks           []hiveview.TaskSummaryView
-	Runs            []hiveview.RunView
-	Events          []htmlEventView
+	Slug               string
+	ColonyRoot         string
+	TraceID            string
+	ExportedAt         string
+	LastActivityAt     string
+	RunCount           int
+	TaskCount          int
+	Bees               string
+	EnergyBudget       int
+	EnergyRemaining    int
+	LowEnergy          bool
+	HasEnergy          bool
+	WorktreePath       string
+	WorktreeBranch     string
+	WorktreeBaseSHA    string
+	WorktreeCreated    string
+	HasWorktree        bool
+	UsageAggregateLine string
+	Tasks              []hiveview.TaskSummaryView
+	Runs               []htmlRunView
+	Events             []htmlEventView
+	IncludeBees        bool
+	IncludeColony      bool
+	IncludeCues        bool
+	BeeYAML            []NamedYAML
+	ColonyYAML         *NamedYAML
+	CueYAML            []NamedYAML
 }
 
 // RenderHTML builds a self-contained HTML document for one trace export.
@@ -58,7 +71,25 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		TaskCount:      data.Trace.TaskCount,
 		Bees:           strings.Join(data.Trace.Bees, ", "),
 		Tasks:          data.Trace.Tasks,
-		Runs:           data.Runs,
+		IncludeBees:    data.Include.Has(IncludeBees),
+		IncludeColony:  data.Include.Has(IncludeColony),
+		IncludeCues:    data.Include.Has(IncludeCues),
+		BeeYAML:        data.BeeYAML,
+		ColonyYAML:     data.ColonyYAML,
+		CueYAML:        data.CueYAML,
+	}
+	if data.Include.Has(IncludeUsage) {
+		page.UsageAggregateLine = formatUsageAggregate(data.Trace.Usage)
+	}
+	for _, run := range data.Runs {
+		view := htmlRunView{Run: run}
+		if data.Include.Has(IncludeDurations) {
+			view.DurationLine = formatWallDuration(run)
+		}
+		if data.Include.Has(IncludeUsage) {
+			view.UsageLine = formatUsageTokens(run.Usage)
+		}
+		page.Runs = append(page.Runs, view)
 	}
 	if data.Trace.EnergyBudget > 0 {
 		page.HasEnergy = true
@@ -380,6 +411,12 @@ code { font-family: var(--mono); font-size: 0.85em; }
         <span class="stat-value" style="font-size:0.88rem">{{ .Bees }}</span>
       </div>
       {{ end }}
+      {{ if .UsageAggregateLine }}
+      <div class="stat-card">
+        <span class="stat-label">Usage</span>
+        <span class="stat-value" style="font-size:0.88rem">{{ .UsageAggregateLine }}</span>
+      </div>
+      {{ end }}
     </div>
     <dl class="meta">
       <dt>Colony root</dt><dd><code>{{ .ColonyRoot }}</code></dd>
@@ -418,12 +455,14 @@ code { font-family: var(--mono); font-size: 0.85em; }
       {{ range .Runs }}
       <li class="compact-item">
         <div class="top">
-          <span class="bee">{{ if .Bee }}{{ .Bee }}{{ else }}{{ .AgentID }}{{ end }}</span>
-          <span class="badge {{ badgeClass .State }}">{{ .State }}</span>
+          <span class="bee">{{ if .Run.Bee }}{{ .Run.Bee }}{{ else }}{{ .Run.AgentID }}{{ end }}</span>
+          <span class="badge {{ badgeClass .Run.State }}">{{ .Run.State }}</span>
         </div>
-        <div class="id">{{ .AgentID }}{{ if .TaskID }} · {{ .TaskID }}{{ end }}</div>
-        <div class="muted" style="font-size:0.78rem;margin-top:0.2rem">{{ formatTime .StartedAt }}{{ if .FinishedAt }} → {{ formatTime .FinishedAt }}{{ end }}</div>
-        {{ if .Summary }}<div class="formatted-text" style="font-size:0.85rem;margin-top:0.25rem">{{ formatMarkdown .Summary }}</div>{{ end }}
+        <div class="id">{{ .Run.AgentID }}{{ if .Run.TaskID }} · {{ .Run.TaskID }}{{ end }}</div>
+        <div class="muted" style="font-size:0.78rem;margin-top:0.2rem">{{ formatTime .Run.StartedAt }}{{ if .Run.FinishedAt }} → {{ formatTime .Run.FinishedAt }}{{ end }}</div>
+        {{ if .DurationLine }}<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">Duration: {{ .DurationLine }}</div>{{ end }}
+        {{ if .UsageLine }}<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">Usage: {{ .UsageLine }}</div>{{ end }}
+        {{ if .Run.Summary }}<div class="formatted-text" style="font-size:0.85rem;margin-top:0.25rem">{{ formatMarkdown .Run.Summary }}</div>{{ end }}
       </li>
       {{ end }}
     </ul>
@@ -455,6 +494,50 @@ code { font-family: var(--mono); font-size: 0.85em; }
     <p class="muted">No events in this trace.</p>
     {{ end }}
   </section>
+
+  {{ if .IncludeBees }}
+  <section class="panel">
+    <h2>Bees</h2>
+    {{ if .BeeYAML }}
+    {{ range .BeeYAML }}
+    <h3>{{ .Name }}</h3>
+    <p class="muted"><code>{{ .Path }}</code></p>
+    <pre class="timeline-raw">{{ .Content }}</pre>
+    {{ end }}
+    {{ else }}
+    <p class="muted">No bee YAML found.</p>
+    {{ end }}
+  </section>
+  {{ end }}
+
+  {{ if .IncludeColony }}
+  <section class="panel">
+    <h2>Colony</h2>
+    {{ if .ColonyYAML }}
+    <p class="muted"><code>{{ .ColonyYAML.Path }}</code></p>
+    {{ if .ColonyYAML.Missing }}
+    <p class="muted">No colony.yaml found.</p>
+    {{ else }}
+    <pre class="timeline-raw">{{ .ColonyYAML.Content }}</pre>
+    {{ end }}
+    {{ end }}
+  </section>
+  {{ end }}
+
+  {{ if .IncludeCues }}
+  <section class="panel">
+    <h2>Cues</h2>
+    {{ if .CueYAML }}
+    {{ range .CueYAML }}
+    <h3>{{ .Name }}</h3>
+    <p class="muted"><code>{{ .Path }}</code></p>
+    <pre class="timeline-raw">{{ .Content }}</pre>
+    {{ end }}
+    {{ else }}
+    <p class="muted">No cues found.</p>
+    {{ end }}
+  </section>
+  {{ end }}
 </main>
 </body>
 </html>`

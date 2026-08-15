@@ -17,9 +17,10 @@ type Options struct {
 	TraceID   string
 	OutputDir string
 	Format    Format
+	Include   IncludeSet
 }
 
-// TraceExportData is the view model passed to the HTML renderer.
+// TraceExportData is the view model passed to export renderers.
 type TraceExportData struct {
 	Slug       string
 	ColonyRoot string
@@ -27,6 +28,10 @@ type TraceExportData struct {
 	Trace      hiveview.TraceDetailView
 	Runs       []hiveview.RunView
 	Events     []hiveview.EventFeedItem
+	Include    IncludeSet
+	BeeYAML    []NamedYAML
+	ColonyYAML *NamedYAML
+	CueYAML    []NamedYAML
 }
 
 // ExportTrace writes a self-contained trace report for one flight trail.
@@ -70,13 +75,9 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 	filename := OutputFilename(ctx.Slug, traceID, format)
 	outPath := filepath.Join(outDir, filename)
 
-	data := TraceExportData{
-		Slug:       ctx.Slug,
-		ColonyRoot: ctx.ColonyRoot,
-		ExportedAt: time.Now().UTC(),
-		Trace:      detail,
-		Runs:       runsView,
-		Events:     feedItems,
+	data, err := buildTraceExportData(ctx, detail, runsView, feedItems, opts.Include)
+	if err != nil {
+		return "", err
 	}
 
 	var content []byte
@@ -110,6 +111,40 @@ func OutputFilename(slug, traceID string, format Format) string {
 		ext = "md"
 	}
 	return fmt.Sprintf("paseka-export-%s-%s.%s", sanitizeFilename(slug), sanitizeFilename(traceID), ext)
+}
+
+func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, runsView []hiveview.RunView, feedItems []hiveview.EventFeedItem, include IncludeSet) (TraceExportData, error) {
+	data := TraceExportData{
+		Slug:       ctx.Slug,
+		ColonyRoot: ctx.ColonyRoot,
+		ExportedAt: time.Now().UTC(),
+		Trace:      detail,
+		Runs:       runsView,
+		Events:     feedItems,
+		Include:    include,
+	}
+	if include.Has(IncludeBees) {
+		bees, err := loadBeeYAML(ctx.ColonyRoot, detail.Bees)
+		if err != nil {
+			return TraceExportData{}, err
+		}
+		data.BeeYAML = bees
+	}
+	if include.Has(IncludeColony) {
+		colonyYAML, err := loadColonyYAML(ctx.ColonyRoot)
+		if err != nil {
+			return TraceExportData{}, err
+		}
+		data.ColonyYAML = colonyYAML
+	}
+	if include.Has(IncludeCues) {
+		cueYAML, err := loadCueYAML(ctx.ColonyRoot)
+		if err != nil {
+			return TraceExportData{}, err
+		}
+		data.CueYAML = cueYAML
+	}
+	return data, nil
 }
 
 func sanitizeFilename(s string) string {

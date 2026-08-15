@@ -136,18 +136,6 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 - **Why deferred:** Phase 2 focused on colony wiring and oracle; automated chain scoring is Phase-adjacent polish.
 - **Revisit when:** Eval cases rely on event-chain assertions beyond manual replay.
 
-### Flight trail export
-
-`paseka export` today writes a self-contained HTML report from `hiveview` trail data (overview, tasks, runs, event timeline). Split render format from payload depth so agent-friendly exports can grow without tying UI chrome to audit content.
-
-#### Export data scope / richer payload
-
-- **Kind:** idea
-- **Source:** planning (trace export / agent analysis)
-- **Summary:** Separate flag (e.g. `--scope` / `--include`) controls how much data enters the export, independent of `--format`. Default stays trail-only (no colony configs). Expand payload for analysis: surface existing `usage` and run durations; optional higher scopes may embed bee/colony/cue snapshots for bottleneck and misconfiguration review. Default must remain without configs.
-- **Why deferred:** Needs a clear scope ladder and size/privacy trade-offs; not required for a format-only ship.
-- **Revisit when:** `--format md` exists (or is shipping) and agent/operator audits need usage, timings, or config context alongside the trail.
-
 ### Releases
 
 #### Windows release builds

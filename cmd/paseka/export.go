@@ -10,9 +10,10 @@ import (
 
 func newExportCmd() *cobra.Command {
 	var (
-		startDir   string
-		traceID    string
-		formatFlag string
+		startDir    string
+		traceID     string
+		formatFlag  string
+		includeFlag []string
 	)
 	cmd := &cobra.Command{
 		Use:   "export",
@@ -25,6 +26,10 @@ func newExportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			include, err := export.ParseInclude(includeFlag)
+			if err != nil {
+				return err
+			}
 			ctx, err := colony.ResolveContext(startDir)
 			if err != nil {
 				return err
@@ -32,6 +37,7 @@ func newExportCmd() *cobra.Command {
 			path, err := export.ExportTrace(ctx, export.Options{
 				TraceID: traceID,
 				Format:  format,
+				Include: include,
 			})
 			if err != nil {
 				return err
@@ -43,6 +49,7 @@ func newExportCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&formatFlag, "format", "html", "export renderer (html, md)")
+	cmd.Flags().StringSliceVar(&includeFlag, "include", nil, "optional payload slices: usage, durations, bees, colony, cues (repeatable or comma-separated)")
 	_ = cmd.MarkFlagRequired("trace")
 	return cmd
 }

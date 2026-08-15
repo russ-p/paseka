@@ -19,8 +19,9 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 
 	writeMarkdownOverview(&buf, data)
 	writeMarkdownTasks(&buf, data.Trace.Tasks)
-	writeMarkdownRuns(&buf, data.Runs)
+	writeMarkdownRuns(&buf, data)
 	writeMarkdownTimeline(&buf, data.Events)
+	writeMarkdownConfigSnapshots(&buf, data)
 
 	return buf.Bytes(), nil
 }
@@ -35,6 +36,11 @@ func writeMarkdownOverview(buf *bytes.Buffer, data TraceExportData) {
 	fmt.Fprintf(buf, "- **Last activity:** %s\n", formatTime(data.Trace.LastActivityAt))
 	if bees := strings.Join(data.Trace.Bees, ", "); bees != "" {
 		fmt.Fprintf(buf, "- **Bees:** %s\n", bees)
+	}
+	if data.Include.Has(IncludeUsage) {
+		if line := formatUsageAggregate(data.Trace.Usage); line != "" {
+			fmt.Fprintf(buf, "- **Usage:** %s\n", line)
+		}
 	}
 	fmt.Fprintf(buf, "- **Colony root:** `%s`\n", data.ColonyRoot)
 	if wt := data.Trace.Worktree; wt != nil {
@@ -71,13 +77,13 @@ func writeMarkdownTasks(buf *bytes.Buffer, tasks []hiveview.TaskSummaryView) {
 	buf.WriteString("\n")
 }
 
-func writeMarkdownRuns(buf *bytes.Buffer, runs []hiveview.RunView) {
+func writeMarkdownRuns(buf *bytes.Buffer, data TraceExportData) {
 	buf.WriteString("## Runs _(oldest first)_\n\n")
-	if len(runs) == 0 {
+	if len(data.Runs) == 0 {
 		buf.WriteString("_No runs in this trace._\n\n")
 		return
 	}
-	for _, run := range runs {
+	for _, run := range data.Runs {
 		label := run.Bee
 		if label == "" {
 			label = run.AgentID
@@ -92,6 +98,16 @@ func writeMarkdownRuns(buf *bytes.Buffer, runs []hiveview.RunView) {
 			timeRange += " → " + formatTime(*run.FinishedAt)
 		}
 		fmt.Fprintf(buf, "- **Time:** %s\n", timeRange)
+		if data.Include.Has(IncludeDurations) {
+			if dur := formatWallDuration(run); dur != "" {
+				fmt.Fprintf(buf, "- **Duration:** %s\n", dur)
+			}
+		}
+		if data.Include.Has(IncludeUsage) {
+			if line := formatUsageTokens(run.Usage); line != "" {
+				fmt.Fprintf(buf, "- **Usage:** %s\n", line)
+			}
+		}
 		if summary := strings.TrimSpace(run.Summary); summary != "" {
 			buf.WriteString("\n")
 			buf.WriteString(summary)
@@ -99,6 +115,55 @@ func writeMarkdownRuns(buf *bytes.Buffer, runs []hiveview.RunView) {
 		}
 		buf.WriteString("\n")
 	}
+}
+
+func writeMarkdownConfigSnapshots(buf *bytes.Buffer, data TraceExportData) {
+	if data.Include.Has(IncludeBees) {
+		buf.WriteString("## Bees\n\n")
+		if len(data.BeeYAML) == 0 {
+			buf.WriteString("_No bee YAML found._\n\n")
+		} else {
+			for _, snap := range data.BeeYAML {
+				fmt.Fprintf(buf, "### %s\n\n", snap.Name)
+				fmt.Fprintf(buf, "`%s`\n\n", snap.Path)
+				writeYAMLFence(buf, snap.Content)
+			}
+		}
+	}
+	if data.Include.Has(IncludeColony) && data.ColonyYAML != nil {
+		buf.WriteString("## Colony\n\n")
+		fmt.Fprintf(buf, "`%s`\n\n", data.ColonyYAML.Path)
+		if data.ColonyYAML.Missing {
+			buf.WriteString("_No colony.yaml found._\n\n")
+		} else {
+			writeYAMLFence(buf, data.ColonyYAML.Content)
+		}
+	}
+	if data.Include.Has(IncludeCues) {
+		buf.WriteString("## Cues\n\n")
+		if len(data.CueYAML) == 0 {
+			buf.WriteString("_No cues found._\n\n")
+		} else {
+			for _, snap := range data.CueYAML {
+				fmt.Fprintf(buf, "### %s\n\n", snap.Name)
+				fmt.Fprintf(buf, "`%s`\n\n", snap.Path)
+				writeYAMLFence(buf, snap.Content)
+			}
+		}
+	}
+}
+
+func writeYAMLFence(buf *bytes.Buffer, content string) {
+	fence := "```"
+	if strings.Contains(content, "```") {
+		fence = "~~~"
+	}
+	buf.WriteString(fence)
+	buf.WriteString("yaml\n")
+	buf.WriteString(strings.TrimRight(content, "\n"))
+	buf.WriteString("\n")
+	buf.WriteString(fence)
+	buf.WriteString("\n\n")
 }
 
 func writeMarkdownTimeline(buf *bytes.Buffer, events []hiveview.EventFeedItem) {

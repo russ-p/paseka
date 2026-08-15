@@ -763,12 +763,13 @@ paseka proposal reject --trace trace-1 --task task-1 --feedback "Use the existin
 
 ## `paseka export`
 
-Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats.
+Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots) without changing the renderer.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | yes | Flight trail id |
 | `--format` | | | Export renderer: `html` (default) or `md` |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -777,11 +778,25 @@ Write a self-contained report for one flight trail to the current working direct
 
 **Markdown** keeps run and event summaries as-is (no HTML conversion) and puts each raw event in a fenced `json` code block.
 
+**`--include` slices** (independent of `--format`):
+
+| Token | Adds to export |
+| ----- | -------------- |
+| `usage` | Trace usage aggregate (when present) and per-run token lines from `result.json` |
+| `durations` | Wall-clock duration per finished run (`FinishedAt - StartedAt`) |
+| `bees` | Committed `.paseka/bees/<role>.yaml` for bees on this trail (no `*.local.yaml`) |
+| `colony` | Raw `.paseka/colony.yaml` (or a short note when missing) |
+| `cues` | All committed `.paseka/cues/*.yaml` in the colony |
+
+Default export omits all config snapshots. Home config and machine-local overlays are never included.
+
 Data is read from `.paseka/runs/` (same as Queen Console). Task and energy fields prefer JetStream KV when NATS is configured; otherwise filesystem projections are used.
 
 ```bash
 paseka export --trace trace-abc123
 paseka export --trace trace-abc123 --format md
+paseka export --trace trace-abc123 --include usage,durations
+paseka export --trace trace-abc123 --include bees --include colony --format md
 paseka export --trace trace-abc123 -C /path/to/repo
 ```
 
