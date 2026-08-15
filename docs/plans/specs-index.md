@@ -23,6 +23,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [015-deferred-event-emit](../specs/015-deferred-event-emit.md) | Implemented | General deferred `event emit` buffer (`--defer`, flush on success; 014 does not depend on it) |
 | [016-cue-layer](../specs/016-cue-layer.md) | Implemented | Named Forage Cue ingress (`.paseka/cues/`); CLI + Console + Telegram `cue:`; optional per-cue `energy_budget` |
 | [017-console-diff-review](../specs/017-console-diff-review.md) | Draft | Queen Console merge-diff viewer, line comments via comb, final-gate request-changes (B/C depend on 014) |
-| [018-cli-colony-status](../specs/018-cli-colony-status.md) | Approved | `paseka status` read-only colony snapshot (CLI alternative to Console dashboard; energy in MVP; `--check` for substrate probe) |
+| [018-cli-colony-status](../specs/018-cli-colony-status.md) | Implemented | `paseka status` read-only colony snapshot (CLI alternative to Console dashboard; energy in MVP; `--check` for substrate probe) |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

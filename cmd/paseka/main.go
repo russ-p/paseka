@@ -43,6 +43,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newInviteCmd())
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newTaskCmd())
+	root.AddCommand(newStatusCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newInspectCmd())
 	root.AddCommand(newReplayCmd())

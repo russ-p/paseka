@@ -2,7 +2,7 @@
 
 ## Status
 
-**Approved.** Read-only `paseka status` snapshot as a Queen Console alternative for Beekeepers and interface bees. Honey (energy) is in MVP. Non-zero process exit only with `--check`.
+**Implemented.** Read-only `paseka status` snapshot as a Queen Console alternative for Beekeepers and interface bees. Honey (energy) is in MVP. Non-zero process exit only with `--check`.
 
 ## Problem Statement
 

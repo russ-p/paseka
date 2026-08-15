@@ -38,7 +38,7 @@ Resolution requires:
 
 | Command | NATS required? |
 | ------- | -------------- |
-| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage` | No |
+| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
 | `paseka run`, `doctor`, `replay`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
@@ -69,6 +69,7 @@ paseka
 │   ├── list
 │   ├── show
 │   └── start
+├── status
 ├── doctor
 ├── event
 │   ├── emit
@@ -346,6 +347,42 @@ paseka run
 
 # Terminal 2 — retry after a failed adapter run
 paseka task retry --trace trace-1 --task task-1
+```
+
+---
+
+## `paseka status`
+
+Read-only colony snapshot: hive runtime, live bees (AFK + interactive), task counts, honey for recent Flight Trails, attention items, and a short recent-trace list. Observe-only — does not start the runtime, dispatch work, or mutate colony state.
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--json` | | Emit `schemaVersion` 1 JSON on stdout (machine contract for interface bees) |
+| `--check` | | Exit non-zero when the hive **substrate** cannot choreograph (runtime not alive, or NATS configured but unreachable). Pending reviews, invites, failed tasks, and empty honey do **not** fail `--check`. |
+
+Default exit code is **0** whenever the snapshot was produced (including when the reactor is stopped). Snapshot is printed before `--check` evaluates so probes can log JSON/text on failure.
+
+**JSON blocks:** `runtime`, `nats` (light connectivity), `agents`, `activeWorktrees`, `taskCounts`, `energy` (recent-traces window), `attention`, `recentTraces`.
+
+**Follow-up commands (index, not new verbs):**
+
+| Snapshot signal | Command |
+| --------------- | ------- |
+| Runtime not alive | Beekeeper starts `paseka run` (status never starts it) |
+| Live `session` | `paseka session list` / `attach` / `stop` |
+| Live `afk` | `paseka task show`, `paseka kill` |
+| `waitingReview` | `paseka task show`, `paseka proposal approve\|reject` |
+| `pendingInvites` | `paseka invite list` / `accept` / `reject` |
+| `failedTasks` | `paseka task retry` |
+| `lowEnergyTraces` | `paseka energy add --trace` |
+| `recentTraces` | `paseka task list --trace`, `paseka energy show --trace`, `paseka replay` |
+| `nats.connected == false` | `paseka doctor` |
+
+```bash
+paseka status
+paseka status --json
+paseka status --check          # health probe for systemd/cron
 ```
 
 ---
