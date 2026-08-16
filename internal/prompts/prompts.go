@@ -27,6 +27,7 @@ type Context struct {
 	IntentRaw      string // caller-supplied intent before normalization
 	Insights       []string
 	ResultFile     string
+	ArtifactsDir   string // absolute path to trail comb (.paseka/runs/<traceId>/artifacts/)
 	Interactive    bool   // true for paseka bee chat / session runs
 	IsLastWorkTask bool   // true at AFK ledger dispatch when sole incomplete non-final task
 	Adapter        string // resolved adapter name (cursor, pi, claude, script)

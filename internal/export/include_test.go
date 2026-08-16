@@ -29,8 +29,8 @@ func TestParseInclude(t *testing.T) {
 		},
 		{
 			name: "repeatable",
-			in:   []string{"bees", "cues"},
-			want: []IncludeKind{IncludeBees, IncludeCues},
+			in:   []string{"bees", "cues", "artifacts"},
+			want: []IncludeKind{IncludeBees, IncludeCues, IncludeArtifacts},
 		},
 		{
 			name: "dedupe",

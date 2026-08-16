@@ -151,6 +151,31 @@ func writeMarkdownConfigSnapshots(buf *bytes.Buffer, data TraceExportData) {
 			}
 		}
 	}
+	if data.Include.Has(IncludeArtifacts) {
+		buf.WriteString("## Trail artifacts\n\n")
+		if len(data.Artifacts) == 0 {
+			buf.WriteString("_No trail artifacts in the comb._\n\n")
+		} else {
+			for _, art := range data.Artifacts {
+				title := art.Title
+				if title == "" {
+					title = art.ArtifactKind
+				}
+				fmt.Fprintf(buf, "### %s\n\n", title)
+				fmt.Fprintf(buf, "`%s`\n\n", art.Ref)
+				if art.Omitted != "" {
+					fmt.Fprintf(buf, "_%s_\n\n", art.Omitted)
+					continue
+				}
+				if art.IsMarkdown {
+					buf.WriteString(strings.TrimRight(art.Content, "\n"))
+					buf.WriteString("\n\n")
+				} else {
+					writeYAMLFence(buf, art.Content)
+				}
+			}
+		}
+	}
 }
 
 func writeYAMLFence(buf *bytes.Buffer, content string) {

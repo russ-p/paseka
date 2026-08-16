@@ -10,6 +10,8 @@ import (
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/runs"
+
+	"github.com/paseka/paseka/internal/artifacts"
 )
 
 // Options configures a trace export.
@@ -32,6 +34,17 @@ type TraceExportData struct {
 	BeeYAML    []NamedYAML
 	ColonyYAML *NamedYAML
 	CueYAML    []NamedYAML
+	Artifacts  []ArtifactExport
+}
+
+// ArtifactExport is one inlined comb file for trace export.
+type ArtifactExport struct {
+	Ref          string
+	ArtifactKind string
+	Title        string
+	Content      string
+	Omitted      string
+	IsMarkdown   bool
 }
 
 // ExportTrace writes a self-contained trace report for one flight trail.
@@ -144,7 +157,42 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 		}
 		data.CueYAML = cueYAML
 	}
+	if include.Has(IncludeArtifacts) {
+		artifactExports, err := loadArtifactExports(ctx.ColonyRoot, detail.TraceID)
+		if err != nil {
+			return TraceExportData{}, err
+		}
+		data.Artifacts = artifactExports
+	}
 	return data, nil
+}
+
+func loadArtifactExports(colonyRoot, traceID string) ([]ArtifactExport, error) {
+	items, err := artifacts.ListItems(colonyRoot, traceID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ArtifactExport, 0, len(items))
+	for _, item := range items {
+		entry := ArtifactExport{
+			Ref:          item.Ref,
+			ArtifactKind: item.ArtifactKind,
+			Title:        item.Title,
+			IsMarkdown:   strings.HasSuffix(strings.ToLower(item.Ref), ".md"),
+		}
+		data, err := artifacts.ReadContent(colonyRoot, traceID, item.Ref)
+		if err != nil {
+			entry.Omitted = err.Error()
+		} else if !artifacts.IsTextContent(data) {
+			entry.Omitted = "binary or invalid UTF-8"
+		} else if len(data) > artifacts.MaxInlineExportBytes {
+			entry.Omitted = "file too large for inline export"
+		} else {
+			entry.Content = string(data)
+		}
+		out = append(out, entry)
+	}
+	return out, nil
 }
 
 func sanitizeFilename(s string) string {

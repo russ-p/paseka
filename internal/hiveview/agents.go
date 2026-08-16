@@ -98,7 +98,7 @@ func scanLiveAFKRuns(colonyRoot string) ([]AgentItem, error) {
 			continue
 		}
 		for _, agentEntry := range agentDirs {
-			if !agentEntry.IsDir() || agentEntry.Name() == "tasks" {
+			if !agentEntry.IsDir() || runs.IsReservedTraceSubdir(agentEntry.Name()) {
 				continue
 			}
 			agentID := agentEntry.Name()

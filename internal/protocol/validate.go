@@ -175,6 +175,11 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateBeekeeperReady(payload)
 	}
 
+	switch ArtifactEventKind(kind) {
+	case SignalArtifactWritten:
+		return validateArtifactWritten(payload)
+	}
+
 	return nil
 }
 
@@ -210,7 +215,38 @@ func expectedEventType(kind string) EventType {
 	case SignalSessionInvite, SignalBeekeeperReady:
 		return EventSignal
 	}
+	switch ArtifactEventKind(kind) {
+	case SignalArtifactWritten:
+		return EventSignal
+	}
 	return ""
+}
+
+func validateArtifactWritten(payload json.RawMessage) []ValidationDetail {
+	var p ArtifactWrittenPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid artifact.written payload"}}
+	}
+	NormalizeArtifactWrittenPayload(&p)
+	if len(p.Artifacts) == 0 {
+		return []ValidationDetail{{Path: "payload.artifacts", Message: "required"}}
+	}
+	var details []ValidationDetail
+	for i, item := range p.Artifacts {
+		if strings.TrimSpace(item.Ref) == "" {
+			details = append(details, ValidationDetail{
+				Path:    fmt.Sprintf("payload.artifacts[%d].ref", i),
+				Message: "required",
+			})
+		}
+		if strings.TrimSpace(item.ArtifactKind) == "" {
+			details = append(details, ValidationDetail{
+				Path:    fmt.Sprintf("payload.artifacts[%d].artifactKind", i),
+				Message: "required",
+			})
+		}
+	}
+	return details
 }
 
 func validateTaskPlan(payload json.RawMessage) []ValidationDetail {

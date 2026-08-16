@@ -165,6 +165,8 @@ When a domain event arrives, reactor finds all bees with `dispatch: direct` subs
 
 **Platform SIGNAL kinds** (`task.ready`, `task.status`, `energy.*`, `session.invite`, `beekeeper.ready`) are **not** valid direct-dispatch targets — they use the task ledger, energy subsystem, or Human Gateway. Runtime refuses them even if a bee misconfigures `dispatch: direct`.
 
+**Trail comb `artifact.written`** is a platform-known `SIGNAL` shape (validated payload, not ledger-denied). Colonies may subscribe with `dispatch: direct` like colony `SIGNAL` kinds. Matching is **type + kind** only; filter by `artifactKind` in the bee prompt, not YAML matchers. Comb files live under `.paseka/runs/<traceId>/artifacts/`; bees write via `{{.ArtifactsDir}}`. See [Spec 014](../specs/014-artifacts-protocol.md).
+
 Duplicate runs are suppressed per `traceId + taskId + bee + type + kind` when `payload.taskId` is set, except for rework-cycle gates (`MUTATION/code.proposal.isolated`, `MUTATION/code.proposal.root`, `code.proposal` alias, `VERIFICATION/verification.failed`): those key by event identity so each publisher→reviewer pass can run again on the same task. Direct dispatch also skips when the publishing run's bee role matches the subscriber (prevents receiver self-loops if it mistakenly re-emits `verification.success`).
 
 ---

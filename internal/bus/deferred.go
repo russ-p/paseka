@@ -208,7 +208,7 @@ func validateEventFileRefs(colonyRoot, traceID string, ev protocol.Event) error 
 			return fmt.Errorf("file not found for %s ref %q", kind, ref)
 		}
 	case "artifact.written":
-		refs, err := artifactWrittenRefs(ev.Payload)
+		refs, err := protocol.ArtifactWrittenRefs(ev.Payload)
 		if err != nil {
 			return err
 		}
@@ -240,28 +240,6 @@ func payloadRef(payload json.RawMessage, field string) (string, error) {
 	return strings.TrimSpace(ref), nil
 }
 
-func artifactWrittenRefs(payload json.RawMessage) ([]string, error) {
-	var top struct {
-		Ref       string `json:"ref"`
-		Artifacts []struct {
-			Ref string `json:"ref"`
-		} `json:"artifacts"`
-	}
-	if err := json.Unmarshal(payload, &top); err != nil {
-		return nil, fmt.Errorf("invalid artifact.written payload")
-	}
-	var refs []string
-	if ref := strings.TrimSpace(top.Ref); ref != "" {
-		refs = append(refs, ref)
-	}
-	for _, item := range top.Artifacts {
-		if ref := strings.TrimSpace(item.Ref); ref != "" {
-			refs = append(refs, ref)
-		}
-	}
-	return refs, nil
-}
-
 func eventRefExists(colonyRoot, traceID, ref string) bool {
 	ref = strings.TrimSpace(ref)
 	if ref == "" || strings.TrimSpace(colonyRoot) == "" {
@@ -274,6 +252,12 @@ func eventRefExists(colonyRoot, traceID, ref string) bool {
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	// Also accept repo-relative comb refs.
+	if strings.Contains(ref, "/artifacts/") {
+		if _, err := os.Stat(filepath.Join(colonyRoot, filepath.FromSlash(ref))); err == nil {
 			return true
 		}
 	}

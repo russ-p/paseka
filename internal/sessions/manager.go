@@ -17,6 +17,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
 	"github.com/paseka/paseka/internal/adapters/pi"
+	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/homestate"
@@ -228,19 +229,20 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, fmt.Errorf("sessions: resolve trace title: %w", err)
 	}
 	promptCtx := prompts.PromptContext(prompts.Context{
-		Bee:         bee.Role,
-		TraceID:     traceID,
-		TraceTitle:  traceTitle,
-		AgentID:     agentID,
-		TaskID:      req.TaskID,
-		ColonyRoot:  ctxColony.ColonyRoot,
-		Workspace:   workspace,
-		Task:        req.Task,
-		IntentRaw:   req.Intent,
-		Insights:    req.Insights,
-		ResultFile:  resultFile,
-		Interactive: true,
-		Adapter:     adapterName,
+		Bee:          bee.Role,
+		TraceID:      traceID,
+		TraceTitle:   traceTitle,
+		AgentID:      agentID,
+		TaskID:       req.TaskID,
+		ColonyRoot:   ctxColony.ColonyRoot,
+		Workspace:    workspace,
+		Task:         req.Task,
+		IntentRaw:    req.Intent,
+		Insights:     req.Insights,
+		ResultFile:   resultFile,
+		ArtifactsDir: artifacts.DirForPrompt(ctxColony.ColonyRoot, traceID),
+		Interactive:  true,
+		Adapter:      adapterName,
 	}, knownIntents, defaultIntent)
 
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
@@ -338,6 +340,13 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		StartedAt:       startedAt,
 	}); err != nil {
 		return nil, err
+	}
+	if err := artifacts.CaptureBaseline(ctxColony.ColonyRoot, traceID, agentID); err != nil {
+		logging.Component("sessions").Warn("artifacts baseline capture failed",
+			logging.F("trace", traceID),
+			logging.F("agent", agentID),
+			logging.F("error", err.Error()),
+		)
 	}
 
 	// Detached attach mode (PTY hub / no local terminal) must still launch the
@@ -510,6 +519,20 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 			msg := "runtime: flush deferred events: " + err.Error()
 			logging.Component("sessions").Warn("flush deferred events failed",
 				logging.F("bee", entry.Handle.Bee),
+				logging.F("trace", entry.Handle.TraceID),
+				logging.F("agent", entry.Handle.AgentID),
+				logging.F("error", err.Error()),
+			)
+			statusErr = joinStatusNotes(statusErr, msg)
+		}
+		var pub bus.Publisher = bus.NopPublisher{}
+		if client, err := bus.ConnectColony(ctxColony, false); err == nil && client != nil {
+			pub = client
+			defer client.Close()
+		}
+		if err := flushSessionArtifacts(context.Background(), entry.Handle.ColonyRoot, entry.Handle.TraceID, entry.Handle.AgentID, pub); err != nil {
+			msg := "runtime: flush artifacts: " + err.Error()
+			logging.Component("sessions").Warn("flush artifacts failed",
 				logging.F("trace", entry.Handle.TraceID),
 				logging.F("agent", entry.Handle.AgentID),
 				logging.F("error", err.Error()),

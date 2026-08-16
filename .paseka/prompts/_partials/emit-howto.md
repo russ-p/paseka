@@ -16,7 +16,7 @@ By default, `event emit` publishes to the bus **immediately** (live). Add **`--d
 
 | Use `--defer` | Use live (default) |
 | ------------- | ------------------ |
-| Handoffs meant for after this bee finishes (`task.plan`, `task.ready` kick after plan, `context.note`, `spec.ready`, optional `artifact.written`) | Need another bee or human reaction **during** this run/session |
+| Handoffs meant for after this bee finishes (`task.plan`, `task.ready` kick after plan, `context.note`, `spec.ready`, optional explicit deferred `artifact.written`) | Need another bee or human reaction **during** this run/session |
 | Invite `done_when` should complete at run boundary, not mid-session | Mid-run control (`feature.classified`, `session.invite`, energy, kill) |
 | Bundle ledger + narrative at successful exit (emit `task.plan` then `task.ready` in that order when starting now) | Debugging with immediate timeline feedback |
 
@@ -24,7 +24,7 @@ By default, `event emit` publishes to the bus **immediately** (live). Add **`--d
 
 **Soft guidance:** do not defer `run.summary` when runtime auto-synthesis applies — let the platform publish one after your successful exit unless you need a custom summary before that.
 
-Trail comb artifacts ([014](../../../docs/specs/014-artifacts-protocol.md)) still use runtime scan flush on success; that MVP does **not** depend on the deferred buffer. Optional explicit deferred `artifact.written` is available when you want intent visible in the pending queue.
+Trail comb artifacts ([014](../../../docs/specs/014-artifacts-protocol.md)): write handoff files under `{{.ArtifactsDir}}` during the run. Runtime scan-flushes `SIGNAL/artifact.written` on **successful** exit for files this run added or changed — do not emit `artifact.written` on every save. Optional explicit deferred `artifact.written` is available when you want intent visible in the pending queue; coexistence skips duplicate scan flush when deferred artifact lines are already pending/flushed.
 
 Use this command form (live):
 

@@ -319,6 +319,57 @@ func TestAutoInviteFromDocReadyBreakdown(t *testing.T) {
 	}
 }
 
+func TestCompleteFromEventArtifactWrittenCombRef(t *testing.T) {
+	repo := initTestRepo(t)
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	traceID := "trace-artifact"
+	combPath := filepath.Join(repo, ".paseka", "runs", traceID, "artifacts", "handoff.md")
+	if err := os.MkdirAll(filepath.Dir(combPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(combPath, []byte("# Handoff\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doneWhen := &colony.InviteDoneWhen{
+		When:        colony.EventRule{Type: "SIGNAL", Kind: "artifact.written"},
+		RequireFile: colony.InviteStringField{From: "ref"},
+	}
+	if err := homestate.UpsertInvite(res.Slug, homestate.InviteEntry{
+		InviteID: "inv-comb",
+		TraceID:  traceID,
+		Bee:      "drone",
+		Intent:   "grilling",
+		Task:     "Comb handoff",
+		Status:   protocol.InviteStatusAccepted,
+		DoneWhen: doneWhen,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"kind": "artifact.written",
+		"artifacts": []map[string]any{{
+			"ref":          ".paseka/runs/" + traceID + "/artifacts/handoff.md",
+			"artifactKind": "handoff",
+		}},
+	})
+	ev := protocol.Event{
+		TraceID: traceID,
+		Type:    protocol.EventSignal,
+		Payload: raw,
+	}
+	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
+	_, completed, err := svc.CompleteFromEvent(context.Background(), ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !completed {
+		t.Fatal("expected invite completed on comb artifact.written")
+	}
+}
+
 func TestBuildInviteIncludesDoneWhen(t *testing.T) {
 	ev, _ := classifiedEvent("session", "")
 	payload, err := BuildInvite(ev, sampleRules()[0], nil)

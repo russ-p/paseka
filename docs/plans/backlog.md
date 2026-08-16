@@ -160,15 +160,7 @@ Shareable colony defaults vs machine-local overlays. Bee roles stay in `.paseka/
 
 ### Deferred emit and artifacts
 
-General deferred `event emit` buffer ([015](../specs/015-deferred-event-emit.md)) and trail comb protocol ([014](../specs/014-artifacts-protocol.md)).
-
-#### 014 scan ↔ deferred `artifact.written` coexistence
-
-- **Kind:** follow-up
-- **Source:** [015-deferred-event-emit](../specs/015-deferred-event-emit.md) (decision §1 / US 8, 20, 21, 23); planning (015 task breakdown)
-- **Summary:** When both 014 scan flush and 015 deferred emit ship, skip scan-synthesized `artifact.written` for a run if a deferred `artifact.written` is already pending/flushed for that run; no silent merge of multiple deferred artifact lines (batch only via one event with `artifacts[]`).
-- **Why deferred:** First 015 ship is the general defer/flush path; 014 scan flush is not a dependency and may land on a different schedule. Coexistence needs both mechanisms present to verify.
-- **Revisit when:** 014 scan flush and 015 deferred emit are both implemented (or one is about to land on top of the other).
+General deferred `event emit` buffer ([015](../specs/015-deferred-event-emit.md)) and trail comb protocol ([014](../specs/014-artifacts-protocol.md)) — **implemented**; scan ↔ deferred coexistence ships with 014.
 
 ## Assumptions and gotchas
 

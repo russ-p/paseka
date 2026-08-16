@@ -170,7 +170,7 @@ func listRunsInTraceDir(colonyRoot, traceID, tracePath string) ([]RunMeta, error
 	}
 	var metas []RunMeta
 	for _, agentEntry := range agentDirs {
-		if !agentEntry.IsDir() || agentEntry.Name() == "tasks" {
+		if !agentEntry.IsDir() || IsReservedTraceSubdir(agentEntry.Name()) {
 			continue
 		}
 		d := Dir{

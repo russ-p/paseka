@@ -27,7 +27,7 @@ func ReadTraceEvents(colonyRoot, traceID string) ([]protocol.Event, error) {
 
 	var all []protocol.Event
 	for _, ent := range entries {
-		if !ent.IsDir() {
+		if !ent.IsDir() || skipTraceEventDir(ent.Name()) {
 			continue
 		}
 		agentID := ent.Name()

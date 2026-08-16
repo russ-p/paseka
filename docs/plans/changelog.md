@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Trail artifacts protocol (comb + `artifact.written`)
+
+Trace-scoped comb under `.paseka/runs/<traceId>/artifacts/` with `{{.ArtifactsDir}}` prompt injection. Runtime captures a per-run SHA-256 baseline and publishes one batched `SIGNAL/artifact.written` on successful AFK or interactive exit (added/changed files only). Coexistence with deferred `artifact.written` skips duplicate scan flush. Queen Console lists comb files (staged vs announced) with Markdown preview. `paseka export --include artifacts` inlines comb bodies in reports. Human `artifacts.WriteAndAnnounce` helper publishes with producer `console` (for 017 Slice B).
+
+- Spec: [014-artifacts-protocol](../specs/014-artifacts-protocol.md)
+- Canonical: [Architecture overview](architecture/overview.md) (runs comb), [Prompt templates](guide/prompt-templates.md) (`ArtifactsDir`), [Bee routing](reference/bee-routing.md), [CLI](guide/cli.md) (`paseka export --include artifacts`)
+
 ## 2026-08 — Queen Console merge-diff viewer (Slice A)
 
 Queen Console Reviews final merge gates show merge-diff summary on the detail panel; **Open merge preview** opens a dedicated full-page viewer (sticky file list, path filter, jump-to-file, per-file hunks via vendored Diff2Html, unified or side-by-side format). Line-number gutters stay clipped to each file pane instead of overlaying scrolled hunks. Approve/reject stay on Reviews. Queue polling still skips re-fetch when the same gate stays selected.
@@ -24,7 +31,7 @@ Scout and Drone breakdown prompts now defer both `task.plan` and post-plan `task
 
 ## 2026-08 — Export `--include` (richer payload)
 
-`paseka export` accepts composable `--include` slices independent of `--format`: `usage` (trace aggregate + per-run tokens), `durations` (wall-clock per run), `bees` (committed `.paseka/bees/*.yaml` for trail roles), `colony` (`.paseka/colony.yaml`), and `cues` (all colony cues). Default export stays trail-only with no config snapshots.
+`paseka export` accepts composable `--include` slices independent of `--format`: `usage` (trace aggregate + per-run tokens), `durations` (wall-clock per run), `bees` (committed `.paseka/bees/*.yaml` for trail roles), `colony` (`.paseka/colony.yaml`), `cues` (all colony cues), and `artifacts` (trail comb file bodies). Default export stays trail-only with no config snapshots.
 
 - Canonical: [CLI](guide/cli.md) (`paseka export`)
 

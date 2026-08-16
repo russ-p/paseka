@@ -7,6 +7,8 @@ const state = {
   traces: [],
   selectedTraceId: null,
   selectedTraceDetail: null,
+  traceArtifacts: [],
+  traceArtifactPreviewRef: null,
   traceDetailError: '',
   traceDetailLoading: false,
   tasks: null,
@@ -89,6 +91,8 @@ const el = {
   traceUsage: document.getElementById('trace-usage'),
   traceWorktreeWrap: document.getElementById('trace-worktree-wrap'),
   traceWorktreeMeta: document.getElementById('trace-worktree-meta'),
+  traceArtifactsList: document.getElementById('trace-artifacts-list'),
+  traceArtifactsPreview: document.getElementById('trace-artifacts-preview'),
   traceTasksList: document.getElementById('trace-tasks-list'),
   traceRunsList: document.getElementById('trace-runs-list'),
   traceEventsList: document.getElementById('trace-events-list'),
@@ -2026,6 +2030,78 @@ function renderTraceDetail(detail) {
   renderTraceTasks(detail.tasks || []);
   renderTraceRuns(detail.runs || []);
   renderTraceEvents(detail.recentEvents || []);
+  renderTraceArtifacts(state.traceArtifacts || []);
+}
+
+function renderTraceArtifacts(items) {
+  el.traceArtifactsList.innerHTML = '';
+  el.traceArtifactsPreview.classList.add('hidden');
+  el.traceArtifactsPreview.innerHTML = '';
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'No trail artifacts in the comb.';
+    el.traceArtifactsList.appendChild(li);
+    return;
+  }
+  for (const item of items) {
+    const li = document.createElement('li');
+    const label = item.title || item.artifactKind || item.ref;
+    const badge = item.announced
+      ? '<span class="badge ok">announced</span>'
+      : '<span class="badge">staged</span>';
+    const producer = item.producer ? ` · ${escapeHtml(item.producer)}` : '';
+    li.innerHTML = `
+      <button type="button" class="linkish artifact-row" data-ref="${escapeHtml(item.ref)}">
+        <strong>${escapeHtml(label)}</strong>
+        <span class="muted">${escapeHtml(item.artifactKind)} · ${escapeHtml(item.ref)}${producer}</span>
+        ${badge}
+      </button>
+    `;
+    li.querySelector('.artifact-row').addEventListener('click', () => {
+      previewTraceArtifact(item.ref).catch(console.error);
+    });
+    el.traceArtifactsList.appendChild(li);
+  }
+  if (state.traceArtifactPreviewRef) {
+    previewTraceArtifact(state.traceArtifactPreviewRef, { quiet: true }).catch(console.error);
+  }
+}
+
+async function previewTraceArtifact(ref, opts = {}) {
+  const traceId = state.selectedTraceId;
+  if (!traceId || !ref) return;
+  state.traceArtifactPreviewRef = ref;
+  if (!opts.quiet) {
+    el.traceArtifactsPreview.classList.remove('hidden');
+    el.traceArtifactsPreview.innerHTML = '<p class="muted">Loading preview…</p>';
+  }
+  const view = await api(`/api/traces/${encodeURIComponent(traceId)}/artifacts?ref=${encodeURIComponent(ref)}`);
+  if (state.traceArtifactPreviewRef !== ref) return;
+  el.traceArtifactsPreview.classList.remove('hidden');
+  if (view.omitted) {
+    el.traceArtifactsPreview.innerHTML = `<p class="muted">${escapeHtml(view.omitted)}</p>`;
+    return;
+  }
+  if (view.contentHtml) {
+    el.traceArtifactsPreview.innerHTML = `<div class="formatted-text artifact-preview-body">${view.contentHtml}</div>`;
+  } else if (view.content) {
+    el.traceArtifactsPreview.innerHTML = `<pre class="artifact-preview-body">${escapeHtml(view.content)}</pre>`;
+  } else {
+    el.traceArtifactsPreview.innerHTML = '<p class="muted">Empty file.</p>';
+  }
+}
+
+async function loadTraceArtifacts(traceId) {
+  if (!traceId) {
+    state.traceArtifacts = [];
+    return;
+  }
+  try {
+    state.traceArtifacts = await api(`/api/traces/${encodeURIComponent(traceId)}/artifacts`);
+  } catch {
+    state.traceArtifacts = [];
+  }
 }
 
 function renderTraceEnergy(detail, hasEnergy) {
@@ -2181,6 +2257,8 @@ async function selectTrace(traceId, opts = {}) {
     state.traceDetailLoading = true;
     if (switching) {
       state.selectedTraceDetail = null;
+      state.traceArtifacts = [];
+      state.traceArtifactPreviewRef = null;
     }
     renderTraces();
     renderTraceDetail(state.selectedTraceDetail);
@@ -2189,6 +2267,8 @@ async function selectTrace(traceId, opts = {}) {
   }
   try {
     const detail = await api(`/api/traces/${encodeURIComponent(traceId)}`);
+    if (state.selectedTraceId !== traceId) return;
+    await loadTraceArtifacts(traceId);
     if (state.selectedTraceId !== traceId) return;
     state.selectedTraceDetail = detail;
     state.traceDetailLoading = false;

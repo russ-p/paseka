@@ -806,7 +806,7 @@ Write a self-contained report for one flight trail to the current working direct
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | yes | Flight trail id |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -824,6 +824,7 @@ Write a self-contained report for one flight trail to the current working direct
 | `bees` | Committed `.paseka/bees/<role>.yaml` for bees on this trail (no `*.local.yaml`) |
 | `colony` | Raw `.paseka/colony.yaml` (or a short note when missing) |
 | `cues` | All committed `.paseka/cues/*.yaml` in the colony |
+| `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
 
 Default export omits all config snapshots. Home config and machine-local overlays are never included.
 
@@ -834,6 +835,7 @@ paseka export --trace trace-abc123
 paseka export --trace trace-abc123 --format md
 paseka export --trace trace-abc123 --include usage,durations
 paseka export --trace trace-abc123 --include bees --include colony --format md
+paseka export --trace trace-abc123 --include artifacts --format md
 paseka export --trace trace-abc123 -C /path/to/repo
 ```
 

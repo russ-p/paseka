@@ -453,6 +453,39 @@ func TestExportTraceIncludeColonyReadError(t *testing.T) {
 	}
 }
 
+func TestExportTraceIncludeArtifacts(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-artifacts-export"
+	writeCompletedRun(t, repo, traceID, time.Now().UTC().Add(-time.Minute), nil)
+	comb := filepath.Join(repo, ".paseka", "runs", traceID, "artifacts")
+	if err := os.MkdirAll(comb, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(comb, "brief.md"), []byte("# Brief\ninline"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := ExportTrace(ctx, Options{
+		TraceID:   traceID,
+		OutputDir: t.TempDir(),
+		Format:    FormatMarkdown,
+		Include:   mustInclude(t, "artifacts"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, want := range []string{"## Trail artifacts", "brief.md", "# Brief", "inline"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("export missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestExportTraceIncludeCues(t *testing.T) {
 	ctx, repo := setupExportColony(t)
 	traceID := "trace-cues"

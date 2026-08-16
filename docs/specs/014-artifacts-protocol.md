@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Approved)**
-Trace-scoped comb, `SIGNAL/artifact.written`, per-run SHA-256 baseline, bee scan-flush on success plus human/Console producer. Open questions closed. Unblocks [017](017-console-diff-review.md) Slice B comb writes. Coexistence with [015](015-deferred-event-emit.md) is complement+skip.
+**(Implemented)**
+Trace comb, `SIGNAL/artifact.written`, bee scan-flush, Console list/preview, export `--include artifacts`, human producer helper.
 
 ## Problem Statement
 
@@ -66,6 +66,7 @@ Queen Console lists comb files from the filesystem and labels them staged vs ann
 41. As a beekeeper using CLI, I want an optional later copy-into-comb helper to publish with the same human producer rules, so that unstructured reject stays available and line-picking stays Console-only.
 42. As a bee author, I want prompt partials to say “write the file; runtime announces on success,” so that I do not emit `artifact.written` on every save; live emit stays allowed for debugging and is not hard-denied.
 43. As a downstream bee, I want to read `artifactKind` from the event payload (or from the filename under `ArtifactsDir`), so that I can ignore irrelevant handoffs without a new subscribe matcher.
+44. As a Beekeeper exporting a trail report, I want `paseka export --include artifacts` to inline comb file bodies in the HTML/Markdown dump, so that I can share handoffs without NATS or Console access (distinct from auto-inlining comb into `{{.Insights}}`).
 
 ## Implementation Decisions
 
@@ -220,6 +221,12 @@ Bees are **not** required to call `paseka event emit` for comb files. Bee-run an
 - Console API + UI — FS list + announced/staged + preview.
 - Prompt partials / bee docs — write the comb; announcement on success for this run’s delta.
 - Purge — already covered if comb lives under runs; verify docs/tests.
+
+### 15. Export inlining (opt-in)
+
+- `paseka export --include artifacts` walks the trail comb (same skip-list) and inlines text bodies into the self-contained report (HTML: Markdown rendered; Markdown export: nested sections or fenced blocks).
+- Default export omits comb bodies. Binary/invalid UTF-8/oversize files get an omitted note, not inline content.
+- Distinct from runtime prompt inlining (still out of scope for `{{.Insights}}`).
 
 ## Testing Decisions
 

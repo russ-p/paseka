@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/homestate"
 	"github.com/paseka/paseka/internal/protocol"
@@ -101,6 +102,9 @@ func artifactRefExists(colonyRoot, traceID, ref string) bool {
 	candidates := []string{
 		filepath.Join(colonyRoot, ref),
 		colony.PasekaPath(colonyRoot, "worktrees", traceID, ref),
+	}
+	if artifacts.RefExists(colonyRoot, traceID, ref) {
+		return true
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {

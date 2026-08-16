@@ -20,6 +20,11 @@ var markdown = goldmark.New(
 	),
 )
 
+// FormatMarkdownHTML renders markdown to HTML for Console preview and export.
+func FormatMarkdownHTML(text string) template.HTML {
+	return formatMarkdown(text)
+}
+
 // formatMarkdown renders plain text or markdown for HTML export.
 // Single newlines are preserved; common markdown (GFM) is supported.
 func formatMarkdown(text string) template.HTML {

@@ -54,29 +54,33 @@ type htmlPageData struct {
 	IncludeBees        bool
 	IncludeColony      bool
 	IncludeCues        bool
+	IncludeArtifacts   bool
 	BeeYAML            []NamedYAML
 	ColonyYAML         *NamedYAML
 	CueYAML            []NamedYAML
+	Artifacts          []ArtifactExport
 }
 
 // RenderHTML builds a self-contained HTML document for one trace export.
 func RenderHTML(data TraceExportData) ([]byte, error) {
 	page := htmlPageData{
-		Slug:           data.Slug,
-		ColonyRoot:     data.ColonyRoot,
-		TraceID:        data.Trace.TraceID,
-		ExportedAt:     formatTime(data.ExportedAt),
-		LastActivityAt: formatTime(data.Trace.LastActivityAt),
-		RunCount:       data.Trace.RunCount,
-		TaskCount:      data.Trace.TaskCount,
-		Bees:           strings.Join(data.Trace.Bees, ", "),
-		Tasks:          data.Trace.Tasks,
-		IncludeBees:    data.Include.Has(IncludeBees),
-		IncludeColony:  data.Include.Has(IncludeColony),
-		IncludeCues:    data.Include.Has(IncludeCues),
-		BeeYAML:        data.BeeYAML,
-		ColonyYAML:     data.ColonyYAML,
-		CueYAML:        data.CueYAML,
+		Slug:             data.Slug,
+		ColonyRoot:       data.ColonyRoot,
+		TraceID:          data.Trace.TraceID,
+		ExportedAt:       formatTime(data.ExportedAt),
+		LastActivityAt:   formatTime(data.Trace.LastActivityAt),
+		RunCount:         data.Trace.RunCount,
+		TaskCount:        data.Trace.TaskCount,
+		Bees:             strings.Join(data.Trace.Bees, ", "),
+		Tasks:            data.Trace.Tasks,
+		IncludeBees:      data.Include.Has(IncludeBees),
+		IncludeColony:    data.Include.Has(IncludeColony),
+		IncludeCues:      data.Include.Has(IncludeCues),
+		IncludeArtifacts: data.Include.Has(IncludeArtifacts),
+		BeeYAML:          data.BeeYAML,
+		ColonyYAML:       data.ColonyYAML,
+		CueYAML:          data.CueYAML,
+		Artifacts:        data.Artifacts,
 	}
 	if data.Include.Has(IncludeUsage) {
 		page.UsageAggregateLine = formatUsageAggregate(data.Trace.Usage)
@@ -535,6 +539,27 @@ code { font-family: var(--mono); font-size: 0.85em; }
     {{ end }}
     {{ else }}
     <p class="muted">No cues found.</p>
+    {{ end }}
+  </section>
+  {{ end }}
+
+  {{ if .IncludeArtifacts }}
+  <section class="panel">
+    <h2>Trail artifacts</h2>
+    {{ if .Artifacts }}
+    {{ range .Artifacts }}
+    <h3>{{ if .Title }}{{ .Title }}{{ else }}{{ .ArtifactKind }}{{ end }}</h3>
+    <p class="muted"><code>{{ .Ref }}</code></p>
+    {{ if .Omitted }}
+    <p class="muted">{{ .Omitted }}</p>
+    {{ else if .IsMarkdown }}
+    <div class="formatted-text">{{ formatMarkdown .Content }}</div>
+    {{ else }}
+    <pre class="timeline-raw">{{ .Content }}</pre>
+    {{ end }}
+    {{ end }}
+    {{ else }}
+    <p class="muted">No trail artifacts in the comb.</p>
     {{ end }}
   </section>
   {{ end }}

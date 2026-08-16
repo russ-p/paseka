@@ -9,6 +9,7 @@ import (
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/logging"
@@ -129,6 +130,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		IntentRaw:      req.Intent,
 		Insights:       insights,
 		ResultFile:     resultFile,
+		ArtifactsDir:   artifacts.DirForPrompt(colonyRoot, req.TraceID),
 		Interactive:    false,
 		IsLastWorkTask: req.IsLastWorkTask,
 		Adapter:        adapterName,
@@ -250,6 +252,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	if baselineErr != nil {
 		runtimeLog.Warn("workspace baseline capture failed", logging.F("error", baselineErr.Error()))
 	}
+	captureArtifactsBaseline(colonyRoot, req.TraceID, agentID)
 
 	filled := req
 	filled.ColonyRoot = colonyRoot
@@ -303,6 +306,14 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 	if result.Status == string(protocol.StatusCompleted) {
 		if err := d.flushDeferredEvents(ctx, p.colonyRoot, p.req.TraceID, p.agentID); err != nil {
 			msg := "runtime: flush deferred events: " + err.Error()
+			if d.busRequired {
+				return result, fmt.Errorf("%s", msg)
+			}
+			result.Warnings = append(result.Warnings, msg)
+			_ = p.runDir.AppendStatusNote(msg)
+		}
+		if err := d.flushArtifactDelta(ctx, p.colonyRoot, p.req.TraceID, p.agentID); err != nil {
+			msg := "runtime: flush artifacts: " + err.Error()
 			if d.busRequired {
 				return result, fmt.Errorf("%s", msg)
 			}
