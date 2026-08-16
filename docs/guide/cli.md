@@ -749,7 +749,7 @@ paseka console --addr 127.0.0.1:8787
 
 Open the printed URL in a browser. Queen Console does not enforce authentication yet.
 
-Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) it shows a side-by-side worktree merge preview before approve. Prefer previewing there, then approve via the UI or `paseka proposal approve`. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
+Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) the detail panel shows merge-diff summary and **Open merge preview** (dedicated full-page file list + per-file diff bodies, unified or side-by-side). Approve from Reviews after previewing. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ---
 

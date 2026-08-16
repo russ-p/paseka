@@ -94,7 +94,7 @@ Implemented backend behavior:
 - Reads active sessions, active worktrees, and runtime registration from machine-local colony state.
 - Uses NATS diagnostics for dashboard connectivity status; it does not yet consume a live JetStream event stream for console updates.
 - Starts detached console sessions through the session manager and adapter session APIs (interactive agent TUI in a PTY hub, not headless `-p`); active sessions can be attached from the browser via `GET /api/sessions/:sessionId/pty`.
-- Final merge gate review (`review: final` / `_review`) shows a three-dot worktree diff vs the default branch in the Reviews detail panel (vendored diff2html, side-by-side).
+- Final merge gate review (`review: final` / `_review`) shows merge-diff summary on Reviews detail; **Open merge preview** opens a dedicated full-page viewer (file list + per-file bodies; default unified layout).
 
 Not implemented in the current baseline:
 
@@ -277,8 +277,8 @@ The Reviews tab exposes the human-in-the-loop review queue:
 
 - list tasks in `waiting_review` with `review: required` or `review: final`
 - proposal detail with trace/task metadata, summary, and review policy
-- for `review: final` / `_review`: merge preview via `GET /api/traces/:traceId/merge-diff` (three-dot diff of trace branch vs default branch, side-by-side in Reviews detail)
-- **Widen** control expands the merge diff to full page width (hiding the queue and non-diff detail) and switches the viewer to unified line-by-line layout; **Restore** returns to the two-column layout with side-by-side diff
+- for `review: final` / `_review`: merge preview summary on Reviews detail (`GET /api/traces/:traceId/merge-diff`); **Open merge preview** opens a dedicated page with file list + per-file bodies (default unified layout)
+- **Format** control on the preview page switches unified (line-by-line) vs side-by-side
 - approve action (optional summary; optional merge commit message for `review: final`)
 - reject action with human feedback
 - links to timeline and linked runs for inspection context
@@ -391,8 +391,8 @@ At minimum, the UI shows:
 - source trace and task
 - summary
 - review policy (`required` vs `final`)
-- for final merge gates: branch metadata, `--stat` summary, and side-by-side diff rendered with vendored diff2html
-- optional full-page **Widen** layout for the merge diff viewer (same interaction model as Sessions terminal widen)
+- for final merge gates: branch metadata, `--stat` summary on Reviews detail; **Open merge preview** for full-page file-oriented viewer (sticky file list, per-file hunks, path filter, keyboard navigation) via vendored diff2html
+- approve/reject chrome stays on Reviews detail (not on the preview page); format control is on the preview page only
 - links to timeline and linked runs for inspection context
 
 Approve/reject actions reuse the same domain flows as `paseka proposal approve|reject`.

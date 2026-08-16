@@ -502,10 +502,207 @@ header h1 {
   font-size: 0.95rem;
 }
 
-#review-diff-wide-btn {
+.review-merge-diff-controls {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+#review-diff-format-btn {
   width: auto;
   padding: 0.3rem 0.65rem;
   font-size: 0.8rem;
+}
+
+#review-diff-layout {
+  grid-template-columns: 1fr;
+}
+
+.review-diff-panel {
+  min-height: calc(100vh - 9rem);
+  min-width: 0;
+}
+
+.review-diff-page-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.review-diff-page-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1 1 auto;
+}
+
+#review-diff-back-btn {
+  width: auto;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+#review-open-diff-btn {
+  margin-top: 0.65rem;
+  width: auto;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+#review-diff-layout .merge-diff-viewer {
+  max-height: none;
+  min-height: 360px;
+  height: calc(100vh - 14rem);
+}
+
+#review-diff-layout .merge-diff-file-panel {
+  max-height: none;
+  height: 100%;
+}
+
+#review-diff-layout .merge-diff-body {
+  max-height: none;
+  height: 100%;
+  overflow: auto;
+}
+
+.merge-diff-viewer {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  min-height: 0;
+  outline: none;
+}
+
+.merge-diff-viewer:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.merge-diff-file-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  max-height: 28rem;
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.merge-diff-file-filter-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.merge-diff-file-filter-label input {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.merge-diff-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  flex: 1 1 auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #3a4560 #141820;
+}
+
+.merge-diff-file-list li {
+  border-bottom: 1px solid var(--border);
+}
+
+.merge-diff-file-list li:last-child {
+  border-bottom: none;
+}
+
+.merge-diff-file-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.merge-diff-file-list button:hover {
+  background: #1a1f2b;
+}
+
+.merge-diff-file-list li.selected button {
+  background: #1e2a3d;
+  color: var(--accent);
+}
+
+.merge-diff-file-list .file-path {
+  display: block;
+  word-break: break-all;
+}
+
+.merge-diff-file-list .file-stat {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+  margin-top: 0.15rem;
+}
+
+.merge-diff-file-list li.truncated-file .file-stat::after {
+  content: ' · truncated';
+  color: var(--warn, #d4a574);
+}
+
+.merge-diff-file-list li.binary-file .file-stat::after {
+  content: ' · binary';
+}
+
+.merge-diff-viewer .merge-diff-container {
+  margin-top: 0;
+}
+
+.merge-diff-body {
+  min-width: 0;
+  max-height: 28rem;
+  overflow: auto;
+}
+
+.merge-diff-file-section {
+  margin-bottom: 0.75rem;
+}
+
+.merge-diff-file-section:last-child {
+  margin-bottom: 0;
+}
+
+.merge-diff-file-section h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.merge-diff-unrenderable {
+  padding: 0.5rem 0.65rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: #141820;
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .merge-diff-container {
@@ -568,6 +765,7 @@ header h1 {
 
 .merge-diff-container.merge-diff-side-by-side .d2h-file-side-diff {
   display: block;
+  position: relative;
   flex: 1 1 0;
   width: 50%;
   max-width: 50%;
@@ -579,6 +777,7 @@ header h1 {
 }
 
 .merge-diff-container.merge-diff-line-by-line .d2h-file-diff {
+  position: relative;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -605,6 +804,8 @@ header h1 {
 
 .merge-diff-container .d2h-code-linenumber,
 .merge-diff-container .d2h-code-side-linenumber {
+  left: 0;
+  z-index: 1;
   background-color: #12151c;
   border-color: var(--border);
   color: var(--muted);
@@ -973,50 +1174,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 #sessions-layout.terminal-wide .terminal-container {
   min-height: 360px;
   height: calc(100vh - 12rem);
-}
-
-/* Full-page-wide merge diff: hide queue and non-diff detail. */
-#reviews-layout.review-diff-wide {
-  grid-template-columns: 1fr;
-}
-
-#reviews-layout.review-diff-wide .reviews-queue-panel {
-  display: none;
-}
-
-#reviews-layout.review-diff-wide .reviews-detail-panel {
-  min-height: calc(100vh - 9rem);
-  min-width: 0;
-  overflow: hidden;
-}
-
-#reviews-layout.review-diff-wide .review-merge-diff {
-  min-width: 0;
-  max-width: 100%;
-}
-
-#reviews-layout.review-diff-wide #review-detail-meta,
-#reviews-layout.review-diff-wide #review-summary-wrap,
-#reviews-layout.review-diff-wide #review-actions-wrap,
-#reviews-layout.review-diff-wide #review-action-error,
-#reviews-layout.review-diff-wide #review-action-success {
-  display: none !important;
-}
-
-#reviews-layout.review-diff-wide .review-merge-diff {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-
-#reviews-layout.review-diff-wide .merge-diff-container {
-  max-height: none;
-  min-height: 360px;
-  height: calc(100vh - 12rem);
-  width: 100%;
-  max-width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 #transcript-wrap.inactive-only {

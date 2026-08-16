@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Design from extended discussion: three shippable slices (merge-diff viewer, annotated request-changes, final-gate rework). Slice B depends on the trail comb from [014-artifacts-protocol](014-artifacts-protocol.md). Complements the Reviews baseline in [002-queen-console-mvp](002-queen-console-mvp.md).
+Slice A (file-oriented merge-diff viewer) shipped. Slice B (annotated comments via trail comb) and Slice C (final-gate request-changes rework) remain blocked on [014-artifacts-protocol](014-artifacts-protocol.md). Complements the Reviews baseline in [002-queen-console-mvp](002-queen-console-mvp.md).
 
 ## Problem Statement
 
@@ -129,11 +129,11 @@ If 014 is still Draft when A ships, A may land first. B/C stay unreleased until 
 
 ### 2. Viewer (Slice A)
 
-- Remain in the embedded Queen Console static SPA and existing Reviews tab; do not add a second process or review server.
+- Remain in the embedded Queen Console static SPA; merge preview is a dedicated Reviews sub-page (not a new top-level tab). Approve/reject stay on Reviews detail.
 - Keep the merge-diff contract from [002](002-queen-console-mvp.md): three-dot `defaultBranch...traceBranch`, stat, unified patch, 1 MiB truncate, missing/empty flags, `baseSha` / `headSha`.
-- Replace whole-patch HTML dump as the primary interaction model with: file list + per-file hunk rendering. Vendored diff HTML may be kept as a fallback renderer only if it can support file-list navigation without re-parsing on every poll.
-- Polling rule already in 002 stands: do not re-render an unchanged patch for the selected final gate.
-- **Widen** is layout (full-width chrome). Diff output format (unified vs side-by-side) is a separate control. Default format may stay unified for long files; do not couple Widen to format.
+- Replace whole-patch HTML dump with file list + per-file hunk rendering on the preview page. Reviews detail shows summary (`--stat`, branch/SHA) and **Open merge preview**.
+- Polling rule already in 002 stands: do not re-render an unchanged patch for the selected final gate (`state.tab` stays `reviews` while preview is open).
+- Diff output format (unified vs side-by-side) is a separate control on the preview page; default unified for long files.
 - No new HTTP API required for A unless pagination of the patch is later needed; MVP keeps one truncated blob.
 
 ### 3. Comment model (Slice B)

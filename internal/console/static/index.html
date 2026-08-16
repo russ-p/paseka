@@ -316,7 +316,6 @@
       <div id="review-merge-diff-wrap" class="review-merge-diff hidden">
         <div class="panel-header review-merge-diff-header">
           <h3>Merge diff</h3>
-          <button type="button" id="review-diff-wide-btn" class="secondary hidden" aria-pressed="false" title="Widen merge diff to full page width (unified view)">Widen</button>
         </div>
         <p id="review-merge-diff-loading" class="muted hidden">Loading worktree diff…</p>
         <p id="review-merge-diff-error" class="error hidden"></p>
@@ -325,7 +324,7 @@
         <p id="review-merge-diff-truncated" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
         <dl id="review-merge-diff-meta" class="meta compact-meta hidden"></dl>
         <pre id="review-merge-diff-stat" class="transcript hidden"></pre>
-        <div id="review-merge-diff-container" class="merge-diff-container"></div>
+        <button type="button" id="review-open-diff-btn" class="secondary hidden">Open merge preview</button>
       </div>
       <div id="review-actions-wrap" class="review-actions hidden">
         <p id="review-final-hint" class="muted hidden">Final merge gate — approve merges the trace worktree. Reject only publishes feedback.</p>
@@ -358,6 +357,30 @@
       </div>
       <p id="review-action-error" class="error hidden"></p>
       <p id="review-action-success" class="success hidden"></p>
+    </section>
+  </main>
+
+  <main class="layout review-diff-layout hidden" id="review-diff-layout">
+    <section class="panel review-diff-panel">
+      <div class="panel-header review-diff-page-header">
+        <button type="button" id="review-diff-back-btn" class="secondary">Back to review</button>
+        <h2>Merge preview</h2>
+        <div class="review-merge-diff-controls">
+          <button type="button" id="review-diff-format-btn" class="secondary hidden" aria-pressed="false" title="Switch between unified and side-by-side diff layout">Side-by-side</button>
+        </div>
+      </div>
+      <p id="review-merge-diff-truncated-preview" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
+      <dl id="review-merge-diff-meta-preview" class="meta compact-meta hidden"></dl>
+      <div id="review-merge-diff-viewer" class="merge-diff-viewer hidden" tabindex="0" aria-label="Merge diff viewer">
+        <div id="review-merge-diff-file-panel" class="merge-diff-file-panel">
+          <label class="merge-diff-file-filter-label">
+            <span class="hint">Filter files</span>
+            <input type="search" id="review-merge-diff-filter" placeholder="Path filter…" autocomplete="off">
+          </label>
+          <ul id="review-merge-diff-file-list" class="merge-diff-file-list" role="listbox" aria-label="Changed files"></ul>
+        </div>
+        <div id="review-merge-diff-body" class="merge-diff-body merge-diff-container"></div>
+      </div>
     </section>
   </main>
 

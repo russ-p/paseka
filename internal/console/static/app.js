@@ -16,7 +16,11 @@ const state = {
   reviewMergeDiffToken: 0,
   reviewMergeDiffLoadedTraceId: null,
   reviewMergeDiffView: null,
-  reviewDiffWide: false,
+  reviewMergeDiffFiles: null,
+  reviewMergeDiffSelectedPath: null,
+  reviewMergeDiffFilter: '',
+  reviewDiffFormat: 'line-by-line',
+  reviewMergePreviewOpen: false,
   selectedTaskKey: null,
   selectedTaskDetail: null,
   dashboard: null,
@@ -138,6 +142,7 @@ const el = {
   taskRejectFeedback: document.getElementById('task-reject-feedback'),
   taskReviewError: document.getElementById('task-review-error'),
   reviewsLayout: document.getElementById('reviews-layout'),
+  reviewDiffLayout: document.getElementById('review-diff-layout'),
   reviewsRefreshBtn: document.getElementById('reviews-refresh-btn'),
   reviewQueueList: document.getElementById('review-queue-list'),
   reviewDetailEmpty: document.getElementById('review-detail-empty'),
@@ -152,8 +157,15 @@ const el = {
   reviewMergeDiffTruncated: document.getElementById('review-merge-diff-truncated'),
   reviewMergeDiffMeta: document.getElementById('review-merge-diff-meta'),
   reviewMergeDiffStat: document.getElementById('review-merge-diff-stat'),
-  reviewMergeDiffContainer: document.getElementById('review-merge-diff-container'),
-  reviewDiffWideBtn: document.getElementById('review-diff-wide-btn'),
+  reviewOpenDiffBtn: document.getElementById('review-open-diff-btn'),
+  reviewMergeDiffTruncatedPreview: document.getElementById('review-merge-diff-truncated-preview'),
+  reviewMergeDiffMetaPreview: document.getElementById('review-merge-diff-meta-preview'),
+  reviewMergeDiffViewer: document.getElementById('review-merge-diff-viewer'),
+  reviewMergeDiffFilter: document.getElementById('review-merge-diff-filter'),
+  reviewMergeDiffFileList: document.getElementById('review-merge-diff-file-list'),
+  reviewMergeDiffBody: document.getElementById('review-merge-diff-body'),
+  reviewDiffFormatBtn: document.getElementById('review-diff-format-btn'),
+  reviewDiffBackBtn: document.getElementById('review-diff-back-btn'),
   reviewActionsWrap: document.getElementById('review-actions-wrap'),
   reviewFinalHint: document.getElementById('review-final-hint'),
   reviewApproveForm: document.getElementById('review-approve-form'),
@@ -480,6 +492,7 @@ function traceSummarySubline(trace) {
 }
 
 function setTab(tab) {
+  closeReviewMergePreview();
   state.tab = tab;
   const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology'];
   const layouts = {
@@ -492,6 +505,9 @@ function setTab(tab) {
     runs: el.runsLayout,
     topology: el.topologyLayout,
   };
+  if (el.reviewDiffLayout) {
+    el.reviewDiffLayout.classList.add('hidden');
+  }
   for (const name of tabs) {
     const active = tab === name;
     const btn = el[`tab${name.charAt(0).toUpperCase()}${name.slice(1)}`];
@@ -523,9 +539,6 @@ function setTab(tab) {
   if (tab !== 'sessions') {
     detachSessionTerminal();
     setTerminalWide(false);
-  }
-  if (tab !== 'reviews') {
-    setReviewDiffWide(false);
   }
   if (tab !== 'topology') {
     destroyTopologyCy();
@@ -1269,40 +1282,285 @@ function setTerminalWide(wide) {
 }
 
 function reviewMergeDiffOutputFormat() {
-  return state.reviewDiffWide ? 'line-by-line' : 'side-by-side';
+  return state.reviewDiffFormat === 'side-by-side' ? 'side-by-side' : 'line-by-line';
 }
 
-function renderReviewMergeDiffBody(diff) {
-  const format = reviewMergeDiffOutputFormat();
-  el.reviewMergeDiffContainer.classList.toggle('merge-diff-line-by-line', format === 'line-by-line');
-  el.reviewMergeDiffContainer.classList.toggle('merge-diff-side-by-side', format === 'side-by-side');
-  el.reviewMergeDiffContainer.innerHTML = Diff2Html.html(diff, {
-    drawFileList: true,
-    matching: 'lines',
-    outputFormat: format,
-    colorScheme: 'dark',
-  });
+function mergeDiffFileSectionId(path) {
+  return 'merge-diff-file-' + encodeURIComponent(path).replace(/%/g, '_');
 }
 
-function setReviewDiffWide(wide) {
-  const changing = !!wide !== !!state.reviewDiffWide;
-  const scrollTop = changing ? (el.reviewMergeDiffContainer?.scrollTop || 0) : 0;
-  state.reviewDiffWide = !!wide;
-  if (el.reviewsLayout) {
-    el.reviewsLayout.classList.toggle('review-diff-wide', state.reviewDiffWide);
-  }
-  if (el.reviewDiffWideBtn) {
-    el.reviewDiffWideBtn.setAttribute('aria-pressed', String(state.reviewDiffWide));
-    el.reviewDiffWideBtn.textContent = state.reviewDiffWide ? 'Restore' : 'Widen';
-    el.reviewDiffWideBtn.title = state.reviewDiffWide
-      ? 'Restore normal review layout'
-      : 'Widen merge diff to full page width (unified view)';
-  }
-  if (changing && state.reviewMergeDiffView?.diff && typeof Diff2Html !== 'undefined') {
-    renderReviewMergeDiffBody(state.reviewMergeDiffView.diff);
-    if (el.reviewMergeDiffContainer) {
-      el.reviewMergeDiffContainer.scrollTop = scrollTop;
+function parseMergeDiffStat(stat) {
+  const map = {};
+  if (!stat) return map;
+  for (const line of stat.split('\n')) {
+    const m = line.match(/^\s*(.+?)\s+\|\s+(\d+)\s*([+-]*)/);
+    if (m) {
+      const bars = m[3] || '';
+      const adds = (bars.match(/\+/g) || []).length;
+      const dels = (bars.match(/-/g) || []).length;
+      map[m[1].trim()] = { changes: m[2], adds, dels };
     }
+  }
+  return map;
+}
+
+function statSummaryLabel(statEntry) {
+  if (!statEntry) return '';
+  if (statEntry.adds || statEntry.dels) {
+    return `+${statEntry.adds} -${statEntry.dels}`;
+  }
+  return statEntry.changes ? `${statEntry.changes} lines` : '';
+}
+
+function splitMergeDiffPatch(diff, truncated) {
+  if (!diff || !diff.trim()) return [];
+  const parts = diff.split(/^diff --git /m);
+  const files = [];
+  for (let i = 0; i < parts.length; i++) {
+    const raw = parts[i];
+    if (!raw.trim()) continue;
+    const patch = raw.startsWith('diff --git ') ? raw : `diff --git ${raw}`;
+    const pathMatch = patch.match(/^diff --git a\/(.+?) b\/(.+?)(?:\n|$)/);
+    const path = pathMatch ? pathMatch[2] : `file-${files.length}`;
+    const binary = /\nBinary files /m.test(patch) || /\nGIT binary patch/m.test(patch);
+    files.push({
+      path,
+      binary,
+      truncated: false,
+      patch,
+    });
+  }
+  if (truncated && files.length) {
+    files[files.length - 1].truncated = true;
+  }
+  return files;
+}
+
+function buildReviewMergeDiffFiles(view) {
+  const statMap = parseMergeDiffStat(view.stat);
+  const files = splitMergeDiffPatch(view.diff, view.truncated);
+  return files.map((file) => ({
+    ...file,
+    statLabel: statSummaryLabel(statMap[file.path]),
+  }));
+}
+
+function reviewMergeDiffFilteredFiles() {
+  const files = state.reviewMergeDiffFiles || [];
+  const filter = (state.reviewMergeDiffFilter || '').trim().toLowerCase();
+  if (!filter) return files;
+  return files.filter((file) => file.path.toLowerCase().includes(filter));
+}
+
+function renderSingleFileDiff(patch, format) {
+  if (typeof Diff2Html === 'undefined' || typeof Diff2Html.html !== 'function') {
+    return null;
+  }
+  try {
+    return Diff2Html.html(patch, {
+      drawFileList: false,
+      matching: 'lines',
+      outputFormat: format,
+      colorScheme: 'dark',
+    });
+  } catch {
+    return null;
+  }
+}
+
+function updateReviewDiffFormatBtn() {
+  if (!el.reviewDiffFormatBtn) return;
+  const unified = reviewMergeDiffOutputFormat() === 'line-by-line';
+  el.reviewDiffFormatBtn.textContent = unified ? 'Side-by-side' : 'Unified';
+  el.reviewDiffFormatBtn.setAttribute('aria-pressed', String(!unified));
+  el.reviewDiffFormatBtn.title = unified
+    ? 'Switch to side-by-side diff layout'
+    : 'Switch to unified diff layout';
+}
+
+function setReviewDiffFormat(format) {
+  const next = format === 'side-by-side' ? 'side-by-side' : 'line-by-line';
+  if (state.reviewDiffFormat === next) return;
+  const scrollTop = el.reviewMergeDiffBody?.scrollTop || 0;
+  const selectedPath = state.reviewMergeDiffSelectedPath;
+  state.reviewDiffFormat = next;
+  updateReviewDiffFormatBtn();
+  renderReviewMergeDiffBodies({ scrollTop, selectedPath });
+}
+
+function renderReviewMergeDiffFileList() {
+  if (!el.reviewMergeDiffFileList) return;
+  const files = reviewMergeDiffFilteredFiles();
+  el.reviewMergeDiffFileList.innerHTML = '';
+  if (!files.length) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = state.reviewMergeDiffFilter ? 'No files match filter.' : 'No files.';
+    el.reviewMergeDiffFileList.appendChild(li);
+    return;
+  }
+  for (const file of files) {
+    const li = document.createElement('li');
+    li.classList.toggle('selected', file.path === state.reviewMergeDiffSelectedPath);
+    li.classList.toggle('truncated-file', file.truncated);
+    li.classList.toggle('binary-file', file.binary);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = `<span class="file-path">${escapeHtml(file.path)}</span>${
+      file.statLabel ? `<span class="file-stat">${escapeHtml(file.statLabel)}</span>` : '<span class="file-stat"></span>'
+    }`;
+    btn.addEventListener('click', () => selectReviewMergeDiffFile(file.path, true));
+    li.appendChild(btn);
+    el.reviewMergeDiffFileList.appendChild(li);
+  }
+}
+
+function selectReviewMergeDiffFile(path, scroll) {
+  state.reviewMergeDiffSelectedPath = path;
+  renderReviewMergeDiffFileList();
+  if (!scroll || !el.reviewMergeDiffBody) return;
+  const section = el.reviewMergeDiffBody.querySelector(`[data-path="${CSS.escape(path)}"]`);
+  if (section) {
+    section.scrollIntoView({ block: 'start' });
+  }
+}
+
+function renderReviewMergeDiffBodies({ scrollTop, selectedPath } = {}) {
+  if (!el.reviewMergeDiffBody) return;
+  const files = state.reviewMergeDiffFiles || [];
+  const format = reviewMergeDiffOutputFormat();
+  el.reviewMergeDiffBody.classList.toggle('merge-diff-line-by-line', format === 'line-by-line');
+  el.reviewMergeDiffBody.classList.toggle('merge-diff-side-by-side', format === 'side-by-side');
+  el.reviewMergeDiffBody.innerHTML = '';
+
+  for (const file of files) {
+    const section = document.createElement('section');
+    section.className = 'merge-diff-file-section';
+    section.dataset.path = file.path;
+    section.id = mergeDiffFileSectionId(file.path);
+
+    const heading = document.createElement('h4');
+    heading.textContent = file.path;
+    section.appendChild(heading);
+
+    if (file.binary) {
+      const note = document.createElement('p');
+      note.className = 'merge-diff-unrenderable';
+      note.textContent = 'Binary file — diff not shown in viewer.';
+      section.appendChild(note);
+    } else {
+      const html = renderSingleFileDiff(file.patch, format);
+      if (html) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = html;
+        section.appendChild(wrap);
+      } else {
+        const note = document.createElement('p');
+        note.className = 'merge-diff-unrenderable';
+        note.textContent = file.truncated
+          ? 'Partial file diff — open worktree locally for the remainder.'
+          : 'Could not render this file diff.';
+        section.appendChild(note);
+      }
+    }
+    el.reviewMergeDiffBody.appendChild(section);
+  }
+
+  if (selectedPath) {
+    state.reviewMergeDiffSelectedPath = selectedPath;
+  } else if (!state.reviewMergeDiffSelectedPath && files.length) {
+    state.reviewMergeDiffSelectedPath = files[0].path;
+  }
+  renderReviewMergeDiffFileList();
+
+  if (typeof scrollTop === 'number') {
+    el.reviewMergeDiffBody.scrollTop = scrollTop;
+  } else if (state.reviewMergeDiffSelectedPath) {
+    selectReviewMergeDiffFile(state.reviewMergeDiffSelectedPath, true);
+  }
+}
+
+function reviewMergeDiffFocusInFormField() {
+  const active = document.activeElement;
+  if (!active) return false;
+  if (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.tagName === 'SELECT') {
+    return true;
+  }
+  return false;
+}
+
+function moveReviewMergeDiffSelection(delta) {
+  const files = reviewMergeDiffFilteredFiles();
+  if (!files.length) return;
+  const currentIdx = files.findIndex((f) => f.path === state.reviewMergeDiffSelectedPath);
+  let nextIdx = currentIdx >= 0 ? currentIdx + delta : (delta > 0 ? 0 : files.length - 1);
+  if (nextIdx < 0) nextIdx = 0;
+  if (nextIdx >= files.length) nextIdx = files.length - 1;
+  selectReviewMergeDiffFile(files[nextIdx].path, true);
+}
+
+function updateReviewMergePreviewChrome() {
+  const view = state.reviewMergeDiffView;
+  if (!view) return;
+  if (el.reviewMergeDiffTruncatedPreview) {
+    el.reviewMergeDiffTruncatedPreview.classList.toggle('hidden', !view.truncated);
+  }
+  if (el.reviewMergeDiffMetaPreview) {
+    const metaRows = [
+      ['Default branch', view.defaultBranch],
+      ['Trace branch', view.branch],
+      ['Base SHA', view.baseSha],
+      ['Head SHA', view.headSha],
+    ];
+    el.reviewMergeDiffMetaPreview.innerHTML = metaRows
+      .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd><code>${escapeHtml(v || '—')}</code></dd>`)
+      .join('');
+    el.reviewMergeDiffMetaPreview.classList.remove('hidden');
+  }
+}
+
+function openReviewMergePreview() {
+  if (!state.reviewMergeDiffView?.diff || !state.reviewMergeDiffFiles?.length) return;
+  state.reviewMergePreviewOpen = true;
+  el.reviewsLayout.classList.add('hidden');
+  el.reviewDiffLayout.classList.remove('hidden');
+  updateReviewMergePreviewChrome();
+  if (el.reviewMergeDiffViewer) {
+    el.reviewMergeDiffViewer.classList.remove('hidden');
+  }
+  if (!el.reviewMergeDiffBody?.innerHTML) {
+    renderReviewMergeDiffBodies();
+  }
+  if (el.reviewDiffFormatBtn) {
+    el.reviewDiffFormatBtn.classList.remove('hidden');
+    updateReviewDiffFormatBtn();
+  }
+  el.subtitle.textContent = 'Reviews — merge preview for final gate worktree diff';
+  requestAnimationFrame(() => el.reviewMergeDiffViewer?.focus());
+}
+
+function closeReviewMergePreview() {
+  if (!state.reviewMergePreviewOpen) return;
+  state.reviewMergePreviewOpen = false;
+  el.reviewDiffLayout?.classList.add('hidden');
+  if (state.tab === 'reviews') {
+    el.reviewsLayout.classList.remove('hidden');
+    el.subtitle.textContent = 'Reviews — approve or reject proposals awaiting human review';
+  }
+}
+
+function prepareReviewMergeDiffFiles(diff) {
+  const view = state.reviewMergeDiffView;
+  if (!view) return;
+  state.reviewMergeDiffFiles = buildReviewMergeDiffFiles({ ...view, diff });
+  if (el.reviewOpenDiffBtn) {
+    el.reviewOpenDiffBtn.classList.remove('hidden');
+  }
+  if (state.reviewMergePreviewOpen) {
+    if (el.reviewMergeDiffViewer) {
+      el.reviewMergeDiffViewer.classList.remove('hidden');
+    }
+    renderReviewMergeDiffBodies();
   }
 }
 
@@ -2051,7 +2309,7 @@ function renderReviewDetail(item) {
     el.reviewDetailEmpty.classList.remove('hidden');
     el.reviewDetailMeta.classList.add('hidden');
     el.reviewSummaryWrap.classList.add('hidden');
-    setReviewDiffWide(false);
+    closeReviewMergePreview();
     clearReviewMergeDiff();
     el.reviewActionsWrap.classList.add('hidden');
     return;
@@ -2112,11 +2370,18 @@ function renderReviewDetail(item) {
 }
 
 function clearReviewMergeDiff() {
+  closeReviewMergePreview();
   state.reviewMergeDiffToken += 1;
   state.reviewMergeDiffLoadedTraceId = null;
   state.reviewMergeDiffView = null;
-  if (el.reviewDiffWideBtn) {
-    el.reviewDiffWideBtn.classList.add('hidden');
+  state.reviewMergeDiffFiles = null;
+  state.reviewMergeDiffSelectedPath = null;
+  state.reviewMergeDiffFilter = '';
+  if (el.reviewOpenDiffBtn) {
+    el.reviewOpenDiffBtn.classList.add('hidden');
+  }
+  if (el.reviewDiffFormatBtn) {
+    el.reviewDiffFormatBtn.classList.add('hidden');
   }
   el.reviewMergeDiffWrap.classList.add('hidden');
   el.reviewMergeDiffLoading.classList.add('hidden');
@@ -2126,9 +2391,27 @@ function clearReviewMergeDiff() {
   el.reviewMergeDiffTruncated.classList.add('hidden');
   el.reviewMergeDiffMeta.classList.add('hidden');
   el.reviewMergeDiffStat.classList.add('hidden');
+  if (el.reviewMergeDiffMetaPreview) {
+    el.reviewMergeDiffMetaPreview.classList.add('hidden');
+    el.reviewMergeDiffMetaPreview.innerHTML = '';
+  }
+  if (el.reviewMergeDiffTruncatedPreview) {
+    el.reviewMergeDiffTruncatedPreview.classList.add('hidden');
+  }
+  if (el.reviewMergeDiffViewer) {
+    el.reviewMergeDiffViewer.classList.add('hidden');
+  }
   el.reviewMergeDiffMeta.innerHTML = '';
   el.reviewMergeDiffStat.textContent = '';
-  el.reviewMergeDiffContainer.innerHTML = '';
+  if (el.reviewMergeDiffFilter) {
+    el.reviewMergeDiffFilter.value = '';
+  }
+  if (el.reviewMergeDiffFileList) {
+    el.reviewMergeDiffFileList.innerHTML = '';
+  }
+  if (el.reviewMergeDiffBody) {
+    el.reviewMergeDiffBody.innerHTML = '';
+  }
 }
 
 function renderReviewMergeDiff(view) {
@@ -2140,7 +2423,9 @@ function renderReviewMergeDiff(view) {
   el.reviewMergeDiffTruncated.classList.toggle('hidden', !view.truncated);
   el.reviewMergeDiffMeta.classList.add('hidden');
   el.reviewMergeDiffStat.classList.add('hidden');
-  el.reviewMergeDiffContainer.innerHTML = '';
+  if (el.reviewOpenDiffBtn) {
+    el.reviewOpenDiffBtn.classList.add('hidden');
+  }
 
   if (view.missingWorktree) {
     el.reviewMergeDiffMissing.classList.remove('hidden');
@@ -2172,14 +2457,10 @@ function renderReviewMergeDiff(view) {
     el.reviewMergeDiffError.textContent = 'Diff viewer failed to load.';
     el.reviewMergeDiffError.classList.remove('hidden');
     el.reviewMergeDiffStat.classList.remove('hidden');
-    el.reviewMergeDiffContainer.textContent = view.diff;
     return;
   }
 
-  renderReviewMergeDiffBody(view.diff);
-  if (el.reviewDiffWideBtn) {
-    el.reviewDiffWideBtn.classList.remove('hidden');
-  }
+  prepareReviewMergeDiffFiles(view.diff);
 }
 
 function reviewMergeDiffStillValid(traceId, token) {
@@ -2193,9 +2474,6 @@ async function loadReviewMergeDiff(traceId) {
   const token = ++state.reviewMergeDiffToken;
   el.reviewMergeDiffWrap.classList.remove('hidden');
   el.reviewMergeDiffLoading.classList.remove('hidden');
-  if (el.reviewDiffWideBtn) {
-    el.reviewDiffWideBtn.classList.remove('hidden');
-  }
   try {
     const view = await api(`/api/traces/${encodeURIComponent(traceId)}/merge-diff`);
     if (!reviewMergeDiffStillValid(traceId, token)) return;
@@ -2903,9 +3181,46 @@ el.reviewsRefreshBtn.addEventListener('click', () => {
   loadReviews().catch(console.error);
 });
 
-if (el.reviewDiffWideBtn) {
-  el.reviewDiffWideBtn.addEventListener('click', () => {
-    setReviewDiffWide(!state.reviewDiffWide);
+if (el.reviewOpenDiffBtn) {
+  el.reviewOpenDiffBtn.addEventListener('click', () => {
+    openReviewMergePreview();
+  });
+}
+
+if (el.reviewDiffBackBtn) {
+  el.reviewDiffBackBtn.addEventListener('click', () => {
+    closeReviewMergePreview();
+  });
+}
+
+if (el.reviewDiffFormatBtn) {
+  el.reviewDiffFormatBtn.addEventListener('click', () => {
+    const next = reviewMergeDiffOutputFormat() === 'line-by-line' ? 'side-by-side' : 'line-by-line';
+    setReviewDiffFormat(next);
+  });
+}
+
+if (el.reviewMergeDiffFilter) {
+  el.reviewMergeDiffFilter.addEventListener('input', () => {
+    state.reviewMergeDiffFilter = el.reviewMergeDiffFilter.value;
+    renderReviewMergeDiffFileList();
+    const files = reviewMergeDiffFilteredFiles();
+    if (files.length && !files.some((f) => f.path === state.reviewMergeDiffSelectedPath)) {
+      selectReviewMergeDiffFile(files[0].path, true);
+    }
+  });
+}
+
+if (el.reviewMergeDiffViewer) {
+  el.reviewMergeDiffViewer.addEventListener('keydown', (event) => {
+    if (reviewMergeDiffFocusInFormField()) return;
+    if (event.key === 'ArrowDown' || event.key === 'j') {
+      event.preventDefault();
+      moveReviewMergeDiffSelection(1);
+    } else if (event.key === 'ArrowUp' || event.key === 'k') {
+      event.preventDefault();
+      moveReviewMergeDiffSelection(-1);
+    }
   });
 }
 

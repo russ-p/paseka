@@ -272,13 +272,23 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 	htmlSrc := string(html)
 	for _, needle := range []string{
 		`id="review-merge-diff-wrap"`,
-		`id="review-merge-diff-container"`,
+		`id="review-diff-layout"`,
+		`id="review-open-diff-btn"`,
+		`id="review-diff-back-btn"`,
+		`id="review-merge-diff-viewer"`,
+		`id="review-merge-diff-file-list"`,
+		`id="review-merge-diff-body"`,
+		`id="review-merge-diff-filter"`,
+		`id="review-diff-format-btn"`,
 		`/vendor/diff2html/diff2html.min.js`,
 		`/vendor/diff2html/diff2html.min.css`,
 	} {
 		if !strings.Contains(htmlSrc, needle) {
 			t.Fatalf("index.html missing %s", needle)
 		}
+	}
+	if strings.Contains(htmlSrc, `id="review-diff-wide-btn"`) {
+		t.Fatal("index.html must not include Widen merge diff button")
 	}
 
 	js, err := staticFiles.ReadFile("static/app.js")
@@ -292,21 +302,41 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 		"function clearReviewMergeDiff()",
 		"state.reviewMergeDiffToken += 1",
 		"function renderReviewMergeDiff(view)",
-		"function renderReviewMergeDiffBody(diff)",
+		"function splitMergeDiffPatch(diff, truncated)",
+		"function renderReviewMergeDiffFileList()",
+		"function renderReviewMergeDiffBodies(",
+		"function setReviewDiffFormat(format)",
+		"function openReviewMergePreview()",
+		"function closeReviewMergePreview()",
+		"state.reviewMergePreviewOpen",
+		"state.reviewDiffFormat",
 		"`/api/traces/${encodeURIComponent(traceId)}/merge-diff`",
-		"Diff2Html.html(diff",
+		"drawFileList: false",
 	} {
 		if !strings.Contains(jsSrc, needle) {
 			t.Fatalf("app.js missing %q", needle)
 		}
+	}
+	if strings.Contains(jsSrc, "setReviewDiffWide") {
+		t.Fatal("app.js must not use Widen merge diff layout toggle")
 	}
 
 	css, err := staticFiles.ReadFile("static/style.css")
 	if err != nil {
 		t.Fatalf("read style.css: %v", err)
 	}
-	if !strings.Contains(string(css), ".merge-diff-container") {
-		t.Fatal("style.css missing .merge-diff-container")
+	cssSrc := string(css)
+	for _, needle := range []string{
+		".merge-diff-viewer",
+		".merge-diff-file-list",
+		".merge-diff-body",
+		"#review-diff-layout",
+		".d2h-file-diff {\n  position: relative;",
+		"left: 0;\n  z-index: 1;",
+	} {
+		if !strings.Contains(cssSrc, needle) {
+			t.Fatalf("style.css missing %s", needle)
+		}
 	}
 
 	for _, path := range []string{
