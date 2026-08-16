@@ -125,7 +125,7 @@ Ship Queen Console Reviews in **three slices**. Each slice is useful alone; late
 - **B** — Comment drafts + Submit. **Requires** trail comb directory, `ArtifactsDir` in prompt context, and `SIGNAL/artifact.written` as specified in 014. Do not ship B by stuffing the packet into `human.feedback.message` alone.
 - **C** — Final-gate request-changes choreography. Requires B’s packet write. Extends review-domain reject/request-changes; does not introduce a central scheduler.
 
-If 014 is still Draft when A ships, A may land first. B/C stay unreleased until comb write from Console is defined and testable.
+Slice A shipped without waiting on 014. [014](014-artifacts-protocol.md) is **Approved** (comb + human/Console producer). B/C stay unreleased until that path is implemented and testable.
 
 ### 2. Viewer (Slice A)
 
@@ -148,7 +148,7 @@ If 014 is still Draft when A ships, A may land first. B/C stay unreleased until 
 
 - Write Markdown to a **stable trail-comb ref** whose basename-stem is `review-comments` (014 kind heuristic). One current file per trail (upsert on each Submit).
 - Runtime must **not** inline that file into `{{.Insights}}`. Prompt context exposes `ArtifactsDir`; templates instruct Bees to read the review-comments file when it exists.
-- Publish `SIGNAL/artifact.written` for that ref with producer `agentId` console. This is a **human Console write**, not a Bee-run flush: 014’s post-adapter flush does not apply. Amend 014 when both are Approved so Console (and optionally CLI) may publish `artifact.written` for comb files they just wrote, with the same path-safety rules.
+- Publish `SIGNAL/artifact.written` for that ref with producer `agentId` console. This is a **human Console write**, not a Bee-run flush: 014’s post-adapter flush does not apply. The human/Console (and optional CLI copy) producer path is specified in [014](014-artifacts-protocol.md) (same path-safety rules).
 - Also publish existing `INSIGHT/human.feedback` with `taskId` and a **short** `message` (summary or a one-line “review comments written to comb”). Optional additive `ref` on the payload is allowed if it stays optional and does not replace `message`.
 - Fail closed if comb write fails: do not publish feedback/routing events that would dispatch a Bee without the file.
 - `paseka proposal reject --feedback` remains the unstructured path. Optional CLI flag to copy a local Markdown file into the same comb ref may ship with B; line-picking stays Console-only.
@@ -220,5 +220,5 @@ Good tests assert operator-visible behavior and bus/ledger outcomes, not CSS cla
 - Slice A is the cheapest relief for the current Widen pain and should not wait on 014.
 - Slice B exists because Beekeeper feedback is currently the wrong width for the job: routing events must stay small; review packets must be files. That is the same split 014 already chose for research notes vs Insights.
 - Slice C is the only slice that changes choreography. Until it ships, final-gate Submit/reject must not be copy that claims a Builder was sent.
-- When this spec is Approved, 014 should gain an explicit human/Console producer exception for `artifact.written` (not only post-run flush).
+- Human/Console `artifact.written` (not only post-run flush) is specified in [014](014-artifacts-protocol.md); Slice B implements that path, it does not invent a third announcement.
 - After A, the same file-oriented viewer is the natural home for per-run proposal preview; keep that as a 002 follow-up rather than blocking 017.

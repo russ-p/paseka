@@ -19,7 +19,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [011-trace-title](../specs/011-trace-title.md) | Implemented | `INSIGHT/trace.title` for Flight Trail display names |
 | [012-trace-summary](../specs/012-trace-summary.md) | Implemented | `INSIGHT/trace.summary` for Console subtitle + merge body |
 | [013-system-kill](../specs/013-system-kill.md) | Implemented | Hard `SIGNAL/system.kill` + `paseka kill` |
-| [014-artifacts-protocol](../specs/014-artifacts-protocol.md) | Draft | Trace comb + `SIGNAL/artifact.written`, per-run hash baseline, flush delta on success |
+| [014-artifacts-protocol](../specs/014-artifacts-protocol.md) | Approved | Trace comb + `SIGNAL/artifact.written`; bee scan-flush (SHA-256 delta) + human/Console producer; 015 complement+skip |
 | [015-deferred-event-emit](../specs/015-deferred-event-emit.md) | Implemented | General deferred `event emit` buffer (`--defer`, flush on success; 014 does not depend on it) |
 | [016-cue-layer](../specs/016-cue-layer.md) | Implemented | Named Forage Cue ingress (`.paseka/cues/`); CLI + Console + Telegram `cue:`; optional per-cue `energy_budget` |
 | [017-console-diff-review](../specs/017-console-diff-review.md) | Draft (Slice A shipped) | Queen Console file-oriented merge-diff viewer (Slice B/C: comments + final rework; depend on 014) |
