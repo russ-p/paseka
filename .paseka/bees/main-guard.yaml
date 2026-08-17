@@ -2,7 +2,7 @@ role: main-guard
 adapter: cursor
 prompt_template: main-guard.md
 params:
-  model: gpt-5.5-medium
+  model: medium-gpt
   output_format: stream-json
   trust: true
   force: true

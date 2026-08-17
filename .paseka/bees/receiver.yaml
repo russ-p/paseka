@@ -2,7 +2,7 @@ role: receiver
 adapter: cursor
 prompt_template: receiver.md
 params:
-  model: composer-2.5
+  model: small
   output_format: stream-json
   trust: true
   force: true

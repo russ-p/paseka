@@ -1,6 +1,12 @@
 slug: paseka
 defaults:
     prompt_template: default.md
+model_aliases:
+    small: composer-2.5
+    low: cursor-grok-4.6-low
+    medium: cursor-grok-4.6-medium
+    high: cursor-grok-4.6-high-fast
+    medium-gpt: gpt-5.5-medium
 auto_invites:
     - when:
         type: SIGNAL

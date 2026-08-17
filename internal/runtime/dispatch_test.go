@@ -264,6 +264,74 @@ func TestDispatchRendersPromptBeforeAdapter(t *testing.T) {
 	}
 }
 
+func TestDispatchResolvesModelAlias(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/colony.yaml"), []byte(`defaults:
+  prompt_template: default.md
+model_aliases:
+  fast: composer-2.5
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(`role: builder
+adapter: cursor
+prompt_template: builder.md
+params:
+  model: fast
+  trust: true
+  force: true
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-alias",
+		Task:       "implement auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.lastReq.Params.Model != "composer-2.5" {
+		t.Fatalf("model = %q, want composer-2.5", rec.lastReq.Params.Model)
+	}
+}
+
+func TestDispatchPassesThroughUnmappedModel(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/colony.yaml"), []byte(`defaults:
+  prompt_template: default.md
+model_aliases:
+  fast: composer-2.5
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-raw",
+		Task:       "implement auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.lastReq.Params.Model != "composer-2.5" {
+		t.Fatalf("model = %q, want composer-2.5 pass-through", rec.lastReq.Params.Model)
+	}
+}
+
 func TestDispatchInlinePromptOverridesTemplate(t *testing.T) {
 	root := t.TempDir()
 	writeColony(t, root)

@@ -101,7 +101,7 @@ Agents build one JSON object per event, pass it on stdin, and receive machine-re
 | `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
 | `Workspace` | `--workspace <path>` (repo root or `.paseka/worktrees/<traceId>/`) |
 | `Prompt` | positional prompt argument (`system_template` + task, newline-separated, when system is set) |
-| `params.model` | `--model <id>` |
+| `params.model` | `--model <id>` (resolved vendor id after `model_aliases` lookup) |
 | `params.trust` (default true) | `--trust` |
 | `params.force` (default true) | `--force` |
 | `params.output_format` (default `stream-json`) | `--output-format stream-json` |

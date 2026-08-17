@@ -206,7 +206,7 @@ Mapped by `RunParamsFromBee` (`internal/colony/params.go`). Defaults: `trust: tr
 
 | Key | Type | Used by |
 | --- | ---- | ------- |
-| `model` | string | cursor, pi, claude |
+| `model` | string | cursor, pi, claude — alias key from `colony.yaml` `model_aliases` or raw vendor id |
 | `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode` |
 | `trust` | bool | cursor |
 | `force` | bool | cursor |
@@ -216,6 +216,8 @@ Mapped by `RunParamsFromBee` (`internal/colony/params.go`). Defaults: `trust: tr
 | `thinking` | string | pi |
 
 When `command` is set, these params are **not** turned into CLI flags; runtime logs a warning if both `command` and `params` are present. `adapter` still selects result parsing, session PTY, and home-config credential injection.
+
+**Model aliases:** bees may set `params.model` to a key from `colony.yaml` `model_aliases` (e.g. `high`) or to a raw vendor id (e.g. `composer-2.5`). Runtime resolves aliases once at dispatch/session start; home `config.yaml` `model_aliases` overlays colony keys on this machine. Unknown names pass through unchanged. Per-bee exceptions stay in that bee's YAML; `*.local.yaml` does not override `params`. See [colony layout](colony-layout.md) and [spec 019](../specs/019-model-aliases.md).
 
 ---
 

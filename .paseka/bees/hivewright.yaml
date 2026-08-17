@@ -3,7 +3,7 @@ adapter: cursor
 system_template: hivewright-system.md
 prompt_template: hivewright-task.md
 params:
-  model: cursor-grok-4.6-medium
+  model: medium
   output_format: stream-json
   trust: true
   force: true

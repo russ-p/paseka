@@ -2,7 +2,7 @@ role: guard
 adapter: cursor
 prompt_template: guard.md
 params:
-  model: composer-2.5
+  model: small
   output_format: stream-json
   trust: true
   force: true

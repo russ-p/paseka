@@ -148,15 +148,7 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 
 ### Colony configuration
 
-Shareable colony defaults vs machine-local overlays. Bee roles stay in `.paseka/bees/`; home config stays for secrets and this-machine overrides ([colony layout](../guide/colony-layout.md)).
-
-#### Model aliases (`small` / `medium` / `high`)
-
-- **Kind:** idea
-- **Source:** planning (bee `params.model` after Cursor grok 4.6 slug churn)
-- **Summary:** Colony-owned aliases (committed, e.g. in `colony.yaml`) map stable names like `small`, `medium`, `high` to the real adapter model id. Home config should override that map when possible so one machine can remap without editing the repo. Bees keep using `params.model` (alias or raw vendor id); this must not replace per-bee YAML or `.paseka/bees/<role>.local.yaml`. Goal: change the id passed to the adapter in one place, with a light local remap.
-- **Why deferred:** Orthogonal to bumping current bee model slugs; needs a short precedence design (colony map vs home map vs bee/`*.local.yaml` params) before it is a spec.
-- **Revisit when:** Vendor model ids churn again, or operators keep editing every `bees/*.yaml` for the same rename.
+Shareable colony defaults vs machine-local overlays. Bee roles stay in `.paseka/bees/`; home config stays for secrets and this-machine overrides ([colony layout](../guide/colony-layout.md)). Model aliases: [spec 019](../specs/019-model-aliases.md).
 
 ### Deferred emit and artifacts
 

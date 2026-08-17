@@ -89,6 +89,10 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, err
 	}
 	adapterExtra := colony.AdapterExtra(ctxColony, adapterName)
+	aliases := ctxColony.ModelAliases
+	if len(aliases) == 0 {
+		aliases = manifest.ModelAliases
+	}
 
 	isLastWorkTask := false
 	if mode == DispatchModeTask {
@@ -109,6 +113,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		InlinePrompt:   req.InlinePrompt,
 		Workspace:      workspace,
 		AdapterExtra:   adapterExtra,
+		ModelAliases:   aliases,
 		IsLastWorkTask: isLastWorkTask,
 	})
 	if err != nil {

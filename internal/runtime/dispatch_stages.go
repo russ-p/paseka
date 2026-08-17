@@ -167,6 +167,11 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	}
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
+	aliases := req.ModelAliases
+	if len(aliases) == 0 {
+		aliases = manifest.ModelAliases
+	}
+	colony.ApplyModelAliases(&params, aliases)
 
 	runDirPath := runDir.Root()
 	commandPrompt := rendered

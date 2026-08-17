@@ -14,10 +14,11 @@ const envNATSURL = "PASEKA_NATS_URL"
 
 // HomeConfig is machine-local colony state under ~/.config/paseka/<slug>/.
 type HomeConfig struct {
-	ColonyRoot string         `yaml:"colony_root"`
-	Slug       string         `yaml:"slug"`
-	NATS       NATSConfig     `yaml:"nats"`
-	Adapters   map[string]any `yaml:"adapters"`
+	ColonyRoot   string            `yaml:"colony_root"`
+	Slug         string            `yaml:"slug"`
+	ModelAliases map[string]string `yaml:"model_aliases,omitempty"`
+	NATS         NATSConfig        `yaml:"nats"`
+	Adapters     map[string]any    `yaml:"adapters"`
 }
 
 // NATSConfig holds NATS connection settings.
@@ -53,12 +54,13 @@ type ClaudeAdapterConfig struct {
 
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
-	ColonyRoot string
-	Slug       string
-	Home       HomeConfig
-	Cursor     CursorAdapterConfig
-	Pi         PiAdapterConfig
-	Claude     ClaudeAdapterConfig
+	ColonyRoot   string
+	Slug         string
+	Home         HomeConfig
+	ModelAliases map[string]string
+	Cursor       CursorAdapterConfig
+	Pi           PiAdapterConfig
+	Claude       ClaudeAdapterConfig
 }
 
 // ResolveContext finds the git repo, loads colony + home config.
@@ -119,13 +121,19 @@ func ResolveContext(startDir string) (Context, error) {
 		return Context{}, err
 	}
 
+	merged := MergedModelAliases(manifest.ModelAliases, home.ModelAliases)
+	if err := ValidateModelAliases(merged); err != nil {
+		return Context{}, err
+	}
+
 	return Context{
-		ColonyRoot: colonyRoot,
-		Slug:       slug,
-		Home:       home,
-		Cursor:     cursor,
-		Pi:         pi,
-		Claude:     claude,
+		ColonyRoot:   colonyRoot,
+		Slug:         slug,
+		Home:         home,
+		ModelAliases: merged,
+		Cursor:       cursor,
+		Pi:           pi,
+		Claude:       claude,
 	}, nil
 }
 
@@ -149,6 +157,10 @@ func LoadHomeConfig(slug string) (HomeConfig, error) {
 	}
 	if cfg.Slug == "" {
 		cfg.Slug = slug
+	}
+	cfg.ModelAliases = NormalizeModelAliases(cfg.ModelAliases)
+	if err := ValidateModelAliases(cfg.ModelAliases); err != nil {
+		return HomeConfig{}, err
 	}
 	return cfg, nil
 }

@@ -54,7 +54,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
     └── <traceId>/
 ```
 
-**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)).
+**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)).
 
 ```yaml
 defaults:
@@ -62,6 +62,10 @@ defaults:
   system_template: default-system.md   # optional colony-wide role context
   energy_budget: 12
   default_bee: builder                 # task role when task.bee is omitted
+model_aliases:
+  small: composer-2.5
+  medium: cursor-grok-4.6-medium
+  high: cursor-grok-4.6-high-fast
 ```
 
 Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`. Per-cue **initial** reserve overrides on fresh trails: [Forage Cues](cues.md) § Honey.
@@ -117,6 +121,7 @@ Per-colony state on this machine. Not committed.
 ```
 ~/.config/paseka/<project-slug>/
 ├── config.yaml                 # secrets refs, NATS URL, adapter env (overridable via PASEKA_NATS_URL)
+│                               # optional model_aliases — overlays colony.yaml keys on this machine
 ├── state.json                  # runtime: active worktrees, last traceId, hive status
 ├── telegram.yaml               # optional: Telegram Human Gateway (not created by init)
 ├── telegram-notify-state.json  # optional: gate notify dedup (runtime)
@@ -132,6 +137,7 @@ Telegram bot tokens and allowlists stay machine-local — see [Telegram gateway]
 | Kind | Project `.paseka/` | Home `~/.config/paseka/<slug>/` |
 | ---- | ------------------ | ------------------------------- |
 | Bee roles & adapter choice | yes | — |
+| Model alias map (`model_aliases`) | yes (base) | yes (overlay same keys) |
 | Prompt templates (shareable) | yes | — |
 | API keys, tokens | — | yes (or env var refs) |
 | NATS connection override | — | yes |

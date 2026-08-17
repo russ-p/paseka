@@ -271,6 +271,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	}
 
 	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), colony.AdapterExtra(ctxColony, adapterName))
+	colony.ApplyModelAliases(&params, ctxColony.ModelAliases)
 
 	commandPrompt := rendered
 	if adapterName == "cursor" {

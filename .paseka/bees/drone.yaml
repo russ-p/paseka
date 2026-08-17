@@ -3,6 +3,6 @@ adapter: cursor
 system_template: drone-system.md
 prompt_template: drone-task.md
 params:
-  model: cursor-grok-4.6-high-fast
+  model: high
   yolo: true
 worktree: false
