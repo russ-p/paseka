@@ -113,7 +113,7 @@ func (r *Reactor) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	<-ctx.Done()
 	return ctx.Err()

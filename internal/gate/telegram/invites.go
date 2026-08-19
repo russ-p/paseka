@@ -248,10 +248,6 @@ func (a *InviteActions) executeReject(ctx context.Context, chatID int64, message
 	a.sendText(chatID, messageID, fmt.Sprintf("Invite %s rejected (%s).", invite.InviteID, invite.Status))
 }
 
-func (a *InviteActions) addEnergy(ctx context.Context, chatID int64, messageID int, traceID string, amount int) {
-	(&EnergyActions{Colony: a.Colony, Bot: a.Bot}).Add(ctx, chatID, messageID, traceID, amount)
-}
-
 func formatAcceptSuccess(cfg Config, res *invites.AcceptResult, hostname string) string {
 	lines := []string{
 		"Session started",

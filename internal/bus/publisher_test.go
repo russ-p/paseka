@@ -10,8 +10,8 @@ func TestPublisherAvailable(t *testing.T) {
 	if bus.PublisherAvailable(nil) {
 		t.Fatal("nil publisher should be unavailable")
 	}
-	if bus.PublisherAvailable(bus.NopPublisher{}) {
-		// value type — always available
+	if !bus.PublisherAvailable(bus.NopPublisher{}) {
+		t.Fatal("NopPublisher value should be available")
 	}
 	var nilClient *bus.Client
 	var pub bus.Publisher = nilClient

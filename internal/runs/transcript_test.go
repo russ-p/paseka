@@ -1,8 +1,6 @@
 package runs_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -89,8 +87,5 @@ func TestScanRecentSessionsEmpty(t *testing.T) {
 	}
 	if len(list) != 0 {
 		t.Fatalf("expected empty, got %+v", list)
-	}
-	if _, err := os.Stat(filepath.Join(root, ".paseka")); os.IsNotExist(err) {
-		// fine
 	}
 }

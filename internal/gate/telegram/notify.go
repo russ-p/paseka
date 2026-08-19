@@ -81,7 +81,7 @@ func (n *Notifier) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	log.Info("bus subscription active", logging.F("durable", durable))
 	<-ctx.Done()

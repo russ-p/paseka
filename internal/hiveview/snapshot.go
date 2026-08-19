@@ -321,11 +321,7 @@ func buildSnapshotAttention(
 			if len(att.LowEnergyTraces) >= snapshotAttentionLimit {
 				break
 			}
-			att.LowEnergyTraces = append(att.LowEnergyTraces, SnapshotLowEnergy{
-				TraceID:   tr.TraceID,
-				Remaining: tr.Remaining,
-				Budget:    tr.Budget,
-			})
+			att.LowEnergyTraces = append(att.LowEnergyTraces, SnapshotLowEnergy(tr))
 		}
 	}
 

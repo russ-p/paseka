@@ -146,7 +146,7 @@ func (c *Client) ReplayTrace(traceID string) ([]protocol.Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bus: replay subscribe: %w", err)
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	var events []protocol.Event
 	for {

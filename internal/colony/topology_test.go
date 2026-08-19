@@ -166,19 +166,6 @@ func assertScoutIntakeSubscribe(t *testing.T, topo colony.Topology) {
 	t.Fatal("missing subscribe edge SIGNAL/feature.requested -> scout (direct)")
 }
 
-func assertImplicitSubscribe(t *testing.T, topo colony.Topology, role string) {
-	t.Helper()
-	for _, edge := range topo.Edges {
-		if edge.Kind == "subscribe" && edge.To == role && edge.Implicit {
-			if edge.From != "SIGNAL/task.ready" || edge.Dispatch != colony.DispatchTask {
-				t.Fatalf("implicit subscribe = %+v, want SIGNAL/task.ready task", edge)
-			}
-			return
-		}
-	}
-	t.Fatalf("missing implicit subscribe edge for %q", role)
-}
-
 func assertInviteEdges(t *testing.T, topo colony.Topology) {
 	t.Helper()
 	var grill, session, wildcard bool

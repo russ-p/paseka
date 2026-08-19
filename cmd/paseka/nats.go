@@ -322,28 +322,3 @@ func newProposalRejectCmd() *cobra.Command {
 	cmd.Flags().StringVar(&commentsFile, "comments-file", "", "path to a Markdown file to copy into the trail comb as review-comments.md before publishing feedback")
 	return cmd
 }
-
-func runSignal(cmd *cobra.Command, startDir, traceID, typ, payload string) error {
-	ctxColony, err := colony.ResolveContext(startDir)
-	if err != nil {
-		return err
-	}
-	client, err := bus.ConnectColony(ctxColony, false)
-	if err != nil {
-		return err
-	}
-	if client == nil {
-		return fmt.Errorf("nats url not configured")
-	}
-	defer client.Close()
-
-	ev, err := bus.NewEventFromCLI(traceID, "human", typ, payload)
-	if err != nil {
-		return err
-	}
-	if err := client.PublishEvent(cmd.Context(), ev); err != nil {
-		return err
-	}
-	fmt.Printf("Published %s on trace %s\n", ev.Type, traceID)
-	return nil
-}

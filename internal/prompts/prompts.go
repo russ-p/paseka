@@ -256,7 +256,7 @@ func validateTemplateRef(ref string) error {
 		return fmt.Errorf("prompts: absolute template path not allowed")
 	}
 	if strings.Contains(ref, "..") {
-		return fmt.Errorf("prompts: template path must not contain ..")
+		return fmt.Errorf("prompts: template path must not contain %q", "..")
 	}
 	return nil
 }

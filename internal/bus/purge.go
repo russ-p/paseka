@@ -125,7 +125,7 @@ func (c *Client) purgeTraceEvents(traceID string, res *PurgeTraceResult) error {
 	if err != nil {
 		return fmt.Errorf("bus: purge events subscribe: %w", err)
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	stream := streamName(c.cfg.Slug)
 	var seqs []uint64

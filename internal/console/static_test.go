@@ -165,7 +165,7 @@ func TestAgentsPanelStaticContract(t *testing.T) {
 	if afkIdx < 0 || runsIdx < 0 || sessIdx < 0 || sessTabIdx < 0 {
 		t.Fatal("navigateAgentsPanel must check afk then sessions")
 	}
-	if !(afkIdx < runsIdx && runsIdx < sessIdx && sessIdx < sessTabIdx) {
+	if afkIdx >= runsIdx || runsIdx >= sessIdx || sessIdx >= sessTabIdx {
 		t.Fatal("smart-nav order must be: afk→runs, sessions→sessions, else runs")
 	}
 }

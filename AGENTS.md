@@ -41,11 +41,12 @@ Read these before making architectural or naming decisions:
 
 ## After Go changes
 
-After editing Go code, run formatting and a full build before finishing:
+After editing Go code, run formatting, lint, and a full build before finishing:
 
 ```bash
 gofmt -w .
+golangci-lint run
 go build -o paseka ./cmd/paseka
 ```
 
-Fix any compilation errors reported by `go build`.
+Config: [`.golangci.yml`](.golangci.yml) (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`). Fix compilation errors from `go build` and issues reported by `golangci-lint`.

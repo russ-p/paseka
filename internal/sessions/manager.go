@@ -505,9 +505,10 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	}
 
 	protoState := protocol.StatusCompleted
-	if state == adapters.SessionFailed {
+	switch state {
+	case adapters.SessionFailed:
 		protoState = protocol.StatusFailed
-	} else if state == adapters.SessionCancelled {
+	case adapters.SessionCancelled:
 		protoState = protocol.StatusCancelled
 	}
 
