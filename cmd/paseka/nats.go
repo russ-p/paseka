@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/review"
@@ -251,10 +253,11 @@ func newProposalApproveCmd() *cobra.Command {
 
 func newProposalRejectCmd() *cobra.Command {
 	var (
-		startDir string
-		traceID  string
-		taskID   string
-		feedback string
+		startDir     string
+		traceID      string
+		taskID       string
+		feedback     string
+		commentsFile string
 	)
 	cmd := &cobra.Command{
 		Use:   "reject",
@@ -271,6 +274,36 @@ func newProposalRejectCmd() *cobra.Command {
 			if session.Publisher == nil || session.Ledger == nil {
 				return fmt.Errorf("nats url not configured")
 			}
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(commentsFile) != "" {
+				if err := review.EnsureRejectable(session.Ledger, traceID, taskID); err != nil {
+					return err
+				}
+				content, err := os.ReadFile(commentsFile)
+				if err != nil {
+					return fmt.Errorf("read comments file: %w", err)
+				}
+				if err := artifacts.WriteAndAnnounce(cmd.Context(), session.Publisher, ctxColony.ColonyRoot, "", traceID, review.ReviewCommentsCombRel, "human", content); err != nil {
+					return err
+				}
+				item, err := artifacts.ItemFromFile(ctxColony.ColonyRoot, traceID, review.ReviewCommentsCombRel)
+				if err != nil {
+					return err
+				}
+				if err := review.Reject(cmd.Context(), session.Publisher, session.Ledger, review.RejectInput{
+					TraceID:  traceID,
+					TaskID:   taskID,
+					Feedback: review.ShortFeedbackMessage(feedback),
+					Ref:      item.Ref,
+				}); err != nil {
+					return err
+				}
+				fmt.Printf("Rejected task %s on trace %s (review comments written to comb)\n", taskID, traceID)
+				return nil
+			}
 			if err := review.Reject(cmd.Context(), session.Publisher, session.Ledger, review.RejectInput{
 				TraceID:  traceID,
 				TaskID:   taskID,
@@ -285,7 +318,8 @@ func newProposalRejectCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&taskID, "task", "", "task id")
-	cmd.Flags().StringVar(&feedback, "feedback", "", "human feedback for the bee")
+	cmd.Flags().StringVar(&feedback, "feedback", "", "human feedback for the bee (short summary when using --comments-file)")
+	cmd.Flags().StringVar(&commentsFile, "comments-file", "", "path to a Markdown file to copy into the trail comb as review-comments.md before publishing feedback")
 	return cmd
 }
 

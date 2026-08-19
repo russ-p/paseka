@@ -386,6 +386,33 @@
         </div>
         <div id="review-merge-diff-body" class="merge-diff-body merge-diff-container"></div>
       </div>
+      <aside id="review-comments-panel" class="review-comments-panel hidden">
+        <div class="panel-header">
+          <h3>Review comments</h3>
+          <span id="review-comments-count" class="hint">0 drafts</span>
+        </div>
+        <p class="muted review-comments-hint">Click an added or context line to comment. Shift-click a second line for a range. Drafts stay local until Submit.</p>
+        <div id="review-comment-editor" class="review-comment-editor hidden">
+          <label>
+            Comment
+            <textarea id="review-comment-body" rows="3" placeholder="Describe the change you want…"></textarea>
+          </label>
+          <div class="review-comment-editor-actions">
+            <button type="button" id="review-comment-save-btn" class="secondary">Add draft</button>
+            <button type="button" id="review-comment-cancel-btn" class="secondary">Cancel</button>
+          </div>
+        </div>
+        <ul id="review-comment-drafts" class="review-comment-drafts"></ul>
+        <form id="review-comments-submit-form" class="review-comments-submit-form">
+          <label>
+            Overall summary <span class="hint">(optional)</span>
+            <textarea id="review-comments-summary" rows="2" placeholder="Theme of this review packet…"></textarea>
+          </label>
+          <button type="submit" id="review-comments-submit-btn" disabled>Submit comments</button>
+        </form>
+        <p id="review-comments-action-error" class="error hidden"></p>
+        <p id="review-comments-action-success" class="success hidden"></p>
+      </aside>
     </section>
   </main>
 

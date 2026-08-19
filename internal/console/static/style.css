@@ -549,6 +549,117 @@ header h1 {
   font-size: 0.85rem;
 }
 
+#review-diff-layout .review-diff-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+#review-diff-layout .review-diff-page-header,
+#review-diff-layout .review-merge-diff-truncated,
+#review-diff-layout .review-merge-diff-meta-preview {
+  grid-column: 1 / -1;
+}
+
+#review-diff-layout .merge-diff-viewer {
+  grid-column: 1;
+}
+
+.review-comments-panel {
+  grid-column: 2;
+  grid-row: 2 / span 2;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  max-height: calc(100vh - 14rem);
+  overflow: auto;
+  background: var(--panel-bg, rgba(0, 0, 0, 0.2));
+}
+
+.review-comments-panel .panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.review-comments-panel h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.review-comments-hint {
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+}
+
+.review-comment-editor {
+  margin-bottom: 0.75rem;
+}
+
+.review-comment-editor textarea,
+.review-comments-submit-form textarea {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.review-comment-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.review-comment-drafts {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.review-comment-drafts li {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.review-comment-draft-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.review-comment-draft-body {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.review-comment-draft-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.review-comments-submit-form button[type="submit"] {
+  margin-top: 0.5rem;
+}
+
+.review-commentable-row {
+  cursor: pointer;
+}
+
+.review-commentable-row:hover td,
+td.review-commentable-row:hover {
+  outline: 1px dashed rgba(120, 170, 255, 0.45);
+}
+
+.review-comment-drafted td,
+td.review-comment-drafted {
+  box-shadow: inset 3px 0 0 rgba(255, 196, 86, 0.85);
+}
+
 #review-diff-layout .merge-diff-viewer {
   max-height: none;
   min-height: 360px;

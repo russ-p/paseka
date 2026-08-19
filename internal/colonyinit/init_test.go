@@ -37,6 +37,7 @@ func TestInitScaffold(t *testing.T) {
 		".paseka/prompts/_partials/scout-intent-intake.md",
 		".paseka/prompts/_partials/scout-emit-intake.md",
 		".paseka/prompts/_partials/emit-howto.md",
+		".paseka/prompts/_partials/artifacts-review-comments.md",
 		".paseka/prompts/_partials/emit-insight.md",
 		".paseka/prompts/_partials/emit-signal.md",
 		".paseka/prompts/_partials/emit-verification.md",

@@ -749,7 +749,7 @@ paseka console --addr 127.0.0.1:8787
 
 Open the printed URL in a browser. Queen Console does not enforce authentication yet.
 
-Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) the detail panel shows merge-diff summary and **Open merge preview** (dedicated full-page file list + per-file diff bodies, unified or side-by-side). Approve from Reviews after previewing. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
+Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) the detail panel shows merge-diff summary and **Open merge preview** (dedicated full-page file list + per-file diff bodies, unified or side-by-side). On the preview page, click diff lines to draft comments and **Submit comments** to write `review-comments.md` to the trail comb plus short `human.feedback`. Plain reject on the detail panel still publishes unstructured feedback only. Approve from Reviews after previewing. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ---
 
@@ -785,7 +785,8 @@ Reject a review-gated task — publishes human `INSIGHT` / `human.feedback`. Tas
 | ---- | ----- | -------- | ------- | ----------- |
 | `--trace` | | yes | | Flight trail id |
 | `--task` | | yes | | Task id |
-| `--feedback` | | | `Please revise the proposal.` | Message for the bee |
+| `--feedback` | | | `Please revise the proposal.` | Short summary for the bee (also used as overall summary with `--comments-file`) |
+| `--comments-file` | | | | Path to a Markdown file copied into `.paseka/runs/<traceId>/artifacts/review-comments.md` before publishing feedback and `artifact.written` (producer `human`) |
 | `--path` | `-C` | | | Colony resolution start directory |
 
 ```bash
@@ -794,6 +795,8 @@ paseka proposal approve --trace trace-1 --task _review --summary "LGTM, merged"
 # Root soft ack — no merge commit line
 paseka proposal approve --trace trace-1 --task task-cfg-1 --summary "Config changes acknowledged"
 paseka proposal reject --trace trace-1 --task task-1 --feedback "Use the existing auth middleware"
+# Attach a pre-written review packet (line comments authored offline or exported elsewhere)
+paseka proposal reject --trace trace-1 --task task-1 --comments-file ./my-review.md --feedback "See line notes in comb"
 ```
 
 ---

@@ -40,7 +40,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | `run.summary` | `summary` | `taskId` | builder, scout; runtime may auto-synthesize after AFK runs |
 | `review.note` | `summary` | `taskId`, `severity` | guard |
 | `context.note` | `summary` | `taskId` | any bee |
-| `human.feedback` | `taskId`, `message` | — | beekeeper via CLI |
+| `human.feedback` | `taskId`, `message` | `ref` (comb path when annotated review was written) | beekeeper via CLI or Queen Console |
 
 ### Example payloads
 

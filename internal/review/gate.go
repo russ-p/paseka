@@ -121,30 +121,38 @@ type RejectInput struct {
 	TaskID   string
 	Feedback string
 	AgentID  string
+	Ref      string
 }
 
-// Reject publishes human feedback for a review-gated task.
-func Reject(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, in RejectInput) error {
-	if in.TraceID == "" || in.TaskID == "" {
+// EnsureRejectable reports whether the task can receive human.feedback (waiting review gate).
+func EnsureRejectable(ledger taskledger.Ledger, traceID, taskID string) error {
+	if traceID == "" || taskID == "" {
 		return fmt.Errorf("trace and task id are required")
 	}
 	if ledger == nil {
 		return fmt.Errorf("task ledger is required")
 	}
-
-	snap, err := ledger.Snapshot(in.TraceID)
+	snap, err := ledger.Snapshot(traceID)
 	if err != nil {
 		return err
 	}
-	task, ok := snap.Tasks[in.TaskID]
+	task, ok := snap.Tasks[taskID]
 	if !ok {
-		return fmt.Errorf("task %q not found in trace %s", in.TaskID, in.TraceID)
+		return fmt.Errorf("task %q not found in trace %s", taskID, traceID)
 	}
 	if task.Status != protocol.TaskStatusWaitingReview {
-		return fmt.Errorf("task %q is %q, expected waiting_review", in.TaskID, task.Status)
+		return fmt.Errorf("task %q is %q, expected waiting_review", taskID, task.Status)
 	}
 	if !taskledger.IsReviewGate(task) {
-		return fmt.Errorf("task %q is not a review gate task", in.TaskID)
+		return fmt.Errorf("task %q is not a review gate task", taskID)
+	}
+	return nil
+}
+
+// Reject publishes human feedback for a review-gated task.
+func Reject(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, in RejectInput) error {
+	if err := EnsureRejectable(ledger, in.TraceID, in.TaskID); err != nil {
+		return err
 	}
 	if !publisherAvailable(pub) {
 		return fmt.Errorf("nats client is required")
@@ -157,11 +165,15 @@ func Reject(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, in
 	if agentID == "" {
 		agentID = "human"
 	}
-	ev, err := protocol.NewEvent(in.TraceID, agentID, 0, protocol.EventInsight, protocol.HumanFeedbackPayload{
+	payload := protocol.HumanFeedbackPayload{
 		Kind:    protocol.InsightHumanFeedback,
 		TaskID:  in.TaskID,
 		Message: feedback,
-	})
+	}
+	if ref := strings.TrimSpace(in.Ref); ref != "" {
+		payload.Ref = ref
+	}
+	ev, err := protocol.NewEvent(in.TraceID, agentID, 0, protocol.EventInsight, payload)
 	if err != nil {
 		return err
 	}

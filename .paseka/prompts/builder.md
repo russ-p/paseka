@@ -13,6 +13,8 @@ Requested intent: {{.IntentRaw}}{{end}}
 {{range .Insights}}- {{.}}
 {{end}}
 
+{{template "artifacts-review-comments" .}}
+
 ## Mission guidance
 {{if eq .Intent "feature"}}
 {{template "builder-intent-feature" .}}

@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Slice A (file-oriented merge-diff viewer) shipped. Slice B (annotated comments via trail comb) and Slice C (final-gate request-changes rework) remain blocked on [014-artifacts-protocol](014-artifacts-protocol.md). Complements the Reviews baseline in [002-queen-console-mvp](002-queen-console-mvp.md).
+Slice A (file-oriented merge-diff viewer) and Slice B (annotated comments via trail comb) shipped. Slice C (final-gate request-changes rework) remains. Complements the Reviews baseline in [002-queen-console-mvp](002-queen-console-mvp.md).
 
 ## Problem Statement
 

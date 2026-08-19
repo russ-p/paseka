@@ -118,6 +118,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest colony.Colony, adapte
 		colony.PasekaPath(root, "prompts", "hivewright-system.md"):                       hivewrightSystemPrompt,
 		colony.PasekaPath(root, "prompts", "hivewright-task.md"):                         hivewrightTaskPrompt,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-howto.md"):                 emitHowtoPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "artifacts-review-comments.md"):  artifactsReviewCommentsPartial,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-insight.md"):               emitInsightPartial,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-signal.md"):                emitSignalPartial,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-verification.md"):          emitVerificationPartial,
@@ -374,6 +375,8 @@ Requested intent: {{.IntentRaw}}{{end}}
 {{range .Insights}}- {{.}}
 {{end}}
 
+{{template "artifacts-review-comments" .}}
+
 ## Mission guidance
 {{if eq .Intent "feature"}}
 {{template "builder-intent-feature" .}}
@@ -591,6 +594,10 @@ Emit one INSIGHT/trace.title with a short human name (from feature.requested tit
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"trace.title","title":"Live bees in Queen Console header"}}
 EOF
+`
+	artifactsReviewCommentsPartial = `## Beekeeper review comments
+
+When human review requested changes on this flight trail, the annotated packet may be at {{.ArtifactsDir}}/review-comments.md. Open that file for path, line, and body details — do not wait for the full review to appear in {{.Insights}}.
 `
 	emitHowtoPartial = `When you need to publish a bus event during a run:
 

@@ -5,6 +5,8 @@ Workspace: {{.Workspace}}
 ## Task
 {{.Task}}
 
+{{template "artifacts-review-comments" .}}
+
 Steps to follow:
 1. Read the task and analyze the requirements and acceptance criteria of the Task.
 2. Run `git diff` (and `git diff --stat` if helpful) to view workspace changes on disk — review truth is the working tree, not staged-only diffs.

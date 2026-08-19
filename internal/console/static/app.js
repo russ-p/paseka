@@ -23,6 +23,11 @@ const state = {
   reviewMergeDiffFilter: '',
   reviewDiffFormat: 'line-by-line',
   reviewMergePreviewOpen: false,
+  reviewCommentDrafts: [],
+  reviewCommentRangeAnchor: null,
+  reviewCommentDraftHeadSha: null,
+  reviewCommentPendingAnchor: null,
+  reviewCommentEditingId: null,
   selectedTaskKey: null,
   selectedTaskDetail: null,
   dashboard: null,
@@ -184,6 +189,18 @@ const el = {
   reviewOpenRunsBtn: document.getElementById('review-open-runs-btn'),
   reviewActionError: document.getElementById('review-action-error'),
   reviewActionSuccess: document.getElementById('review-action-success'),
+  reviewCommentsPanel: document.getElementById('review-comments-panel'),
+  reviewCommentsCount: document.getElementById('review-comments-count'),
+  reviewCommentEditor: document.getElementById('review-comment-editor'),
+  reviewCommentBody: document.getElementById('review-comment-body'),
+  reviewCommentSaveBtn: document.getElementById('review-comment-save-btn'),
+  reviewCommentCancelBtn: document.getElementById('review-comment-cancel-btn'),
+  reviewCommentDrafts: document.getElementById('review-comment-drafts'),
+  reviewCommentsSubmitForm: document.getElementById('review-comments-submit-form'),
+  reviewCommentsSummary: document.getElementById('review-comments-summary'),
+  reviewCommentsSubmitBtn: document.getElementById('review-comments-submit-btn'),
+  reviewCommentsActionError: document.getElementById('review-comments-action-error'),
+  reviewCommentsActionSuccess: document.getElementById('review-comments-action-success'),
   sessionsLayout: document.getElementById('sessions-layout'),
   runsLayout: document.getElementById('runs-layout'),
   topologyLayout: document.getElementById('topology-layout'),
@@ -1482,6 +1499,243 @@ function renderReviewMergeDiffBodies({ scrollTop, selectedPath } = {}) {
   } else if (state.reviewMergeDiffSelectedPath) {
     selectReviewMergeDiffFile(state.reviewMergeDiffSelectedPath, true);
   }
+  decorateReviewCommentableRows();
+  renderReviewCommentDraftMarkers();
+}
+
+function reviewCommentDraftId(draft) {
+  return `${draft.path}:${draft.side}:${draft.startLine}:${draft.endLine || draft.startLine}`;
+}
+
+function clearReviewCommentDrafts() {
+  state.reviewCommentDrafts = [];
+  state.reviewCommentRangeAnchor = null;
+  state.reviewCommentPendingAnchor = null;
+  state.reviewCommentEditingId = null;
+  if (el.reviewCommentEditor) el.reviewCommentEditor.classList.add('hidden');
+  if (el.reviewCommentBody) el.reviewCommentBody.value = '';
+  renderReviewCommentDrafts();
+}
+
+function syncReviewCommentHeadSha() {
+  const headSha = state.reviewMergeDiffView?.headSha || '';
+  if (state.reviewCommentDraftHeadSha && state.reviewCommentDraftHeadSha !== headSha) {
+    clearReviewCommentDrafts();
+    if (el.reviewCommentsSummary) el.reviewCommentsSummary.value = '';
+  }
+  state.reviewCommentDraftHeadSha = headSha || null;
+}
+
+function reviewCommentsCanSubmit() {
+  const summary = el.reviewCommentsSummary?.value.trim() || '';
+  return state.reviewCommentDrafts.length > 0 || summary.length > 0;
+}
+
+function updateReviewCommentsSubmitState() {
+  if (!el.reviewCommentsSubmitBtn) return;
+  el.reviewCommentsSubmitBtn.disabled = !reviewCommentsCanSubmit();
+  if (el.reviewCommentsCount) {
+    const n = state.reviewCommentDrafts.length;
+    el.reviewCommentsCount.textContent = `${n} draft${n === 1 ? '' : 's'}`;
+  }
+}
+
+function renderReviewCommentDrafts() {
+  if (!el.reviewCommentDrafts) return;
+  el.reviewCommentDrafts.innerHTML = '';
+  for (const draft of state.reviewCommentDrafts) {
+    const li = document.createElement('li');
+    const end = draft.endLine && draft.endLine !== draft.startLine ? `–${draft.endLine}` : '';
+    li.innerHTML = `
+      <div class="review-comment-draft-head">
+        <code>${escapeHtml(draft.path)}</code>
+        <span class="hint">${escapeHtml(draft.side)} L${draft.startLine}${end}</span>
+      </div>
+      <p class="review-comment-draft-body">${escapeHtml(draft.body)}</p>
+      <div class="review-comment-draft-actions">
+        <button type="button" class="secondary review-comment-edit-btn">Edit</button>
+        <button type="button" class="danger review-comment-delete-btn">Delete</button>
+      </div>`;
+    li.querySelector('.review-comment-edit-btn').addEventListener('click', () => {
+      state.reviewCommentEditingId = reviewCommentDraftId(draft);
+      state.reviewCommentPendingAnchor = { ...draft };
+      if (el.reviewCommentBody) el.reviewCommentBody.value = draft.body;
+      if (el.reviewCommentEditor) el.reviewCommentEditor.classList.remove('hidden');
+    });
+    li.querySelector('.review-comment-delete-btn').addEventListener('click', () => {
+      const id = reviewCommentDraftId(draft);
+      state.reviewCommentDrafts = state.reviewCommentDrafts.filter((d) => reviewCommentDraftId(d) !== id);
+      renderReviewCommentDraftMarkers();
+      renderReviewCommentDrafts();
+      updateReviewCommentsSubmitState();
+    });
+    el.reviewCommentDrafts.appendChild(li);
+  }
+  updateReviewCommentsSubmitState();
+}
+
+function decorateReviewCommentableRows() {
+  if (!el.reviewMergeDiffBody) return;
+  const format = reviewMergeDiffOutputFormat();
+  if (format === 'line-by-line') {
+    for (const row of el.reviewMergeDiffBody.querySelectorAll('tr')) {
+      const cell = row.querySelector('td.d2h-ins, td.d2h-cntx, td.d2h-del');
+      if (!cell) continue;
+      const anchor = parseUnifiedDiffRowAnchor(row);
+      if (!anchor) continue;
+      markReviewCommentable(row, anchor);
+    }
+    return;
+  }
+  for (const section of el.reviewMergeDiffBody.querySelectorAll('.merge-diff-file-section')) {
+    const path = section.dataset.path;
+    if (!path) continue;
+    for (const sideEl of section.querySelectorAll('.d2h-code-side-linenumber')) {
+      const sideCell = sideEl.closest('td');
+      if (!sideCell) continue;
+      const lineText = sideEl.textContent?.trim();
+      if (!lineText) continue;
+      const line = Number.parseInt(lineText, 10);
+      if (!Number.isFinite(line) || line < 1) continue;
+      const isDel = sideCell.classList.contains('d2h-del');
+      const isIns = sideCell.classList.contains('d2h-ins');
+      const isCtx = sideCell.classList.contains('d2h-cntx');
+      let side = null;
+      if (isDel) side = 'old';
+      else if (isIns || isCtx) side = 'new';
+      if (!side) continue;
+      const snippet = sideCell.querySelector('.d2h-code-line-ctn, .d2h-code-side-line')?.textContent?.trim() || '';
+      markReviewCommentable(sideCell, { path, side, line, snippet });
+    }
+  }
+}
+
+function markReviewCommentable(target, anchor) {
+  target.classList.add('review-commentable-row');
+  target.dataset.commentPath = anchor.path;
+  target.dataset.commentSide = anchor.side;
+  target.dataset.commentLine = String(anchor.line);
+  if (anchor.snippet) target.dataset.commentSnippet = anchor.snippet;
+}
+
+function parseUnifiedDiffRowAnchor(row) {
+  const section = row.closest('.merge-diff-file-section');
+  const path = section?.dataset.path;
+  if (!path) return null;
+  const ins = row.querySelector('td.d2h-ins');
+  const ctx = row.querySelector('td.d2h-cntx');
+  const del = row.querySelector('td.d2h-del');
+  let side = null;
+  let lineCell = null;
+  if (ins) {
+    side = 'new';
+    lineCell = ins.querySelector('.line-num2');
+  } else if (ctx) {
+    side = 'new';
+    lineCell = ctx.querySelector('.line-num2');
+  } else if (del) {
+    side = 'old';
+    lineCell = del.querySelector('.line-num1');
+  }
+  if (!side || !lineCell) return null;
+  const lineText = lineCell.textContent?.trim();
+  if (!lineText) return null;
+  const line = Number.parseInt(lineText, 10);
+  if (!Number.isFinite(line) || line < 1) return null;
+  const snippet = row.querySelector('.d2h-code-line-ctn')?.textContent?.trim() || '';
+  return { path, side, line, snippet };
+}
+
+function renderReviewCommentDraftMarkers() {
+  if (!el.reviewMergeDiffBody) return;
+  for (const row of el.reviewMergeDiffBody.querySelectorAll('.review-commentable-row')) {
+    row.classList.remove('review-comment-drafted');
+  }
+  for (const draft of state.reviewCommentDrafts) {
+    const end = draft.endLine || draft.startLine;
+    for (const row of el.reviewMergeDiffBody.querySelectorAll('.review-commentable-row')) {
+      if (row.dataset.commentPath !== draft.path || row.dataset.commentSide !== draft.side) continue;
+      const line = Number.parseInt(row.dataset.commentLine || '0', 10);
+      if (line >= draft.startLine && line <= end) {
+        row.classList.add('review-comment-drafted');
+      }
+    }
+  }
+}
+
+function openReviewCommentEditor(anchor, extendRange) {
+  if (!anchor) return;
+  if (extendRange && state.reviewCommentRangeAnchor
+    && state.reviewCommentRangeAnchor.path === anchor.path
+    && state.reviewCommentRangeAnchor.side === anchor.side) {
+    const start = Math.min(state.reviewCommentRangeAnchor.line, anchor.line);
+    const end = Math.max(state.reviewCommentRangeAnchor.line, anchor.line);
+    state.reviewCommentPendingAnchor = {
+      path: anchor.path,
+      side: anchor.side,
+      startLine: start,
+      endLine: end === start ? start : end,
+      snippet: anchor.snippet || state.reviewCommentRangeAnchor.snippet || '',
+    };
+  } else {
+    state.reviewCommentRangeAnchor = { ...anchor };
+    state.reviewCommentPendingAnchor = {
+      path: anchor.path,
+      side: anchor.side,
+      startLine: anchor.line,
+      endLine: anchor.line,
+      snippet: anchor.snippet || '',
+    };
+  }
+  state.reviewCommentEditingId = null;
+  if (el.reviewCommentBody) el.reviewCommentBody.value = '';
+  if (el.reviewCommentEditor) el.reviewCommentEditor.classList.remove('hidden');
+  el.reviewCommentBody?.focus();
+}
+
+function saveReviewCommentDraft() {
+  const pending = state.reviewCommentPendingAnchor;
+  const body = el.reviewCommentBody?.value.trim() || '';
+  if (!pending || !body) return;
+  const draft = {
+    path: pending.path,
+    side: pending.side,
+    startLine: pending.startLine,
+    endLine: pending.endLine || pending.startLine,
+    snippet: pending.snippet || '',
+    body,
+  };
+  const id = reviewCommentDraftId(draft);
+  const existingIdx = state.reviewCommentDrafts.findIndex((d) => reviewCommentDraftId(d) === id);
+  if (existingIdx >= 0) {
+    state.reviewCommentDrafts[existingIdx] = draft;
+  } else if (state.reviewCommentEditingId) {
+    state.reviewCommentDrafts = state.reviewCommentDrafts.map((d) => (
+      reviewCommentDraftId(d) === state.reviewCommentEditingId ? draft : d
+    ));
+  } else {
+    state.reviewCommentDrafts.push(draft);
+  }
+  state.reviewCommentPendingAnchor = null;
+  state.reviewCommentEditingId = null;
+  state.reviewCommentRangeAnchor = null;
+  if (el.reviewCommentEditor) el.reviewCommentEditor.classList.add('hidden');
+  if (el.reviewCommentBody) el.reviewCommentBody.value = '';
+  renderReviewCommentDraftMarkers();
+  renderReviewCommentDrafts();
+}
+
+function handleReviewMergeDiffBodyClick(event) {
+  const row = event.target.closest('.review-commentable-row');
+  if (!row) return;
+  const anchor = {
+    path: row.dataset.commentPath,
+    side: row.dataset.commentSide,
+    line: Number.parseInt(row.dataset.commentLine || '0', 10),
+    snippet: row.dataset.commentSnippet || '',
+  };
+  if (!anchor.path || !anchor.side || anchor.line < 1) return;
+  openReviewCommentEditor(anchor, event.shiftKey);
 }
 
 function reviewMergeDiffFocusInFormField() {
@@ -1528,6 +1782,12 @@ function openReviewMergePreview() {
   state.reviewMergePreviewOpen = true;
   el.reviewsLayout.classList.add('hidden');
   el.reviewDiffLayout.classList.remove('hidden');
+  syncReviewCommentHeadSha();
+  if (el.reviewCommentsPanel) {
+    el.reviewCommentsPanel.classList.remove('hidden');
+  }
+  updateReviewCommentsSubmitState();
+  renderReviewCommentDrafts();
   updateReviewMergePreviewChrome();
   if (el.reviewMergeDiffViewer) {
     el.reviewMergeDiffViewer.classList.remove('hidden');
@@ -1547,6 +1807,8 @@ function closeReviewMergePreview() {
   if (!state.reviewMergePreviewOpen) return;
   state.reviewMergePreviewOpen = false;
   el.reviewDiffLayout?.classList.add('hidden');
+  if (el.reviewCommentsPanel) el.reviewCommentsPanel.classList.add('hidden');
+  if (el.reviewCommentEditor) el.reviewCommentEditor.classList.add('hidden');
   if (state.tab === 'reviews') {
     el.reviewsLayout.classList.remove('hidden');
     el.subtitle.textContent = 'Reviews — approve or reject proposals awaiting human review';
@@ -2492,10 +2754,16 @@ function clearReviewMergeDiff() {
   if (el.reviewMergeDiffBody) {
     el.reviewMergeDiffBody.innerHTML = '';
   }
+  clearReviewCommentDrafts();
+  state.reviewCommentDraftHeadSha = null;
+  if (el.reviewCommentsSummary) el.reviewCommentsSummary.value = '';
+  if (el.reviewCommentsActionError) el.reviewCommentsActionError.classList.add('hidden');
+  if (el.reviewCommentsActionSuccess) el.reviewCommentsActionSuccess.classList.add('hidden');
 }
 
 function renderReviewMergeDiff(view) {
   state.reviewMergeDiffView = view;
+  syncReviewCommentHeadSha();
   el.reviewMergeDiffWrap.classList.remove('hidden');
   el.reviewMergeDiffError.classList.add('hidden');
   el.reviewMergeDiffMissing.classList.add('hidden');
@@ -2724,9 +2992,11 @@ async function approveReview(traceId, taskId, { summary, mergeMessage }) {
   });
 }
 
-async function rejectReview(traceId, taskId, feedback) {
+async function rejectReview(traceId, taskId, { feedback, headSha, comments } = {}) {
   const body = {};
   if (feedback) body.feedback = feedback;
+  if (headSha) body.headSha = headSha;
+  if (comments !== undefined) body.comments = comments;
   return api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/reject`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -3245,7 +3515,7 @@ el.taskRejectForm.addEventListener('submit', async (ev) => {
   const { traceId, taskId } = state.selectedTaskDetail;
   el.taskReviewError.classList.add('hidden');
   try {
-    const res = await rejectReview(traceId, taskId, el.taskRejectFeedback.value.trim());
+    const res = await rejectReview(traceId, taskId, { feedback: el.taskRejectFeedback.value.trim() });
     await loadTasks();
     await loadReviews();
     alert(res.message || 'Feedback published.');
@@ -3304,6 +3574,68 @@ if (el.reviewMergeDiffViewer) {
   });
 }
 
+if (el.reviewMergeDiffBody) {
+  el.reviewMergeDiffBody.addEventListener('click', handleReviewMergeDiffBodyClick);
+}
+
+if (el.reviewCommentSaveBtn) {
+  el.reviewCommentSaveBtn.addEventListener('click', () => {
+    saveReviewCommentDraft();
+  });
+}
+
+if (el.reviewCommentCancelBtn) {
+  el.reviewCommentCancelBtn.addEventListener('click', () => {
+    state.reviewCommentPendingAnchor = null;
+    state.reviewCommentEditingId = null;
+    state.reviewCommentRangeAnchor = null;
+    if (el.reviewCommentEditor) el.reviewCommentEditor.classList.add('hidden');
+    if (el.reviewCommentBody) el.reviewCommentBody.value = '';
+  });
+}
+
+if (el.reviewCommentsSummary) {
+  el.reviewCommentsSummary.addEventListener('input', updateReviewCommentsSubmitState);
+}
+
+if (el.reviewCommentsSubmitForm) {
+  el.reviewCommentsSubmitForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (!state.selectedReviewDetail || !reviewCommentsCanSubmit()) return;
+    const { traceId, taskId } = state.selectedReviewDetail;
+    if (el.reviewCommentsActionError) el.reviewCommentsActionError.classList.add('hidden');
+    if (el.reviewCommentsActionSuccess) el.reviewCommentsActionSuccess.classList.add('hidden');
+    try {
+      const comments = state.reviewCommentDrafts.map((draft) => ({
+        path: draft.path,
+        side: draft.side,
+        startLine: draft.startLine,
+        endLine: draft.endLine !== draft.startLine ? draft.endLine : undefined,
+        snippet: draft.snippet || undefined,
+        body: draft.body,
+      }));
+      const res = await rejectReview(traceId, taskId, {
+        feedback: el.reviewCommentsSummary?.value.trim() || '',
+        headSha: state.reviewMergeDiffView?.headSha || '',
+        comments,
+      });
+      clearReviewCommentDrafts();
+      if (el.reviewCommentsSummary) el.reviewCommentsSummary.value = '';
+      if (el.reviewCommentsActionSuccess) {
+        el.reviewCommentsActionSuccess.textContent = res.message || 'Review comments submitted.';
+        el.reviewCommentsActionSuccess.classList.remove('hidden');
+      }
+      await loadReviews();
+      await loadTasks();
+    } catch (err) {
+      if (el.reviewCommentsActionError) {
+        el.reviewCommentsActionError.textContent = err.message;
+        el.reviewCommentsActionError.classList.remove('hidden');
+      }
+    }
+  });
+}
+
 function showReviewActionSuccess(message) {
   el.reviewActionError.classList.add('hidden');
   el.reviewActionSuccess.textContent = message;
@@ -3343,7 +3675,7 @@ el.reviewRejectForm.addEventListener('submit', async (ev) => {
   el.reviewActionError.classList.add('hidden');
   el.reviewActionSuccess.classList.add('hidden');
   try {
-    const res = await rejectReview(traceId, taskId, el.reviewRejectFeedback.value.trim());
+    const res = await rejectReview(traceId, taskId, { feedback: el.reviewRejectFeedback.value.trim() });
     state.selectedReviewKey = null;
     state.selectedReviewDetail = null;
     renderReviewDetail(null);

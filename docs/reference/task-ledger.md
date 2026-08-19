@@ -96,10 +96,10 @@ When no `review: final` task is planned, the runtime synthesizes task `_review` 
 Human actions (CLI and Queen Console Reviews use the same domain flows):
 
 - `paseka proposal approve --trace <id> --task <id>` — **isolated final gate:** merge trace worktree when present and emit `task.completed`; **root / required soft gate:** ack only (no merge, no commit) and emit `task.completed`
-- `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework
+- `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework. Optional `--comments-file` writes `review-comments.md` to the trail comb and announces `artifact.written` before feedback.
 - `paseka task retry --trace <id> --task <id>` — re-publish `task.ready` for a `failed` or stuck `running` task (same bee, intent, body)
 
-For `review: final` / `_review`, Queen Console Reviews shows an accumulated worktree merge preview (`GET /api/traces/:traceId/merge-diff`) before approve. See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
+For `review: final` / `_review`, Queen Console Reviews shows an accumulated worktree merge preview (`GET /api/traces/:traceId/merge-diff`) before approve; the preview page supports annotated comments submitted via `POST .../reject` with a `comments` array (see [spec 017](../specs/017-console-diff-review.md) Slice B). See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ### Adapter failure
 

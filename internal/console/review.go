@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
@@ -55,7 +56,19 @@ type ApproveTaskResponse struct {
 
 // RejectTaskRequest is the JSON body for POST .../reject.
 type RejectTaskRequest struct {
-	Feedback string `json:"feedback"`
+	Feedback string                `json:"feedback"`
+	HeadSHA  string                `json:"headSha,omitempty"`
+	Comments *[]ReviewCommentInput `json:"comments,omitempty"`
+}
+
+// ReviewCommentInput is one line-anchored comment from Queen Console.
+type ReviewCommentInput struct {
+	Path      string `json:"path"`
+	Side      string `json:"side"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine,omitempty"`
+	Snippet   string `json:"snippet,omitempty"`
+	Body      string `json:"body"`
 }
 
 // RejectTaskResponse is returned after rejecting a review-gated task.
@@ -152,11 +165,36 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 	}
 	defer session.Close()
 
-	if err := validateReviewTaskTarget(colonyCtx, session, traceID, taskID); err != nil {
+	snap, err := validateReviewTaskTarget(colonyCtx, session, traceID, taskID)
+	if err != nil {
 		return RejectTaskResponse{}, err
 	}
+	task := snap.Tasks[taskID]
 	if session.Publisher == nil || session.Ledger == nil {
 		return RejectTaskResponse{}, fmt.Errorf("nats url not configured")
+	}
+
+	isFinal := taskledger.IsFinalReviewTask(task)
+	if req.Comments != nil {
+		packet := review.CommentsPacket{
+			HeadSHA:  req.HeadSHA,
+			Summary:  req.Feedback,
+			Comments: reviewCommentsFromInput(*req.Comments),
+		}
+		if _, err := review.SubmitAnnotatedReview(ctx, session.Publisher, colonyCtx.ColonyRoot, session.Ledger, review.AnnotatedReviewInput{
+			TraceID:  traceID,
+			TaskID:   taskID,
+			AgentID:  "console",
+			Producer: artifacts.ProducerConsole,
+			Packet:   packet,
+		}); err != nil {
+			return RejectTaskResponse{}, err
+		}
+		return RejectTaskResponse{
+			TraceID: traceID,
+			TaskID:  taskID,
+			Message: review.RejectResponseMessage(isFinal, true),
+		}, nil
 	}
 
 	if err := review.Reject(ctx, session.Publisher, session.Ledger, review.RejectInput{
@@ -168,12 +206,26 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 		return RejectTaskResponse{}, err
 	}
 
-	msg := "Feedback published. For review: required tasks the runtime will return the task to ready."
 	return RejectTaskResponse{
 		TraceID: traceID,
 		TaskID:  taskID,
-		Message: msg,
+		Message: review.RejectResponseMessage(isFinal, false),
 	}, nil
+}
+
+func reviewCommentsFromInput(in []ReviewCommentInput) []review.ReviewComment {
+	out := make([]review.ReviewComment, 0, len(in))
+	for _, c := range in {
+		out = append(out, review.ReviewComment{
+			Path:      c.Path,
+			Side:      c.Side,
+			StartLine: c.StartLine,
+			EndLine:   c.EndLine,
+			Snippet:   c.Snippet,
+			Body:      c.Body,
+		})
+	}
+	return out
 }
 
 func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
@@ -193,9 +245,9 @@ func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
 	}
 }
 
-func validateReviewTaskTarget(colonyCtx colony.Context, session *tasks.LedgerSession, traceID, taskID string) error {
+func validateReviewTaskTarget(colonyCtx colony.Context, session *tasks.LedgerSession, traceID, taskID string) (taskledger.TraceSnapshot, error) {
 	if traceID == "" || taskID == "" {
-		return fmt.Errorf("trace and task id are required")
+		return taskledger.TraceSnapshot{}, fmt.Errorf("trace and task id are required")
 	}
 	var ledger taskledger.Ledger
 	if session != nil {
@@ -203,19 +255,19 @@ func validateReviewTaskTarget(colonyCtx colony.Context, session *tasks.LedgerSes
 	}
 	snap, _, err := tasks.LoadTrace(colonyCtx, ledger, traceID)
 	if err != nil {
-		return err
+		return taskledger.TraceSnapshot{}, err
 	}
 	task, ok := snap.Tasks[taskID]
 	if !ok {
-		return fmt.Errorf("task %q not found in trace %s", taskID, traceID)
+		return taskledger.TraceSnapshot{}, fmt.Errorf("task %q not found in trace %s", taskID, traceID)
 	}
 	if task.Status != protocol.TaskStatusWaitingReview {
-		return fmt.Errorf("task %q is %q, expected waiting_review", taskID, task.Status)
+		return taskledger.TraceSnapshot{}, fmt.Errorf("task %q is %q, expected waiting_review", taskID, task.Status)
 	}
 	if !taskledger.IsReviewGate(task) {
-		return fmt.Errorf("task %q is not a review gate task", taskID)
+		return taskledger.TraceSnapshot{}, fmt.Errorf("task %q is not a review gate task", taskID)
 	}
-	return nil
+	return snap, nil
 }
 
 func sortReviewQueue(items []ReviewQueueItem) {

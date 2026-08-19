@@ -37,6 +37,7 @@ type HumanFeedbackPayload struct {
 	Kind    InsightKind `json:"kind"`
 	TaskID  string      `json:"taskId"`
 	Message string      `json:"message"`
+	Ref     string      `json:"ref,omitempty"`
 }
 
 // TraceTitlePayload is emitted as INSIGHT with payload.kind=trace.title.

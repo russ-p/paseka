@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Queen Console annotated review comments (Slice B)
+
+Queen Console merge preview supports line-anchored comment drafts (click added/context lines; Shift-click for a range). Submit writes `review-comments.md` to the trail comb, publishes `SIGNAL/artifact.written` (producer `console`), then a short `INSIGHT/human.feedback` with optional `ref`. Fail closed if the comb write fails. `review: required` still returns the task to `ready`; `review: final` stores notes without merge or rework dispatch (Slice C). CLI: `paseka proposal reject --comments-file` copies an existing Markdown packet into the same comb ref.
+
+- Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice B; Slice C outstanding)
+- Canonical: [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews), [CLI](guide/cli.md) (`paseka proposal reject`), [Insight kinds](reference/insight-kinds.md), [Prompt templates](guide/prompt-templates.md)
+
 ## 2026-08 — Model aliases (`params.model`)
 
 Colony-owned `model_aliases` in `.paseka/colony.yaml` map stable names to vendor model ids; home `config.yaml` overlays the same keys per machine. Bees keep `params.model` as alias or raw id; runtime resolves once before `--model` is passed to the adapter.
@@ -20,7 +27,7 @@ Trace-scoped comb under `.paseka/runs/<traceId>/artifacts/` with `{{.ArtifactsDi
 
 Queen Console Reviews final merge gates show merge-diff summary on the detail panel; **Open merge preview** opens a dedicated full-page viewer (sticky file list, path filter, jump-to-file, per-file hunks via vendored Diff2Html, unified or side-by-side format). Line-number gutters stay clipped to each file pane instead of overlaying scrolled hunks. Approve/reject stay on Reviews. Queue polling still skips re-fetch when the same gate stays selected.
 
-- Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice A only; B/C blocked on 014)
+- Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice A only; B/C follow)
 - Canonical: [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews tab), [CLI](guide/cli.md) (`paseka console`)
 
 ## 2026-08 — Queen Shell colony status
