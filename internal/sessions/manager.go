@@ -516,7 +516,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	_ = entry.RunDir.WriteResultText(resultText)
 
 	if state == adapters.SessionCompleted {
-		ctxColony := colony.Context{ColonyRoot: entry.Handle.ColonyRoot, Slug: entry.Slug}
+		ctxColony := colony.EnrichFromHome(colony.Context{ColonyRoot: entry.Handle.ColonyRoot, Slug: entry.Slug})
 		if err := bus.FlushPendingForRun(context.Background(), ctxColony, entry.Handle.TraceID, entry.Handle.AgentID); err != nil {
 			msg := "runtime: flush deferred events: " + err.Error()
 			logging.Component("sessions").Warn("flush deferred events failed",

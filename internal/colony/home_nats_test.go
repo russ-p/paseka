@@ -2,6 +2,7 @@ package colony_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -58,6 +59,55 @@ func TestLoadHomeConfigNATSURLFallsBackToConfig(t *testing.T) {
 	busCfg := bus.ConfigFromContext(colony.Context{Slug: slug, Home: home}, colony.Colony{})
 	if got := busCfg.URL; got != "nats://config:4222" {
 		t.Fatalf("bus URL = %q, want config URL", got)
+	}
+}
+
+func TestEnrichFromHomeLoadsNATSURLWhenContextOmitsHome(t *testing.T) {
+	repo := t.TempDir()
+	runGitHome(t, repo, "init")
+	runGitHome(t, repo, "config", "user.email", "test@test.com")
+	runGitHome(t, repo, "config", "user.name", "test")
+	runGitHome(t, repo, "commit", "--allow-empty", "-m", "init")
+
+	paseka := filepath.Join(repo, ".paseka")
+	if err := os.MkdirAll(paseka, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slug := "nats-enrich-test"
+	if err := os.WriteFile(filepath.Join(paseka, "colony.yaml"), []byte("slug: "+slug+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("PASEKA_NATS_URL", "")
+	homeDir := filepath.Join(xdg, "paseka", slug)
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "colony_root: " + repo + "\nslug: " + slug + "\nnats:\n  url: nats://from-home:4222\n"
+	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	partial := colony.Context{ColonyRoot: repo, Slug: slug}
+	if got := bus.ConfigFromContext(partial, colony.Colony{}).URL; got != "" {
+		t.Fatalf("partial context URL = %q, want empty before enrich", got)
+	}
+	enriched := colony.EnrichFromHome(partial)
+	busCfg := bus.ConfigFromContext(enriched, colony.Colony{})
+	if busCfg.URL != "nats://from-home:4222" {
+		t.Fatalf("enriched URL = %q, want nats://from-home:4222", busCfg.URL)
+	}
+}
+
+func runGitHome(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
 

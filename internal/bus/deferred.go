@@ -276,6 +276,7 @@ func PendingWarning(colonyRoot, traceID, agentID string) (string, bool) {
 
 // FlushPendingForRun connects to NATS when configured and flushes the pending queue.
 func FlushPendingForRun(ctx context.Context, ctxColony colony.Context, traceID, agentID string) error {
+	ctxColony = colony.EnrichFromHome(ctxColony)
 	client, err := ConnectColony(ctxColony, false)
 	if err != nil {
 		return err

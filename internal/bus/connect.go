@@ -9,6 +9,7 @@ import (
 // ConnectColony connects to NATS using resolved colony context.
 // Returns nil client when NATS URL is not configured.
 func ConnectColony(ctx colony.Context, full bool) (*Client, error) {
+	ctx = colony.EnrichFromHome(ctx)
 	manifest, err := colony.LoadColony(ctx.ColonyRoot)
 	if err != nil {
 		return nil, err
@@ -39,6 +40,7 @@ type DoctorReport struct {
 
 // Diagnose checks NATS connectivity and JetStream resources.
 func Diagnose(ctx colony.Context) (DoctorReport, error) {
+	ctx = colony.EnrichFromHome(ctx)
 	manifest, err := colony.LoadColony(ctx.ColonyRoot)
 	if err != nil {
 		return DoctorReport{}, err

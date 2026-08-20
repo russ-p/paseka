@@ -486,7 +486,7 @@ Event contracts: [task ledger](../reference/task-ledger.md), `.paseka/prompts/_p
 
 Validate and publish bus events with machine-readable feedback. This is the intended agent publish path.
 
-By default, `emit` publishes to JetStream immediately. With **`--defer`**, the event is validated and appended to a per-run pending queue (`.paseka/runs/<traceId>/<agentId>/pending.ndjson`); runtime flushes FIFO on **successful** AFK or interactive session completion. Failed or cancelled runs leave pending on disk for inspect / manual flush. **`--defer` requires an existing run directory** for the event's `traceId` and `agentId` — missing run dir fails closed.
+By default, `emit` publishes to JetStream immediately. With **`--defer`**, the event is validated and appended to a per-run pending queue (`.paseka/runs/<traceId>/<agentId>/pending.ndjson`); runtime flushes FIFO on **successful** AFK or interactive session completion. Failed or cancelled runs leave pending on disk for inspect / manual flush. **`--defer` requires an existing run directory** for the event's `traceId` and `agentId` — missing run dir fails closed. End-of-session flush resolves home NATS settings from disk even when the session handle only stored the colony root (so a configured bus is not silently skipped).
 
 Trail comb artifacts ([014](../specs/014-artifacts-protocol.md)) use runtime scan flush on success and do **not** depend on this buffer. See [015](../specs/015-deferred-event-emit.md) for the general deferred-emit contract.
 

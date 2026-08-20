@@ -2,6 +2,12 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Session deferred flush uses home NATS config
+
+Interactive session (and other ColonyRoot-only) deferred flush loads `~/.config/paseka/<slug>/config.yaml` before connecting. Previously a partial in-memory context treated NATS as unset, flushed pending events to the run audit log with a no-op publisher, and never reached JetStream or the task ledger.
+
+- Canonical: [Interactive sessions](guide/interactive-sessions.md), [CLI](guide/cli.md) (`paseka event emit --defer`)
+
 ## 2026-08 — Queen Console annotated review comments (Slice B)
 
 Queen Console merge preview supports line-anchored comment drafts (click added/context lines; Shift-click for a range). Submit writes `review-comments.md` to the trail comb, publishes `SIGNAL/artifact.written` (producer `console`), then a short `INSIGHT/human.feedback` with optional `ref`. Fail closed if the comb write fails. `review: required` still returns the task to `ready`; `review: final` stores notes without merge or rework dispatch (Slice C). CLI: `paseka proposal reject --comments-file` copies an existing Markdown packet into the same comb ref.

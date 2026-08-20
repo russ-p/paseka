@@ -137,6 +137,19 @@ func ResolveContext(startDir string) (Context, error) {
 	}, nil
 }
 
+// EnrichFromHome fills machine-local Home (including NATS URL) when callers
+// passed only ColonyRoot/Slug. If home config cannot be loaded, ctx is returned unchanged.
+func EnrichFromHome(ctx Context) Context {
+	if ctx.ColonyRoot == "" || ctx.Home.NATS.EffectiveURL() != "" {
+		return ctx
+	}
+	resolved, err := ResolveContext(ctx.ColonyRoot)
+	if err != nil {
+		return ctx
+	}
+	return resolved
+}
+
 // LoadHomeConfig reads ~/.config/paseka/<slug>/config.yaml.
 func LoadHomeConfig(slug string) (HomeConfig, error) {
 	homeDir, err := HomeDir(slug)

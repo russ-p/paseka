@@ -252,7 +252,7 @@ pi --session-dir "$RUN_DIR/pi-sessions" \
 
 Pi session artifacts stay under `.paseka/runs/<traceId>/<agentId>/pi-sessions/`, tied to the current `agentId`.
 
-**Event publishing boundary:** interactive Pi output is not parsed into domain bus events. Use `paseka event emit --stdin` during the session when the bee prompt requires bus events. Prefer `--defer` for end-of-run handoffs; runtime flushes the pending queue on successful session end (same policy as AFK).
+**Event publishing boundary:** interactive Pi output is not parsed into domain bus events. Use `paseka event emit --stdin` during the session when the bee prompt requires bus events. Prefer `--defer` for end-of-run handoffs; runtime flushes the pending queue on successful session end (same policy as AFK). Flush loads machine-local home config (`~/.config/paseka/<slug>/config.yaml`) for the NATS URL — a session must not treat the bus as unset when only `ColonyRoot` is in memory.
 
 ---
 

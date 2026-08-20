@@ -33,7 +33,7 @@ func (d *Dispatcher) flushPublisher(colonyRoot string) (bus.Publisher, func(), e
 	if d.publisher != nil {
 		return d.publisher, nil, nil
 	}
-	client, err := bus.ConnectColony(colony.Context{ColonyRoot: colonyRoot}, false)
+	client, err := bus.ConnectColony(colony.EnrichFromHome(colony.Context{ColonyRoot: colonyRoot}), false)
 	if err != nil {
 		return nil, nil, err
 	}
