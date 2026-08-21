@@ -150,6 +150,18 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 
 Shareable colony defaults vs machine-local overlays. Bee roles stay in `.paseka/bees/`; home config stays for secrets and this-machine overrides ([colony layout](../guide/colony-layout.md)). Model aliases: [spec 019](../specs/019-model-aliases.md).
 
+### NATS / hive substrate
+
+Laptop onboarding still requires an external JetStream (`nats.url` in home config, or `PASEKA_NATS_URL`). Homelab already assumes a shared server ([homelab deployment](../guide/homelab-deployment.md)).
+
+#### Optional embedded NATS
+
+- **Kind:** idea
+- **Source:** planning (laptop `paseka init` / `paseka run` DX)
+- **Summary:** Opt-in in-process NATS+JetStream for a single-machine hive so first `paseka run` does not need Docker or a separately installed broker. Keep `PASEKA_NATS_URL` / home `nats.url` as the override for shared LAN/homelab JetStream. Store embedded server files under machine-local state (not `.paseka/` in the repo). Choreography contracts stay unchanged.
+- **Why deferred:** Orthogonal to bee contracts; needs a written split (embedded vs external, bind address, data dir, one-consumer-per-prefix, shutdown) before changing `paseka init` defaults.
+- **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
+
 ### Deferred emit and artifacts
 
 General deferred `event emit` buffer ([015](../specs/015-deferred-event-emit.md)) and trail comb protocol ([014](../specs/014-artifacts-protocol.md)) — **implemented**; scan ↔ deferred coexistence ships with 014.
