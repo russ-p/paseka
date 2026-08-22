@@ -32,6 +32,9 @@ type ReviewQueueItem struct {
 	ProposalWorkspace string    `json:"proposalWorkspace,omitempty"`
 	CanApprove        bool      `json:"canApprove"`
 	CanReject         bool      `json:"canReject"`
+	CanRequestChanges bool      `json:"canRequestChanges,omitempty"`
+	ReworkTaskID      string    `json:"reworkTaskId,omitempty"`
+	ReworkStatus      string    `json:"reworkStatus,omitempty"`
 }
 
 // ReviewQueueView is the colony-wide review queue projection.
@@ -73,9 +76,10 @@ type ReviewCommentInput struct {
 
 // RejectTaskResponse is returned after rejecting a review-gated task.
 type RejectTaskResponse struct {
-	TraceID string `json:"traceId"`
-	TaskID  string `json:"taskId"`
-	Message string `json:"message,omitempty"`
+	TraceID      string `json:"traceId"`
+	TaskID       string `json:"taskId"`
+	ReworkTaskID string `json:"reworkTaskId,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
 
 // ListReviewQueue returns tasks awaiting human review across recent traces.
@@ -181,19 +185,21 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 			Summary:  req.Feedback,
 			Comments: reviewCommentsFromInput(*req.Comments),
 		}
-		if _, err := review.SubmitAnnotatedReview(ctx, session.Publisher, colonyCtx.ColonyRoot, session.Ledger, review.AnnotatedReviewInput{
+		res, err := review.SubmitAnnotatedReview(ctx, session.Publisher, colonyCtx.ColonyRoot, session.Ledger, review.AnnotatedReviewInput{
 			TraceID:  traceID,
 			TaskID:   taskID,
 			AgentID:  "console",
 			Producer: artifacts.ProducerConsole,
 			Packet:   packet,
-		}); err != nil {
+		})
+		if err != nil {
 			return RejectTaskResponse{}, err
 		}
 		return RejectTaskResponse{
-			TraceID: traceID,
-			TaskID:  taskID,
-			Message: review.RejectResponseMessage(isFinal, true),
+			TraceID:      traceID,
+			TaskID:       taskID,
+			ReworkTaskID: res.ReworkTaskID,
+			Message:      review.RejectResponseMessage(isFinal, true, res.ReworkTaskID),
 		}, nil
 	}
 
@@ -209,7 +215,7 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 	return RejectTaskResponse{
 		TraceID: traceID,
 		TaskID:  taskID,
-		Message: review.RejectResponseMessage(isFinal, false),
+		Message: review.RejectResponseMessage(isFinal, false, ""),
 	}, nil
 }
 
@@ -242,6 +248,9 @@ func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
 		ProposalWorkspace: item.ProposalWorkspace,
 		CanApprove:        item.CanApprove,
 		CanReject:         item.CanReject,
+		CanRequestChanges: item.CanRequestChanges,
+		ReworkTaskID:      item.ReworkTaskID,
+		ReworkStatus:      item.ReworkStatus,
 	}
 }
 

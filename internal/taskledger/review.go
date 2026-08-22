@@ -74,6 +74,79 @@ func HasIsolatedProposal(trace TraceSnapshot) bool {
 	return false
 }
 
+// LastCompletedIsolatedProposalTask returns the newest completed non-final task
+// that recorded an isolated code.proposal (the bee that should continue rework).
+func LastCompletedIsolatedProposalTask(trace TraceSnapshot) (TaskSnapshot, bool) {
+	var candidates []TaskSnapshot
+	for _, task := range trace.Tasks {
+		if IsFinalReviewTask(task) {
+			continue
+		}
+		if task.Status != protocol.TaskStatusCompleted {
+			continue
+		}
+		if task.ProposalWorkspace != protocol.ProposalWorkspaceIsolated {
+			continue
+		}
+		candidates = append(candidates, task)
+	}
+	if len(candidates) == 0 {
+		return TaskSnapshot{}, false
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].UpdatedAt.Equal(candidates[j].UpdatedAt) {
+			return candidates[i].UpdatedAt.After(candidates[j].UpdatedAt)
+		}
+		return candidates[i].TaskID > candidates[j].TaskID
+	})
+	return candidates[0], true
+}
+
+func isInFlightReworkStatus(status protocol.TaskStatus) bool {
+	switch status {
+	case protocol.TaskStatusPlanned, protocol.TaskStatusReady, protocol.TaskStatusRunning,
+		protocol.TaskStatusWaitingReview, protocol.TaskStatusBlocked:
+		return true
+	default:
+		return false
+	}
+}
+
+// InFlightRework returns a non-final task that is still occupying the trail
+// (planned through blocked). Failed and cancelled tasks do not count.
+func InFlightRework(trace TraceSnapshot) (TaskSnapshot, bool) {
+	var candidates []TaskSnapshot
+	for _, task := range trace.Tasks {
+		if IsFinalReviewTask(task) {
+			continue
+		}
+		if isInFlightReworkStatus(task.Status) {
+			candidates = append(candidates, task)
+		}
+	}
+	if len(candidates) == 0 {
+		return TaskSnapshot{}, false
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].TaskID < candidates[j].TaskID
+	})
+	return candidates[0], true
+}
+
+// CanRequestChanges reports whether a final merge gate may start a rework task.
+func CanRequestChanges(trace TraceSnapshot, task TaskSnapshot) bool {
+	if !IsFinalReviewTask(task) || task.Status != protocol.TaskStatusWaitingReview {
+		return false
+	}
+	if _, ok := LastCompletedIsolatedProposalTask(trace); !ok {
+		return false
+	}
+	if _, ok := InFlightRework(trace); ok {
+		return false
+	}
+	return true
+}
+
 // ShouldSkipDispatch reports whether a ready task should bypass AFK dispatch.
 func ShouldSkipDispatch(task TaskSnapshot) bool {
 	return IsFinalReviewTask(task)

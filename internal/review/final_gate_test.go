@@ -191,3 +191,75 @@ func TestActivateFinalReviewGateAutoCompletesHollowWaitingReview(t *testing.T) {
 		t.Fatalf("status = %q, want completed", snap.Tasks[taskledger.FinalReviewTaskID].Status)
 	}
 }
+
+func TestActivateFinalReviewGateKeepsWaitingReviewAfterRework(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-1"
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Build", Bee: "builder"},
+			{TaskID: "task-rework", Title: "Rework", Bee: "builder"},
+			{TaskID: taskledger.FinalReviewTaskID, Title: "Merge", Review: protocol.TaskReviewFinal},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	mutation, err := protocol.NewEvent(traceID, "builder-1", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:      protocol.MutationCodeProposalIsolated,
+		TaskID:    "task-1",
+		Workspace: protocol.ProposalWorkspaceIsolated,
+		Diff:      "+line",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(mutation); err != nil {
+		t.Fatal(err)
+	}
+	for _, taskID := range []string{"task-1", "task-rework"} {
+		completed, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+			Kind: protocol.TaskEventCompleted, TaskID: taskID, Status: protocol.TaskStatusCompleted,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.Apply(completed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: taskledger.FinalReviewTaskID, Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(waiting); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID, review.WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks[taskledger.FinalReviewTaskID].Status != protocol.TaskStatusWaitingReview {
+		t.Fatalf("final status = %q, want waiting_review", snap.Tasks[taskledger.FinalReviewTaskID].Status)
+	}
+	finalCount := 0
+	for _, task := range snap.Tasks {
+		if taskledger.IsFinalReviewTask(task) {
+			finalCount++
+		}
+	}
+	if finalCount != 1 {
+		t.Fatalf("final review tasks = %d, want 1", finalCount)
+	}
+}

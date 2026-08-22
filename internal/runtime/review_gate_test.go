@@ -565,6 +565,122 @@ func TestReactorRootRequiredSoftAckAfterVerification(t *testing.T) {
 	}
 }
 
+func TestReactorReworkDispatchConsumesHoneyAndKeepsFinalGate(t *testing.T) {
+	r := newTestReactor(t, map[string]colony.Bee{
+		"builder": {
+			Role: "builder",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "task.ready"}, Dispatch: colony.DispatchTask},
+			},
+		},
+	})
+	ledger := r.Ledger().(*taskledger.MemoryLedger)
+	if err := ledger.SeedEnergy("trace-1", 12); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Build", Bee: "builder"},
+			{TaskID: taskledger.FinalReviewTaskID, Title: "Merge", Review: protocol.TaskReviewFinal},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	mutation, err := protocol.NewEvent("trace-1", "builder-1", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:      protocol.MutationCodeProposalIsolated,
+		TaskID:    "task-1",
+		Workspace: protocol.ProposalWorkspaceIsolated,
+		Diff:      "+line",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(mutation); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind: protocol.TaskEventCompleted, TaskID: "task-1", Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(completed); err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: taskledger.FinalReviewTaskID, Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(waiting); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reworkPlan, err := protocol.NewEvent("trace-1", "console", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-rework", Title: "Apply review comments", Bee: "builder", Body: "fix comments",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reworkReady, err := protocol.NewEvent("trace-1", "console", 0, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind: protocol.TaskEventReady, TaskID: "task-rework", Bee: "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{result: &adapters.RunResult{Status: "completed", Summary: "reworked"}}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), reworkPlan); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), reworkReady); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("adapter calls = %d, want 1", rec.calls)
+	}
+
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks["task-rework"].Status != protocol.TaskStatusCompleted {
+		t.Fatalf("rework status = %q, want completed", snap.Tasks["task-rework"].Status)
+	}
+	if snap.Tasks[taskledger.FinalReviewTaskID].Status != protocol.TaskStatusWaitingReview {
+		t.Fatalf("final status = %q, want waiting_review", snap.Tasks[taskledger.FinalReviewTaskID].Status)
+	}
+	if snap.EnergyRemaining != before.EnergyRemaining-1 {
+		t.Fatalf("energy remaining = %d, want %d", snap.EnergyRemaining, before.EnergyRemaining-1)
+	}
+	finalCount := 0
+	for _, task := range snap.Tasks {
+		if taskledger.IsFinalReviewTask(task) {
+			finalCount++
+		}
+	}
+	if finalCount != 1 {
+		t.Fatalf("final review tasks = %d, want 1", finalCount)
+	}
+}
+
 func TestReactorRejectsFinalReviewOnRootBeePlan(t *testing.T) {
 	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
 		Kind: protocol.TaskEventPlan,

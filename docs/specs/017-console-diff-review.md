@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Draft)**
-Slice A (file-oriented merge-diff viewer) and Slice B (annotated comments via trail comb) shipped. Slice C (final-gate request-changes rework) remains. Complements the Reviews baseline in [002-queen-console-mvp](002-queen-console-mvp.md).
+**(Implemented)**
+Queen Console merge-diff viewer (A), annotated comb comments (B), and final-gate Request changes rework (C). Complements the Reviews baseline in [002-queen-console-mvp](002-queen-console-mvp.md).
 
 ## Problem Statement
 
@@ -125,7 +125,7 @@ Ship Queen Console Reviews in **three slices**. Each slice is useful alone; late
 - **B** — Comment drafts + Submit. **Requires** trail comb directory, `ArtifactsDir` in prompt context, and `SIGNAL/artifact.written` as specified in 014. Do not ship B by stuffing the packet into `human.feedback.message` alone.
 - **C** — Final-gate request-changes choreography. Requires B’s packet write. Extends review-domain reject/request-changes; does not introduce a central scheduler.
 
-Slice A shipped without waiting on 014. [014](014-artifacts-protocol.md) is **Approved** (comb + human/Console producer). B/C stay unreleased until that path is implemented and testable.
+Slice A shipped without waiting on 014. [014](014-artifacts-protocol.md) and Slices B/C are implemented (comb + human/Console producer + Request changes rework).
 
 ### 2. Viewer (Slice A)
 
@@ -219,6 +219,6 @@ Good tests assert operator-visible behavior and bus/ledger outcomes, not CSS cla
 
 - Slice A is the cheapest relief for the current Widen pain and should not wait on 014.
 - Slice B exists because Beekeeper feedback is currently the wrong width for the job: routing events must stay small; review packets must be files. That is the same split 014 already chose for research notes vs Insights.
-- Slice C is the only slice that changes choreography. Until it ships, final-gate Submit/reject must not be copy that claims a Builder was sent.
+- Slice C is the only slice that changes choreography: annotated Request changes on `review: final` plans a new rework task; plain reject stays abandon-style feedback.
 - Human/Console `artifact.written` (not only post-run flush) is specified in [014](014-artifacts-protocol.md); Slice B implements that path, it does not invent a third announcement.
 - After A, the same file-oriented viewer is the natural home for per-run proposal preview; keep that as a 002 follow-up rather than blocking 017.

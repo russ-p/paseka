@@ -28,6 +28,7 @@ const state = {
   reviewCommentDraftHeadSha: null,
   reviewCommentPendingAnchor: null,
   reviewCommentEditingId: null,
+  reviewCommentsSubmitting: false,
   selectedTaskKey: null,
   selectedTaskDetail: null,
   dashboard: null,
@@ -199,6 +200,7 @@ const el = {
   reviewCommentsSubmitForm: document.getElementById('review-comments-submit-form'),
   reviewCommentsSummary: document.getElementById('review-comments-summary'),
   reviewCommentsSubmitBtn: document.getElementById('review-comments-submit-btn'),
+  reviewReworkHint: document.getElementById('review-rework-hint'),
   reviewCommentsActionError: document.getElementById('review-comments-action-error'),
   reviewCommentsActionSuccess: document.getElementById('review-comments-action-success'),
   sessionsLayout: document.getElementById('sessions-layout'),
@@ -1531,12 +1533,34 @@ function reviewCommentsCanSubmit() {
   return state.reviewCommentDrafts.length > 0 || summary.length > 0;
 }
 
+function reviewCommentsSubmitBlocked() {
+  const item = state.selectedReviewDetail;
+  if (!item || !item.isFinal) return false;
+  return item.canRequestChanges !== true;
+}
+
 function updateReviewCommentsSubmitState() {
   if (!el.reviewCommentsSubmitBtn) return;
-  el.reviewCommentsSubmitBtn.disabled = !reviewCommentsCanSubmit();
+  const item = state.selectedReviewDetail;
+  const isFinal = !!(item && item.isFinal);
+  el.reviewCommentsSubmitBtn.textContent = isFinal ? 'Request changes' : 'Submit comments';
+  el.reviewCommentsSubmitBtn.disabled =
+    !!state.reviewCommentsSubmitting || reviewCommentsSubmitBlocked() || !reviewCommentsCanSubmit();
   if (el.reviewCommentsCount) {
     const n = state.reviewCommentDrafts.length;
     el.reviewCommentsCount.textContent = `${n} draft${n === 1 ? '' : 's'}`;
+  }
+  if (el.reviewReworkHint) {
+    if (isFinal && item.reworkTaskId) {
+      el.reviewReworkHint.textContent = `Rework ${item.reworkTaskId} is ${item.reworkStatus || 'in flight'}. Request changes is disabled until it finishes.`;
+      el.reviewReworkHint.classList.remove('hidden');
+    } else if (isFinal && item.canRequestChanges !== true) {
+      el.reviewReworkHint.textContent = 'Request changes is unavailable (no isolated proposal bee, or rework already in flight).';
+      el.reviewReworkHint.classList.remove('hidden');
+    } else {
+      el.reviewReworkHint.textContent = '';
+      el.reviewReworkHint.classList.add('hidden');
+    }
   }
 }
 
@@ -1815,7 +1839,7 @@ function closeReviewMergePreview() {
   }
 }
 
-function prepareReviewMergeDiffFiles(diff) {
+function prepareReviewMergeDiffFiles(diff, preserve) {
   const view = state.reviewMergeDiffView;
   if (!view) return;
   state.reviewMergeDiffFiles = buildReviewMergeDiffFiles({ ...view, diff });
@@ -1826,7 +1850,7 @@ function prepareReviewMergeDiffFiles(diff) {
     if (el.reviewMergeDiffViewer) {
       el.reviewMergeDiffViewer.classList.remove('hidden');
     }
-    renderReviewMergeDiffBodies();
+    renderReviewMergeDiffBodies(preserve);
   }
 }
 
@@ -2675,6 +2699,9 @@ function renderReviewDetail(item) {
   if (item.isFinal) {
     rows.unshift(['Gate', 'Final merge gate']);
   }
+  if (item.reworkTaskId) {
+    rows.push(['Rework', `${item.reworkTaskId} (${item.reworkStatus || 'in flight'})`]);
+  }
   el.reviewDetailMeta.innerHTML = rows
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
     .join('');
@@ -2709,6 +2736,7 @@ function renderReviewDetail(item) {
     el.reviewActionsWrap.classList.add('hidden');
     el.reviewMergeBodyPreviewWrap.classList.add('hidden');
   }
+  updateReviewCommentsSubmitState();
 }
 
 function clearReviewMergeDiff() {
@@ -2761,7 +2789,7 @@ function clearReviewMergeDiff() {
   if (el.reviewCommentsActionSuccess) el.reviewCommentsActionSuccess.classList.add('hidden');
 }
 
-function renderReviewMergeDiff(view) {
+function renderReviewMergeDiff(view, preserve) {
   state.reviewMergeDiffView = view;
   syncReviewCommentHeadSha();
   el.reviewMergeDiffWrap.classList.remove('hidden');
@@ -2808,7 +2836,30 @@ function renderReviewMergeDiff(view) {
     return;
   }
 
-  prepareReviewMergeDiffFiles(view.diff);
+  prepareReviewMergeDiffFiles(view.diff, preserve);
+}
+
+async function refreshReviewMergeDiffIfChanged(traceId) {
+  if (!traceId || state.reviewMergeDiffLoadedTraceId !== traceId) return;
+  const token = state.reviewMergeDiffToken;
+  try {
+    const view = await api(`/api/traces/${encodeURIComponent(traceId)}/merge-diff`);
+    if (!reviewMergeDiffStillValid(traceId, token)) return;
+    const prev = state.reviewMergeDiffView;
+    if (prev && prev.headSha === view.headSha && prev.diff === view.diff && prev.stat === view.stat) {
+      return;
+    }
+    const preserve = {
+      scrollTop: el.reviewMergeDiffBody?.scrollTop || 0,
+      selectedPath: state.reviewMergeDiffSelectedPath,
+    };
+    renderReviewMergeDiff(view, preserve);
+    if (state.reviewMergePreviewOpen) {
+      updateReviewMergePreviewChrome();
+    }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function reviewMergeDiffStillValid(traceId, token) {
@@ -2950,6 +3001,9 @@ async function loadReviews() {
     const item = state.reviews.items?.find((i) => i.traceId === traceId && i.taskId === taskId);
     state.selectedReviewDetail = item || null;
     renderReviewDetail(state.selectedReviewDetail);
+    if (item?.isFinal) {
+      await refreshReviewMergeDiffIfChanged(traceId);
+    }
   }
   renderTabBadges();
 }
@@ -2978,6 +3032,9 @@ async function selectReview(traceId, taskId) {
     isFinal: detail.isFinal,
     canApprove: detail.canApprove,
     canReject: detail.canReject,
+    canRequestChanges: detail.canRequestChanges,
+    reworkTaskId: detail.reworkTaskId,
+    reworkStatus: detail.reworkStatus,
   };
   renderReviewDetail(state.selectedReviewDetail);
 }
@@ -3602,9 +3659,12 @@ if (el.reviewCommentsSubmitForm) {
   el.reviewCommentsSubmitForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (!state.selectedReviewDetail || !reviewCommentsCanSubmit()) return;
+    if (reviewCommentsSubmitBlocked() || state.reviewCommentsSubmitting) return;
     const { traceId, taskId } = state.selectedReviewDetail;
     if (el.reviewCommentsActionError) el.reviewCommentsActionError.classList.add('hidden');
     if (el.reviewCommentsActionSuccess) el.reviewCommentsActionSuccess.classList.add('hidden');
+    state.reviewCommentsSubmitting = true;
+    updateReviewCommentsSubmitState();
     try {
       const comments = state.reviewCommentDrafts.map((draft) => ({
         path: draft.path,
@@ -3632,6 +3692,9 @@ if (el.reviewCommentsSubmitForm) {
         el.reviewCommentsActionError.textContent = err.message;
         el.reviewCommentsActionError.classList.remove('hidden');
       }
+    } finally {
+      state.reviewCommentsSubmitting = false;
+      updateReviewCommentsSubmitState();
     }
   });
 }

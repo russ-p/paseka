@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Final-gate Request changes (Slice C)
+
+On `review: final` / `_review`, annotated Submit on the merge preview is **Request changes**: it writes the comb packet as before, keeps the merge gate in `waiting_review`, and plans+readies a new AFK rework task for the last isolated-proposal Bee on the same Flight Trail (honey consumed on dispatch). Plain reject remains abandon-only (feedback, no rework). Duplicate Request changes is rejected while non-final work is still in flight. Approve stays the only merge path. CLI `paseka proposal reject --comments-file` on a final gate uses the same rework path.
+
+- Spec: [017-console-diff-review](../specs/017-console-diff-review.md)
+- Canonical: [CLI](guide/cli.md) (`paseka console`, `paseka proposal reject`), [Task ledger](reference/task-ledger.md), [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews)
+
 ## 2026-08 — Session deferred flush uses home NATS config
 
 Interactive session (and other ColonyRoot-only) deferred flush loads `~/.config/paseka/<slug>/config.yaml` before connecting. Previously a partial in-memory context treated NATS as unset, flushed pending events to the run audit log with a no-op publisher, and never reached JetStream or the task ledger.
@@ -10,9 +17,9 @@ Interactive session (and other ColonyRoot-only) deferred flush loads `~/.config/
 
 ## 2026-08 — Queen Console annotated review comments (Slice B)
 
-Queen Console merge preview supports line-anchored comment drafts (click added/context lines; Shift-click for a range). Submit writes `review-comments.md` to the trail comb, publishes `SIGNAL/artifact.written` (producer `console`), then a short `INSIGHT/human.feedback` with optional `ref`. Fail closed if the comb write fails. `review: required` still returns the task to `ready`; `review: final` stores notes without merge or rework dispatch (Slice C). CLI: `paseka proposal reject --comments-file` copies an existing Markdown packet into the same comb ref.
+Queen Console merge preview supports line-anchored comment drafts (click added/context lines; Shift-click for a range). Submit writes `review-comments.md` to the trail comb, publishes `SIGNAL/artifact.written` (producer `console`), then a short `INSIGHT/human.feedback` with optional `ref`. Fail closed if the comb write fails. `review: required` still returns the task to `ready`. CLI: `paseka proposal reject --comments-file` copies an existing Markdown packet into the same comb ref. Final-gate rework shipped separately as Slice C.
 
-- Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice B; Slice C outstanding)
+- Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice B)
 - Canonical: [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews), [CLI](guide/cli.md) (`paseka proposal reject`), [Insight kinds](reference/insight-kinds.md), [Prompt templates](guide/prompt-templates.md)
 
 ## 2026-08 — Model aliases (`params.model`)

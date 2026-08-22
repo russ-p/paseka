@@ -22,7 +22,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [014-artifacts-protocol](../specs/014-artifacts-protocol.md) | Implemented | Trace comb + `SIGNAL/artifact.written`; bee scan-flush; Console list/preview; export `--include artifacts`; human producer helper |
 | [015-deferred-event-emit](../specs/015-deferred-event-emit.md) | Implemented | General deferred `event emit` buffer (`--defer`, flush on success; 014 does not depend on it) |
 | [016-cue-layer](../specs/016-cue-layer.md) | Implemented | Named Forage Cue ingress (`.paseka/cues/`); CLI + Console + Telegram `cue:`; optional per-cue `energy_budget` |
-| [017-console-diff-review](../specs/017-console-diff-review.md) | Draft (Slice A+B shipped) | Queen Console merge-diff viewer + annotated review comments (Slice C: final-gate rework) |
+| [017-console-diff-review](../specs/017-console-diff-review.md) | Implemented | Queen Console merge-diff viewer, annotated review comments, final-gate Request changes rework |
 | [018-cli-colony-status](../specs/018-cli-colony-status.md) | Implemented | `paseka status` read-only colony snapshot (CLI alternative to Console dashboard; energy in MVP; `--check` for substrate probe) |
 | [019-model-aliases](../specs/019-model-aliases.md) | Implemented | Colony `model_aliases` map; home overlay; resolves `params.model` at dispatch |
 | [020-worktree-branch](../specs/020-worktree-branch.md) | Draft | `INSIGHT/worktree.branch` to name/rename the isolated trace worktree git ref |

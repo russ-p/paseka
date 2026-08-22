@@ -280,12 +280,13 @@ The Reviews tab exposes the human-in-the-loop review queue:
 - for `review: final` / `_review`: merge preview summary on Reviews detail (`GET /api/traces/:traceId/merge-diff`); **Open merge preview** opens a dedicated page with file list + per-file bodies (default unified layout)
 - **Format** control on the preview page switches unified (line-by-line) vs side-by-side
 - approve action (optional summary; optional merge commit message for `review: final`)
-- reject action with human feedback
+- reject action with human feedback (final gate: abandon-style; no rework)
+- **Request changes** on the merge preview (final gate): comb comments + new rework task; merge gate stays `waiting_review`
 - links to timeline and linked runs for inspection context
 
-Approve/reject reuse the same domain flows as `paseka proposal approve|reject`. For `review: required`, reject publishes `human.feedback` and the runtime may return the task to `ready`. For `review: final`, reject only publishes feedback; approve may merge the trace worktree.
+Approve/reject reuse the same domain flows as `paseka proposal approve|reject`. For `review: required`, reject publishes `human.feedback` and the runtime may return the task to `ready`. For `review: final`, plain reject only publishes feedback; annotated Request changes plans rework without merging; approve may merge the trace worktree.
 
-Current implementation polls `GET /api/review-queue` every 5 seconds while the Reviews tab is active. While the same final merge gate stays selected, the poll refreshes queue metadata and actions without re-fetching or re-rendering the merge diff (preserving file-list selection and scroll position).
+Current implementation polls `GET /api/review-queue` every 5 seconds while the Reviews tab is active. While the same final merge gate stays selected, the poll refreshes queue metadata and actions without re-rendering an unchanged merge diff (preserving file-list selection and scroll). When the worktree `headSha` (or patch) changes after rework, the preview refreshes quietly.
 
 #### 6. Runs
 
@@ -393,6 +394,7 @@ At minimum, the UI shows:
 - review policy (`required` vs `final`)
 - for final merge gates: branch metadata, `--stat` summary on Reviews detail; **Open merge preview** for full-page file-oriented viewer (sticky file list, per-file hunks, path filter, keyboard navigation) via vendored diff2html
 - approve/reject chrome stays on Reviews detail (not on the preview page); format control is on the preview page only
+- Request changes on the preview page for final gates (line comments + rework); disabled while rework is in flight
 - links to timeline and linked runs for inspection context
 
 Approve/reject actions reuse the same domain flows as `paseka proposal approve|reject`.

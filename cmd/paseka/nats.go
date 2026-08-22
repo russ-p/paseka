@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/review"
@@ -279,29 +278,25 @@ func newProposalRejectCmd() *cobra.Command {
 				return err
 			}
 			if strings.TrimSpace(commentsFile) != "" {
-				if err := review.EnsureRejectable(session.Ledger, traceID, taskID); err != nil {
-					return err
-				}
 				content, err := os.ReadFile(commentsFile)
 				if err != nil {
 					return fmt.Errorf("read comments file: %w", err)
 				}
-				if err := artifacts.WriteAndAnnounce(cmd.Context(), session.Publisher, ctxColony.ColonyRoot, "", traceID, review.ReviewCommentsCombRel, "human", content); err != nil {
-					return err
-				}
-				item, err := artifacts.ItemFromFile(ctxColony.ColonyRoot, traceID, review.ReviewCommentsCombRel)
+				res, err := review.DeliverReviewCommentsFile(cmd.Context(), session.Publisher, ctxColony.ColonyRoot, session.Ledger, review.DeliverCommentsInput{
+					TraceID:  traceID,
+					TaskID:   taskID,
+					AgentID:  "human",
+					Producer: "human",
+					Content:  content,
+					Feedback: feedback,
+				})
 				if err != nil {
 					return err
 				}
-				if err := review.Reject(cmd.Context(), session.Publisher, session.Ledger, review.RejectInput{
-					TraceID:  traceID,
-					TaskID:   taskID,
-					Feedback: review.ShortFeedbackMessage(feedback),
-					Ref:      item.Ref,
-				}); err != nil {
-					return err
-				}
 				fmt.Printf("Rejected task %s on trace %s (review comments written to comb)\n", taskID, traceID)
+				if res.ReworkTaskID != "" {
+					fmt.Printf("  rework task: %s\n", res.ReworkTaskID)
+				}
 				return nil
 			}
 			if err := review.Reject(cmd.Context(), session.Publisher, session.Ledger, review.RejectInput{

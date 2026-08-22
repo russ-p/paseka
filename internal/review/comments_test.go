@@ -85,7 +85,7 @@ func TestSubmitAnnotatedReviewWritesCombAndPublishes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ref, err := review.SubmitAnnotatedReview(context.Background(), pub, root, ledger, review.AnnotatedReviewInput{
+	res, err := review.SubmitAnnotatedReview(context.Background(), pub, root, ledger, review.AnnotatedReviewInput{
 		TraceID:  traceID,
 		TaskID:   "task-1",
 		AgentID:  "console",
@@ -100,6 +100,10 @@ func TestSubmitAnnotatedReviewWritesCombAndPublishes(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	ref := res.CombRef
+	if res.ReworkTaskID != "" {
+		t.Fatalf("rework task = %q, want none for review: required", res.ReworkTaskID)
 	}
 	if !strings.Contains(ref, review.ReviewCommentsCombRel) {
 		t.Fatalf("ref = %q", ref)
@@ -233,8 +237,211 @@ func TestShortFeedbackMessageDefault(t *testing.T) {
 }
 
 func TestRejectResponseMessageFinalAnnotated(t *testing.T) {
-	msg := review.RejectResponseMessage(true, true)
-	if !strings.Contains(msg, "Merge gate remains open") {
+	msg := review.RejectResponseMessage(true, true, "task-abc")
+	if !strings.Contains(msg, "merge gate remains open") || !strings.Contains(msg, "task-abc") {
 		t.Fatalf("msg = %q", msg)
+	}
+}
+
+func mustApplyReviewLedger(t *testing.T, ledger taskledger.Ledger, ev protocol.Event) {
+	t.Helper()
+	if _, err := ledger.Apply(ev); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setupFinalGateWithIsolatedBuilder(t *testing.T, ledger taskledger.Ledger, traceID string) {
+	t.Helper()
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Build feature", Body: "Add the badge", Bee: "builder", Intent: "feature"},
+			{TaskID: taskledger.FinalReviewTaskID, Title: "Merge", Review: protocol.TaskReviewFinal},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, plan)
+	mutation, err := protocol.NewEvent(traceID, "builder-1", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:      protocol.MutationCodeProposalIsolated,
+		TaskID:    "task-1",
+		Workspace: protocol.ProposalWorkspaceIsolated,
+		Diff:      "+line",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, mutation)
+	completed, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind: protocol.TaskEventCompleted, TaskID: "task-1", Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, completed)
+	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: taskledger.FinalReviewTaskID, Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, waiting)
+}
+
+func TestSubmitAnnotatedReviewPlansReworkOnFinalGate(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-final-rework"
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	setupFinalGateWithIsolatedBuilder(t, ledger, traceID)
+
+	res, err := review.SubmitAnnotatedReview(context.Background(), pub, root, ledger, review.AnnotatedReviewInput{
+		TraceID:  traceID,
+		TaskID:   taskledger.FinalReviewTaskID,
+		AgentID:  "console",
+		Producer: artifacts.ProducerConsole,
+		Packet: review.CommentsPacket{
+			Summary: "Fix the error path",
+			Comments: []review.ReviewComment{{
+				Path: "main.go", Side: "new", StartLine: 3, Body: "handle err",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ReworkTaskID == "" {
+		t.Fatal("expected rework task id")
+	}
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks[taskledger.FinalReviewTaskID].Status != protocol.TaskStatusWaitingReview {
+		t.Fatalf("final status = %q", snap.Tasks[taskledger.FinalReviewTaskID].Status)
+	}
+
+	if len(pub.events) != 4 {
+		t.Fatalf("events = %d, want 4 (artifact, feedback, plan, ready)", len(pub.events))
+	}
+	if protocol.PayloadKind(pub.events[2].Payload) != string(protocol.TaskEventPlan) {
+		t.Fatalf("event[2] = %s", protocol.PayloadKind(pub.events[2].Payload))
+	}
+	var plan protocol.TaskPlanPayload
+	if err := json.Unmarshal(pub.events[2].Payload, &plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Tasks) != 1 || plan.Tasks[0].TaskID != res.ReworkTaskID {
+		t.Fatalf("plan tasks = %+v", plan.Tasks)
+	}
+	if plan.Tasks[0].Bee != "builder" || protocol.NormalizeTaskReviewPolicy(plan.Tasks[0].Review) != protocol.TaskReviewNone {
+		t.Fatalf("rework spec = %+v", plan.Tasks[0])
+	}
+	if !strings.Contains(plan.Tasks[0].Body, "review-comments.md") || !strings.Contains(plan.Tasks[0].Body, "task-1") {
+		t.Fatalf("rework body = %s", plan.Tasks[0].Body)
+	}
+	if protocol.PayloadKind(pub.events[3].Payload) != string(protocol.TaskEventReady) {
+		t.Fatalf("event[3] = %s", protocol.PayloadKind(pub.events[3].Payload))
+	}
+}
+
+func TestSubmitAnnotatedReviewFinalFailsClosedWithoutIsolatedBee(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-no-isolated"
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: taskledger.FinalReviewTaskID, Title: "Merge", Review: protocol.TaskReviewFinal},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, plan)
+	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: taskledger.FinalReviewTaskID, Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, waiting)
+
+	_, err = review.SubmitAnnotatedReview(context.Background(), pub, root, ledger, review.AnnotatedReviewInput{
+		TraceID: traceID,
+		TaskID:  taskledger.FinalReviewTaskID,
+		Packet: review.CommentsPacket{
+			Comments: []review.ReviewComment{{Path: "main.go", Side: "new", StartLine: 1, Body: "note"}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "isolated") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatal("expected no bus events")
+	}
+	combPath := filepath.Join(root, ".paseka", "runs", traceID, "artifacts", review.ReviewCommentsCombRel)
+	if _, err := os.Stat(combPath); err == nil {
+		t.Fatal("expected no comb file")
+	}
+}
+
+func TestSubmitAnnotatedReviewFinalFailsClosedWhenReworkInFlight(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-inflight"
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	setupFinalGateWithIsolatedBuilder(t, ledger, traceID)
+	rework, err := protocol.NewEvent(traceID, "console", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind:  protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{TaskID: "task-rework", Title: "Rework", Bee: "builder"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, rework)
+	running, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: "task-rework", Status: protocol.TaskStatusRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustApplyReviewLedger(t, ledger, running)
+
+	_, err = review.SubmitAnnotatedReview(context.Background(), pub, root, ledger, review.AnnotatedReviewInput{
+		TraceID: traceID,
+		TaskID:  taskledger.FinalReviewTaskID,
+		Packet: review.CommentsPacket{
+			Comments: []review.ReviewComment{{Path: "main.go", Side: "new", StartLine: 1, Body: "note"}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "in flight") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatal("expected no bus events")
+	}
+}
+
+func TestRejectOnFinalDoesNotPlanRework(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	traceID := "trace-plain-reject"
+	setupFinalGateWithIsolatedBuilder(t, ledger, traceID)
+	if err := review.Reject(context.Background(), pub, ledger, review.RejectInput{
+		TraceID:  traceID,
+		TaskID:   taskledger.FinalReviewTaskID,
+		Feedback: "stop this approach",
+		AgentID:  "console",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d, want 1 feedback only", len(pub.events))
+	}
+	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.InsightHumanFeedback) {
+		t.Fatalf("event = %s", protocol.PayloadKind(pub.events[0].Payload))
 	}
 }

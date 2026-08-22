@@ -2,6 +2,7 @@ package taskledger_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
@@ -150,5 +151,61 @@ func TestHasIsolatedProposal(t *testing.T) {
 	}
 	if !taskledger.HasIsolatedProposal(trace) {
 		t.Fatal("expected isolated proposal")
+	}
+}
+
+func TestLastCompletedIsolatedProposalTaskPicksNewest(t *testing.T) {
+	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Hour)
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated, UpdatedAt: older,
+			},
+			"task-2": {
+				TaskID: "task-2", Bee: "builder", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated, UpdatedAt: newer,
+			},
+			"_review": {
+				TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview,
+			},
+			"root-1": {
+				TaskID: "root-1", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceRoot, UpdatedAt: newer.Add(time.Hour),
+			},
+		},
+	}
+	got, ok := taskledger.LastCompletedIsolatedProposalTask(trace)
+	if !ok || got.TaskID != "task-2" {
+		t.Fatalf("got %+v ok=%v, want task-2", got, ok)
+	}
+}
+
+func TestCanRequestChangesAndInFlightRework(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated,
+			},
+			"_review": {
+				TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview,
+			},
+		},
+	}
+	if !taskledger.CanRequestChanges(trace, trace.Tasks["_review"]) {
+		t.Fatal("expected can request changes")
+	}
+	trace.Tasks["task-rework"] = taskledger.TaskSnapshot{
+		TaskID: "task-rework", Status: protocol.TaskStatusRunning,
+	}
+	if inflight, ok := taskledger.InFlightRework(trace); !ok || inflight.TaskID != "task-rework" {
+		t.Fatalf("inflight = %+v ok=%v", inflight, ok)
+	}
+	if taskledger.CanRequestChanges(trace, trace.Tasks["_review"]) {
+		t.Fatal("expected request changes disabled while rework running")
 	}
 }

@@ -749,7 +749,7 @@ paseka console --addr 127.0.0.1:8787
 
 Open the printed URL in a browser. Queen Console does not enforce authentication yet.
 
-Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) the detail panel shows merge-diff summary and **Open merge preview** (dedicated full-page file list + per-file diff bodies, unified or side-by-side). On the preview page, click diff lines to draft comments and **Submit comments** to write `review-comments.md` to the trail comb plus short `human.feedback`. Plain reject on the detail panel still publishes unstructured feedback only. Approve from Reviews after previewing. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
+Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) the detail panel shows merge-diff summary and **Open merge preview** (dedicated full-page file list + per-file diff bodies, unified or side-by-side). On the preview page, click diff lines to draft comments and **Request changes** to write `review-comments.md` to the trail comb, publish short `human.feedback`, and plan a rework task on the same worktree (merge gate stays open). Plain reject on the detail panel still publishes unstructured feedback only (no rework). Approve from Reviews after previewing. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ---
 
@@ -779,14 +779,14 @@ For **isolated** final merge gates, preview the accumulated worktree diff in Que
 
 ### `paseka proposal reject`
 
-Reject a review-gated task — publishes human `INSIGHT` / `human.feedback`. Tasks with `review: required` return to `ready` for another AFK pass when `paseka run` is active.
+Reject a review-gated task — publishes human `INSIGHT` / `human.feedback`. Tasks with `review: required` return to `ready` for another AFK pass when `paseka run` is active. On a **final merge gate**, unstructured `--feedback` is abandon-style (no rework). `--comments-file` writes the comb packet and, on `review: final`, also plans a rework task for the last isolated-proposal Bee.
 
 | Flag | Short | Required | Default | Description |
 | ---- | ----- | -------- | ------- | ----------- |
 | `--trace` | | yes | | Flight trail id |
 | `--task` | | yes | | Task id |
 | `--feedback` | | | `Please revise the proposal.` | Short summary for the bee (also used as overall summary with `--comments-file`) |
-| `--comments-file` | | | | Path to a Markdown file copied into `.paseka/runs/<traceId>/artifacts/review-comments.md` before publishing feedback and `artifact.written` (producer `human`) |
+| `--comments-file` | | | | Path to a Markdown file copied into `.paseka/runs/<traceId>/artifacts/review-comments.md` before publishing feedback and `artifact.written`. On `review: final`, also plans rework (same as Console Request changes) |
 | `--path` | `-C` | | | Colony resolution start directory |
 
 ```bash

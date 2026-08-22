@@ -332,7 +332,7 @@
         <button type="button" id="review-open-diff-btn" class="secondary hidden">Open merge preview</button>
       </div>
       <div id="review-actions-wrap" class="review-actions hidden">
-        <p id="review-final-hint" class="muted hidden">Final merge gate — approve merges the trace worktree. Reject only publishes feedback.</p>
+        <p id="review-final-hint" class="muted hidden">Final merge gate — approve merges the trace worktree. Request changes on the merge preview starts rework. Reject only publishes feedback (no rework).</p>
         <form id="review-approve-form" class="review-form">
           <label>
             Approval summary <span class="hint">(optional)</span>
@@ -392,6 +392,7 @@
           <span id="review-comments-count" class="hint">0 drafts</span>
         </div>
         <p class="muted review-comments-hint">Click an added or context line to comment. Shift-click a second line for a range. Drafts stay local until Submit.</p>
+        <p id="review-rework-hint" class="muted hidden"></p>
         <div id="review-comment-editor" class="review-comment-editor hidden">
           <label>
             Comment

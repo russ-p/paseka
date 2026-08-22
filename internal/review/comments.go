@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -41,6 +42,22 @@ type AnnotatedReviewInput struct {
 	AgentID  string
 	Producer string
 	Packet   CommentsPacket
+}
+
+// AnnotatedReviewResult is the outcome of an annotated review submit.
+type AnnotatedReviewResult struct {
+	CombRef      string
+	ReworkTaskID string
+}
+
+// DeliverCommentsInput copies an existing Markdown packet into the trail comb.
+type DeliverCommentsInput struct {
+	TraceID  string
+	TaskID   string
+	AgentID  string
+	Producer string
+	Content  []byte
+	Feedback string
 }
 
 // ValidateCommentsPacket ensures an annotated review has content and well-formed comments.
@@ -142,36 +159,69 @@ func ShortFeedbackMessage(summary string) string {
 }
 
 // SubmitAnnotatedReview writes the comb packet, announces it, then publishes short human.feedback.
-func SubmitAnnotatedReview(ctx context.Context, pub bus.Publisher, colonyRoot string, ledger taskledger.Ledger, in AnnotatedReviewInput) (combRef string, err error) {
+// On a final merge gate it also plans a rework task (Slice C).
+func SubmitAnnotatedReview(ctx context.Context, pub bus.Publisher, colonyRoot string, ledger taskledger.Ledger, in AnnotatedReviewInput) (AnnotatedReviewResult, error) {
 	if err := ValidateCommentsPacket(in.Packet); err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
+	return deliverAnnotatedReview(ctx, pub, colonyRoot, ledger, DeliverCommentsInput{
+		TraceID:  in.TraceID,
+		TaskID:   in.TaskID,
+		AgentID:  in.AgentID,
+		Producer: in.Producer,
+		Content:  RenderCommentsMarkdown(in.Packet),
+		Feedback: ShortFeedbackMessage(in.Packet.Summary),
+	})
+}
+
+// DeliverReviewCommentsFile copies Markdown into the trail comb, announces it, and
+// publishes short human.feedback. On a final merge gate it also plans rework.
+func DeliverReviewCommentsFile(ctx context.Context, pub bus.Publisher, colonyRoot string, ledger taskledger.Ledger, in DeliverCommentsInput) (AnnotatedReviewResult, error) {
+	if len(bytes.TrimSpace(in.Content)) == 0 {
+		return AnnotatedReviewResult{}, fmt.Errorf("review comments: file is empty")
+	}
+	return deliverAnnotatedReview(ctx, pub, colonyRoot, ledger, in)
+}
+
+func deliverAnnotatedReview(ctx context.Context, pub bus.Publisher, colonyRoot string, ledger taskledger.Ledger, in DeliverCommentsInput) (AnnotatedReviewResult, error) {
 	if err := EnsureRejectable(ledger, in.TraceID, in.TaskID); err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
 	if pub == nil {
-		return "", fmt.Errorf("nats client is required")
+		return AnnotatedReviewResult{}, fmt.Errorf("nats client is required")
+	}
+	snap, err := ledger.Snapshot(in.TraceID)
+	if err != nil {
+		return AnnotatedReviewResult{}, err
+	}
+	task := snap.Tasks[in.TaskID]
+	isFinal := taskledger.IsFinalReviewTask(task)
+	var source taskledger.TaskSnapshot
+	if isFinal {
+		source, err = EnsureRequestChanges(snap)
+		if err != nil {
+			return AnnotatedReviewResult{}, err
+		}
 	}
 	producer := strings.TrimSpace(in.Producer)
 	if producer == "" {
 		producer = artifacts.ProducerConsole
 	}
-	markdown := RenderCommentsMarkdown(in.Packet)
-	combRef, err = artifacts.WriteFile(colonyRoot, in.TraceID, ReviewCommentsCombRel, markdown)
+	combRef, err := artifacts.WriteFile(colonyRoot, in.TraceID, ReviewCommentsCombRel, in.Content)
 	if err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
 	item, err := artifacts.ItemFromFile(colonyRoot, in.TraceID, ReviewCommentsCombRel)
 	if err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
 	item.Ref = combRef
 	payload, err := artifacts.BuildWrittenPayload([]artifacts.Item{item})
 	if err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
 	if err := artifacts.PublishWritten(ctx, pub, colonyRoot, "", in.TraceID, producer, payload); err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
 	agentID := strings.TrimSpace(in.AgentID)
 	if agentID == "" {
@@ -180,19 +230,30 @@ func SubmitAnnotatedReview(ctx context.Context, pub bus.Publisher, colonyRoot st
 	if err := Reject(ctx, pub, ledger, RejectInput{
 		TraceID:  in.TraceID,
 		TaskID:   in.TaskID,
-		Feedback: ShortFeedbackMessage(in.Packet.Summary),
+		Feedback: ShortFeedbackMessage(in.Feedback),
 		AgentID:  agentID,
 		Ref:      combRef,
 	}); err != nil {
-		return "", err
+		return AnnotatedReviewResult{}, err
 	}
-	return combRef, nil
+	result := AnnotatedReviewResult{CombRef: combRef}
+	if isFinal {
+		reworkID, err := PlanReworkTask(ctx, pub, source, in.TraceID, agentID, colonyRoot)
+		if err != nil {
+			return AnnotatedReviewResult{}, err
+		}
+		result.ReworkTaskID = reworkID
+	}
+	return result, nil
 }
 
 // RejectResponseMessage returns operator-facing copy after a reject or annotated submit.
-func RejectResponseMessage(isFinal, annotated bool) string {
+func RejectResponseMessage(isFinal, annotated bool, reworkTaskID string) string {
 	if annotated {
 		if isFinal {
+			if id := strings.TrimSpace(reworkTaskID); id != "" {
+				return "Request changes sent. Rework task " + id + " planned; merge gate remains open — approve when ready."
+			}
 			return "Review comments saved to comb. Merge gate remains open — approve when ready."
 		}
 		return "Review comments saved to comb. For review: required tasks the runtime will return the task to ready."

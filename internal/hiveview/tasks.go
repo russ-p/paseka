@@ -50,6 +50,9 @@ type TaskListItem struct {
 	CanRetry          bool      `json:"canRetry"`
 	CanApprove        bool      `json:"canApprove"`
 	CanReject         bool      `json:"canReject"`
+	CanRequestChanges bool      `json:"canRequestChanges,omitempty"`
+	ReworkTaskID      string    `json:"reworkTaskId,omitempty"`
+	ReworkStatus      string    `json:"reworkStatus,omitempty"`
 	IsFinal           bool      `json:"isFinal"`
 	ProposalWorkspace string    `json:"proposalWorkspace,omitempty"`
 	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
@@ -183,7 +186,7 @@ func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 	reviewPolicy := string(protocol.NormalizeTaskReviewPolicy(task.Review))
 	canApprove, canReject := reviewActionsForTask(task)
 	proposalWorkspace := string(task.ProposalWorkspace)
-	return TaskListItem{
+	item := TaskListItem{
 		TraceID:           traceID,
 		TaskID:            task.TaskID,
 		Title:             title,
@@ -201,6 +204,14 @@ func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 		ProposalWorkspace: proposalWorkspace,
 		UpdatedAt:         task.UpdatedAt,
 	}
+	if item.IsFinal {
+		item.CanRequestChanges = taskledger.CanRequestChanges(snap, task)
+		if inflight, ok := taskledger.InFlightRework(snap); ok {
+			item.ReworkTaskID = inflight.TaskID
+			item.ReworkStatus = string(inflight.Status)
+		}
+	}
+	return item
 }
 
 func collectRecentTaskItems(ctx colony.Context) ([]TaskListItem, error) {
