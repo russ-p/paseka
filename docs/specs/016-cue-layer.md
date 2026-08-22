@@ -103,6 +103,7 @@ body: "{{.Body}}"
 
 - No `bee run`, invite accept, multi-step graphs, or waits for bee completion inside cue execution.
 - Cue success = successful publish(es) (and successful optional honey seed); AFK reactions still require `paseka run` as today.
+- Timers, inbound HTTP, and GitHub-style hooks are **not** cue channels. They invoke the same Queen Shell `cue run` (or an equivalent trusted-host wrapper) that humans use. Do not add a webhook route table, cron table, or result callback into the cue runtime.
 
 ### 4. Per-cue initial honey (`energy_budget`)
 
@@ -156,7 +157,7 @@ CLI sketch:
 
 - One library/module loads, validates, renders, seeds optional honey, and publishes cues.
 - CLI, Console API, and Telegram gate all call that runtime after channel-specific auth/UX.
-- Envelope `agentId` / payload `source` reflect the calling channel.
+- Envelope `agentId` / payload `source` reflect the calling channel (`cli`, `console`, `telegram`). Scripted `cue run` uses `cli` until a later change adds an explicit machine-origin tag.
 - Publishing reuses existing bus + task-create helpers; honey override reuses `SeedEnergy` — do not invent parallel ledger writers or a new energy bus kind for MVP.
 
 ### 8. Telegram gate
@@ -184,10 +185,18 @@ CLI sketch:
 
 ### 11. Docs on ship
 
-- Guide: cue authoring + CLI; Telegram `cue:` example; Console Run cue; `energy_budget` vs colony default vs `paseka energy add`.
+- Guide: cue authoring + CLI; Telegram `cue:` example; Console Run cue; `energy_budget` vs colony default vs `paseka energy add`; external timers/webhooks as wrappers around `cue run`.
 - Glossary: Forage Cue ↔ cue.
 - Changelog entry; remove backlog cue row on ship.
 - Ideation / telegram / task-ledger guides link here for ingress honey override instead of duplicating recipes.
+
+### 12. External timers and webhooks
+
+- Colony owns **what** (cue YAML). The machine/CI owns **when** and **from where** (systemd, GitHub Actions, a signed-webhook script). Schedules do not live under `.paseka/`.
+- Queen Console `POST /api/cues/:id/run` is a trusted-network Console API, not a public webhook. Internet providers call Queen Shell on the hive host (SSH / self-hosted runner), never the Console port.
+- Wrappers map provider JSON to cue `Text` / `--set`. Cue YAML must not encode GitHub/GitLab payload schemas.
+- Duplicate deliveries: wrappers dedupe (`delivery_id`, timer slot). Cue run without `--trace` always allocates a new trail; the bus does not noop retries.
+- `paseka status --check` is the substrate probe for timers; it is not part of cue success. Telegram gate `mode: webhook` remains bot transport ([010](010-telegram-human-gateway.md)), not this ingress.
 
 ## Testing Decisions
 
@@ -212,6 +221,13 @@ CLI sketch:
 - Shrinking or rewriting honey on an already seeded trail
 - New bus kind to carry budget (e.g. `energy.seed`) — MVP uses ledger `SeedEnergy` only
 - Per-cue override of colony `energyBudget` display semantics beyond first seed
+- In-process HTTP webhook receiver or path→cue route table
+- Built-in cron / scheduled cue dispatcher
+- Delivering cue or bee results back to the HTTP caller (`report_to` / callback)
+- Bus-level cue-run idempotency or `dedupe_key` (wrappers own GitHub delivery-id / timer slot)
+- Treating Queen Console cue-run HTTP as public internet ingress
+- Mapping raw webhook JSON in the cue runtime (no stdin / `--file`; wrappers render `Text` / `--set`)
+- Dedicated `--source` / `agentId` values for cron or GitHub (scripted runs stay `cli` until a later spec)
 
 ## Further Notes
 
@@ -219,3 +235,4 @@ CLI sketch:
 - Complements [005 ideation](005-feature-ideation-flow.md) entry paths and [010 Telegram custom emit](010-telegram-human-gateway.md) without replacing raw `paseka signal` (power users / evals keep it).
 - Honey model background: [task ledger](../reference/task-ledger.md) (`energyBudget` vs `energy.add`).
 - Related durable docs after ship: [telegram gateway](../guide/telegram-gateway.md), [CLI](../guide/cli.md), [colony layout](../guide/colony-layout.md), [nuc](../guide/nuc.md), [glossary](../idea/glossary.md).
+- External timers and webhooks: [Forage Cues](../guide/cues.md) § External timers and webhooks. A machine-origin `source` tag (`cron`, `github`) is optional later work if Flight Trails must distinguish scripted vs human CLI; it is not required to keep hooks outside the binary.

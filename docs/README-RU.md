@@ -16,7 +16,7 @@
 | -------- | -------- |
 | [Colony layout](guide/colony-layout.md) | `.paseka/` и machine-local конфиг, slug, `paseka init` |
 | [CLI](guide/cli.md) | Справочник Queen Shell (`paseka`) |
-| [Forage Cues](guide/cues.md) | Именованные точки входа (`.paseka/cues/`), CLI, Console, Telegram |
+| [Forage Cues](guide/cues.md) | Именованные точки входа (`.paseka/cues/`); CLI, Console, Telegram; таймеры/webhook вызывают `cue run` |
 | [Bee config](guide/bee-config.md) | YAML роли пчелы, адаптеры, routing |
 | [Prompt templates](guide/prompt-templates.md) | `.paseka/prompts/`, `text/template`, partials |
 | [Interactive sessions](guide/interactive-sessions.md) | HITL `bee chat`, SessionAdapter, Ghostty |

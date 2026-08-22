@@ -425,7 +425,7 @@ paseka replay trace-abc123
 
 ## `paseka cue`
 
-Run colony **Forage Cue** shortcuts from `.paseka/cues/<id>.yaml`. Publishes `signal` or `task` ingress immediately (no confirm). Full authoring, Console, Telegram, and honey rules: [Forage Cues](cues.md).
+Run colony **Forage Cue** shortcuts from `.paseka/cues/<id>.yaml`. Publishes `signal` or `task` ingress immediately (no confirm). Full authoring, Console, Telegram, honey, and **external timer/webhook** rules: [Forage Cues](cues.md). Cron and GitHub hooks invoke this command on the hive host; Paseka does not listen for HTTP or run a scheduler.
 
 Requires NATS (same as `paseka signal` / `task create`).
 

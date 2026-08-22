@@ -4,7 +4,7 @@ A **cue** (bee language: **Forage Cue**) is a project-local YAML shortcut under 
 
 Design record: [spec 016](../specs/016-cue-layer.md). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue).
 
-Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout](colony-layout.md), [task ledger](../reference/task-ledger.md), [feature ideation flow](../specs/005-feature-ideation-flow.md).
+Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout](colony-layout.md), [task ledger](../reference/task-ledger.md), [feature ideation flow](../specs/005-feature-ideation-flow.md), [homelab deployment](homelab-deployment.md).
 
 ---
 
@@ -15,8 +15,9 @@ Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout]
 | Publish `SIGNAL` or `INSIGHT`/`SIGNAL` task plan (+ optional `task.ready`) | Run bees, start sessions, or accept invites |
 | Seed optional per-cue **initial** honey on a fresh trace | Top up honey mid-flight (`paseka energy add`) |
 | Share one definition across CLI, Console, Telegram | Replace raw `paseka signal` / `task create` for power users |
+| Stay the publish API for timers and GitHub-style hooks (via `paseka cue run`) | Listen for HTTP, run cron, or reply to the webhook caller |
 
-Cue success means the bus publish(es) succeeded (and optional honey seed). AFK reactions still need `paseka run` as today.
+Cue success means the bus publish(es) succeeded (and optional honey seed). AFK reactions still need `paseka run` as today. Timers and inbound HTTP stay **outside** Paseka — see [§10](#10-external-timers-and-webhooks).
 
 ---
 
@@ -89,7 +90,7 @@ Reuses `task create` semantics: `INSIGHT/task.plan`, then `SIGNAL/task.ready` wh
 | `Text` | Operator text (positional CLI arg, Console modal, Telegram command body) |
 | `Title` | First line of `Text` |
 | `Body` | Full `Text` |
-| `Source` | `cli`, `console`, or `telegram` |
+| `Source` | Calling channel: `cli`, `console`, or `telegram` (scripted `cue run` is `cli` today) |
 | `TraceID` | Resolved flight trail |
 
 Extra vars: `--set key=val` (CLI) or `vars` map (Console API). Missing template keys → error. Unused `--set` keys are ignored. Operator `Text` / `--set` wins over cue `static` defaults.
@@ -116,7 +117,7 @@ paseka cue run hotfix "Fix nil deref in token refresh"
 paseka cue run feature "Follow-up on same trail" --trace trace-abc123
 ```
 
-Requires NATS (same as `paseka signal` / `task create`). See [CLI](cli.md) § `paseka cue`.
+Requires NATS (same as `paseka signal` / `task create`). See [CLI](cli.md) § `paseka cue`. systemd/cron and GitHub should invoke this command on the hive host — not a Paseka listener ([§10](#10-external-timers-and-webhooks)).
 
 ---
 
@@ -156,7 +157,7 @@ API (NATS required):
 | `GET` | `/api/cues` | — |
 | `POST` | `/api/cues/:id/run` | `{"text":"…","traceId":"…","vars":{}}` |
 
-`traceId` and `vars` are optional. `agentId` / `source` are `console`.
+`traceId` and `vars` are optional. `agentId` / `source` are `console`. This API is for Queen Console on a **trusted** network ([homelab](homelab-deployment.md)); it is not a public GitHub/webhook endpoint.
 
 ---
 
@@ -207,3 +208,34 @@ paseka cue run feature "Live bees indicator in Console header"
 ```
 
 See [feature ideation flow](../specs/005-feature-ideation-flow.md) § Entry paths and § Soft bootstrap.
+
+---
+
+## 10. External timers and webhooks
+
+Colony YAML says **what** to publish (`.paseka/cues/<id>.yaml`). The apiary says **when** and **from where**. Paseka does not ship an HTTP webhook receiver, a cron dispatcher, or delivery back to the caller (`report_to`). Telegram `mode: webhook` is bot transport ([Telegram gateway](telegram-gateway.md)), not generic ingress.
+
+| Layer | Owns | Lives in |
+| ----- | ---- | -------- |
+| Cue definition | Mnemonic + payload templates | `.paseka/cues/` (git, Nuc) |
+| Schedule / hook | systemd timer, GitHub Actions, a small signed-webhook wrapper | Machine / CI — not the colony repo |
+| Hive liveness | JetStream + reactor | `paseka run`; probe with `paseka status --check` |
+
+**Cue success ≠ bees running.** `paseka cue run` publishes even if the reactor is down. A timer that must start work should probe first (`paseka status --check`), then run the cue. See [CLI](cli.md) (`paseka status --check`, `paseka cue`).
+
+**Do not** point GitHub (or any internet webhook) at `POST /api/cues/:id/run`. Use SSH or a self-hosted runner on the hive host and call Queen Shell. Map provider JSON to cue `Text` / `--set` in the wrapper — cue files stay GitHub-agnostic (no stdin / `--file` on `cue run`).
+
+**Idempotency** is the wrapper’s job. Omitting `--trace` always starts a **new** trail; a retried GitHub delivery or a double timer tick otherwise burns a second honey reserve. Remember `delivery_id` or `job@slot` and skip the second `cue run`.
+
+Examples (apiary-local; adjust `-C` / paths):
+
+```bash
+# systemd / cron: probe hive, then publish
+paseka status --check -C /path/to/colony && \
+  paseka cue run nightly-deps "timer $(date -Is)" -C /path/to/colony
+
+# CI on a self-hosted runner next to the hive (map provider JSON → Text in the job)
+paseka cue run hotfix "$ISSUE_TITLE" -C "$COLONY_ROOT"
+```
+
+Scheduled cues still need an active `paseka run` (and NATS) for AFK bees. Put schedules in machine config, not in committed `.paseka/`.
