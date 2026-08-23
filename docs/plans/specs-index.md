@@ -8,7 +8,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | ---- | ------ | ------- |
 | [001-pi-integration](../specs/001-pi-integration.md) | Implemented | Pi CLI as first-class AFK + interactive adapter |
 | [002-queen-console-mvp](../specs/002-queen-console-mvp.md) | Implemented (MVP baseline) | Queen Console SPA + API surface |
-| [003-hive-evals](../specs/003-hive-evals.md) | In progress | Eval harness / eval colony |
+| [003-hive-evals](../specs/003-hive-evals.md) | In progress (Phase 2 largely done; Tier C/4 open) | Eval harness / eval colony |
 | [004-live-bees-indicator](../specs/004-live-bees-indicator.md) | Implemented | Live agent processes in Console header |
 | [005-feature-ideation-flow](../specs/005-feature-ideation-flow.md) | Draft (colony reference) | Classify → grill → `spec.ready` → breakdown |
 | [006-human-gateway-invites](../specs/006-human-gateway-invites.md) | Implemented | Session invites, accept/reject, `done_when` |

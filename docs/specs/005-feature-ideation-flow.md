@@ -44,7 +44,7 @@ This extends — does not replace — the short path in [task ledger](../referen
 - Do not add a new top-level `EventType` (stay on `SIGNAL` / `INSIGHT` / `MUTATION` / `VERIFICATION`).
 - Do not make `INSIGHT` drive workflow routing (narrative only; see [insight kinds](../reference/insight-kinds.md)).
 - Do not AFK-dispatch `intent=grilling` via `task.ready` (grilling is interactive-by-contract).
-- Do not implement `confidence` budgets or `system.kill` here (see [backlog](../plans/backlog.md)).
+- Do not implement `confidence` budgets here (see [backlog](../plans/backlog.md)). Hard stop is [013-system-kill](013-system-kill.md).
 - Do not invent a second task ledger for grill/breakdown meta-tasks (optional later; not MVP).
 - Do not require Object Store for MVP specs — a repo path under `docs/specs/` is enough.
 - Do not register `feature.*` / `spec.ready` as hardcoded validators or reactor special-cases in `internal/protocol` — those are colony choreography contracts, not platform primitives.

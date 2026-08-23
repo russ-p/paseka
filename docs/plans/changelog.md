@@ -82,8 +82,6 @@ Bees can stage bus events until a run or session completes successfully. `paseka
 - Spec: [015-deferred-event-emit](../specs/015-deferred-event-emit.md)
 - Canonical: [CLI](../guide/cli.md) (`paseka event emit`, `pending`, `flush`), [Prompt templates](../guide/prompt-templates.md), [Interactive sessions](../guide/interactive-sessions.md)
 
-Deferred from that work: 014 scan-flush coexistence with deferred `artifact.written` — see [Backlog](backlog.md).
-
 ## 2026-07 — Hard trace kill (`system.kill`)
 
 Beekeepers can emergency-stop a trace without waiting for honey to drain. `paseka kill --trace <id>` publishes `SIGNAL/system.kill`: marks the trace `killed`, cancels non-terminal tasks, blocks new AFK dispatch, and cancels in-flight adapter processes. `energy.add` after kill does not redispatch.

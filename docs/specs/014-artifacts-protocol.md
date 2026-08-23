@@ -175,7 +175,7 @@ Bees are **not** required to call `paseka event emit` for comb files. Bee-run an
 
 [015](015-deferred-event-emit.md) is **Implemented**. This spec does **not** depend on the pending buffer for MVP artifacts.
 
-**Complement + skip:** keep scan flush enabled. If a pending or already-flushed deferred `artifact.written` exists for that run when scan would run, **skip** the scan-synthesized event. Prefer one announcement path per bee run. Do not silently merge multiple deferred `artifact.written` lines (batch only via one event with `artifacts[]`). Joint tests live in [backlog](../plans/backlog.md) until 014 scan flush lands on top of 015.
+**Complement + skip:** keep scan flush enabled. If a pending or already-flushed deferred `artifact.written` exists for that run when scan would run, **skip** the scan-synthesized event. Prefer one announcement path per bee run. Do not silently merge multiple deferred `artifact.written` lines (batch only via one event with `artifacts[]`). Joint coverage: eval colony cases `12-artifact-scan-flush`, `13-artifact-deferred-skip`, `14-artifact-handoff`.
 
 ### 10. Relationship to `spec.ready` and ideation
 

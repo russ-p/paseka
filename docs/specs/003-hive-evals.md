@@ -2,12 +2,13 @@
 
 ## Status
 
-**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner, and at least two cases (`01-add-function`, `02-energy-exhausted`). Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [backlog](../plans/backlog.md#eval-colony) (Assumptions).
+**In progress (Phase 2).** Design is locked. Platform Tier A coverage exists via `internal/runtime` harness tests (routing, energy, review gates). Sibling eval colony [`paseka-eval-colony`](https://github.com/russ-p/paseka-eval-colony) has script bees, reset/run-case runner with event-chain scoring, and cases `01`–`14`. Phase 3 (live LLM Tier C) and Phase 4 platform affordances are not started. Gotchas from standing up Phase 2: [backlog](../plans/backlog.md#eval-colony) (Assumptions).
 
 Resolved since the original draft:
 
 - First-class `adapter: script` in the platform (eval bees use it + `paseka event emit`).
-- `paseka purge --bus --trace <traceId>` for per-trace JetStream wipe (stop `paseka run` first).
+- `paseka purge --bus --trace <traceId>` for per-trace JetStream wipe (stop `paseka run` first); `--reseed-energy` seeds honey after the wipe.
+- Eval colony event-chain scorer (`expect_event_chain` vs `paseka replay`) and cases `01`–`14`.
 
 ## Purpose
 
@@ -67,8 +68,7 @@ Gaps remaining:
 
 - No golden `testdata/` suite inside the **platform** repo beyond unit/integration tests (Tier B lives in the sibling eval colony).
 - No seeded `agentId` control.
-- No JetStream snapshot/restore helper beyond per-trace `purge --bus`.
-- No automated event-chain scorer in the runner (oracle + human `paseka replay` inspection today).
+- No JetStream snapshot/restore helper beyond per-trace `purge --bus` (eval reset uses `purge --bus --reseed-energy`).
 - Tier C live LLM suite not started.
 - `confidence` filtering is not implemented (out of scope; see backlog).
 
@@ -297,12 +297,12 @@ Production Paseka bees remain unchanged unless a platform gap is found.
 - Covered: routing (including `verification.failed` → builder direct dispatch), energy block/unblock, review gates.
 - Still useful to add: a single end-to-end in-process golden for bad builder → guard fail → builder fix → success if not already covered by focused reactor tests.
 
-### Phase 2 — Eval colony + Tier B — In progress
+### Phase 2 — Eval colony + Tier B — Largely done
 
-- Sibling repo with cases (`01-add-function`, `02-energy-exhausted`, …).
-- Scripted builder/guard/receiver bees.
-- Reset + run-case scripts; JSON reports under `reports/`.
-- Assert outcomes via oracle and `paseka replay` (automated event-chain scorer still backlog).
+- Sibling repo with cases `01`–`14` (scripted loop, energy, kill, HITL reject, cues, deferred emit, artifacts, ready-before-plan, …).
+- Scripted builder/guard/receiver/scout bees.
+- Reset + run-case scripts; JSON reports under `reports/`. Reset uses `paseka purge --bus --trace <id> --reseed-energy` (skipped for cue ingress).
+- Assert outcomes via oracle, `paseka replay`, and `expect_event_chain` scoring in `runner/lib.sh`.
 
 ### Phase 3 — Tier C live suite — Not started
 
@@ -313,7 +313,7 @@ Production Paseka bees remain unchanged unless a platform gap is found.
 ### Phase 4 — Platform affordances (only if needed) — Not started
 
 - Optional `--agent-id` / seed for deterministic run dirs.
-- Eval-oriented purge/namespace helpers (partially covered by `paseka purge --bus --trace`).
+- Eval-oriented purge/namespace helpers (partially covered by `paseka purge --bus --trace --reseed-energy`).
 - True prompt replay against historical JetStream chains (product brief “Event Replay”) — separate spec.
 
 ## Verification (when implementing)
@@ -346,10 +346,10 @@ Success criteria for the design:
 1. **Runner home** — today: standalone scripts in the eval colony. Promote to `paseka eval …` later?
 2. **Seed materialization** — copy `seed/` into colony root + commit each run (current runner) vs tags on a single eval-colony history?
 3. **Script bees** — **resolved:** first-class `adapter: script` in platform; eval colonies use script bees with `paseka event emit` for domain events.
-4. **JetStream wipe** — **resolved:** `paseka purge --bus --trace <traceId>` removes task-ledger KV, stream events, and object-store artifacts for one trace without restarting NATS. Stop `paseka run` before bus purge. See [CLI](../guide/cli.md) § `paseka purge`.
+4. **JetStream wipe** — **resolved:** `paseka purge --bus --trace <traceId>` removes task-ledger KV, stream events, and object-store artifacts for one trace without restarting NATS. `--reseed-energy` seeds honey after the wipe. Stop `paseka run` before bus purge. See [CLI](../guide/cli.md) § `paseka purge`.
 5. **Case language** — keep YAML only, or allow Markdown task bodies with YAML front matter?
 6. **Multi-sector cases** — defer until sectors are common in real colonies?
-7. **Event-chain scorer** — automate `expect_event_chain` against `paseka replay` (backlog follow-up).
+7. **Event-chain scorer** — **resolved:** eval colony `check_replay_event_chain` asserts `case.yaml` `expect_event_chain` against `paseka replay`.
 
 ## References
 
@@ -359,4 +359,4 @@ Success criteria for the design:
 - [bee routing](../reference/bee-routing.md) — builder/guard subscriptions
 - [bee config](../guide/bee-config.md) — `adapter: script` and bee schema
 - [Brief](../idea/brief.md) — event replay and energyToken vision
-- [backlog](../plans/backlog.md#eval-colony) — eval colony gotchas; [Eval harness](../plans/backlog.md#eval-harness) follow-ups
+- [backlog](../plans/backlog.md#eval-colony) — eval colony gotchas; leftover eval-adjacent follow-up is [task retry with edit](../plans/backlog.md#task-retry-with-edit)

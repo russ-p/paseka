@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented.** General deferred `paseka event emit --defer` buffer with per-run `pending.ndjson`, success flush (FIFO, before `run.summary`), `event pending` / `event flush` / `--discard`, and live-only deny-list. **014 MVP does not depend on this buffer** — artifacts use scan flush first; 014/015 coexistence follow-up is in [backlog](../plans/backlog.md).
+**Implemented.** General deferred `paseka event emit --defer` buffer with per-run `pending.ndjson`, success flush (FIFO, before `run.summary`), `event pending` / `event flush` / `--discard`, and live-only deny-list. **014 MVP does not depend on this buffer** — artifacts use scan flush first; scan-flush skip when a deferred `artifact.written` is present shipped with 014 (eval colony cases `12`–`14`).
 
 ## Problem Statement
 
@@ -196,7 +196,7 @@ Prior art: `ProcessEventInput` publish/validate paths; runtime auto-publish orde
 
 ## Further Notes
 
-- **014 coexistence follow-up:** scan-flush skip when a deferred `artifact.written` is present is tracked in [backlog](../plans/backlog.md#014-scan--deferred-artifactwritten-coexistence), not the first 015 implementation slices.
+- **014 coexistence:** scan-flush skip when a deferred `artifact.written` is present shipped with 014; eval colony cases `12`–`14` cover scan-flush, deferred skip, and comb handoff.
 - Closest shipped analogy: runtime auto-publish of `code.proposal` **after** adapter exit — deferred emit extends that “boundary visibility” idea to **bee-authored** events.
 - Naming: user-facing “queued events” / “flush on success”; wire stays standard domain events after publish.
 - If the colony later rejects building 015, move status to **Deprecated** with pointer to 014-only flush so the trade-off discussion is not lost.

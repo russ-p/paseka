@@ -15,6 +15,14 @@ Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-inde
 - **Why deferred:** CLI/cues/Telegram already use plan+ready as two events; deferred FIFO pair matches `task create --autorun` without new protocol surface. Ledger `pendingReady` covers out-of-order emits.
 - **Revisit when:** Product wants one-event autostart from bees without relying on prompt discipline, with explicit bus observability for the synthesized ready.
 
+#### Task retry with edit
+
+- **Kind:** follow-up
+- **Source:** [003-hive-evals](../specs/003-hive-evals.md); planning (task ledger / Console)
+- **Summary:** Allow changing bee, intent, body, or sector when retrying a failed task (CLI flags or Console form). Today `paseka task retry` and Console Retry reuse the ledger snapshot as-is.
+- **Why deferred:** Snapshot reuse was enough for MVP retry; edit-on-retry needs UX and ledger rules. Eval colony has no case that needs a corrected retry.
+- **Revisit when:** Operators or eval cases need corrected retries without creating a new task.
+
 ### Energy and honey
 
 MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion → `blocked` (`Honey reserve exhausted`). These items need separate design or evidence before expanding the MVP.
@@ -30,10 +38,10 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 #### New trace from interrupted worktree
 
 - **Kind:** follow-up
-- **Source:** planning (`system.kill` / hard kill)
+- **Source:** planning (`system.kill` / hard kill); [013-system-kill](../specs/013-system-kill.md)
 - **Summary:** After a hard kill (or late-stage avalanche), good early work may already live in `.paseka/worktrees/<traceId>/`. Need an operator path to start a **new** `traceId` that reuses that worktree (or grafts its branch/diff) instead of discarding progress and redoing from `HEAD`.
-- **Why deferred:** Orthogonal to kill protocol itself; needs worktree registry + trace bootstrap design (identity, honey budget, which tasks/events to carry).
-- **Revisit when:** `system.kill` ships and operators hit “early stages were fine, last stage blew up” without a clean continue path.
+- **Why deferred:** Orthogonal to kill protocol itself (`paseka kill` shipped); needs worktree registry + trace bootstrap design (identity, honey budget, which tasks/events to carry).
+- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path.
 
 #### Energy gate on `paseka bee run` / `bee chat`
 
@@ -107,35 +115,6 @@ Leftovers from [008-code-proposal-workspaces](../specs/008-code-proposal-workspa
 - **Why deferred:** Alias keeps older colonies working while `.isolated` / `.root` settle.
 - **Revisit when:** Docs and colonies have moved to explicit kinds and the alias is a liability.
 
-### Eval harness
-
-Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony `paseka-eval-colony`. Gotchas from standing up Phase 2 are under [Assumptions and gotchas](#assumptions-and-gotchas).
-
-#### Task retry with edit
-
-- **Kind:** follow-up
-- **Source:** [003-hive-evals](../specs/003-hive-evals.md); planning (task ledger / Console)
-- **Summary:** Allow changing bee, intent, body, or sector when retrying a failed task (CLI flags or Console form). Today `paseka task retry` and Console Retry reuse the ledger snapshot as-is.
-- **Why deferred:** Snapshot reuse was enough for MVP retry; edit-on-retry needs UX and ledger rules.
-- **Revisit when:** Operators or eval cases need corrected retries without creating a new task.
-
-#### Trace reset helper
-
-- **Status:** shipped as `paseka purge --bus --trace <id> --reseed-energy` (seeds colony `defaults.energy_budget` after bus wipe). For filesystem artifacts, combine with `--runs`, `--worktrees`, and `--state` as needed.
-- **Kind:** follow-up (narrowed)
-- **Source:** [003-hive-evals](../specs/003-hive-evals.md); planning (eval harness)
-- **Summary:** ~~One command to seed energy and clear ledger for a fixed `--trace`~~ Covered by `purge --bus --reseed-energy`; optional dedicated alias or eval-runner wrapper remains polish.
-- **Why deferred:** Core wipe+seed path shipped; a friendlier eval helper or custom budget override is optional polish.
-- **Revisit when:** Eval runners need a single named command beyond `purge --bus --reseed-energy`.
-
-#### Event-chain scorer in runner
-
-- **Kind:** follow-up
-- **Source:** [003-hive-evals](../specs/003-hive-evals.md)
-- **Summary:** Assert `case.yaml` `expect_event_chain` against `paseka replay` output (today: oracle + human replay inspection only).
-- **Why deferred:** Phase 2 focused on colony wiring and oracle; automated chain scoring is Phase-adjacent polish.
-- **Revisit when:** Eval cases rely on event-chain assertions beyond manual replay.
-
 ### Releases
 
 #### Windows release builds
@@ -145,10 +124,6 @@ Follow-ups for [003-hive-evals](../specs/003-hive-evals.md) and the side colony 
 - **Summary:** Make `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` work (Unix-only PTY/HITL today: e.g. `SIGWINCH`, review `Setsid`), then add `windows` to GoReleaser `builds.goos` so release assets include `.exe` archives.
 - **Why deferred:** Pipeline already ships linux/darwin from Ubuntu with `CGO_ENABLED=0`; Windows needs build tags/stubs before CI/release changes.
 - **Revisit when:** Local/CI Windows cross-build succeeds and release should publish `windows/amd64` (optionally `windows/arm64`).
-
-### Colony configuration
-
-Shareable colony defaults vs machine-local overlays. Bee roles stay in `.paseka/bees/`; home config stays for secrets and this-machine overrides ([colony layout](../guide/colony-layout.md)). Model aliases: [spec 019](../specs/019-model-aliases.md).
 
 ### NATS / hive substrate
 
@@ -162,22 +137,20 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 - **Why deferred:** Orthogonal to bee contracts; needs a written split (embedded vs external, bind address, data dir, one-consumer-per-prefix, shutdown) before changing `paseka init` defaults.
 - **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
 
-### Deferred emit and artifacts
-
-General deferred `event emit` buffer ([015](../specs/015-deferred-event-emit.md)) and trail comb protocol ([014](../specs/014-artifacts-protocol.md)) — **implemented**; scan ↔ deferred coexistence ships with 014.
-
 ## Assumptions and gotchas
 
 ### Eval colony
 
 Wiring the side eval colony (`paseka-eval-colony`) and `runner/run-case.sh` against real NATS + `paseka run`. See [003-hive-evals](../specs/003-hive-evals.md).
 
+Tier B in that repo already covers cases `01`–`14` (scripted loop, energy block, first-pass, inject-mutation, kill, human reject, cue hotfix, deferred emit, kill no-redispatch, signal direct, ready-before-plan, artifact scan-flush, deferred-artifact skip, artifact handoff). `runner/reset.sh` purges with `--reseed-energy` (skipped for cue ingress so the cue’s `energy_budget` seeds honey). `check_replay_event_chain` scores `case.yaml` `expect_event_chain` against `paseka replay`. Remaining eval work is Tier C (live LLM) and optional platform helpers (`paseka eval`, seeded `agentId`) — owned by spec 003, not this backlog.
+
 - **Always pass `-C` to `paseka` from runner scripts** — resolving from cwd alone can target the wrong git repo (e.g. parent `paseka` platform) and `purge` the wrong colony. Use `paseka … -C "${EVAL_ROOT}"`.
 - **Worktrees are created from `HEAD`, not the working tree** — seed code (`go.mod`, `pkg/`, …) must be **committed** before a trace worktree is created. Do not gitignore materialized seed files at the colony root. Also relevant outside eval; see [008](../specs/008-code-proposal-workspaces.md).
 - **Script bees run from the worktree checkout** — `scripts/*.sh` and bee YAML come from git `HEAD`. Uncommitted script changes are invisible inside `.paseka/worktrees/<traceId>/`.
 - **`paseka event emit` from script bees needs `-C "$PASEKA_COLONY_ROOT"`** — when cwd is the worktree, emit without `-C` fails colony/home resolution. Guard/receiver scripts must pass colony root explicitly.
 - **`paseka event emit` can fail after a successful bus publish** — if audit log append to `.paseka/runs/<traceId>/<agentId>/events.ndjson` fails, emit exits non-zero and the adapter run is marked failed. Normal adapter runs have a run dir; ad-hoc manual emits need a matching run dir.
-- **Fixed `trace` + JetStream state accumulates** — reusing case traces leaves ledger KV, depleted honey, and replay history. Use `paseka purge --bus --trace <case-trace>` (stop `paseka run` first); see [CLI](../guide/cli.md) § `paseka purge`.
+- **Fixed `trace` + JetStream state accumulates** — reusing case traces leaves ledger KV, depleted honey, and replay history. Stop `paseka run` first, then `paseka purge --bus --trace <case-trace> --reseed-energy` (eval `reset.sh` does this; cue-ingress cases omit `--reseed-energy`). See [CLI](../guide/cli.md) § `paseka purge`.
 - **Only one `paseka run` consumer per colony subject prefix** — a second reactor logs `consumer is already bound to a subscription`. Stop the previous runtime before `run-case.sh` starts another.
 - **Builder rework is async** — `verification.failed` → builder fix-up via direct dispatch can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop; treat `blocked` as terminal when honey runs out.
 - **Oracle scope** — `go test ./...` in the worktree also picks up packages under `cases/…/expect/`. Prefer a narrow path (e.g. `go test ./pkg/...`) in `case.yaml` `oracle.command` and in script-guard bees.
