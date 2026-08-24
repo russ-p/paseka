@@ -1125,6 +1125,18 @@ button.secondary {
   border: 1px solid var(--border);
 }
 
+/* Dashboard "Run cue" should stand out from other secondary actions. */
+#dashboard-run-cue-btn.secondary {
+  background: var(--ok);
+  border: 1px solid rgba(95, 211, 141, 0.65);
+  color: #081018;
+}
+
+#dashboard-run-cue-btn.secondary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  border-color: rgba(95, 211, 141, 0.9);
+}
+
 button.danger {
   width: auto;
   background: var(--danger);
