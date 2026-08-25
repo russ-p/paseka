@@ -216,7 +216,7 @@ agent --force \
 
 When `system_template` is set and no task/prompt is given, the session starts without a positional prompt and waits for user input.
 
-Worktrees: if the bee has `worktree: true`, the session cwd is `.paseka/worktrees/<traceId>/` (same as `bee run`).
+Worktrees: if the bee has `worktree: true`, the session cwd is `.paseka/worktrees/<traceId>/` (same as `bee run`). Git branch follows the same ensure/rename rules as AFK: latest `INSIGHT/worktree.branch`, else `paseka/<traceId>`.
 
 ---
 

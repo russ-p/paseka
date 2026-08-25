@@ -78,6 +78,29 @@ func TestApplyEventTaskPlanPreservesIntent(t *testing.T) {
 	}
 }
 
+func TestApplyEventWorktreeBranchNoOp(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
+
+	ev, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventInsight, protocol.WorktreeBranchPayload{
+		Kind:   protocol.InsightWorktreeBranch,
+		Branch: "feature/foo",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Fatal("worktree.branch should not change ledger")
+	}
+	if len(res.Ready) != 0 {
+		t.Fatalf("ready = %#v", res.Ready)
+	}
+}
+
 func TestApplyEventTaskReadyUpdatesIntent(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

@@ -17,7 +17,7 @@ Work centers on a **git repository**. Configuration is split:
 - **Project:** `.paseka/` in the repo — shareable colony manifest, bee definitions, gitignored worktrees.
 - **Machine-local:** `~/.config/paseka/<project-slug>/` — secrets, adapter credentials, runtime state.
 
-`paseka init` bootstraps both. See [docs/guide/colony-layout.md](docs/guide/colony-layout.md).
+`paseka init` bootstraps both. See [docs/guide/colony-layout.md](docs/guide/colony-layout.md). Isolated worktrees live under `.paseka/worktrees/<traceId>/`; git branch is `INSIGHT/worktree.branch` when set, else `paseka/<traceId>`.
 
 ## Adapters
 

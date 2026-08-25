@@ -25,7 +25,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [017-console-diff-review](../specs/017-console-diff-review.md) | Implemented | Queen Console merge-diff viewer, annotated review comments, final-gate Request changes rework |
 | [018-cli-colony-status](../specs/018-cli-colony-status.md) | Implemented | `paseka status` read-only colony snapshot (CLI alternative to Console dashboard; energy in MVP; `--check` for substrate probe) |
 | [019-model-aliases](../specs/019-model-aliases.md) | Implemented | Colony `model_aliases` map; home overlay; resolves `params.model` at dispatch |
-| [020-worktree-branch](../specs/020-worktree-branch.md) | Draft | `INSIGHT/worktree.branch` to name/rename the isolated trace worktree git ref |
+| [020-worktree-branch](../specs/020-worktree-branch.md) | Implemented | `INSIGHT/worktree.branch` to name/rename the isolated trace worktree git ref |
 | [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) | Draft | Associate `providerSessionId` with agent runs; enrich local `paseka export` from provider logs (tool calls); keep `events.ndjson` bus-only |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

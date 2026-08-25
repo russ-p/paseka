@@ -228,21 +228,26 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, fmt.Errorf("sessions: resolve trace title: %w", err)
 	}
+	worktreeBranch, err := runs.ResolveWorktreeBranch(ctxColony.ColonyRoot, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: resolve worktree branch: %w", err)
+	}
 	promptCtx := prompts.PromptContext(prompts.Context{
-		Bee:          bee.Role,
-		TraceID:      traceID,
-		TraceTitle:   traceTitle,
-		AgentID:      agentID,
-		TaskID:       req.TaskID,
-		ColonyRoot:   ctxColony.ColonyRoot,
-		Workspace:    workspace,
-		Task:         req.Task,
-		IntentRaw:    req.Intent,
-		Insights:     req.Insights,
-		ResultFile:   resultFile,
-		ArtifactsDir: artifacts.DirForPrompt(ctxColony.ColonyRoot, traceID),
-		Interactive:  true,
-		Adapter:      adapterName,
+		Bee:            bee.Role,
+		TraceID:        traceID,
+		TraceTitle:     traceTitle,
+		WorktreeBranch: worktreeBranch,
+		AgentID:        agentID,
+		TaskID:         req.TaskID,
+		ColonyRoot:     ctxColony.ColonyRoot,
+		Workspace:      workspace,
+		Task:           req.Task,
+		IntentRaw:      req.Intent,
+		Insights:       req.Insights,
+		ResultFile:     resultFile,
+		ArtifactsDir:   artifacts.DirForPrompt(ctxColony.ColonyRoot, traceID),
+		Interactive:    true,
+		Adapter:        adapterName,
 	}, knownIntents, defaultIntent)
 
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{

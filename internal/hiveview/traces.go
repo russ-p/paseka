@@ -15,6 +15,7 @@ import (
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
+	"github.com/paseka/paseka/internal/worktree"
 )
 
 const (
@@ -241,11 +242,15 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	}
 	for _, wt := range st.Worktrees {
 		if wt.TraceID == traceID {
+			branch := wt.Branch
+			if resolved, err := worktree.ResolvedBranch(ctx.ColonyRoot, traceID, ctx.Slug); err == nil && resolved != "" {
+				branch = resolved
+			}
 			view.Worktree = &WorktreeView{
 				TraceID:   wt.TraceID,
 				Path:      wt.Path,
 				BaseSHA:   wt.BaseSHA,
-				Branch:    wt.Branch,
+				Branch:    branch,
 				CreatedAt: wt.CreatedAt,
 			}
 			break
@@ -582,6 +587,12 @@ func RenderEventSummary(ev protocol.Event) (string, bool) {
 			return "", false
 		}
 		return fmt.Sprintf("Trail title: %s", strings.TrimSpace(p.Title)), true
+	case string(protocol.InsightWorktreeBranch):
+		var p protocol.WorktreeBranchPayload
+		if err := json.Unmarshal(ev.Payload, &p); err != nil || strings.TrimSpace(p.Branch) == "" {
+			return "", false
+		}
+		return fmt.Sprintf("Worktree branch: %s", strings.TrimSpace(p.Branch)), true
 	case string(protocol.TaskEventReady):
 		var p protocol.TaskReadyPayload
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {

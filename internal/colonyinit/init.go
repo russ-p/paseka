@@ -273,6 +273,8 @@ publishes:
     kind: task.plan
   - type: SIGNAL
     kind: task.ready
+  - type: INSIGHT
+    kind: worktree.branch
 `
 	builderBeeYAML = `role: builder
 adapter: cursor
@@ -527,6 +529,7 @@ Always emit feature.classified first. Then follow the decision branch below.
 | INSIGHT | task.plan | decision=plan or decision=triage (one builder task) |
 | SIGNAL | task.ready | Same slice, only when entry text asks to start now (--defer after task.plan) |
 | INSIGHT | trace.title | Short Flight Trail name for Console (emit on every intake) |
+| INSIGHT | worktree.branch | Git branch for isolated work (plan / triage; optional otherwise) |
 | INSIGHT | run.summary | Optional one-line summary |
 
 Do not emit task.plan or task.ready when decision=grill, clarify, or reject. Still emit trace.title when the entry has a usable short name.
@@ -654,6 +657,7 @@ Runtime automatically projects selected narrative INSIGHT kinds into {{.Insights
 | task.plan | Task ledger planning | no (operational) |
 | trace.title | Flight Trail display name | no (operational) |
 | trace.summary | Flight Trail description | no (operational) |
+| worktree.branch | Trace worktree git branch | no (operational) |
 
 {{if .IsLastWorkTask}}
 ### trace.summary — Flight trail summary (required on last work task)
@@ -772,6 +776,8 @@ publishes:
     kind: task.plan
   - type: SIGNAL
     kind: task.ready
+  - type: INSIGHT
+    kind: worktree.branch
 `
 	builderBeePiYAML = `role: builder
 adapter: pi

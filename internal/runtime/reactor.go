@@ -264,6 +264,9 @@ func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Ev
 	if err := r.handleAutoInvite(ctx, ev); err != nil {
 		return err
 	}
+	if err := r.handleWorktreeBranch(ctx, ev); err != nil {
+		return err
+	}
 	return r.handleInviteProjection(ev)
 }
 

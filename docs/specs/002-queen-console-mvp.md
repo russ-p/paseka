@@ -434,7 +434,7 @@ Implemented HTTP endpoints:
   | ----- | ---- | ----- |
   | `traceId` | string | Requested flight trail |
   | `defaultBranch` | string | Colony default branch (e.g. `main`) |
-  | `branch` | string | Trace worktree branch (usually `paseka/<traceId>`) |
+  | `branch` | string | Trace worktree branch (resolved from `INSIGHT/worktree.branch` or `paseka/<traceId>`) |
   | `baseSha` | string | Tip of default branch |
   | `headSha` | string | Tip of trace branch |
   | `stat` | string | `git diff --stat` output |

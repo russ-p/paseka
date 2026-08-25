@@ -2,9 +2,9 @@
 
 ## Status
 
-**Draft**
+**Implemented**
 
-Operational `INSIGHT` so planner bees can name the isolated git branch for a Flight Trail worktree (`feature/…`, `hotfix/…`), instead of the hardcoded `paseka/<traceId>`. Follow-up to worktree ensure in [008-code-proposal-workspaces](008-code-proposal-workspaces.md) and operational-insight prior art in [011-trace-title](011-trace-title.md).
+`INSIGHT/worktree.branch` names and renames the isolated trace worktree git ref; default remains `paseka/<traceId>`.
 
 ## Problem Statement
 

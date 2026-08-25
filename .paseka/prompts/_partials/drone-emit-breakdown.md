@@ -7,6 +7,7 @@ For breakdown, publish **only** these kinds. Do not emit `run.summary`, `review.
 | `INSIGHT` | `task.plan` | Register the full approved task ledger |
 | `SIGNAL` | `task.ready` | Kick the first runnable task (optional; see rule below) |
 | `INSIGHT` | `trace.title` | Flight Trail name (emit with breakdown) |
+| `INSIGHT` | `worktree.branch` | Git branch for isolated builder work (when breakdown includes builder slices) |
 | `INSIGHT` | `context.note` | Short trace fact for later bees (optional) |
 
 ### `task.plan` — full breakdown (one event, many tasks)
@@ -40,5 +41,8 @@ If the Beekeeper approved the plan but did **not** ask to start immediately, pub
 
 Emit **one** `INSIGHT/trace.title` when publishing the breakdown (use spec title or a clearer short name for the whole trail).
 
+When the breakdown includes isolated builder slices, emit **one** `INSIGHT/worktree.branch` with a conventional git branch name.
+
 {{template "insight-kind-trace-title" .}}
+{{template "insight-kind-worktree-branch" .}}
 {{template "insight-kind-context-note" .}}

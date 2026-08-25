@@ -113,6 +113,26 @@ func RegisterWorktree(slug string, entry WorktreeEntry) error {
 	return SaveState(slug, st)
 }
 
+// UpdateWorktreeBranch sets the branch field for an existing worktree registry entry.
+func UpdateWorktreeBranch(slug, traceID, branch string) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	found := false
+	for i, w := range st.Worktrees {
+		if w.TraceID == traceID {
+			st.Worktrees[i].Branch = branch
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	return SaveState(slug, st)
+}
+
 // UnregisterWorktree removes a worktree entry for a trace.
 func UnregisterWorktree(slug, traceID string) error {
 	st, err := LoadState(slug)

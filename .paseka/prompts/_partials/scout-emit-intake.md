@@ -8,6 +8,7 @@ Always emit `feature.classified` first. Then follow the decision branch below.
 | `INSIGHT` | `task.plan` | `decision=plan` or `decision=triage` (one builder task) |
 | `SIGNAL` | `task.ready` | Same slice, only when entry text asks to start now (`--defer` after `task.plan`) |
 | `INSIGHT` | `trace.title` | Short Flight Trail name for Console (emit on every intake) |
+| `INSIGHT` | `worktree.branch` | Git branch for isolated work (`plan` / `triage`; optional otherwise) |
 | `INSIGHT` | `run.summary` | Optional one-line summary |
 
 Do **not** emit `task.plan` or `task.ready` when `decision=grill`, `clarify`, or `reject`. Still emit `trace.title` when the entry has a usable short name.
@@ -78,5 +79,8 @@ EOF
 
 Emit **one** `INSIGHT/trace.title` on every intake when the entry has a usable short name (from `feature.requested` title/body or your refined label). Update when you sharpen the name during `plan` / `triage`.
 
+When `decision=plan` or `decision=triage`, also emit **one** `INSIGHT/worktree.branch` with a conventional git branch name for the isolated worktree.
+
 {{template "insight-kind-trace-title" .}}
+{{template "insight-kind-worktree-branch" .}}
 {{template "insight-kind-run-summary" .}}

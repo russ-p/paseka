@@ -38,6 +38,11 @@
       "id": "INSIGHT/task.plan"
     },
     {
+      "type": "INSIGHT",
+      "kind": "worktree.branch",
+      "id": "INSIGHT/worktree.branch"
+    },
+    {
       "type": "MUTATION",
       "kind": "code.proposal.isolated",
       "id": "MUTATION/code.proposal.isolated"
@@ -117,6 +122,11 @@
       "kind": "publish",
       "from": "scout",
       "to": "INSIGHT/task.plan"
+    },
+    {
+      "kind": "publish",
+      "from": "scout",
+      "to": "INSIGHT/worktree.branch"
     },
     {
       "kind": "publish",

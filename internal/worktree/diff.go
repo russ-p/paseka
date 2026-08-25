@@ -42,13 +42,9 @@ func MergeDiff(opts MergeDiffOptions) (MergeDiffResult, error) {
 		return res, err
 	}
 
-	entry, ok, err := findWorktreeEntry(opts.Slug, opts.TraceID)
+	branch, err := ResolvedBranch(colonyRoot, opts.TraceID, opts.Slug)
 	if err != nil {
 		return res, err
-	}
-	branch := branchName(opts.TraceID)
-	if ok && entry.Branch != "" {
-		branch = entry.Branch
 	}
 	res.Branch = branch
 
@@ -61,7 +57,7 @@ func MergeDiff(opts MergeDiffOptions) (MergeDiffResult, error) {
 	}
 	res.DefaultBranch = defaultBranch
 
-	if !branchExists(colonyRoot, branch) {
+	if !gitroot.LocalBranchExists(colonyRoot, branch) {
 		res.Missing = true
 		return res, nil
 	}
@@ -70,14 +66,14 @@ func MergeDiff(opts MergeDiffOptions) (MergeDiffResult, error) {
 	if err != nil {
 		return res, fmt.Errorf("worktree: resolve %s: %w", defaultBranch, err)
 	}
-	headSHA, err := revParse(colonyRoot, branch)
+	headSHA, err := revParse(colonyRoot, "refs/heads/"+branch)
 	if err != nil {
 		return res, fmt.Errorf("worktree: resolve %s: %w", branch, err)
 	}
 	res.BaseSHA = baseSHA
 	res.HeadSHA = headSHA
 
-	rangeSpec := defaultBranch + "..." + branch
+	rangeSpec := defaultBranch + "...refs/heads/" + branch
 	stat, err := gitOutput(colonyRoot, "diff", "--stat", rangeSpec)
 	if err != nil {
 		return res, err
@@ -92,11 +88,6 @@ func MergeDiff(opts MergeDiffOptions) (MergeDiffResult, error) {
 	res.Truncated = truncated
 	res.Empty = strings.TrimSpace(stat) == "" && strings.TrimSpace(diff) == ""
 	return res, nil
-}
-
-func branchExists(dir, branch string) bool {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", branch)
-	return cmd.Run() == nil
 }
 
 func gitOutput(dir string, args ...string) (string, error) {

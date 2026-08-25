@@ -100,6 +100,87 @@ func TestValidateTraceTitle(t *testing.T) {
 	}
 }
 
+func TestValidateWorktreeBranch(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"feature/live-bees-header"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+
+	empty := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"   "}}`)
+	in2, err := ParseEventInput(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in2.Validate()
+	if len(details) != 1 || details[0].Path != "payload.branch" {
+		t.Fatalf("details = %#v", details)
+	}
+
+	main := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"main"}}`)
+	in3, err := ParseEventInput(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in3.Validate()
+	if len(details) != 1 {
+		t.Fatalf("details = %#v", details)
+	}
+
+	dash := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"--help"}}`)
+	in4, err := ParseEventInput(dash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in4.Validate()
+	if len(details) != 1 {
+		t.Fatalf("leading-dash details = %#v", details)
+	}
+
+	origin := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"origin/main"}}`)
+	in5, err := ParseEventInput(origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in5.Validate()
+	if len(details) != 1 {
+		t.Fatalf("origin details = %#v", details)
+	}
+
+	head := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"HEAD"}}`)
+	in6, err := ParseEventInput(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in6.Validate()
+	if len(details) != 1 {
+		t.Fatalf("HEAD details = %#v", details)
+	}
+
+	invalid := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"has spaces"}}`)
+	in7, err := ParseEventInput(invalid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in7.Validate()
+	if len(details) != 1 {
+		t.Fatalf("spaces details = %#v", details)
+	}
+
+	over := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"worktree.branch","branch":"` + strings.Repeat("a", MaxWorktreeBranchLen+1) + `"}}`)
+	in8, err := ParseEventInput(over)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in8.Validate()
+	if len(details) != 1 || details[0].Path != "payload.branch" {
+		t.Fatalf("overlong details = %#v", details)
+	}
+}
+
 func TestValidateInvalidJSON(t *testing.T) {
 	_, err := ParseEventInput([]byte(`not-json`))
 	if err == nil {

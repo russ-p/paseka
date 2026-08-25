@@ -10,16 +10,20 @@ import (
 type InsightKind string
 
 const (
-	InsightRunSummary    InsightKind = "run.summary"
-	InsightReviewNote    InsightKind = "review.note"
-	InsightContextNote   InsightKind = "context.note"
-	InsightHumanFeedback InsightKind = "human.feedback"
-	InsightTraceTitle    InsightKind = "trace.title"
-	InsightTraceSummary  InsightKind = "trace.summary"
+	InsightRunSummary     InsightKind = "run.summary"
+	InsightReviewNote     InsightKind = "review.note"
+	InsightContextNote    InsightKind = "context.note"
+	InsightHumanFeedback  InsightKind = "human.feedback"
+	InsightTraceTitle     InsightKind = "trace.title"
+	InsightTraceSummary   InsightKind = "trace.summary"
+	InsightWorktreeBranch InsightKind = "worktree.branch"
 )
 
 // MaxTraceTitleLen is the maximum length of payload.title on INSIGHT/trace.title.
 const MaxTraceTitleLen = 120
+
+// MaxWorktreeBranchLen is the maximum length of payload.branch on INSIGHT/worktree.branch.
+const MaxWorktreeBranchLen = 120
 
 // MaxTraceSummaryLen is the maximum length of payload.summary on INSIGHT/trace.summary.
 const MaxTraceSummaryLen = 800
@@ -50,6 +54,12 @@ type TraceTitlePayload struct {
 type TraceSummaryPayload struct {
 	Kind    InsightKind `json:"kind"`
 	Summary string      `json:"summary"`
+}
+
+// WorktreeBranchPayload is emitted as INSIGHT with payload.kind=worktree.branch.
+type WorktreeBranchPayload struct {
+	Kind   InsightKind `json:"kind"`
+	Branch string      `json:"branch"`
 }
 
 // IsPromptMemoryInsightKind reports whether an INSIGHT kind should be projected into prompt memory.

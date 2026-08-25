@@ -105,6 +105,10 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("runtime: resolve trace title: %w", err)
 	}
+	worktreeBranch, err := runs.ResolveWorktreeBranch(colonyRoot, req.TraceID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: resolve worktree branch: %w", err)
+	}
 
 	adapterName, err := bee.ResolveAdapter()
 	if err != nil {
@@ -120,6 +124,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		Bee:            bee.Role,
 		TraceID:        req.TraceID,
 		TraceTitle:     traceTitle,
+		WorktreeBranch: worktreeBranch,
 		AgentID:        agentID,
 		TaskID:         req.TaskID,
 		ColonyRoot:     colonyRoot,

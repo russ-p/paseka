@@ -341,13 +341,13 @@ Root proposals do **not** open the AFK receiver commit-gate defer (`waiting_revi
 
 **Default worktree location:** `.paseka/worktrees/<traceId>/` — colocated with colony, simple paths for adapters, listed in `.gitignore`.
 
-**Branch:** `paseka/<traceId>` (registered in machine-local `state.json`).
+**Branch:** latest `INSIGHT/worktree.branch` when set, else `paseka/<traceId>` (registered in machine-local `state.json`; renamed in place when insights update).
 
 **Direct dispatch workspace affinity:** isolated (+ alias) → ensure/reuse trace worktree (prefer existing dirty tree over fresh HEAD); root → colony root, never call worktree ensure.
 
 **Auto-publish:** runtime publishes a proposal only when the bee explicitly declares the matching kind in `publishes` and `worktree` matches the kind. Empty `publishes` never auto-publishes (fail closed). Mismatch → skip + warn; hard mismatches are `paseka doctor` errors (see [bee config](../guide/bee-config.md)).
 
-**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...paseka/<traceId>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
+**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...<resolvedTraceBranch>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). Resolved trace branch: live worktree HEAD, else registry, else latest `worktree.branch` insight, else `paseka/<traceId>`. See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 **Registry:** `~/.config/paseka/<slug>/state.json` tracks active worktrees, base SHA, branch, and linked `traceId` for cleanup on `paseka doctor`.
 

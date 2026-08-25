@@ -16,6 +16,7 @@ type Context struct {
 	Bee            string
 	TraceID        string
 	TraceTitle     string
+	WorktreeBranch string
 	AgentID        string
 	TaskID         string
 	ColonyRoot     string

@@ -166,6 +166,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateTraceTitle(payload)
 	case InsightTraceSummary:
 		return validateTraceSummary(payload)
+	case InsightWorktreeBranch:
+		return validateWorktreeBranch(payload)
 	}
 
 	switch InviteEventKind(kind) {
@@ -428,6 +430,14 @@ func validateTraceTitle(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.title", Message: fmt.Sprintf("must be at most %d characters", MaxTraceTitleLen)}}
 	}
 	return nil
+}
+
+func validateWorktreeBranch(payload json.RawMessage) []ValidationDetail {
+	var p WorktreeBranchPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid worktree.branch payload"}}
+	}
+	return ValidateBranchRef(p.Branch, "")
 }
 
 func validateTraceSummary(payload json.RawMessage) []ValidationDetail {

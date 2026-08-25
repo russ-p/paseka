@@ -16,3 +16,5 @@ publishes:
     kind: task.plan
   - type: SIGNAL
     kind: task.ready
+  - type: INSIGHT
+    kind: worktree.branch

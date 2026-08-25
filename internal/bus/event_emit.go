@@ -39,6 +39,19 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 		}, nil
 	}
 
+	if colonyRoot != "" && protocol.PayloadKind(in.Payload) == string(protocol.InsightWorktreeBranch) {
+		var p protocol.WorktreeBranchPayload
+		if err := json.Unmarshal(in.Payload, &p); err == nil {
+			if details := protocol.ValidateBranchRef(p.Branch, colonyRoot); len(details) > 0 {
+				return protocol.EventCLIResult{
+					OK:      false,
+					Error:   "schema_validation_failed",
+					Details: details,
+				}, nil
+			}
+		}
+	}
+
 	ev, err := in.ToEvent(defaultAgentID)
 	if err != nil {
 		var verr *protocol.ValidationError

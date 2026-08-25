@@ -46,13 +46,9 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 		return MergeResult{}, err
 	}
 
-	entry, ok, err := findWorktreeEntry(opts.Slug, opts.TraceID)
+	branch, err := ResolvedBranch(colonyRoot, opts.TraceID, opts.Slug)
 	if err != nil {
 		return MergeResult{}, err
-	}
-	branch := branchName(opts.TraceID)
-	if ok && entry.Branch != "" {
-		branch = entry.Branch
 	}
 
 	defaultBranch, err := gitroot.DefaultBranch(colonyRoot)
@@ -84,7 +80,7 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 	if err := runGit(colonyRoot, "checkout", defaultBranch); err != nil {
 		return failAfterStash(colonyRoot, stashed, err)
 	}
-	if err := runGit(colonyRoot, "merge", "--no-ff", "-m", message, branch); err != nil {
+	if err := runGit(colonyRoot, "merge", "--no-ff", "-m", message, "--", "refs/heads/"+branch); err != nil {
 		return failAfterStash(colonyRoot, stashed, err)
 	}
 	commitSHA, err := revParse(colonyRoot, "HEAD")
