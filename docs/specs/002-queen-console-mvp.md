@@ -730,6 +730,7 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 
 - [007-colony-eda-topology.md](./007-colony-eda-topology.md) — Topology tab and `GET /api/colony/topology`
 - [004-live-bees-indicator.md](./004-live-bees-indicator.md) — header indicator for live agent processes (AFK runs and interactive sessions)
+- [022-console-system-info.md](./022-console-system-info.md) — Host CPU/RAM plaque and System tab (console OS view; Approved)
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — feature idea → Scout intake → session invite → Drone grilling / breakdown (Console invite UX)
 
 ## Verification
