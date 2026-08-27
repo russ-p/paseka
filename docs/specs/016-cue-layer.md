@@ -109,7 +109,7 @@ body: "{{.Body}}"
 
 - Optional integer field `energy_budget` on any cue (`signal` or `task`).
 - Meaning: **initial** per-trace honey reserve for a **not-yet-seeded** trail — overrides `colony.yaml` → `defaults.energy_budget` (and platform default) for that `traceId` only.
-- Implementation: call existing ledger `SeedEnergy(traceId, N)` (same primitive as task create / reactor ensure-seed). **Not** `SIGNAL/energy.add` (add only increments `energyRemaining` and cannot set a smaller budget).
+- Implementation: call existing ledger `SeedEnergy(traceId, N)` (same primitive as task create / reactor ensure-seed). **Not** `SIGNAL/energy.add` (add increments remaining, and `energyAdded` only after seed; it cannot set a smaller budget). See [task ledger](../reference/task-ledger.md) § Honey reserve.
 - Ordering: resolve `traceId` → if cue has `energy_budget` and snapshot `energyBudget == 0`, seed → then publish signal or task plan(+ready). For `emit: task`, pass the cue budget into the shared create path so colony default is not seeded first.
 - When `energy_budget` is omitted: unchanged today — task path seeds colony default; signal path leaves seed to first ensure-seed / dispatch with colony default.
 - When `--trace` (or equivalent) targets a trail that already has `energyBudget > 0`: **ignore** cue `energy_budget` (do not shrink, do not re-seed, do not error solely for this mismatch). Document in CLI help.

@@ -104,6 +104,9 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				trace.EnergyRemaining += payload.Amount
 				// Leave EnergyBudget untouched when still 0 so SeedEnergy can apply
 				// colony defaults.energy_budget (not a hardcoded DefaultEnergyBudget).
+				if trace.EnergyBudget > 0 {
+					trace.EnergyAdded += payload.Amount
+				}
 				changed = true
 
 			case protocol.SignalEnergyConsume:

@@ -2,6 +2,14 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Honey remaining / allocated
+
+Honey UIs (CLI, Queen Console, Telegram, hive status, export) show **remaining / allocated**, where allocated is the frozen seed plus post-seed `energy.add` totals (`energyAdded` on the task ledger snapshot). `energyBudget` stays the initial seed so Forage Cue overrides and `budget == 0` seeding still work. When the trail has been topped up, a second line shows `seed N · topped M`. Console **low** still uses remaining vs seed (`budget/4`).
+
+`paseka energy show` still prints parseable `budget:` and `remaining:` integers; `added:` and the remaining/allocated fraction appear only after a post-seed top-up. Unseeded trails print remaining without a `/ 0` denominator. Ledger snapshots from before `energyAdded` can still show remaining above seed until a new top-up.
+
+- Canonical: [Task ledger](../reference/task-ledger.md) (Honey reserve), [Forage Cues](../guide/cues.md) § Honey, [CLI](../guide/cli.md) (`paseka energy`), [Telegram gateway](../guide/telegram-gateway.md)
+
 ## 2026-08 — Worktree branch name (`worktree.branch`)
 
 Planner bees can emit `INSIGHT/worktree.branch` so isolated Flight Trail worktrees use readable git refs (`feature/…`, `hotfix/…`) instead of only `paseka/<traceId>`. Runtime applies names on worktree ensure and renames immediately when a later insight lands; collisions fail closed (no detached HEAD fallback). Merge, merge-diff, Queen Console trace detail, and `state.json` follow the live branch name. Path stays `.paseka/worktrees/<traceId>/`.

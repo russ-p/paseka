@@ -6,6 +6,7 @@ import (
 
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/energy"
+	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
 )
 
@@ -20,6 +21,8 @@ type EnergyAddResponse struct {
 	Amount          int    `json:"amount"`
 	EnergyBudget    int    `json:"energyBudget"`
 	EnergyRemaining int    `json:"energyRemaining"`
+	EnergyAdded     int    `json:"energyAdded"`
+	EnergyAllocated int    `json:"energyAllocated"`
 	LowEnergy       bool   `json:"lowEnergy"`
 }
 
@@ -52,12 +55,16 @@ func AddTraceEnergy(ctx context.Context, colonyCtx colony.Context, traceID strin
 
 	budget := snap.EnergyBudget
 	remaining := snap.EnergyRemaining
+	added := snap.EnergyAdded
+	allocated := taskledger.Allocated(budget, added)
 	low := budget > 0 && remaining <= budget/4
 	return EnergyAddResponse{
 		TraceID:         traceID,
 		Amount:          amount,
 		EnergyBudget:    budget,
 		EnergyRemaining: remaining,
+		EnergyAdded:     added,
+		EnergyAllocated: allocated,
 		LowEnergy:       low,
 	}, nil
 }

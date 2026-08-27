@@ -604,7 +604,7 @@ paseka inspect usage --trace trace-1 --agent agent-abc
 
 ## `paseka energy`
 
-Manage per-trace honey reserve (`energyToken`).
+Manage per-trace honey reserve (`energyToken`). `paseka energy show` prints `budget:` (seed) and `remaining:`. After a post-seed top-up it also prints `added:` and remaining / allocated (`energyBudget + energyAdded`). Unseeded traces print remaining without a `/ 0` denominator. Low-energy in Queen Console is remaining vs seed — see [Task ledger](../reference/task-ledger.md) § Honey reserve.
 
 ### `paseka energy show`
 

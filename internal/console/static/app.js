@@ -2392,8 +2392,17 @@ async function loadTraceArtifacts(traceId) {
 
 function renderTraceEnergy(detail, hasEnergy) {
   const low = detail.lowEnergy ? ' <span class="badge warn">low</span>' : '';
+  const allocated = detail.energyAllocated > 0
+    ? detail.energyAllocated
+    : (detail.energyBudget > 0 ? detail.energyBudget : 0);
+  const secondary = detail.energyAdded > 0
+    ? `<span class="muted trace-energy-seed">seed ${detail.energyBudget} · topped ${detail.energyAdded}</span>`
+    : '';
+  const primary = allocated > 0
+    ? `${detail.energyRemaining} / ${allocated}`
+    : `${detail.energyRemaining ?? 0}`;
   const stats = hasEnergy
-    ? `<span>${detail.energyRemaining} / ${detail.energyBudget} remaining</span>${low}`
+    ? `<span class="trace-energy-stats"><span>${primary}</span>${low}${secondary}</span>`
     : '<span class="muted">Honey reserve unavailable — top up when NATS and the task ledger are connected</span>';
   el.traceEnergy.innerHTML = `
     ${stats}
@@ -2425,6 +2434,8 @@ async function addTraceEnergy(amount) {
     if (state.selectedTraceDetail && state.selectedTraceId === traceId) {
       state.selectedTraceDetail.energyBudget = res.energyBudget;
       state.selectedTraceDetail.energyRemaining = res.energyRemaining;
+      state.selectedTraceDetail.energyAdded = res.energyAdded;
+      state.selectedTraceDetail.energyAllocated = res.energyAllocated;
       state.selectedTraceDetail.lowEnergy = res.lowEnergy;
       renderTraceDetail(state.selectedTraceDetail);
     }

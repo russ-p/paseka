@@ -28,6 +28,7 @@ type TraceSnapshot struct {
 	TraceID         string                  `json:"traceId"`
 	EnergyBudget    int                     `json:"energyBudget,omitempty"`
 	EnergyRemaining int                     `json:"energyRemaining,omitempty"`
+	EnergyAdded     int                     `json:"energyAdded,omitempty"`
 	Killed          bool                    `json:"killed,omitempty"`
 	PendingReady    *PendingReadySnapshot   `json:"pendingReady,omitempty"`
 	Tasks           map[string]TaskSnapshot `json:"tasks"`

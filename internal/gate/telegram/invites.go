@@ -96,11 +96,11 @@ func FormatInviteCard(ctx colony.Context, ledger taskledger.Ledger, invite homes
 }
 
 func honeyLine(ctx colony.Context, ledger taskledger.Ledger, traceID string) string {
-	remaining, budget := traceHoney(ctx, ledger, traceID)
-	return fmt.Sprintf("honey: %d/%d", remaining, budget)
+	remaining, budget, added := traceHoney(ctx, ledger, traceID)
+	return "honey: " + taskledger.FormatHoneyCompact(remaining, budget, added)
 }
 
-func traceHoney(ctx colony.Context, ledger taskledger.Ledger, traceID string) (remaining, budget int) {
+func traceHoney(ctx colony.Context, ledger taskledger.Ledger, traceID string) (remaining, budget, added int) {
 	budget = protocol.DefaultEnergyBudget
 	if ctx.ColonyRoot != "" {
 		if manifest, err := colony.LoadColony(ctx.ColonyRoot); err == nil {
@@ -108,17 +108,18 @@ func traceHoney(ctx colony.Context, ledger taskledger.Ledger, traceID string) (r
 		}
 	}
 	if ledger == nil {
-		return 0, budget
+		return 0, budget, 0
 	}
 	snap, err := ledger.Snapshot(traceID)
 	if err != nil {
-		return 0, budget
+		return 0, budget, 0
 	}
 	remaining = snap.EnergyRemaining
+	added = snap.EnergyAdded
 	if snap.EnergyBudget > 0 {
 		budget = snap.EnergyBudget
 	}
-	return remaining, budget
+	return remaining, budget, added
 }
 
 func inviteActionKeyboard(inviteID string) tgbotapi.InlineKeyboardMarkup {

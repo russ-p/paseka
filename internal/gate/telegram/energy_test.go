@@ -29,9 +29,21 @@ func TestParseEnergyCommandArgs(t *testing.T) {
 }
 
 func TestFormatEnergyShow(t *testing.T) {
-	got := tggate.FormatEnergyShow("trace-1", 3, 12)
+	got := tggate.FormatEnergyShow("trace-1", 3, 12, 0)
 	want := "Trace: trace-1\nhoney: 3/12"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
+	}
+
+	got = tggate.FormatEnergyShow("trace-1", 5, 12, 8)
+	want = "Trace: trace-1\nhoney: 5/20\nseed 12 · topped 8"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+
+	got = tggate.FormatEnergyShow("trace-1", 5, 0, 0)
+	want = "Trace: trace-1\nhoney: 5"
+	if got != want {
+		t.Fatalf("unseeded got %q want %q", got, want)
 	}
 }

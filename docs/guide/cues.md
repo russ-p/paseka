@@ -129,7 +129,7 @@ Three different mechanisms:
 | --------- | ---- | ------ |
 | **`defaults.energy_budget`** in `colony.yaml` | First seed on a trace (task create, reactor ensure-seed, cue without override) | Sets initial `energyBudget` / `energyRemaining` (default `12`) |
 | **Cue `energy_budget`** | Fresh trail only (`energyBudget == 0` on snapshot) | Seeds a **smaller or custom initial** reserve via ledger `SeedEnergy` — can be less than colony default |
-| **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining` only; does not change `energyBudget` |
+| **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining`; after seed also increments `energyAdded`. Does not change `energyBudget` |
 
 Rules:
 

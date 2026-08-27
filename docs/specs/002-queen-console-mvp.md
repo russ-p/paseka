@@ -443,7 +443,7 @@ Implemented HTTP endpoints:
   | `empty` | bool | No changes between branches |
   | `missingWorktree` | bool | Trace branch not found — preview unavailable |
 
-- `POST /api/traces/:traceId/energy/add` — body `{ "amount": <positive int> }`; publishes `SIGNAL/energy.add` via shared `tasks.AddEnergy` (`agentId: console`). Returns updated `energyBudget`, `energyRemaining`, `lowEnergy`. Requires NATS and task ledger KV (503 when unavailable).
+- `POST /api/traces/:traceId/energy/add` — body `{ "amount": <positive int> }`; publishes `SIGNAL/energy.add` via shared `tasks.AddEnergy` (`agentId: console`). Returns updated `energyBudget`, `energyRemaining`, `energyAdded`, `energyAllocated` (`budget + added` after seed), `lowEnergy` (`remaining <= budget/4`). Requires NATS and task ledger KV (503 when unavailable). Honey display: [task ledger](../reference/task-ledger.md) § Honey reserve.
 
 - `GET /api/traces/:traceId/events`
 - `GET /api/traces/:traceId/tasks`

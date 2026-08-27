@@ -12,6 +12,7 @@ import (
 	"github.com/paseka/paseka/internal/runs"
 	"github.com/paseka/paseka/internal/runtime"
 	"github.com/paseka/paseka/internal/sessions"
+	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
 )
 
@@ -59,11 +60,13 @@ type SnapshotEnergy struct {
 	Traces    []SnapshotEnergyTrace `json:"traces"`
 }
 
-// SnapshotEnergyTrace is remaining/budget for one trace in the energy window.
+// SnapshotEnergyTrace is remaining/seed/top-up for one trace in the energy window.
 type SnapshotEnergyTrace struct {
 	TraceID   string `json:"traceId"`
 	Remaining int    `json:"remaining"`
 	Budget    int    `json:"budget"`
+	Added     int    `json:"added,omitempty"`
+	Allocated int    `json:"allocated,omitempty"`
 }
 
 // SnapshotAttention lists items that may need Beekeeper or interface-bee action.
@@ -96,6 +99,8 @@ type SnapshotLowEnergy struct {
 	TraceID   string `json:"traceId"`
 	Remaining int    `json:"remaining"`
 	Budget    int    `json:"budget"`
+	Added     int    `json:"added,omitempty"`
+	Allocated int    `json:"allocated,omitempty"`
 }
 
 // SnapshotRecentTrace is a short recent Flight Trail row.
@@ -265,6 +270,8 @@ func collectSnapshotEnergy(ctx colony.Context, traces []TraceSummaryView) Snapsh
 			TraceID:   tr.TraceID,
 			Remaining: ledgerSnap.EnergyRemaining,
 			Budget:    ledgerSnap.EnergyBudget,
+			Added:     ledgerSnap.EnergyAdded,
+			Allocated: taskledger.Allocated(ledgerSnap.EnergyBudget, ledgerSnap.EnergyAdded),
 		})
 	}
 	return out
@@ -388,7 +395,7 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 		lines = append(lines, "")
 		lines = append(lines, "Honey:")
 		for _, tr := range s.Energy.Traces {
-			lines = append(lines, fmt.Sprintf("  %s: %d/%d remaining", tr.TraceID, tr.Remaining, tr.Budget))
+			lines = append(lines, fmt.Sprintf("  %s: %s remaining", tr.TraceID, taskledger.FormatHoneyCompact(tr.Remaining, tr.Budget, tr.Added)))
 		}
 	} else if s.NATS.Configured {
 		lines = append(lines, "")
@@ -425,7 +432,7 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 		if len(s.Attention.LowEnergyTraces) > 0 {
 			lines = append(lines, fmt.Sprintf("  low energy traces: %d", len(s.Attention.LowEnergyTraces)))
 			for _, tr := range s.Attention.LowEnergyTraces {
-				lines = append(lines, fmt.Sprintf("    %s (%d/%d)", tr.TraceID, tr.Remaining, tr.Budget))
+				lines = append(lines, fmt.Sprintf("    %s (%s)", tr.TraceID, taskledger.FormatHoneyCompact(tr.Remaining, tr.Budget, tr.Added)))
 			}
 		}
 	}

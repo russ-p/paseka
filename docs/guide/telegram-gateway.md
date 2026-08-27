@@ -142,7 +142,7 @@ Message the bot from an allowlisted user **and** chat:
 | Command | Behavior |
 | ------- | -------- |
 | `/status` | Reactor alive?, slug, subject prefix, live bees, pending invites; **Refresh** button |
-| `/energy <traceId>` | Honey remaining/budget |
+| `/energy <traceId>` | Honey remaining/allocated (seed · topped when topped up) |
 | `/energy add <traceId> <n>` | Top up honey (`SIGNAL/energy.add`) |
 | `/task <text>` | Preview card → Confirm/Cancel → `task.plan` (+ `task.ready` if autorun) |
 | `/feature <text>` (example custom) | Preview → Confirm → `SIGNAL/feature.requested` on new trace (when configured) |

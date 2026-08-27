@@ -8,6 +8,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
 )
 
@@ -38,8 +39,16 @@ func ParseEnergyCommandArgs(args string) (action string, traceID string, amount 
 }
 
 // FormatEnergyShow renders honey reserve for one trace.
-func FormatEnergyShow(traceID string, remaining, budget int) string {
-	return fmt.Sprintf("Trace: %s\nhoney: %d/%d", traceID, remaining, budget)
+func FormatEnergyShow(traceID string, remaining, budget, added int) string {
+	return fmt.Sprintf("Trace: %s\n%s", traceID, formatHoneyLines(remaining, budget, added))
+}
+
+func formatHoneyLines(remaining, budget, added int) string {
+	text := "honey: " + taskledger.FormatHoneyCompact(remaining, budget, added)
+	if extra := taskledger.FormatHoneySecondary(budget, added); extra != "" {
+		text += "\n" + extra
+	}
+	return text
 }
 
 // HandleCommand processes /energy and subcommands.
@@ -61,14 +70,14 @@ func (a *EnergyActions) HandleCommand(ctx context.Context, chatID int64, args st
 	}
 }
 
-// Show posts remaining/budget for one trace.
+// Show posts remaining/allocated for one trace.
 func (a *EnergyActions) Show(ctx context.Context, chatID int64, editMessageID int, traceID string) {
-	remaining, budget, err := a.traceHoney(traceID)
+	remaining, budget, added, err := a.traceHoney(traceID)
 	if err != nil {
 		a.sendText(chatID, editMessageID, "energy unavailable: "+err.Error())
 		return
 	}
-	a.sendText(chatID, editMessageID, FormatEnergyShow(traceID, remaining, budget))
+	a.sendText(chatID, editMessageID, FormatEnergyShow(traceID, remaining, budget, added))
 }
 
 // Add publishes SIGNAL/energy.add via the shared tasks package.
@@ -92,18 +101,18 @@ func (a *EnergyActions) Add(ctx context.Context, chatID int64, editMessageID int
 		a.sendText(chatID, editMessageID, "energy add failed: "+err.Error())
 		return
 	}
-	text := fmt.Sprintf("Added %d honey to %s\nhoney: %d/%d", amount, traceID, snap.EnergyRemaining, snap.EnergyBudget)
+	text := fmt.Sprintf("Added %d honey to %s\n%s", amount, traceID, formatHoneyLines(snap.EnergyRemaining, snap.EnergyBudget, snap.EnergyAdded))
 	a.sendText(chatID, editMessageID, text)
 }
 
-func (a *EnergyActions) traceHoney(traceID string) (remaining, budget int, err error) {
+func (a *EnergyActions) traceHoney(traceID string) (remaining, budget, added int, err error) {
 	session, err := tasks.OpenLedger(a.Colony)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	defer session.Close()
-	remaining, budget = traceHoney(a.Colony, session.Ledger, traceID)
-	return remaining, budget, nil
+	remaining, budget, added = traceHoney(a.Colony, session.Ledger, traceID)
+	return remaining, budget, added, nil
 }
 
 func (a *EnergyActions) sendText(chatID int64, editMessageID int, text string) {

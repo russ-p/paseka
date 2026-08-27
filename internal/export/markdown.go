@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/taskledger"
 )
 
 // RenderMarkdown builds a Markdown document for one trace export.
@@ -31,7 +32,11 @@ func writeMarkdownOverview(buf *bytes.Buffer, data TraceExportData) {
 	fmt.Fprintf(buf, "- **Runs:** %d\n", data.Trace.RunCount)
 	fmt.Fprintf(buf, "- **Tasks:** %d\n", data.Trace.TaskCount)
 	if data.Trace.EnergyBudget > 0 {
-		fmt.Fprintf(buf, "- **Honey reserve:** %d / %d\n", data.Trace.EnergyRemaining, data.Trace.EnergyBudget)
+		fmt.Fprintf(buf, "- **Honey reserve:** %s\n", taskledger.FormatHoneyPrimary(
+			data.Trace.EnergyRemaining, data.Trace.EnergyBudget, data.Trace.EnergyAdded))
+		if extra := taskledger.FormatHoneySecondary(data.Trace.EnergyBudget, data.Trace.EnergyAdded); extra != "" {
+			fmt.Fprintf(buf, "- %s\n", extra)
+		}
 	}
 	fmt.Fprintf(buf, "- **Last activity:** %s\n", formatTime(data.Trace.LastActivityAt))
 	if bees := strings.Join(data.Trace.Bees, ", "); bees != "" {

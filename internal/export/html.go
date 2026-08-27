@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/paseka/paseka/internal/taskledger"
 )
 
 type htmlEventView struct {
@@ -40,6 +41,9 @@ type htmlPageData struct {
 	Bees               string
 	EnergyBudget       int
 	EnergyRemaining    int
+	EnergyAdded        int
+	EnergyAllocated    int
+	HoneySecondary     string
 	LowEnergy          bool
 	HasEnergy          bool
 	WorktreePath       string
@@ -99,6 +103,12 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		page.HasEnergy = true
 		page.EnergyBudget = data.Trace.EnergyBudget
 		page.EnergyRemaining = data.Trace.EnergyRemaining
+		page.EnergyAdded = data.Trace.EnergyAdded
+		page.EnergyAllocated = data.Trace.EnergyAllocated
+		if page.EnergyAllocated <= 0 {
+			page.EnergyAllocated = data.Trace.EnergyBudget
+		}
+		page.HoneySecondary = taskledger.FormatHoneySecondary(data.Trace.EnergyBudget, data.Trace.EnergyAdded)
 		page.LowEnergy = data.Trace.LowEnergy
 	}
 	if data.Trace.Worktree != nil {
@@ -244,6 +254,12 @@ header h1 { margin: 0; font-size: 1.35rem; }
   margin-bottom: 0.25rem;
 }
 .stat-value { font-size: 1rem; font-weight: 600; }
+.stat-sub {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
 .meta {
   display: grid;
   grid-template-columns: 8rem 1fr;
@@ -402,7 +418,8 @@ code { font-family: var(--mono); font-size: 0.85em; }
       {{ if .HasEnergy }}
       <div class="stat-card">
         <span class="stat-label">Honey reserve</span>
-        <span class="stat-value">{{ .EnergyRemaining }} / {{ .EnergyBudget }}</span>
+        <span class="stat-value">{{ .EnergyRemaining }} / {{ .EnergyAllocated }}</span>
+        {{ if .HoneySecondary }}<span class="stat-sub">{{ .HoneySecondary }}</span>{{ end }}
       </div>
       {{ end }}
       <div class="stat-card">

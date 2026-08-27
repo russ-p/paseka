@@ -83,6 +83,8 @@ type TraceSummaryView struct {
 	HasActive       bool                 `json:"hasActive"`
 	EnergyBudget    int                  `json:"energyBudget,omitempty"`
 	EnergyRemaining int                  `json:"energyRemaining,omitempty"`
+	EnergyAdded     int                  `json:"energyAdded,omitempty"`
+	EnergyAllocated int                  `json:"energyAllocated,omitempty"`
 	LowEnergy       bool                 `json:"lowEnergy,omitempty"`
 	Usage           *runs.UsageAggregate `json:"usage,omitempty"`
 }
@@ -404,6 +406,8 @@ func EnrichTraceEnergy(ctx colony.Context, view *TraceSummaryView) {
 	}
 	view.EnergyBudget = snap.EnergyBudget
 	view.EnergyRemaining = snap.EnergyRemaining
+	view.EnergyAdded = snap.EnergyAdded
+	view.EnergyAllocated = taskledger.Allocated(snap.EnergyBudget, snap.EnergyAdded)
 	view.LowEnergy = snap.EnergyRemaining <= snap.EnergyBudget/4
 }
 

@@ -223,6 +223,31 @@ func TestFormatColonySnapshotIncludesBlocks(t *testing.T) {
 	}
 }
 
+func TestFormatColonySnapshotHoneyUsesAllocated(t *testing.T) {
+	text := hiveview.FormatColonySnapshot(hiveview.ColonySnapshot{
+		Slug:    "demo",
+		Runtime: hiveview.SnapshotRuntime{Status: runtime.RuntimeStatusStopped},
+		Agents:  hiveview.AgentsView{},
+		Energy: hiveview.SnapshotEnergy{
+			Available: true,
+			Traces: []hiveview.SnapshotEnergyTrace{
+				{TraceID: "t1", Remaining: 5, Budget: 12, Added: 8, Allocated: 20},
+			},
+		},
+		Attention: hiveview.SnapshotAttention{
+			LowEnergyTraces: []hiveview.SnapshotLowEnergy{
+				{TraceID: "t2", Remaining: 0, Budget: 12, Added: 3, Allocated: 15},
+			},
+		},
+	})
+	if !contains(text, "t1: 5/20 remaining") {
+		t.Fatalf("honey line missing allocated denom:\n%s", text)
+	}
+	if !contains(text, "t2 (0/15)") {
+		t.Fatalf("low energy line missing allocated denom:\n%s", text)
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
 }

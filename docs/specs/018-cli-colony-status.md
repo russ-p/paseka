@@ -156,7 +156,7 @@ JSON object (illustrative contract; names are normative):
 
 - Honey is part of the snapshot, not a follow-up-only concern.
 - Scope: traces in the **recent-traces window** (same set / same limit as `recentTraces`), not every historical trail.
-- Source: task-ledger snapshot (`remaining` / `budget`) when NATS is configured and the ledger reads successfully.
+- Source: task-ledger snapshot (`remaining`, seed `budget`, post-seed `added`, display `allocated = budget + added`) when NATS is configured and the ledger reads successfully. Text honey lines use remaining/allocated.
 - `energy.available` is true only when that read succeeded for the window (partial failures: skip unread traces; if **none** could be read, `available` is false and `traces` is empty).
 - Never invent zeros for unread traces.
 - `attention.lowEnergyTraces`: traces in that window with a seeded budget (`budget > 0`) and `remaining <= 0` (same gate the reactor uses to refuse dispatch). Do not add a second “warning percent” threshold in MVP.

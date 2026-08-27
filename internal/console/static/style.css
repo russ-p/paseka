@@ -397,6 +397,17 @@ header h1 {
   font-size: 0.9rem;
 }
 
+.trace-energy-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+}
+
+.trace-energy-seed {
+  font-size: 0.8rem;
+}
+
 .trace-energy-topup {
   display: flex;
   flex-wrap: wrap;

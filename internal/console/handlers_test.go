@@ -993,6 +993,9 @@ func TestEnergyAddAPIHandler(t *testing.T) {
 		if res.EnergyRemaining != 15 || res.EnergyBudget != 10 {
 			t.Fatalf("energy = remaining %d budget %d, want 15/10", res.EnergyRemaining, res.EnergyBudget)
 		}
+		if res.EnergyAdded != 5 || res.EnergyAllocated != 15 {
+			t.Fatalf("added/allocated = %d/%d, want 5/15", res.EnergyAdded, res.EnergyAllocated)
+		}
 
 		snap, err := ledger.Snapshot(traceID)
 		if err != nil {

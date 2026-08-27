@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
@@ -40,8 +41,7 @@ func newEnergyShowCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("Trace: %s\n", traceID)
-			fmt.Printf("  budget:    %d\n", snap.EnergyBudget)
-			fmt.Printf("  remaining: %d\n", snap.EnergyRemaining)
+			printHoneyReserve(snap)
 			return nil
 		},
 	}
@@ -77,7 +77,7 @@ func newEnergyAddCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("Added %d honey to trace %s\n", amount, traceID)
-			fmt.Printf("  remaining: %d / %d\n", snap.EnergyRemaining, snap.EnergyBudget)
+			printHoneyReserve(snap)
 			return nil
 		},
 	}
@@ -85,4 +85,10 @@ func newEnergyAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().IntVar(&amount, "amount", 0, "honey tokens to add")
 	return cmd
+}
+
+func printHoneyReserve(snap taskledger.TraceSnapshot) {
+	for _, line := range taskledger.FormatHoneyReport(snap.EnergyRemaining, snap.EnergyBudget, snap.EnergyAdded) {
+		fmt.Printf("  %s\n", line)
+	}
 }
