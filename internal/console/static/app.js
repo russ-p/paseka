@@ -40,6 +40,8 @@ const state = {
   runtime: null,
   runtimeBusy: false,
   agents: null,
+  system: null,
+  systemError: '',
   selectedId: null,
   selectedRunKey: null,
   transcriptCursor: 0,
@@ -49,6 +51,7 @@ const state = {
   terminalWide: false,
   pollTimer: null,
   runtimePollTimer: null,
+  headerStatusInFlight: false,
   dashboardPollTimer: null,
   tracesPollTimer: null,
   tasksPollTimer: null,
@@ -76,6 +79,7 @@ const el = {
   sessionsTabBadge: document.getElementById('sessions-tab-badge'),
   tabRuns: document.getElementById('tab-runs'),
   tabTopology: document.getElementById('tab-topology'),
+  tabSystem: document.getElementById('tab-system'),
   dashboardLayout: document.getElementById('dashboard-layout'),
   tracesLayout: document.getElementById('traces-layout'),
   timelineLayout: document.getElementById('timeline-layout'),
@@ -213,6 +217,14 @@ const el = {
   topologyLoading: document.getElementById('topology-loading'),
   topologySummary: document.getElementById('topology-summary'),
   topologyDiagram: document.getElementById('topology-diagram'),
+  systemLayout: document.getElementById('system-layout'),
+  systemRefreshBtn: document.getElementById('system-refresh-btn'),
+  systemError: document.getElementById('system-error'),
+  systemIdentity: document.getElementById('system-identity'),
+  systemMetrics: document.getElementById('system-metrics'),
+  systemProcessTable: document.getElementById('system-process-table'),
+  systemProcessBody: document.getElementById('system-process-body'),
+  systemProcessesEmpty: document.getElementById('system-processes-empty'),
   beeSelect: document.getElementById('bee-select'),
   taskInput: document.getElementById('task-input'),
   rawToggle: document.getElementById('raw-prompt-toggle'),
@@ -253,6 +265,10 @@ const el = {
   agentsBadge: document.getElementById('agents-badge'),
   agentsMeta: document.getElementById('agents-meta'),
   agentsDetail: document.getElementById('agents-detail'),
+  hostPanel: document.getElementById('host-panel'),
+  hostBadge: document.getElementById('host-badge'),
+  hostMeta: document.getElementById('host-meta'),
+  hostDetail: document.getElementById('host-detail'),
   runCueBtn: document.getElementById('run-cue-btn'),
   dashboardRunCueBtn: document.getElementById('dashboard-run-cue-btn'),
   cueModal: document.getElementById('cue-modal'),
@@ -449,6 +465,57 @@ function renderTabBadges() {
   setTabBadge(el.reviewsTabBadge, el.tabReviews, 'Reviews', reviewCount);
 }
 
+function formatBytesGiB(n) {
+  if (n == null || Number.isNaN(Number(n))) return '—';
+  const gib = Number(n) / (1024 ** 3);
+  if (gib >= 10) return `${gib.toFixed(1)} GiB`;
+  if (gib >= 0.1) return `${gib.toFixed(2)} GiB`;
+  const mib = Number(n) / (1024 ** 2);
+  if (mib >= 1) return `${mib.toFixed(0)} MiB`;
+  return `${Number(n)} B`;
+}
+
+function formatCPUPercent(n) {
+  if (n == null || Number.isNaN(Number(n))) return '—';
+  return `${Math.round(Number(n))}%`;
+}
+
+function formatUptime(seconds) {
+  if (seconds == null || Number.isNaN(Number(seconds))) return '—';
+  const s = Math.max(0, Math.floor(Number(seconds)));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function renderHost() {
+  const sys = state.system;
+  const failed = Boolean(state.systemError) && !sys;
+  if (failed || !sys) {
+    el.hostBadge.textContent = '—';
+    el.hostBadge.className = 'badge idle';
+    el.hostMeta.textContent = state.systemError || 'Unavailable';
+    el.hostDetail.textContent = '';
+    return;
+  }
+  const cpu = formatCPUPercent(sys.cpuPercent);
+  el.hostBadge.textContent = cpu;
+  if (sys.error && sys.cpuPercent == null && sys.memUsedBytes == null) {
+    el.hostBadge.className = 'badge idle';
+  } else {
+    el.hostBadge.className = 'badge active';
+  }
+  if (sys.memUsedBytes != null && sys.memTotalBytes != null) {
+    el.hostMeta.textContent = `${formatBytesGiB(sys.memUsedBytes)} / ${formatBytesGiB(sys.memTotalBytes)}`;
+  } else {
+    el.hostMeta.textContent = sys.error || 'Memory unavailable';
+  }
+  el.hostDetail.textContent = sys.load1 != null ? `load ${Number(sys.load1).toFixed(2)}` : '';
+}
+
 function renderAgents() {
   const ag = state.agents || { count: 0, afk: 0, sessions: 0, items: [] };
   el.agentsBadge.textContent = String(ag.count);
@@ -472,15 +539,138 @@ function renderAgents() {
   el.agentsDetail.textContent = labels.join(' · ');
 }
 
+function liveBeePidSet() {
+  const items = state.agents?.items || [];
+  const pids = new Set();
+  for (const item of items) {
+    if (item && item.pid) pids.add(Number(item.pid));
+  }
+  return pids;
+}
+
+function renderSystem() {
+  const sys = state.system;
+  const fetchErr = state.systemError;
+  if (el.systemError) {
+    const msg = fetchErr || sys?.error || '';
+    el.systemError.textContent = msg;
+    el.systemError.classList.toggle('hidden', !msg);
+  }
+  if (!sys) {
+    if (el.systemIdentity) el.systemIdentity.innerHTML = '';
+    if (el.systemMetrics) el.systemMetrics.innerHTML = '';
+    if (el.systemProcessTable) el.systemProcessTable.hidden = true;
+    if (el.systemProcessesEmpty) {
+      el.systemProcessesEmpty.classList.remove('hidden');
+      el.systemProcessesEmpty.textContent = fetchErr || 'Snapshot unavailable.';
+    }
+    return;
+  }
+
+  const identityRows = [
+    ['Hostname', sys.hostname || '—'],
+    ['Kernel', sys.kernel || '—'],
+    ['OS / arch', `${sys.os || '—'} / ${sys.arch || '—'}`],
+    ['CPUs', sys.cpus != null ? String(sys.cpus) : '—'],
+    ['Uptime', formatUptime(sys.uptimeSeconds)],
+    ['Console PID', sys.consolePid != null ? String(sys.consolePid) : '—'],
+    ['Go', sys.goVersion || '—'],
+  ];
+  el.systemIdentity.innerHTML = identityRows.map(([k, v]) => (
+    `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`
+  )).join('');
+
+  const metrics = [];
+  metrics.push(`<div class="system-metric"><span class="label">CPU</span>${escapeHtml(formatCPUPercent(sys.cpuPercent))}</div>`);
+  metrics.push(`<div class="system-metric"><span class="label">Memory</span>${escapeHtml(
+    sys.memUsedBytes != null && sys.memTotalBytes != null
+      ? `${formatBytesGiB(sys.memUsedBytes)} / ${formatBytesGiB(sys.memTotalBytes)}`
+      : '—'
+  )}</div>`);
+  if (sys.memAvailableBytes != null) {
+    metrics.push(`<div class="system-metric"><span class="label">Available</span>${escapeHtml(formatBytesGiB(sys.memAvailableBytes))}</div>`);
+  }
+  const load = [sys.load1, sys.load5, sys.load15].every((v) => v != null)
+    ? `${Number(sys.load1).toFixed(2)} / ${Number(sys.load5).toFixed(2)} / ${Number(sys.load15).toFixed(2)}`
+    : '—';
+  metrics.push(`<div class="system-metric"><span class="label">Load 1/5/15</span>${escapeHtml(load)}</div>`);
+  if (sys.diskUsedBytes != null && sys.diskTotalBytes != null) {
+    metrics.push(`<div class="system-metric"><span class="label">Colony disk</span>${escapeHtml(
+      `${formatBytesGiB(sys.diskUsedBytes)} / ${formatBytesGiB(sys.diskTotalBytes)}`
+    )}</div>`);
+  } else {
+    metrics.push(`<div class="system-metric"><span class="label">Colony disk</span>—</div>`);
+  }
+  el.systemMetrics.innerHTML = metrics.join('');
+
+  const procs = Array.isArray(sys.processes) ? sys.processes : [];
+  if (!procs.length) {
+    el.systemProcessTable.hidden = true;
+    el.systemProcessesEmpty.classList.remove('hidden');
+    el.systemProcessesEmpty.textContent = 'No process list (unavailable on this OS, or /proc could not be read).';
+    return;
+  }
+  el.systemProcessesEmpty.classList.add('hidden');
+  el.systemProcessTable.hidden = false;
+  const live = liveBeePidSet();
+  el.systemProcessBody.innerHTML = procs.map((p) => {
+    const liveClass = live.has(Number(p.pid)) ? ' class="live-bee"' : '';
+    return `<tr${liveClass}>
+      <td class="pid">${escapeHtml(String(p.pid))}</td>
+      <td class="cpu">${escapeHtml(formatCPUPercent(p.cpuPercent))}</td>
+      <td class="rss">${escapeHtml(formatBytesGiB(p.rssBytes))}</td>
+      <td class="comm">${escapeHtml(p.comm || '')}</td>
+      <td class="cmd" title="${escapeHtml(p.cmd || '')}">${escapeHtml(p.cmd || '')}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function refreshSystem() {
+  try {
+    const system = await api('/api/system');
+    state.system = system;
+    state.systemError = '';
+    renderHost();
+    renderSystem();
+  } catch (err) {
+    state.system = null;
+    state.systemError = err.message || 'Unavailable';
+    renderHost();
+    renderSystem();
+  }
+}
+
 async function loadHeaderStatus() {
-  const [runtime, agents] = await Promise.all([
-    api('/api/runtime'),
-    api('/api/agents'),
-  ]);
-  state.runtime = runtime;
-  state.agents = agents;
-  renderRuntime();
-  renderAgents();
+  if (state.headerStatusInFlight) return;
+  state.headerStatusInFlight = true;
+  try {
+    try {
+      const [runtime, agents] = await Promise.all([
+        api('/api/runtime'),
+        api('/api/agents'),
+      ]);
+      state.runtime = runtime;
+      state.agents = agents;
+      renderRuntime();
+      renderAgents();
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      const system = await api('/api/system');
+      state.system = system;
+      state.systemError = '';
+      renderHost();
+      if (state.tab === 'system') renderSystem();
+    } catch (err) {
+      state.system = null;
+      state.systemError = err.message || 'Unavailable';
+      renderHost();
+      if (state.tab === 'system') renderSystem();
+    }
+  } finally {
+    state.headerStatusInFlight = false;
+  }
 }
 
 function startRuntimePolling() {
@@ -517,7 +707,7 @@ function traceSummarySubline(trace) {
 function setTab(tab) {
   closeReviewMergePreview();
   state.tab = tab;
-  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology'];
+  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology', 'system'];
   const layouts = {
     dashboard: el.dashboardLayout,
     traces: el.tracesLayout,
@@ -527,6 +717,7 @@ function setTab(tab) {
     sessions: el.sessionsLayout,
     runs: el.runsLayout,
     topology: el.topologyLayout,
+    system: el.systemLayout,
   };
   if (el.reviewDiffLayout) {
     el.reviewDiffLayout.classList.add('hidden');
@@ -552,6 +743,7 @@ function setTab(tab) {
     sessions: 'Sessions — launch, attach, and observe interactive bees',
     runs: 'Runs — observe headless adapter invocations',
     topology: 'Topology — config-derived colony EDA graph (bees, events, invites)',
+    system: 'System — console host CPU, memory, and top processes',
   };
   el.subtitle.textContent = subtitles[tab] || '';
 
@@ -584,6 +776,8 @@ function setTab(tab) {
     loadReviews().catch(console.error);
   } else if (tab === 'topology') {
     loadTopology().catch(console.error);
+  } else if (tab === 'system') {
+    renderSystem();
   }
 }
 
@@ -3462,6 +3656,7 @@ el.tabRuns.addEventListener('click', () => {
   loadRuns().catch(console.error);
 });
 el.tabTopology.addEventListener('click', () => setTab('topology'));
+el.tabSystem.addEventListener('click', () => setTab('system'));
 
 el.topologyRefreshBtn.addEventListener('click', () => {
   loadTopology().catch(console.error);
@@ -3889,6 +4084,23 @@ el.agentsPanel.addEventListener('keydown', (event) => {
     navigateAgentsPanel();
   }
 });
+
+function navigateHostPanel() {
+  setTab('system');
+}
+
+el.hostPanel.addEventListener('click', navigateHostPanel);
+el.hostPanel.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    navigateHostPanel();
+  }
+});
+if (el.systemRefreshBtn) {
+  el.systemRefreshBtn.addEventListener('click', () => {
+    refreshSystem().catch(console.error);
+  });
+}
 
 async function init() {
   try {

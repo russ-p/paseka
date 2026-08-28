@@ -126,6 +126,8 @@ docker compose up
 
 Use Reviews, agents, and trace views from the browser. Console itself does not require NATS; bus-backed panels need a reachable JetStream.
 
+The header **Host** plaque and **System** tab show the OS view of the `paseka console` process: inside this container that is the **container PID namespace** (bees, `node`, `java`, and similar children), not the rest of the NAS. CPU/RAM figures come from `/proc/stat` and `/proc/meminfo`, which may still describe the **host** when cgroups do not hide them — do not treat RAM as this container’s limit. System Info is not a cluster control plane and does not call Docker APIs.
+
 ### Reactor on the same machine
 
 Run the choreography loop in a second process (second compose service, `docker compose run`, or systemd on the host):

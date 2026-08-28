@@ -39,6 +39,14 @@
           <div class="runtime-meta muted" id="agents-meta">None active</div>
           <div class="runtime-meta muted" id="agents-detail"></div>
         </section>
+        <section class="host-panel" id="host-panel" aria-label="Host" role="button" tabindex="0">
+          <div class="runtime-status">
+            <span class="runtime-label">Host</span>
+            <span id="host-badge" class="badge idle">—</span>
+          </div>
+          <div class="runtime-meta muted" id="host-meta">Unavailable</div>
+          <div class="runtime-meta muted" id="host-detail"></div>
+        </section>
       </div>
     </div>
     <nav class="tabs" role="tablist">
@@ -50,6 +58,7 @@
       <button type="button" id="tab-sessions" class="tab" role="tab" aria-selected="false">Sessions<span class="tab-badge" id="sessions-tab-badge" hidden aria-hidden="true"></span></button>
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
       <button type="button" id="tab-topology" class="tab" role="tab" aria-selected="false">Topology</button>
+      <button type="button" id="tab-system" class="tab" role="tab" aria-selected="false">System</button>
     </nav>
   </header>
 
@@ -530,6 +539,37 @@
       <div id="topology-loading" class="muted hidden">Loading topology…</div>
       <div id="topology-summary" class="topology-summary hidden"></div>
       <div id="topology-diagram" class="topology-diagram" aria-label="Colony topology diagram"></div>
+    </section>
+  </main>
+
+  <main class="layout hidden" id="system-layout">
+    <section class="panel system-panel">
+      <div class="panel-header">
+        <h2>System Info</h2>
+        <div class="topology-actions">
+          <button type="button" id="system-refresh-btn" class="secondary">Refresh</button>
+        </div>
+      </div>
+      <p class="muted topology-hint">OS view of the Queen Console process (container PID namespace when running in Docker). Not a cluster control plane. Process names are a hint, not a test/build detector.</p>
+      <p id="system-error" class="error hidden"></p>
+      <dl class="meta" id="system-identity"></dl>
+      <div class="system-metrics" id="system-metrics"></div>
+      <h3 class="system-table-heading">Processes</h3>
+      <p id="system-processes-empty" class="muted hidden">No process list (unavailable on this OS, or /proc could not be read).</p>
+      <div class="system-table-wrap">
+        <table class="system-process-table" id="system-process-table" hidden>
+          <thead>
+            <tr>
+              <th>PID</th>
+              <th>CPU</th>
+              <th>RSS</th>
+              <th>Comm</th>
+              <th>Command</th>
+            </tr>
+          </thead>
+          <tbody id="system-process-body"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 

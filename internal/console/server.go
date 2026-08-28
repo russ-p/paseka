@@ -54,11 +54,12 @@ func NewServer(opts Options) *Server {
 		runtime:  runtimeSup,
 	}
 	mux := http.NewServeMux()
-	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup}
+	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup, sampler: newCPUSampler()}
 	mux.HandleFunc("/api/runtime", apiHandler.handleRuntime)
 	mux.HandleFunc("/api/runtime/start", apiHandler.handleRuntimeStart)
 	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
 	mux.HandleFunc("/api/agents", apiHandler.handleAgents)
+	mux.HandleFunc("/api/system", apiHandler.handleSystem)
 	mux.HandleFunc("/api/dashboard", apiHandler.handleDashboard)
 	mux.HandleFunc("/api/cues", apiHandler.handleCues)
 	mux.HandleFunc("/api/cues/", apiHandler.handleCueByID)

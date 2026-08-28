@@ -408,7 +408,7 @@ internal/
   energy/                   # honey reserve seed + CLI publish helpers
   tasks/                    # task ops (create, start, retry, energy CLI paths)
   hiveview/                 # shared read models (traces, tasks, runs, agents, invites)
-  console/                  # Queen Console HTTP API + embedded SPA (transport)
+  console/                  # Queen Console HTTP API + embedded SPA (transport); Host/System snapshot is console-local, not hiveview
   gate/telegram/            # Telegram Human Gateway (transport)
   export/                   # trace HTML export (uses hiveview)
   colony/                   # load .paseka + home config, bee schema, slug resolution

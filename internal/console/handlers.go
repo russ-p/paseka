@@ -30,6 +30,7 @@ type api struct {
 	ctx      colony.Context
 	sessions *sessions.Manager
 	runtime  *runtime.Supervisor
+	sampler  *cpuSampler
 }
 
 func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {

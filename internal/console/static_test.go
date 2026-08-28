@@ -170,6 +170,64 @@ func TestAgentsPanelStaticContract(t *testing.T) {
 	}
 }
 
+func TestHostPanelStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="host-panel"`,
+		`id="host-badge"`,
+		`id="host-meta"`,
+		`id="host-detail"`,
+		`aria-label="Host"`,
+		`id="tab-system"`,
+		`id="system-layout"`,
+		`id="system-refresh-btn"`,
+		`id="system-process-table"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"function renderHost()",
+		"function renderSystem()",
+		"api('/api/system')",
+		"function navigateHostPanel()",
+		"setTab('system')",
+		"class=\"live-bee\"",
+		"headerStatusInFlight",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	css, err := staticFiles.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatalf("read style.css: %v", err)
+	}
+	cssSrc := string(css)
+	for _, needle := range []string{
+		".host-panel",
+		"#system-layout",
+		".system-process-table",
+		"tr.live-bee",
+	} {
+		if !strings.Contains(cssSrc, needle) {
+			t.Fatalf("style.css missing %s", needle)
+		}
+	}
+}
+
 func TestTracesTabStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {

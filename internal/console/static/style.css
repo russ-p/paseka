@@ -86,7 +86,8 @@ header {
 }
 
 .runtime-panel,
-.agents-panel {
+.agents-panel,
+.host-panel {
   min-width: 220px;
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--border);
@@ -94,11 +95,13 @@ header {
   background: var(--panel);
 }
 
-.agents-panel {
+.agents-panel,
+.host-panel {
   cursor: pointer;
 }
 
-.agents-panel:hover {
+.agents-panel:hover,
+.host-panel:hover {
   border-color: #3a4560;
 }
 
@@ -139,6 +142,9 @@ header {
 
 #agents-badge.idle { background: #2a3040; color: var(--muted); }
 #agents-badge.active { background: #1f3d2e; color: var(--ok); }
+#host-badge.idle { background: #2a3040; color: var(--muted); }
+#host-badge.active { background: #1f3d2e; color: var(--ok); }
+#host-badge.warn { background: #3d3318; color: var(--warn); }
 
 header h1 {
   margin: 0;
@@ -366,7 +372,8 @@ header h1 {
 /* Single-panel tabs: must come after .layout (same specificity, later wins). */
 #dashboard-layout,
 #timeline-layout,
-#topology-layout {
+#topology-layout,
+#system-layout {
   grid-template-columns: 1fr;
 }
 
@@ -1395,4 +1402,74 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+.system-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+}
+
+.system-metric {
+  min-width: 10rem;
+}
+
+.system-metric .label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 0.15rem;
+}
+
+.system-table-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.system-table-wrap {
+  overflow-x: auto;
+}
+
+.system-process-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.system-process-table th,
+.system-process-table td {
+  text-align: left;
+  padding: 0.35rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.system-process-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.system-process-table td.pid,
+.system-process-table td.cpu,
+.system-process-table td.rss {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.system-process-table td.cmd {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.system-process-table tr.live-bee {
+  background: #1a2a22;
+}
+
+.system-process-table tr.live-bee td.comm {
+  color: var(--ok);
 }

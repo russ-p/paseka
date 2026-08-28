@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Approved)**
-Minimal host load and process snapshot in Queen Console: header CPU/RAM plaque and a System tab. Agreed with the Beekeeper (homelab apiary / AFK bees).
+**(Implemented)**
+Queen Console Host plaque and System tab: `GET /api/system` Linux `/proc` snapshot, graceful non-Linux identity-only degrade.
 
 ## Problem Statement
 

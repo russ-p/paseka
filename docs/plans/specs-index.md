@@ -27,6 +27,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [019-model-aliases](../specs/019-model-aliases.md) | Implemented | Colony `model_aliases` map; home overlay; resolves `params.model` at dispatch |
 | [020-worktree-branch](../specs/020-worktree-branch.md) | Implemented | `INSIGHT/worktree.branch` to name/rename the isolated trace worktree git ref |
 | [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) | Draft | Associate `providerSessionId` with agent runs; enrich local `paseka export` from provider logs (tool calls); keep `events.ndjson` bus-only |
-| [022-console-system-info](../specs/022-console-system-info.md) | Approved | Queen Console Host plaque + System tab: CPU/RAM, cheap identity, top processes (console host view, no Docker APIs) |
+| [022-console-system-info](../specs/022-console-system-info.md) | Implemented | Queen Console Host plaque + System tab: CPU/RAM, cheap identity, top processes (console host view, no Docker APIs) |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

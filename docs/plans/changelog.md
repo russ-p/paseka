@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — Queen Console System Info
+
+Queen Console header adds an observe-only **Host** plaque (CPU percent and memory used/total, optional 1-minute load) next to Hive runtime and Live bees. Click or Enter/Space opens a **System** tab with hostname/kernel, OS/arch, CPU count, uptime, console PID, load averages, memory, optional colony-root disk, and a capped top-process table. Live bee PIDs are highlighted client-side. `GET /api/system` reads the OS view of the `paseka console` process (container PID namespace in Docker); it does not call Docker APIs and does not depend on NATS or Hive runtime. Linux uses `/proc`; other OSes keep identity fields and leave load/processes empty. `/proc/meminfo` may still describe the **host** when cgroups do not hide it.
+
+- Spec: [022-console-system-info](../specs/022-console-system-info.md)
+- Canonical: [CLI](../guide/cli.md) (`paseka console`), [Homelab deployment](../guide/homelab-deployment.md)
+
 ## 2026-08 — Honey remaining / allocated
 
 Honey UIs (CLI, Queen Console, Telegram, hive status, export) show **remaining / allocated**, where allocated is the frozen seed plus post-seed `energy.add` totals (`energyAdded` on the task ledger snapshot). `energyBudget` stays the initial seed so Forage Cue overrides and `budget == 0` seeding still work. When the trail has been topped up, a second line shows `seed N · topped M`. Console **low** still uses remaining vs seed (`budget/4`).
