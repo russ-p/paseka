@@ -171,7 +171,7 @@ Prior art: `internal/worktree` merge/diff tests (temp repos), `internal/console`
 ## Out of Scope
 
 - Auto-push (or auto-fetch) on review approve; `git.pushed` / `git.push.failed` bus events.
-- Pushing the trace worktree branch; opening Gitea/GitHub PRs ([020](./020-worktree-branch.md) remains out of scope for auto-PR).
+- Pushing the trace worktree branch and opening Gitea/GitHub PRs as **isolated delivery** — [024](./024-pull-request-delivery.md). This spec still does not push worktree branches or open PRs from the Git tab; 023 Push remains default-branch only.
 - `--force` / rebase / merge commit with origin / `reset --hard` to origin.
 - Checkout of a non-default branch on colony root; commit/amend/stage from Console (root R1 stays manual, [008](./008-code-proposal-workspaces.md)).
 - Git credential UI, token env (`GITEA_TOKEN`) as a Paseka git auth path, embedding `tea`.
@@ -190,4 +190,4 @@ Prior art: `internal/worktree` merge/diff tests (temp repos), `internal/console`
 - **Why skip hooks by default:** homelab Console git has no login shell; nvm/sdkman are often only in `.bashrc`. Husky `pre-push` then skips or fails. Operator Push/merge is “publish reviewed work”; CI stays on Gitea. Opt-in `runHooks` is the escape hatch.
 - **Webhook coexistence:** after Console Push, a sidecar ff-pull is typically a no-op. Console Pull is for missed hooks, not a second daemon.
 - **Leftover branches:** `git worktree remove` does not delete the branch; merged `paseka/<traceId>` and named `feature/` refs accumulate. Safe `-d` plus leftover filter is the cleanup, not `branch -D`.
-- Related: [002](./002-queen-console-mvp.md) (Console; worktrees page), [008](./008-code-proposal-workspaces.md), [009](./009-merge-autostash.md), [017](./017-console-diff-review.md), [020](./020-worktree-branch.md), [022](./022-console-system-info.md) (plaque/tab), [homelab deployment](../guide/homelab-deployment.md), [Backlog — Console Git follow-ups](../plans/backlog.md#console-git).
+- Related: [002](./002-queen-console-mvp.md) (Console; worktrees page), [008](./008-code-proposal-workspaces.md), [009](./009-merge-autostash.md), [017](./017-console-diff-review.md), [020](./020-worktree-branch.md), [022](./022-console-system-info.md) (plaque/tab), [024](./024-pull-request-delivery.md) (PR delivery vs this tab’s default-branch Push), [homelab deployment](../guide/homelab-deployment.md), [Backlog — Console Git follow-ups](../plans/backlog.md#console-git).

@@ -147,5 +147,5 @@ No soft fallback from narrative `run.summary` (UI or merge). Empty → no Consol
 
 - Closes the deferred narrative-summary non-goal called out in [011-trace-title](011-trace-title.md).
 - Canonical docs after ship: [insight-kinds](../reference/insight-kinds.md), [prompt templates](../guide/prompt-templates.md) (`IsLastWorkTask`), [CLI](../guide/cli.md) approve flags.
-- Neighbor contracts: [task ledger](../reference/task-ledger.md) final review / `_review`.
+- Neighbor contracts: [task ledger](../reference/task-ledger.md) final review / `_review`; [024](./024-pull-request-delivery.md) uses `trace.summary` as fallback PR body when `pr.body` is missing.
 - Possible follow-ups: `{{.TraceSummary}}`, mid-trail optional updates, clear/sentinel, richer “last task” enums for parallel leaves.

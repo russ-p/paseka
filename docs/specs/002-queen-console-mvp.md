@@ -469,6 +469,7 @@ Implemented HTTP endpoints:
 Deferred suggested endpoints (worktrees list is specified in [023](./023-console-git.md), not a standalone tab):
 
 - Git clone ops — see [023-console-git](./023-console-git.md)
+- Isolated PR publish (not Git-tab Push of default) — see [024-pull-request-delivery](./024-pull-request-delivery.md)
 
 Deferred live endpoints:
 

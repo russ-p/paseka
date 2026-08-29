@@ -29,5 +29,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) | Draft | Associate `providerSessionId` with agent runs; enrich local `paseka export` from provider logs (tool calls); keep `events.ndjson` bus-only |
 | [022-console-system-info](../specs/022-console-system-info.md) | Implemented | Queen Console Host plaque + System tab: CPU/RAM, cheap identity, top processes (console host view, no Docker APIs) |
 | [023-console-git](../specs/023-console-git.md) | Approved | Queen Console Git tab: clone vs origin, explicit fetch/push/ff-only pull, worktrees, leftover branches (homelab; no auto-push on approve) |
+| [024-pull-request-delivery](../specs/024-pull-request-delivery.md) | Draft | Isolated trails: opt-in PR publish instead of local merge; bees `pr.body`; forge via external CLI script contract |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

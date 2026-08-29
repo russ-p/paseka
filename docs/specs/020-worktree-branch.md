@@ -159,7 +159,7 @@ Prior art: worktree ensure/merge/diff tests; `trace.title` validate + resolve te
 ## Out of Scope
 
 - Renaming or relocating `.paseka/worktrees/<traceId>/` (path stays trace-scoped).
-- Pushing the branch to `origin` or opening a GitHub PR automatically.
+- Pushing the branch to `origin` or opening a GitHub PR automatically — owned by [024](./024-pull-request-delivery.md), not this spec.
 - Per-task branches (one branch per `taskId`); v1 is one branch per Flight Trail worktree.
 - Clearing a custom name back to `paseka/<traceId>` via empty payload (no sentinel in v1).
 - Required completion contract or runtime auto-synthesis from `trace.title` / cue id.
@@ -176,4 +176,4 @@ Prior art: worktree ensure/merge/diff tests; `trace.title` validate + resolve te
 - **Why not a field on `task.plan`:** plans describe nectar tasks; several tasks share one isolated worktree. Branch is trace-scoped.
 - **Default vs conventional:** keeping `paseka/<traceId>` as anonymous default avoids collisions between unnamed trails. Scout should emit conventional names when it intends isolated implementation.
 - **Fail closed vs detached HEAD:** today’s ensure fallback exists for an already-created `paseka/<traceId>` on retry. Named insights must not inherit that fallback; retry of the **same** default name when the worktree is missing but the branch exists is still an error in v1 (beekeeper/doctor cleanup), not silent detach.
-- Related: [insight kinds](../reference/insight-kinds.md), [architecture overview](../architecture/overview.md) (worktree path + branch), [008](008-code-proposal-workspaces.md), [011](011-trace-title.md), [012](012-trace-summary.md), [017](017-console-diff-review.md) (merge-diff `branch` field), [023](023-console-git.md) (operator Push of the default branch after merge — not auto-push of the worktree branch).
+- Related: [insight kinds](../reference/insight-kinds.md), [architecture overview](../architecture/overview.md) (worktree path + branch), [008](008-code-proposal-workspaces.md), [011](011-trace-title.md), [012](012-trace-summary.md), [017](017-console-diff-review.md) (merge-diff `branch` field), [023](023-console-git.md) (operator Push of the default branch after merge — not auto-push of the worktree branch), [024](024-pull-request-delivery.md) (opt-in PR delivery: push this branch + forge upsert).
