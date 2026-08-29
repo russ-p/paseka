@@ -9,6 +9,16 @@ on:
       - requirements-docs.txt
       - scripts/gen-llms-full.sh
       - scripts/mkdocs_hooks.py
+      - scripts/render-archify.sh
+      - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - docs/**
+      - mkdocs.yml
+      - requirements-docs.txt
+      - scripts/gen-llms-full.sh
+      - scripts/mkdocs_hooks.py
+      - scripts/render-archify.sh
       - .github/workflows/docs.yml
   workflow_dispatch:
 
@@ -26,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Archify repository-evidence needs the pinned spec revision reachable.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -33,8 +46,15 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-docs.txt
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dependencies
         run: pip install -r requirements-docs.txt
+
+      - name: Render Archify diagrams
+        run: bash scripts/render-archify.sh deliver
 
       - name: Generate llms-full.txt
         run: bash scripts/gen-llms-full.sh
@@ -43,10 +63,12 @@ jobs:
         run: mkdocs build --strict
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: site
 
   deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

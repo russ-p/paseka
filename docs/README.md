@@ -37,6 +37,7 @@ Docs are grouped by immersion depth. Feature specs under `specs/` are **not** pu
 | Document | Description |
 | -------- | ----------- |
 | [Overview](architecture/overview.md) | Adapters, run IPC, worktrees, package layout |
+| [Hive Runtime map](architecture/paseka-runtime.html) | Interactive Archify diagram (generated in docs CI) |
 
 ## Plans
 

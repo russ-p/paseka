@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Paseka Hive Runtime",
+    "locale": "en",
+    "output": "paseka-runtime.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/russ-p/paseka.git",
+      "revision": "4e86f7b834c85c226ad7f93054d03f358fbf636a"
+    },
+    "views": [
+      {
+        "id": "primary-path",
+        "label": "Forage to agent exec",
+        "focus": ["beekeeper", "queen-console", "nats", "hive-runtime", "adapters", "agent-cli"],
+        "note": "Beekeeper cue publishes a domain event; the reactor dispatches an adapter that execs an external CLI."
+      },
+      {
+        "id": "ownership",
+        "label": "Colony vs Apiary",
+        "focus": ["apiary", "colony", "worktrees", "runs-ipc", "task-ledger"],
+        "note": "Committed colony config stays in git; secrets and JetStream KV stay machine-local; worktrees and runs are gitignored."
+      },
+      {
+        "id": "trust-boundary",
+        "label": "Trust boundary",
+        "focus": ["queen-console", "apiary", "adapters", "agent-cli"],
+        "note": "Queen Console has no auth. Paseka does not embed LLM logic; untrusted agent CLIs publish only through validated event emit."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "beekeeper",
+      "type": "external",
+      "label": "Beekeeper",
+      "sublabel": "Queen Shell",
+      "pos": [40, 300],
+      "size": [136, 62]
+    },
+    {
+      "id": "queen-console",
+      "type": "frontend",
+      "label": "Queen Console",
+      "sublabel": "HTTP :8787",
+      "tag": "no auth",
+      "pos": [260, 300],
+      "size": [136, 62],
+      "sources": [
+        { "path": "cmd/paseka/console.go", "line": 15, "end_line": 45, "label": "paseka console" },
+        { "path": "internal/console/server.go", "line": 36, "end_line": 78, "label": "HTTP API" },
+        { "path": "internal/console/cues.go", "line": 49, "end_line": 68, "label": "RunCue" }
+      ]
+    },
+    {
+      "id": "nats",
+      "type": "messagebus",
+      "label": "NATS JetStream",
+      "sublabel": "domain events",
+      "tag": "choreography",
+      "pos": [480, 300],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/bus/client.go", "line": 23, "end_line": 47, "label": "Connect" },
+        { "path": "internal/bus/publisher.go", "line": 10, "end_line": 13, "label": "Publisher" }
+      ]
+    },
+    {
+      "id": "hive-runtime",
+      "type": "backend",
+      "label": "Hive Runtime",
+      "sublabel": "Reactor",
+      "tag": "paseka run",
+      "pos": [700, 300],
+      "size": [136, 62],
+      "sources": [
+        { "path": "cmd/paseka/run.go", "line": 15, "end_line": 42, "label": "paseka run" },
+        { "path": "internal/runtime/reactor.go", "line": 43, "end_line": 119, "label": "NewReactor" },
+        { "path": "internal/runtime/dispatch.go", "line": 75, "end_line": 86, "label": "Dispatch" }
+      ]
+    },
+    {
+      "id": "adapters",
+      "type": "backend",
+      "label": "Adapters",
+      "sublabel": "CLI drivers",
+      "tag": "no LLM",
+      "pos": [920, 300],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/adapters/adapter.go", "line": 61, "end_line": 65, "label": "Adapter" },
+        { "path": "internal/runtime/dispatch.go", "line": 42, "end_line": 51, "label": "registry" }
+      ]
+    },
+    {
+      "id": "agent-cli",
+      "type": "external",
+      "label": "Agent CLIs",
+      "sublabel": "external CLIs",
+      "tag": "untrusted",
+      "pos": [920, 510],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/adapters/cursor/cursor.go", "line": 23, "end_line": 65, "label": "agent CLI" }
+      ]
+    },
+    {
+      "id": "task-ledger",
+      "type": "database",
+      "label": "Task Ledger",
+      "sublabel": "JetStream KV",
+      "pos": [700, 90],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/taskledger/kv_ledger.go", "line": 14, "end_line": 46, "label": "KVLedger" }
+      ]
+    },
+    {
+      "id": "colony",
+      "type": "database",
+      "label": "Colony config",
+      "sublabel": ".paseka/",
+      "tag": "shareable",
+      "pos": [260, 510],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/colony/paths.go", "line": 30, "end_line": 33, "label": "PasekaPath" }
+      ]
+    },
+    {
+      "id": "worktrees",
+      "type": "database",
+      "label": "Worktrees",
+      "sublabel": "isolated git",
+      "tag": "gitignored",
+      "pos": [700, 510],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/worktree/worktree.go", "line": 55, "end_line": 60, "label": "Ensure" },
+        { "path": "internal/runtime/colony_dispatch.go", "line": 138, "end_line": 156, "label": "workspace" }
+      ]
+    },
+    {
+      "id": "runs-ipc",
+      "type": "database",
+      "label": "Run IPC",
+      "sublabel": "file IPC",
+      "tag": "gitignored",
+      "pos": [480, 510],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/runs/runs.go", "line": 40, "end_line": 43, "label": "Dir.Root" }
+      ]
+    },
+    {
+      "id": "apiary",
+      "type": "security",
+      "label": "Apiary home",
+      "sublabel": "machine-local",
+      "tag": "secrets",
+      "pos": [260, 90],
+      "size": [136, 62],
+      "sources": [
+        { "path": "internal/colony/home.go", "line": 15, "end_line": 27, "label": "HomeConfig" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Apiary — trusted workstation",
+      "wraps": ["apiary", "queen-console", "nats", "hive-runtime", "adapters", "task-ledger"]
+    },
+    {
+      "kind": "region",
+      "label": "Colony — git repo",
+      "wraps": ["colony", "worktrees", "runs-ipc"]
+    },
+    {
+      "kind": "security-group",
+      "label": "no-auth Console",
+      "wraps": ["queen-console"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "beekeeper-console",
+      "from": "beekeeper",
+      "to": "queen-console",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "console-nats",
+      "from": "queen-console",
+      "to": "nats",
+      "label": "SIGNAL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "nats-runtime",
+      "from": "nats",
+      "to": "hive-runtime",
+      "label": "subscribe",
+      "variant": "emphasis"
+    },
+    {
+      "id": "runtime-adapters",
+      "from": "hive-runtime",
+      "to": "adapters",
+      "label": "Dispatch",
+      "variant": "emphasis"
+    },
+    {
+      "id": "adapters-cli",
+      "from": "adapters",
+      "to": "agent-cli",
+      "label": "exec CLI",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "runtime-ledger",
+      "from": "hive-runtime",
+      "to": "task-ledger",
+      "label": "KV Apply",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "runtime-worktrees",
+      "from": "hive-runtime",
+      "to": "worktrees",
+      "label": "Ensure",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "apiary-console",
+      "from": "apiary",
+      "to": "queen-console",
+      "label": "secrets",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Primary path",
+      "items": [
+        "POST /api/cues/:id/run publishes SIGNAL or task.plan",
+        "Reactor applies the ledger, then Prepare → Run → Finalize"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Ownership",
+      "items": [
+        ".paseka/ is committed; worktrees/ and runs/ are gitignored",
+        "Apiary ~/.config/paseka/<slug>/ holds secrets and state.json"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust and side paths",
+      "items": [
+        "Console has no auth — localhost or VPN only",
+        "Agents publish only via paseka event emit --stdin"
+      ]
+    }
+  ]
+}

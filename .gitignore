@@ -6,5 +6,8 @@ paseka-export-*.md
 /site/
 /.venv-docs/
 /docs/llms-full.txt
+# Archify viewer HTML + visual-check sidecars (built by scripts/render-archify.sh)
+/docs/**/*.html
+/docs/**/*.visual-check.*
 **/__pycache__/
 docker/dev/.env

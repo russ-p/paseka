@@ -2,6 +2,8 @@
 
 Adapters, run IPC, worktrees / code proposals, end-to-end flow, and Go package layout.
 
+Interactive map of the Hive Runtime (Queen Console → NATS → Reactor → adapters): **[Paseka Hive Runtime](paseka-runtime.html)**. The HTML is generated in docs CI from [`paseka-runtime.architecture.json`](paseka-runtime.architecture.json); locally run `scripts/render-archify.sh`.
+
 Colony config layout and `paseka init`: [Colony layout](../guide/colony-layout.md).
 
 ## 1. Agent adapters

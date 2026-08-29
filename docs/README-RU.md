@@ -37,6 +37,7 @@
 | Документ | Описание |
 | -------- | -------- |
 | [Overview](architecture/overview.md) | Адаптеры, run IPC, worktrees, раскладка пакетов |
+| [Hive Runtime map](architecture/paseka-runtime.html) | Интерактивная Archify-диаграмма (собирается в docs CI) |
 
 ## Планы
 
