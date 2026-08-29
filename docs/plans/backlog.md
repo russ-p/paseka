@@ -87,6 +87,58 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Why deferred:** Final merge gate was enough for MVP; per-run preview is extra UI surface.
 - **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate.
 
+### Console Git
+
+Leftovers from [023-console-git](../specs/023-console-git.md). The Git tab MVP covers status vs origin, fetch, explicit push, ff-only pull, worktrees, leftover branch delete, Reviews origin-ahead warn, and skip-hooks defaults.
+
+#### Autostash list on Git tab
+
+- **Kind:** follow-up
+- **Source:** [023-console-git](../specs/023-console-git.md); [009-merge-autostash](../specs/009-merge-autostash.md)
+- **Summary:** Show `git stash list` entries (especially `paseka: autostash before merge …`) on the Git tab when merge left a stash behind.
+- **Why deferred:** Leftover refs and worktrees were the homelab cleanup priority; stash pop/drop is easy to get wrong from a browser.
+- **Revisit when:** Operators hit merge-failure stashes on the apiary without SSH, or 009 leftovers show up in real homelab use.
+
+#### Porcelain file list
+
+- **Kind:** follow-up
+- **Source:** [023-console-git](../specs/023-console-git.md)
+- **Summary:** Git tab dirty flag expands to a short `git status --porcelain` file list (hivewright R1 uncommitted paths). No stage/commit UI.
+- **Why deferred:** A boolean dirty flag is enough to know Pull/autostash will fire; a file list is extra UI.
+- **Revisit when:** Beekeepers cannot tell *what* dirtied colony root from Console and avoid SSH for that reason.
+
+#### Remote connectivity probe
+
+- **Kind:** follow-up
+- **Source:** [023-console-git](../specs/023-console-git.md)
+- **Summary:** Cheap probe that origin fetch/push is reachable (without publishing), distinct from running Push and from dumping helper secrets.
+- **Why deferred:** Real `git fetch`/`push` errors already surface helper/auth failures; a dedicated probe is extra round-trips to Gitea.
+- **Revisit when:** Operators want a green/red “tea/helper OK” before touching Push, or fetch-on-demand is too heavy as the only signal.
+
+#### Incoming log vs origin
+
+- **Kind:** follow-up
+- **Source:** [023-console-git](../specs/023-console-git.md)
+- **Summary:** Short log of `HEAD..origin/<default>` (what a sidecar pull would fast-forward), alongside the MVP unpublished outbound list.
+- **Why deferred:** Behind count plus Fetch is enough to decide Pull vs wait; outbound unpublished list covers Push.
+- **Revisit when:** Beekeepers need to see *which* remote commits they are missing before ff-only Pull.
+
+#### Mutation lock while bees run
+
+- **Kind:** follow-up
+- **Source:** [023-console-git](../specs/023-console-git.md)
+- **Summary:** Disable Push and branch-delete (not Fetch) while Live bees or a merge is in progress. Pull already refuses colony-root bees and in-progress merge in 023.
+- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API.
+- **Revisit when:** A Push or branch delete races an in-flight adapter in practice, or operators ask for a hard lock.
+
+#### Gitea (or origin host) commit links
+
+- **Kind:** follow-up
+- **Source:** [023-console-git](../specs/023-console-git.md)
+- **Summary:** Link HEAD / unpublished SHAs to the origin host commit URL (e.g. Gitea). Not a PR or issues UI.
+- **Why deferred:** SHA + Push is enough to publish; hyperlinks are convenience once the tab exists.
+- **Revisit when:** Beekeepers copy SHAs into Gitea often enough that Console should deep-link.
+
 ### Code proposal workspaces
 
 Leftovers from [008-code-proposal-workspaces](../specs/008-code-proposal-workspaces.md).

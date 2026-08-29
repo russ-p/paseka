@@ -6,7 +6,7 @@
 
 Still deferred from this baseline:
 
-- Dedicated worktrees page / `GET /api/worktrees`
+- Dedicated worktrees page / `GET /api/worktrees` — owned by [023-console-git](./023-console-git.md) (Git tab), not a separate Console tab
 - Cross-process browser attach
 - Global WebSocket/SSE event stream (`/api/events/stream`)
 - Per-run `MUTATION/code.proposal` diff preview for `review: required` (final merge gate diff is shipped)
@@ -98,7 +98,7 @@ Implemented backend behavior:
 
 Not implemented in the current baseline:
 
-- Dedicated worktrees page or `/api/worktrees` endpoint.
+- Dedicated worktrees page or `/api/worktrees` endpoint — see [023-console-git](./023-console-git.md).
 - Cross-process browser attach (sessions started outside the current `paseka console` process).
 - Global WebSocket/SSE event stream (`/api/events/stream`).
 - Per-run `MUTATION/code.proposal` diff preview for `review: required` tasks (final merge gate diff is implemented).
@@ -466,9 +466,9 @@ Implemented HTTP endpoints:
 - `GET /api/runs/:traceId/:agentId`
 - `GET /api/runs/:traceId/:agentId/events`
 
-Deferred suggested endpoints:
+Deferred suggested endpoints (worktrees list is specified in [023](./023-console-git.md), not a standalone tab):
 
-- `GET /api/worktrees`
+- Git clone ops — see [023-console-git](./023-console-git.md)
 
 Deferred live endpoints:
 
