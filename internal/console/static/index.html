@@ -47,6 +47,14 @@
           <div class="runtime-meta muted" id="host-meta">Unavailable</div>
           <div class="runtime-meta muted" id="host-detail"></div>
         </section>
+        <section class="git-panel" id="git-panel" aria-label="Git" role="button" tabindex="0">
+          <div class="runtime-status">
+            <span class="runtime-label">Git</span>
+            <span id="git-badge" class="badge idle">—</span>
+          </div>
+          <div class="runtime-meta muted" id="git-meta">Unavailable</div>
+          <div class="runtime-meta muted" id="git-detail"></div>
+        </section>
       </div>
     </div>
     <nav class="tabs" role="tablist">
@@ -59,6 +67,7 @@
       <button type="button" id="tab-runs" class="tab" role="tab" aria-selected="false">Runs</button>
       <button type="button" id="tab-topology" class="tab" role="tab" aria-selected="false">Topology</button>
       <button type="button" id="tab-system" class="tab" role="tab" aria-selected="false">System</button>
+      <button type="button" id="tab-git" class="tab" role="tab" aria-selected="false">Git</button>
     </nav>
   </header>
 
@@ -333,6 +342,7 @@
         <p id="review-merge-diff-missing" class="muted hidden">No trace worktree branch found — merge preview unavailable.</p>
         <p id="review-merge-diff-empty" class="muted hidden">No changes between the default branch and the trace branch.</p>
         <p id="review-merge-diff-truncated" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
+        <p id="review-origin-behind-warn" class="warn hidden">Local default branch is behind origin. Fetch or fast-forward pull before Approve so a sidecar pull cannot collide with a merge onto a stale HEAD.</p>
         <dl id="review-merge-diff-meta" class="meta compact-meta hidden"></dl>
         <pre id="review-merge-diff-stat" class="transcript hidden"></pre>
         <button type="button" id="review-open-diff-btn" class="secondary hidden">Open merge preview</button>
@@ -381,6 +391,7 @@
         </div>
       </div>
       <p id="review-merge-diff-truncated-preview" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
+      <p id="review-origin-behind-warn-preview" class="warn hidden">Local default branch is behind origin. Fetch or fast-forward pull before Approve so a sidecar pull cannot collide with a merge onto a stale HEAD.</p>
       <dl id="review-merge-diff-meta-preview" class="meta compact-meta hidden"></dl>
       <div id="review-merge-diff-viewer" class="merge-diff-viewer hidden" tabindex="0" aria-label="Merge diff viewer">
         <div id="review-merge-diff-file-panel" class="merge-diff-file-panel">
@@ -570,6 +581,62 @@
           <tbody id="system-process-body"></tbody>
         </table>
       </div>
+    </section>
+  </main>
+
+  <main class="layout hidden" id="git-layout">
+    <section class="panel git-tab-panel">
+      <div class="panel-header">
+        <h2>Git</h2>
+        <div class="topology-actions">
+          <button type="button" id="git-refresh-btn" class="secondary">Refresh</button>
+        </div>
+      </div>
+      <p class="muted topology-hint">Colony clone vs origin. Fetch updates remote-tracking only. Push publishes the default branch (never --force). Pull is fast-forward only — a backup when the inbound webhook sidecar did not update this clone.</p>
+      <p id="git-error" class="error hidden"></p>
+      <p id="git-action-msg" class="muted hidden"></p>
+
+      <h3>Colony root vs origin</h3>
+      <dl class="meta" id="git-origin-meta"></dl>
+      <div class="git-actions">
+        <button type="button" id="git-fetch-btn">Fetch</button>
+        <button type="button" id="git-push-btn">Push</button>
+        <button type="button" id="git-pull-btn">Pull (ff-only)</button>
+        <label class="git-hooks-label"><input type="checkbox" id="git-run-hooks"> Run git hooks on Push</label>
+      </div>
+      <p class="muted git-pull-hint">Pull is a backup when inbound sync (webhook sidecar) did not run. Isolated worktrees do not block Pull; a dirty root or live bees on colony root do.</p>
+      <h4>Unpublished commits</h4>
+      <ul id="git-unpublished" class="session-list compact-list"></ul>
+
+      <h3>Worktrees</h3>
+      <button type="button" id="git-prune-btn" class="secondary">Prune orphans</button>
+      <table class="git-table" id="git-worktree-table">
+        <thead>
+          <tr>
+            <th>Trace</th>
+            <th>Branch</th>
+            <th>Path</th>
+            <th>Base SHA</th>
+            <th>Dirty</th>
+          </tr>
+        </thead>
+        <tbody id="git-worktree-body"></tbody>
+      </table>
+      <p id="git-worktrees-empty" class="muted hidden">No colony-managed worktrees.</p>
+
+      <h3>Branches</h3>
+      <button type="button" id="git-batch-delete-btn" class="secondary">Delete merged leftovers</button>
+      <table class="git-table" id="git-branch-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Flags</th>
+            <th>Subject</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="git-branch-body"></tbody>
+      </table>
     </section>
   </main>
 

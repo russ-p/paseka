@@ -56,3 +56,19 @@ func IsInsideWorkTree(dir string) bool {
 	out, err := cmd.Output()
 	return err == nil && bytes.Equal(bytes.TrimSpace(out), []byte("true"))
 }
+
+// IsCheckoutRoot reports whether dir is the root of a git work tree (main or linked).
+func IsCheckoutRoot(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	top, err := Find(abs)
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(top) == filepath.Clean(abs)
+}

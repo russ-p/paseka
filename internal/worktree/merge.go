@@ -80,7 +80,11 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 	if err := runGit(colonyRoot, "checkout", defaultBranch); err != nil {
 		return failAfterStash(colonyRoot, stashed, err)
 	}
-	if err := runGit(colonyRoot, "merge", "--no-ff", "-m", message, "--", "refs/heads/"+branch); err != nil {
+	if _, err := gitroot.Run(gitroot.RunOpts{
+		Dir:      colonyRoot,
+		Args:     []string{"merge", "--no-ff", "--no-verify", "-m", message, "--", "refs/heads/" + branch},
+		ExtraEnv: []string{"HUSKY=0"},
+	}); err != nil {
 		return failAfterStash(colonyRoot, stashed, err)
 	}
 	commitSHA, err := revParse(colonyRoot, "HEAD")

@@ -228,6 +228,74 @@ func TestHostPanelStaticContract(t *testing.T) {
 	}
 }
 
+func TestGitPanelStaticContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="git-panel"`,
+		`id="git-badge"`,
+		`id="git-meta"`,
+		`id="git-detail"`,
+		`aria-label="Git"`,
+		`id="tab-git"`,
+		`id="git-layout"`,
+		`id="git-refresh-btn"`,
+		`id="git-fetch-btn"`,
+		`id="git-push-btn"`,
+		`id="git-pull-btn"`,
+		`id="git-run-hooks"`,
+		`id="git-prune-btn"`,
+		`id="git-batch-delete-btn"`,
+		`id="review-origin-behind-warn"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"function renderGit()",
+		"function renderGitPlaque()",
+		"function navigateGitPanel()",
+		"setTab('git')",
+		"api('/api/git')",
+		"gitMutate('/api/git/fetch')",
+		"gitMutate('/api/git/push'",
+		"gitMutate('/api/git/pull')",
+		"'/api/git/branches/delete'",
+		"'/api/git/worktrees/prune'",
+		"originBehindCount",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	css, err := staticFiles.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatalf("read style.css: %v", err)
+	}
+	cssSrc := string(css)
+	for _, needle := range []string{
+		".git-panel",
+		"#git-layout",
+		"#git-badge.warn",
+		".git-table",
+	} {
+		if !strings.Contains(cssSrc, needle) {
+			t.Fatalf("style.css missing %s", needle)
+		}
+	}
+}
+
 func TestTracesTabStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {

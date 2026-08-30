@@ -128,6 +128,8 @@ Use Reviews, agents, and trace views from the browser. Console itself does not r
 
 The header **Host** plaque and **System** tab show the OS view of the `paseka console` process: inside this container that is the **container PID namespace** (bees, `node`, `java`, and similar children), not the rest of the NAS. CPU/RAM figures come from `/proc/stat` and `/proc/meminfo`, which may still describe the **host** when cgroups do not hide them — do not treat RAM as this container’s limit. System Info is not a cluster control plane and does not call Docker APIs.
 
+The **Git** plaque and tab operate this colony clone (Fetch / Push / ff-only Pull). Git mutations do not need NATS. See [Git on the apiary](#git-on-the-apiary).
+
 ### Reactor on the same machine
 
 Run the choreography loop in a second process (second compose service, `docker compose run`, or systemd on the host):
@@ -158,6 +160,14 @@ Interactive `bee chat` / Ghostty attach assume a usable TTY on that machine — 
 | `CURSOR_CONFIG` | `/home/dev/.config/cursor` | e.g. `auth.json` |
 
 `CURSOR_API_KEY` is enough for headless auth; mounting Cursor config dirs is optional convenience when you already logged in on that host.
+
+## Git on the apiary
+
+Paseka remains the **local merger** (Console/CLI approve). **Outbound** publish is Queen Console **Git → Push** of the default branch, using the same system `git` and credential helper (`tea`, HTTPS) as a non-interactive `docker exec git push`. Bind-mount the same `HOME` (and `PATH`) the helper needs. Paseka does not store Gitea/GitHub tokens.
+
+**Inbound** fast-forward from Gitea/GitHub stays an operator **webhook sidecar** (`git pull --ff-only` into the colony clone). Console **Fetch** only updates remote-tracking refs. Console **Pull** is a backup when that sidecar missed a hook — not a second pull daemon inside Paseka.
+
+After Console Push, a sidecar pull is typically a no-op. Do not auto-push on review Approve.
 
 ## Security notes
 

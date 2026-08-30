@@ -2,7 +2,7 @@
 
 ## Status
 
-**(Approved)**
+**(Implemented)**
 Queen Console Git tab for the colony clone: status vs `origin`, explicit fetch/push/ff-only pull, worktrees, leftover local branches. Designed for homelab apiary (Gitea + inbound webhook pull). Operator push is not folded into review approve.
 
 ## Problem Statement

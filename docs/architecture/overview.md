@@ -410,7 +410,7 @@ internal/
   energy/                   # honey reserve seed + CLI publish helpers
   tasks/                    # task ops (create, start, retry, energy CLI paths)
   hiveview/                 # shared read models (traces, tasks, runs, agents, invites)
-  console/                  # Queen Console HTTP API + embedded SPA (transport); Host/System snapshot is console-local, not hiveview
+  console/                  # Queen Console HTTP API + embedded SPA (transport); Host/System/Git snapshots are console-local, not hiveview
   gate/telegram/            # Telegram Human Gateway (transport)
   export/                   # trace HTML export (uses hiveview)
   colony/                   # load .paseka + home config, bee schema, slug resolution
@@ -421,7 +421,8 @@ internal/
   runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
   adapters/                 # adapter registry + cursor/, pi/, claude/, script/
   sessions/                 # interactive PTY sessions, terminal attach
-  worktree/                 # create, diff, merge, cleanup
+  gitroot/                  # repo identity, origin, replica fetch/push/ff-only pull, branch delete
+  worktree/                 # create, diff, merge, list, prune orphans
   bus/                      # NATS transport; Publisher, TraceReplayer, ArtifactStore, EventSubscriber, TracePurger seams
   runtime/                  # reactor + dispatch: colony → prompts → adapter (AFK)
   review/                   # HITL approve/reject + merge

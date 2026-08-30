@@ -42,6 +42,9 @@ const state = {
   agents: null,
   system: null,
   systemError: '',
+  git: null,
+  gitError: '',
+  gitBusy: false,
   selectedId: null,
   selectedRunKey: null,
   transcriptCursor: 0,
@@ -80,6 +83,7 @@ const el = {
   tabRuns: document.getElementById('tab-runs'),
   tabTopology: document.getElementById('tab-topology'),
   tabSystem: document.getElementById('tab-system'),
+  tabGit: document.getElementById('tab-git'),
   dashboardLayout: document.getElementById('dashboard-layout'),
   tracesLayout: document.getElementById('traces-layout'),
   timelineLayout: document.getElementById('timeline-layout'),
@@ -269,6 +273,28 @@ const el = {
   hostBadge: document.getElementById('host-badge'),
   hostMeta: document.getElementById('host-meta'),
   hostDetail: document.getElementById('host-detail'),
+  gitPanel: document.getElementById('git-panel'),
+  gitBadge: document.getElementById('git-badge'),
+  gitMeta: document.getElementById('git-meta'),
+  gitDetail: document.getElementById('git-detail'),
+  gitLayout: document.getElementById('git-layout'),
+  gitRefreshBtn: document.getElementById('git-refresh-btn'),
+  gitError: document.getElementById('git-error'),
+  gitActionMsg: document.getElementById('git-action-msg'),
+  gitOriginMeta: document.getElementById('git-origin-meta'),
+  gitFetchBtn: document.getElementById('git-fetch-btn'),
+  gitPushBtn: document.getElementById('git-push-btn'),
+  gitPullBtn: document.getElementById('git-pull-btn'),
+  gitRunHooks: document.getElementById('git-run-hooks'),
+  gitUnpublished: document.getElementById('git-unpublished'),
+  gitPruneBtn: document.getElementById('git-prune-btn'),
+  gitWorktreeTable: document.getElementById('git-worktree-table'),
+  gitWorktreeBody: document.getElementById('git-worktree-body'),
+  gitWorktreesEmpty: document.getElementById('git-worktrees-empty'),
+  gitBatchDeleteBtn: document.getElementById('git-batch-delete-btn'),
+  gitBranchBody: document.getElementById('git-branch-body'),
+  reviewOriginBehindWarn: document.getElementById('review-origin-behind-warn'),
+  reviewOriginBehindWarnPreview: document.getElementById('review-origin-behind-warn-preview'),
   runCueBtn: document.getElementById('run-cue-btn'),
   dashboardRunCueBtn: document.getElementById('dashboard-run-cue-btn'),
   cueModal: document.getElementById('cue-modal'),
@@ -516,6 +542,234 @@ function renderHost() {
   el.hostDetail.textContent = sys.load1 != null ? `load ${Number(sys.load1).toFixed(2)}` : '';
 }
 
+function gitSyncLabel(git) {
+  if (!git) return '—';
+  if (!git.originUrl) return 'no origin';
+  const ahead = git.ahead;
+  const behind = git.behind;
+  if (ahead == null && behind == null) {
+    const bits = [];
+    if (git.note && !git.dirty) bits.push('fetch');
+    if (git.dirty) bits.push('dirty');
+    return bits.join(' ') || git.defaultBranch || 'git';
+  }
+  if ((ahead || 0) === 0 && (behind || 0) === 0 && !git.dirty) return 'synced';
+  const parts = [];
+  if (ahead) parts.push(`↑${ahead}`);
+  if (behind) parts.push(`↓${behind}`);
+  if (git.dirty) parts.push('dirty');
+  return parts.join(' ') || 'git';
+}
+
+function renderGitPlaque() {
+  const git = state.git;
+  const failed = Boolean(state.gitError) && !git;
+  if (!el.gitBadge) return;
+  if (failed || !git) {
+    el.gitBadge.textContent = '—';
+    el.gitBadge.className = 'badge idle';
+    el.gitMeta.textContent = state.gitError || 'Unavailable';
+    el.gitDetail.textContent = '';
+    return;
+  }
+  el.gitBadge.textContent = gitSyncLabel(git);
+  const diverged = (git.ahead || 0) > 0 || (git.behind || 0) > 0 || git.dirty;
+  if (state.gitError && !git.originUrl && git.ahead == null) {
+    el.gitBadge.className = 'badge idle';
+  } else if (!git.originUrl || git.dirty || (git.behind || 0) > 0 || (git.ahead || 0) > 0) {
+    el.gitBadge.className = diverged || !git.originUrl ? 'badge warn' : 'badge active';
+  } else {
+    el.gitBadge.className = 'badge active';
+  }
+  if (!git.originUrl) {
+    el.gitBadge.className = 'badge warn';
+  }
+  el.gitMeta.textContent = git.defaultBranch || git.branch || '—';
+  const bits = [];
+  if (git.headShaShort) bits.push(git.headShaShort);
+  if (git.lastFetchAgeSeconds != null) bits.push(`fetch ${formatGitAge(git.lastFetchAgeSeconds)}`);
+  el.gitDetail.textContent = bits.join(' · ');
+}
+
+function renderGit() {
+  renderGitPlaque();
+  const git = state.git;
+  const fetchErr = state.gitError;
+  if (el.gitError) {
+    const msg = fetchErr || '';
+    el.gitError.textContent = msg;
+    el.gitError.classList.toggle('hidden', !msg);
+  }
+  if (!git) {
+    if (el.gitOriginMeta) el.gitOriginMeta.innerHTML = '';
+    if (el.gitUnpublished) el.gitUnpublished.innerHTML = '';
+    if (el.gitWorktreeBody) el.gitWorktreeBody.innerHTML = '';
+    if (el.gitBranchBody) el.gitBranchBody.innerHTML = '';
+    return;
+  }
+  const noOrigin = !git.originUrl;
+  const disableReason = noOrigin ? 'no origin remote' : '';
+  const btns = [el.gitFetchBtn, el.gitPushBtn, el.gitPullBtn];
+  for (const btn of btns) {
+    if (!btn) continue;
+    btn.disabled = state.gitBusy || noOrigin;
+    btn.title = noOrigin ? disableReason : '';
+  }
+  if (el.gitPruneBtn) el.gitPruneBtn.disabled = state.gitBusy;
+  if (el.gitBatchDeleteBtn) el.gitBatchDeleteBtn.disabled = state.gitBusy;
+
+  const rows = [
+    ['Branch', git.branch],
+    ['HEAD', git.headShaShort || git.headSha],
+    ['Default', git.defaultBranch],
+    ['Dirty', git.dirty ? 'yes' : 'no'],
+    ['Origin', git.originUrl || '—'],
+    ['Ahead', git.ahead == null ? '—' : String(git.ahead)],
+    ['Behind', git.behind == null ? '—' : String(git.behind)],
+  ];
+  if (git.note) rows.push(['Note', git.note]);
+  if (git.lastFetchAgeSeconds != null) {
+    rows.push(['Last fetch', formatGitAge(git.lastFetchAgeSeconds) + ' ago']);
+  }
+  if (el.gitOriginMeta) {
+    el.gitOriginMeta.innerHTML = rows
+      .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd><code>${escapeHtml(v || '—')}</code></dd>`)
+      .join('');
+  }
+  if (el.gitUnpublished) {
+    const unpublished = git.unpublished || [];
+    if (!unpublished.length) {
+      el.gitUnpublished.innerHTML = '<li class="muted">None</li>';
+    } else {
+      el.gitUnpublished.innerHTML = unpublished
+        .map((c) => `<li><code>${escapeHtml(c.sha?.slice(0, 8) || '')}</code> ${escapeHtml(c.subject || '')}</li>`)
+        .join('');
+    }
+  }
+  const wts = git.worktrees || [];
+  if (el.gitWorktreesEmpty) {
+    el.gitWorktreesEmpty.classList.toggle('hidden', wts.length > 0);
+  }
+  if (el.gitWorktreeTable) el.gitWorktreeTable.hidden = wts.length === 0;
+  if (el.gitWorktreeBody) {
+    el.gitWorktreeBody.innerHTML = '';
+    for (const wt of wts) {
+      const tr = document.createElement('tr');
+      const traceCell = document.createElement('td');
+      if (wt.traceId) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'toast-link';
+        btn.textContent = wt.traceId;
+        btn.addEventListener('click', () => navigateToTrace(wt.traceId));
+        traceCell.appendChild(btn);
+      } else {
+        traceCell.textContent = '—';
+      }
+      tr.appendChild(traceCell);
+      tr.insertAdjacentHTML(
+        'beforeend',
+        `<td><code>${escapeHtml(wt.branch || '—')}</code></td>
+         <td><code>${escapeHtml(wt.path || '')}</code></td>
+         <td><code>${escapeHtml((wt.baseSha || '').slice(0, 8))}</code></td>
+         <td>${wt.dirty ? 'yes' : 'no'}</td>`
+      );
+      el.gitWorktreeBody.appendChild(tr);
+    }
+  }
+  const branches = git.branches || [];
+  if (el.gitBranchBody) {
+    el.gitBranchBody.innerHTML = '';
+    for (const b of branches) {
+      const tr = document.createElement('tr');
+      if (b.leftover) tr.className = 'leftover';
+      const flags = [];
+      if (b.current) flags.push('HEAD');
+      if (b.default) flags.push('default');
+      if (b.merged) flags.push('merged');
+      if (b.leftover) flags.push('leftover');
+      if (b.worktreePath) flags.push('worktree');
+      if (b.traceId) flags.push(b.traceId);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'secondary';
+      del.textContent = 'Delete';
+      del.disabled = state.gitBusy || b.default || b.current || !b.merged || Boolean(b.worktreePath);
+      del.addEventListener('click', () => gitDeleteBranches([b.name]));
+      tr.innerHTML = `<td><code>${escapeHtml(b.name)}</code></td>
+        <td>${escapeHtml(flags.join(' · ') || '—')}</td>
+        <td>${escapeHtml(b.subject || '')}</td>
+        <td></td>`;
+      tr.lastElementChild.appendChild(del);
+      el.gitBranchBody.appendChild(tr);
+    }
+  }
+  const leftovers = branches.filter((b) => b.leftover);
+  if (el.gitBatchDeleteBtn) {
+    el.gitBatchDeleteBtn.disabled = state.gitBusy || leftovers.length === 0;
+    el.gitBatchDeleteBtn.textContent = leftovers.length
+      ? `Delete ${leftovers.length} merged leftover${leftovers.length === 1 ? '' : 's'}`
+      : 'Delete merged leftovers';
+  }
+}
+
+async function refreshGit() {
+  try {
+    const git = await api('/api/git');
+    state.git = git;
+    state.gitError = '';
+    renderGit();
+  } catch (err) {
+    state.git = null;
+    state.gitError = err.message || 'Unavailable';
+    renderGit();
+  }
+}
+
+async function gitMutate(path, body) {
+  state.gitBusy = true;
+  renderGit();
+  if (el.gitActionMsg) {
+    el.gitActionMsg.classList.add('hidden');
+  }
+  try {
+    const opts = { method: 'POST' };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await api(path, opts);
+    if (el.gitActionMsg) {
+      el.gitActionMsg.classList.remove('error');
+      el.gitActionMsg.textContent = res.message || (res.ok ? 'OK' : '');
+      if (res.results) {
+        const lines = res.results.map((r) => `${r.name}: ${r.ok ? 'deleted' : r.error || 'failed'}`);
+        el.gitActionMsg.textContent = lines.join('\n');
+      }
+      el.gitActionMsg.classList.toggle('hidden', !el.gitActionMsg.textContent);
+    }
+    await refreshGit();
+  } catch (err) {
+    if (el.gitActionMsg) {
+      el.gitActionMsg.textContent = err.message || 'Failed';
+      el.gitActionMsg.classList.remove('hidden');
+      el.gitActionMsg.classList.add('error');
+    }
+  } finally {
+    state.gitBusy = false;
+    renderGit();
+  }
+}
+
+async function gitDeleteBranches(names) {
+  if (!names.length) return;
+  await gitMutate('/api/git/branches/delete', { names });
+}
+
+function formatGitAge(seconds) {
+  if (seconds == null || Number.isNaN(Number(seconds))) return '—';
+  const s = Math.max(0, Math.floor(Number(seconds)));
+  if (s < 60) return `${s}s`;
+  return formatUptime(s);
+}
+
 function renderAgents() {
   const ag = state.agents || { count: 0, afk: 0, sessions: 0, items: [] };
   el.agentsBadge.textContent = String(ag.count);
@@ -668,6 +922,18 @@ async function loadHeaderStatus() {
       renderHost();
       if (state.tab === 'system') renderSystem();
     }
+    try {
+      const git = await api('/api/git');
+      state.git = git;
+      state.gitError = '';
+      renderGitPlaque();
+      if (state.tab === 'git') renderGit();
+    } catch (err) {
+      state.git = null;
+      state.gitError = err.message || 'Unavailable';
+      renderGitPlaque();
+      if (state.tab === 'git') renderGit();
+    }
   } finally {
     state.headerStatusInFlight = false;
   }
@@ -707,7 +973,7 @@ function traceSummarySubline(trace) {
 function setTab(tab) {
   closeReviewMergePreview();
   state.tab = tab;
-  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology', 'system'];
+  const tabs = ['dashboard', 'traces', 'timeline', 'tasks', 'reviews', 'sessions', 'runs', 'topology', 'system', 'git'];
   const layouts = {
     dashboard: el.dashboardLayout,
     traces: el.tracesLayout,
@@ -718,6 +984,7 @@ function setTab(tab) {
     runs: el.runsLayout,
     topology: el.topologyLayout,
     system: el.systemLayout,
+    git: el.gitLayout,
   };
   if (el.reviewDiffLayout) {
     el.reviewDiffLayout.classList.add('hidden');
@@ -744,6 +1011,7 @@ function setTab(tab) {
     runs: 'Runs — observe headless adapter invocations',
     topology: 'Topology — config-derived colony EDA graph (bees, events, invites)',
     system: 'System — console host CPU, memory, and top processes',
+    git: 'Git — colony clone vs origin, worktrees, leftover branches',
   };
   el.subtitle.textContent = subtitles[tab] || '';
 
@@ -778,6 +1046,8 @@ function setTab(tab) {
     loadTopology().catch(console.error);
   } else if (tab === 'system') {
     renderSystem();
+  } else if (tab === 'git') {
+    renderGit();
   }
 }
 
@@ -1975,6 +2245,17 @@ function moveReviewMergeDiffSelection(delta) {
   selectReviewMergeDiffFile(files[nextIdx].path, true);
 }
 
+function setOriginBehindWarn(view) {
+  const behind = view?.originBehindCount;
+  const show = Number(behind) > 0;
+  if (el.reviewOriginBehindWarn) {
+    el.reviewOriginBehindWarn.classList.toggle('hidden', !show);
+  }
+  if (el.reviewOriginBehindWarnPreview) {
+    el.reviewOriginBehindWarnPreview.classList.toggle('hidden', !show);
+  }
+}
+
 function updateReviewMergePreviewChrome() {
   const view = state.reviewMergeDiffView;
   if (!view) return;
@@ -1993,6 +2274,7 @@ function updateReviewMergePreviewChrome() {
       .join('');
     el.reviewMergeDiffMetaPreview.classList.remove('hidden');
   }
+  setOriginBehindWarn(view);
 }
 
 function openReviewMergePreview() {
@@ -2973,6 +3255,7 @@ function clearReviewMergeDiff() {
   if (el.reviewMergeDiffTruncatedPreview) {
     el.reviewMergeDiffTruncatedPreview.classList.add('hidden');
   }
+  setOriginBehindWarn(null);
   if (el.reviewMergeDiffViewer) {
     el.reviewMergeDiffViewer.classList.add('hidden');
   }
@@ -3010,6 +3293,7 @@ function renderReviewMergeDiff(view, preserve) {
 
   if (view.missingWorktree) {
     el.reviewMergeDiffMissing.classList.remove('hidden');
+    setOriginBehindWarn(view);
     return;
   }
 
@@ -3023,6 +3307,7 @@ function renderReviewMergeDiff(view, preserve) {
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd><code>${escapeHtml(v || '—')}</code></dd>`)
     .join('');
   el.reviewMergeDiffMeta.classList.remove('hidden');
+  setOriginBehindWarn(view);
 
   if (view.stat) {
     el.reviewMergeDiffStat.textContent = view.stat;
@@ -3657,6 +3942,7 @@ el.tabRuns.addEventListener('click', () => {
 });
 el.tabTopology.addEventListener('click', () => setTab('topology'));
 el.tabSystem.addEventListener('click', () => setTab('system'));
+el.tabGit.addEventListener('click', () => setTab('git'));
 
 el.topologyRefreshBtn.addEventListener('click', () => {
   loadTopology().catch(console.error);
@@ -4099,6 +4385,47 @@ el.hostPanel.addEventListener('keydown', (event) => {
 if (el.systemRefreshBtn) {
   el.systemRefreshBtn.addEventListener('click', () => {
     refreshSystem().catch(console.error);
+  });
+}
+
+function navigateGitPanel() {
+  setTab('git');
+}
+
+if (el.gitPanel) {
+  el.gitPanel.addEventListener('click', navigateGitPanel);
+  el.gitPanel.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      navigateGitPanel();
+    }
+  });
+}
+if (el.gitRefreshBtn) {
+  el.gitRefreshBtn.addEventListener('click', () => {
+    refreshGit().catch(console.error);
+  });
+}
+if (el.gitFetchBtn) {
+  el.gitFetchBtn.addEventListener('click', () => gitMutate('/api/git/fetch'));
+}
+if (el.gitPushBtn) {
+  el.gitPushBtn.addEventListener('click', () => {
+    gitMutate('/api/git/push', { runHooks: Boolean(el.gitRunHooks?.checked) });
+  });
+}
+if (el.gitPullBtn) {
+  el.gitPullBtn.addEventListener('click', () => gitMutate('/api/git/pull'));
+}
+if (el.gitPruneBtn) {
+  el.gitPruneBtn.addEventListener('click', () => gitMutate('/api/git/worktrees/prune'));
+}
+if (el.gitBatchDeleteBtn) {
+  el.gitBatchDeleteBtn.addEventListener('click', () => {
+    const leftovers = (state.git?.branches || []).filter((b) => b.leftover).map((b) => b.name);
+    if (!leftovers.length) return;
+    if (!confirm(`Delete ${leftovers.length} merged leftover branch(es)?\n\n${leftovers.join('\n')}`)) return;
+    gitDeleteBranches(leftovers);
   });
 }
 

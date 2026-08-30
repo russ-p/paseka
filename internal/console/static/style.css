@@ -87,7 +87,8 @@ header {
 
 .runtime-panel,
 .agents-panel,
-.host-panel {
+.host-panel,
+.git-panel {
   min-width: 220px;
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--border);
@@ -96,12 +97,14 @@ header {
 }
 
 .agents-panel,
-.host-panel {
+.host-panel,
+.git-panel {
   cursor: pointer;
 }
 
 .agents-panel:hover,
-.host-panel:hover {
+.host-panel:hover,
+.git-panel:hover {
   border-color: #3a4560;
 }
 
@@ -145,6 +148,9 @@ header {
 #host-badge.idle { background: #2a3040; color: var(--muted); }
 #host-badge.active { background: #1f3d2e; color: var(--ok); }
 #host-badge.warn { background: #3d3318; color: var(--warn); }
+#git-badge.idle { background: #2a3040; color: var(--muted); }
+#git-badge.active { background: #1f3d2e; color: var(--ok); }
+#git-badge.warn { background: #3d3318; color: var(--warn); }
 
 header h1 {
   margin: 0;
@@ -373,7 +379,8 @@ header h1 {
 #dashboard-layout,
 #timeline-layout,
 #topology-layout,
-#system-layout {
+#system-layout,
+#git-layout {
   grid-template-columns: 1fr;
 }
 
@@ -1182,6 +1189,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: var(--muted); }
 .hidden { display: none !important; }
 .error { color: var(--danger); font-size: 0.9rem; }
+#git-action-msg.error { color: var(--danger); }
 
 .session-list {
   list-style: none;
@@ -1472,4 +1480,55 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .system-process-table tr.live-bee td.comm {
   color: var(--ok);
+}
+
+.warn { color: var(--warn); font-size: 0.9rem; }
+
+.git-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.git-hooks-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.git-pull-hint {
+  margin: 0 0 0.75rem;
+}
+
+.git-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 1.25rem;
+  font-size: 0.85rem;
+}
+
+.git-table th,
+.git-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.git-table tr.leftover {
+  background: #2a2414;
+}
+
+.git-table code {
+  font-size: 0.8rem;
+}
+
+.git-tab-panel h3 {
+  margin: 1.25rem 0 0.5rem;
+}
+
+.git-tab-panel h4 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.9rem;
 }

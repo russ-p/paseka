@@ -2,11 +2,10 @@
 
 ## Status
 
-**Implemented (MVP baseline).** Living baseline for Queen Console: `paseka console`, embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews (including final merge-diff preview), sessions (same-process browser PTY), runs, Topology tab ([007](./007-colony-eda-topology.md)), and the Live bees header panel ([004](./004-live-bees-indicator.md)).
+**Implemented (MVP baseline).** Living baseline for Queen Console: `paseka console`, embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews (including final merge-diff preview), sessions (same-process browser PTY), runs, Topology tab ([007](./007-colony-eda-topology.md)), Live bees header panel ([004](./004-live-bees-indicator.md)), Host/System ([022](./022-console-system-info.md)), and Git plaque/tab ([023](./023-console-git.md)).
 
 Still deferred from this baseline:
 
-- Dedicated worktrees page / `GET /api/worktrees` — owned by [023-console-git](./023-console-git.md) (Git tab), not a separate Console tab
 - Cross-process browser attach
 - Global WebSocket/SSE event stream (`/api/events/stream`)
 - Per-run `MUTATION/code.proposal` diff preview for `review: required` (final merge gate diff is shipped)
@@ -98,7 +97,6 @@ Implemented backend behavior:
 
 Not implemented in the current baseline:
 
-- Dedicated worktrees page or `/api/worktrees` endpoint — see [023-console-git](./023-console-git.md).
 - Cross-process browser attach (sessions started outside the current `paseka console` process).
 - Global WebSocket/SSE event stream (`/api/events/stream`).
 - Per-run `MUTATION/code.proposal` diff preview for `review: required` tasks (final merge gate diff is implemented).
@@ -177,7 +175,7 @@ Approve and reject actions follow the same rule: they call `internal/review.Appr
 
 ### MVP Screens
 
-The current MVP includes eight primary SPA tabs plus a global runtime panel.
+The current MVP includes ten primary SPA tabs plus header plaques (Hive runtime, Live bees, Host, Git).
 
 #### 1. Dashboard
 
@@ -401,17 +399,7 @@ Approve/reject actions reuse the same domain flows as `paseka proposal approve|r
 
 ### Worktree Visibility
 
-The dashboard currently surfaces only the count of active colony-managed worktrees. The trace detail API can include the active worktree associated with a trace.
-
-A future dedicated worktree view should surface:
-
-- trace id
-- path
-- base SHA
-- branch
-- created at
-
-This is important for understanding isolated mutation state and for debugging stuck or abandoned traces.
+The dashboard still shows the count of active colony-managed worktrees. Trace detail includes the active worktree for that trail. Colony-wide list, prune, and leftover branch cleanup live on the **Git** tab ([023](./023-console-git.md)): path, branch, `traceId`, base SHA, dirty, plus orphan prune.
 
 ## Backend API Shape
 
@@ -442,6 +430,7 @@ Implemented HTTP endpoints:
   | `truncated` | bool | Diff body capped at 1 MiB |
   | `empty` | bool | No changes between branches |
   | `missingWorktree` | bool | Trace branch not found — preview unavailable |
+  | `originBehindCount` | int, optional | Local default behind `origin/<default>` when remote-tracking exists (warn only) |
 
 - `POST /api/traces/:traceId/energy/add` — body `{ "amount": <positive int> }`; publishes `SIGNAL/energy.add` via shared `tasks.AddEnergy` (`agentId: console`). Returns updated `energyBudget`, `energyRemaining`, `energyAdded`, `energyAllocated` (`budget + added` after seed), `lowEnergy` (`remaining <= budget/4`). Requires NATS and task ledger KV (503 when unavailable). Honey display: [task ledger](../reference/task-ledger.md) § Honey reserve.
 
@@ -466,9 +455,16 @@ Implemented HTTP endpoints:
 - `GET /api/runs/:traceId/:agentId`
 - `GET /api/runs/:traceId/:agentId/events`
 
-Deferred suggested endpoints (worktrees list is specified in [023](./023-console-git.md), not a standalone tab):
+- `GET /api/system` — Host/System snapshot ([022](./022-console-system-info.md))
+- `GET /api/git` — colony clone vs origin snapshot (no fetch); worktrees + local branches
+- `POST /api/git/fetch` — `git fetch origin`
+- `POST /api/git/push` — default branch only; optional `runHooks` (default skip `--no-verify`)
+- `POST /api/git/pull` — `--ff-only` backup
+- `POST /api/git/branches/delete` — safe `git branch -d` (batch)
+- `POST /api/git/worktrees/prune` — orphan prune (never force-remove a live registered checkout)
 
-- Git clone ops — see [023-console-git](./023-console-git.md)
+Deferred suggested endpoints:
+
 - Isolated PR publish (not Git-tab Push of default) — see [024-pull-request-delivery](./024-pull-request-delivery.md)
 
 Deferred live endpoints:
