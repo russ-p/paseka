@@ -2432,6 +2432,7 @@ function renderRunDetail(run) {
     ['Agent ID', run.agentId],
     ['Bee', run.bee],
     ['Adapter', run.adapter],
+    ['Provider session', run.providerSessionId],
     ['Task ID', run.taskId],
     ['Intent', run.intent],
     ['Workspace', run.workspace],

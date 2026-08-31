@@ -79,3 +79,62 @@ func TestParseStreamJSONUsageAbsent(t *testing.T) {
 		t.Fatalf("expected nil usage, got %+v", got.Usage)
 	}
 }
+
+func TestParseStreamJSONSessionIDFromInit(t *testing.T) {
+	stdout := `{"type":"system","subtype":"init","session_id":"init-uuid"}
+{"type":"assistant","timestamp_ms":1,"message":{"content":[{"text":"hi"}]},"session_id":"later-uuid"}
+{"type":"result","subtype":"success","result":"done","session_id":"later-uuid"}`
+
+	got := parseStreamJSON(stdout, "t", "a")
+	if got.SessionID != "init-uuid" {
+		t.Fatalf("session id = %q, want init-uuid", got.SessionID)
+	}
+}
+
+func TestParseStreamJSONSessionIDLaterLineFallback(t *testing.T) {
+	stdout := `{"type":"assistant","timestamp_ms":1,"message":{"content":[{"text":"hi"}]},"session_id":"from-assistant"}
+{"type":"result","subtype":"success","result":"done","session_id":"from-result"}`
+
+	got := parseStreamJSON(stdout, "t", "a")
+	if got.SessionID != "from-assistant" {
+		t.Fatalf("session id = %q, want from-assistant", got.SessionID)
+	}
+}
+
+func TestParseStreamJSONSessionIDInitWinsOverEarlierLine(t *testing.T) {
+	stdout := `{"type":"user","session_id":"user-uuid"}
+{"type":"system","subtype":"init","session_id":"init-uuid"}`
+
+	got := parseStreamJSON(stdout, "t", "a")
+	if got.SessionID != "init-uuid" {
+		t.Fatalf("session id = %q, want init-uuid", got.SessionID)
+	}
+}
+
+func TestParseStreamJSONSessionIDCompactJSON(t *testing.T) {
+	stdout := `{"type":"result","subtype":"success","result":"done","session_id":"compact-uuid"}`
+	got := parseStreamJSON(stdout, "t", "a")
+	if got.SessionID != "compact-uuid" {
+		t.Fatalf("session id = %q, want compact-uuid", got.SessionID)
+	}
+}
+
+func TestParseStreamJSONSessionIDAbsentOnText(t *testing.T) {
+	got := parseStreamJSON("plain agent output", "t", "a")
+	if got.SessionID != "" {
+		t.Fatalf("session id = %q, want empty", got.SessionID)
+	}
+}
+
+func TestParseStreamJSONSessionIDPrettyPrinted(t *testing.T) {
+	stdout := `{
+  "type": "result",
+  "subtype": "success",
+  "result": "done",
+  "session_id": "pretty-uuid"
+}`
+	got := parseStreamJSON(stdout, "t", "a")
+	if got.SessionID != "pretty-uuid" {
+		t.Fatalf("session id = %q, want pretty-uuid", got.SessionID)
+	}
+}

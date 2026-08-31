@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/runs"
@@ -41,7 +40,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		TraceID:    req.TraceID,
 		AgentID:    req.AgentID,
 	}
-	sessionDir := filepath.Join(runDir.Root(), "pi-sessions")
+	sessionDir := sessionDirFor(req.ColonyRoot, req.TraceID, req.AgentID)
 	systemFile := ""
 	if req.SystemPrompt != "" {
 		systemFile = runDir.SystemPath()

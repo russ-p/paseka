@@ -79,6 +79,9 @@ func printRunUsage(w io.Writer, colonyRoot, traceID, agentID string) error {
 	if meta.Bee != "" {
 		fmt.Fprintf(w, "  bee:     %s\n", meta.Bee)
 	}
+	if meta.ProviderSessionID != "" {
+		fmt.Fprintf(w, "  providerSessionId: %s\n", meta.ProviderSessionID)
+	}
 	if meta.Usage == nil {
 		fmt.Fprintln(w, "  usage: (none)")
 		return nil

@@ -11,23 +11,24 @@ import (
 
 // RunMeta is a read-only projection of one headless adapter run directory.
 type RunMeta struct {
-	TraceID    string          `json:"traceId"`
-	AgentID    string          `json:"agentId"`
-	Bee        string          `json:"bee"`
-	Adapter    string          `json:"adapter"`
-	Workspace  string          `json:"workspace"`
-	ColonyRoot string          `json:"colonyRoot"`
-	TaskID     string          `json:"taskId,omitempty"`
-	Task       string          `json:"task,omitempty"`
-	Intent     string          `json:"intent,omitempty"`
-	State      string          `json:"state"`
-	Summary    string          `json:"summary,omitempty"`
-	Usage      *protocol.Usage `json:"usage,omitempty"`
-	RunDir     string          `json:"runDir"`
-	StartedAt  time.Time       `json:"startedAt"`
-	FinishedAt time.Time       `json:"finishedAt,omitempty"`
-	HasEvents  bool            `json:"hasEvents"`
-	HasSession bool            `json:"hasSession"`
+	TraceID           string          `json:"traceId"`
+	AgentID           string          `json:"agentId"`
+	Bee               string          `json:"bee"`
+	Adapter           string          `json:"adapter"`
+	Workspace         string          `json:"workspace"`
+	ColonyRoot        string          `json:"colonyRoot"`
+	TaskID            string          `json:"taskId,omitempty"`
+	Task              string          `json:"task,omitempty"`
+	Intent            string          `json:"intent,omitempty"`
+	State             string          `json:"state"`
+	Summary           string          `json:"summary,omitempty"`
+	Usage             *protocol.Usage `json:"usage,omitempty"`
+	ProviderSessionID string          `json:"providerSessionId,omitempty"`
+	RunDir            string          `json:"runDir"`
+	StartedAt         time.Time       `json:"startedAt"`
+	FinishedAt        time.Time       `json:"finishedAt,omitempty"`
+	HasEvents         bool            `json:"hasEvents"`
+	HasSession        bool            `json:"hasSession"`
 }
 
 // LoadRunMeta reads a run projection from an existing run directory.
@@ -73,6 +74,9 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		if res.Usage != nil {
 			meta.Usage = res.Usage
 		}
+		if res.ProviderSessionID != "" {
+			meta.ProviderSessionID = res.ProviderSessionID
+		}
 		if !res.FinishedAt.IsZero() {
 			meta.FinishedAt = res.FinishedAt
 		}
@@ -83,9 +87,12 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 	if meta.State == "" {
 		meta.State = string(protocol.StatusQueued)
 	}
-	if meta.StartedAt.IsZero() {
-		if legacy, err := readLegacyMetaStartedAt(d); err == nil {
-			meta.StartedAt = legacy
+	if legacy, err := readLegacyMeta(d); err == nil {
+		if meta.StartedAt.IsZero() {
+			meta.StartedAt = legacy.StartedAt
+		}
+		if meta.ProviderSessionID == "" {
+			meta.ProviderSessionID = legacy.ProviderSessionID
 		}
 	}
 
@@ -211,16 +218,16 @@ func (d Dir) readEventsFrom(skip int) ([]protocol.Event, error) {
 	return all[skip:], nil
 }
 
-func readLegacyMetaStartedAt(d Dir) (time.Time, error) {
+func readLegacyMeta(d Dir) (Meta, error) {
 	data, err := os.ReadFile(d.MetaPath())
 	if err != nil {
-		return time.Time{}, err
+		return Meta{}, err
 	}
 	var legacy Meta
 	if err := json.Unmarshal(data, &legacy); err != nil {
-		return time.Time{}, err
+		return Meta{}, err
 	}
-	return legacy.StartedAt, nil
+	return legacy, nil
 }
 
 func fileExists(path string) bool {

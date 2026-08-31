@@ -42,12 +42,33 @@ type cliStreamLine struct {
 			Args json.RawMessage `json:"arguments"`
 		} `json:"function"`
 	} `json:"toolCall"`
+	SessionID string `json:"session_id"`
 }
 
 type streamParseOutput struct {
-	Summary string
-	Events  []protocol.Event
-	Usage   *protocol.Usage
+	Summary   string
+	Events    []protocol.Event
+	Usage     *protocol.Usage
+	SessionID string
+	fromInit  bool
+}
+
+func considerSessionID(out *streamParseOutput, raw cliStreamLine) {
+	id := strings.TrimSpace(raw.SessionID)
+	if id == "" {
+		return
+	}
+	if raw.Type == "system" && raw.Subtype == "init" {
+		out.SessionID = id
+		out.fromInit = true
+		return
+	}
+	if out.fromInit {
+		return
+	}
+	if out.SessionID == "" {
+		out.SessionID = id
+	}
 }
 
 func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
@@ -62,6 +83,7 @@ func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			continue
 		}
+		considerSessionID(&out, raw)
 		switch raw.Type {
 		case "result":
 			if raw.Subtype == "success" && raw.Result != "" {
@@ -95,6 +117,12 @@ func parseStreamJSON(stdout, traceID, agentID string) streamParseOutput {
 				out.Events = append(out.Events, ev)
 				seq++
 			}
+		}
+	}
+	if out.SessionID == "" {
+		var raw cliStreamLine
+		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &raw); err == nil {
+			considerSessionID(&out, raw)
 		}
 	}
 	return out

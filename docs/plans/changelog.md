@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-08 — AFK provider session id
+
+Headless Cursor and Pi runs record the provider’s native session id as `providerSessionId` on `result.json` / `meta.json`. Cursor parses `session_id` from stream-json (prefer `system`/`init`). Pi AFK pins `--session-dir` / `--session-id` like interactive sessions, then prefers the JSON session header when present. Queen Console run detail and `paseka inspect usage --agent` show the id when set. Missing id does not fail the run. Export enrichment and HITL Cursor resume are not in this slice.
+
+- Spec: [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) (Draft; association slice)
+- Canonical: [Architecture overview](../architecture/overview.md) (adapter result collection), [CLI](../guide/cli.md) (`paseka inspect usage`)
+
 ## 2026-08 — Queen Console Git
 
 Queen Console header adds a **Git** plaque (ahead/behind `origin`, dirty, or synced) next to Host. Click or Enter/Space opens a **Git** tab: colony root vs origin with explicit **Fetch** (remote-tracking only), **Push** of the default branch (never `--force`; hooks skipped by default), and fast-forward-only **Pull** as a backup when a webhook sidecar did not update the clone. The tab lists colony-managed worktrees (with prune of orphans) and leftover merged branches (`paseka/*`, `feature/` / `hotfix/` / `fix/`) with safe `git branch -d`. Reviews warn when origin is ahead of the local default branch; Approve still does not push. Git ops do not depend on NATS. Credentials stay in the system git helper (`HOME`/`PATH` of `paseka console`).

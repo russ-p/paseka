@@ -3,6 +3,8 @@ package pi
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/paseka/paseka/internal/adapters"
 )
 
 func piMode(format string) string {
@@ -91,4 +93,42 @@ func stringFromJSONValue(raw json.RawMessage) string {
 		}
 	}
 	return ""
+}
+
+func resolveProviderSessionID(stdout string, args []string) string {
+	if id := parseSessionID(stdout); id != "" {
+		return id
+	}
+	return strings.TrimSpace(adapters.FlagValue(args, "--session-id"))
+}
+
+func parseSessionID(stdout string) string {
+	stdout = strings.TrimSpace(stdout)
+	if stdout == "" {
+		return ""
+	}
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if id := sessionIDFromJSON(line); id != "" {
+			return id
+		}
+	}
+	return sessionIDFromJSON(stdout)
+}
+
+func sessionIDFromJSON(data string) string {
+	var raw struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(data), &raw); err != nil {
+		return ""
+	}
+	if raw.Type != "session" {
+		return ""
+	}
+	return strings.TrimSpace(raw.ID)
 }

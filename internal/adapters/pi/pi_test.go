@@ -22,6 +22,7 @@ func TestAdapterName(t *testing.T) {
 
 func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
+		AgentID: "agent-1",
 		Params: adapters.RunParams{
 			Model:        "gpt-4",
 			OutputFormat: "json",
@@ -33,10 +34,12 @@ func TestBuildArgs(t *testing.T) {
 			Force:        true,
 		},
 	}
-	args := buildArgs(req, "implement feature", "")
+	args := buildArgs(req, "implement feature", "", "/colony/.paseka/runs/t/a/pi-sessions")
 
 	want := []string{
 		"-p", "--mode", "json",
+		"--session-dir", "/colony/.paseka/runs/t/a/pi-sessions",
+		"--session-id", "agent-1",
 		"--model", "gpt-4",
 		"--provider", "gemini",
 		"--thinking", "high",
@@ -156,6 +159,21 @@ func TestAdapterRunEndToEnd(t *testing.T) {
 	if protoResult.Summary != "pi completed" {
 		t.Fatalf("result summary = %q", protoResult.Summary)
 	}
+	if protoResult.ProviderSessionID != "agent-pi-1" {
+		t.Fatalf("result.json session id = %q, want agent-pi-1", protoResult.ProviderSessionID)
+	}
+
+	metaData, err := os.ReadFile(runDir.MetaPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta runs.Meta
+	if err := json.Unmarshal(metaData, &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta.ProviderSessionID != "agent-pi-1" {
+		t.Fatalf("meta.json session id = %q", meta.ProviderSessionID)
+	}
 
 	var kinds []string
 	for _, art := range result.Artifacts {
@@ -173,6 +191,12 @@ func TestAdapterRunEndToEnd(t *testing.T) {
 	log := string(data)
 	if !strings.Contains(log, "-p") || !strings.Contains(log, "--mode json") {
 		t.Fatalf("invocation log missing expected args: %q", log)
+	}
+	if !strings.Contains(log, "--session-dir") || !strings.Contains(log, "pi-sessions") {
+		t.Fatalf("invocation log missing session dir: %q", log)
+	}
+	if !strings.Contains(log, "--session-id agent-pi-1") && !strings.Contains(log, "--session-id=agent-pi-1") {
+		t.Fatalf("invocation log missing session id: %q", log)
 	}
 	if !strings.Contains(log, "do the task") {
 		t.Fatalf("invocation log missing prompt: %q", log)
@@ -415,5 +439,106 @@ func TestAdapterRunDoesNotParseEventsFromStdout(t *testing.T) {
 	}
 	if len(result.Events) != 0 {
 		t.Fatalf("expected no parsed events, got %+v", result.Events)
+	}
+}
+
+func TestParseSessionIDFromHeader(t *testing.T) {
+	stdout := `{"type":"session","version":3,"id":"pi-native-uuid"}
+{"summary":"ok"}`
+	if got := parseSessionID(stdout); got != "pi-native-uuid" {
+		t.Fatalf("parseSessionID = %q", got)
+	}
+	if got := resolveProviderSessionID(stdout, []string{"--session-id", "agent-1"}); got != "pi-native-uuid" {
+		t.Fatalf("resolve prefers JSON id, got %q", got)
+	}
+	if got := resolveProviderSessionID("plain text", []string{"--session-id", "agent-1"}); got != "agent-1" {
+		t.Fatalf("resolve falls back to argv, got %q", got)
+	}
+	if got := resolveProviderSessionID("plain text", nil); got != "" {
+		t.Fatalf("resolve without sources = %q", got)
+	}
+}
+
+func TestParseSessionIDPrettyPrinted(t *testing.T) {
+	stdout := `{
+  "type": "session",
+  "version": 3,
+  "id": "pretty-pi"
+}`
+	if got := parseSessionID(stdout); got != "pretty-pi" {
+		t.Fatalf("parseSessionID = %q", got)
+	}
+}
+
+func TestAdapterRunPrefersJSONSessionID(t *testing.T) {
+	repo := initPiRepo(t)
+	stdout := `{"type":"session","version":3,"id":"pi-native-uuid"}
+{"summary":"pi completed"}`
+	fakePi := writeFakePi(t, stdout)
+
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Prompt:     "do the task",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-pi-1",
+		AgentID:    "agent-pi-1",
+		Params:     adapters.RunParams{Binary: fakePi, OutputFormat: "json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ProviderSessionID != "pi-native-uuid" {
+		t.Fatalf("session id = %q, want pi-native-uuid", result.ProviderSessionID)
+	}
+}
+
+func TestAdapterRunCommandOverrideParsesSessionID(t *testing.T) {
+	repo := initPiRepo(t)
+	stdout := `{"type":"session","id":"from-stdout"}
+{"summary":"ok"}`
+	fakePi := writeFakePiWithTrace(t, "trace-cmd", "agent-cmd", stdout)
+
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Prompt:     "task",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-cmd",
+		AgentID:    "agent-cmd",
+		Command:    []string{fakePi, "-p", "--mode", "json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ProviderSessionID != "from-stdout" {
+		t.Fatalf("session id = %q, want from-stdout", result.ProviderSessionID)
+	}
+
+	logPath := filepath.Join(repo, ".paseka", "runs", "trace-cmd", "agent-cmd", "pi-invocation.log")
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(log), "--session-dir") {
+		t.Fatalf("command override should not inject session-dir: %q", log)
+	}
+}
+
+func TestAdapterRunCommandOverrideOmitsSessionIDOnText(t *testing.T) {
+	repo := initPiRepo(t)
+	fakePi := writeFakePiWithTrace(t, "trace-text", "agent-text", "plain output")
+
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Prompt:     "task",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-text",
+		AgentID:    "agent-text",
+		Command:    []string{fakePi, "-p", "--mode", "text"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ProviderSessionID != "" {
+		t.Fatalf("expected empty session id, got %q", result.ProviderSessionID)
 	}
 }

@@ -125,7 +125,7 @@ agent -p --trust --force \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `agent` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root). Pre-existing dirty files are not attributed to the run.
-5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
+5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). When stream (or compact JSON) lines include `session_id`, the adapter persists **`providerSessionId`** on `result.json` and `meta.json` so later export/inspect can associate the run with Cursor’s native chat without copying the vendor store. Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandContext` (no tmux — process wait replaces the shell's `tmux wait-for` pattern).
@@ -141,6 +141,8 @@ Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.pase
 | `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
 | `Workspace` | process cwd |
 | `Prompt` | positional prompt argument |
+| run directory | `--session-dir <runDir>/pi-sessions` (AFK and interactive) |
+| `agentId` | `--session-id <agentId>` (AFK and interactive) |
 | `params.model` | `--model <pattern>` |
 | `params.provider` | `--provider <name>` |
 | `params.thinking` | `--thinking <level>` |
@@ -162,6 +164,8 @@ Default non-interactive invocation:
 
 ```bash
 pi -p --mode json \
+  --session-dir "$RUN_DIR/pi-sessions" \
+  --session-id "$AGENT_ID" \
   --model "$MODEL" \
   --provider "$PROVIDER" \
   "$PROMPT"
@@ -175,7 +179,7 @@ pi -p --mode json \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `pi` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root).
-5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `summary.md` only.
+5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `summary.md` only. A native session id is resolved from the JSON session header (`{"type":"session","id":…}`) when present, otherwise from `--session-id` on the argv, and persisted as **`providerSessionId`** on `result.json` and `meta.json`. `command:` overrides do not inject session flags; association then depends on stdout or flags already in the custom argv.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 **Event publishing boundary:** Pi stdout/JSON is **not** parsed into domain bus events (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`). Agents must publish domain events explicitly via `paseka event emit --stdin` — same contract as Cursor.

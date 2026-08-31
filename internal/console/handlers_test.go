@@ -290,7 +290,8 @@ func TestRunsAPIHandlers(t *testing.T) {
 			DurationMs:       2453,
 			Source:           protocol.UsageSourceCursorStreamJSON,
 		},
-		FinishedAt: started.Add(2 * time.Minute),
+		ProviderSessionID: "cursor-uuid",
+		FinishedAt:        started.Add(2 * time.Minute),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -340,6 +341,9 @@ func TestRunsAPIHandlers(t *testing.T) {
 	}
 	if detail.Usage == nil || detail.Usage.InputTokens != 8848 || detail.Usage.OutputTokens != 56 {
 		t.Fatalf("detail.Usage = %+v", detail.Usage)
+	}
+	if detail.ProviderSessionID != "cursor-uuid" {
+		t.Fatalf("detail.ProviderSessionID = %q", detail.ProviderSessionID)
 	}
 
 	eventsReq := httptest.NewRequest(http.MethodGet, "/api/runs/trace-run/agent-run/events?after=0", nil)

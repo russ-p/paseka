@@ -102,6 +102,33 @@ func TestPrintRunUsageNone(t *testing.T) {
 	}
 }
 
+func TestPrintRunUsageProviderSessionID(t *testing.T) {
+	root := t.TempDir()
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-1", AgentID: "agent-1"}
+	writeInspectRun(t, root, "trace-1", "agent-1", started, nil)
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion:   protocol.Version,
+		TraceID:           "trace-1",
+		AgentID:           "agent-1",
+		Status:            protocol.StatusCompleted,
+		Summary:           "ok",
+		ProviderSessionID: "cursor-uuid",
+		FinishedAt:        started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := printRunUsage(&buf, root, "trace-1", "agent-1"); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "  providerSessionId: cursor-uuid\n") {
+		t.Fatalf("output missing providerSessionId:\n%s", got)
+	}
+}
+
 func TestPrintRunUsageNotFound(t *testing.T) {
 	root := t.TempDir()
 	err := printRunUsage(&bytes.Buffer{}, root, "trace-1", "missing")

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 const (
 	adapterName   = "pi"
 	defaultBinary = "pi"
+	piSessionsDir = "pi-sessions"
 )
 
 // Adapter runs the Pi CLI in non-interactive print mode.
@@ -62,7 +64,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildArgs(req, prompt, systemFile)
+		return b, buildArgs(req, prompt, systemFile, sessionDirFor(req.ColonyRoot, req.TraceID, req.AgentID))
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
@@ -81,14 +83,18 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			return nil, fmt.Errorf("pi: write system: %w", err)
 		}
 	}
-	if err := runDir.WriteMeta(runs.Meta{
+	meta := runs.Meta{
 		TraceID:   req.TraceID,
 		AgentID:   req.AgentID,
 		Bee:       req.Bee,
 		Adapter:   adapterName,
 		Workspace: req.Workspace,
 		StartedAt: startedAt,
-	}); err != nil {
+	}
+	if len(req.Command) == 0 {
+		meta.ProviderSessionID = req.AgentID
+	}
+	if err := runDir.WriteMeta(meta); err != nil {
 		return nil, fmt.Errorf("pi: write meta: %w", err)
 	}
 
@@ -130,6 +136,16 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	fileSummary, _ := runDir.ReadResult()
 	fileSummary = strings.TrimSpace(fileSummary)
 	summary := adapters.PickSummary(fileSummary, extractSummary(stdoutStr, mode))
+	providerSessionID := resolveProviderSessionID(stdoutStr, args)
+	if providerSessionID == "" {
+		providerSessionID = meta.ProviderSessionID
+	}
+	if providerSessionID != "" && providerSessionID != meta.ProviderSessionID {
+		meta.ProviderSessionID = providerSessionID
+		if err := runDir.WriteMeta(meta); err != nil {
+			return nil, fmt.Errorf("pi: write meta: %w", err)
+		}
+	}
 
 	artifacts := []adapters.Artifact{
 		{Kind: "stdout", Content: stdoutStr},
@@ -171,7 +187,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			Error:    statusErr,
 			Stderr:   stderrStr,
 		},
-		FinishedAt: finishedAt,
+		ProviderSessionID: providerSessionID,
+		FinishedAt:        finishedAt,
 	}
 	if err := runDir.WriteResult(protoResult); err != nil {
 		return nil, fmt.Errorf("pi: write result: %w", err)
@@ -180,11 +197,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
-		Status:    string(status),
-		Summary:   summary,
-		Output:    adapters.PickOutput(summary, stdoutStr),
-		Artifacts: artifacts,
-		ExitCode:  exitCode,
+		Status:            string(status),
+		Summary:           summary,
+		Output:            adapters.PickOutput(summary, stdoutStr),
+		Artifacts:         artifacts,
+		ProviderSessionID: providerSessionID,
+		ExitCode:          exitCode,
 	}
 	if status == protocol.StatusFailed {
 		result.Err = adapters.BuildRunError("pi: run failed", exitCode, runErr, stderrStr, statusErr)
@@ -192,12 +210,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	return result, nil
 }
 
-func buildArgs(req adapters.RunRequest, prompt, systemFile string) []string {
+func buildArgs(req adapters.RunRequest, prompt, systemFile, sessionDir string) []string {
 	p := req.Params
 	mode := piMode(req.Params.OutputFormat)
 	args := []string{
 		"-p",
 		"--mode", mode,
+	}
+	if sessionDir != "" && req.AgentID != "" {
+		args = append(args, "--session-dir", sessionDir, "--session-id", req.AgentID)
 	}
 	if systemFile != "" {
 		args = append(args, "--append-system-prompt", systemFile)
@@ -221,4 +242,12 @@ func buildArgs(req adapters.RunRequest, prompt, systemFile string) []string {
 		args = append(args, prompt)
 	}
 	return args
+}
+
+func sessionDirFor(colonyRoot, traceID, agentID string) string {
+	return filepath.Join(runs.Dir{
+		ColonyRoot: colonyRoot,
+		TraceID:    traceID,
+		AgentID:    agentID,
+	}.Root(), piSessionsDir)
 }

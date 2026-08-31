@@ -47,15 +47,16 @@ type RunParams struct {
 
 // RunResult is the normalized adapter output.
 type RunResult struct {
-	Status    string // completed | failed | cancelled
-	Summary   string // normalized run summary (summary.md, legacy result.txt, stream-json, or empty)
-	Output    string // preferred display text (summary or stdout)
-	Events    []protocol.Event
-	Artifacts []Artifact
-	Usage     *protocol.Usage // optional; set when the adapter can report LLM tokens
-	ExitCode  int
-	Err       error
-	Warnings  []string // advisory runtime notices (e.g. undeclared publishes)
+	Status            string // completed | failed | cancelled
+	Summary           string // normalized run summary (summary.md, legacy result.txt, stream-json, or empty)
+	Output            string // preferred display text (summary or stdout)
+	Events            []protocol.Event
+	Artifacts         []Artifact
+	Usage             *protocol.Usage // optional; set when the adapter can report LLM tokens
+	ProviderSessionID string          // optional; native provider session id when resolved
+	ExitCode          int
+	Err               error
+	Warnings          []string // advisory runtime notices (e.g. undeclared publishes)
 }
 
 // Adapter launches an external agent and returns normalized results.

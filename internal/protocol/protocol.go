@@ -93,15 +93,16 @@ type Usage struct {
 
 // Result is the final envelope written to result.json.
 type Result struct {
-	ProtocolVersion string        `json:"protocolVersion"`
-	TraceID         string        `json:"traceId"`
-	AgentID         string        `json:"agentId"`
-	Status          RunStatus     `json:"status"`
-	Summary         string        `json:"summary"`
-	Artifacts       []ArtifactRef `json:"artifacts,omitempty"`
-	Diagnostics     Diagnostics   `json:"diagnostics"`
-	Usage           *Usage        `json:"usage,omitempty"`
-	FinishedAt      time.Time     `json:"finishedAt"`
+	ProtocolVersion   string        `json:"protocolVersion"`
+	TraceID           string        `json:"traceId"`
+	AgentID           string        `json:"agentId"`
+	Status            RunStatus     `json:"status"`
+	Summary           string        `json:"summary"`
+	Artifacts         []ArtifactRef `json:"artifacts,omitempty"`
+	Diagnostics       Diagnostics   `json:"diagnostics"`
+	Usage             *Usage        `json:"usage,omitempty"`
+	ProviderSessionID string        `json:"providerSessionId,omitempty"`
+	FinishedAt        time.Time     `json:"finishedAt"`
 }
 
 // StatusSnapshot is written to status.json at lifecycle transitions.

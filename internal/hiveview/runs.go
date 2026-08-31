@@ -13,23 +13,24 @@ const recentRunLimit = 50
 
 // RunView is a projection of one headless adapter run.
 type RunView struct {
-	TraceID    string          `json:"traceId"`
-	AgentID    string          `json:"agentId"`
-	Bee        string          `json:"bee"`
-	Adapter    string          `json:"adapter"`
-	Workspace  string          `json:"workspace"`
-	ColonyRoot string          `json:"colonyRoot,omitempty"`
-	TaskID     string          `json:"taskId,omitempty"`
-	Body       string          `json:"body,omitempty"`
-	Intent     string          `json:"intent,omitempty"`
-	State      string          `json:"state"`
-	Summary    string          `json:"summary,omitempty"`
-	Usage      *protocol.Usage `json:"usage,omitempty"`
-	RunDir     string          `json:"runDir"`
-	StartedAt  time.Time       `json:"startedAt"`
-	FinishedAt *time.Time      `json:"finishedAt,omitempty"`
-	HasEvents  bool            `json:"hasEvents"`
-	HasSession bool            `json:"hasSession"`
+	TraceID           string          `json:"traceId"`
+	AgentID           string          `json:"agentId"`
+	Bee               string          `json:"bee"`
+	Adapter           string          `json:"adapter"`
+	Workspace         string          `json:"workspace"`
+	ColonyRoot        string          `json:"colonyRoot,omitempty"`
+	TaskID            string          `json:"taskId,omitempty"`
+	Body              string          `json:"body,omitempty"`
+	Intent            string          `json:"intent,omitempty"`
+	State             string          `json:"state"`
+	Summary           string          `json:"summary,omitempty"`
+	Usage             *protocol.Usage `json:"usage,omitempty"`
+	ProviderSessionID string          `json:"providerSessionId,omitempty"`
+	RunDir            string          `json:"runDir"`
+	StartedAt         time.Time       `json:"startedAt"`
+	FinishedAt        *time.Time      `json:"finishedAt,omitempty"`
+	HasEvents         bool            `json:"hasEvents"`
+	HasSession        bool            `json:"hasSession"`
 }
 
 // ListRuns returns recent headless adapter runs from the filesystem.
@@ -67,22 +68,23 @@ func SortRunsAsc(out []RunView) {
 
 func runViewFromMeta(meta runs.RunMeta) RunView {
 	view := RunView{
-		TraceID:    meta.TraceID,
-		AgentID:    meta.AgentID,
-		Bee:        meta.Bee,
-		Adapter:    meta.Adapter,
-		Workspace:  meta.Workspace,
-		ColonyRoot: meta.ColonyRoot,
-		TaskID:     meta.TaskID,
-		Body:       meta.Task,
-		Intent:     meta.Intent,
-		State:      meta.State,
-		Summary:    meta.Summary,
-		Usage:      meta.Usage,
-		RunDir:     meta.RunDir,
-		StartedAt:  meta.StartedAt,
-		HasEvents:  meta.HasEvents,
-		HasSession: meta.HasSession,
+		TraceID:           meta.TraceID,
+		AgentID:           meta.AgentID,
+		Bee:               meta.Bee,
+		Adapter:           meta.Adapter,
+		Workspace:         meta.Workspace,
+		ColonyRoot:        meta.ColonyRoot,
+		TaskID:            meta.TaskID,
+		Body:              meta.Task,
+		Intent:            meta.Intent,
+		State:             meta.State,
+		Summary:           meta.Summary,
+		Usage:             meta.Usage,
+		ProviderSessionID: meta.ProviderSessionID,
+		RunDir:            meta.RunDir,
+		StartedAt:         meta.StartedAt,
+		HasEvents:         meta.HasEvents,
+		HasSession:        meta.HasSession,
 	}
 	if !meta.FinishedAt.IsZero() {
 		finished := meta.FinishedAt

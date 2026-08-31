@@ -77,14 +77,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			return nil, fmt.Errorf("cursor: write system: %w", err)
 		}
 	}
-	if err := runDir.WriteMeta(runs.Meta{
+	meta := runs.Meta{
 		TraceID:   req.TraceID,
 		AgentID:   req.AgentID,
 		Bee:       req.Bee,
 		Adapter:   adapterName,
 		Workspace: req.Workspace,
 		StartedAt: startedAt,
-	}); err != nil {
+	}
+	if err := runDir.WriteMeta(meta); err != nil {
 		return nil, fmt.Errorf("cursor: write meta: %w", err)
 	}
 
@@ -123,15 +124,27 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	var streamUsage *protocol.Usage
 	outputFormat := req.Params.OutputFormat
 	if len(req.Command) > 0 {
-		outputFormat = adapters.FlagValue(args, "--output-format")
+		if v := adapters.FlagValue(args, "--output-format"); v != "" {
+			outputFormat = v
+		}
 	}
+	parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
 	if adapters.IsStreamFormat(outputFormat) {
-		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
 		events = parsed.Events
 		streamSummary = strings.TrimSpace(parsed.Summary)
 		streamUsage = parsed.Usage
 		for _, ev := range events {
 			_ = runDir.AppendEvent(ev)
+		}
+	}
+	sessionID := parsed.SessionID
+	if outputFormat == "text" {
+		sessionID = ""
+	}
+	if sessionID != "" {
+		meta.ProviderSessionID = sessionID
+		if err := runDir.WriteMeta(meta); err != nil {
+			return nil, fmt.Errorf("cursor: write meta: %w", err)
 		}
 	}
 
@@ -179,8 +192,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			Error:    statusErr,
 			Stderr:   stderrStr,
 		},
-		Usage:      streamUsage,
-		FinishedAt: finishedAt,
+		Usage:             streamUsage,
+		ProviderSessionID: sessionID,
+		FinishedAt:        finishedAt,
 	}
 	if err := runDir.WriteResult(protoResult); err != nil {
 		return nil, fmt.Errorf("cursor: write result: %w", err)
@@ -189,13 +203,14 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
-		Status:    string(status),
-		Summary:   summary,
-		Output:    adapters.PickOutput(summary, stdoutStr),
-		Events:    events,
-		Artifacts: artifacts,
-		Usage:     streamUsage,
-		ExitCode:  exitCode,
+		Status:            string(status),
+		Summary:           summary,
+		Output:            adapters.PickOutput(summary, stdoutStr),
+		Events:            events,
+		Artifacts:         artifacts,
+		Usage:             streamUsage,
+		ProviderSessionID: sessionID,
+		ExitCode:          exitCode,
 	}
 	if status == protocol.StatusFailed {
 		result.Err = adapters.BuildRunError("cursor: agent run failed", exitCode, runErr, stderrStr, statusErr)

@@ -57,12 +57,13 @@ func (d Dir) TranscriptPath() string   { return filepath.Join(d.Root(), Transcri
 
 // Meta is written by the runtime before launching an agent (legacy observers).
 type Meta struct {
-	TraceID   string    `json:"traceId"`
-	AgentID   string    `json:"agentId"`
-	Bee       string    `json:"bee"`
-	Adapter   string    `json:"adapter"`
-	Workspace string    `json:"workspace"`
-	StartedAt time.Time `json:"startedAt"`
+	TraceID           string    `json:"traceId"`
+	AgentID           string    `json:"agentId"`
+	Bee               string    `json:"bee"`
+	Adapter           string    `json:"adapter"`
+	Workspace         string    `json:"workspace"`
+	ProviderSessionID string    `json:"providerSessionId,omitempty"`
+	StartedAt         time.Time `json:"startedAt"`
 }
 
 // Prepare creates the run directory and removes stale outputs from a previous attempt.

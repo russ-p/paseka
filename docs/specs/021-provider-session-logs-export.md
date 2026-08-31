@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Associate each agent run with the provider’s native session id; enrich local `paseka export` from provider logs when available. AFK Cursor first; HITL Cursor (`create-chat` / `--resume`) next. Do not mix provider CLI stream into `events.ndjson`.
+AFK Cursor and Pi persist `providerSessionId`. Remaining: export Agent log, HITL Cursor `create-chat` / `--resume`, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
 
 ## Problem Statement
 
@@ -75,7 +75,8 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 ### 1. Association field
 
 - Persist **`providerSessionId`** (string) on the agent run, alongside existing `adapter` identity.
-- AFK: write when stream parse yields an id (into run meta / result surface already used by observers — one durable place documented in architecture after ship).
+- AFK: canonical store is `result.json`; also rewrite `meta.json` after capture. Observers (`LoadRunMeta`, Queen Console, `paseka inspect usage --agent`) read the projection.
+- AFK Pi uses the same run-local `--session-dir <runDir>/pi-sessions --session-id <agentId>` pattern as HITL, then prefers the JSON session header `id` when present.
 - HITL: write onto session meta before process start; keep Paseka `sessionId` == `agentId` as today; do not overwrite Paseka ids with Cursor UUIDs.
 - Optional companion: `provider` / adapter name already present; do not invent a second id namespace beyond adapter + providerSessionId.
 
@@ -143,9 +144,10 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 
 | Slice | Deliverable |
 | ----- | ----------- |
-| A | AFK Cursor `providerSessionId` + stop stream→events dump + export Agent log (tool calls) when resolvable |
+| A (partial) | AFK Cursor + Pi `providerSessionId` on run meta/result (export Agent log and stream→events cleanup not in this slice) |
+| A (remaining) | Stop stream→events dump + export Agent log (tool calls) when resolvable |
 | B | HITL Cursor create-chat / resume + same meta + same export path |
-| C | Pi (and later Claude) readers |
+| C | Pi (and later Claude) log readers |
 
 ## Testing Decisions
 

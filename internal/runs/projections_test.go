@@ -210,6 +210,54 @@ func TestFindRun(t *testing.T) {
 	}
 }
 
+func TestLoadRunMetaProviderSessionID(t *testing.T) {
+	root := t.TempDir()
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-1", AgentID: "agent-1"}
+	writeHeadlessRun(t, root, "trace-1", "agent-1", started, protocol.StatusCompleted, "ok")
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion:   protocol.Version,
+		TraceID:           "trace-1",
+		AgentID:           "agent-1",
+		Status:            protocol.StatusCompleted,
+		Summary:           "ok",
+		ProviderSessionID: "from-result",
+		FinishedAt:        started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	meta, err := runs.LoadRunMeta(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.ProviderSessionID != "from-result" {
+		t.Fatalf("from result.json = %q", meta.ProviderSessionID)
+	}
+
+	root2 := t.TempDir()
+	d2 := runs.Dir{ColonyRoot: root2, TraceID: "trace-2", AgentID: "agent-2"}
+	writeHeadlessRun(t, root2, "trace-2", "agent-2", started, protocol.StatusRunning, "")
+	if err := d2.WriteMeta(runs.Meta{
+		TraceID:           "trace-2",
+		AgentID:           "agent-2",
+		Bee:               "builder",
+		Adapter:           "cursor",
+		Workspace:         root2,
+		ProviderSessionID: "from-meta",
+		StartedAt:         started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	meta2, err := runs.LoadRunMeta(d2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta2.ProviderSessionID != "from-meta" {
+		t.Fatalf("from meta.json = %q", meta2.ProviderSessionID)
+	}
+}
+
 func TestReadEventsAfter(t *testing.T) {
 	root := t.TempDir()
 	d := runs.Dir{ColonyRoot: root, TraceID: "trace-1", AgentID: "agent-1"}
