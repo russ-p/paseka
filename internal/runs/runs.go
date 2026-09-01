@@ -285,18 +285,19 @@ func (d Dir) WriteResultText(summary string) error {
 
 // SessionMeta is written to session.json for interactive agent sessions.
 type SessionMeta struct {
-	ProtocolVersion string    `json:"protocolVersion"`
-	SessionID       string    `json:"sessionId"`
-	TraceID         string    `json:"traceId"`
-	AgentID         string    `json:"agentId"`
-	Bee             string    `json:"bee"`
-	Adapter         string    `json:"adapter"`
-	Workspace       string    `json:"workspace"`
-	ColonyRoot      string    `json:"colonyRoot"`
-	PID             int       `json:"pid,omitempty"`
-	State           string    `json:"state"`
-	StartedAt       time.Time `json:"startedAt"`
-	FinishedAt      time.Time `json:"finishedAt,omitempty"`
+	ProtocolVersion   string    `json:"protocolVersion"`
+	SessionID         string    `json:"sessionId"`
+	TraceID           string    `json:"traceId"`
+	AgentID           string    `json:"agentId"`
+	Bee               string    `json:"bee"`
+	Adapter           string    `json:"adapter"`
+	Workspace         string    `json:"workspace"`
+	ColonyRoot        string    `json:"colonyRoot"`
+	PID               int       `json:"pid,omitempty"`
+	State             string    `json:"state"`
+	ProviderSessionID string    `json:"providerSessionId,omitempty"`
+	StartedAt         time.Time `json:"startedAt"`
+	FinishedAt        time.Time `json:"finishedAt,omitempty"`
 }
 
 // TranscriptEntry is one NDJSON line in transcript.ndjson.

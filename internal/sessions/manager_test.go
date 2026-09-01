@@ -138,6 +138,62 @@ func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 	}
 }
 
+func TestManagerPersistsProviderSessionID(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+
+	slow := &providerIDSessionAdapter{id: "cursor-uuid"}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", slow)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res, err := mgr.StartDetached(ctx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		Task:     "hello id",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d := runs.Dir{
+		ColonyRoot: repo,
+		TraceID:    res.TraceID,
+		AgentID:    res.AgentID,
+	}
+	sess, err := d.ReadSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.ProviderSessionID != "cursor-uuid" {
+		t.Fatalf("session.json providerSessionId = %q", sess.ProviderSessionID)
+	}
+	legacy, err := os.ReadFile(d.MetaPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(legacy), `"providerSessionId": "cursor-uuid"`) {
+		t.Fatalf("meta.json missing providerSessionId:\n%s", legacy)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(mgr.ListActive()) == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	sess, err = d.ReadSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.ProviderSessionID != "cursor-uuid" {
+		t.Fatalf("finished session.json providerSessionId = %q", sess.ProviderSessionID)
+	}
+}
+
 type instantSessionAdapter struct {
 	name    string
 	lastReq adapters.SessionRequest
@@ -287,6 +343,26 @@ func TestManagerStartDetachedIgnoresParentContextCancel(t *testing.T) {
 			t.Fatalf("unexpected transcript entry after clean exit: %+v", e)
 		}
 	}
+}
+
+type providerIDSessionAdapter struct {
+	id string
+}
+
+func (p *providerIDSessionAdapter) Name() string { return "cursor" }
+
+func (p *providerIDSessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		return adapters.SessionCommand{}, err
+	}
+	return adapters.SessionCommand{
+		Binary:            shell,
+		Args:              []string{"-c", "sleep 0.2; exit 0"},
+		Env:               os.Environ(),
+		Dir:               req.Workspace,
+		ProviderSessionID: p.id,
+	}, nil
 }
 
 type outputSessionAdapter struct {

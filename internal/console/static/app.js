@@ -2385,6 +2385,7 @@ function renderSessionDetail(session) {
     ['Bee', session.bee],
     ['Workspace', session.workspace],
     ['Run dir', session.runDir],
+    ['Provider session', session.providerSessionId],
     ['Started', formatTime(session.startedAt)],
     ['Finished', formatTime(session.finishedAt)],
   ];

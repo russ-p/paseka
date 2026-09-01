@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/runs"
@@ -57,11 +58,19 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		return adapters.SessionCommand{}, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
 	}
 
+	providerSessionID := ""
+	if len(req.Command) > 0 {
+		providerSessionID = strings.TrimSpace(adapters.FlagValue(args, "--session-id"))
+	} else {
+		providerSessionID = strings.TrimSpace(req.AgentID)
+	}
+
 	return adapters.SessionCommand{
-		Binary: binary,
-		Args:   args,
-		Env:    os.Environ(),
-		Dir:    req.Workspace,
+		Binary:            binary,
+		Args:              args,
+		Env:               os.Environ(),
+		Dir:               req.Workspace,
+		ProviderSessionID: providerSessionID,
 	}, nil
 }
 

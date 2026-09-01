@@ -63,6 +63,7 @@ func TestAppJSRendersLLMUsage(t *testing.T) {
 		"traceUsageWrap",
 		"Provider session",
 		"run.providerSessionId",
+		"session.providerSessionId",
 	} {
 		if !strings.Contains(src, needle) {
 			t.Fatalf("app.js missing %s", needle)

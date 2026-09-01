@@ -37,19 +37,20 @@ type BeeView struct {
 
 // SessionView is a console projection of one interactive session.
 type SessionView struct {
-	SessionID  string     `json:"sessionId"`
-	TraceID    string     `json:"traceId"`
-	AgentID    string     `json:"agentId"`
-	Bee        string     `json:"bee"`
-	Adapter    string     `json:"adapter,omitempty"`
-	Workspace  string     `json:"workspace"`
-	RunDir     string     `json:"runDir"`
-	ColonyRoot string     `json:"colonyRoot,omitempty"`
-	State      string     `json:"state"`
-	PID        int        `json:"pid,omitempty"`
-	StartedAt  time.Time  `json:"startedAt"`
-	FinishedAt *time.Time `json:"finishedAt,omitempty"`
-	Active     bool       `json:"active"`
+	SessionID         string     `json:"sessionId"`
+	TraceID           string     `json:"traceId"`
+	AgentID           string     `json:"agentId"`
+	Bee               string     `json:"bee"`
+	Adapter           string     `json:"adapter,omitempty"`
+	Workspace         string     `json:"workspace"`
+	RunDir            string     `json:"runDir"`
+	ColonyRoot        string     `json:"colonyRoot,omitempty"`
+	State             string     `json:"state"`
+	PID               int        `json:"pid,omitempty"`
+	ProviderSessionID string     `json:"providerSessionId,omitempty"`
+	StartedAt         time.Time  `json:"startedAt"`
+	FinishedAt        *time.Time `json:"finishedAt,omitempty"`
+	Active            bool       `json:"active"`
 }
 
 // TranscriptPage is a cursor-based transcript slice.
@@ -182,18 +183,19 @@ func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView 
 		state = string(adapters.SessionActive)
 	}
 	return SessionView{
-		SessionID:  h.SessionID,
-		TraceID:    h.TraceID,
-		AgentID:    h.AgentID,
-		Bee:        h.Bee,
-		Adapter:    h.Adapter,
-		Workspace:  h.Workspace,
-		RunDir:     runDir,
-		ColonyRoot: h.ColonyRoot,
-		State:      state,
-		PID:        h.PID,
-		StartedAt:  h.StartedAt,
-		Active:     h.State == adapters.SessionActive || h.State == "",
+		SessionID:         h.SessionID,
+		TraceID:           h.TraceID,
+		AgentID:           h.AgentID,
+		Bee:               h.Bee,
+		Adapter:           h.Adapter,
+		Workspace:         h.Workspace,
+		RunDir:            runDir,
+		ColonyRoot:        h.ColonyRoot,
+		State:             state,
+		PID:               h.PID,
+		ProviderSessionID: h.ProviderSessionID,
+		StartedAt:         h.StartedAt,
+		Active:            h.State == adapters.SessionActive || h.State == "",
 	}
 }
 
@@ -206,7 +208,7 @@ func sessionViewFromRegistry(e homestate.SessionEntry, colonyRoot string) Sessio
 			AgentID:    e.AgentID,
 		}.Root()
 	}
-	return SessionView{
+	return overlaySessionArtifacts(SessionView{
 		SessionID: e.SessionID,
 		TraceID:   e.TraceID,
 		AgentID:   e.AgentID,
@@ -217,23 +219,41 @@ func sessionViewFromRegistry(e homestate.SessionEntry, colonyRoot string) Sessio
 		PID:       e.PID,
 		StartedAt: e.StartedAt,
 		Active:    true,
+	}, colonyRoot)
+}
+
+func overlaySessionArtifacts(view SessionView, colonyRoot string) SessionView {
+	if colonyRoot == "" || view.TraceID == "" || view.AgentID == "" {
+		return view
 	}
+	meta, err := runs.Dir{ColonyRoot: colonyRoot, TraceID: view.TraceID, AgentID: view.AgentID}.ReadSession()
+	if err != nil {
+		return view
+	}
+	if view.ProviderSessionID == "" {
+		view.ProviderSessionID = meta.ProviderSessionID
+	}
+	if view.Adapter == "" {
+		view.Adapter = meta.Adapter
+	}
+	return view
 }
 
 func sessionViewFromMeta(meta runs.SessionMeta) SessionView {
 	view := SessionView{
-		SessionID:  meta.SessionID,
-		TraceID:    meta.TraceID,
-		AgentID:    meta.AgentID,
-		Bee:        meta.Bee,
-		Adapter:    meta.Adapter,
-		Workspace:  meta.Workspace,
-		RunDir:     runs.Dir{ColonyRoot: meta.ColonyRoot, TraceID: meta.TraceID, AgentID: meta.AgentID}.Root(),
-		ColonyRoot: meta.ColonyRoot,
-		State:      meta.State,
-		PID:        meta.PID,
-		StartedAt:  meta.StartedAt,
-		Active:     meta.State == string(adapters.SessionActive),
+		SessionID:         meta.SessionID,
+		TraceID:           meta.TraceID,
+		AgentID:           meta.AgentID,
+		Bee:               meta.Bee,
+		Adapter:           meta.Adapter,
+		Workspace:         meta.Workspace,
+		RunDir:            runs.Dir{ColonyRoot: meta.ColonyRoot, TraceID: meta.TraceID, AgentID: meta.AgentID}.Root(),
+		ColonyRoot:        meta.ColonyRoot,
+		State:             meta.State,
+		PID:               meta.PID,
+		ProviderSessionID: meta.ProviderSessionID,
+		StartedAt:         meta.StartedAt,
+		Active:            meta.State == string(adapters.SessionActive),
 	}
 	if !meta.FinishedAt.IsZero() {
 		finished := meta.FinishedAt

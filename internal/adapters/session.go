@@ -38,25 +38,27 @@ type SessionRequest struct {
 
 // SessionCommand describes how to launch the external agent process.
 type SessionCommand struct {
-	Binary string
-	Args   []string
-	Env    []string
-	Dir    string
+	Binary            string
+	Args              []string
+	Env               []string
+	Dir               string
+	ProviderSessionID string // optional; native provider session id when known before PTY start
 }
 
 // SessionHandle identifies a running or recently finished session.
 type SessionHandle struct {
-	SessionID  string // equals AgentID for MVP
-	TraceID    string
-	AgentID    string
-	RunDir     string
-	Workspace  string
-	ColonyRoot string
-	Bee        string
-	Adapter    string
-	PID        int
-	State      SessionState
-	StartedAt  time.Time
+	SessionID         string // equals AgentID for MVP
+	TraceID           string
+	AgentID           string
+	RunDir            string
+	Workspace         string
+	ColonyRoot        string
+	Bee               string
+	Adapter           string
+	PID               int
+	State             SessionState
+	StartedAt         time.Time
+	ProviderSessionID string
 }
 
 // SessionEventKind categorizes normalized session events.

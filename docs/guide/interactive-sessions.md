@@ -90,7 +90,7 @@ Interactive sessions reuse `.paseka/runs/<traceId>/<agentId>/` under the **colon
 
 | File | Purpose |
 | ---- | ------- |
-| `session.json` | `sessionId`, `traceId`, `pid`, `state` (`active` → `completed` / `failed` / `cancelled`) |
+| `session.json` | `sessionId`, `traceId`, `pid`, `state` (`active` → `completed` / `failed` / `cancelled`), optional `providerSessionId` |
 | `transcript.ndjson` | Audit trail for dialogue (`role`: `user` \| `agent` \| `system`) |
 
 `sessionId` equals `agentId` in the MVP.
@@ -203,16 +203,21 @@ If Ghostty is not installed, set `terminal: default` or omit `terminal.yaml`.
 | `params.force` | `--force` |
 | `params.plan` | `--plan` |
 | API key | `CURSOR_API_KEY` or `--api-key` from home config |
+| Provider chat | `agent create-chat` before PTY start; UUID stored as `providerSessionId`; TUI launched with `--resume <uuid>` |
 
 Interactive invocation:
 
 ```bash
+agent create-chat   # UUID → session.json / meta.json providerSessionId
 agent --force \
   --workspace "$WORKSPACE" \
-  --model composer-2.5
+  --model composer-2.5 \
+  --resume "$PROVIDER_SESSION_ID"
 # positional prompt when system_template and/or task are set:
 # "$PROMPT"   # system + task, newline-separated
 ```
+
+`command:` overrides do not call `create-chat` or inject `--resume`. If the custom argv already has `--resume`, that value is stored as `providerSessionId`. If `create-chat` fails, the TUI still starts without a pointer.
 
 When `system_template` is set and no task/prompt is given, the session starts without a positional prompt and waits for user input.
 
@@ -250,7 +255,7 @@ pi --session-dir "$RUN_DIR/pi-sessions" \
 # optional: "$PROMPT"
 ```
 
-Pi session artifacts stay under `.paseka/runs/<traceId>/<agentId>/pi-sessions/`, tied to the current `agentId`.
+Pi session artifacts stay under `.paseka/runs/<traceId>/<agentId>/pi-sessions/`, tied to the current `agentId`. That same `agentId` is stored as `providerSessionId` on `session.json` and `meta.json` at launch (or `--session-id` from a `command:` override when present).
 
 **Event publishing boundary:** interactive Pi output is not parsed into domain bus events. Use `paseka event emit --stdin` during the session when the bee prompt requires bus events. Prefer `--defer` for end-of-run handoffs; runtime flushes the pending queue on successful session end (same policy as AFK). Flush loads machine-local home config (`~/.config/paseka/<slug>/config.yaml`) for the NATS URL — a session must not treat the bus as unset when only `ColonyRoot` is in memory.
 
@@ -340,6 +345,7 @@ paseka bee chat <role> [prompt]
 | ----- | -------- |
 | Session vs AFK | Separate `SessionAdapter`; do not overload `Adapter.Run()` |
 | Session ID | Same as `agentId` for MVP |
+| Provider session | Cursor HITL: `create-chat` + `--resume`; Pi HITL: pinned `--session-id`. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
 | Run dir | `.paseka/runs/<traceId>/<agentId>/` — shared with AFK IPC |
 | Terminal config | `~/.config/paseka/<slug>/terminal.yaml` — not committed |
 | Ghostty | Optional UI; `session run` runs full session inside Ghostty window |

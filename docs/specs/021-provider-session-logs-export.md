@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-AFK Cursor and Pi persist `providerSessionId`. Remaining: export Agent log, HITL Cursor `create-chat` / `--resume`, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
+AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Remaining: export Agent log, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
 
 ## Problem Statement
 
@@ -146,7 +146,7 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 | ----- | ----------- |
 | A (partial) | AFK Cursor + Pi `providerSessionId` on run meta/result (export Agent log and stream→events cleanup not in this slice) |
 | A (remaining) | Stop stream→events dump + export Agent log (tool calls) when resolvable |
-| B | HITL Cursor create-chat / resume + same meta + same export path |
+| B (partial) | HITL Cursor `create-chat` / `--resume` + Pi HITL persist `providerSessionId` (export Agent log not in this slice) |
 | C | Pi (and later Claude) log readers |
 
 ## Testing Decisions

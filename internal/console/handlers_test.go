@@ -221,16 +221,17 @@ func TestListSessionsProjection(t *testing.T) {
 	}
 	finished := started.Add(5 * time.Minute)
 	if err := d.WriteSession(runs.SessionMeta{
-		SessionID:  "agent-hist",
-		TraceID:    "trace-hist",
-		AgentID:    "agent-hist",
-		Bee:        "scout",
-		Adapter:    "cursor",
-		Workspace:  repo,
-		ColonyRoot: repo,
-		State:      string(adapters.SessionCompleted),
-		StartedAt:  started,
-		FinishedAt: finished,
+		SessionID:         "agent-hist",
+		TraceID:           "trace-hist",
+		AgentID:           "agent-hist",
+		Bee:               "scout",
+		Adapter:           "cursor",
+		Workspace:         repo,
+		ColonyRoot:        repo,
+		State:             string(adapters.SessionCompleted),
+		StartedAt:         started,
+		FinishedAt:        finished,
+		ProviderSessionID: "hist-cursor-uuid",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +242,65 @@ func TestListSessionsProjection(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].SessionID != "agent-hist" {
 		t.Fatalf("list = %+v", list)
+	}
+	if list[0].ProviderSessionID != "hist-cursor-uuid" {
+		t.Fatalf("list[0].ProviderSessionID = %q", list[0].ProviderSessionID)
+	}
+}
+
+func TestListSessionsRegistryOverlaysProviderSessionID(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-2 * time.Minute)
+	d := runs.Dir{ColonyRoot: repo, TraceID: "trace-live", AgentID: "agent-live"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteSession(runs.SessionMeta{
+		SessionID:         "agent-live",
+		TraceID:           "trace-live",
+		AgentID:           "agent-live",
+		Bee:               "scout",
+		Adapter:           "cursor",
+		Workspace:         repo,
+		ColonyRoot:        repo,
+		State:             string(adapters.SessionActive),
+		ProviderSessionID: "live-cursor-uuid",
+		PID:               4242,
+		StartedAt:         started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := homestate.RegisterSession(ctxColony.Slug, homestate.SessionEntry{
+		SessionID: "agent-live",
+		TraceID:   "trace-live",
+		AgentID:   "agent-live",
+		RunDir:    d.Root(),
+		Bee:       "scout",
+		PID:       4242,
+		StartedAt: started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := console.ListSessions(ctxColony, sessions.NewManager())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].SessionID != "agent-live" {
+		t.Fatalf("list = %+v", list)
+	}
+	if list[0].ProviderSessionID != "live-cursor-uuid" {
+		t.Fatalf("list[0].ProviderSessionID = %q", list[0].ProviderSessionID)
+	}
+
+	got, ok, err := console.GetSession(ctxColony, sessions.NewManager(), "agent-live")
+	if err != nil || !ok {
+		t.Fatalf("GetSession ok=%v err=%v", ok, err)
+	}
+	if got.ProviderSessionID != "live-cursor-uuid" {
+		t.Fatalf("GetSession ProviderSessionID = %q", got.ProviderSessionID)
 	}
 }
 

@@ -378,36 +378,53 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 
+	providerSessionID := strings.TrimSpace(cmd.ProviderSessionID)
+	if providerSessionID != "" {
+		if err := runDir.WriteMeta(runs.Meta{
+			TraceID:           traceID,
+			AgentID:           agentID,
+			Bee:               bee.Role,
+			Adapter:           adapterName,
+			Workspace:         workspace,
+			ProviderSessionID: providerSessionID,
+			StartedAt:         startedAt,
+		}); err != nil {
+			return nil, fmt.Errorf("sessions: write meta: %w", err)
+		}
+	}
+
 	proc, err := startPTY(cmd)
 	if err != nil {
 		return nil, err
 	}
 
 	handle := adapters.SessionHandle{
-		SessionID:  sessionID,
-		TraceID:    traceID,
-		AgentID:    agentID,
-		RunDir:     runDir.Root(),
-		Workspace:  workspace,
-		ColonyRoot: ctxColony.ColonyRoot,
-		Bee:        bee.Role,
-		Adapter:    adapterName,
-		PID:        proc.PID(),
-		State:      adapters.SessionActive,
-		StartedAt:  startedAt,
+		SessionID:         sessionID,
+		TraceID:           traceID,
+		AgentID:           agentID,
+		RunDir:            runDir.Root(),
+		Workspace:         workspace,
+		ColonyRoot:        ctxColony.ColonyRoot,
+		Bee:               bee.Role,
+		Adapter:           adapterName,
+		PID:               proc.PID(),
+		State:             adapters.SessionActive,
+		StartedAt:         startedAt,
+		ProviderSessionID: providerSessionID,
 	}
 
 	if err := runDir.WriteSession(runs.SessionMeta{
-		SessionID:  sessionID,
-		TraceID:    traceID,
-		AgentID:    agentID,
-		Bee:        bee.Role,
-		Adapter:    adapterName,
-		Workspace:  workspace,
-		ColonyRoot: ctxColony.ColonyRoot,
-		PID:        proc.PID(),
-		State:      string(adapters.SessionActive),
-		StartedAt:  startedAt,
+		SessionID:         sessionID,
+		TraceID:           traceID,
+		AgentID:           agentID,
+		Bee:               bee.Role,
+		Adapter:           adapterName,
+		Workspace:         workspace,
+		ColonyRoot:        ctxColony.ColonyRoot,
+		PID:               proc.PID(),
+		State:             string(adapters.SessionActive),
+		ProviderSessionID: providerSessionID,
+		StartedAt:         startedAt,
 	}); err != nil {
 		_ = proc.Kill()
 		return nil, err
@@ -489,17 +506,23 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 
 	finishedAt := time.Now().UTC()
 
+	providerSessionID := entry.Handle.ProviderSessionID
+	if existing, err := entry.RunDir.ReadSession(); err == nil && strings.TrimSpace(existing.ProviderSessionID) != "" {
+		providerSessionID = existing.ProviderSessionID
+	}
+
 	_ = entry.RunDir.WriteSession(runs.SessionMeta{
-		SessionID:  sessionID,
-		TraceID:    entry.Handle.TraceID,
-		AgentID:    entry.Handle.AgentID,
-		Bee:        entry.Handle.Bee,
-		Adapter:    entry.Handle.Adapter,
-		Workspace:  entry.Handle.Workspace,
-		ColonyRoot: entry.Handle.ColonyRoot,
-		State:      string(state),
-		StartedAt:  entry.Handle.StartedAt,
-		FinishedAt: finishedAt,
+		SessionID:         sessionID,
+		TraceID:           entry.Handle.TraceID,
+		AgentID:           entry.Handle.AgentID,
+		Bee:               entry.Handle.Bee,
+		Adapter:           entry.Handle.Adapter,
+		Workspace:         entry.Handle.Workspace,
+		ColonyRoot:        entry.Handle.ColonyRoot,
+		State:             string(state),
+		ProviderSessionID: providerSessionID,
+		StartedAt:         entry.Handle.StartedAt,
+		FinishedAt:        finishedAt,
 	})
 
 	exitCode := 0

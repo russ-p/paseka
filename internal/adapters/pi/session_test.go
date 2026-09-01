@@ -66,6 +66,9 @@ func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {
 	if last != "discuss feature" {
 		t.Fatalf("prompt arg = %q", last)
 	}
+	if cmd.ProviderSessionID != "agent-1" {
+		t.Fatalf("provider session id = %q", cmd.ProviderSessionID)
+	}
 }
 
 func TestSessionCommandDetachedStillInteractive(t *testing.T) {
@@ -110,6 +113,9 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 	last := cmd.Args[len(cmd.Args)-1]
 	if last != "implement feature" {
 		t.Fatalf("prompt arg = %q", last)
+	}
+	if cmd.ProviderSessionID != "agent-1" {
+		t.Fatalf("provider session id = %q", cmd.ProviderSessionID)
 	}
 }
 
@@ -174,6 +180,44 @@ func writeFakePiBinary(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestSessionCommandOverrideReadsSessionID(t *testing.T) {
+	fakePi := writeFakePiBinary(t)
+	a := NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		ColonyRoot:    "/colony",
+		Workspace:     "/tmp/ws",
+		TraceID:       "trace-1",
+		AgentID:       "agent-1",
+		InitialPrompt: "discuss feature",
+		Command:       []string{fakePi, "--session-id", "from-argv", "discuss feature"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.ProviderSessionID != "from-argv" {
+		t.Fatalf("provider session id = %q", cmd.ProviderSessionID)
+	}
+}
+
+func TestSessionCommandOverrideOmitsSessionID(t *testing.T) {
+	fakePi := writeFakePiBinary(t)
+	a := NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		ColonyRoot:    "/colony",
+		Workspace:     "/tmp/ws",
+		TraceID:       "trace-1",
+		AgentID:       "agent-1",
+		InitialPrompt: "discuss feature",
+		Command:       []string{fakePi, "discuss feature"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.ProviderSessionID != "" {
+		t.Fatalf("provider session id = %q, want empty", cmd.ProviderSessionID)
+	}
 }
 
 func assertArgPair(t *testing.T, args []string, flag, want string) {

@@ -587,7 +587,7 @@ Filesystem projections for flight trails and runs (no NATS).
 
 ### `paseka inspect usage`
 
-Show LLM token usage from `result.json` projections — trace aggregate by default, or one run with `--agent`. Mirrors Queen Console trace/run usage fields (`inputTokens`, `outputTokens`, cache read/write). Only Cursor AFK runs report usage today; others print `usage: (none)`. With `--agent`, if the run stored a native **`providerSessionId`**, it is printed as `providerSessionId:` (Cursor stream-json `session_id`, or Pi session id).
+Show LLM token usage from `result.json` projections — trace aggregate by default, or one run with `--agent`. Mirrors Queen Console trace/run usage fields (`inputTokens`, `outputTokens`, cache read/write). Only Cursor AFK runs report usage today; others print `usage: (none)`. With `--agent`, if the run stored a native **`providerSessionId`**, it is printed as `providerSessionId:` (Cursor stream-json `session_id`, Cursor HITL `create-chat` UUID, or Pi session id).
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
