@@ -18,9 +18,9 @@ func TestParseInclude(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "single",
-			in:   []string{"usage"},
-			want: []IncludeKind{IncludeUsage},
+			name: "agent-logs",
+			in:   []string{"agent-logs"},
+			want: []IncludeKind{IncludeAgentLogs},
 		},
 		{
 			name: "csv",

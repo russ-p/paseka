@@ -16,10 +16,11 @@ import (
 
 // Options configures a trace export.
 type Options struct {
-	TraceID   string
-	OutputDir string
-	Format    Format
-	Include   IncludeSet
+	TraceID     string
+	OutputDir   string
+	Format      Format
+	Include     IncludeSet
+	SessionLogs SessionLogLookup // optional; default Cursor/Pi stubs
 }
 
 // TraceExportData is the view model passed to export renderers.
@@ -35,6 +36,7 @@ type TraceExportData struct {
 	ColonyYAML *NamedYAML
 	CueYAML    []NamedYAML
 	Artifacts  []ArtifactExport
+	AgentLogs  []AgentLogExport
 }
 
 // ArtifactExport is one inlined comb file for trace export.
@@ -88,7 +90,7 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 	filename := OutputFilename(ctx.Slug, traceID, format)
 	outPath := filepath.Join(outDir, filename)
 
-	data, err := buildTraceExportData(ctx, detail, runsView, feedItems, opts.Include)
+	data, err := buildTraceExportData(ctx, detail, runsView, feedItems, opts)
 	if err != nil {
 		return "", err
 	}
@@ -126,7 +128,8 @@ func OutputFilename(slug, traceID string, format Format) string {
 	return fmt.Sprintf("paseka-export-%s-%s.%s", sanitizeFilename(slug), sanitizeFilename(traceID), ext)
 }
 
-func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, runsView []hiveview.RunView, feedItems []hiveview.EventFeedItem, include IncludeSet) (TraceExportData, error) {
+func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, runsView []hiveview.RunView, feedItems []hiveview.EventFeedItem, opts Options) (TraceExportData, error) {
+	include := opts.Include
 	data := TraceExportData{
 		Slug:       ctx.Slug,
 		ColonyRoot: ctx.ColonyRoot,
@@ -135,6 +138,9 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 		Runs:       runsView,
 		Events:     feedItems,
 		Include:    include,
+	}
+	if include.Has(IncludeAgentLogs) {
+		data.AgentLogs = resolveAgentLogs(runsView, opts.SessionLogs)
 	}
 	if include.Has(IncludeBees) {
 		bees, err := loadBeeYAML(ctx.ColonyRoot, detail.Bees)

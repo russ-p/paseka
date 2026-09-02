@@ -25,9 +25,11 @@ type htmlEventView struct {
 }
 
 type htmlRunView struct {
-	Run          hiveview.RunView
-	DurationLine string
-	UsageLine    string
+	Run             hiveview.RunView
+	DurationLine    string
+	UsageLine       string
+	IncludeAgentLog bool
+	AgentLog        AgentLogExport
 }
 
 type htmlPageData struct {
@@ -96,6 +98,10 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		}
 		if data.Include.Has(IncludeUsage) {
 			view.UsageLine = formatUsageTokens(run.Usage)
+		}
+		if data.Include.Has(IncludeAgentLogs) {
+			view.IncludeAgentLog = true
+			view.AgentLog = agentLogByAgentID(data.AgentLogs, run.AgentID)
 		}
 		page.Runs = append(page.Runs, view)
 	}
@@ -304,6 +310,28 @@ header h1 { margin: 0; font-size: 1.35rem; }
   font-size: 0.78rem;
   color: var(--muted);
 }
+.agent-log {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border);
+}
+.agent-log h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+}
+.agent-log table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-family: var(--mono);
+}
+.agent-log th, .agent-log td {
+  text-align: left;
+  padding: 0.2rem 0.4rem 0.2rem 0;
+  vertical-align: top;
+  word-break: break-word;
+}
+.agent-log th { color: var(--muted); font-weight: 600; }
 .timeline-feed { list-style: none; margin: 0; padding: 0; }
 .timeline-item {
   border: 1px solid var(--border);
@@ -484,6 +512,26 @@ code { font-family: var(--mono); font-size: 0.85em; }
         {{ if .DurationLine }}<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">Duration: {{ .DurationLine }}</div>{{ end }}
         {{ if .UsageLine }}<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">Usage: {{ .UsageLine }}</div>{{ end }}
         {{ if .Run.Summary }}<div class="formatted-text" style="font-size:0.85rem;margin-top:0.25rem">{{ formatMarkdown .Run.Summary }}</div>{{ end }}
+        {{ if .IncludeAgentLog }}
+        <div class="agent-log">
+          <h3>Agent log</h3>
+          {{ if .AgentLog.Omitted }}
+          <p class="muted" style="margin:0;font-size:0.78rem">omitted: {{ .AgentLog.Omitted }}</p>
+          {{ else if .AgentLog.ToolCalls }}
+          <table>
+            <thead><tr><th>Name</th><th>Args</th><th>Call id</th></tr></thead>
+            <tbody>
+            {{ range .AgentLog.ToolCalls }}
+            <tr><td>{{ .Name }}</td><td>{{ .Args }}</td><td>{{ .CallID }}</td></tr>
+            {{ end }}
+            </tbody>
+          </table>
+          {{ if .AgentLog.Truncated }}<p class="muted" style="margin:0.35rem 0 0;font-size:0.75rem">Showing first 100 tool calls.</p>{{ end }}
+          {{ else }}
+          <p class="muted" style="margin:0;font-size:0.78rem">omitted: not implemented</p>
+          {{ end }}
+        </div>
+        {{ end }}
       </li>
       {{ end }}
     </ul>

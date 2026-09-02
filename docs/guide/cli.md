@@ -807,13 +807,13 @@ paseka proposal reject --trace trace-1 --task task-1 --comments-file ./my-review
 
 ## `paseka export`
 
-Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots) without changing the renderer.
+Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs) without changing the renderer.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | yes | Flight trail id |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -832,6 +832,7 @@ Write a self-contained report for one flight trail to the current working direct
 | `colony` | Raw `.paseka/colony.yaml` (or a short note when missing) |
 | `cues` | All committed `.paseka/cues/*.yaml` in the colony |
 | `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
+| `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Missing id, unsupported adapter, stub readers, or resolve errors omit the section with a reason; export still succeeds. Cursor and Pi resolvers are stubs until vendor-store readers land. |
 
 Default export omits all config snapshots. Home config and machine-local overlays are never included.
 
@@ -843,6 +844,7 @@ paseka export --trace trace-abc123 --format md
 paseka export --trace trace-abc123 --include usage,durations
 paseka export --trace trace-abc123 --include bees --include colony --format md
 paseka export --trace trace-abc123 --include artifacts --format md
+paseka export --trace trace-abc123 --include agent-logs --format md
 paseka export --trace trace-abc123 -C /path/to/repo
 ```
 

@@ -118,8 +118,39 @@ func writeMarkdownRuns(buf *bytes.Buffer, data TraceExportData) {
 			buf.WriteString(summary)
 			buf.WriteString("\n")
 		}
+		if data.Include.Has(IncludeAgentLogs) {
+			writeMarkdownAgentLog(buf, agentLogByAgentID(data.AgentLogs, run.AgentID))
+		}
 		buf.WriteString("\n")
 	}
+}
+
+func writeMarkdownAgentLog(buf *bytes.Buffer, log AgentLogExport) {
+	buf.WriteString("\n#### Agent log\n\n")
+	if log.Omitted != "" {
+		fmt.Fprintf(buf, "_omitted: %s_\n", log.Omitted)
+		return
+	}
+	if len(log.ToolCalls) == 0 {
+		buf.WriteString("_omitted: not implemented_\n")
+		return
+	}
+	buf.WriteString("| Name | Args | Call id |\n| --- | --- | --- |\n")
+	for _, call := range log.ToolCalls {
+		fmt.Fprintf(buf, "| %s | %s | %s |\n",
+			escapeMarkdownTableCell(call.Name),
+			escapeMarkdownTableCell(call.Args),
+			escapeMarkdownTableCell(call.CallID))
+	}
+	if log.Truncated {
+		buf.WriteString("\n_Showing first 100 tool calls._\n")
+	}
+}
+
+func escapeMarkdownTableCell(s string) string {
+	s = strings.ReplaceAll(s, "|", "\\|")
+	s = strings.ReplaceAll(s, "\n", " ")
+	return s
 }
 
 func writeMarkdownConfigSnapshots(buf *bytes.Buffer, data TraceExportData) {

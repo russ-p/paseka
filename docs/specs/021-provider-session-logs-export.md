@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Remaining: export Agent log, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
+AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Export `--include agent-logs` renders a per-run Agent log via an optional adapter `SessionLogResolver` (Cursor/Pi are stubs: omit `not implemented`). Remaining: real provider log readers, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
 
 ## Problem Statement
 
@@ -103,17 +103,14 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 
 ### 5. Adapter capability
 
-- Optional adapter seam (name illustrative): resolve provider session log / tool-call summary by `providerSessionId` (+ workspace hints if required).
-- Adapters without the capability → enrichment skip.
-- Cursor implements Slice A/B against local Cursor storage / documented CLI artifacts.
-- Pi implements against its session-dir layout when ready.
+- Optional adapter seam: `SessionLogResolver` resolves a tool-call summary by `providerSessionId` (+ workspace / runDir hints).
+- Adapters without the capability → omit `unsupported`.
+- Cursor and Pi currently stub the seam (`not implemented`). Real Cursor store / Pi session-dir readers are Slice C.
 - Claude deferred until native id/log surface is specified in a follow-up decision note.
 
 ### 6. Export enrichment
 
-- Add an include kind (illustrative token: `agent-logs` or `provider-logs`) for opt-in payload, **or** document best-effort enrichment under a clear default — pick one in implementation and lock in CLI help.
-- Per-run Agent log section in HTML and Markdown renderers.
-- MVP content: tool calls (name, path/short args, `call_id` when present, timestamps if cheap).
+- Add include kind **`agent-logs`** (opt-in). Per-run Agent log subsection in HTML and Markdown (under Runs). MVP content: tool calls (name, path/short args, `call_id` when present, timestamps if cheap).
 - Later (out of MVP priority): system prompt, reasoning/thinking blocks when provider exposes them.
 - Missing id / missing store / parse error → omit section or show a one-line omitted reason; export exit code stays success for trail-only data.
 - Do not merge provider tool calls into the domain Timeline section.
@@ -130,8 +127,8 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 - Cursor (and Claude) stream parse / AFK adapter — capture id; stop dumping stream diagnostics into events.
 - Runs / session meta — persist `providerSessionId`.
 - Session manager + Cursor session adapter — Slice B create-chat + resume argv.
-- Export include + HTML/Markdown renderers — Agent log section.
-- Optional Cursor/Pi log readers behind adapter capability.
+- Export include + HTML/Markdown renderers — Agent log subsection under each run (`--include agent-logs`).
+- Cursor/Pi `SessionLogResolver` stubs; real log readers later.
 - Docs: architecture (association), interactive sessions (HITL resume), CLI (`paseka export` include), bee/event boundary reminder.
 
 ### 9. Security / size
@@ -145,9 +142,10 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 | Slice | Deliverable |
 | ----- | ----------- |
 | A (partial) | AFK Cursor + Pi `providerSessionId` on run meta/result (export Agent log and stream→events cleanup not in this slice) |
-| A (remaining) | Stop stream→events dump + export Agent log (tool calls) when resolvable |
+| A (remaining) | Stop stream→events dump |
 | B (partial) | HITL Cursor `create-chat` / `--resume` + Pi HITL persist `providerSessionId` (export Agent log not in this slice) |
-| C | Pi (and later Claude) log readers |
+| Export (stubs) | `--include agent-logs` + per-run Agent log; Cursor/Pi `SessionLogResolver` stubs omit `not implemented` |
+| C | Pi (and later Claude) log readers; Cursor store reader behind the same seam |
 
 ## Testing Decisions
 

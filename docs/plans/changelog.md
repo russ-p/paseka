@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Export Agent log (adapter stubs)
+
+`paseka export --include agent-logs` adds a per-run **Agent log** subsection (tool-call table, or a one-line omit reason). Enrichment is best-effort: missing `providerSessionId`, adapters without a resolver, stub readers, and resolve errors never fail the command. Cursor and Pi implement the resolve seam as stubs (`not implemented`) until vendor session stores are read in place. Provider logs are not copied into `.paseka/runs/`.
+
+- Spec: [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) (Draft; export plumbing)
+- Canonical: [CLI](../guide/cli.md) (`paseka export`), [Architecture overview](../architecture/overview.md) (adapter result collection)
+
 ## 2026-09 — HITL provider session id
 
 Interactive Cursor and Pi sessions record the provider’s native session id as `providerSessionId` on `session.json` and `meta.json` before the PTY starts. Cursor HITL runs `agent create-chat` and launches the TUI with `--resume`; a failed create-chat still starts the session without a pointer. Pi HITL stores the pinned `--session-id` (`agentId`, or the flag already on a `command:` override). Queen Console session detail shows the id when set. Export Agent log and `events.ndjson` cleanup stay out of this slice.

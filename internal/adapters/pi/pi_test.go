@@ -20,6 +20,21 @@ func TestAdapterName(t *testing.T) {
 	}
 }
 
+func TestResolveSessionLogStub(t *testing.T) {
+	got, err := New().ResolveSessionLog(context.Background(), adapters.SessionLogRequest{
+		ProviderSessionID: "agent-1",
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionLog: %v", err)
+	}
+	if got.Omitted != adapters.SessionLogOmittedNotImplemented {
+		t.Fatalf("Omitted = %q, want %q", got.Omitted, adapters.SessionLogOmittedNotImplemented)
+	}
+	if len(got.ToolCalls) != 0 {
+		t.Fatalf("stub must not return tool calls: %+v", got.ToolCalls)
+	}
+}
+
 func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		AgentID: "agent-1",

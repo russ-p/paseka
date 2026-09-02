@@ -26,7 +26,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [018-cli-colony-status](../specs/018-cli-colony-status.md) | Implemented | `paseka status` read-only colony snapshot (CLI alternative to Console dashboard; energy in MVP; `--check` for substrate probe) |
 | [019-model-aliases](../specs/019-model-aliases.md) | Implemented | Colony `model_aliases` map; home overlay; resolves `params.model` at dispatch |
 | [020-worktree-branch](../specs/020-worktree-branch.md) | Implemented | `INSIGHT/worktree.branch` to name/rename the isolated trace worktree git ref |
-| [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) | Draft | AFK + HITL Cursor/Pi persist `providerSessionId`; remaining: export Agent log, `events.ndjson` bus-only cleanup |
+| [021-provider-session-logs-export](../specs/021-provider-session-logs-export.md) | Draft | AFK + HITL Cursor/Pi persist `providerSessionId`; export `--include agent-logs` with adapter stubs; remaining: real log readers, `events.ndjson` bus-only cleanup |
 | [022-console-system-info](../specs/022-console-system-info.md) | Implemented | Queen Console Host plaque + System tab: CPU/RAM, cheap identity, top processes (console host view, no Docker APIs) |
 | [023-console-git](../specs/023-console-git.md) | Implemented | Queen Console Git tab: clone vs origin, explicit fetch/push/ff-only pull, worktrees, leftover branches (homelab; no auto-push on approve) |
 | [024-pull-request-delivery](../specs/024-pull-request-delivery.md) | Draft | Isolated trails: opt-in PR publish instead of local merge; bees `pr.body`; forge via external CLI script contract |

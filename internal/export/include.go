@@ -15,6 +15,7 @@ const (
 	IncludeColony    IncludeKind = "colony"
 	IncludeCues      IncludeKind = "cues"
 	IncludeArtifacts IncludeKind = "artifacts"
+	IncludeAgentLogs IncludeKind = "agent-logs"
 )
 
 // IncludeSet is a normalized, deduplicated list of include tokens.
@@ -42,7 +43,7 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 			}
 			kind := IncludeKind(part)
 			if !kind.valid() {
-				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts)", part)
+				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs)", part)
 			}
 			if _, ok := seen[kind]; ok {
 				continue
@@ -56,7 +57,7 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 
 func (k IncludeKind) valid() bool {
 	switch k {
-	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts:
+	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs:
 		return true
 	default:
 		return false

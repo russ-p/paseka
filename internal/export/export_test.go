@@ -1,12 +1,15 @@
 package export
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/colony"
 	"github.com/paseka/paseka/internal/hiveview"
 	"github.com/paseka/paseka/internal/protocol"
@@ -34,16 +37,36 @@ func setupExportColony(t *testing.T) (colony.Context, string) {
 
 func writeCompletedRun(t *testing.T, repo, traceID string, started time.Time, usage *protocol.Usage) {
 	t.Helper()
-	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-1"}
+	writeCompletedRunCfg(t, repo, traceID, started, completedRunCfg{Usage: usage})
+}
+
+type completedRunCfg struct {
+	AgentID           string
+	Adapter           string
+	ProviderSessionID string
+	Usage             *protocol.Usage
+}
+
+func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time, cfg completedRunCfg) {
+	t.Helper()
+	agentID := cfg.AgentID
+	if agentID == "" {
+		agentID = "agent-1"
+	}
+	adapter := cfg.Adapter
+	if adapter == "" {
+		adapter = "cursor"
+	}
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
 	if err := d.Prepare(); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.WriteRequest(protocol.Request{
 		ProtocolVersion: protocol.Version,
 		TraceID:         traceID,
-		AgentID:         "agent-1",
+		AgentID:         agentID,
 		Bee:             "scout",
-		Adapter:         "cursor",
+		Adapter:         adapter,
 		Workspace:       repo,
 		ColonyRoot:      repo,
 		CreatedAt:       started,
@@ -60,20 +83,21 @@ func writeCompletedRun(t *testing.T, repo, traceID string, started time.Time, us
 		t.Fatal(err)
 	}
 	if err := d.WriteResult(protocol.Result{
-		ProtocolVersion: protocol.Version,
-		TraceID:         traceID,
-		AgentID:         "agent-1",
-		Status:          protocol.StatusCompleted,
-		Summary:         "done",
-		Usage:           usage,
-		FinishedAt:      finished,
+		ProtocolVersion:   protocol.Version,
+		TraceID:           traceID,
+		AgentID:           agentID,
+		Status:            protocol.StatusCompleted,
+		Summary:           "done",
+		Usage:             cfg.Usage,
+		ProviderSessionID: cfg.ProviderSessionID,
+		FinishedAt:        finished,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.AppendEvent(protocol.Event{
 		ProtocolVersion: protocol.Version,
 		TraceID:         traceID,
-		AgentID:         "agent-1",
+		AgentID:         agentID,
 		Seq:             1,
 		Type:            protocol.EventInsight,
 		CreatedAt:       started.Add(2 * time.Second),
@@ -262,6 +286,8 @@ func TestExportTraceDefaultOmitsConfigSnapshots(t *testing.T) {
 		"role: scout",
 		"secret.local",
 		"scout.local.yaml",
+		"#### Agent log",
+		"omitted:",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("default export should not contain %q:\n%s", forbidden, text)
@@ -633,5 +659,146 @@ func TestRenderHTMLColonyMissingNote(t *testing.T) {
 	}
 	if strings.Contains(body, "<pre class=\"timeline-raw\">_No colony.yaml found._</pre>") {
 		t.Fatalf("missing note should not be in yaml pre: %s", body)
+	}
+}
+
+type fakeSessionLogResolver struct {
+	log adapters.SessionLog
+	err error
+}
+
+func (f fakeSessionLogResolver) ResolveSessionLog(_ context.Context, _ adapters.SessionLogRequest) (adapters.SessionLog, error) {
+	return f.log, f.err
+}
+
+func exportAgentLogs(t *testing.T, ctx colony.Context, traceID string, format Format, lookup SessionLogLookup) string {
+	t.Helper()
+	path, err := ExportTrace(ctx, Options{
+		TraceID:     traceID,
+		OutputDir:   t.TempDir(),
+		Format:      format,
+		Include:     mustInclude(t, "agent-logs"),
+		SessionLogs: lookup,
+	})
+	if err != nil {
+		t.Fatalf("ExportTrace: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func TestExportTraceIncludeAgentLogsOmitsWithoutProviderSessionID(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-agent-log-noid"
+	writeCompletedRun(t, repo, traceID, time.Now().UTC().Add(-time.Minute), nil)
+
+	text := exportAgentLogs(t, ctx, traceID, FormatMarkdown, nil)
+	if !strings.Contains(text, "#### Agent log") {
+		t.Fatalf("missing Agent log:\n%s", text)
+	}
+	if !strings.Contains(text, "_omitted: no providerSessionId_") {
+		t.Fatalf("missing omit reason:\n%s", text)
+	}
+}
+
+func TestExportTraceIncludeAgentLogsStubNotImplemented(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-agent-log-stub"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+
+	md := exportAgentLogs(t, ctx, traceID, FormatMarkdown, nil)
+	if !strings.Contains(md, "_omitted: not implemented_") {
+		t.Fatalf("cursor stub omit missing:\n%s", md)
+	}
+
+	writeCompletedRunCfg(t, repo, "trace-agent-log-pi", time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		AgentID:           "agent-pi",
+		Adapter:           "pi",
+		ProviderSessionID: "pi-session",
+	})
+	piMD := exportAgentLogs(t, ctx, "trace-agent-log-pi", FormatMarkdown, nil)
+	if !strings.Contains(piMD, "_omitted: not implemented_") {
+		t.Fatalf("pi stub omit missing:\n%s", piMD)
+	}
+}
+
+func TestExportTraceIncludeAgentLogsUnsupportedAdapter(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-agent-log-script"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		Adapter:           "script",
+		ProviderSessionID: "sess-1",
+	})
+
+	text := exportAgentLogs(t, ctx, traceID, FormatMarkdown, nil)
+	if !strings.Contains(text, "_omitted: unsupported_") {
+		t.Fatalf("unsupported omit missing:\n%s", text)
+	}
+}
+
+func TestExportTraceIncludeAgentLogsResolverError(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-agent-log-err"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+
+	text := exportAgentLogs(t, ctx, traceID, FormatMarkdown, func(string) adapters.SessionLogResolver {
+		return fakeSessionLogResolver{err: errors.New("store boom")}
+	})
+	if !strings.Contains(text, "_omitted: resolve error_") {
+		t.Fatalf("resolve error omit missing:\n%s", text)
+	}
+}
+
+func TestExportTraceIncludeAgentLogsFakeToolCalls(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-agent-log-tools"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+
+	lookup := func(string) adapters.SessionLogResolver {
+		return fakeSessionLogResolver{log: adapters.SessionLog{
+			ToolCalls: []adapters.ToolCall{{
+				Name:   "Read",
+				CallID: "call-abc",
+				Args:   "docs/guide/cli.md",
+			}},
+		}}
+	}
+	md := exportAgentLogs(t, ctx, traceID, FormatMarkdown, lookup)
+	for _, want := range []string{
+		"#### Agent log",
+		"| Read | docs/guide/cli.md | call-abc |",
+		"## Timeline",
+		"INSIGHT",
+	} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("markdown missing %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "TOOL_CALL") {
+		t.Fatalf("timeline must not dump tool calls:\n%s", md)
+	}
+
+	html := exportAgentLogs(t, ctx, traceID, FormatHTML, lookup)
+	for _, want := range []string{
+		"<h3>Agent log</h3>",
+		"Read",
+		"call-abc",
+		"docs/guide/cli.md",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML missing %q", want)
+		}
+	}
+	if strings.Contains(html, "TOOL_CALL") {
+		t.Fatalf("HTML timeline must not dump tool calls")
 	}
 }
