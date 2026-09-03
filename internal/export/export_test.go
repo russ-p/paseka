@@ -704,18 +704,22 @@ func TestExportTraceIncludeAgentLogsOmitsWithoutProviderSessionID(t *testing.T) 
 	}
 }
 
-func TestExportTraceIncludeAgentLogsStubNotImplemented(t *testing.T) {
+func TestExportTraceIncludeAgentLogsCursorStoreNotFound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	ctx, repo := setupExportColony(t)
-	traceID := "trace-agent-log-stub"
+	traceID := "trace-agent-log-cursor-miss"
 	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
-		ProviderSessionID: "cursor-uuid",
+		ProviderSessionID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
 	})
 
 	md := exportAgentLogs(t, ctx, traceID, FormatMarkdown, nil)
-	if !strings.Contains(md, "_omitted: not implemented_") {
-		t.Fatalf("cursor stub omit missing:\n%s", md)
+	if !strings.Contains(md, "_omitted: store not found_") {
+		t.Fatalf("cursor store omit missing:\n%s", md)
 	}
+}
 
+func TestExportTraceIncludeAgentLogsPiStubNotImplemented(t *testing.T) {
+	ctx, repo := setupExportColony(t)
 	writeCompletedRunCfg(t, repo, "trace-agent-log-pi", time.Now().UTC().Add(-time.Minute), completedRunCfg{
 		AgentID:           "agent-pi",
 		Adapter:           "pi",

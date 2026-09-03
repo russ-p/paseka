@@ -528,7 +528,7 @@ code { font-family: var(--mono); font-size: 0.85em; }
           </table>
           {{ if .AgentLog.Truncated }}<p class="muted" style="margin:0.35rem 0 0;font-size:0.75rem">Showing first 100 tool calls.</p>{{ end }}
           {{ else }}
-          <p class="muted" style="margin:0;font-size:0.78rem">omitted: not implemented</p>
+          <p class="muted" style="margin:0;font-size:0.78rem">No tool calls.</p>
           {{ end }}
         </div>
         {{ end }}

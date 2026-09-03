@@ -37,6 +37,22 @@ func TestResolveAgentLogTruncatesArgsAndCapsRows(t *testing.T) {
 	}
 }
 
+func TestResolveAgentLogEmptyToolCallsFound(t *testing.T) {
+	got := resolveAgentLog(hiveview.RunView{
+		AgentID:           "agent-1",
+		Adapter:           "cursor",
+		ProviderSessionID: "sess",
+	}, func(string) adapters.SessionLogResolver {
+		return fakeSessionLogResolver{log: adapters.SessionLog{ToolCalls: []adapters.ToolCall{}}}
+	})
+	if got.Omitted != "" {
+		t.Fatalf("Omitted = %q", got.Omitted)
+	}
+	if got.ToolCalls == nil {
+		t.Fatal("expected empty slice, not nil omit")
+	}
+}
+
 func TestResolveAgentLogEmptyToolCallsWithOmitted(t *testing.T) {
 	got := resolveAgentLog(hiveview.RunView{
 		AgentID:           "agent-1",
@@ -74,7 +90,14 @@ func TestDefaultSessionLogLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Omitted != adapters.SessionLogOmittedNotImplemented {
-		t.Fatalf("cursor stub Omitted = %q", got.Omitted)
+	if got.Omitted != adapters.SessionLogOmittedStoreNotFound {
+		t.Fatalf("cursor missing id Omitted = %q", got.Omitted)
+	}
+	piLog, err := defaultSessionLogLookup("pi").ResolveSessionLog(context.Background(), adapters.SessionLogRequest{ProviderSessionID: "agent-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if piLog.Omitted != adapters.SessionLogOmittedNotImplemented {
+		t.Fatalf("pi stub Omitted = %q", piLog.Omitted)
 	}
 }

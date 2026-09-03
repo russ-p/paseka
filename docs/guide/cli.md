@@ -832,7 +832,7 @@ Write a self-contained report for one flight trail to the current working direct
 | `colony` | Raw `.paseka/colony.yaml` (or a short note when missing) |
 | `cues` | All committed `.paseka/cues/*.yaml` in the colony |
 | `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
-| `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Missing id, unsupported adapter, stub readers, or resolve errors omit the section with a reason; export still succeeds. Cursor and Pi resolvers are stubs until vendor-store readers land. |
+| `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place. Missing id, unsupported adapter, missing transcript (`store not found`), parse errors, Pi stub (`not implemented`), or resolve errors omit the section with a reason; export still succeeds. |
 
 Default export omits all config snapshots. Home config and machine-local overlays are never included.
 

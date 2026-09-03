@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Export `--include agent-logs` renders a per-run Agent log via an optional adapter `SessionLogResolver` (Cursor/Pi are stubs: omit `not implemented`). Remaining: real provider log readers, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
+AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Export `--include agent-logs` renders a per-run Agent log via `SessionLogResolver`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place (omit `store not found` / `parse error`). Pi remains stubbed (`not implemented`). Remaining: Pi reader, Cursor `store.db`, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
 
 ## Problem Statement
 
@@ -105,7 +105,8 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 
 - Optional adapter seam: `SessionLogResolver` resolves a tool-call summary by `providerSessionId` (+ workspace / runDir hints).
 - Adapters without the capability → omit `unsupported`.
-- Cursor and Pi currently stub the seam (`not implemented`). Real Cursor store / Pi session-dir readers are Slice C.
+- Cursor reads local `agent-transcripts` jsonl by UUID (workspace slug first, then glob). Missing file → `store not found`; bad jsonl → `parse error`. SQLite `store.db` is a later follow-up.
+- Pi remains stubbed (`not implemented`) until a session-dir reader lands.
 - Claude deferred until native id/log surface is specified in a follow-up decision note.
 
 ### 6. Export enrichment
@@ -128,7 +129,7 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 - Runs / session meta — persist `providerSessionId`.
 - Session manager + Cursor session adapter — Slice B create-chat + resume argv.
 - Export include + HTML/Markdown renderers — Agent log subsection under each run (`--include agent-logs`).
-- Cursor/Pi `SessionLogResolver` stubs; real log readers later.
+- Cursor/Pi `SessionLogResolver`; Cursor jsonl reader; Pi stub.
 - Docs: architecture (association), interactive sessions (HITL resume), CLI (`paseka export` include), bee/event boundary reminder.
 
 ### 9. Security / size
@@ -144,8 +145,9 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 | A (partial) | AFK Cursor + Pi `providerSessionId` on run meta/result (export Agent log and stream→events cleanup not in this slice) |
 | A (remaining) | Stop stream→events dump |
 | B (partial) | HITL Cursor `create-chat` / `--resume` + Pi HITL persist `providerSessionId` (export Agent log not in this slice) |
-| Export (stubs) | `--include agent-logs` + per-run Agent log; Cursor/Pi `SessionLogResolver` stubs omit `not implemented` |
-| C | Pi (and later Claude) log readers; Cursor store reader behind the same seam |
+| Export (stubs) | `--include agent-logs` + per-run Agent log; Pi stub omit `not implemented` |
+| Cursor jsonl | Read-in-place `agent-transcripts/<uuid>/<uuid>.jsonl` for Agent log tool calls |
+| C | Pi (and later Claude) log readers; Cursor `store.db` if jsonl is absent |
 
 ## Testing Decisions
 

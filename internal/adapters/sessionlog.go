@@ -10,6 +10,8 @@ const (
 	SessionLogOmittedNoProviderSessionID = "no providerSessionId"
 	SessionLogOmittedUnsupported         = "unsupported"
 	SessionLogOmittedNotImplemented      = "not implemented"
+	SessionLogOmittedStoreNotFound       = "store not found"
+	SessionLogOmittedParseError          = "parse error"
 	SessionLogOmittedResolveError        = "resolve error"
 )
 

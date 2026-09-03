@@ -132,7 +132,7 @@ func writeMarkdownAgentLog(buf *bytes.Buffer, log AgentLogExport) {
 		return
 	}
 	if len(log.ToolCalls) == 0 {
-		buf.WriteString("_omitted: not implemented_\n")
+		buf.WriteString("_No tool calls._\n")
 		return
 	}
 	buf.WriteString("| Name | Args | Call id |\n| --- | --- | --- |\n")

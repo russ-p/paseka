@@ -71,12 +71,8 @@ func resolveAgentLog(run hiveview.RunView, lookup SessionLogLookup) AgentLogExpo
 		entry.Omitted = adapters.SessionLogOmittedResolveError
 		return entry
 	}
-	if len(log.ToolCalls) == 0 {
-		if log.Omitted != "" {
-			entry.Omitted = log.Omitted
-			return entry
-		}
-		entry.Omitted = adapters.SessionLogOmittedNotImplemented
+	if log.Omitted != "" {
+		entry.Omitted = log.Omitted
 		return entry
 	}
 	calls := log.ToolCalls

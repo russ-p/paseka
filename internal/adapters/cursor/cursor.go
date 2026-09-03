@@ -31,11 +31,6 @@ func (a *Adapter) Name() string {
 	return adapterName
 }
 
-// ResolveSessionLog is a stub until Cursor store readers land (spec 021).
-func (a *Adapter) ResolveSessionLog(_ context.Context, _ adapters.SessionLogRequest) (adapters.SessionLog, error) {
-	return adapters.SessionLog{Omitted: adapters.SessionLogOmittedNotImplemented}, nil
-}
-
 // Run invokes `agent` in non-interactive mode.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {
