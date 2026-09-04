@@ -33,5 +33,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [025-cursor-session-resume](../specs/025-cursor-session-resume.md) | Draft | Console/CLI resume of a finished Cursor HITL chat via stored `providerSessionId`; new Paseka session, same UUID; no Pi/Claude/AFK |
 | [026-opencode-adapter](../specs/026-opencode-adapter.md) | Draft | OpenCode CLI as first-class AFK + interactive adapter; `paseka init --adapter opencode` |
 | [027-config-profiles](../specs/027-config-profiles.md) | Draft | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
+| [028-standing-trails](../specs/028-standing-trails.md) | Draft | Long-lived named Flight Trails for recurring cues; sidecar cron; comb checkpoints; per-tick honey stipend |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
