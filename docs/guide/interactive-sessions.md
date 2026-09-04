@@ -43,6 +43,7 @@ flowchart LR
 | `internal/adapters/cursor` | Interactive `agent` invocation (no `-p`) |
 | `internal/adapters/pi` | Interactive `pi` invocation (no `-p`, run-local session storage) |
 | `internal/adapters/claude` | Interactive `claude` invocation (no `-p`) |
+| `internal/adapters/opencode` | Interactive `opencode` TUI invocation (no `run`) |
 | `internal/sessions` | PTY process, attach, registry, Ghostty launcher |
 | `internal/runs` | `session.json`, `transcript.ndjson` |
 | `internal/colony` | Session registry in `state.json`, `terminal.yaml` |
@@ -289,7 +290,35 @@ When `system_template` is set and no task/prompt is given, the session starts wi
 
 ---
 
-## 10. Lifecycle
+## 10. OpenCode adapter (interactive)
+
+Bees with `adapter: opencode` launch the OpenCode TUI (no `run` subcommand).
+
+| Input | Maps to `opencode` |
+| ----- | ------------------ |
+| `command` (optional) | full argv; overrides `params` mapping (see [architecture overview](../architecture/overview.md)) |
+| `Workspace` | process cwd (TUI has no `--dir`; that flag is `run`/`attach` only) |
+| `SystemPrompt` + `InitialPrompt` | joined into `--prompt` (no append-system flag) |
+| `params.model` | `--model <id>` (`provider/model` when `params.provider` is set and model has no `/`) |
+| `params.plan` | `--agent plan` |
+| `params.thinking` | `--variant` |
+| `params.binary` | CLI binary name (default `opencode`) |
+| Auth | `opencode auth login` / provider env / project `.env` |
+| Provider chat | not pre-created; `providerSessionId` stays empty for HITL |
+
+Interactive invocation:
+
+```bash
+opencode --prompt "$PROMPT"
+```
+
+`--auto`, `--format`, `--title`, and `--dir` are AFK `run`-only. Permission prompts stay in the TUI. The PTY process cwd is the workspace.
+
+**Event publishing boundary:** interactive OpenCode output is not parsed into domain bus events. Use `paseka event emit --stdin` during the session when the bee prompt requires bus events.
+
+---
+
+## 11. Lifecycle
 
 ```
 paseka bee chat <role> [prompt]
@@ -327,7 +356,7 @@ paseka bee chat <role> [prompt]
 
 ---
 
-## 11. MVP limitations and next steps
+## 12. MVP limitations and next steps
 
 | Topic | MVP | Later |
 | ----- | --- | ----- |
@@ -339,13 +368,13 @@ paseka bee chat <role> [prompt]
 
 ---
 
-## 12. Decisions (locked)
+## 13. Decisions (locked)
 
 | Topic | Decision |
 | ----- | -------- |
 | Session vs AFK | Separate `SessionAdapter`; do not overload `Adapter.Run()` |
 | Session ID | Same as `agentId` for MVP |
-| Provider session | Cursor HITL: `create-chat` + `--resume`; Pi HITL: pinned `--session-id`. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
+| Provider session | Cursor HITL: `create-chat` + `--resume`; Pi HITL: pinned `--session-id`; OpenCode HITL: empty until a native pre-create exists. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
 | Run dir | `.paseka/runs/<traceId>/<agentId>/` — shared with AFK IPC |
 | Terminal config | `~/.config/paseka/<slug>/terminal.yaml` — not committed |
 | Ghostty | Optional UI; `session run` runs full session inside Ghostty window |

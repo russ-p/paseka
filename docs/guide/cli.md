@@ -110,7 +110,7 @@ Bootstrap `.paseka/` in the current git repository and machine-local home config
 | Flag | Short | Default | Description |
 | ---- | ----- | ------- | ----------- |
 | `--path` | `-C` | cwd | Directory inside the git repository |
-| `--adapter` | | `cursor` | Scaffold bees and home config for this adapter (`cursor` or `pi`; unknown values use `cursor`) |
+| `--adapter` | | `cursor` | Scaffold bees and home config for this adapter (`cursor`, `pi`, or `opencode`; unknown values use `cursor`) |
 
 **Creates (if missing):**
 
@@ -119,12 +119,14 @@ Bootstrap `.paseka/` in the current git repository and machine-local home config
 - `~/.config/paseka/<slug>/adapters/cursor.yaml` (default adapter)
 - `~/.config/paseka/<slug>/adapters/pi.yaml` (when `--adapter pi`)
 - `~/.config/paseka/<slug>/adapters/claude.yaml` (optional Claude adapter config)
+- `~/.config/paseka/<slug>/adapters/opencode.yaml` (OpenCode binary; always written)
 
 Idempotent — existing files are skipped.
 
 ```bash
 paseka init
 paseka init --adapter pi
+paseka init --adapter opencode
 paseka init -C /path/to/repo
 ```
 
@@ -132,7 +134,7 @@ paseka init -C /path/to/repo
 
 ## `paseka bee`
 
-Run colony bees via adapters (Cursor Agent CLI by default; Pi CLI when `adapter: pi`; shell/python when `adapter: script`).
+Run colony bees via adapters (Cursor Agent CLI by default; Pi CLI when `adapter: pi`; OpenCode CLI when `adapter: opencode`; shell/python when `adapter: script`).
 
 ### `paseka bee run <role>`
 
@@ -895,6 +897,7 @@ paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
 ```bash
 paseka init                    # Cursor adapter (default)
 paseka init --adapter pi       # Pi adapter
+paseka init --adapter opencode # OpenCode adapter
 agent login                    # or export CURSOR_API_KEY (cursor init)
 docker compose up -d           # local NATS + JetStream
 paseka doctor

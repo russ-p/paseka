@@ -18,6 +18,17 @@ func TestResolveAdapterPi(t *testing.T) {
 	}
 }
 
+func TestResolveAdapterOpenCode(t *testing.T) {
+	bee := colony.Bee{Role: "builder", Adapter: "opencode"}
+	name, err := bee.ResolveAdapter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "opencode" {
+		t.Fatalf("got %q, want opencode", name)
+	}
+}
+
 func TestResolveAdapterCursorDefault(t *testing.T) {
 	bee := colony.Bee{Role: "builder"}
 	name, err := bee.ResolveAdapter()
@@ -104,8 +115,9 @@ func TestMergeRunParamsProviderThinking(t *testing.T) {
 
 func TestAdapterExtraRoutesByAdapter(t *testing.T) {
 	ctx := colony.Context{
-		Cursor: colony.CursorAdapterConfig{Binary: "agent"},
-		Pi:     colony.PiAdapterConfig{Binary: "pi"},
+		Cursor:   colony.CursorAdapterConfig{Binary: "agent"},
+		Pi:       colony.PiAdapterConfig{Binary: "pi"},
+		OpenCode: colony.OpenCodeAdapterConfig{Binary: "/opt/opencode"},
 	}
 
 	cursorExtra := colony.AdapterExtra(ctx, "cursor")
@@ -116,5 +128,10 @@ func TestAdapterExtraRoutesByAdapter(t *testing.T) {
 	piExtra := colony.AdapterExtra(ctx, "pi")
 	if piExtra.Binary != "pi" {
 		t.Fatalf("pi binary = %q", piExtra.Binary)
+	}
+
+	ocExtra := colony.AdapterExtra(ctx, "opencode")
+	if ocExtra.Binary != "/opt/opencode" {
+		t.Fatalf("opencode binary = %q", ocExtra.Binary)
 	}
 }

@@ -77,6 +77,7 @@ type Diagnostics struct {
 // UsageSource identifies where per-run LLM token counts came from.
 const (
 	UsageSourceCursorStreamJSON = "cursor.stream-json"
+	UsageSourceOpenCodeRunJSON  = "opencode.run-json"
 	UsageSourceUnavailable      = "unavailable"
 )
 

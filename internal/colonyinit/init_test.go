@@ -64,6 +64,10 @@ func TestInitScaffold(t *testing.T) {
 		t.Fatalf("home dir: %v", err)
 	}
 
+	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "opencode.yaml")); err != nil {
+		t.Fatalf("default init should write opencode.yaml: %v", err)
+	}
+
 	res2, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +85,8 @@ func TestNormalizeInitAdapter(t *testing.T) {
 		{"cursor", "cursor"},
 		{"pi", "pi"},
 		{"PI", "pi"},
+		{"opencode", "opencode"},
+		{" OpenCode ", "opencode"},
 		{" claude ", "cursor"},
 		{"unknown", "cursor"},
 	}
@@ -142,6 +148,64 @@ func TestInitScaffoldWithPiAdapter(t *testing.T) {
 	}
 	if !strings.Contains(string(cfg), "pi: {}") {
 		t.Fatalf("home config should reference pi adapter:\n%s", cfg)
+	}
+}
+
+func TestInitScaffoldWithOpenCodeAdapter(t *testing.T) {
+	repo := initTestRepo(t)
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+
+	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo, Adapter: "opencode"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Adapter != "opencode" {
+		t.Fatalf("adapter = %q, want opencode", res.Adapter)
+	}
+
+	scout, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", "scout.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(scout), "adapter: opencode") {
+		t.Fatalf("scout bee should use opencode adapter:\n%s", scout)
+	}
+	if !strings.Contains(string(scout), "output_format: json") {
+		t.Fatalf("scout bee should use json output:\n%s", scout)
+	}
+
+	builder, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", "builder.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(builder), "adapter: opencode") {
+		t.Fatalf("builder bee should use opencode adapter:\n%s", builder)
+	}
+
+	hivewright, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", "hivewright.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hivewright), "adapter: opencode") {
+		t.Fatalf("hivewright bee should use opencode adapter:\n%s", hivewright)
+	}
+
+	ocYAML := filepath.Join(res.HomeDir, "adapters", "opencode.yaml")
+	if _, err := os.Stat(ocYAML); err != nil {
+		t.Fatalf("missing opencode adapter config: %v", err)
+	}
+
+	cfg, err := os.ReadFile(filepath.Join(res.HomeDir, "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cfg), "opencode: {}") {
+		t.Fatalf("home config should reference opencode adapter:\n%s", cfg)
+	}
+
+	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "pi.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("pi.yaml should not be scaffolded for opencode init: %v", err)
 	}
 }
 

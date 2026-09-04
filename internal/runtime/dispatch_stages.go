@@ -180,7 +180,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 
 	runDirPath := runDir.Root()
 	commandPrompt := rendered
-	if adapterName == "cursor" {
+	if adapterName == "cursor" || adapterName == "opencode" {
 		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
 	}
 	cmdVars := colony.CommandVars{

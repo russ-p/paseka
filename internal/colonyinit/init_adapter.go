@@ -11,6 +11,8 @@ func NormalizeInitAdapter(name string) string {
 	switch strings.TrimSpace(strings.ToLower(name)) {
 	case "pi":
 		return "pi"
+	case "opencode":
+		return "opencode"
 	default:
 		return "cursor"
 	}
@@ -20,6 +22,8 @@ func scoutBeeYAMLFor(adapter string) string {
 	switch adapter {
 	case "pi":
 		return scoutBeePiYAML
+	case "opencode":
+		return scoutBeeOpenCodeYAML
 	default:
 		return scoutBeeYAML
 	}
@@ -29,6 +33,8 @@ func builderBeeYAMLFor(adapter string) string {
 	switch adapter {
 	case "pi":
 		return builderBeePiYAML
+	case "opencode":
+		return builderBeeOpenCodeYAML
 	default:
 		return builderBeeYAML
 	}
@@ -38,6 +44,8 @@ func hivewrightBeeYAMLFor(adapter string) string {
 	switch adapter {
 	case "pi":
 		return hivewrightBeePiYAML
+	case "opencode":
+		return hivewrightBeeOpenCodeYAML
 	default:
 		return hivewrightBeeYAML
 	}
@@ -48,9 +56,14 @@ func homeConfigYAML(repoRoot, slug, adapter string) string {
   cursor:
     api_key_env: CURSOR_API_KEY
 `
-	if adapter == "pi" {
+	switch adapter {
+	case "pi":
 		adaptersBlock = `adapters:
   pi: {}
+`
+	case "opencode":
+		adaptersBlock = `adapters:
+  opencode: {}
 `
 	}
 	return fmt.Sprintf(`colony_root: %q

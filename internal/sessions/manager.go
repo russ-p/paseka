@@ -16,6 +16,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/paseka/paseka/internal/adapters/opencode"
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/artifacts"
 	"github.com/paseka/paseka/internal/bus"
@@ -79,9 +80,10 @@ func NewManager() *Manager {
 	return &Manager{
 		sessions: map[string]*activeSession{},
 		adapters: map[string]adapters.SessionAdapter{
-			"cursor": cursor.NewSession(),
-			"pi":     pi.NewSession(),
-			"claude": claude.NewSession(),
+			"cursor":   cursor.NewSession(),
+			"pi":       pi.NewSession(),
+			"claude":   claude.NewSession(),
+			"opencode": opencode.NewSession(),
 		},
 	}
 }
@@ -279,7 +281,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	colony.ApplyModelAliases(&params, ctxColony.ModelAliases)
 
 	commandPrompt := rendered
-	if adapterName == "cursor" {
+	if adapterName == "cursor" || adapterName == "opencode" {
 		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
 	}
 

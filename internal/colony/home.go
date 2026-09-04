@@ -52,6 +52,11 @@ type ClaudeAdapterConfig struct {
 	APIKeyEnv string `yaml:"api_key_env"`
 }
 
+// OpenCodeAdapterConfig is ~/.config/paseka/<slug>/adapters/opencode.yaml.
+type OpenCodeAdapterConfig struct {
+	Binary string `yaml:"binary"`
+}
+
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
 	ColonyRoot   string
@@ -61,6 +66,7 @@ type Context struct {
 	Cursor       CursorAdapterConfig
 	Pi           PiAdapterConfig
 	Claude       ClaudeAdapterConfig
+	OpenCode     OpenCodeAdapterConfig
 }
 
 // ResolveContext finds the git repo, loads colony + home config.
@@ -121,6 +127,11 @@ func ResolveContext(startDir string) (Context, error) {
 		return Context{}, err
 	}
 
+	opencode, err := LoadOpenCodeAdapter(slug)
+	if err != nil {
+		return Context{}, err
+	}
+
 	merged := MergedModelAliases(manifest.ModelAliases, home.ModelAliases)
 	if err := ValidateModelAliases(merged); err != nil {
 		return Context{}, err
@@ -134,6 +145,7 @@ func ResolveContext(startDir string) (Context, error) {
 		Cursor:       cursor,
 		Pi:           pi,
 		Claude:       claude,
+		OpenCode:     opencode,
 	}, nil
 }
 
@@ -277,6 +289,30 @@ func (c ClaudeAdapterConfig) APIKey() string {
 		return ""
 	}
 	return os.Getenv(c.APIKeyEnv)
+}
+
+// LoadOpenCodeAdapter reads ~/.config/paseka/<slug>/adapters/opencode.yaml.
+func LoadOpenCodeAdapter(slug string) (OpenCodeAdapterConfig, error) {
+	homeDir, err := HomeDir(slug)
+	if err != nil {
+		return OpenCodeAdapterConfig{}, err
+	}
+	path := filepath.Join(homeDir, "adapters", "opencode.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return OpenCodeAdapterConfig{Binary: "opencode"}, nil
+		}
+		return OpenCodeAdapterConfig{}, err
+	}
+	var cfg OpenCodeAdapterConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return OpenCodeAdapterConfig{}, fmt.Errorf("parse opencode adapter config: %w", err)
+	}
+	if cfg.Binary == "" {
+		cfg.Binary = "opencode"
+	}
+	return cfg, nil
 }
 
 // TerminalConfig is ~/.config/paseka/<slug>/terminal.yaml.

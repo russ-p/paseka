@@ -6,6 +6,7 @@ import (
 	"github.com/paseka/paseka/internal/adapters"
 	"github.com/paseka/paseka/internal/adapters/claude"
 	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/paseka/paseka/internal/adapters/opencode"
 	"github.com/paseka/paseka/internal/adapters/pi"
 	"github.com/paseka/paseka/internal/adapters/script"
 	"github.com/paseka/paseka/internal/bus"
@@ -43,10 +44,11 @@ type Dispatcher struct {
 func NewDispatcher() *Dispatcher {
 	return &Dispatcher{
 		adapters: map[string]adapters.Adapter{
-			"cursor": cursor.New(),
-			"pi":     pi.New(),
-			"claude": claude.New(),
-			"script": script.New(),
+			"cursor":   cursor.New(),
+			"pi":       pi.New(),
+			"claude":   claude.New(),
+			"opencode": opencode.New(),
+			"script":   script.New(),
 		},
 	}
 }

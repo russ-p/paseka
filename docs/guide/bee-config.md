@@ -63,7 +63,7 @@ type Bee struct {
 | YAML field | Required | Meaning |
 | ---------- | -------- | ------- |
 | `role` | recommended | Role name. If empty, defaults to the filename stem (`builder.yaml` → `builder`). |
-| `adapter` | no | `cursor` (default), `pi`, `claude`, or `script`. Unknown names fail load. |
+| `adapter` | no | `cursor` (default), `pi`, `claude`, `opencode`, or `script`. Unknown names fail load. |
 | `prompt_template` | usually | Path relative to `.paseka/prompts/`. User/task turn. Optional for `adapter: script` (no colony default applied when omitted). |
 | `system_template` | no | Path relative to `.paseka/prompts/`. Role / standing instructions injected by the adapter (see [prompt templates](prompt-templates.md)). |
 | `sector` | no | Default sector name from `colony.yaml` `sectors`. Task `sector` wins when set. |
@@ -166,13 +166,14 @@ publishes:
 
 ## 4. Adapters
 
-`ResolveAdapter()` defaults empty `adapter` to `cursor`. Allowed values: `cursor`, `pi`, `claude`, `script`.
+`ResolveAdapter()` defaults empty `adapter` to `cursor`. Allowed values: `cursor`, `pi`, `claude`, `opencode`, `script`.
 
 | Adapter | Notes |
 | ------- | ----- |
-| `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead. |
+| `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead; OpenCode also merges into one message. |
 | `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
+| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `thinking` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
 
 Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
@@ -206,14 +207,14 @@ Mapped by `RunParamsFromBee` (`internal/colony/params.go`). Defaults: `trust: tr
 
 | Key | Type | Used by |
 | --- | ---- | ------- |
-| `model` | string | cursor, pi, claude — alias key from `colony.yaml` `model_aliases` or raw vendor id |
-| `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode` |
-| `trust` | bool | cursor |
-| `force` | bool | cursor |
-| `plan` | bool | cursor (`--plan`); pi (`--plan`) |
+| `model` | string | cursor, pi, claude, opencode — alias key from `colony.yaml` `model_aliases` or raw vendor id (OpenCode prefers `provider/model`) |
+| `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode`; opencode AFK maps `json` → `--format json`, `text` → `--format default` |
+| `trust` | bool | cursor; opencode AFK (`--auto`) |
+| `force` | bool | cursor; opencode AFK (`--auto`) |
+| `plan` | bool | cursor (`--plan`); pi (`--plan`); opencode (`--agent plan`) |
 | `binary` | string | override CLI binary name |
-| `provider` | string | pi |
-| `thinking` | string | pi |
+| `provider` | string | pi; opencode (prefix for `--model` when model has no `/`) |
+| `thinking` | string | pi; opencode (`--variant`) |
 
 When `command` is set, these params are **not** turned into CLI flags; runtime logs a warning if both `command` and `params` are present. `adapter` still selects result parsing, session PTY, and home-config credential injection.
 

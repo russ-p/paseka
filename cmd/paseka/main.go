@@ -78,7 +78,7 @@ func newInitCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository (default: current directory)")
-	cmd.Flags().StringVar(&adapter, "adapter", "cursor", "scaffold bees and home config for this adapter (cursor or pi; unknown values use cursor)")
+	cmd.Flags().StringVar(&adapter, "adapter", "cursor", "scaffold bees and home config for this adapter (cursor, pi, or opencode; unknown values use cursor)")
 	return cmd
 }
 
@@ -104,6 +104,12 @@ func printInitResult(res colonyinit.InitResult) {
 	case "pi":
 		fmt.Println("  1. Ensure `pi` is in PATH (install Pi CLI)")
 		fmt.Println("  2. Optionally set api_key_env in ~/.config/paseka/<slug>/adapters/pi.yaml")
+		fmt.Println("  3. paseka bee run scout --body \"your task\"")
+		fmt.Println("  4. paseka bee chat scout \"discuss a feature\"  # interactive HITL")
+		fmt.Println("  5. paseka run    # start hive runtime (NATS reactor)")
+	case "opencode":
+		fmt.Println("  1. Ensure `opencode` is in PATH (install OpenCode CLI)")
+		fmt.Println("  2. opencode auth login  # or set provider env / project .env")
 		fmt.Println("  3. paseka bee run scout --body \"your task\"")
 		fmt.Println("  4. paseka bee chat scout \"discuss a feature\"  # interactive HITL")
 		fmt.Println("  5. paseka run    # start hive runtime (NATS reactor)")

@@ -209,6 +209,66 @@ prompt_template: scout.md
 
 Go implementation: `internal/adapters/pi/`.
 
+### Example: OpenCode adapter (CLI)
+
+**Decision:** invoke the **OpenCode CLI** (`opencode`) for bees configured with `adapter: opencode`. AFK runs use `opencode run`; interactive sessions use the OpenCode TUI under a Paseka-owned PTY (see [interactive sessions](../guide/interactive-sessions.md)).
+
+| Input (bee config + event) | Maps to `opencode` flag |
+| ---------------------------- | ----------------------- |
+| `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
+| `Workspace` | `--dir <path>` (AFK `run`) and process cwd (AFK and HITL) |
+| Prompt + `system_template` | joined into one message (OpenCode has no append-system flag) |
+| `params.model` | `--model <id>`; if the id has no `/` and `params.provider` is set, `provider/model` |
+| `params.trust` / `params.force` (AFK) | `--auto` |
+| `params.plan` | `--agent plan` (built-in read-only Plan primary; not Paseka `agentId`) |
+| `params.output_format` | AFK `--format json` (default) or `--format default` when `text` |
+| `params.thinking` | `--variant` (reasoning effort) |
+| `params.binary` | CLI binary name (default `opencode`) |
+| Auth | `opencode auth login`, provider env, or project `.env` (no `--api-key`) |
+| `agentId` (AFK) | `--title <agentId>` for later list correlation |
+
+Default non-interactive invocation:
+
+```bash
+opencode run --format json --dir "$WORKSPACE" --auto --title "$AGENT_ID" \
+  -- "$PROMPT"
+```
+
+**Ignored / HITL differences:** Interactive sessions omit `run`, `--dir`, `--format`, `--auto`, and `--title`; workspace is process cwd. Permission prompts stay in the TUI.
+
+**Result collection:**
+
+1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
+2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
+3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
+4. **Git diff** — after `opencode` exits, capture a **baseline-attributed** tracked diff in the **workspace**.
+5. **Stdout** — raw stdout is preserved as an artifact. In JSON format the adapter tolerantly reads `sessionID`, last `text` part for `summary.md`, and last `step_finish` `part.tokens` as optional `usage` (source `opencode.run-json`). The native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. HITL does not pre-create a session id. Export Agent log is unsupported in this slice (omit quietly).
+6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
+
+**Event publishing boundary:** OpenCode JSON is **not** parsed into domain bus events. Agents must publish via `paseka event emit --stdin`.
+
+**Machine-local config** (`~/.config/paseka/<slug>/adapters/opencode.yaml`):
+
+```yaml
+binary: opencode
+```
+
+If the file is missing, default is `binary: opencode`.
+
+Example bee config:
+
+```yaml
+# .paseka/bees/scout.yaml
+role: scout
+adapter: opencode
+params:
+  model: anthropic/claude-sonnet-4
+  output_format: json
+prompt_template: scout.md
+```
+
+Go implementation: `internal/adapters/opencode/`.
+
 ### Script adapter (bash / python / custom)
 
 **Decision:** bees with `adapter: script` run a **declared command** (bash, python, Go binary, etc.) instead of an LLM CLI. Use for deterministic eval bees (oracle guard, fault-injecting builder), CI hooks, and other signal-driven automation.
@@ -278,8 +338,8 @@ For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongsid
 
 | Mode | CLI | Adapter API |
 | ---- | --- | ----------- |
-| AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p` |
-| Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`, PTY-owned by runtime |
+| AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p`; OpenCode: `opencode run` |
+| Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`; OpenCode: TUI without `run`, PTY-owned by runtime |
 
 Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail the session). Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
 
@@ -388,6 +448,7 @@ flowchart LR
   subgraph external [External agents]
     CR[Cursor Agent CLI]
     PI[Pi CLI]
+    OC[OpenCode CLI]
   end
 
   QS --> PC
@@ -397,8 +458,10 @@ flowchart LR
   WM --> WT
   AD --> CR
   AD --> PI
+  AD --> OC
   CR --> WT
   PI --> WT
+  OC --> WT
   AD --> BUS
 ```
 
@@ -423,7 +486,7 @@ internal/
   purge/                    # FS + bus purge (runs, worktrees, cache, trace artifacts)
   prompts/                  # load + render .paseka/prompts/*.md templates
   runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
-  adapters/                 # adapter registry + cursor/, pi/, claude/, script/
+  adapters/                 # adapter registry + cursor/, pi/, claude/, opencode/, script/
   sessions/                 # interactive PTY sessions, terminal attach
   gitroot/                  # repo identity, origin, replica fetch/push/ff-only pull, branch delete
   worktree/                 # create, diff, merge, list, prune orphans
@@ -448,7 +511,8 @@ internal/
 | Worktree path | `.paseka/worktrees/<traceId>/` — colony-managed; registry in home `state.json` |
 | Cursor invocation | Cursor Agent CLI (`agent`) — port of `ai-tasks-run.sh` pattern |
 | Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §1 Pi adapter |
-| Supported adapters | `cursor` (default), `pi` — selected per bee via `adapter:` in `bees/*.yaml` |
+| OpenCode invocation | OpenCode CLI (`opencode`) — AFK `opencode run`, interactive TUI; see §1 OpenCode adapter |
+| Supported adapters | `cursor` (default), `pi`, `claude`, `opencode` — selected per bee via `adapter:` in `bees/*.yaml` |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |
 | Prompt templates | `.paseka/prompts/` — committed; bee YAML references `prompt_template` and optional `system_template` |
 | Commit `.paseka/` | yes by default; `.gitignore` covers `worktrees/`, `runs/`, `*.local.yaml`, `cache/` |

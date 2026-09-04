@@ -231,6 +231,12 @@ func (r *InitResult) scaffoldHome(slug, repoRoot, adapter string) error {
 		return err
 	}
 
+	opencodePath := filepath.Join(homeDir, "adapters", "opencode.yaml")
+	created, err = writeFileIfMissing(opencodePath, []byte(opencodeAdapterYAML), 0o644)
+	if err := r.track(created, opencodePath, err); err != nil {
+		return err
+	}
+
 	if adapter == "pi" {
 		piPath := filepath.Join(homeDir, "adapters", "pi.yaml")
 		created, err = writeFileIfMissing(piPath, []byte(piAdapterYAML), 0o644)
@@ -815,6 +821,66 @@ publishes:
 `
 	piAdapterYAML = `binary: pi
 # api_key_env: GEMINI_API_KEY   # optional; passed as --api-key when set in env
+`
+	opencodeAdapterYAML = `binary: opencode
+# Auth is via opencode auth login (~/.local/share/opencode/auth.json)
+# and provider environment variables or a project .env.
+`
+	scoutBeeOpenCodeYAML = `role: scout
+adapter: opencode
+prompt_template: scout.md
+default_intent: intake
+params:
+  output_format: json
+  plan: false
+worktree: false
+subscribes:
+  - type: SIGNAL
+    kind: feature.requested
+    dispatch: direct
+publishes:
+  - type: SIGNAL
+    kind: feature.classified
+  - type: INSIGHT
+    kind: task.plan
+  - type: SIGNAL
+    kind: task.ready
+  - type: INSIGHT
+    kind: worktree.branch
+`
+	builderBeeOpenCodeYAML = `role: builder
+adapter: opencode
+prompt_template: builder.md
+params:
+  output_format: json
+worktree: true
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+  - type: VERIFICATION
+    kind: verification.failed
+    dispatch: direct
+publishes:
+  - type: MUTATION
+    kind: code.proposal.isolated
+  - type: VERIFICATION
+    kind: task.completed
+`
+	hivewrightBeeOpenCodeYAML = `role: hivewright
+adapter: opencode
+system_template: hivewright-system.md
+prompt_template: hivewright-task.md
+params:
+  output_format: json
+worktree: false
+publishes:
+  - type: MUTATION
+    kind: code.proposal.root
+  - type: INSIGHT
+    kind: run.summary
+  - type: INSIGHT
+    kind: context.note
 `
 	featureCueYAML = `description: Intake an idea or bug for Scout classification
 emit: signal

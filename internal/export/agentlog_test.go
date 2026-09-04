@@ -83,8 +83,8 @@ func TestDefaultSessionLogLookup(t *testing.T) {
 	if defaultSessionLogLookup("cursor") == nil || defaultSessionLogLookup("pi") == nil {
 		t.Fatal("cursor and pi must resolve")
 	}
-	if defaultSessionLogLookup("claude") != nil || defaultSessionLogLookup("script") != nil {
-		t.Fatal("claude and script must be unsupported")
+	if defaultSessionLogLookup("claude") != nil || defaultSessionLogLookup("script") != nil || defaultSessionLogLookup("opencode") != nil {
+		t.Fatal("claude, script, and opencode must be unsupported")
 	}
 	got, err := defaultSessionLogLookup("cursor").ResolveSessionLog(context.Background(), adapters.SessionLogRequest{})
 	if err != nil {

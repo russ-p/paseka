@@ -127,7 +127,9 @@ Per-colony state on this machine. Not committed.
 ├── telegram-notify-state.json  # optional: gate notify dedup (runtime)
 ├── adapters/                   # adapter-specific local overrides
 │   ├── cursor.yaml             # CLI binary path, API key env
-│   └── pi.yaml                 # Pi CLI binary path, API key env
+│   ├── pi.yaml                 # Pi CLI binary path, API key env
+│   ├── claude.yaml             # Claude Code CLI binary, optional API key env
+│   └── opencode.yaml           # OpenCode CLI binary
 ```
 
 Telegram bot tokens and allowlists stay machine-local — see [Telegram gateway](telegram-gateway.md).

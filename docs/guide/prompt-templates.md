@@ -84,7 +84,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.ArtifactsDir}}` | `string` | Absolute path to the trail comb for handoff files: `.paseka/runs/<traceId>/artifacts/`. Runtime announces this run's comb delta on successful exit; write files here during the run. Beekeeper annotated review packets use `review-comments.md` under this directory (see partial `artifacts-review-comments`). |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
 | `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` guidance in emit partials. |
-| `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `script`). |
+| `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `opencode`, `script`). |
 
 ### Field sources (MVP)
 
