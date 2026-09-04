@@ -173,12 +173,12 @@ Prefer fixtures with synthetic stream lines and fake log reader seams over live 
 - Changing honey / energy accounting based on provider sessions.
 - MCP wrappers for session log read.
 - Telegram or Human Gateway surfaces for provider logs.
-- Automatic resume of a previous trail’s provider session across a new `agentId` (association is per run; deliberate multi-turn resume across Paseka runs is a separate feature).
+- Automatic resume of a previous trail’s provider session across a new `agentId` (association is per run; deliberate HITL continuation is [025](./025-cursor-session-resume.md)).
 - Renaming Paseka `sessionId` away from `agentId`.
 
 ## Further Notes
 
-- Related: [001 Pi integration](001-pi-integration.md) (run-local `--session-id` / `--session-dir`), [002 Queen Console](002-queen-console-mvp.md) (transcript vs PTY), [014 artifacts](014-artifacts-protocol.md) (trail comb ≠ provider logs). Architecture overview already states domain events are not inferred from assistant stdout — this spec extends that boundary to “do not park CLI stream diagnostics in the bus audit file.”
+- Related: [001 Pi integration](001-pi-integration.md) (run-local `--session-id` / `--session-dir`), [002 Queen Console](002-queen-console-mvp.md) (transcript vs PTY), [014 artifacts](014-artifacts-protocol.md) (trail comb ≠ provider logs), [025 Cursor HITL resume](025-cursor-session-resume.md) (new Paseka session, same `providerSessionId`). Architecture overview already states domain events are not inferred from assistant stdout — this spec extends that boundary to “do not park CLI stream diagnostics in the bus audit file.”
 - Naming: user-facing **Agent log** / **provider session**; wire field **`providerSessionId`**. Avoid calling these “events” in UI copy.
 - After implementation: update changelog, CLI export help, interactive-sessions guide (HITL resume), architecture adapter result-collection notes; set status to Implemented.
 - Ask before promoting this Draft to **Approved** after review.
