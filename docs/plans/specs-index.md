@@ -32,5 +32,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [024-pull-request-delivery](../specs/024-pull-request-delivery.md) | Draft | Isolated trails: opt-in PR publish instead of local merge; bees `pr.body`; forge via external CLI script contract |
 | [025-cursor-session-resume](../specs/025-cursor-session-resume.md) | Draft | Console/CLI resume of a finished Cursor HITL chat via stored `providerSessionId`; new Paseka session, same UUID; no Pi/Claude/AFK |
 | [026-opencode-adapter](../specs/026-opencode-adapter.md) | Draft | OpenCode CLI as first-class AFK + interactive adapter; `paseka init --adapter opencode` |
+| [027-config-profiles](../specs/027-config-profiles.md) | Draft | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
