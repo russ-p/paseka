@@ -25,6 +25,13 @@ Resolution requires:
 - A git repository with `.paseka/colony.yaml` (run `paseka init` first)
 - Machine-local config at `~/.config/paseka/<slug>/` (created by `paseka init`)
 
+### Global flags
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `--log-level` | `info` | Runtime log level: `error`, `warn`, `info`, or `debug` |
+| `--no-color` | off | Disable ANSI colors in logs |
+
 ### Identifiers
 
 | Flag / field | Name in docs | Description |
@@ -68,7 +75,8 @@ paseka
 │   ├── create
 │   ├── list
 │   ├── show
-│   └── start
+│   ├── start
+│   └── retry
 ├── status
 ├── doctor
 ├── event
@@ -89,6 +97,12 @@ paseka
 ├── energy
 │   ├── show
 │   └── add
+├── invite
+│   ├── list
+│   ├── record
+│   ├── accept
+│   └── reject
+├── kill
 ├── colony
 │   └── topology
 ├── nuc
@@ -366,6 +380,33 @@ Read-only colony snapshot: hive runtime, live bees (AFK + interactive), task cou
 Default exit code is **0** whenever the snapshot was produced (including when the reactor is stopped). Snapshot is printed before `--check` evaluates so probes can log JSON/text on failure.
 
 **JSON blocks:** `runtime`, `nats` (light connectivity), `agents`, `activeWorktrees`, `taskCounts`, `energy` (recent-traces window), `attention`, `recentTraces`.
+
+Minimal schema shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedAt": "RFC3339",
+  "slug": "string",
+  "colonyRoot": "string",
+  "runtime": {"status": "running|stopped|stale|stopping", "alive": false},
+  "nats": {"configured": false, "connected": false},
+  "agents": {"count": 0, "afk": 0, "sessions": 0, "items": []},
+  "activeWorktrees": 0,
+  "taskCounts": {"running": 0, "waiting_review": 0, "failed": 0},
+  "energy": {"available": false, "traces": []},
+  "attention": {
+    "waitingReview": [],
+    "pendingInvites": [],
+    "failedTasks": [],
+    "lowEnergyTraces": []
+  },
+  "recentTraces": []
+}
+```
+
+Additive fields may appear without changing `schemaVersion`; consumers should
+ignore unknown fields.
 
 **Follow-up commands (index, not new verbs):**
 
@@ -736,9 +777,52 @@ Setup, allowlist, and command reference: [Telegram gateway](telegram-gateway.md)
 
 ---
 
+## `paseka invite`
+
+Manage Human Gateway requests for interactive beekeeper sessions.
+
+### `paseka invite list`
+
+Lists pending invites by default. Use `--trace` and `--status` to filter.
+Known statuses are `pending`, `accepted`, `completed`, `incomplete`,
+`cancelled`, and `deferred`.
+
+### `paseka invite record`
+
+Seeds a pending invite in machine-local state without publishing to NATS.
+Pass `--trace`, `--bee`, and `--body`, or provide a `session.invite` payload
+with `--stdin`. Optional fields include `--intent`, `--invite-id`, and
+`--artifact-ref`.
+
+### `paseka invite accept <inviteId>`
+
+Publishes `beekeeper.ready`, consumes one honey, and starts an interactive
+session on the invite's Flight Trail. The session starts detached unless
+`--attach` is set. If honey is exhausted, add it with
+`paseka energy add --trace <traceId> --amount 1` and retry.
+
+### `paseka invite reject <inviteId>`
+
+Cancels a pending invite. Add `--defer` to preserve it as deferred instead.
+
+```bash
+paseka invite list --trace trace-1
+paseka invite record --trace trace-1 --bee drone --intent grilling --body "Review the feature"
+paseka invite accept <inviteId> --attach
+paseka invite reject <inviteId> --defer
+```
+
+Automatic invite creation is configured with `auto_invites` in
+`.paseka/colony.yaml`; lifecycle and routing are described in
+[Bee routing](../reference/bee-routing.md).
+
+---
+
 ## `paseka console`
 
-Start the local Queen Console web UI (embedded SPA + JSON API).
+Start the local Queen Console web UI (embedded SPA + JSON API). See the
+[Queen Console operator guide](queen-console.md) for its tabs, runtime
+dependencies, reviews, Git operations, and troubleshooting.
 
 | Flag | Short | Required | Default | Description |
 | ---- | ----- | -------- | ------- | ----------- |
@@ -751,12 +835,6 @@ paseka console --addr 127.0.0.1:8787
 ```
 
 Open the printed URL in a browser. Queen Console does not enforce authentication yet.
-
-The header **Host** plaque shows CPU and memory for the machine (or container PID namespace) where `paseka console` is running. Click it — or open the **System** tab — for identity, load averages, optional colony-root disk, and a top-process table. Live bees stays the adapter liveness signal; System Info does not infer “tests are running”.
-
-The header **Git** plaque shows whether the colony clone is ahead of, behind, or in sync with `origin` (and a dirty flag). Click it — or open the **Git** tab — to Fetch remote-tracking refs, Push the default branch (explicit, never `--force`; git hooks skipped unless you opt in), or Pull fast-forward only as a backup when an inbound webhook sidecar did not update the clone. The same tab lists colony-managed worktrees and leftover merged branches. Review Approve does **not** push; publish is a separate Git-tab action. `GET /api/git` does not fetch on poll. `paseka status` and Telegram `/status` are unchanged. See [homelab deployment](homelab-deployment.md) for inbound sidecar vs Console Push.
-
-Useful surfaces for HITL: Reviews tab lists `waiting_review` tasks; for final merge gates (`review: final` / `_review`) the detail panel shows merge-diff summary and **Open merge preview** (dedicated full-page file list + per-file diff bodies, unified or side-by-side). On the preview page, click diff lines to draft comments and **Request changes** to write `review-comments.md` to the trail comb, publish short `human.feedback`, and plan a rework task on the same worktree (merge gate stays open). Plain reject on the detail panel still publishes unstructured feedback only (no rework). Approve from Reviews after previewing. Full baseline: [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
 ---
 
@@ -888,6 +966,27 @@ paseka purge --bus --trace my-trace --reseed-energy --yes
 # Eval case reset (filesystem + bus for one fixed trace)
 paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
 ```
+
+---
+
+## Troubleshooting
+
+| Symptom | Check | Action |
+| ------- | ----- | ------ |
+| `paseka run` cannot connect | `paseka doctor`; inspect `PASEKA_NATS_URL` | Start local NATS with `docker compose up -d` or fix machine-local `nats.url` |
+| Runtime appears stale or stopped | `paseka status --check` | Start or restart `paseka run` |
+| Task stays planned | `paseka task show`; inspect dependencies and honey | Complete dependencies, add honey, then `task start` |
+| Task failed or is stuck running | `paseka task show`, run logs | Fix the cause, then `paseka task retry` |
+| Review is waiting | `paseka status`, `paseka task show` | Use Queen Console or `proposal approve\|reject` |
+| Invite cannot start | `paseka invite list`, `energy show` | Ensure NATS is reachable and at least one honey remains |
+| Deferred events do not appear | `paseka event pending` | Start NATS and run `paseka event flush` |
+| Console has filesystem data but no live updates | `paseka status --check` | Start the reactor and verify NATS |
+| Homelab shows the wrong colony | compare `colony_root` and mounted path | Fix the container bind mount and machine-local config |
+
+Use `status` for a read-only operational snapshot and `doctor` for active NATS,
+JetStream, and colony-wiring diagnostics. Stop `paseka run` before destructive
+`paseka purge --bus` maintenance so the reactor cannot project events while
+state is being reset.
 
 ---
 

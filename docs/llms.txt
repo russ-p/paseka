@@ -8,7 +8,9 @@ Colony work lives in a git repo under `.paseka/`. Machine secrets stay in `~/.co
 
 - [Bee role YAML](https://russ-p.github.io/paseka/guide/bee-config/): schema for `.paseka/bees/<role>.yaml` — adapter, prompt_template, command, post_exec, routing, completion
 - [Prompt templates](https://russ-p.github.io/paseka/guide/prompt-templates/): `.paseka/prompts/`, text/template context, emit partials
+- [Forage Cues](https://russ-p.github.io/paseka/guide/cues/): named signal/task ingress, standing trace identity, honey overrides
 - [Bee event routing](https://russ-p.github.io/paseka/reference/bee-routing/): subscribes / publishes, Reactor, task vs direct dispatch
+- [Event contracts](https://russ-p.github.io/paseka/reference/event-contracts/): platform kinds, colony-defined kinds, validation, deferred publishing
 - [INSIGHT kinds](https://russ-p.github.io/paseka/reference/insight-kinds/): insight taxonomy and `{{.Insights}}` projection
 - [Colony layout](https://russ-p.github.io/paseka/guide/colony-layout/): `.paseka/` layout, init, config tiers
 - [Architecture overview](https://russ-p.github.io/paseka/architecture/overview/): adapters, worktrees, run IPC
@@ -21,7 +23,8 @@ Colony work lives in a git repo under `.paseka/`. Machine secrets stay in `~/.co
 
 - [Principles](https://russ-p.github.io/paseka/idea/principles/): choreography model overview
 - [Glossary](https://russ-p.github.io/paseka/idea/glossary/): bee-language vocabulary
-- [CLI](https://russ-p.github.io/paseka/guide/cli/): `paseka bee run` / `bee chat`, event emit
+- [CLI](https://russ-p.github.io/paseka/guide/cli/): dispatch, status, export, kill, invites, event emit, troubleshooting
+- [Queen Console](https://russ-p.github.io/paseka/guide/queen-console/): operator UI, reviews, sessions, topology, system, Git
 - [Task ledger](https://russ-p.github.io/paseka/reference/task-ledger/): traceId / taskId / agentId
 - [Interactive sessions](https://russ-p.github.io/paseka/guide/interactive-sessions/): HITL `bee chat`, SessionAdapter, Ghostty attach
 - [Telegram gateway](https://russ-p.github.io/paseka/guide/telegram-gateway/): setup and run `paseka gate telegram`

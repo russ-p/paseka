@@ -68,80 +68,80 @@ Honey UIs (CLI, Queen Console, Telegram, hive status, export) show **remaining /
 Planner bees can emit `INSIGHT/worktree.branch` so isolated Flight Trail worktrees use readable git refs (`feature/…`, `hotfix/…`) instead of only `paseka/<traceId>`. Runtime applies names on worktree ensure and renames immediately when a later insight lands; collisions fail closed (no detached HEAD fallback). Merge, merge-diff, Queen Console trace detail, and `state.json` follow the live branch name. Path stays `.paseka/worktrees/<traceId>/`.
 
 - Spec: [020-worktree-branch](../specs/020-worktree-branch.md)
-- Canonical: [Insight kinds](reference/insight-kinds.md), [Architecture overview](architecture/overview.md), [Prompt templates](guide/prompt-templates.md), [Interactive sessions](guide/interactive-sessions.md)
+- Canonical: [Insight kinds](../reference/insight-kinds.md), [Architecture overview](../architecture/overview.md), [Prompt templates](../guide/prompt-templates.md), [Interactive sessions](../guide/interactive-sessions.md)
 
 ## 2026-08 — Final-gate Request changes (Slice C)
 
 On `review: final` / `_review`, annotated Submit on the merge preview is **Request changes**: it writes the comb packet as before, keeps the merge gate in `waiting_review`, and plans+readies a new AFK rework task for the last isolated-proposal Bee on the same Flight Trail (honey consumed on dispatch). Plain reject remains abandon-only (feedback, no rework). Duplicate Request changes is rejected while non-final work is still in flight. Approve stays the only merge path. CLI `paseka proposal reject --comments-file` on a final gate uses the same rework path.
 
 - Spec: [017-console-diff-review](../specs/017-console-diff-review.md)
-- Canonical: [CLI](guide/cli.md) (`paseka console`, `paseka proposal reject`), [Task ledger](reference/task-ledger.md), [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews)
+- Canonical: [Queen Console](../guide/queen-console.md) (Reviews), [CLI](../guide/cli.md) (`paseka proposal reject`), [Task ledger](../reference/task-ledger.md)
 
 ## 2026-08 — Session deferred flush uses home NATS config
 
 Interactive session (and other ColonyRoot-only) deferred flush loads `~/.config/paseka/<slug>/config.yaml` before connecting. Previously a partial in-memory context treated NATS as unset, flushed pending events to the run audit log with a no-op publisher, and never reached JetStream or the task ledger.
 
-- Canonical: [Interactive sessions](guide/interactive-sessions.md), [CLI](guide/cli.md) (`paseka event emit --defer`)
+- Canonical: [Interactive sessions](../guide/interactive-sessions.md), [CLI](../guide/cli.md) (`paseka event emit --defer`)
 
 ## 2026-08 — Queen Console annotated review comments (Slice B)
 
 Queen Console merge preview supports line-anchored comment drafts (click added/context lines; Shift-click for a range). Submit writes `review-comments.md` to the trail comb, publishes `SIGNAL/artifact.written` (producer `console`), then a short `INSIGHT/human.feedback` with optional `ref`. Fail closed if the comb write fails. `review: required` still returns the task to `ready`. CLI: `paseka proposal reject --comments-file` copies an existing Markdown packet into the same comb ref. Final-gate rework shipped separately as Slice C.
 
 - Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice B)
-- Canonical: [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews), [CLI](guide/cli.md) (`paseka proposal reject`), [Insight kinds](reference/insight-kinds.md), [Prompt templates](guide/prompt-templates.md)
+- Canonical: [Queen Console](../guide/queen-console.md) (Reviews), [CLI](../guide/cli.md) (`paseka proposal reject`), [Insight kinds](../reference/insight-kinds.md), [Prompt templates](../guide/prompt-templates.md)
 
 ## 2026-08 — Model aliases (`params.model`)
 
 Colony-owned `model_aliases` in `.paseka/colony.yaml` map stable names to vendor model ids; home `config.yaml` overlays the same keys per machine. Bees keep `params.model` as alias or raw id; runtime resolves once before `--model` is passed to the adapter.
 
 - Spec: [019-model-aliases](../specs/019-model-aliases.md)
-- Canonical: [Colony layout](guide/colony-layout.md), [Bee config](guide/bee-config.md), [Architecture overview](architecture/overview.md)
+- Canonical: [Colony layout](../guide/colony-layout.md), [Bee config](../guide/bee-config.md), [Architecture overview](../architecture/overview.md)
 
 ## 2026-08 — Trail artifacts protocol (comb + `artifact.written`)
 
 Trace-scoped comb under `.paseka/runs/<traceId>/artifacts/` with `{{.ArtifactsDir}}` prompt injection. Runtime captures a per-run SHA-256 baseline and publishes one batched `SIGNAL/artifact.written` on successful AFK or interactive exit (added/changed files only). Coexistence with deferred `artifact.written` skips duplicate scan flush. Queen Console lists comb files (staged vs announced) with Markdown preview. `paseka export --include artifacts` inlines comb bodies in reports. Human `artifacts.WriteAndAnnounce` helper publishes with producer `console` (for 017 Slice B).
 
 - Spec: [014-artifacts-protocol](../specs/014-artifacts-protocol.md)
-- Canonical: [Architecture overview](architecture/overview.md) (runs comb), [Prompt templates](guide/prompt-templates.md) (`ArtifactsDir`), [Bee routing](reference/bee-routing.md), [CLI](guide/cli.md) (`paseka export --include artifacts`)
+- Canonical: [Architecture overview](../architecture/overview.md) (runs comb), [Prompt templates](../guide/prompt-templates.md) (`ArtifactsDir`), [Bee routing](../reference/bee-routing.md), [CLI](../guide/cli.md) (`paseka export --include artifacts`)
 
 ## 2026-08 — Queen Console merge-diff viewer (Slice A)
 
 Queen Console Reviews final merge gates show merge-diff summary on the detail panel; **Open merge preview** opens a dedicated full-page viewer (sticky file list, path filter, jump-to-file, per-file hunks via vendored Diff2Html, unified or side-by-side format). Line-number gutters stay clipped to each file pane instead of overlaying scrolled hunks. Approve/reject stay on Reviews. Queue polling still skips re-fetch when the same gate stays selected.
 
 - Spec: [017-console-diff-review](../specs/017-console-diff-review.md) (Slice A only; B/C follow)
-- Canonical: [Queen Console MVP](../specs/002-queen-console-mvp.md) (Reviews tab), [CLI](guide/cli.md) (`paseka console`)
+- Canonical: [Queen Console](../guide/queen-console.md) (Reviews)
 
 ## 2026-08 — Queen Shell colony status
 
 `paseka status` is a read-only colony snapshot for Beekeepers and interface bees: runtime liveness, live bees, task counts, honey for recent Flight Trails, attention items (reviews, invites, failures, exhausted honey), and recent traces. Default text output; `--json` emits `schemaVersion` 1 for agents. `--check` exits non-zero only when the hive substrate cannot choreograph (runtime down or configured NATS unreachable) — pending HITL work is not treated as an outage.
 
 - Spec: [018-cli-colony-status](../specs/018-cli-colony-status.md)
-- Canonical: [CLI](guide/cli.md) (`paseka status`)
+- Canonical: [CLI](../guide/cli.md) (`paseka status`)
 
 ## 2026-08 — `task.ready` race fix (prompts + ledger)
 
 Scout and Drone breakdown prompts now defer both `task.plan` and post-plan `task.ready` (FIFO flush), with slim ready payloads (`taskId` only). The task ledger parks unmatched `task.ready` kicks on `pendingReady` until the matching `task.plan` registers the task, then promotes on the plan event — so live-ready-before-plan no longer loses autostart. Cleared on `system.kill`.
 
-- Canonical: [Task ledger](reference/task-ledger.md), [Prompt templates](guide/prompt-templates.md)
+- Canonical: [Task ledger](../reference/task-ledger.md), [Prompt templates](../guide/prompt-templates.md)
 
 ## 2026-08 — Export `--include` (richer payload)
 
 `paseka export` accepts composable `--include` slices independent of `--format`: `usage` (trace aggregate + per-run tokens), `durations` (wall-clock per run), `bees` (committed `.paseka/bees/*.yaml` for trail roles), `colony` (`.paseka/colony.yaml`), `cues` (all colony cues), and `artifacts` (trail comb file bodies). Default export stays trail-only with no config snapshots.
 
-- Canonical: [CLI](guide/cli.md) (`paseka export`)
+- Canonical: [CLI](../guide/cli.md) (`paseka export`)
 
 ## 2026-08 — Export `--format` (HTML | Markdown)
 
 `paseka export` now accepts `--format html` (default) or `--format md`. Both renderers share the same `TraceExportData` (overview, tasks, runs, event timeline); the output filename extension matches the format. Markdown keeps run and event summaries verbatim and fences raw event JSON for agent-friendly trail dumps.
 
-- Canonical: [CLI](guide/cli.md) (`paseka export`)
+- Canonical: [CLI](../guide/cli.md) (`paseka export`)
 
 ## 2026-08 — Forage Cues (cue layer)
 
 Named colony ingress shortcuts (`.paseka/cues/<id>.yaml`) publish `signal` or `task` choreography without hand-writing emit JSON. One definition drives Queen Shell (`paseka cue list|run`), Queen Console **Run cue** (`GET/POST /api/cues`), and Telegram `commands.custom` with `cue: <id>`. Optional per-cue `energy_budget` seeds a smaller initial honey reserve on fresh trails; `paseka init` scaffolds `feature` and `hotfix`. Nuc export/import includes cues with `--cues` filter.
 
 - Spec: [016-cue-layer](../specs/016-cue-layer.md)
-- Canonical: [Forage Cues](guide/cues.md), [CLI](guide/cli.md) (`paseka cue`), [Telegram gateway](guide/telegram-gateway.md), [Colony layout](guide/colony-layout.md), [Nuc packs](guide/nuc.md), [Task ledger](reference/task-ledger.md)
+- Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`), [Telegram gateway](../guide/telegram-gateway.md), [Colony layout](../guide/colony-layout.md), [Nuc packs](../guide/nuc.md), [Task ledger](../reference/task-ledger.md)
 
 ## 2026-07 — Deferred event emit buffer
 
@@ -174,7 +174,7 @@ Colonies can set the default AFK task role in `.paseka/colony.yaml` (`defaults.d
 Sessions and Reviews tabs show pending invite and review counts (1–9, then `9+`) with background polling so counts stay fresh while you are on other views.
 
 - Spec: [002-queen-console-mvp](../specs/002-queen-console-mvp.md)
-- Canonical: [Queen Console MVP](../specs/002-queen-console-mvp.md) (Sessions / Reviews tabs)
+- Canonical: [Queen Console](../guide/queen-console.md) (Sessions / Reviews)
 
 ## 2026-07 — Homelab / server container apiary
 

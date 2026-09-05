@@ -9,7 +9,9 @@ out="$docs/llms-full.txt"
 files=(
   guide/bee-config.md
   guide/prompt-templates.md
+  guide/cues.md
   reference/bee-routing.md
+  reference/event-contracts.md
   reference/insight-kinds.md
   guide/colony-layout.md
   architecture/overview.md

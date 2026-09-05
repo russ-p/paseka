@@ -10,7 +10,7 @@ This is a research experiment: can a swarm of modest agents coordinate through c
 
 ## What It Can Do
 
-- Execute coding tasks — write and review code — by launching Cursor, Pi, or Claude with a focused prompt per bee role.
+- Execute coding tasks — write and review code — by launching Cursor, Pi, Claude, OpenCode, or a declared script with a focused prompt per bee role.
 - Run AFK (headless) dispatches and interactive HITL sessions against the same colony.
 - Operate and observe the swarm from the CLI or the local Queen Console web UI.
 
@@ -30,20 +30,35 @@ go mod download
 go build -o paseka ./cmd/paseka
 ```
 
-3. Initialize a colony and start the runtime:
+3. Initialize the colony, authenticate the selected adapter, and start local
+   NATS + JetStream:
 
 ```
 ./paseka init
+agent login                    # Cursor; or configure the selected adapter
+docker compose up -d
+./paseka doctor
+```
+
+4. Start the choreographic runtime:
+
+```
 ./paseka run
 ```
 
-4. Start the local Queen Console web UI:
+For a one-shot run that does not need bus choreography, use
+`./paseka bee run <role>` without starting the reactor.
+
+5. Start the local Queen Console web UI:
 
 ```
 ./paseka console
 ```
 
 Open http://127.0.0.1:8787 in your browser. Queen Console does not enforce authentication yet, so keep it bound to localhost or another trusted interface only. Use `--addr` only when you understand the exposure risk.
+
+See [Colony layout](docs/guide/colony-layout.md) for adapter-specific setup and
+[Queen Console](docs/guide/queen-console.md) for the operator tour.
 
 To run an always-on apiary on a separate machine (container + Console, reuse host NATS), see [Homelab deployment](docs/guide/homelab-deployment.md) and [`docker/dev/`](docker/dev/).
 

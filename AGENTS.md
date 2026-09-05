@@ -7,7 +7,7 @@ Paseka is a decentralized, event-driven AI agent swarm for solo developers. Agen
 - **Language:** Go — platform, CLI, runtime, and Queen Console API.
 - **Message bus:** NATS + JetStream (event sourcing, KV, Object Store).
 - **CLI:** Queen Shell (`cmd/paseka`) — single binary for init, run, status, and minimal hive management.
-- **Web UI:** Queen Console — embedded SPA + Go HTTP/WebSocket API via `paseka console`; baseline in [docs/specs/002-queen-console-mvp.md](docs/specs/002-queen-console-mvp.md).
+- **Web UI:** Queen Console — embedded SPA + Go HTTP/WebSocket API via `paseka console`; operator guide in [docs/guide/queen-console.md](docs/guide/queen-console.md).
 - **Agents (Bees):** implemented in Go by default. Optional Python workers may subscribe to the same NATS contracts later for code/AST-heavy tasks.
 
 ## Colony model
@@ -34,6 +34,8 @@ Read these before making architectural or naming decisions:
 - [docs/idea/principles.md](docs/idea/principles.md) — Choreography model, contracts, honey, HITL.
 - [docs/idea/glossary.md](docs/idea/glossary.md) — Bee glossary: branding, user-facing terms, agent roles, and domain vocabulary.
 - [docs/guide/colony-layout.md](docs/guide/colony-layout.md) — Colony config layout and `paseka init`.
+- [docs/guide/cli.md](docs/guide/cli.md) — Queen Shell commands, first run, and troubleshooting.
+- [docs/reference/event-contracts.md](docs/reference/event-contracts.md) — Domain event kinds and authoring rules.
 - [docs/architecture/overview.md](docs/architecture/overview.md) — Adapters, worktrees, package layout.
 - [docs/guide/interactive-sessions.md](docs/guide/interactive-sessions.md) — Interactive agent sessions (HITL), `bee chat`, session registry, Ghostty attach.
 - [docs/guide/bee-config.md](docs/guide/bee-config.md) — Bee role YAML: adapter, params, command/post_exec, routing and completion fields.

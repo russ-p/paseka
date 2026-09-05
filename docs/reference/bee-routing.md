@@ -291,11 +291,32 @@ Only **accepted** or **incomplete** invites with a `doneWhen` on the same trace 
 
 ---
 
-## 9. Related docs
+## 9. Operator playbook for invites
+
+1. A matching `auto_invites` rule publishes and records
+   `SIGNAL/session.invite`, or the beekeeper seeds one with
+   `paseka invite record`.
+2. Inspect pending work with `paseka invite list` or Queen Console.
+3. Accepting publishes `SIGNAL/beekeeper.ready`, consumes one honey, and
+   starts a detached interactive session on the same `traceId`.
+4. Attach with `paseka session attach <sessionId>`, or accept with
+   `paseka invite accept <inviteId> --attach`.
+5. A matching `done_when` event completes the invite; session exit without
+   the required artifact marks it incomplete.
+6. Reject to cancel, or use `--defer` to keep the request for later.
+
+Telegram and Queen Console expose the same invite state. If accept fails,
+check NATS and the trail's Honey Reserve before retrying.
+
+---
+
+## 10. Related docs
 
 - [specs/007-colony-eda-topology.md](../specs/007-colony-eda-topology.md) — config-derived EDA graph (Console Topology tab, `paseka colony topology`)
 - [task ledger](task-ledger.md) — task lifecycle events
 - [architecture overview](../architecture/overview.md) — colony layout and adapters
 - [bee config](../guide/bee-config.md) — full bee YAML schema (`role`, `adapter`, contracts, …)
 - [insight kinds](insight-kinds.md) — INSIGHT taxonomy and prompt memory projection
+- [event contracts](event-contracts.md) — platform event kinds and deferred publishing
+- [CLI](../guide/cli.md) — `paseka invite` command reference
 - [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) — invite lifecycle, CLI/Console, energy

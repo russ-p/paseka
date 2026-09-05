@@ -44,4 +44,10 @@ The beekeeper is a first-class participant, not a blocked approval step in an or
 | Config layout / `paseka init` | [Colony layout](../guide/colony-layout.md) |
 | Configure a bee | [Bee config](../guide/bee-config.md) |
 | CLI reference | [CLI](../guide/cli.md) |
+| Operate the web UI | [Queen Console](../guide/queen-console.md) |
+| Work interactively | [Interactive sessions](../guide/interactive-sessions.md) |
+| Define ingress shortcuts | [Forage Cues](../guide/cues.md) |
+| Understand events and routing | [Event contracts](../reference/event-contracts.md), [Bee routing](../reference/bee-routing.md) |
+| Understand runtime internals | [Architecture overview](../architecture/overview.md) |
+| Deploy an always-on apiary | [Homelab deployment](../guide/homelab-deployment.md) |
 | Shipped work & design drafts | [Changelog](../plans/changelog.md), [Specs index](../plans/specs-index.md) |

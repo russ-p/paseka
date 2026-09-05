@@ -59,36 +59,41 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
 
-# Remaining unknown links (if any) are ignored; off-site targets are rewritten by hooks.
+# Off-site targets are rewritten by hooks. Report unresolved local links during
+# development and fail `mkdocs build --strict` in CI.
 validation:
   links:
-    not_found: ignore
+    not_found: warn
     absolute_links: ignore
     unrecognized_links: ignore
 
 nav:
   - Home: README.md
-  - Индекс (RU): README-RU.md
+  - Language:
+      - Индекс (RU): README-RU.md
   - Idea & principles:
       - Principles: idea/principles.md
       - Glossary: idea/glossary.md
       - Brief (RU): idea/brief.md
   - Using Paseka:
-      - Colony layout: guide/colony-layout.md
-      - CLI: guide/cli.md
-      - Forage Cues: guide/cues.md
+      - Start here — Colony layout: guide/colony-layout.md
       - Bee config: guide/bee-config.md
       - Prompt templates: guide/prompt-templates.md
+      - CLI: guide/cli.md
       - Interactive sessions: guide/interactive-sessions.md
+      - Queen Console: guide/queen-console.md
+      - Forage Cues: guide/cues.md
       - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
       - Homelab deployment: guide/homelab-deployment.md
   - Reference:
       - Bee routing: reference/bee-routing.md
+      - Event contracts: reference/event-contracts.md
       - Insight kinds: reference/insight-kinds.md
       - Task ledger: reference/task-ledger.md
   - Architecture:
       - Overview: architecture/overview.md
+      - Hive Runtime map: architecture/paseka-runtime.html
   - Plans:
       - Changelog: plans/changelog.md
       - Specs index: plans/specs-index.md

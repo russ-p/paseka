@@ -209,6 +209,42 @@ prompt_template: scout.md
 
 Go implementation: `internal/adapters/pi/`.
 
+### Example: Claude Code adapter (CLI)
+
+**Decision:** invoke the **Claude Code CLI** (`claude`) for bees configured
+with `adapter: claude`. AFK runs use print mode; interactive sessions use the
+Claude TUI through the shared PTY session layer.
+
+| Input | Maps to Claude Code |
+| ----- | ------------------- |
+| `command` (optional) | full argv override |
+| `Workspace` | process cwd |
+| Prompt | positional prompt after `-p` |
+| `system_template` | `--append-system-prompt-file <runDir>/system.txt` |
+| `params.model` | `--model <id>` |
+| `params.output_format` | `--output-format` (`stream-json` default; adds `--verbose`) |
+| `params.plan` | `--permission-mode plan` |
+| `params.trust` or `params.force` | `--permission-mode bypassPermissions` |
+| default permissions | `--permission-mode acceptEdits` |
+| API key | `ANTHROPIC_API_KEY` from machine-local adapter config |
+
+Default non-interactive shape:
+
+```bash
+claude -p --output-format stream-json --verbose \
+  --permission-mode bypassPermissions \
+  --append-system-prompt-file "$RUN_DIR/system.txt" \
+  "$PROMPT"
+```
+
+The adapter records process outcome, normalized summary, stdout/stderr, git
+diff, `result.json`, and `status.json`. Stream JSON is parsed for lifecycle
+events and summary only; domain choreography should still be emitted through
+`paseka event emit --stdin`. Machine-local overrides live in
+`~/.config/paseka/<slug>/adapters/claude.yaml`.
+
+Go implementation: `internal/adapters/claude/`.
+
 ### Example: OpenCode adapter (CLI)
 
 **Decision:** invoke the **OpenCode CLI** (`opencode`) for bees configured with `adapter: opencode`. AFK runs use `opencode run`; interactive sessions use the OpenCode TUI under a Paseka-owned PTY (see [interactive sessions](../guide/interactive-sessions.md)).
@@ -511,6 +547,7 @@ internal/
 | Worktree path | `.paseka/worktrees/<traceId>/` — colony-managed; registry in home `state.json` |
 | Cursor invocation | Cursor Agent CLI (`agent`) — port of `ai-tasks-run.sh` pattern |
 | Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §1 Pi adapter |
+| Claude invocation | Claude Code CLI (`claude`) — AFK `claude -p`, interactive PTY; see §1 Claude adapter |
 | OpenCode invocation | OpenCode CLI (`opencode`) — AFK `opencode run`, interactive TUI; see §1 OpenCode adapter |
 | Supported adapters | `cursor` (default), `pi`, `claude`, `opencode` — selected per bee via `adapter:` in `bees/*.yaml` |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |

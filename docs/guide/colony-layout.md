@@ -12,7 +12,10 @@ For adapters, run directories, worktrees, and package layout see [Architecture o
 | **Apiary** | Developer machine | Hosts Hive Runtime, NATS, and local adapter credentials |
 | **Bee** | Config + runtime | A role (Scout, Guard, Builder…) bound to an **adapter** that drives an external agent |
 
-The runtime never owns LLM logic. It **orchestrates** external tools via **adapters** — the **Cursor Agent CLI** (`agent`), the **Pi CLI** (`pi`), **Claude Code**, and **script** commands — reads their output, and publishes results to the NATS bus as contract events.
+The runtime never owns LLM logic. It launches external tools through
+**adapters** — the **Cursor Agent CLI** (`agent`), the **Pi CLI** (`pi`),
+**Claude Code**, **OpenCode**, and declared **script** commands — reads their
+output, and publishes results to the NATS bus as contract events.
 
 To run the apiary on a separate always-on host (containerized toolbelt + Queen Console, reuse an existing NATS), see [Homelab deployment](homelab-deployment.md).
 
@@ -134,6 +137,15 @@ Per-colony state on this machine. Not committed.
 
 Telegram bot tokens and allowlists stay machine-local — see [Telegram gateway](telegram-gateway.md).
 
+Common environment overrides:
+
+| Variable | Purpose |
+| -------- | ------- |
+| `PASEKA_NATS_URL` | Overrides machine-local `nats.url` for CLI, runtime, Console, and gateways |
+| `CURSOR_API_KEY` | Cursor Agent CLI authentication when not using `agent login` |
+| Adapter `api_key_env` target | Vendor key named by `adapters/<adapter>.yaml`, for example `GEMINI_API_KEY` |
+| `PASEKA_TRACE_ID`, `PASEKA_AGENT_ID`, `PASEKA_TASK_ID` | Injected into declared script adapter processes |
+
 **Split rule:**
 
 | Kind | Project `.paseka/` | Home `~/.config/paseka/<slug>/` |
@@ -166,7 +178,7 @@ Stored in `.paseka/colony.yaml` as `slug` after first `paseka init` so later com
 Run from inside a git repository (or at repo root).
 
 ```
-paseka init [--adapter cursor|pi]
+paseka init [--adapter cursor|pi|opencode]
   │
   ├─► resolve git root (fail if not a repo)
   ├─► compute / persist project slug
@@ -177,10 +189,44 @@ paseka init [--adapter cursor|pi]
   ├─► create .paseka/.gitignore (worktrees/, runs/, *.local.yaml, cache/)
   ├─► create ~/.config/paseka/<slug>/config.yaml
   ├─► create ~/.config/paseka/<slug>/state.json (empty)
-  ├─► create ~/.config/paseka/<slug>/adapters/<adapter>.yaml (cursor by default; pi when --adapter pi)
+  ├─► create adapter config stubs (cursor, pi, claude, opencode)
   └─► print next steps (adapter-specific auth / CLI setup, then `paseka run`)
 ```
 
-`--adapter` selects which LLM adapter the starter bees use (`cursor` default; `pi` supported). Unknown adapter names fall back to `cursor`.
+`--adapter` selects which LLM adapter the starter bees use (`cursor` by
+default; `pi` and `opencode` are supported scaffold choices). Unknown adapter
+names fall back to `cursor`. Claude and script adapters can be selected later
+in individual bee YAML.
 
 `paseka init` is idempotent: existing files are preserved; missing pieces are added.
+
+---
+
+## 5. First local run
+
+The choreographic runtime requires NATS with JetStream. The repository
+`docker-compose.yml` starts both NATS and a browser UI:
+
+```bash
+docker compose up -d
+curl http://127.0.0.1:8222/jsz
+# Optional NATS UI: http://127.0.0.1:31311
+```
+
+Ports are `4222` for NATS clients, `8222` for NATS monitoring, and `31311`
+for the optional UI. Data is persisted in Docker volumes.
+
+Then initialize and verify the colony:
+
+```bash
+paseka init
+agent login                    # Cursor default
+paseka doctor
+paseka run
+```
+
+For Pi or OpenCode, pass the corresponding `--adapter` during init and
+authenticate that CLI. `paseka bee run` and `paseka bee chat` can launch
+one-off work without the reactor; commands that publish or project
+choreography events still need NATS. See the
+[CLI NATS dependency matrix](cli.md#nats-dependency).
