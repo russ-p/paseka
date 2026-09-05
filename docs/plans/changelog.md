@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Standing cue identity
+
+A Forage Cue may declare `standing.trace` and `standing.stipend`. Omitting `--trace` / API `traceId` / Telegram `cue:` then publishes on that stable Flight Trail instead of minting a disposable bloom id; a mismatched explicit id fails closed. First tick seeds honey from stipend; later ticks do not yet refill remaining. Standing task cues require `review: none` and `worktree: false`. Nuc export/import carries the YAML as today.
+
+- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity slice)
+- Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`), [Glossary](../idea/glossary.md) (Standing Trail)
+
+Deferred from that work: per-tick stipend replace, overlap refuse, kill fail-closed, Console/status badge — see [Spec 028](../specs/028-standing-trails.md).
+
 ## 2026-09 — Cursor Agent log from local transcripts
 
 `paseka export --include agent-logs` now fills Cursor **Agent log** tool calls from `~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl` (same UUID as `providerSessionId`). Files are read in place, never copied into `.paseka/runs/`. Missing or unreadable transcripts omit with `store not found` / `parse error`; a conversation with no tools is an empty table. Pi stays stubbed.

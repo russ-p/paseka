@@ -68,7 +68,7 @@ model_aliases:
   high: cursor-grok-4.6-high-fast
 ```
 
-Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`. Per-cue **initial** reserve overrides on fresh trails: [Forage Cues](cues.md) § Honey.
+Each `traceId` shares one **Honey Reserve** (`energyToken`): every adapter dispatch (`task.ready` and direct routing) consumes one token. When the reserve is empty, tasks move to `blocked` with summary `Honey reserve exhausted`. Beekeepers can top up via `paseka energy add --trace <id> --amount <n>`. Per-cue **initial** reserve overrides on fresh trails (including standing `stipend`): [Forage Cues](cues.md) § Honey.
 
 Example sectors for monorepos or git-submodule layouts:
 

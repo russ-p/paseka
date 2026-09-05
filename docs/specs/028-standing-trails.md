@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Captures the design conversation: long-lived named Flight Trails for recurring procedures (daily triage and similar), sidecar cron via Forage Cues, comb checkpoints, and a per-tick honey stipend. Not implemented.
+Identity slice shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend. Per-tick stipend replace, overlap refuse, kill fail-closed, Console badge, checkpoints/prompts still open.
 
 ## Problem Statement
 

@@ -17,6 +17,8 @@
 
 > **Forage Cue** — именованная точка входа в хореографию Colony (`.paseka/cues/<id>.yaml`): публикует `signal` или `task` без DAG-исполнителя. Технически: `paseka cue`, Queen Console **Run cue**, Telegram `cue:`. См. [cues](../guide/cues.md).
 
+> **Standing Trail** — long-lived Flight Trail bound to a Forage Cue (`standing.trace` + `standing.stipend`). Recurring procedures (daily triage and similar) reuse the same `traceId` instead of minting a bloom trail each tick. Not a Loop. See [cues](../guide/cues.md), [spec 028](../specs/028-standing-trails.md).
+
 ---
 
 # Пользователь
@@ -102,6 +104,7 @@ Bloom → Nectar → Comb → Honey
 | confidence    | Pollen Quality  |
 | priority      | Nectar Richness |
 | traceId       | Flight Trail    |
+| standing trail | Standing Trail |
 | correlationId | Swarm Trail     |
 | retries       | Return Flights  |
 | timeout       | Sunset          |

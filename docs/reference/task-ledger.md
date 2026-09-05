@@ -61,7 +61,7 @@ Each trace carries a shared honey reserve on the task ledger snapshot:
 
 | Field | Meaning |
 | ----- | ------- |
-| `energyBudget` | Initial seed from `colony.yaml` → `defaults.energy_budget` (default `12`), or a Forage Cue override on a fresh trail. Frozen after first seed. |
+| `energyBudget` | Initial seed from `colony.yaml` → `defaults.energy_budget` (default `12`), a Forage Cue `energy_budget` on a fresh bloom trail, or a standing cue `stipend` on a fresh Standing Trail. Frozen after first seed. |
 | `energyRemaining` | Tokens left; each adapter dispatch consumes `1`; `energy.add` increments this |
 | `energyAdded` | Sum of `energy.add` amounts **after** seed. Pre-seed top-ups stay in `energyRemaining` only so `SeedEnergy` can still apply colony/cue budget. |
 
@@ -71,7 +71,7 @@ When `energyRemaining` reaches `0`, further dispatches set the task to `blocked`
 
 Hard-kill a trace with `paseka kill --trace <id> [--reason …]` (`SIGNAL` / `system.kill`). Sets `killed` on the trace snapshot, cancels non-terminal tasks, stops new dispatches, and cancels in-flight AFK adapter processes. `energy.add` after kill tops up honey but does not redispatch killed tasks. See [Spec 013](../specs/013-system-kill.md).
 
-`energy.add` does not change `energyBudget`. After seed it also increments `energyAdded`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml` and clears `energyAdded`. **Forage Cues** may override the initial seed on a fresh trail with per-cue `energy_budget` (ledger `SeedEnergy`, not `energy.add`) — see [Forage Cues](../guide/cues.md) § Honey. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
+`energy.add` does not change `energyBudget`. After seed it also increments `energyAdded`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml` and clears `energyAdded`. **Forage Cues** may override the initial seed on a fresh bloom trail with per-cue `energy_budget`, or seed a Standing Trail from `standing.stipend` (ledger `SeedEnergy`, not `energy.add`) — see [Forage Cues](../guide/cues.md) § Honey. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
 
 ### Review policy
 

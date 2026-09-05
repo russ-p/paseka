@@ -14,6 +14,8 @@ type Cue struct {
 	Description     string
 	Emit            EmitKind
 	EnergyBudget    int
+	StandingTrace   string
+	StandingStipend int
 	SignalType      string
 	SignalKind      string
 	Static          map[string]string
@@ -27,8 +29,14 @@ type Cue struct {
 	Autorun bool
 }
 
+// IsStanding reports whether this cue is bound to a Standing Trail identity.
+func (c Cue) IsStanding() bool {
+	return c.StandingTrace != ""
+}
+
 // Summary is a list entry for paseka cue list.
 type Summary struct {
-	ID          string
-	Description string
+	ID            string
+	Description   string
+	StandingTrace string
 }

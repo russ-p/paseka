@@ -6,15 +6,23 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/protocol"
 	"gopkg.in/yaml.v3"
 )
+
+type rawStanding struct {
+	Trace   string `yaml:"trace"`
+	Stipend *int   `yaml:"stipend"`
+}
 
 type rawCue struct {
 	Description     string            `yaml:"description"`
 	Emit            string            `yaml:"emit"`
 	EnergyBudget    *int              `yaml:"energy_budget"`
+	Standing        yaml.Node         `yaml:"standing"`
 	Type            string            `yaml:"type"`
 	Kind            string            `yaml:"kind"`
 	Static          map[string]string `yaml:"static"`
@@ -25,6 +33,10 @@ type rawCue struct {
 	Intent          string            `yaml:"intent"`
 	Review          string            `yaml:"review"`
 	Autorun         bool              `yaml:"autorun"`
+}
+
+type standingTraceFile struct {
+	Standing *rawStanding `yaml:"standing"`
 }
 
 // Dir returns the colony cues directory path.
@@ -55,7 +67,14 @@ func Load(colonyRoot, id string) (Cue, error) {
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return Cue{}, fmt.Errorf("cue %q: invalid yaml: %w", id, err)
 	}
-	return validateCue(id, raw)
+	cue, err := validateCue(id, raw)
+	if err != nil {
+		return Cue{}, err
+	}
+	if err := validateStandingInColony(colonyRoot, cue); err != nil {
+		return Cue{}, err
+	}
+	return cue, nil
 }
 
 // List returns all valid cues in stable id order.
@@ -88,7 +107,7 @@ func List(colonyRoot string) ([]Summary, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, Summary{ID: cue.ID, Description: cue.Description})
+		out = append(out, Summary{ID: cue.ID, Description: cue.Description, StandingTrace: cue.StandingTrace})
 	}
 	return out, nil
 }
@@ -109,6 +128,13 @@ func validateCue(id string, raw rawCue) (Cue, error) {
 	case EmitSignal, EmitTask:
 	default:
 		return Cue{}, fmt.Errorf("cue %q: emit must be signal or task", id)
+	}
+	standing, err := parseStandingNode(id, raw.Standing)
+	if err != nil {
+		return Cue{}, err
+	}
+	if standing != nil && raw.EnergyBudget != nil {
+		return Cue{}, fmt.Errorf("cue %q: energy_budget is forbidden when standing is set", id)
 	}
 	if raw.EnergyBudget != nil {
 		if *raw.EnergyBudget <= 0 {
@@ -131,6 +157,10 @@ func validateCue(id string, raw rawCue) (Cue, error) {
 	}
 	if raw.EnergyBudget != nil {
 		cue.EnergyBudget = *raw.EnergyBudget
+	}
+	if standing != nil {
+		cue.StandingTrace = standing.trace
+		cue.StandingStipend = standing.stipend
 	}
 
 	switch emit {
@@ -155,9 +185,131 @@ func validateCue(id string, raw rawCue) (Cue, error) {
 		if strings.TrimSpace(raw.Intent) == "" {
 			return Cue{}, fmt.Errorf("cue %q: intent is required for emit task", id)
 		}
+		if cue.IsStanding() {
+			review := protocol.NormalizeTaskReviewPolicy(protocol.TaskReviewPolicy(cue.Review))
+			if review != protocol.TaskReviewNone {
+				got := cue.Review
+				if got == "" {
+					got = string(review)
+				}
+				return Cue{}, fmt.Errorf("cue %q: standing: bee %q: review must be none (got %q)", id, cue.Bee, got)
+			}
+		}
 	}
 
 	return cue, nil
+}
+
+func parseStandingNode(id string, node yaml.Node) (*parsedStanding, error) {
+	if node.Kind == 0 && node.Tag == "" {
+		return nil, nil
+	}
+	if node.Kind == yaml.ScalarNode && (node.Tag == "!!null" || strings.TrimSpace(node.Value) == "") {
+		return nil, fmt.Errorf("cue %q: standing.trace is required", id)
+	}
+	var raw rawStanding
+	if err := node.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("cue %q: standing: %w", id, err)
+	}
+	trace, stipend, err := validateStandingBlock(id, raw)
+	if err != nil {
+		return nil, err
+	}
+	return &parsedStanding{trace: trace, stipend: stipend}, nil
+}
+
+type parsedStanding struct {
+	trace   string
+	stipend int
+}
+
+func validateStandingBlock(id string, raw rawStanding) (string, int, error) {
+	trace := strings.TrimSpace(raw.Trace)
+	if err := validateStandingTrace(trace); err != nil {
+		return "", 0, fmt.Errorf("cue %q: %w", id, err)
+	}
+	if raw.Stipend == nil {
+		return "", 0, fmt.Errorf("cue %q: standing.stipend is required", id)
+	}
+	if *raw.Stipend <= 0 {
+		return "", 0, fmt.Errorf("cue %q: standing.stipend must be a positive integer", id)
+	}
+	return trace, *raw.Stipend, nil
+}
+
+func validateStandingTrace(id string) error {
+	if id == "" {
+		return fmt.Errorf("standing.trace is required")
+	}
+	if strings.Contains(id, "..") || strings.ContainsAny(id, `/\.*>`) {
+		return fmt.Errorf("standing.trace %q is not a legal trace id", id)
+	}
+	for _, r := range id {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return fmt.Errorf("standing.trace %q is not a legal trace id", id)
+		}
+	}
+	return nil
+}
+
+func validateStandingInColony(colonyRoot string, cue Cue) error {
+	if !cue.IsStanding() {
+		return nil
+	}
+	if err := checkStandingTraceCollision(colonyRoot, cue.ID, cue.StandingTrace); err != nil {
+		return err
+	}
+	if cue.Emit != EmitTask {
+		return nil
+	}
+	return validateStandingTaskBee(colonyRoot, cue)
+}
+
+func checkStandingTraceCollision(colonyRoot, cueID, trace string) error {
+	dir := Dir(colonyRoot)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("cue %q: standing: %w", cueID, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		otherID := strings.TrimSuffix(entry.Name(), ".yaml")
+		if otherID == cueID {
+			continue
+		}
+		if err := validateCueID(otherID); err != nil {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return fmt.Errorf("cue %q: standing: read %s: %w", cueID, otherID, err)
+		}
+		var raw standingTraceFile
+		if err := yaml.Unmarshal(data, &raw); err != nil || raw.Standing == nil {
+			continue
+		}
+		otherTrace := strings.TrimSpace(raw.Standing.Trace)
+		if otherTrace != "" && otherTrace == trace {
+			return fmt.Errorf("cue %q: standing.trace %q is already declared by cue %q", cueID, trace, otherID)
+		}
+	}
+	return nil
+}
+
+func validateStandingTaskBee(colonyRoot string, cue Cue) error {
+	bee, _, err := colony.LoadBee(colonyRoot, cue.Bee)
+	if err != nil {
+		return fmt.Errorf("cue %q: standing: bee %q: %w", cue.ID, cue.Bee, err)
+	}
+	if bee.Worktree {
+		return fmt.Errorf("cue %q: standing: bee %q: worktree must be false", cue.ID, cue.Bee)
+	}
+	return nil
 }
 
 func copyStringMap(in map[string]string) map[string]string {

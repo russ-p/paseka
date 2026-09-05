@@ -11,8 +11,9 @@ import (
 
 // CueView is one cue row for GET /api/cues.
 type CueView struct {
-	ID          string `json:"id"`
-	Description string `json:"description,omitempty"`
+	ID            string `json:"id"`
+	Description   string `json:"description,omitempty"`
+	StandingTrace string `json:"standingTrace,omitempty"`
 }
 
 // RunCueRequest is the JSON body for POST /api/cues/:id/run.
@@ -30,7 +31,7 @@ type RunCueResponse struct {
 	Kind      string `json:"kind,omitempty"`
 }
 
-// ListCues returns colony cues sorted by id (id + optional description only).
+// ListCues returns colony cues sorted by id (id, optional description, optional standingTrace).
 func ListCues(colonyRoot string) ([]CueView, error) {
 	items, err := cues.List(colonyRoot)
 	if err != nil {
@@ -39,8 +40,9 @@ func ListCues(colonyRoot string) ([]CueView, error) {
 	out := make([]CueView, 0, len(items))
 	for _, item := range items {
 		out = append(out, CueView{
-			ID:          item.ID,
-			Description: item.Description,
+			ID:            item.ID,
+			Description:   item.Description,
+			StandingTrace: item.StandingTrace,
 		})
 	}
 	return out, nil

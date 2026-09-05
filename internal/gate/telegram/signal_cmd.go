@@ -140,10 +140,17 @@ func FormatCuePreview(cue cues.Cue, text string) string {
 		}
 		lines = append(lines, fmt.Sprintf("Autorun: %s", autorunLabel))
 	}
+	if cue.IsStanding() {
+		lines = append(lines, fmt.Sprintf("Standing: %s", cue.StandingTrace))
+	}
+	confirm := "Confirm to publish on a new trace."
+	if cue.IsStanding() {
+		confirm = fmt.Sprintf("Confirm to publish on standing trail %s.", cue.StandingTrace)
+	}
 	lines = append(lines,
 		fmt.Sprintf("Text: %s", truncateText(text, maxTaskPreviewLen)),
 		"",
-		"Confirm to publish on a new trace.",
+		confirm,
 	)
 	return strings.Join(lines, "\n")
 }

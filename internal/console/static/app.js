@@ -2623,6 +2623,7 @@ function renderCuePicker() {
     el.cuePickerList.appendChild(li);
     state.selectedCueId = null;
     el.cueRunBtn.disabled = true;
+    updateCueTracePlaceholder();
     return;
   }
   for (const cue of cues) {
@@ -2632,7 +2633,8 @@ function renderCuePicker() {
       li.classList.add('selected');
     }
     const desc = cue.description ? `<div class="muted" style="font-size:0.85rem;margin-top:0.2rem">${escapeHtml(cue.description)}</div>` : '';
-    li.innerHTML = `<div class="top"><span class="bee">${escapeHtml(cue.id)}</span></div>${desc}`;
+    const standing = cue.standingTrace ? `<div class="muted" style="font-size:0.8rem;margin-top:0.2rem">Standing: ${escapeHtml(cue.standingTrace)}</div>` : '';
+    li.innerHTML = `<div class="top"><span class="bee">${escapeHtml(cue.id)}</span></div>${desc}${standing}`;
     li.addEventListener('click', () => {
       state.selectedCueId = cue.id;
       renderCuePicker();
@@ -2642,6 +2644,21 @@ function renderCuePicker() {
     el.cuePickerList.appendChild(li);
   }
   el.cueRunBtn.disabled = !state.selectedCueId || !el.cueTextInput.value.trim();
+  updateCueTracePlaceholder();
+}
+
+function selectedCue() {
+  return (state.cues || []).find((c) => c.id === state.selectedCueId) || null;
+}
+
+function updateCueTracePlaceholder() {
+  if (!el.cueTraceInput) return;
+  const cue = selectedCue();
+  if (cue?.standingTrace) {
+    el.cueTraceInput.placeholder = `omit for ${cue.standingTrace}`;
+  } else {
+    el.cueTraceInput.placeholder = 'new trail when omitted';
+  }
 }
 
 function openCueModal() {

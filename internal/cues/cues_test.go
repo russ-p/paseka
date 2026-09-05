@@ -558,3 +558,446 @@ body: "{{.Body}}"
 		t.Fatalf("seeded trace budget changed = %d", snap.EnergyBudget)
 	}
 }
+
+func writeBeeFile(t *testing.T, root, role, body string) {
+	t.Helper()
+	dir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, role+".yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const standingSignalYAML = `description: Daily triage
+emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`
+
+func TestLoadStandingSignalCue(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	cue, err := cues.Load(root, "daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cue.IsStanding() || cue.StandingTrace != "trail-daily-triage" || cue.StandingStipend != 4 {
+		t.Fatalf("standing = %+v", cue)
+	}
+	if cue.EnergyBudget != 0 {
+		t.Fatalf("energy budget = %d, want 0", cue.EnergyBudget)
+	}
+}
+
+func TestLoadStandingRequiresTraceAndStipend(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "empty.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing: {}
+title: "{{.Title}}"
+`)
+	_, err := cues.Load(root, "empty")
+	if err == nil || !strings.Contains(err.Error(), "standing.trace is required") {
+		t.Fatalf("err = %v", err)
+	}
+
+	writeCueFile(t, root, "nostipend.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+title: "{{.Title}}"
+`)
+	_, err = cues.Load(root, "nostipend")
+	if err == nil || !strings.Contains(err.Error(), "standing.stipend is required") {
+		t.Fatalf("err = %v", err)
+	}
+
+	writeCueFile(t, root, "null.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+title: "{{.Title}}"
+`)
+	_, err = cues.Load(root, "null")
+	if err == nil || !strings.Contains(err.Error(), "standing.trace is required") {
+		t.Fatalf("null standing: err = %v", err)
+	}
+}
+
+func TestLoadStandingRejectsZeroStipend(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "zero.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 0
+title: "{{.Title}}"
+`)
+	_, err := cues.Load(root, "zero")
+	if err == nil || !strings.Contains(err.Error(), "standing.stipend must be a positive integer") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadStandingRejectsEnergyBudget(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "both.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+energy_budget: 3
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+`)
+	_, err := cues.Load(root, "both")
+	if err == nil || !strings.Contains(err.Error(), "energy_budget is forbidden when standing is set") {
+		t.Fatalf("err = %v", err)
+	}
+
+	writeCueFile(t, root, "zero-budget.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+energy_budget: 0
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+`)
+	_, err = cues.Load(root, "zero-budget")
+	if err == nil || !strings.Contains(err.Error(), "energy_budget is forbidden when standing is set") {
+		t.Fatalf("zero budget with standing: err = %v", err)
+	}
+}
+
+func TestLoadStandingRejectsIllegalTrace(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "bad.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: "trail daily"
+  stipend: 4
+title: "{{.Title}}"
+`)
+	_, err := cues.Load(root, "bad")
+	if err == nil || !strings.Contains(err.Error(), "is not a legal trace id") {
+		t.Fatalf("err = %v", err)
+	}
+
+	writeCueFile(t, root, "dotted.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail.daily.triage
+  stipend: 4
+title: "{{.Title}}"
+`)
+	_, err = cues.Load(root, "dotted")
+	if err == nil || !strings.Contains(err.Error(), "is not a legal trace id") {
+		t.Fatalf("dotted trace: err = %v", err)
+	}
+}
+
+func TestLoadStandingRejectsDuplicateTrace(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "alpha.yaml", standingSignalYAML)
+	writeCueFile(t, root, "beta.yaml", `emit: signal
+type: SIGNAL
+kind: other.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 2
+title: "{{.Title}}"
+`)
+	_, err := cues.Load(root, "beta")
+	if err == nil || !strings.Contains(err.Error(), `standing.trace "trail-daily-triage" is already declared by cue "alpha"`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadStandingUnreadableSiblingFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "alpha.yaml", standingSignalYAML)
+	writeCueFile(t, root, "beta.yaml", standingSignalYAML)
+	path := filepath.Join(root, ".paseka", "cues", "beta.yaml")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("running as root; chmod 0 still readable")
+	}
+	_, err := cues.Load(root, "alpha")
+	if err == nil || !strings.Contains(err.Error(), "read beta") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadStandingTaskRejectsReviewRequired(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily.yaml", `emit: task
+bee: watch
+intent: triage
+review: required
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	_, err := cues.Load(root, "daily")
+	if err == nil || !strings.Contains(err.Error(), `bee "watch"`) || !strings.Contains(err.Error(), "review must be none") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadStandingTaskRejectsWorktreeTrue(t *testing.T) {
+	root := t.TempDir()
+	writeBeeFile(t, root, "watch", `role: watch
+adapter: script
+command: ["true"]
+worktree: true
+`)
+	writeCueFile(t, root, "daily.yaml", `emit: task
+bee: watch
+intent: triage
+review: none
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	_, err := cues.Load(root, "daily")
+	if err == nil || !strings.Contains(err.Error(), `bee "watch"`) || !strings.Contains(err.Error(), "worktree must be false") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadStandingTaskWorktreeFalseOK(t *testing.T) {
+	root := t.TempDir()
+	writeBeeFile(t, root, "watch", `role: watch
+adapter: script
+command: ["true"]
+worktree: false
+`)
+	writeCueFile(t, root, "daily.yaml", `emit: task
+bee: watch
+intent: triage
+autorun: false
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	cue, err := cues.Load(root, "daily")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cue.StandingTrace != "trail-daily-triage" || cue.Bee != "watch" {
+		t.Fatalf("cue = %+v", cue)
+	}
+}
+
+func TestListIncludesStandingTrace(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	writeCueFile(t, root, "feature.yaml", `description: Intake
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+`)
+
+	items, err := cues.List(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].ID != "daily-triage" || items[1].ID != "feature" {
+		t.Fatalf("items = %#v", items)
+	}
+	if items[0].StandingTrace != "trail-daily-triage" {
+		t.Fatalf("standing = %q", items[0].StandingTrace)
+	}
+	if items[1].StandingTrace != "" {
+		t.Fatalf("bloom standing = %q", items[1].StandingTrace)
+	}
+}
+
+func TestRunStandingOmitsTraceUsesStandingID(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	pub := &recordingPublisher{}
+	ledger := taskledger.NewMemoryLedger()
+	res, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick 2026-09-05",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.TraceID != "trail-daily-triage" {
+		t.Fatalf("trace = %q", res.TraceID)
+	}
+	if len(pub.events) != 1 || pub.events[0].TraceID != "trail-daily-triage" {
+		t.Fatalf("events = %+v", pub.events)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 4 || snap.EnergyRemaining != 4 {
+		t.Fatalf("honey = %+v", snap)
+	}
+}
+
+func TestRunStandingTaskOmitsTraceUsesStandingID(t *testing.T) {
+	root := t.TempDir()
+	writeColonyManifest(t, root, 12)
+	writeBeeFile(t, root, "watch", `role: watch
+adapter: script
+command: ["true"]
+worktree: false
+`)
+	writeCueFile(t, root, "daily.yaml", `emit: task
+bee: watch
+intent: triage
+autorun: false
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	pub := &recordingPublisher{}
+	ledger := taskledger.NewMemoryLedger()
+	res, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.TraceID != "trail-daily-triage" || res.TaskID == "" {
+		t.Fatalf("result = %+v", res)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 4 {
+		t.Fatalf("energy budget = %d, want stipend 4", snap.EnergyBudget)
+	}
+}
+
+func TestRunStandingMatchingTraceOK(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, taskledger.NewMemoryLedger(), cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		TraceID:    "trail-daily-triage",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pub.events[0].TraceID != "trail-daily-triage" {
+		t.Fatalf("trace = %q", pub.events[0].TraceID)
+	}
+}
+
+func TestRunStandingMismatchedTraceError(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	_, err := cues.Run(context.Background(), &recordingPublisher{}, taskledger.NewMemoryLedger(), cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		TraceID:    "trail-other",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err == nil || !strings.Contains(err.Error(), `does not match standing.trace "trail-daily-triage"`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunStandingDoesNotReseedSeededTrail(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trail-daily-triage", 10); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cues.Run(context.Background(), &recordingPublisher{}, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 10 {
+		t.Fatalf("seeded budget changed = %d", snap.EnergyBudget)
+	}
+}
+
+func TestRunNonStandingStillGeneratesTrace(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "feature.yaml", `emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	res, err := cues.Run(context.Background(), &recordingPublisher{}, taskledger.NewMemoryLedger(), cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "feature",
+		Text:       "New idea",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.TraceID == "" || res.TraceID == "trail-daily-triage" {
+		t.Fatalf("generated trace = %q", res.TraceID)
+	}
+	if !strings.HasPrefix(res.TraceID, "trace-") {
+		t.Fatalf("generated trace = %q, want trace- prefix", res.TraceID)
+	}
+}

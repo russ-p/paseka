@@ -118,6 +118,29 @@ func TestFormatCuePreviewTask(t *testing.T) {
 	if !strings.Contains(text, "Autorun: yes") {
 		t.Fatalf("missing autorun:\n%s", text)
 	}
+	if !strings.Contains(text, "Confirm to publish on a new trace.") {
+		t.Fatalf("missing new-trace confirm:\n%s", text)
+	}
+}
+
+func TestFormatCuePreviewStanding(t *testing.T) {
+	text := tggate.FormatCuePreview(cues.Cue{
+		ID:            "daily-triage",
+		Description:   "Daily triage",
+		Emit:          cues.EmitSignal,
+		SignalType:    "SIGNAL",
+		SignalKind:    "triage.tick",
+		StandingTrace: "trail-daily-triage",
+	}, "tick 2026-09-05")
+	if !strings.Contains(text, "Standing: trail-daily-triage") {
+		t.Fatalf("missing standing id:\n%s", text)
+	}
+	if !strings.Contains(text, "Confirm to publish on standing trail trail-daily-triage.") {
+		t.Fatalf("missing standing confirm:\n%s", text)
+	}
+	if strings.Contains(text, "Confirm to publish on a new trace.") {
+		t.Fatalf("bloom confirm leaked:\n%s", text)
+	}
 }
 
 func TestCustomCommandHelpDescriptionFallsBackToCue(t *testing.T) {

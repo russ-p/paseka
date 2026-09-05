@@ -41,9 +41,9 @@ func newCueListCmd() *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintf(w, "CUE\tDESCRIPTION\n")
+			fmt.Fprintf(w, "CUE\tSTANDING\tDESCRIPTION\n")
 			for _, item := range items {
-				fmt.Fprintf(w, "%s\t%s\n", item.ID, item.Description)
+				fmt.Fprintf(w, "%s\t%s\t%s\n", item.ID, item.StandingTrace, item.Description)
 			}
 			_ = w.Flush()
 			return nil
@@ -101,7 +101,7 @@ func newCueRunCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().StringVar(&traceID, "trace", "", "attach publish to an existing flight trail (new trace when omitted; cue energy_budget is ignored when the trail is already seeded)")
+	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (new trail when omitted; standing cues use standing.trace and reject a mismatch)")
 	cmd.Flags().StringArrayVar(&setFlags, "set", nil, "template variable override (key=val, repeatable)")
 	return cmd
 }

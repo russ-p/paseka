@@ -437,7 +437,7 @@ Requires NATS (same as `paseka signal` / `task create`).
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-Lists cues sorted by id (id + optional description).
+Lists cues sorted by id (id, optional standing trail, optional description).
 
 ### `paseka cue run`
 
@@ -445,7 +445,7 @@ Lists cues sorted by id (id + optional description).
 | ---- | ----- | -------- | ----------- |
 | `<id>` | | yes | Cue id (filename without `.yaml`) |
 | `<text>` | | yes | Operator text (`Text` / `Title` / `Body` in templates) |
-| `--trace` | | | Attach to existing flight trail (new trace when omitted; cue `energy_budget` ignored when trail already seeded) |
+| `--trace` | | | Flight trail id (new trail when omitted; standing cues use `standing.trace` and reject a mismatch) |
 | `--set` | | | Template override `key=val` (repeatable; unused keys ignored) |
 | `--path` | `-C` | | Colony resolution start directory |
 
@@ -454,6 +454,7 @@ paseka cue list
 paseka cue run feature "OAuth callback returns 500 on refresh"
 paseka cue run hotfix "Fix nil deref in token refresh"
 paseka cue run feature "Follow-up" --trace trace-abc123
+paseka cue run daily-triage "tick $(date -I)"
 ```
 
 ---

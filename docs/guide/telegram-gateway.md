@@ -145,7 +145,7 @@ Message the bot from an allowlisted user **and** chat:
 | `/energy <traceId>` | Honey remaining/allocated (seed · topped when topped up) |
 | `/energy add <traceId> <n>` | Top up honey (`SIGNAL/energy.add`) |
 | `/task <text>` | Preview card → Confirm/Cancel → `task.plan` (+ `task.ready` if autorun) |
-| `/feature <text>` (example custom) | Preview → Confirm → `SIGNAL/feature.requested` on new trace (when configured) |
+| `/feature <text>` (example custom) | Preview → Confirm → cue publish (new bloom trail, or the cue’s Standing Trail when `standing` is set) |
 | `/invites` | Pending invites with Accept / Reject / Defer |
 | `/traces` | Recent colony traces (activity + status hints; optional Console links) |
 | `/help` | Command list |

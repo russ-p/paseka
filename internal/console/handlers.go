@@ -928,8 +928,27 @@ func writeCueError(w http.ResponseWriter, err error) {
 		status = http.StatusServiceUnavailable
 	} else if strings.Contains(msg, "not found") {
 		status = http.StatusNotFound
-	} else if strings.Contains(msg, "required") || strings.Contains(msg, "invalid") || strings.Contains(msg, "empty") {
+	} else if isCueClientError(msg) {
 		status = http.StatusBadRequest
 	}
 	http.Error(w, msg, status)
+}
+
+func isCueClientError(msg string) bool {
+	msg = strings.ToLower(msg)
+	for _, needle := range []string{
+		"required",
+		"invalid",
+		"empty",
+		"does not match",
+		"forbidden",
+		"must be",
+		"already declared",
+		"not a legal",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
 }

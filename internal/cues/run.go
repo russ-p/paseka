@@ -52,13 +52,9 @@ func runSignal(ctx context.Context, publisher bus.Publisher, ledger taskledger.L
 		return RunResult{}, fmt.Errorf("nats url not configured (cue run requires NATS)")
 	}
 
-	traceID := strings.TrimSpace(in.TraceID)
-	if traceID == "" {
-		id, err := colony.NewTraceID()
-		if err != nil {
-			return RunResult{}, err
-		}
-		traceID = id
+	traceID, err := resolveRunTraceID(cue, in.TraceID)
+	if err != nil {
+		return RunResult{}, err
 	}
 
 	source := strings.TrimSpace(in.Source)
@@ -100,13 +96,9 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 		return RunResult{}, fmt.Errorf("nats url not configured (cue run requires NATS)")
 	}
 
-	traceID := strings.TrimSpace(in.TraceID)
-	if traceID == "" {
-		id, err := colony.NewTraceID()
-		if err != nil {
-			return RunResult{}, err
-		}
-		traceID = id
+	traceID, err := resolveRunTraceID(cue, in.TraceID)
+	if err != nil {
+		return RunResult{}, err
 	}
 
 	source := strings.TrimSpace(in.Source)
@@ -198,6 +190,27 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 	}, nil
 }
 
+func resolveRunTraceID(cue Cue, requested string) (string, error) {
+	requested = strings.TrimSpace(requested)
+	if !cue.IsStanding() {
+		if requested != "" {
+			return requested, nil
+		}
+		id, err := colony.NewTraceID()
+		if err != nil {
+			return "", err
+		}
+		return id, nil
+	}
+	if requested == "" {
+		return cue.StandingTrace, nil
+	}
+	if requested != cue.StandingTrace {
+		return "", fmt.Errorf("cue %q: trace id %q does not match standing.trace %q", cue.ID, requested, cue.StandingTrace)
+	}
+	return cue.StandingTrace, nil
+}
+
 func seedTrailEnergy(ledger taskledger.Ledger, traceID, colonyRoot string, cue Cue) error {
 	if ledger == nil {
 		return nil
@@ -208,6 +221,9 @@ func seedTrailEnergy(ledger taskledger.Ledger, traceID, colonyRoot string, cue C
 	}
 	if snap.EnergyBudget > 0 {
 		return nil
+	}
+	if cue.StandingStipend > 0 {
+		return ledger.SeedEnergy(traceID, cue.StandingStipend)
 	}
 	if cue.EnergyBudget > 0 {
 		return ledger.SeedEnergy(traceID, cue.EnergyBudget)

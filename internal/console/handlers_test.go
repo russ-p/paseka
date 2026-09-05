@@ -1351,6 +1351,44 @@ body: "{{.Body}}"
 	}
 }
 
+func TestCuesAPIListStanding(t *testing.T) {
+	repo := initConsoleRepo(t)
+	writeConsoleCue(t, repo, "daily-triage.yaml", `description: Daily triage
+emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	ctxColony := setupConsoleHome(t, repo)
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/cues", nil)
+	listRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listed []console.CueView
+	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != "daily-triage" {
+		t.Fatalf("cues = %+v", listed)
+	}
+	if listed[0].StandingTrace != "trail-daily-triage" {
+		t.Fatalf("standingTrace = %q", listed[0].StandingTrace)
+	}
+}
+
 func TestCuesAPIRunWithNATS(t *testing.T) {
 	url := os.Getenv("PASEKA_NATS_URL")
 	if url == "" {
