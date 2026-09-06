@@ -4,7 +4,7 @@ A **cue** (bee language: **Forage Cue**) is a project-local YAML shortcut under 
 
 Optional **`standing`** binds a cue to a long-lived **Standing Trail** (stable `traceId`) so recurring procedures reuse the same comb instead of minting a new trail every tick.
 
-Design records: [spec 016](../specs/016-cue-layer.md), [spec 028](../specs/028-standing-trails.md) (identity slice). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue, Standing Trail).
+Design records: [spec 016](../specs/016-cue-layer.md), [spec 028](../specs/028-standing-trails.md) (identity + stipend slices). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue, Standing Trail).
 
 Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout](colony-layout.md), [task ledger](../reference/task-ledger.md), [feature ideation flow](../specs/005-feature-ideation-flow.md), [homelab deployment](homelab-deployment.md).
 
@@ -15,12 +15,12 @@ Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout]
 | Cues do | Cues do not |
 | ------- | ----------- |
 | Publish `SIGNAL` or `INSIGHT`/`SIGNAL` task plan (+ optional `task.ready`) | Run bees, start sessions, or accept invites |
-| Seed optional per-cue **initial** honey on a fresh trace (`energy_budget`, or standing `stipend`) | Top up honey mid-flight (`paseka energy add`); standing cues do not yet refill remaining each tick |
+| Seed optional per-cue **initial** honey on a fresh trace (`energy_budget`, or standing `stipend`); standing ticks then **replace** remaining | Top up a live bloom or tick mid-flight (`paseka energy add`) — that extra is wiped on the next standing stipend |
 | Bind a recurring procedure to a Standing Trail (`standing.trace`) | Ship a scheduler, webhook listener, or `report_to` callback |
 | Share one definition across CLI, Console, Telegram | Replace raw `paseka signal` / `task create` for power users |
 | Stay the publish API for timers and GitHub-style hooks (via `paseka cue run`) | Listen for HTTP, run cron, or reply to the webhook caller |
 
-Cue success means the bus publish(es) succeeded (and optional honey seed). AFK reactions still need `paseka run` as today. Timers and inbound HTTP stay **outside** Paseka — see [§10](#10-external-timers-and-webhooks).
+Cue success means the bus publish(es) succeeded (and honey seed or standing stipend, when applicable). AFK reactions still need `paseka run` as today. Timers and inbound HTTP stay **outside** Paseka — see [§10](#10-external-timers-and-webhooks).
 
 ---
 
@@ -90,7 +90,7 @@ Standing is a **cue** binding, not a ledger flag. Recommended ids look like `tra
 
 Standing `emit: task` cues require `review: none` (or omit review) and the named bee must have `worktree: false`. Load/import errors name the cue, bee, and field.
 
-This slice does **not** yet apply a per-tick stipend replace, refuse overlapping ticks, or refuse a killed trail. First successful run seeds honey from `standing.stipend`; later runs keep the existing seed (same as cue `energy_budget` on a live trail). Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
+First successful run seeds honey from `standing.stipend`. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. This slice does **not** yet refuse overlapping ticks. Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
 
 ### Schema (MVP)
 
@@ -100,7 +100,7 @@ This slice does **not** yet apply a per-tick stipend replace, refuse overlapping
 | `emit` | yes | `signal` or `task` |
 | `energy_budget` | no | Positive int — initial honey override on an unseeded **bloom** trail (§5). Forbidden when `standing` is set |
 | `standing.trace` | with `standing` | Stable Flight Trail id used when the caller omits `--trace` / `traceId`. No spaces, path separators, `.`, `*`, or `>` (JetStream KV keys) |
-| `standing.stipend` | with `standing` | Positive int — first-tick honey seed (§5). Required whenever `standing` is present |
+| `standing.stipend` | with `standing` | Positive int — first-tick seed and per-tick remaining ration (§5). Required whenever `standing` is present |
 | **signal** | | |
 | `type` | yes | Must be `SIGNAL` |
 | `kind` | yes | `payload.kind` (e.g. `feature.requested`) |
@@ -152,22 +152,25 @@ Requires NATS (same as `paseka signal` / `task create`). See [CLI](cli.md) § `p
 
 ## 5. Honey: `energy_budget` vs colony default vs `energy add`
 
-Three bloom mechanisms, plus standing first-tick seed:
+Bloom seed and top-up, plus standing seed and per-tick replace:
 
 | Mechanism | When | Effect |
 | --------- | ---- | ------ |
 | **`defaults.energy_budget`** in `colony.yaml` | First seed on a trace (task create, reactor ensure-seed, cue without override) | Sets initial `energyBudget` / `energyRemaining` (default `12`) |
 | **Cue `energy_budget`** | Fresh **bloom** trail only (`energyBudget == 0` on snapshot) | Seeds a **smaller or custom initial** reserve via ledger `SeedEnergy` — can be less than colony default |
-| **Standing `stipend`** | Fresh standing trail only (`energyBudget == 0`) | Seeds `energyBudget` / `energyRemaining` from `standing.stipend` (same `SeedEnergy` primitive). Does **not** refill remaining on later ticks yet |
-| **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining`; after seed also increments `energyAdded`. Does not change `energyBudget` |
+| **Standing first-tick seed** | Fresh standing trail (`energyBudget == 0`) | Seeds `energyBudget` / `energyRemaining` from `standing.stipend` (same `SeedEnergy` primitive) |
+| **Standing later tick** | Standing trail already seeded, not killed | Publishes `SIGNAL` / `energy.stipend` before ingress; **sets** `energyRemaining` to stipend. Does not change budget or `energyAdded`. Does **not** unblock honey-blocked tasks from a previous tick |
+| **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining`; after seed also increments `energyAdded`. Does not change `energyBudget`. Unblocks honey-blocked tasks on a **live** tick; the next standing stipend wipes leftover remaining back to stipend |
 
 Rules:
 
 - Omit `energy_budget` on a non-standing cue → unchanged colony-default seeding.
 - Cue with `energy_budget` on a **new** bloom trail → seed before publish (signal and task paths).
 - Standing cue on a **new** trail → seed from `stipend` before publish.
-- `cue run --trace` (or Console/Telegram `traceId`) on a trail that **already has** honey → cue `energy_budget` / standing stipend seed is **ignored** (no shrink, no re-seed). Per-tick stipend **replace** (`energy.stipend`) is not in this slice.
-- Cues never emit `energy.add` — use CLI, Console, or Telegram `/energy` for top-ups.
+- Standing cue on a **seeded** trail → replace remaining with stipend, then publish ingress.
+- `cue run --trace` (or Console/Telegram `traceId`) on a bloom trail that **already has** honey → cue `energy_budget` seed is **ignored** (no shrink, no re-seed).
+- Killed standing trail → cue run fails closed (names `system.kill`); no stipend event, no ingress.
+- Cues never emit `energy.add` — use CLI, Console, or Telegram `/energy` for a live-tick extra token.
 
 Full ledger model: [task ledger](../reference/task-ledger.md) § Honey reserve.
 

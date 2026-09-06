@@ -84,6 +84,59 @@ func Add(ctx context.Context, slug string, ledger taskledger.Ledger, pub Publish
 	return waitIncrease(ledger, in.TraceID, before.EnergyRemaining, in.Amount)
 }
 
+// StipendInput describes a standing-tick honey replace for one trace.
+type StipendInput struct {
+	TraceID string
+	Amount  int
+	AgentID string
+}
+
+// Stipend publishes SIGNAL/energy.stipend, which sets remaining to amount.
+// When the hive reactor is not running, the event is also applied to the ledger.
+func Stipend(ctx context.Context, slug string, ledger taskledger.Ledger, pub Publisher, in StipendInput) (taskledger.TraceSnapshot, error) {
+	if ledger == nil {
+		return taskledger.TraceSnapshot{}, fmt.Errorf("task ledger is required")
+	}
+	if pub == nil {
+		return taskledger.TraceSnapshot{}, fmt.Errorf("nats client is required")
+	}
+	if in.TraceID == "" {
+		return taskledger.TraceSnapshot{}, fmt.Errorf("trace id is required")
+	}
+	if err := ValidateAddAmount(in.Amount); err != nil {
+		return taskledger.TraceSnapshot{}, err
+	}
+
+	agentID := in.AgentID
+	if agentID == "" {
+		agentID = "cli"
+	}
+	ev, err := protocol.NewEvent(in.TraceID, agentID, 0, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: in.Amount,
+	})
+	if err != nil {
+		return taskledger.TraceSnapshot{}, err
+	}
+
+	reactorRunning, err := ReactorAlive(slug)
+	if err != nil {
+		return taskledger.TraceSnapshot{}, err
+	}
+
+	if err := pub.PublishEvent(ctx, ev); err != nil {
+		return taskledger.TraceSnapshot{}, err
+	}
+	if !reactorRunning {
+		if _, err := ledger.Apply(ev); err != nil {
+			return taskledger.TraceSnapshot{}, err
+		}
+		return ledger.Snapshot(in.TraceID)
+	}
+
+	return waitRemaining(ledger, in.TraceID, in.Amount)
+}
+
 // Consume publishes SIGNAL/energy.consume. When the hive reactor is not running,
 // the event is also applied to the ledger so CLI callers see immediate state.
 func Consume(ctx context.Context, slug, colonyRoot string, ledger taskledger.Ledger, pub Publisher, in ConsumeInput) (taskledger.TraceSnapshot, error) {

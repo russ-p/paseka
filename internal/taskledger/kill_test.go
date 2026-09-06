@@ -127,6 +127,38 @@ func TestApplyEventEnergyAddDoesNotUnkill(t *testing.T) {
 	}
 }
 
+func TestApplyEventEnergyStipendDoesNotUnkill(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		Killed:          true,
+		EnergyBudget:    4,
+		EnergyRemaining: 0,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCancelled},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d", res.Trace.EnergyRemaining)
+	}
+	if !res.Trace.Killed {
+		t.Fatal("kill flag cleared")
+	}
+	if res.Trace.Tasks["task-1"].Status != protocol.TaskStatusCancelled {
+		t.Fatalf("status = %q, want cancelled", res.Trace.Tasks["task-1"].Status)
+	}
+}
+
 func TestApplyEventTaskStatusIgnoredWhenKilled(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

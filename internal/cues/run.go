@@ -7,6 +7,7 @@ import (
 
 	"github.com/paseka/paseka/internal/bus"
 	"github.com/paseka/paseka/internal/colony"
+	"github.com/paseka/paseka/internal/energy"
 	"github.com/paseka/paseka/internal/protocol"
 	"github.com/paseka/paseka/internal/taskledger"
 	"github.com/paseka/paseka/internal/tasks"
@@ -72,7 +73,7 @@ func runSignal(ctx context.Context, publisher bus.Publisher, ledger taskledger.L
 		return RunResult{}, err
 	}
 
-	if err := seedTrailEnergy(ledger, traceID, in.ColonyRoot, cue); err != nil {
+	if err := prepareTrailEnergy(ctx, publisher, ledger, traceID, in.ColonyRoot, agentID, cue); err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
@@ -126,7 +127,7 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 		return RunResult{}, err
 	}
 
-	if err := seedTrailEnergy(ledger, traceID, in.ColonyRoot, cue); err != nil {
+	if err := prepareTrailEnergy(ctx, publisher, ledger, traceID, in.ColonyRoot, agentID, cue); err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
@@ -211,7 +212,35 @@ func resolveRunTraceID(cue Cue, requested string) (string, error) {
 	return cue.StandingTrace, nil
 }
 
-func seedTrailEnergy(ledger taskledger.Ledger, traceID, colonyRoot string, cue Cue) error {
+func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, traceID, colonyRoot, agentID string, cue Cue) error {
+	if cue.IsStanding() {
+		if ledger == nil {
+			return fmt.Errorf("task ledger is required for standing trails")
+		}
+		snap, err := ledger.Snapshot(traceID)
+		if err != nil {
+			return err
+		}
+		if snap.Killed {
+			return fmt.Errorf("trail %q is killed (system.kill); standing cue run refused", traceID)
+		}
+		if snap.EnergyBudget == 0 {
+			return ledger.SeedEnergy(traceID, cue.StandingStipend)
+		}
+		if publisher == nil {
+			return fmt.Errorf("nats url not configured (cue run requires NATS)")
+		}
+		manifest, err := colony.LoadColony(colonyRoot)
+		if err != nil {
+			return err
+		}
+		_, err = energy.Stipend(ctx, manifest.Slug, ledger, publisher, energy.StipendInput{
+			TraceID: traceID,
+			Amount:  cue.StandingStipend,
+			AgentID: agentID,
+		})
+		return err
+	}
 	if ledger == nil {
 		return nil
 	}
@@ -221,9 +250,6 @@ func seedTrailEnergy(ledger taskledger.Ledger, traceID, colonyRoot string, cue C
 	}
 	if snap.EnergyBudget > 0 {
 		return nil
-	}
-	if cue.StandingStipend > 0 {
-		return ledger.SeedEnergy(traceID, cue.StandingStipend)
 	}
 	if cue.EnergyBudget > 0 {
 		return ledger.SeedEnergy(traceID, cue.EnergyBudget)

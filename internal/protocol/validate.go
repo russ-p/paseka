@@ -140,6 +140,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateEnergyAdd(payload)
 	case SignalEnergyConsume:
 		return validateEnergyConsume(payload)
+	case SignalEnergyStipend:
+		return validateEnergyStipend(payload)
 	}
 
 	switch SystemEventKind(kind) {
@@ -195,7 +197,7 @@ func expectedEventType(kind string) EventType {
 		return EventVerification
 	}
 	switch EnergyEventKind(kind) {
-	case SignalEnergyAdd, SignalEnergyConsume:
+	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend:
 		return EventSignal
 	}
 	switch SystemEventKind(kind) {
@@ -470,6 +472,17 @@ func validateEnergyConsume(payload json.RawMessage) []ValidationDetail {
 	var p EnergyConsumePayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return []ValidationDetail{{Path: "payload", Message: "invalid energy.consume payload"}}
+	}
+	if p.Amount <= 0 {
+		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
+	}
+	return nil
+}
+
+func validateEnergyStipend(payload json.RawMessage) []ValidationDetail {
+	var p EnergyStipendPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.stipend payload"}}
 	}
 	if p.Amount <= 0 {
 		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}

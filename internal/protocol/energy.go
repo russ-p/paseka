@@ -6,6 +6,7 @@ type EnergyEventKind string
 const (
 	SignalEnergyAdd     EnergyEventKind = "energy.add"
 	SignalEnergyConsume EnergyEventKind = "energy.consume"
+	SignalEnergyStipend EnergyEventKind = "energy.stipend"
 
 	// DefaultEnergyBudget is the per-trace honey reserve when colony.yaml omits energy_budget.
 	DefaultEnergyBudget = 12
@@ -29,4 +30,11 @@ type EnergyConsumePayload struct {
 	Amount int             `json:"amount"`
 	Reason string          `json:"reason,omitempty"`
 	TaskID string          `json:"taskId,omitempty"`
+}
+
+// EnergyStipendPayload is emitted as SIGNAL with payload.kind=energy.stipend.
+// The ledger sets energyRemaining to Amount; it does not change budget or added.
+type EnergyStipendPayload struct {
+	Kind   EnergyEventKind `json:"kind"`
+	Amount int             `json:"amount"`
 }

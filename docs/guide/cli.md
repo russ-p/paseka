@@ -498,6 +498,8 @@ paseka cue run feature "Follow-up" --trace trace-abc123
 paseka cue run daily-triage "tick $(date -I)"
 ```
 
+Standing cues seed honey on the first tick and replace remaining with `standing.stipend` on later ticks (`SIGNAL` / `energy.stipend`). A killed standing trail refuses the run.
+
 ---
 
 ## `paseka signal`
@@ -534,7 +536,7 @@ By default, `emit` publishes to JetStream immediately. With **`--defer`**, the e
 
 Trail comb artifacts ([014](../specs/014-artifacts-protocol.md)) use runtime scan flush on success and do **not** depend on this buffer. See [015](../specs/015-deferred-event-emit.md) for the general deferred-emit contract.
 
-**Live-only kinds** (CLI rejects `--defer`): `system.kill`, `energy.add`, `energy.consume`, `session.invite`, `beekeeper.ready`, `task.status`.
+**Live-only kinds** (CLI rejects `--defer`): `system.kill`, `energy.add`, `energy.consume`, `energy.stipend`, `session.invite`, `beekeeper.ready`, `task.status`.
 
 ### `paseka event emit`
 

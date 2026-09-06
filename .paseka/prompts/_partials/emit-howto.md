@@ -20,7 +20,7 @@ By default, `event emit` publishes to the bus **immediately** (live). Add **`--d
 | Invite `done_when` should complete at run boundary, not mid-session | Mid-run control (`feature.classified`, `session.invite`, energy, kill) |
 | Bundle ledger + narrative at successful exit (emit `task.plan` then `task.ready` in that order when starting now) | Debugging with immediate timeline feedback |
 
-**Hard-deny for `--defer`** (live-only platform kinds): `system.kill`, `energy.add`, `energy.consume`, `session.invite`, `beekeeper.ready`, `task.status`.
+**Hard-deny for `--defer`** (live-only platform kinds): `system.kill`, `energy.add`, `energy.consume`, `energy.stipend`, `session.invite`, `beekeeper.ready`, `task.status`.
 
 **Soft guidance:** do not defer `run.summary` when runtime auto-synthesis applies — let the platform publish one after your successful exit unless you need a custom summary before that.
 

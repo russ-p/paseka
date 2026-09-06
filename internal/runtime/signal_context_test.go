@@ -53,6 +53,7 @@ func TestEventDispatchContextSignalDenylist(t *testing.T) {
 		string(protocol.TaskEventStatus),
 		string(protocol.SignalEnergyAdd),
 		string(protocol.SignalEnergyConsume),
+		string(protocol.SignalEnergyStipend),
 		string(protocol.SignalSessionInvite),
 		string(protocol.SignalBeekeeperReady),
 	} {

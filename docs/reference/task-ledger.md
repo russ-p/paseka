@@ -62,16 +62,16 @@ Each trace carries a shared honey reserve on the task ledger snapshot:
 | Field | Meaning |
 | ----- | ------- |
 | `energyBudget` | Initial seed from `colony.yaml` → `defaults.energy_budget` (default `12`), a Forage Cue `energy_budget` on a fresh bloom trail, or a standing cue `stipend` on a fresh Standing Trail. Frozen after first seed. |
-| `energyRemaining` | Tokens left; each adapter dispatch consumes `1`; `energy.add` increments this |
+| `energyRemaining` | Tokens left; each adapter dispatch consumes `1`; `energy.add` increments this; standing `energy.stipend` **sets** it to the cue stipend |
 | `energyAdded` | Sum of `energy.add` amounts **after** seed. Pre-seed top-ups stay in `energyRemaining` only so `SeedEnergy` can still apply colony/cue budget. |
 
 Display uses **remaining / allocated**, where `allocated = energyBudget + energyAdded` once the trail is seeded. When `energyAdded > 0`, UIs also show `seed {budget} · topped {added}`. Queen Console **low** still means `remaining <= energyBudget/4` (seed, not allocated). Colony status attention still flags traces with `remaining <= 0`.
 
-When `energyRemaining` reaches `0`, further dispatches set the task to `blocked` with summary `Honey reserve exhausted`. Top up with `paseka energy add --trace <id> --amount <n>` (`SIGNAL` / `energy.add`). Runtime audit events use `SIGNAL` / `energy.consume`.
+When `energyRemaining` reaches `0`, further dispatches set the task to `blocked` with summary `Honey reserve exhausted`. Top up a live tick with `paseka energy add --trace <id> --amount <n>` (`SIGNAL` / `energy.add`). Runtime audit events use `SIGNAL` / `energy.consume`. A later standing cue run publishes `SIGNAL` / `energy.stipend`, which **sets** remaining to the cue stipend and does **not** unblock leftover honey-blocked tasks.
 
-Hard-kill a trace with `paseka kill --trace <id> [--reason …]` (`SIGNAL` / `system.kill`). Sets `killed` on the trace snapshot, cancels non-terminal tasks, stops new dispatches, and cancels in-flight AFK adapter processes. `energy.add` after kill tops up honey but does not redispatch killed tasks. See [Spec 013](../specs/013-system-kill.md).
+Hard-kill a trace with `paseka kill --trace <id> [--reason …]` (`SIGNAL` / `system.kill`). Sets `killed` on the trace snapshot, cancels non-terminal tasks, stops new dispatches, and cancels in-flight AFK adapter processes. `energy.add` after kill tops up honey but does not redispatch killed tasks. A standing cue run on a killed trail fails closed (no stipend, no ingress). See [Spec 013](../specs/013-system-kill.md).
 
-`energy.add` does not change `energyBudget`. After seed it also increments `energyAdded`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml` and clears `energyAdded`. **Forage Cues** may override the initial seed on a fresh bloom trail with per-cue `energy_budget`, or seed a Standing Trail from `standing.stipend` (ledger `SeedEnergy`, not `energy.add`) — see [Forage Cues](../guide/cues.md) § Honey. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
+`energy.add` does not change `energyBudget`. After seed it also increments `energyAdded`. `energy.stipend` does not change `energyBudget` or `energyAdded`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml` and clears `energyAdded`. **Forage Cues** may override the initial seed on a fresh bloom trail with per-cue `energy_budget`, or seed a Standing Trail from `standing.stipend` (ledger `SeedEnergy` on first sight; later ticks use `energy.stipend`) — see [Forage Cues](../guide/cues.md) § Honey. Out-of-process honey events (`energy.add` / `energy.stipend`) publish and let the reactor project when `paseka run` is alive, or apply locally when it is stopped, so remaining is not applied twice. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
 
 ### Review policy
 

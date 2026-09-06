@@ -82,6 +82,81 @@ func TestAddDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
 	}
 }
 
+func TestStipendAppliesWhenReactorStopped(t *testing.T) {
+	slug := "energy-stipend-stopped"
+	root := t.TempDir()
+	setupEnergyHome(t, slug, root)
+
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trace-1", 10); err != nil {
+		t.Fatal(err)
+	}
+	var applyCount atomic.Int32
+	wrapped := &applyCountingLedger{Ledger: ledger, onApply: func() { applyCount.Add(1) }}
+
+	snap, err := energy.Stipend(context.Background(), slug, wrapped, &noopPublisher{}, energy.StipendInput{
+		TraceID: "trace-1",
+		Amount:  4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want 4", snap.EnergyRemaining)
+	}
+	if snap.EnergyBudget != 10 {
+		t.Fatalf("budget = %d, want 10", snap.EnergyBudget)
+	}
+	if applyCount.Load() != 1 {
+		t.Fatalf("ledger apply calls = %d, want 1", applyCount.Load())
+	}
+}
+
+func TestStipendDoesNotDoubleApplyWhenReactorRunning(t *testing.T) {
+	slug := "energy-stipend-running"
+	root := t.TempDir()
+	setupEnergyHome(t, slug, root)
+
+	if err := homestate.RegisterRuntime(slug, homestate.RuntimeEntry{
+		PID:             os.Getpid(),
+		StartedAt:       time.Now().UTC(),
+		ColonyRoot:      root,
+		Status:          "running",
+		LastHeartbeatAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = homestate.ClearRuntime(slug) })
+
+	memory := taskledger.NewMemoryLedger()
+	if err := memory.SeedEnergy("trace-1", 12); err != nil {
+		t.Fatal(err)
+	}
+
+	var cliApplyCount atomic.Int32
+	wrapped := &applyCountingLedger{
+		Ledger:  memory,
+		onApply: func() { cliApplyCount.Add(1) },
+	}
+
+	snap, err := energy.Stipend(context.Background(), slug, wrapped, &reactorSimPublisher{ledger: memory}, energy.StipendInput{
+		TraceID: "trace-1",
+		Amount:  4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cliApplyCount.Load() != 0 {
+		t.Fatalf("cli ledger apply calls = %d, want 0 when reactor is running", cliApplyCount.Load())
+	}
+	if snap.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want 4 once", snap.EnergyRemaining)
+	}
+	if snap.EnergyBudget != 12 {
+		t.Fatalf("budget = %d, want 12", snap.EnergyBudget)
+	}
+}
+
 func TestConsumeSeedsAndDecrements(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	pub := &stubPublisher{}

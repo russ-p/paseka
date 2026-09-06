@@ -911,6 +911,71 @@ body: "{{.Body}}"
 	}
 }
 
+func TestRunStandingTaskSecondTickNewTaskID(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeColonyManifest(t, root, 12)
+	writeBeeFile(t, root, "watch", `role: watch
+adapter: script
+command: ["true"]
+worktree: false
+`)
+	writeCueFile(t, root, "daily.yaml", `emit: task
+bee: watch
+intent: triage
+autorun: false
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	first, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily",
+		Text:       "tick 1",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily",
+		Text:       "tick 2",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.TaskID == "" || second.TaskID == first.TaskID {
+		t.Fatalf("second task id = %q, first = %q", second.TaskID, first.TaskID)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 4 || snap.EnergyRemaining != 4 {
+		t.Fatalf("honey = %+v", snap)
+	}
+	if len(pub.events) < 2 {
+		t.Fatalf("events = %d", len(pub.events))
+	}
+	stipend := pub.events[len(pub.events)-2]
+	ingress := pub.events[len(pub.events)-1]
+	if protocol.PayloadKind(stipend.Payload) != string(protocol.SignalEnergyStipend) {
+		t.Fatalf("penultimate kind = %q, want energy.stipend", protocol.PayloadKind(stipend.Payload))
+	}
+	if protocol.PayloadKind(ingress.Payload) != string(protocol.TaskEventPlan) {
+		t.Fatalf("last kind = %q, want task.plan", protocol.PayloadKind(ingress.Payload))
+	}
+}
+
 func TestRunStandingMatchingTraceOK(t *testing.T) {
 	root := t.TempDir()
 	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
@@ -949,15 +1014,18 @@ func TestRunStandingMismatchedTraceError(t *testing.T) {
 	}
 }
 
-func TestRunStandingDoesNotReseedSeededTrail(t *testing.T) {
+func TestRunStandingLaterTickReplacesRemainingKeepsBudget(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeColonyManifest(t, root, 12)
 	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
 
 	ledger := taskledger.NewMemoryLedger()
 	if err := ledger.SeedEnergy("trail-daily-triage", 10); err != nil {
 		t.Fatal(err)
 	}
-	_, err := cues.Run(context.Background(), &recordingPublisher{}, ledger, cues.RunInput{
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
 		ColonyRoot: root,
 		CueID:      "daily-triage",
 		Text:       "tick",
@@ -973,6 +1041,168 @@ func TestRunStandingDoesNotReseedSeededTrail(t *testing.T) {
 	}
 	if snap.EnergyBudget != 10 {
 		t.Fatalf("seeded budget changed = %d", snap.EnergyBudget)
+	}
+	if snap.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want stipend 4", snap.EnergyRemaining)
+	}
+	if len(pub.events) != 2 {
+		t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+	}
+	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergyStipend) {
+		t.Fatalf("first kind = %q, want energy.stipend", protocol.PayloadKind(pub.events[0].Payload))
+	}
+	if protocol.PayloadKind(pub.events[1].Payload) != "triage.tick" {
+		t.Fatalf("second kind = %q, want triage.tick", protocol.PayloadKind(pub.events[1].Payload))
+	}
+}
+
+func TestRunStandingSecondTickResetsLeftoverAndIgnoresAdd(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeColonyManifest(t, root, 12)
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	if _, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick 1",
+		Source:     "cli",
+		AgentID:    "cli",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	consume, err := protocol.NewEvent("trail-daily-triage", "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
+		Kind:   protocol.SignalEnergyConsume,
+		Amount: 3,
+		Reason: "task.dispatch",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(consume); err != nil {
+		t.Fatal(err)
+	}
+	add, err := protocol.NewEvent("trail-daily-triage", "cli", 0, protocol.EventSignal, protocol.EnergyAddPayload{
+		Kind:   protocol.SignalEnergyAdd,
+		Amount: 8,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(add); err != nil {
+		t.Fatal(err)
+	}
+	before, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.EnergyRemaining != 9 || before.EnergyAdded != 8 {
+		t.Fatalf("after consume+add = %+v", before)
+	}
+
+	if _, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick 2",
+		Source:     "cli",
+		AgentID:    "cli",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 4 {
+		t.Fatalf("budget = %d, want first-tick stipend 4", snap.EnergyBudget)
+	}
+	if snap.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want stipend 4", snap.EnergyRemaining)
+	}
+	if snap.EnergyAdded != 8 {
+		t.Fatalf("added = %d, want unchanged 8", snap.EnergyAdded)
+	}
+}
+
+func TestRunStandingRefusesKilledTrail(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+		t.Fatal(err)
+	}
+	kill, err := protocol.NewEvent("trail-daily-triage", "cli", 0, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind:   protocol.SignalSystemKill,
+		Reason: "retire procedure",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(kill); err != nil {
+		t.Fatal(err)
+	}
+
+	pub := &recordingPublisher{}
+	_, err = cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err == nil || !strings.Contains(err.Error(), "system.kill") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("published = %+v, want none", pub.events)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyRemaining != 4 || !snap.Killed {
+		t.Fatalf("honey after refused run = %+v", snap)
+	}
+}
+
+func TestRunStandingRefusesKilledUnseededTrail(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+
+	ledger := taskledger.NewMemoryLedger()
+	kill, err := protocol.NewEvent("trail-daily-triage", "cli", 0, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind: protocol.SignalSystemKill,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(kill); err != nil {
+		t.Fatal(err)
+	}
+
+	pub := &recordingPublisher{}
+	_, err = cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err == nil || !strings.Contains(err.Error(), "system.kill") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("published = %+v, want none", pub.events)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 0 {
+		t.Fatalf("budget = %d, want unseeded", snap.EnergyBudget)
 	}
 }
 

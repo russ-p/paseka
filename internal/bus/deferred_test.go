@@ -76,13 +76,15 @@ func TestProcessEventInputDeferDenyList(t *testing.T) {
 	root := t.TempDir()
 	prepareRun(t, root, "trace-1", "agent-1")
 
-	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"SIGNAL","payload":{"kind":"task.status","taskId":"t1","status":"blocked"}}`)
-	result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", true, true, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.OK || result.Error != "defer_denied" {
-		t.Fatalf("result = %#v", result)
+	for _, kind := range []string{"task.status", "energy.stipend"} {
+		raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"SIGNAL","payload":{"kind":"` + kind + `","taskId":"t1","status":"blocked","amount":4}}`)
+		result, err := ProcessEventInput(context.Background(), nil, "", raw, "agent-1", true, true, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.OK || result.Error != "defer_denied" {
+			t.Fatalf("kind %s: result = %#v", kind, result)
+		}
 	}
 }
 
@@ -377,6 +379,9 @@ func TestInspectPending(t *testing.T) {
 func TestIsDeferDenied(t *testing.T) {
 	if !IsDeferDenied("system.kill") {
 		t.Fatal("expected deny")
+	}
+	if !IsDeferDenied("energy.stipend") {
+		t.Fatal("expected deny stipend")
 	}
 	if IsDeferDenied("context.note") {
 		t.Fatal("expected allow")

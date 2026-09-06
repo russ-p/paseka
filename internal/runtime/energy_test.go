@@ -130,6 +130,75 @@ func TestReactorUnblocksAfterEnergyAdd(t *testing.T) {
 	}
 }
 
+func TestReactorDoesNotUnblockAfterEnergyStipend(t *testing.T) {
+	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "implement",
+			Bee:    "builder",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := protocol.NewEvent("trace-1", "reactor", 0, protocol.EventSignal, protocol.TaskReadyPayload{
+		Kind:   protocol.TaskEventReady,
+		TaskID: "task-1",
+		Bee:    "builder",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stipend, err := protocol.NewEvent("trace-1", "cli", 0, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestReactor(t, map[string]colony.Bee{
+		"builder": {Role: "builder", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "task.ready"}, Dispatch: colony.DispatchTask},
+		}},
+	})
+	ledger := r.Ledger().(*taskledger.MemoryLedger)
+	if err := ledger.SeedEnergy("trace-1", 1); err != nil {
+		t.Fatal(err)
+	}
+	mustConsumeEnergy(t, ledger, "trace-1", 1)
+
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ready); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d before stipend, want 0", rec.calls)
+	}
+	if err := r.ProcessEvent(context.Background(), stipend); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d after stipend, want 0", rec.calls)
+	}
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want 4", snap.EnergyRemaining)
+	}
+	if snap.Tasks["task-1"].Status != protocol.TaskStatusBlocked {
+		t.Fatalf("status = %q, want blocked", snap.Tasks["task-1"].Status)
+	}
+}
+
 func TestReactorSkipsLocalEnergyConsumeEcho(t *testing.T) {
 	r := newTestReactor(t, map[string]colony.Bee{})
 	ledger := r.Ledger().(*taskledger.MemoryLedger)

@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Identity slice shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend. Per-tick stipend replace, overlap refuse, kill fail-closed, Console badge, checkpoints/prompts still open.
+Identity + stipend slices shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend, later-tick `energy.stipend` remaining replace, kill fail-closed on cue run. Overlap refuse, Console badge, checkpoints/prompts still open.
 
 ## Problem Statement
 
@@ -156,7 +156,7 @@ Do not generate a mini-ULID for standing cues.
 - Previous tick `blocked` (honey exhausted) stays `blocked`; the new tick is a new task (or new signal). Operator `energy.add` during a **live** tick still unblocks that tick’s tasks as today; the **next** standing cue run sets remaining back to stipend.
 - Killed trail: do not stipend, do not publish ingress; return a clear error naming `system.kill`.
 - `energy.stipend` is live-only (defer deny-list). Bees are not the intended publisher; cue runtime is.
-- Idempotency: one cue-run attempt applies stipend at most once (local apply-before-publish + reactor skip of own echo, same family as other ledger energy events). A **later** cue run always sets remaining to stipend again even if remaining was already equal (harmless).
+- Idempotency: cue run is a separate process from the hive reactor, so stipend follows the out-of-process honey path (same family as `energy.add`): publish first; apply locally only when the reactor is not running; when it is running, wait until remaining equals the stipend so the ledger is not applied twice. Do not apply-then-publish from cue run — the reactor cannot skip that echo, and a SET after a consume would restore the ration. A later cue run always publishes stipend even if remaining was already equal (harmless SET).
 
 ### 5. Overlap (one open tick)
 

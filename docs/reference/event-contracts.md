@@ -45,6 +45,7 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `VERIFICATION` | `task.completed` | `taskId` | runtime/reviewer → task ledger |
 | `SIGNAL` | `energy.add` | positive `amount` | beekeeper → honey reserve |
 | `SIGNAL` | `energy.consume` | positive `amount` | runtime → honey reserve |
+| `SIGNAL` | `energy.stipend` | positive `amount` | standing cue runtime → honey remaining (set, not add) |
 | `SIGNAL` | `system.kill` | optional `reason` | beekeeper → reactor/tasks |
 | `MUTATION` | `code.proposal.isolated` | proposal metadata; isolated workspace | builder → guard/review gate |
 | `MUTATION` | `code.proposal.root` | proposal metadata; root workspace | hivewright → main guard |
@@ -101,6 +102,7 @@ live-only and cannot be deferred:
 - `system.kill`
 - `energy.add`
 - `energy.consume`
+- `energy.stipend`
 - `session.invite`
 - `beekeeper.ready`
 - `task.status`

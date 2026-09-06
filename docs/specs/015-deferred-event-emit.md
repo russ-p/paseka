@@ -129,6 +129,7 @@ CLI validation rejects `--defer` for these platform kinds (live-only):
 - `system.kill`
 - `energy.add`
 - `energy.consume`
+- `energy.stipend`
 - `session.invite`
 - `beekeeper.ready`
 - `task.status`

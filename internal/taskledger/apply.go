@@ -123,6 +123,17 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				trace.EnergyRemaining -= payload.Amount
 				changed = true
 
+			case protocol.SignalEnergyStipend:
+				var payload protocol.EnergyStipendPayload
+				if err := json.Unmarshal(event.Payload, &payload); err != nil {
+					return ApplyResult{}, fmt.Errorf("taskledger: parse energy.stipend: %w", err)
+				}
+				if payload.Amount <= 0 {
+					return ApplyResult{}, fmt.Errorf("taskledger: energy.stipend amount must be positive")
+				}
+				trace.EnergyRemaining = payload.Amount
+				changed = true
+
 			default:
 				if kind == string(protocol.TaskEventStatus) {
 					var payload protocol.TaskStatusPayload

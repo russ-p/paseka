@@ -627,7 +627,7 @@ By default, event emit publishes to the bus immediately (live). Add --defer to q
 | Handoffs after this bee finishes (task.plan, task.ready kick after plan, context.note, spec.ready) | Mid-run control (feature.classified, session.invite, energy, kill) |
 | Bundle ledger at successful exit (task.plan then task.ready when starting now) | Debugging with immediate timeline feedback |
 
-Hard-deny for --defer: system.kill, energy.add, energy.consume, session.invite, beekeeper.ready, task.status.
+Hard-deny for --defer: system.kill, energy.add, energy.consume, energy.stipend, session.invite, beekeeper.ready, task.status.
 
 Use this command form (live):
 

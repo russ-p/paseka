@@ -128,6 +128,65 @@ func TestApplyEventEnergyConsume(t *testing.T) {
 	}
 }
 
+func TestApplyEventEnergyStipendSetsRemaining(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    10,
+		EnergyRemaining: 1,
+		EnergyAdded:     6,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID:  "task-1",
+				Status:  protocol.TaskStatusBlocked,
+				Summary: protocol.HoneyReserveExhaustedSummary,
+			},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want 4", res.Trace.EnergyRemaining)
+	}
+	if res.Trace.EnergyBudget != 10 {
+		t.Fatalf("budget = %d, want unchanged 10", res.Trace.EnergyBudget)
+	}
+	if res.Trace.EnergyAdded != 6 {
+		t.Fatalf("added = %d, want unchanged 6", res.Trace.EnergyAdded)
+	}
+	if res.Trace.Tasks["task-1"].Status != protocol.TaskStatusBlocked {
+		t.Fatalf("status = %q, want blocked", res.Trace.Tasks["task-1"].Status)
+	}
+}
+
+func TestApplyEventEnergyStipendRequiresPositiveAmount(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    4,
+		EnergyRemaining: 4,
+		Tasks:           map[string]taskledger.TaskSnapshot{},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = taskledger.ApplyEvent(trace, ev)
+	if err == nil {
+		t.Fatal("expected positive amount error")
+	}
+}
+
 func TestApplyEventEnergyConsumeInsufficient(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID:         "trace-1",

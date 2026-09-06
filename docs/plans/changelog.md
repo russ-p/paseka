@@ -2,14 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Standing trail stipend
+
+Later ticks of a Standing Trail **replace** remaining honey with the cue stipend (`SIGNAL` / `energy.stipend`) instead of leaving leftover tokens or stacking `energy.add`. The event does not change seed budget or `energyAdded`, and it does not unblock honey-blocked tasks from a previous tick. A killed standing trail refuses `cue run` (error names `system.kill`). First tick still seeds via `SeedEnergy` as in the identity slice.
+
+- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend slices)
+- Canonical: [Forage Cues](../guide/cues.md) § Honey, [Task ledger](../reference/task-ledger.md) § Honey reserve, [Event contracts](../reference/event-contracts.md)
+
+Deferred from that work: overlap refuse, Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+
 ## 2026-09 — Standing cue identity
 
-A Forage Cue may declare `standing.trace` and `standing.stipend`. Omitting `--trace` / API `traceId` / Telegram `cue:` then publishes on that stable Flight Trail instead of minting a disposable bloom id; a mismatched explicit id fails closed. First tick seeds honey from stipend; later ticks do not yet refill remaining. Standing task cues require `review: none` and `worktree: false`. Nuc export/import carries the YAML as today.
+A Forage Cue may declare `standing.trace` and `standing.stipend`. Omitting `--trace` / API `traceId` / Telegram `cue:` then publishes on that stable Flight Trail instead of minting a disposable bloom id; a mismatched explicit id fails closed. First tick seeds honey from stipend. Standing task cues require `review: none` and `worktree: false`. Nuc export/import carries the YAML as today.
 
 - Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity slice)
 - Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`), [Glossary](../idea/glossary.md) (Standing Trail)
-
-Deferred from that work: per-tick stipend replace, overlap refuse, kill fail-closed, Console/status badge — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Cursor Agent log from local transcripts
 
