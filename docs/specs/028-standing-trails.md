@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Identity + stipend slices shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend, later-tick `energy.stipend` remaining replace, kill fail-closed on cue run. Overlap refuse, Console badge, checkpoints/prompts still open.
+Identity + stipend + overlap slices shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend, later-tick `energy.stipend` remaining replace, kill fail-closed on cue run, overlap refuse (open ledger tick or live AFK). Console badge, checkpoints/prompts still open.
 
 ## Problem Statement
 

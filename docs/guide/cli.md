@@ -498,7 +498,7 @@ paseka cue run feature "Follow-up" --trace trace-abc123
 paseka cue run daily-triage "tick $(date -I)"
 ```
 
-Standing cues seed honey on the first tick and replace remaining with `standing.stipend` on later ticks (`SIGNAL` / `energy.stipend`). A killed standing trail refuses the run.
+Standing cues seed honey on the first tick and replace remaining with `standing.stipend` on later ticks (`SIGNAL` / `energy.stipend`). A killed standing trail refuses the run. A busy standing trail (open ledger task or live AFK on that id) refuses the run without burning stipend.
 
 ---
 

@@ -19,6 +19,7 @@ func TestWriteCueErrorStandingClientErrors(t *testing.T) {
 		{fmt.Errorf(`cue "beta": standing.trace "trail-daily-triage" is already declared by cue "alpha"`), http.StatusBadRequest},
 		{fmt.Errorf(`cue "daily": standing: bee "watch": worktree must be false`), http.StatusBadRequest},
 		{fmt.Errorf(`cue "daily-triage": trail "trail-daily-triage" is killed (system.kill); standing cue run refused`), http.StatusBadRequest},
+		{fmt.Errorf(`cue "daily-triage": trail "trail-daily-triage" is busy (task "task-1" is running)`), http.StatusBadRequest},
 		{fmt.Errorf(`cue "missing": not found at .paseka/cues/missing.yaml`), http.StatusNotFound},
 		{fmt.Errorf("nats url not configured (cue run requires NATS)"), http.StatusServiceUnavailable},
 		{fmt.Errorf("ledger snapshot: connection reset"), http.StatusInternalServerError},

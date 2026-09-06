@@ -8,6 +8,7 @@ import (
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/energy"
+	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/tasks"
@@ -224,6 +225,9 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 		if snap.Killed {
 			return fmt.Errorf("trail %q is killed (system.kill); standing cue run refused", traceID)
 		}
+		if err := refuseStandingOverlap(snap, colonyRoot, traceID); err != nil {
+			return err
+		}
 		if snap.EnergyBudget == 0 {
 			return ledger.SeedEnergy(traceID, cue.StandingStipend)
 		}
@@ -262,6 +266,24 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 		return err
 	}
 	return ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget())
+}
+
+func refuseStandingOverlap(snap taskledger.TraceSnapshot, colonyRoot, traceID string) error {
+	if task, ok := taskledger.OpenStandingTick(snap); ok {
+		return fmt.Errorf("trail %q is busy (task %q is %s)", traceID, task.TaskID, task.Status)
+	}
+	live, err := hiveview.LiveAFKOnTrace(colonyRoot, traceID)
+	if err != nil {
+		return err
+	}
+	if len(live) == 0 {
+		return nil
+	}
+	bee := strings.TrimSpace(live[0].Bee)
+	if bee == "" {
+		bee = live[0].AgentID
+	}
+	return fmt.Errorf("trail %q is busy (%s still in flight)", traceID, bee)
 }
 
 // ParseSetFlags parses repeated --set key=val arguments.

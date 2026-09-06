@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Standing trail overlap refuse
+
+A second standing `cue run` fails closed while the trail already has an open tick (`planned`, `ready`, `running`, `waiting_review`) or a live AFK adapter on that `traceId`. The error says the trail **is busy** and names the blocking task status or bee. No stipend and no ingress. `blocked` / finished tasks and interactive sessions do not block, so a drained tick can start the next ration and a HITL inspect is not a tick.
+
+- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap slices)
+- Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`)
+
+Deferred from that work: Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+
 ## 2026-09 — Standing trail stipend
 
 Later ticks of a Standing Trail **replace** remaining honey with the cue stipend (`SIGNAL` / `energy.stipend`) instead of leaving leftover tokens or stacking `energy.add`. The event does not change seed budget or `energyAdded`, and it does not unblock honey-blocked tasks from a previous tick. A killed standing trail refuses `cue run` (error names `system.kill`). First tick still seeds via `SeedEnergy` as in the identity slice.
@@ -9,7 +18,7 @@ Later ticks of a Standing Trail **replace** remaining honey with the cue stipend
 - Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend slices)
 - Canonical: [Forage Cues](../guide/cues.md) § Honey, [Task ledger](../reference/task-ledger.md) § Honey reserve, [Event contracts](../reference/event-contracts.md)
 
-Deferred from that work: overlap refuse, Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+Deferred from that work: Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Standing cue identity
 

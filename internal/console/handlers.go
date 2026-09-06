@@ -947,6 +947,7 @@ func isCueClientError(msg string) bool {
 		"not a legal",
 		"system.kill",
 		"is killed",
+		"is busy",
 	} {
 		if strings.Contains(msg, needle) {
 			return true

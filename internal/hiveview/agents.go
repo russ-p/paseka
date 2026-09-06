@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -15,6 +16,21 @@ import (
 )
 
 const liveAgentsLimit = 50
+
+// LiveAFKOnTrace returns live headless adapter runs for one Flight Trail.
+// Interactive sessions are omitted (they are not a standing tick).
+func LiveAFKOnTrace(colonyRoot, traceID string) ([]AgentItem, error) {
+	traceID = strings.TrimSpace(traceID)
+	if colonyRoot == "" || traceID == "" {
+		return nil, nil
+	}
+	items, err := scanLiveAFKTrace(colonyRoot, filepath.Join(colonyRoot, ".paseka", "runs", traceID), traceID)
+	if err != nil {
+		return nil, err
+	}
+	sortLiveAgents(items)
+	return items, nil
+}
 
 // AgentItem is one live AFK or interactive session process.
 type AgentItem struct {
@@ -93,47 +109,60 @@ func scanLiveAFKRuns(colonyRoot string) ([]AgentItem, error) {
 		}
 		traceID := traceEntry.Name()
 		tracePath := filepath.Join(runsRoot, traceID)
-		agentDirs, err := os.ReadDir(tracePath)
+		found, err := scanLiveAFKTrace(colonyRoot, tracePath, traceID)
 		if err != nil {
 			continue
 		}
-		for _, agentEntry := range agentDirs {
-			if !agentEntry.IsDir() || runs.IsReservedTraceSubdir(agentEntry.Name()) {
-				continue
-			}
-			agentID := agentEntry.Name()
-			d := runs.Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: agentID}
-			if !fileExists(d.RequestPath()) {
-				continue
-			}
-			if fileExists(d.SessionPath()) {
-				continue
-			}
-			snap, err := d.ReadStatus()
-			if err != nil {
-				continue
-			}
-			if snap.State != protocol.StatusRunning || snap.PID <= 0 || !colony.ProcessAlive(snap.PID) {
-				continue
-			}
-			req, err := d.ReadRequest()
-			if err != nil {
-				continue
-			}
-			startedAt := snap.StartedAt
-			if startedAt.IsZero() {
-				startedAt = req.CreatedAt
-			}
-			items = append(items, AgentItem{
-				Kind:      "afk",
-				Bee:       req.Bee,
-				PID:       snap.PID,
-				TraceID:   traceID,
-				AgentID:   agentID,
-				StartedAt: startedAt.UTC().Format(time.RFC3339),
-				RunDir:    d.Root(),
-			})
+		items = append(items, found...)
+	}
+	return items, nil
+}
+
+func scanLiveAFKTrace(colonyRoot, tracePath, traceID string) ([]AgentItem, error) {
+	agentDirs, err := os.ReadDir(tracePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
 		}
+		return nil, err
+	}
+	var items []AgentItem
+	for _, agentEntry := range agentDirs {
+		if !agentEntry.IsDir() || runs.IsReservedTraceSubdir(agentEntry.Name()) {
+			continue
+		}
+		agentID := agentEntry.Name()
+		d := runs.Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: agentID}
+		if !fileExists(d.RequestPath()) {
+			continue
+		}
+		if fileExists(d.SessionPath()) {
+			continue
+		}
+		snap, err := d.ReadStatus()
+		if err != nil {
+			continue
+		}
+		if snap.State != protocol.StatusRunning || snap.PID <= 0 || !colony.ProcessAlive(snap.PID) {
+			continue
+		}
+		req, err := d.ReadRequest()
+		if err != nil {
+			continue
+		}
+		startedAt := snap.StartedAt
+		if startedAt.IsZero() {
+			startedAt = req.CreatedAt
+		}
+		items = append(items, AgentItem{
+			Kind:      "afk",
+			Bee:       req.Bee,
+			PID:       snap.PID,
+			TraceID:   traceID,
+			AgentID:   agentID,
+			StartedAt: startedAt.UTC().Format(time.RFC3339),
+			RunDir:    d.Root(),
+		})
 	}
 	return items, nil
 }

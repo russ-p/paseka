@@ -90,7 +90,7 @@ Standing is a **cue** binding, not a ledger flag. Recommended ids look like `tra
 
 Standing `emit: task` cues require `review: none` (or omit review) and the named bee must have `worktree: false`. Load/import errors name the cue, bee, and field.
 
-First successful run seeds honey from `standing.stipend`. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. This slice does **not** yet refuse overlapping ticks. Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
+First successful run seeds honey from `standing.stipend`. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. A second tick is refused while any ledger task is `planned`, `ready`, `running`, or `waiting_review`, or a live AFK adapter is still running on that trail (interactive `bee chat` does not count). Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
 
 ### Schema (MVP)
 
@@ -159,7 +159,7 @@ Bloom seed and top-up, plus standing seed and per-tick replace:
 | **`defaults.energy_budget`** in `colony.yaml` | First seed on a trace (task create, reactor ensure-seed, cue without override) | Sets initial `energyBudget` / `energyRemaining` (default `12`) |
 | **Cue `energy_budget`** | Fresh **bloom** trail only (`energyBudget == 0` on snapshot) | Seeds a **smaller or custom initial** reserve via ledger `SeedEnergy` — can be less than colony default |
 | **Standing first-tick seed** | Fresh standing trail (`energyBudget == 0`) | Seeds `energyBudget` / `energyRemaining` from `standing.stipend` (same `SeedEnergy` primitive) |
-| **Standing later tick** | Standing trail already seeded, not killed | Publishes `SIGNAL` / `energy.stipend` before ingress; **sets** `energyRemaining` to stipend. Does not change budget or `energyAdded`. Does **not** unblock honey-blocked tasks from a previous tick |
+| **Standing later tick** | Standing trail already seeded, not killed, not busy | Publishes `SIGNAL` / `energy.stipend` before ingress; **sets** `energyRemaining` to stipend. Does not change budget or `energyAdded`. Does **not** unblock honey-blocked tasks from a previous tick |
 | **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining`; after seed also increments `energyAdded`. Does not change `energyBudget`. Unblocks honey-blocked tasks on a **live** tick; the next standing stipend wipes leftover remaining back to stipend |
 
 Rules:
@@ -170,6 +170,7 @@ Rules:
 - Standing cue on a **seeded** trail → replace remaining with stipend, then publish ingress.
 - `cue run --trace` (or Console/Telegram `traceId`) on a bloom trail that **already has** honey → cue `energy_budget` seed is **ignored** (no shrink, no re-seed).
 - Killed standing trail → cue run fails closed (names `system.kill`); no stipend event, no ingress.
+- Standing trail with an open tick (`planned` / `ready` / `running` / `waiting_review`) or a live AFK run on that `traceId` → cue run fails closed (error says the trail **is busy**); no stipend, no ingress. `blocked` / `completed` / `failed` / `cancelled` and interactive sessions do not block.
 - Cues never emit `energy.add` — use CLI, Console, or Telegram `/energy` for a live-tick extra token.
 
 Full ledger model: [task ledger](../reference/task-ledger.md) § Honey reserve.
@@ -259,7 +260,7 @@ Colony YAML says **what** to publish (`.paseka/cues/<id>.yaml`). The apiary says
 
 **Do not** point GitHub (or any internet webhook) at `POST /api/cues/:id/run`. Use SSH or a self-hosted runner on the hive host and call Queen Shell. Map provider JSON to cue `Text` / `--set` in the wrapper — cue files stay GitHub-agnostic (no stdin / `--file` on `cue run`).
 
-**Idempotency** is the wrapper’s job. On a **non-standing** cue, omitting `--trace` always starts a **new** trail; a retried GitHub delivery or a double timer tick otherwise burns a second honey reserve. Remember `delivery_id` or `job@slot` and skip the second `cue run`. Recurring procedures should declare **`standing`** so omitted `--trace` reuses the procedure identity (overlap refuse is not in this slice — the wrapper should still skip a second tick).
+**Idempotency** is the wrapper’s job. On a **non-standing** cue, omitting `--trace` always starts a **new** trail; a retried GitHub delivery or a double timer tick otherwise burns a second honey reserve. Remember `delivery_id` or `job@slot` and skip the second `cue run`. Recurring procedures should declare **`standing`** so omitted `--trace` reuses the procedure identity; Paseka also refuses a second tick while the trail is busy. The wrapper should still skip a double fire when it can.
 
 Examples (apiary-local; adjust `-C` / paths):
 

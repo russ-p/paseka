@@ -8,9 +8,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/cues"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
@@ -943,6 +945,19 @@ body: "{{.Body}}"
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := ledger.Apply(pub.events[0]); err != nil {
+		t.Fatal(err)
+	}
+	done, err := protocol.NewEvent(first.TraceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: first.TaskID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(done); err != nil {
+		t.Fatal(err)
+	}
 	second, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
 		ColonyRoot: root,
 		CueID:      "daily",
@@ -1206,6 +1221,138 @@ func TestRunStandingRefusesKilledUnseededTrail(t *testing.T) {
 	}
 }
 
+func TestRunStandingRefusesOpenTick(t *testing.T) {
+	for _, status := range []protocol.TaskStatus{
+		protocol.TaskStatusPlanned,
+		protocol.TaskStatusReady,
+		protocol.TaskStatusRunning,
+		protocol.TaskStatusWaitingReview,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			root := t.TempDir()
+			writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+			ledger := taskledger.NewMemoryLedger()
+			if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+				t.Fatal(err)
+			}
+			mustApplyStandingTask(t, ledger, "task-open", status)
+
+			pub := &recordingPublisher{}
+			_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+				ColonyRoot: root,
+				CueID:      "daily-triage",
+				Text:       "tick",
+				Source:     "cli",
+				AgentID:    "cli",
+			})
+			if err == nil || !strings.Contains(err.Error(), "is busy") || !strings.Contains(err.Error(), string(status)) {
+				t.Fatalf("err = %v", err)
+			}
+			if len(pub.events) != 0 {
+				t.Fatalf("published = %+v, want none", pub.events)
+			}
+			snap, err := ledger.Snapshot("trail-daily-triage")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snap.EnergyRemaining != 4 {
+				t.Fatalf("remaining = %d, want unchanged 4", snap.EnergyRemaining)
+			}
+		})
+	}
+}
+
+func TestRunStandingAllowsBlockedOrFinishedTick(t *testing.T) {
+	for _, status := range []protocol.TaskStatus{
+		protocol.TaskStatusBlocked,
+		protocol.TaskStatusCompleted,
+		protocol.TaskStatusFailed,
+		protocol.TaskStatusCancelled,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			writeColonyManifest(t, root, 12)
+			writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+			ledger := taskledger.NewMemoryLedger()
+			if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+				t.Fatal(err)
+			}
+			mustApplyStandingTask(t, ledger, "task-done", status)
+
+			pub := &recordingPublisher{}
+			_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+				ColonyRoot: root,
+				CueID:      "daily-triage",
+				Text:       "tick",
+				Source:     "cli",
+				AgentID:    "cli",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(pub.events) != 2 {
+				t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+			}
+			if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergyStipend) {
+				t.Fatalf("first kind = %q", protocol.PayloadKind(pub.events[0].Payload))
+			}
+		})
+	}
+}
+
+func TestRunStandingRefusesLiveAFK(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	writeStandingLiveAFK(t, root, "trail-daily-triage", "watch", os.Getpid(), false)
+
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+		t.Fatal(err)
+	}
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err == nil || !strings.Contains(err.Error(), "is busy") || !strings.Contains(err.Error(), "watch still in flight") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("published = %+v, want none", pub.events)
+	}
+}
+
+func TestRunStandingAllowsInteractiveSessionOnTrail(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeColonyManifest(t, root, 12)
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	writeStandingLiveAFK(t, root, "trail-daily-triage", "watch", os.Getpid(), true)
+
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+		t.Fatal(err)
+	}
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pub.events) != 2 {
+		t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+	}
+}
+
 func TestRunNonStandingStillGeneratesTrace(t *testing.T) {
 	root := t.TempDir()
 	writeCueFile(t, root, "feature.yaml", `emit: signal
@@ -1229,5 +1376,83 @@ body: "{{.Body}}"
 	}
 	if !strings.HasPrefix(res.TraceID, "trace-") {
 		t.Fatalf("generated trace = %q, want trace- prefix", res.TraceID)
+	}
+}
+
+func mustApplyStandingTask(t *testing.T, ledger taskledger.Ledger, taskID string, status protocol.TaskStatus) {
+	t.Helper()
+	plan, err := protocol.NewEvent("trail-daily-triage", "cli", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: taskID,
+			Title:  "tick",
+			Bee:    "watch",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	if status == protocol.TaskStatusPlanned {
+		return
+	}
+	if status == protocol.TaskStatusCompleted {
+		done, err := protocol.NewEvent("trail-daily-triage", "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+			Kind:   protocol.TaskEventCompleted,
+			TaskID: taskID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.Apply(done); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	st, err := protocol.NewEvent("trail-daily-triage", "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:   protocol.TaskEventStatus,
+		TaskID: taskID,
+		Status: status,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(st); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeStandingLiveAFK(t *testing.T, root, traceID, bee string, pid int, session bool) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: root, TraceID: traceID, AgentID: bee}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         bee,
+		Bee:             bee,
+		Adapter:         "script",
+		Workspace:       root,
+		ColonyRoot:      root,
+		CreatedAt:       time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusRunning,
+		PID:             pid,
+		StartedAt:       time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if session {
+		if err := os.WriteFile(d.SessionPath(), []byte(`{"sessionId":"sess-1"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
