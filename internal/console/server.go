@@ -145,10 +145,27 @@ func spaHandler(staticFS fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(staticFS))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && !strings.HasPrefix(r.URL.Path, "/api/") {
-			if _, err := fs.Stat(staticFS, strings.TrimPrefix(r.URL.Path, "/")); err != nil {
+			rel := strings.TrimPrefix(r.URL.Path, "/")
+			if _, err := fs.Stat(staticFS, rel); err != nil {
+				if looksLikeStaticAsset(rel) {
+					http.NotFound(w, r)
+					return
+				}
 				r.URL.Path = "/"
 			}
 		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// looksLikeStaticAsset reports paths whose last segment has a file extension.
+// Missing assets must 404 instead of falling back to index.html (otherwise
+// go install binaries that omit files look like a working SPA serving HTML as JS).
+func looksLikeStaticAsset(path string) bool {
+	base := path
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		base = path[i+1:]
+	}
+	dot := strings.LastIndex(base, ".")
+	return dot > 0 && dot < len(base)-1
 }

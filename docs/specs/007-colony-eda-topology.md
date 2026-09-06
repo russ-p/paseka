@@ -117,7 +117,7 @@ Do **not** invent bee→bee edges. Do not draw a fake “bee publishes `session.
 
 ### 7. Console render: vendored cytoscape.js
 
-Follow existing vendor pattern (`/vendor/...`), not CDN.
+Follow existing vendored-lib pattern (`/lib/...`), not CDN. Module zips omit `/vendor/` paths, so Console third-party files must not live under a directory named `vendor`.
 
 Console renders from structured `bees` / `events` / `edges` JSON (not by parsing Mermaid). API still returns the canonical `mermaid` string for CLI parity and **Copy Mermaid**.
 

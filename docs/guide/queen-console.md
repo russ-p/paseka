@@ -118,6 +118,11 @@ fast-forward-only; Push is explicit and never uses `--force`.
   attachment depends on the active session registry and terminal setup.
 - **Remote Git state looks stale:** use explicit Fetch. Polling `/api/git`
   intentionally does not contact the remote.
+- **Topology, Sessions, or merge preview load as HTML / fail as JS after
+  `go install`:** third-party Console files are served from `/lib/...`
+  (not `/vendor/...`). Module zips omit any `/vendor/` path, so an older
+  binary can embed the SPA without those bundles. Rebuild or reinstall a
+  version that ships `static/lib`.
 
 The implemented API and UI baseline is recorded in
 [Spec 002](../specs/002-queen-console-mvp.md). Durable operator behavior belongs

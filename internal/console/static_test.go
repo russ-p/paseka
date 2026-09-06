@@ -420,8 +420,8 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 		`id="review-comment-drafts"`,
 		`id="review-comments-submit-form"`,
 		`id="review-rework-hint"`,
-		`/vendor/diff2html/diff2html.min.js`,
-		`/vendor/diff2html/diff2html.min.css`,
+		`/lib/diff2html/diff2html.min.js`,
+		`/lib/diff2html/diff2html.min.css`,
 	} {
 		if !strings.Contains(htmlSrc, needle) {
 			t.Fatalf("index.html missing %s", needle)
@@ -489,8 +489,8 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"static/vendor/diff2html/diff2html.min.js",
-		"static/vendor/diff2html/diff2html.min.css",
+		"static/lib/diff2html/diff2html.min.js",
+		"static/lib/diff2html/diff2html.min.css",
 	} {
 		if _, err := staticFiles.ReadFile(path); err != nil {
 			t.Fatalf("missing vendored asset %s: %v", path, err)
@@ -499,7 +499,7 @@ func TestReviewMergeDiffStaticContract(t *testing.T) {
 }
 
 func TestCytoscapeVendorStaticContract(t *testing.T) {
-	const path = "static/vendor/cytoscape/cytoscape.min.js"
+	const path = "static/lib/cytoscape/cytoscape.min.js"
 	data, err := staticFiles.ReadFile(path)
 	if err != nil {
 		t.Fatalf("missing vendored asset %s: %v", path, err)
@@ -517,13 +517,44 @@ func TestCytoscapeVendorStaticContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/vendor/cytoscape/cytoscape.min.js", nil)
+	req := httptest.NewRequest(http.MethodGet, "/lib/cytoscape/cytoscape.min.js", nil)
 	spaHandler(staticFS).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /vendor/cytoscape/cytoscape.min.js status = %d", rec.Code)
+		t.Fatalf("GET /lib/cytoscape/cytoscape.min.js status = %d", rec.Code)
 	}
 	if !strings.Contains(rec.Body.String(), "cytoscape=t()") {
 		t.Fatal("HTTP response must serve embedded cytoscape bundle")
+	}
+}
+
+func TestEmbeddedStaticOmitsVendorPathSegment(t *testing.T) {
+	err := fs.WalkDir(staticFiles, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if strings.Contains(path, "/vendor/") || strings.HasPrefix(path, "vendor/") {
+			t.Errorf("embedded path %q contains /vendor/; module zips omit those files", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSPAHandlerMissingAssetIsNotIndex(t *testing.T) {
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/lib/missing-bundle.js", nil)
+	spaHandler(staticFS).ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing JS status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "Queen Console") {
+		t.Fatal("missing JS must not fall back to index.html")
 	}
 }
 
@@ -540,7 +571,7 @@ func TestTopologyTabStaticContract(t *testing.T) {
 		`id="topology-copy-btn"`,
 		`id="topology-refresh-btn"`,
 		`id="topology-reset-btn"`,
-		`/vendor/cytoscape/cytoscape.min.js`,
+		`/lib/cytoscape/cytoscape.min.js`,
 	} {
 		if !strings.Contains(htmlSrc, needle) {
 			t.Fatalf("index.html missing %s", needle)

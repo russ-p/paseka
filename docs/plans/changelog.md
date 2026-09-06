@@ -2,6 +2,12 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Console lib assets in `go install` binaries
+
+Queen Console third-party files (xterm, Diff2Html, cytoscape, fonts) live under `/lib/...`. A directory named `vendor` is stripped from Go module zips, so `go install` used to ship a binary that answered those URLs with the SPA `index.html`. Missing `.js`/`.css` requests now 404 instead of falling back to HTML.
+
+- Canonical: [Queen Console](../guide/queen-console.md)
+
 ## 2026-09 — Standing trail overlap refuse
 
 A second standing `cue run` fails closed while the trail already has an open tick (`planned`, `ready`, `running`, `waiting_review`) or a live AFK adapter on that `traceId`. The error says the trail **is busy** and names the blocking task status or bee. No stipend and no ingress. `blocked` / finished tasks and interactive sessions do not block, so a drained tick can start the next ration and a HITL inspect is not a tick.
