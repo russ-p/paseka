@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 // builtinMenuCommands is the fixed setMyCommands order for built-in slash commands

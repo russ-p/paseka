@@ -3,7 +3,7 @@ package taskledger
 import (
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // TaskSnapshot is the current state of one task within a trace.

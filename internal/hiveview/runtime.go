@@ -3,8 +3,8 @@ package hiveview
 import (
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 // RuntimeView is the hive projection of runtime status.

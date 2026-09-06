@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // CodeProposalDiagnosis groups doctor findings for code proposal wiring.

@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"github.com/paseka/paseka/internal/invites"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/invites"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func (r *Reactor) handleInviteProjection(ev protocol.Event) error {

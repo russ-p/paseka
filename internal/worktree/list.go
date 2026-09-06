@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
 )
 
 // Snapshot is one colony-managed or leftover isolated worktree.

@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/colonyinit"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colonyinit"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func defaultGrillDoneWhen() *colony.InviteDoneWhen {

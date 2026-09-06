@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/cursor"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/cursor"
 )
 
 const testChatUUID = "c6b62c6f-7ead-4fd6-9922-e952131177ff"

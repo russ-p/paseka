@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 const defaultScrollbackSize = 512 * 1024

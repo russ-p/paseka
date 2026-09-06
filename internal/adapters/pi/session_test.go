@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {

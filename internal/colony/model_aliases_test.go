@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func TestMergedModelAliasesHomeWins(t *testing.T) {

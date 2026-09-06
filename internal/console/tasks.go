@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/taskledger"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/tasks"
 )
 
 // CreateTaskRequest is the JSON body for POST /api/tasks.

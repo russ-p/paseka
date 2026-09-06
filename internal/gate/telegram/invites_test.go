@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/colony"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestFormatInviteCardIncludesHoneyLine(t *testing.T) {

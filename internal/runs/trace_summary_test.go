@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestResolveTraceSummaryLastWriteWins(t *testing.T) {

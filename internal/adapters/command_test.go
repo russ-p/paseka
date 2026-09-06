@@ -3,7 +3,7 @@ package adapters_test
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 func TestResolveExecCustomCommand(t *testing.T) {

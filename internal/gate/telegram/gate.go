@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 // Gate is the Telegram Human Gateway long-poll process for one colony.

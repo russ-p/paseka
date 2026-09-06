@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/logging"
 )
 
 const createChatTimeout = 15 * time.Second

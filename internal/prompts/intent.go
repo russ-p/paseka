@@ -3,7 +3,7 @@ package prompts
 import (
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 // IntentGeneral is the conventional default intent name when present in a bee vocabulary.

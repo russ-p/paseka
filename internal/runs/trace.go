@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // ReadTraceEvents loads domain events from all agent runs under .paseka/runs/<traceId>/.

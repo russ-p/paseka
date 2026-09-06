@@ -3,7 +3,7 @@ package taskledger
 import (
 	"sort"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // FinalReviewTaskID is the synthetic task id when no explicit final review task was planned.

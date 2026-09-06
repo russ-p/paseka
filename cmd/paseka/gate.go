@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/paseka/paseka/internal/colony"
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	"github.com/russ-p/paseka/internal/colony"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
 	"github.com/spf13/cobra"
 )
 

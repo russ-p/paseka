@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func TestListRegistryAndGit(t *testing.T) {

@@ -3,13 +3,13 @@ package runtime
 import (
 	"context"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/claude"
-	"github.com/paseka/paseka/internal/adapters/cursor"
-	"github.com/paseka/paseka/internal/adapters/opencode"
-	"github.com/paseka/paseka/internal/adapters/pi"
-	"github.com/paseka/paseka/internal/adapters/script"
-	"github.com/paseka/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/claude"
+	"github.com/russ-p/paseka/internal/adapters/cursor"
+	"github.com/russ-p/paseka/internal/adapters/opencode"
+	"github.com/russ-p/paseka/internal/adapters/pi"
+	"github.com/russ-p/paseka/internal/adapters/script"
+	"github.com/russ-p/paseka/internal/bus"
 )
 
 // DispatchRequest is input for spawning one bee/agent run.

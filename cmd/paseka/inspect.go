@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/spf13/cobra"
 )
 

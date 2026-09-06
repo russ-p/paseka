@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // LatestWorktreeBranch returns the latest INSIGHT/worktree.branch name for a flight trail.

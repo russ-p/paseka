@@ -1,9 +1,9 @@
 package console
 
 import (
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 // StartRuntime launches an external `paseka run` when none is alive.

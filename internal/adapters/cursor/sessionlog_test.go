@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 const testSessionID = "11111111-1111-1111-1111-111111111111"

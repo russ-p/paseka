@@ -1,9 +1,9 @@
 package hiveview
 
 import (
-	"github.com/paseka/paseka/internal/artifacts"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // ArtifactView is one trail comb file for Console or export.

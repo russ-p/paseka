@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 func formatUsageAggregate(u *runs.UsageAggregate) string {

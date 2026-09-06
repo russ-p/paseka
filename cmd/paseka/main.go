@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/paseka/paseka/internal/colonyinit"
-	"github.com/paseka/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/colonyinit"
+	"github.com/russ-p/paseka/internal/logging"
 	"github.com/spf13/cobra"
 )
 

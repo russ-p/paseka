@@ -7,11 +7,11 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/colony"
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/colony"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 func TestFormatTracesListEmpty(t *testing.T) {

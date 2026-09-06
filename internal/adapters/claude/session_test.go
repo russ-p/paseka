@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/claude"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/claude"
 )
 
 func TestSessionCommandInteractiveNoPrintFlag(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/console"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 func TestTraceArtifactsAPIHandler(t *testing.T) {

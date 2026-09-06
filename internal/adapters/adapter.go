@@ -3,7 +3,7 @@ package adapters
 import (
 	"context"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // Artifact is a normalized output from an adapter run.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/hiveview"
 )
 
 func TestFormatMarkdownPreservesNewlines(t *testing.T) {

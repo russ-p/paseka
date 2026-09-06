@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // EventHandler processes one domain event from the bus.

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestLogDomainEventPublish(t *testing.T) {

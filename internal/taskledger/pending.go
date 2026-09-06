@@ -3,7 +3,7 @@ package taskledger
 import (
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func pendingReadyFromPayload(payload protocol.TaskReadyPayload) *PendingReadySnapshot {

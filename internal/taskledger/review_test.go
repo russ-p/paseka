@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func TestApplyEventTaskStatus(t *testing.T) {

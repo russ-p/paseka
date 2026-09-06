@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/nuc"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/nuc"
 	"github.com/spf13/cobra"
 )
 

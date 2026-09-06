@@ -3,7 +3,7 @@ package taskledger
 import (
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // IsKillableTaskStatus reports whether a task should transition to cancelled on system.kill.

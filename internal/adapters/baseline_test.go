@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 func TestAttributableDiffExcludesPreExistingDirty(t *testing.T) {

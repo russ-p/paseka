@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 func TestResolveStatusStoppedAndRunning(t *testing.T) {

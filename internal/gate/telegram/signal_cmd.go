@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/cues"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/tasks"
 )
 
 const maxSignalTitleLen = 200

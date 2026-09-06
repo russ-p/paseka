@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // State is persisted runtime state under ~/.config/paseka/<slug>/state.json.

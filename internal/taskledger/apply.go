@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // ApplyEvent is a pure reducer: given a trace snapshot and one bus event,

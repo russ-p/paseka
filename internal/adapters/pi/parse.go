@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 func piMode(format string) string {

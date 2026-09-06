@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/russ-p/paseka/internal/colonyinit"
 )
 
 func TestInitScaffold(t *testing.T) {

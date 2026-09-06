@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/nuc"
+	"github.com/russ-p/paseka/internal/nuc"
 )
 
 func TestRoundTripExportImport(t *testing.T) {

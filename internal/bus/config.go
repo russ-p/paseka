@@ -3,7 +3,7 @@ package bus
 import (
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 // Config holds NATS connection and subject prefix settings.

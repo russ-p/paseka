@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 func TestBeeRunUsesWorktreeForBuilder(t *testing.T) {

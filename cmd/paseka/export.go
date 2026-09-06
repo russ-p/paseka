@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/export"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/export"
 	"github.com/spf13/cobra"
 )
 

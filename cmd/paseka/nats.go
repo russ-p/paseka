@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/review"
 	"github.com/spf13/cobra"
 )
 

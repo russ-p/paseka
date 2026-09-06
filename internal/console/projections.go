@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/prompts"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/prompts"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 const (

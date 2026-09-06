@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 // SessionAdapter builds commands for interactive OpenCode TUI sessions.

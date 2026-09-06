@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 // PingResult summarizes light NATS connectivity for colony status snapshots.

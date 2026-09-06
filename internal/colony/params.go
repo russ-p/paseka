@@ -3,7 +3,7 @@ package colony
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 // MergeRunParams overlays non-zero/explicit fields from over onto base.

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func (r *Reactor) handleWorktreeBranch(ctx context.Context, ev protocol.Event) error {

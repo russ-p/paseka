@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 // BotAPI is the subset of Telegram Bot API used by the gate (mockable in tests).

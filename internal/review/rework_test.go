@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/review"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func TestReworkTaskBodyPointsAtCombAndOriginalIntent(t *testing.T) {

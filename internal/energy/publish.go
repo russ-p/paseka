@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 // ErrHoneyReserveExhausted is returned when a trace has insufficient honey reserve.

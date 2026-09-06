@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 func TestSessionAndTranscript(t *testing.T) {

@@ -1,7 +1,7 @@
 package bus_test
 
 import (
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func colonyCtx(slug, natsURL string) colony.Context {

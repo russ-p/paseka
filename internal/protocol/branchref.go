@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/gitroot"
 )
 
 // Reserved branch ref names that isolated worktrees must not target.

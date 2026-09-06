@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func writeTestColonyWithBees(root string, bees map[string]colony.Bee) error {

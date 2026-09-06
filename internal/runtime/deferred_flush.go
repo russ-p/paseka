@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func (d *Dispatcher) flushDeferredEvents(ctx context.Context, colonyRoot, traceID, agentID string) error {

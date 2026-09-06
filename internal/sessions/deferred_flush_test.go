@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 type pendingSessionAdapter struct {

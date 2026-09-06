@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/prompts"
+	"github.com/russ-p/paseka/internal/prompts"
 )
 
 func writePromptTree(t *testing.T, colonyRoot string) {

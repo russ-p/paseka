@@ -3,8 +3,8 @@ package taskledger_test
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func TestApplyEventSystemKill(t *testing.T) {

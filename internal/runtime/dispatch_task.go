@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot) error {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // PayloadKind extracts payload.kind from raw JSON.

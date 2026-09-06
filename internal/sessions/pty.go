@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/creack/pty"
-	"github.com/paseka/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters"
 )
 
 // ptyProcess wraps a PTY-backed child process.

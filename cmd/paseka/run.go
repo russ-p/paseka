@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/runtime"
 	"github.com/spf13/cobra"
 )
 

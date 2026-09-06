@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
 )
 
 func TestRuntimeRegistry(t *testing.T) {

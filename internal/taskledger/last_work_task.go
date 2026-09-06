@@ -1,6 +1,6 @@
 package taskledger
 
-import "github.com/paseka/paseka/internal/protocol"
+import "github.com/russ-p/paseka/internal/protocol"
 
 // IsLastWorkTask reports whether currentTaskID is the sole incomplete non-final-review
 // task in the trace ledger. Used at AFK ledger dispatch to gate trace.summary guidance.

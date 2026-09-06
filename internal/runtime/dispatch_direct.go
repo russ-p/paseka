@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {

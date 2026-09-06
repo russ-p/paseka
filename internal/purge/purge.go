@@ -3,10 +3,10 @@ package purge
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/energy"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/energy"
+	"github.com/russ-p/paseka/internal/tasks"
 )
 
 func validateReseedEnergy(target PurgeTarget) error {

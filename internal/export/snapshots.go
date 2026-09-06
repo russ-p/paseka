@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/paseka/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/cues"
 )
 
 // NamedYAML is a committed config file snapshot for export.

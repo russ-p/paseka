@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/cues"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/tasks"
 )
 
 // CueView is one cue row for GET /api/cues.

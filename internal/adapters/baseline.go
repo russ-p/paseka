@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/gitroot"
 )
 
 // WorkspaceBaseline captures tracked dirty state before an adapter run.

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/script"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/script"
 )
 
 func initGitRepo(t *testing.T, root string) {

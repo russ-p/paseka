@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/runs"
 
-	"github.com/paseka/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/artifacts"
 )
 
 // Options configures a trace export.

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/colonyinit"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colonyinit"
 	"gopkg.in/yaml.v3"
 )
 

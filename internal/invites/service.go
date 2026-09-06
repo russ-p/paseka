@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/ids"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/ids"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 // Service coordinates invite persistence, bus publish, and session launch.

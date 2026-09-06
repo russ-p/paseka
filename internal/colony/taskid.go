@@ -1,7 +1,7 @@
 package colony
 
 import (
-	"github.com/paseka/paseka/internal/ids"
+	"github.com/russ-p/paseka/internal/ids"
 )
 
 const taskIDPrefix = "task-"

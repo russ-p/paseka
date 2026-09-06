@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 // BeeRunRequest is input for a one-shot bee dispatch from the CLI.

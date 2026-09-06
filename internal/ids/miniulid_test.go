@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/paseka/paseka/internal/ids"
+	"github.com/russ-p/paseka/internal/ids"
 )
 
 func TestMiniULIDFormat(t *testing.T) {

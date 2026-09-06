@@ -3,7 +3,7 @@ package colony
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestCompletionContractValidateRunEvents(t *testing.T) {

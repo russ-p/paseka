@@ -3,7 +3,7 @@ package colony_test
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func TestComputeSlugFromRemote(t *testing.T) {

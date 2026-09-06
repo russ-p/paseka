@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/spf13/cobra"
 )
 

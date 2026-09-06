@@ -4,7 +4,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // Publisher publishes protocol events to the bus.

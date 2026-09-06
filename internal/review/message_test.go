@@ -3,9 +3,9 @@ package review_test
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/review"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func TestApproveMessageStashOutcomes(t *testing.T) {

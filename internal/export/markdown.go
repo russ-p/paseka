@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 // RenderMarkdown builds a Markdown document for one trace export.

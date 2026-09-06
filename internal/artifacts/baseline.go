@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // BaselineSnapshot is persisted under the producing run directory.

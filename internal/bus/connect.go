@@ -3,7 +3,7 @@ package bus
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 // ConnectColony connects to NATS using resolved colony context.

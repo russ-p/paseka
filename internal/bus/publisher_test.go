@@ -3,7 +3,7 @@ package bus_test
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/bus"
 )
 
 func TestPublisherAvailable(t *testing.T) {

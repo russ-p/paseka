@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/sessions"
 	"github.com/spf13/cobra"
 )
 

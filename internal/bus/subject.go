@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // EventSubject maps a protocol event to a colony-scoped NATS subject.

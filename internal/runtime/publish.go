@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func (d *Dispatcher) publishRunOutcome(

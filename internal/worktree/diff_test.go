@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func TestMergeDiffThreeDot(t *testing.T) {

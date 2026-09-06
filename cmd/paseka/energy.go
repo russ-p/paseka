@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/taskledger"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
 

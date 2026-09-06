@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // ResolveStatus maps process and context errors to a run status and diagnostic message.

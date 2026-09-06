@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 const kvApplyMaxRetries = 16

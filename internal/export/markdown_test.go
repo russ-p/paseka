@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestParseFormat(t *testing.T) {

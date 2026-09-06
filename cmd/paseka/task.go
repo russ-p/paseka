@@ -8,10 +8,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/taskledger"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
 

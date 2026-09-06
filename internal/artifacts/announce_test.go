@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paseka/paseka/internal/artifacts"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 type recordingPublisher struct {

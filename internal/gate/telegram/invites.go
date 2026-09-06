@@ -7,15 +7,15 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/invites"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/sessions"
-	"github.com/paseka/paseka/internal/taskledger"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/invites"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/tasks"
 )
 
 const maxInviteTaskLen = 200

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
 )
 
 func writeTelegramYAML(t *testing.T, slug, content string) {

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
 )
 
 // MergeOptions configures merging a trace worktree branch into the default branch.

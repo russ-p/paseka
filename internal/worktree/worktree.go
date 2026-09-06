@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // Entry describes a colony-managed worktree.

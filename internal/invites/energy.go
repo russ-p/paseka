@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/energy"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/energy"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func (s *Service) consumeSessionEnergy(ctx context.Context, traceID string) error {

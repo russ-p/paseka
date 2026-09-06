@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // Deferred deny-list kinds are live-only and cannot be queued with --defer.

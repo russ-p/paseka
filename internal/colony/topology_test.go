@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func TestBuildTopologyGolden(t *testing.T) {

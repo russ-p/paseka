@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 type recordingPublisher struct {

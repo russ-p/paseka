@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // PurgeTracePlan describes bus artifacts that would be removed for one trace.

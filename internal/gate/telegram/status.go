@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/cues"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runtime"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 // Snapshot is the Telegram /status projection for one colony.

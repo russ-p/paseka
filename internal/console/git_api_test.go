@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/console"
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/sessions"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/console"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func TestGitAPIStatusNoOrigin(t *testing.T) {

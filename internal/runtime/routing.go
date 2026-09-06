@@ -3,8 +3,8 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // BeeRegistry holds loaded bee configs and routing helpers for the reactor.

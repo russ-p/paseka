@@ -4,10 +4,10 @@ import (
 	"context"
 	"unicode/utf8"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/cursor"
-	"github.com/paseka/paseka/internal/adapters/pi"
-	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/cursor"
+	"github.com/russ-p/paseka/internal/adapters/pi"
+	"github.com/russ-p/paseka/internal/hiveview"
 )
 
 const (

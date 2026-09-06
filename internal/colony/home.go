@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/gitroot"
 	"gopkg.in/yaml.v3"
 )
 

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/protocol"
 	"gopkg.in/yaml.v3"
 )
 

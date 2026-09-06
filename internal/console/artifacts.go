@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/paseka/paseka/internal/export"
-	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/export"
+	"github.com/russ-p/paseka/internal/hiveview"
 )
 
 func (a *api) handleTraceArtifacts(w http.ResponseWriter, r *http.Request, traceID string) {

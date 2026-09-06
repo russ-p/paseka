@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
 )
 
 // PurgeTarget selects which artifact classes to remove.

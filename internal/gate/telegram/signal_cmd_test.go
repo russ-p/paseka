@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/cues"
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	"github.com/russ-p/paseka/internal/cues"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
 )
 
 func TestBuildCustomSignalPayload(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/logging"
 )
 
 func TestRedactArgs(t *testing.T) {

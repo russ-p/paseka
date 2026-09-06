@@ -7,15 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/adapters/cursor"
-	"github.com/paseka/paseka/internal/artifacts"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/logging"
-	"github.com/paseka/paseka/internal/prompts"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/cursor"
+	"github.com/russ-p/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/prompts"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // preparedDispatch holds everything needed after Prepare through Finalize.

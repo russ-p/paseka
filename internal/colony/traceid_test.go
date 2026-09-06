@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func TestNewTraceIDFormat(t *testing.T) {

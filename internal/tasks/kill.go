@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/paseka/paseka/internal/energy"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/energy"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 // KillTraceInput describes a hard kill for one trace.

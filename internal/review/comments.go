@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/artifacts"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 const (

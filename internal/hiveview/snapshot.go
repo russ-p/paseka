@@ -5,15 +5,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/runtime"
-	"github.com/paseka/paseka/internal/sessions"
-	"github.com/paseka/paseka/internal/taskledger"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/tasks"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestNewEventDefaults(t *testing.T) {

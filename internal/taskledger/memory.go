@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // MemoryLedger is an in-process Ledger for tests and single-process reactors.

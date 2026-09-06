@@ -4,11 +4,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 func refusePullIfRootBees(ctx colony.Context, mgr *sessions.Manager) error {

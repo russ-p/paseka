@@ -1,4 +1,4 @@
-module github.com/paseka/paseka
+module github.com/russ-p/paseka
 
 go 1.25.0
 

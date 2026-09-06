@@ -11,9 +11,9 @@ import (
 
 	"time"
 
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/runtime"
 )
 
 func TestStatusCLIStoppedRuntimeExitZero(t *testing.T) {

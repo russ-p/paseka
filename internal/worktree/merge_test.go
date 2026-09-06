@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func TestMergeComposedMessageWithBody(t *testing.T) {

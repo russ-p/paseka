@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/review"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event) error {

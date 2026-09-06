@@ -3,7 +3,7 @@ package claude
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestParseStreamJSONResultAndText(t *testing.T) {

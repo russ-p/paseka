@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/review"
 )
 
 func TestComposeMergeMessageDefaultSubjectWithSummaryBody(t *testing.T) {

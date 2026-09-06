@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/purge"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/purge"
 )
 
 func TestPurgeReseedEnergyRequiresBusAndTrace(t *testing.T) {

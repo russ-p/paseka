@@ -3,7 +3,7 @@ package energy
 import (
 	"time"
 
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func waitIncrease(ledger taskledger.Ledger, traceID string, beforeRemaining, amount int) (taskledger.TraceSnapshot, error) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/paseka/paseka/internal/artifacts"
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 func subjectPrefixForColonyRoot(colonyRoot string) string {

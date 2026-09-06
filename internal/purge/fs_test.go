@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/purge"
-	"github.com/paseka/paseka/internal/runs"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/purge"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 func TestPurgeRuns(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/paseka/paseka/internal/colony"
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	"github.com/russ-p/paseka/internal/colony"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
 )
 
 func TestCommandMenuScopesDedupesChatIDs(t *testing.T) {

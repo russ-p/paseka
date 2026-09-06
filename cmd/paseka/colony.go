@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 	"github.com/spf13/cobra"
 )
 

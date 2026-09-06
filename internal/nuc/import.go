@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/cues"
 )
 
 type fileAction string

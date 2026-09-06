@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/hiveview"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 type htmlEventView struct {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/runtime"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runtime"
+	"github.com/russ-p/paseka/internal/sessions"
 	"golang.org/x/term"
 )
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/colony"
 	"gopkg.in/yaml.v3"
 )
 

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // EligiblePlanned returns planned tasks whose dependencies are all completed.

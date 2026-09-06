@@ -3,7 +3,7 @@ package telegram_test
 import (
 	"testing"
 
-	tggate "github.com/paseka/paseka/internal/gate/telegram"
+	tggate "github.com/russ-p/paseka/internal/gate/telegram"
 )
 
 func TestAllowedRequiresUserAndChat(t *testing.T) {

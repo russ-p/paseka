@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // CompletionRule requires a bee run to emit a minimum number of domain events.

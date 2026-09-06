@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paseka/paseka/internal/cues"
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 func writeCueFile(t *testing.T, root, name, body string) {

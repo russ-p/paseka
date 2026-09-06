@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
 )
 
 // SpawnFunc launches a detached `paseka run` and returns the child PID.

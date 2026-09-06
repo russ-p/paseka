@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // Topology is a static, config-derived EDA graph of bees and bus events.

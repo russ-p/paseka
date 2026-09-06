@@ -3,7 +3,7 @@ package adapters
 import (
 	"os"
 
-	"github.com/paseka/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // ScriptEnv returns process environment for script adapter runs.

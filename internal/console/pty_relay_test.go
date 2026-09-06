@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/paseka/paseka/internal/adapters"
-	"github.com/paseka/paseka/internal/console"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/console"
+	"github.com/russ-p/paseka/internal/sessions"
 )
 
 func TestSessionPTYWebSocketRelay(t *testing.T) {

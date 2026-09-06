@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/console"
-	"github.com/paseka/paseka/internal/sessions"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/console"
+	"github.com/russ-p/paseka/internal/sessions"
 	"github.com/spf13/cobra"
 )
 

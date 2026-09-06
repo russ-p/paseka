@@ -6,9 +6,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/cues"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/cues"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
 

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/artifacts"
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/homestate"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/artifacts"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // MatchDoneWhen reports whether ev matches an invite completion contract.

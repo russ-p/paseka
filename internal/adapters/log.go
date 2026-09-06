@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/logging"
 )
 
 const logOutputMaxLen = 2048

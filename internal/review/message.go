@@ -1,8 +1,8 @@
 package review
 
 import (
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 // ApproveMessageOptions configures the human-readable approve success message.

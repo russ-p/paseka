@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/paseka/paseka/internal/protocol"
-	"github.com/paseka/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
 

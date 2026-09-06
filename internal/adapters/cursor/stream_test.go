@@ -3,7 +3,7 @@ package cursor
 import (
 	"testing"
 
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func TestParseStreamJSONResultEvent(t *testing.T) {

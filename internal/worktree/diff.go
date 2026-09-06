@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/paseka/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/gitroot"
 )
 
 const maxMergeDiffBytes = 1 << 20 // 1 MiB

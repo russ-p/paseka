@@ -3,9 +3,9 @@ package runtime
 import (
 	"context"
 
-	"github.com/paseka/paseka/internal/bus"
-	"github.com/paseka/paseka/internal/invites"
-	"github.com/paseka/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/invites"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event) error {

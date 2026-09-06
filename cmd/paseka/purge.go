@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/purge"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/purge"
 	"github.com/spf13/cobra"
 )
 

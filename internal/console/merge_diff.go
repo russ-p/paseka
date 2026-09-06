@@ -1,9 +1,9 @@
 package console
 
 import (
-	"github.com/paseka/paseka/internal/colony"
-	"github.com/paseka/paseka/internal/gitroot"
-	"github.com/paseka/paseka/internal/worktree"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/worktree"
 )
 
 // MergeDiffView is the Queen Console projection of a trace merge preview.

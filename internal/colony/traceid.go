@@ -3,7 +3,7 @@ package colony
 import (
 	"time"
 
-	"github.com/paseka/paseka/internal/ids"
+	"github.com/russ-p/paseka/internal/ids"
 )
 
 const traceIDPrefix = "trace-"

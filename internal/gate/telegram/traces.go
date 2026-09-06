@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paseka/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/hiveview"
 )
 
 const defaultTracesLimit = 20
