@@ -69,3 +69,31 @@ func ResolveTraceTitle(colonyRoot, traceID string) (string, error) {
 	}
 	return "", nil
 }
+
+// HasInsightTraceTitle reports whether an INSIGHT/trace.title event exists on the trail.
+// Empty or unreadable titles do not count. Fallbacks (feature.requested, task.md) are ignored.
+func HasInsightTraceTitle(colonyRoot, traceID string) (bool, error) {
+	if colonyRoot == "" || traceID == "" {
+		return false, nil
+	}
+	events, err := ReadTraceEvents(colonyRoot, traceID)
+	if err != nil {
+		return false, err
+	}
+	for _, ev := range events {
+		if ev.Type != protocol.EventInsight {
+			continue
+		}
+		if protocol.PayloadKind(ev.Payload) != string(protocol.InsightTraceTitle) {
+			continue
+		}
+		var p protocol.TraceTitlePayload
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			continue
+		}
+		if strings.TrimSpace(p.Title) != "" {
+			return true, nil
+		}
+	}
+	return false, nil
+}

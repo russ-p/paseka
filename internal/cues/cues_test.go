@@ -3,6 +3,7 @@ package cues_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -858,8 +859,17 @@ func TestRunStandingOmitsTraceUsesStandingID(t *testing.T) {
 	if res.TraceID != "trail-daily-triage" {
 		t.Fatalf("trace = %q", res.TraceID)
 	}
-	if len(pub.events) != 1 || pub.events[0].TraceID != "trail-daily-triage" {
+	if len(pub.events) != 2 {
 		t.Fatalf("events = %+v", pub.events)
+	}
+	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.InsightTraceTitle) {
+		t.Fatalf("first kind = %q, want trace.title", protocol.PayloadKind(pub.events[0].Payload))
+	}
+	if got := insightTraceTitle(t, pub.events[0]); got != "Daily triage" {
+		t.Fatalf("title = %q", got)
+	}
+	if pub.events[1].TraceID != "trail-daily-triage" || protocol.PayloadKind(pub.events[1].Payload) != "triage.tick" {
+		t.Fatalf("ingress = %+v", pub.events[1])
 	}
 	snap, err := ledger.Snapshot("trail-daily-triage")
 	if err != nil {
@@ -945,7 +955,11 @@ body: "{{.Body}}"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ledger.Apply(pub.events[0]); err != nil {
+	planEv, ok := eventByKind(pub.events, string(protocol.TaskEventPlan))
+	if !ok {
+		t.Fatalf("missing task.plan in %+v", kindsOf(pub.events))
+	}
+	if _, err := ledger.Apply(planEv); err != nil {
 		t.Fatal(err)
 	}
 	done, err := protocol.NewEvent(first.TraceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
@@ -989,6 +1003,9 @@ body: "{{.Body}}"
 	if protocol.PayloadKind(ingress.Payload) != string(protocol.TaskEventPlan) {
 		t.Fatalf("last kind = %q, want task.plan", protocol.PayloadKind(ingress.Payload))
 	}
+	if n := countKind(pub.events, string(protocol.InsightTraceTitle)); n != 1 {
+		t.Fatalf("trace.title count = %d, want 1", n)
+	}
 }
 
 func TestRunStandingMatchingTraceOK(t *testing.T) {
@@ -1009,6 +1026,89 @@ func TestRunStandingMatchingTraceOK(t *testing.T) {
 	}
 	if pub.events[0].TraceID != "trail-daily-triage" {
 		t.Fatalf("trace = %q", pub.events[0].TraceID)
+	}
+}
+
+func TestRunStandingFirstTitleFromCueIDWhenDescriptionEmpty(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", `emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, taskledger.NewMemoryLedger(), cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := insightTraceTitle(t, pub.events[0]); got != "daily-triage" {
+		t.Fatalf("title = %q, want cue id", got)
+	}
+}
+
+func TestRunStandingFirstTitleClipsToMaxLen(t *testing.T) {
+	root := t.TempDir()
+	long := strings.Repeat("a", protocol.MaxTraceTitleLen+20)
+	writeCueFile(t, root, "daily-triage.yaml", fmt.Sprintf(`description: %s
+emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`, long))
+
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, taskledger.NewMemoryLedger(), cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := insightTraceTitle(t, pub.events[0])
+	if got != strings.Repeat("a", protocol.MaxTraceTitleLen) {
+		t.Fatalf("title len = %d, want %d", len(got), protocol.MaxTraceTitleLen)
+	}
+}
+
+func TestRunStandingDoesNotOverwriteExistingTitle(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	writeStandingTraceTitle(t, root, "trail-daily-triage", "Human name")
+
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, taskledger.NewMemoryLedger(), cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := countKind(pub.events, string(protocol.InsightTraceTitle)); n != 0 {
+		t.Fatalf("published title events = %d, want none: %+v", n, pub.events)
+	}
+	if len(pub.events) != 1 || protocol.PayloadKind(pub.events[0].Payload) != "triage.tick" {
+		t.Fatalf("events = %+v", pub.events)
 	}
 }
 
@@ -1138,6 +1238,9 @@ func TestRunStandingSecondTickResetsLeftoverAndIgnoresAdd(t *testing.T) {
 	}
 	if snap.EnergyAdded != 8 {
 		t.Fatalf("added = %d, want unchanged 8", snap.EnergyAdded)
+	}
+	if n := countKind(pub.events, string(protocol.InsightTraceTitle)); n != 1 {
+		t.Fatalf("trace.title count = %d, want 1 (later tick must not overwrite)", n)
 	}
 }
 
@@ -1455,4 +1558,61 @@ func writeStandingLiveAFK(t *testing.T, root, traceID, bee string, pid int, sess
 			t.Fatal(err)
 		}
 	}
+}
+
+func writeStandingTraceTitle(t *testing.T, root, traceID, title string) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: root, TraceID: traceID, AgentID: "scout"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := protocol.NewEvent(traceID, "scout", 1, protocol.EventInsight, protocol.TraceTitlePayload{
+		Kind:  protocol.InsightTraceTitle,
+		Title: title,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(ev); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func insightTraceTitle(t *testing.T, ev protocol.Event) string {
+	t.Helper()
+	if ev.Type != protocol.EventInsight || protocol.PayloadKind(ev.Payload) != string(protocol.InsightTraceTitle) {
+		t.Fatalf("event type=%s kind=%s, want INSIGHT/trace.title", ev.Type, protocol.PayloadKind(ev.Payload))
+	}
+	var p protocol.TraceTitlePayload
+	if err := json.Unmarshal(ev.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p.Title
+}
+
+func eventByKind(events []protocol.Event, kind string) (protocol.Event, bool) {
+	for _, ev := range events {
+		if protocol.PayloadKind(ev.Payload) == kind {
+			return ev, true
+		}
+	}
+	return protocol.Event{}, false
+}
+
+func countKind(events []protocol.Event, kind string) int {
+	n := 0
+	for _, ev := range events {
+		if protocol.PayloadKind(ev.Payload) == kind {
+			n++
+		}
+	}
+	return n
+}
+
+func kindsOf(events []protocol.Event) []string {
+	out := make([]string, 0, len(events))
+	for _, ev := range events {
+		out = append(out, protocol.PayloadKind(ev.Payload))
+	}
+	return out
 }

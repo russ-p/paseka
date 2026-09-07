@@ -30,7 +30,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 
 `task.plan` is consumed by the Task Ledger and reactor. It is **not** auto-included in `{{.Insights}}` because it is structured queue data, not narrative memory.
 
-`trace.title` is trace identity metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime and Console resolve the display title with fallbacks from `feature.requested` and task ledger titles. See [specs/011-trace-title.md](../specs/011-trace-title.md).
+`trace.title` is trace identity metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime and Console resolve the display title with fallbacks from `feature.requested` and task ledger titles. Standing cue first seed publishes one `trace.title` from the cue description (or cue id) when none exists; later ticks do not overwrite. See [specs/011-trace-title.md](../specs/011-trace-title.md) and [Forage Cues](../guide/cues.md).
 
 `trace.summary` is operational trail metadata (last-write-wins). It is **not** projected into `{{.Insights}}` or dashboard Recent insights. Runtime resolves the latest `INSIGHT/trace.summary` by `createdAt`, then `seq`. Payload shape: `{ "kind": "trace.summary", "summary": "<prose>" }` (max 800 characters after trim). Bees on the sole incomplete non-final AFK work task receive must-emit guidance via `{{.IsLastWorkTask}}` in emit partials. See [specs/012-trace-summary.md](../specs/012-trace-summary.md).
 

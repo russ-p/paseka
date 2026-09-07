@@ -111,3 +111,57 @@ func TestResolveTraceTitleEmpty(t *testing.T) {
 		t.Fatalf("title = %q, want empty", got)
 	}
 }
+
+func TestHasInsightTraceTitleIgnoresFallbacks(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trail-daily-triage"
+
+	ok, err := HasInsightTraceTitle(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected no title insight on missing trail")
+	}
+
+	d := Dir{ColonyRoot: root, TraceID: traceID, AgentID: "telegram"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	feature, err := protocol.NewEvent(traceID, "telegram", 0, protocol.EventSignal, map[string]any{
+		"kind":  featureRequestedKind,
+		"title": "Entry title",
+		"body":  "body",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(feature); err != nil {
+		t.Fatal(err)
+	}
+	ok, err = HasInsightTraceTitle(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("feature.requested must not count as trace.title")
+	}
+
+	titleEv, err := protocol.NewEvent(traceID, "scout", 1, protocol.EventInsight, protocol.TraceTitlePayload{
+		Kind:  protocol.InsightTraceTitle,
+		Title: "Daily triage",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(titleEv); err != nil {
+		t.Fatal(err)
+	}
+	ok, err = HasInsightTraceTitle(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected title insight")
+	}
+}

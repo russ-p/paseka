@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Standing trail first title
+
+The first standing `cue run` that seeds honey also publishes `INSIGHT` / `trace.title` when the trail has none yet: cue `description` (trimmed, 120-character cap), or the cue id if description is empty. Later ticks and a human/bee title already on the trail are left alone, so lists show “Daily triage” instead of a raw id without clobbering a refined name.
+
+- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap + first-title slices)
+- Canonical: [Forage Cues](../guide/cues.md), [INSIGHT kinds](../reference/insight-kinds.md) (`trace.title`)
+
+Deferred from that work: Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+
 ## 2026-09 — Console lib assets in `go install` binaries
 
 Queen Console third-party files (xterm, Diff2Html, cytoscape, fonts) live under `/lib/...`. A directory named `vendor` is stripped from Go module zips, so `go install` used to ship a binary that answered those URLs with the SPA `index.html`. Missing `.js`/`.css` requests now 404 instead of falling back to HTML.

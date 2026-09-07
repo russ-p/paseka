@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/energy"
 	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/tasks"
 )
@@ -229,7 +231,10 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 			return err
 		}
 		if snap.EnergyBudget == 0 {
-			return ledger.SeedEnergy(traceID, cue.StandingStipend)
+			if err := ledger.SeedEnergy(traceID, cue.StandingStipend); err != nil {
+				return err
+			}
+			return publishFirstStandingTitle(ctx, publisher, colonyRoot, traceID, agentID, cue)
 		}
 		if publisher == nil {
 			return fmt.Errorf("nats url not configured (cue run requires NATS)")
@@ -266,6 +271,53 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 		return err
 	}
 	return ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget())
+}
+
+func publishFirstStandingTitle(ctx context.Context, publisher bus.Publisher, colonyRoot, traceID, agentID string, cue Cue) error {
+	if publisher == nil {
+		return fmt.Errorf("nats url not configured (cue run requires NATS)")
+	}
+	exists, err := runs.HasInsightTraceTitle(colonyRoot, traceID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	title := standingTraceTitle(cue)
+	if title == "" {
+		return nil
+	}
+	ev, err := protocol.NewEvent(traceID, agentID, 0, protocol.EventInsight, protocol.TraceTitlePayload{
+		Kind:  protocol.InsightTraceTitle,
+		Title: title,
+	})
+	if err != nil {
+		return err
+	}
+	if err := publisher.PublishEvent(ctx, ev); err != nil {
+		return fmt.Errorf("publish trace.title: %w", err)
+	}
+	return nil
+}
+
+func standingTraceTitle(cue Cue) string {
+	title := strings.TrimSpace(cue.Description)
+	if title == "" {
+		title = strings.TrimSpace(cue.ID)
+	}
+	return clipStandingTraceTitle(title)
+}
+
+func clipStandingTraceTitle(title string) string {
+	if len(title) <= protocol.MaxTraceTitleLen {
+		return title
+	}
+	title = title[:protocol.MaxTraceTitleLen]
+	for len(title) > 0 && !utf8.ValidString(title) {
+		title = title[:len(title)-1]
+	}
+	return strings.TrimSpace(title)
 }
 
 func refuseStandingOverlap(snap taskledger.TraceSnapshot, colonyRoot, traceID string) error {

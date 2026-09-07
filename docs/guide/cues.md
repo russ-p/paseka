@@ -4,7 +4,7 @@ A **cue** (bee language: **Forage Cue**) is a project-local YAML shortcut under 
 
 Optional **`standing`** binds a cue to a long-lived **Standing Trail** (stable `traceId`) so recurring procedures reuse the same comb instead of minting a new trail every tick.
 
-Design records: [spec 016](../specs/016-cue-layer.md), [spec 028](../specs/028-standing-trails.md) (identity + stipend slices). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue, Standing Trail).
+Design records: [spec 016](../specs/016-cue-layer.md), [spec 028](../specs/028-standing-trails.md) (identity + stipend + overlap + first-title slices). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue, Standing Trail).
 
 Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout](colony-layout.md), [task ledger](../reference/task-ledger.md), [feature ideation flow](../specs/005-feature-ideation-flow.md), [homelab deployment](homelab-deployment.md).
 
@@ -90,13 +90,13 @@ Standing is a **cue** binding, not a ledger flag. Recommended ids look like `tra
 
 Standing `emit: task` cues require `review: none` (or omit review) and the named bee must have `worktree: false`. Load/import errors name the cue, bee, and field.
 
-First successful run seeds honey from `standing.stipend`. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. A second tick is refused while any ledger task is `planned`, `ready`, `running`, or `waiting_review`, or a live AFK adapter is still running on that trail (interactive `bee chat` does not count). Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
+First successful run seeds honey from `standing.stipend` and, if the trail has no `INSIGHT/trace.title` yet, publishes one from cue `description` (trimmed, 120-character cap) or the cue id when description is empty. Later ticks do not overwrite a human or bee title. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. A second tick is refused while any ledger task is `planned`, `ready`, `running`, or `waiting_review`, or a live AFK adapter is still running on that trail (interactive `bee chat` does not count). Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
 
 ### Schema (MVP)
 
 | Field | Required | Notes |
 | ----- | -------- | ----- |
-| `description` | no | Shown in `cue list`, Console picker, Telegram help fallback |
+| `description` | no | Shown in `cue list`, Console picker, Telegram help fallback. First standing seed also uses it as `INSIGHT/trace.title` (cue id if empty) |
 | `emit` | yes | `signal` or `task` |
 | `energy_budget` | no | Positive int — initial honey override on an unseeded **bloom** trail (§5). Forbidden when `standing` is set |
 | `standing.trace` | with `standing` | Stable Flight Trail id used when the caller omits `--trace` / `traceId`. No spaces, path separators, `.`, `*`, or `>` (JetStream KV keys) |
@@ -166,8 +166,8 @@ Rules:
 
 - Omit `energy_budget` on a non-standing cue → unchanged colony-default seeding.
 - Cue with `energy_budget` on a **new** bloom trail → seed before publish (signal and task paths).
-- Standing cue on a **new** trail → seed from `stipend` before publish.
-- Standing cue on a **seeded** trail → replace remaining with stipend, then publish ingress.
+- Standing cue on a **new** trail → seed from `stipend` before publish; also publish `trace.title` from description (or cue id) when none exists.
+- Standing cue on a **seeded** trail → replace remaining with stipend, then publish ingress (does not overwrite `trace.title`).
 - `cue run --trace` (or Console/Telegram `traceId`) on a bloom trail that **already has** honey → cue `energy_budget` seed is **ignored** (no shrink, no re-seed).
 - Killed standing trail → cue run fails closed (names `system.kill`); no stipend event, no ingress.
 - Standing trail with an open tick (`planned` / `ready` / `running` / `waiting_review`) or a live AFK run on that `traceId` → cue run fails closed (error says the trail **is busy**); no stipend, no ingress. `blocked` / `completed` / `failed` / `cancelled` and interactive sessions do not block.

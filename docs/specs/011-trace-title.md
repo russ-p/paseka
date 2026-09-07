@@ -50,7 +50,7 @@ No `summary` field in v1. List subtitles remain time / task / bee metadata.
 - **Last-write-wins** per trace (latest event by `createdAt`, then `seq`).
 - **Not projected** into `{{.Insights}}` (operational, like `task.plan`).
 - **Does not drive routing** or completion contracts.
-- Runtime does **not** auto-emit `trace.title`; fallbacks are virtual at read time.
+- Runtime does **not** auto-emit `trace.title` for bloom trails; fallbacks are virtual at read time. Standing cue first seed is the exception: it publishes one title from cue description (or cue id) when none exists ([028](028-standing-trails.md)).
 
 ### Resolve order
 
@@ -84,3 +84,4 @@ Scout intake and Drone breakdown emit `trace.title` when classifying or publishi
 - [Queen Console MVP](002-queen-console-mvp.md)
 - [Feature ideation flow](005-feature-ideation-flow.md)
 - [Flight trail summary](012-trace-summary.md)
+- [Standing Trails](028-standing-trails.md) (first-seed auto title)
