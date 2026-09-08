@@ -840,6 +840,39 @@ title: "{{.Title}}"
 	}
 }
 
+func TestStandingTraceIDsFromLoadedCues(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	writeCueFile(t, root, "feature.yaml", `description: Intake
+emit: signal
+type: SIGNAL
+kind: feature.requested
+title: "{{.Title}}"
+`)
+
+	ids, err := cues.StandingTraceIDs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ids["trail-daily-triage"]; !ok {
+		t.Fatalf("ids = %#v", ids)
+	}
+	if _, ok := ids["feature"]; ok {
+		t.Fatal("bloom cue must not appear")
+	}
+	if len(ids) != 1 {
+		t.Fatalf("ids = %#v", ids)
+	}
+
+	empty, err := cues.StandingTraceIDs(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("empty = %#v", empty)
+	}
+}
+
 func TestRunStandingOmitsTraceUsesStandingID(t *testing.T) {
 	root := t.TempDir()
 	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)

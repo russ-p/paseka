@@ -147,7 +147,7 @@ Message the bot from an allowlisted user **and** chat:
 | `/task <text>` | Preview card → Confirm/Cancel → `task.plan` (+ `task.ready` if autorun) |
 | `/feature <text>` (example custom) | Preview → Confirm → cue publish (new bloom trail, or the cue’s Standing Trail when `standing` is set) |
 | `/invites` | Pending invites with Accept / Reject / Defer |
-| `/traces` | Recent colony traces (activity + status hints; optional Console links) |
+| `/traces` | Recent colony traces (activity + status hints; `standing` + remaining honey for Standing Trails; optional Console links) |
 | `/help` | Command list |
 
 The **reply keyboard** (refreshed on gate startup) offers one-tap `/status`, `/help`, and `/invites`. The Telegram **command menu** (tap `/` in the composer) lists the same no-arg built-ins. Parameterized commands (`/energy`, `/task`, custom emit commands) are available via `/help` and typed manually.

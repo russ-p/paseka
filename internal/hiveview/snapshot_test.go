@@ -248,6 +248,40 @@ func TestFormatColonySnapshotHoneyUsesAllocated(t *testing.T) {
 	}
 }
 
+func TestFormatColonySnapshotStandingBadge(t *testing.T) {
+	text := hiveview.FormatColonySnapshot(hiveview.ColonySnapshot{
+		Slug:    "demo",
+		Runtime: hiveview.SnapshotRuntime{Status: runtime.RuntimeStatusStopped},
+		Agents:  hiveview.AgentsView{},
+		Energy: hiveview.SnapshotEnergy{
+			Available: true,
+			Traces: []hiveview.SnapshotEnergyTrace{
+				{TraceID: "trail-daily-triage", Remaining: 4, Budget: 4, Allocated: 4, Standing: true},
+				{TraceID: "trace-bloom", Remaining: 5, Budget: 12, Allocated: 12},
+			},
+		},
+		Attention: hiveview.SnapshotAttention{
+			WaitingReview:   []hiveview.SnapshotAttentionTask{},
+			PendingInvites:  []hiveview.SnapshotAttentionInvite{},
+			FailedTasks:     []hiveview.SnapshotAttentionTask{},
+			LowEnergyTraces: []hiveview.SnapshotLowEnergy{},
+		},
+		RecentTraces: []hiveview.SnapshotRecentTrace{
+			{TraceID: "trail-daily-triage", Title: "Daily triage", Standing: true},
+			{TraceID: "trace-bloom", Title: "A bloom"},
+		},
+	})
+	if !contains(text, "trail-daily-triage: Daily triage · standing") {
+		t.Fatalf("recent standing missing:\n%s", text)
+	}
+	if !contains(text, "trail-daily-triage: 4/4 remaining · standing") {
+		t.Fatalf("honey standing missing:\n%s", text)
+	}
+	if contains(text, "trace-bloom: A bloom · standing") {
+		t.Fatalf("bloom should not be standing:\n%s", text)
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
 }

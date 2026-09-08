@@ -55,6 +55,31 @@ func TestFormatTracesListRendersStatusHintsAndTimes(t *testing.T) {
 	}
 }
 
+func TestFormatTracesListStandingAndRemaining(t *testing.T) {
+	now := time.Date(2026, 9, 8, 8, 0, 0, 0, time.UTC)
+	text := tggate.FormatTracesList(tggate.Config{}, []hiveview.TraceSummaryView{
+		{
+			TraceID:         "trail-daily-triage",
+			LastActivityAt:  now.Add(-10 * time.Minute),
+			RunCount:        2,
+			Standing:        true,
+			EnergyBudget:    4,
+			EnergyRemaining: 3,
+		},
+		{
+			TraceID:        "trace-bloom",
+			LastActivityAt: now.Add(-time.Hour),
+			RunCount:       1,
+		},
+	}, now)
+	if !strings.Contains(text, "trail-daily-triage · 10m ago · standing · 3 remaining · 2 runs") {
+		t.Fatalf("standing line missing:\n%s", text)
+	}
+	if strings.Contains(text, "trace-bloom · 1h ago · standing") {
+		t.Fatalf("bloom must not be standing:\n%s", text)
+	}
+}
+
 func TestFormatTracesListIncludesConsoleDeepLinks(t *testing.T) {
 	now := time.Now().UTC()
 	text := tggate.FormatTracesList(tggate.Config{

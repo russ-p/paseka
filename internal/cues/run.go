@@ -9,7 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/energy"
-	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/liveafk"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -324,7 +324,7 @@ func refuseStandingOverlap(snap taskledger.TraceSnapshot, colonyRoot, traceID st
 	if task, ok := taskledger.OpenStandingTick(snap); ok {
 		return fmt.Errorf("trail %q is busy (task %q is %s)", traceID, task.TaskID, task.Status)
 	}
-	live, err := hiveview.LiveAFKOnTrace(colonyRoot, traceID)
+	live, err := liveafk.OnTrace(colonyRoot, traceID)
 	if err != nil {
 		return err
 	}

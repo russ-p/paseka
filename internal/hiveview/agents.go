@@ -1,16 +1,13 @@
 package hiveview
 
 import (
-	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/homestate"
-	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/liveafk"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/sessions"
 )
@@ -20,14 +17,11 @@ const liveAgentsLimit = 50
 // LiveAFKOnTrace returns live headless adapter runs for one Flight Trail.
 // Interactive sessions are omitted (they are not a standing tick).
 func LiveAFKOnTrace(colonyRoot, traceID string) ([]AgentItem, error) {
-	traceID = strings.TrimSpace(traceID)
-	if colonyRoot == "" || traceID == "" {
-		return nil, nil
-	}
-	items, err := scanLiveAFKTrace(colonyRoot, filepath.Join(colonyRoot, ".paseka", "runs", traceID), traceID)
+	found, err := liveafk.OnTrace(colonyRoot, traceID)
 	if err != nil {
 		return nil, err
 	}
+	items := agentItemsFromLiveAFK(found)
 	sortLiveAgents(items)
 	return items, nil
 }
@@ -58,10 +52,11 @@ func GetAgents(ctx colony.Context, mgr *sessions.Manager) (AgentsView, error) {
 		mgr = sessions.NewManager()
 	}
 
-	afkItems, err := scanLiveAFKRuns(ctx.ColonyRoot)
+	afkRuns, err := liveafk.ScanColony(ctx.ColonyRoot)
 	if err != nil {
 		return AgentsView{}, err
 	}
+	afkItems := agentItemsFromLiveAFK(afkRuns)
 	sessionItems, err := collectLiveSessions(ctx, mgr)
 	if err != nil {
 		return AgentsView{}, err
@@ -92,79 +87,20 @@ func GetAgents(ctx colony.Context, mgr *sessions.Manager) (AgentsView, error) {
 	}, nil
 }
 
-func scanLiveAFKRuns(colonyRoot string) ([]AgentItem, error) {
-	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs")
-	traceDirs, err := os.ReadDir(runsRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var items []AgentItem
-	for _, traceEntry := range traceDirs {
-		if !traceEntry.IsDir() {
-			continue
-		}
-		traceID := traceEntry.Name()
-		tracePath := filepath.Join(runsRoot, traceID)
-		found, err := scanLiveAFKTrace(colonyRoot, tracePath, traceID)
-		if err != nil {
-			continue
-		}
-		items = append(items, found...)
-	}
-	return items, nil
-}
-
-func scanLiveAFKTrace(colonyRoot, tracePath, traceID string) ([]AgentItem, error) {
-	agentDirs, err := os.ReadDir(tracePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var items []AgentItem
-	for _, agentEntry := range agentDirs {
-		if !agentEntry.IsDir() || runs.IsReservedTraceSubdir(agentEntry.Name()) {
-			continue
-		}
-		agentID := agentEntry.Name()
-		d := runs.Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: agentID}
-		if !fileExists(d.RequestPath()) {
-			continue
-		}
-		if fileExists(d.SessionPath()) {
-			continue
-		}
-		snap, err := d.ReadStatus()
-		if err != nil {
-			continue
-		}
-		if snap.State != protocol.StatusRunning || snap.PID <= 0 || !colony.ProcessAlive(snap.PID) {
-			continue
-		}
-		req, err := d.ReadRequest()
-		if err != nil {
-			continue
-		}
-		startedAt := snap.StartedAt
-		if startedAt.IsZero() {
-			startedAt = req.CreatedAt
-		}
+func agentItemsFromLiveAFK(found []liveafk.Run) []AgentItem {
+	items := make([]AgentItem, 0, len(found))
+	for _, run := range found {
 		items = append(items, AgentItem{
 			Kind:      "afk",
-			Bee:       req.Bee,
-			PID:       snap.PID,
-			TraceID:   traceID,
-			AgentID:   agentID,
-			StartedAt: startedAt.UTC().Format(time.RFC3339),
-			RunDir:    d.Root(),
+			Bee:       run.Bee,
+			PID:       run.PID,
+			TraceID:   run.TraceID,
+			AgentID:   run.AgentID,
+			StartedAt: run.StartedAt.UTC().Format(time.RFC3339),
+			RunDir:    run.RunDir,
 		})
 	}
-	return items, nil
+	return items
 }
 
 func collectLiveSessions(ctx colony.Context, mgr *sessions.Manager) ([]AgentItem, error) {
@@ -242,9 +178,4 @@ func sortLiveAgents(items []AgentItem) {
 		}
 		return items[i].Bee < items[j].Bee
 	})
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

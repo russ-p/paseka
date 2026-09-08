@@ -67,6 +67,7 @@ type SnapshotEnergyTrace struct {
 	Budget    int    `json:"budget"`
 	Added     int    `json:"added,omitempty"`
 	Allocated int    `json:"allocated,omitempty"`
+	Standing  bool   `json:"standing,omitempty"`
 }
 
 // SnapshotAttention lists items that may need Beekeeper or interface-bee action.
@@ -101,6 +102,7 @@ type SnapshotLowEnergy struct {
 	Budget    int    `json:"budget"`
 	Added     int    `json:"added,omitempty"`
 	Allocated int    `json:"allocated,omitempty"`
+	Standing  bool   `json:"standing,omitempty"`
 }
 
 // SnapshotRecentTrace is a short recent Flight Trail row.
@@ -108,6 +110,7 @@ type SnapshotRecentTrace struct {
 	TraceID   string `json:"traceId"`
 	Title     string `json:"title,omitempty"`
 	UpdatedAt string `json:"updatedAt"`
+	Standing  bool   `json:"standing,omitempty"`
 }
 
 // BuildColonySnapshot assembles the observe-only colony status projection.
@@ -189,6 +192,7 @@ func BuildColonySnapshot(ctx colony.Context, sup *runtime.Supervisor, mgr *sessi
 			TraceID:   tr.TraceID,
 			Title:     tr.Title,
 			UpdatedAt: tr.LastActivityAt.UTC().Format(time.RFC3339),
+			Standing:  tr.Standing,
 		})
 	}
 
@@ -272,6 +276,7 @@ func collectSnapshotEnergy(ctx colony.Context, traces []TraceSummaryView) Snapsh
 			Budget:    ledgerSnap.EnergyBudget,
 			Added:     ledgerSnap.EnergyAdded,
 			Allocated: taskledger.Allocated(ledgerSnap.EnergyBudget, ledgerSnap.EnergyAdded),
+			Standing:  tr.Standing,
 		})
 	}
 	return out
@@ -395,7 +400,11 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 		lines = append(lines, "")
 		lines = append(lines, "Honey:")
 		for _, tr := range s.Energy.Traces {
-			lines = append(lines, fmt.Sprintf("  %s: %s remaining", tr.TraceID, taskledger.FormatHoneyCompact(tr.Remaining, tr.Budget, tr.Added)))
+			line := fmt.Sprintf("  %s: %s remaining", tr.TraceID, taskledger.FormatHoneyCompact(tr.Remaining, tr.Budget, tr.Added))
+			if tr.Standing {
+				line += " · standing"
+			}
+			lines = append(lines, line)
 		}
 	} else if s.NATS.Configured {
 		lines = append(lines, "")
@@ -432,7 +441,11 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 		if len(s.Attention.LowEnergyTraces) > 0 {
 			lines = append(lines, fmt.Sprintf("  low energy traces: %d", len(s.Attention.LowEnergyTraces)))
 			for _, tr := range s.Attention.LowEnergyTraces {
-				lines = append(lines, fmt.Sprintf("    %s (%s)", tr.TraceID, taskledger.FormatHoneyCompact(tr.Remaining, tr.Budget, tr.Added)))
+				line := fmt.Sprintf("    %s (%s)", tr.TraceID, taskledger.FormatHoneyCompact(tr.Remaining, tr.Budget, tr.Added))
+				if tr.Standing {
+					line += " · standing"
+				}
+				lines = append(lines, line)
 			}
 		}
 	}
@@ -445,7 +458,11 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 			if title == "" {
 				title = tr.TraceID
 			}
-			lines = append(lines, fmt.Sprintf("  %s: %s", tr.TraceID, title))
+			line := fmt.Sprintf("  %s: %s", tr.TraceID, title)
+			if tr.Standing {
+				line += " · standing"
+			}
+			lines = append(lines, line)
 		}
 	}
 

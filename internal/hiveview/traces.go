@@ -86,6 +86,7 @@ type TraceSummaryView struct {
 	EnergyAdded     int                  `json:"energyAdded,omitempty"`
 	EnergyAllocated int                  `json:"energyAllocated,omitempty"`
 	LowEnergy       bool                 `json:"lowEnergy,omitempty"`
+	Standing        bool                 `json:"standing,omitempty"`
 	Usage           *runs.UsageAggregate `json:"usage,omitempty"`
 }
 
@@ -159,11 +160,16 @@ func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
 	if err != nil {
 		return nil, err
 	}
+	standing := LoadStandingTraceIDs(ctx.ColonyRoot)
 	out := make([]TraceSummaryView, 0, len(summaries))
 	for _, s := range summaries {
 		view := TraceSummaryFromRuns(s)
 		EnrichTraceTitle(ctx, &view)
 		EnrichTraceSummary(ctx, &view)
+		EnrichTraceStanding(standing, &view)
+		if view.Standing {
+			EnrichTraceEnergy(ctx, &view)
+		}
 		out = append(out, view)
 	}
 	return out, nil
@@ -203,6 +209,7 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	EnrichTraceEnergy(ctx, &view.TraceSummaryView)
 	EnrichTraceTitle(ctx, &view.TraceSummaryView)
 	EnrichTraceSummary(ctx, &view.TraceSummaryView)
+	EnrichTraceStanding(LoadStandingTraceIDs(ctx.ColonyRoot), &view.TraceSummaryView)
 
 	taskSnap, err := loadTraceTasksOfflineFirst(ctx, traceID)
 	if err != nil {

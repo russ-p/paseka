@@ -112,6 +112,24 @@ func List(colonyRoot string) ([]Summary, error) {
 	return out, nil
 }
 
+// StandingTraceIDs returns Flight Trail ids declared by loaded standing cues.
+// Invalid cue files are skipped the same way as List.
+func StandingTraceIDs(colonyRoot string) (map[string]struct{}, error) {
+	items, err := List(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]struct{})
+	for _, item := range items {
+		id := strings.TrimSpace(item.StandingTrace)
+		if id == "" {
+			continue
+		}
+		out[id] = struct{}{}
+	}
+	return out, nil
+}
+
 func validateCueID(id string) error {
 	if id == "" {
 		return fmt.Errorf("empty cue id")

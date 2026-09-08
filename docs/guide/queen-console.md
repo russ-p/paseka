@@ -47,6 +47,9 @@ reviews, honey pressure, and other items that need beekeeper attention.
 **Timeline** exposes the event stream for diagnosing routing and handoffs.
 Use `paseka replay <traceId>` for the CLI equivalent.
 
+Trails bound to a standing Forage Cue carry a **standing** badge, and their
+honey reads `remaining / stipend` — see [Forage Cues](cues.md).
+
 ### Tasks
 
 Lists task-ledger state and task details. Common CLI equivalents are

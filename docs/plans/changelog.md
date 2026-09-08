@@ -2,6 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Standing trail badge in Console, status, and Telegram
+
+Flight Trails bound to a standing Forage Cue are now visually distinct from bloom trails on every operator surface, so a months-old triage identity no longer reads as a stuck feature.
+
+- Queen Console: **standing** badge in Dashboard and Traces lists, `standing` flag in trail detail, and honey shown as `remaining / stipend` for those trails.
+- `paseka status`: `· standing` marker on honey, low-honey, and recent-trace lines; `--json` adds `standing: true` to `energy.traces`, `attention.lowEnergyTraces`, and `recentTraces`.
+- Telegram `/traces`: `standing` plus remaining honey on standing trail lines.
+
+The badge is derived from colony cue YAML (`standing.trace`), not a ledger flag — delete the cue and the trail reads as an ordinary leftover trail.
+
+- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap + first-title + badge slices)
+- Canonical: [Queen Console](../guide/queen-console.md), [CLI](../guide/cli.md) (`paseka status`), [Forage Cues](../guide/cues.md), [Telegram gateway](../guide/telegram-gateway.md)
+
+Deferred from that work: standing comb checkpoints and prompt partials — see [Spec 028](../specs/028-standing-trails.md).
+
 ## 2026-09 — Standing trail first title
 
 The first standing `cue run` that seeds honey also publishes `INSIGHT` / `trace.title` when the trail has none yet: cue `description` (trimmed, 120-character cap), or the cue id if description is empty. Later ticks and a human/bee title already on the trail are left alone, so lists show “Daily triage” instead of a raw id without clobbering a refined name.
@@ -9,7 +24,7 @@ The first standing `cue run` that seeds honey also publishes `INSIGHT` / `trace.
 - Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap + first-title slices)
 - Canonical: [Forage Cues](../guide/cues.md), [INSIGHT kinds](../reference/insight-kinds.md) (`trace.title`)
 
-Deferred from that work: Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+Deferred from that work: checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Console lib assets in `go install` binaries
 
@@ -24,7 +39,7 @@ A second standing `cue run` fails closed while the trail already has an open tic
 - Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap slices)
 - Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`)
 
-Deferred from that work: Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+Deferred from that work: checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Standing trail stipend
 
@@ -33,7 +48,7 @@ Later ticks of a Standing Trail **replace** remaining honey with the cue stipend
 - Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend slices)
 - Canonical: [Forage Cues](../guide/cues.md) § Honey, [Task ledger](../reference/task-ledger.md) § Honey reserve, [Event contracts](../reference/event-contracts.md)
 
-Deferred from that work: Console/status badge, checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
+Deferred from that work: checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Standing cue identity
 

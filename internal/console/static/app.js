@@ -970,6 +970,10 @@ function traceSummarySubline(trace) {
   return `<div class="muted trace-summary-subline">${escapeHtml(trace.summary)}</div>`;
 }
 
+function standingBadge(trace) {
+  return trace?.standing ? '<span class="badge standing">standing</span>' : '';
+}
+
 function setTab(tab) {
   closeReviewMergePreview();
   state.tab = tab;
@@ -2510,7 +2514,7 @@ function renderDashboard() {
   renderDashboardList(el.dashboardTraces, d.recentTraces, (trace) => `
     <div class="top">
       <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
-      <span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span>
+      <span class="trace-badges">${standingBadge(trace)}<span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span></span>
     </div>
     ${traceSummarySubline(trace)}
     ${traceIdSubline(trace)}
@@ -2736,7 +2740,7 @@ function renderTraces() {
     li.innerHTML = `
       <div class="top">
         <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
-        <span class="badge ${badge}">${escapeHtml(badgeLabel)}</span>
+        <span class="trace-badges">${standingBadge(trace)}<span class="badge ${badge}">${escapeHtml(badgeLabel)}</span></span>
       </div>
       ${traceSummarySubline(trace)}
       ${traceIdSubline(trace)}
@@ -2773,10 +2777,11 @@ function renderTraceDetail(detail) {
   el.traceDetailBody.classList.remove('hidden');
   const bees = (detail.bees || []).join(', ') || '—';
   const flags = [];
+  if (detail.standing) flags.push('standing');
   if (detail.hasActive) flags.push('active');
   if (detail.hasFailures) flags.push('failures');
   el.traceDetailMeta.innerHTML = `
-    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)}${traceSummarySubline(detail)}</dd>` : (detail.summary ? `<dt>Summary</dt><dd class="muted">${escapeHtml(detail.summary)}</dd>` : '')}
+    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)} ${standingBadge(detail)}${traceSummarySubline(detail)}</dd>` : (detail.summary ? `<dt>Summary</dt><dd class="muted">${escapeHtml(detail.summary)}</dd>` : '')}
     <dt>Trace</dt><dd>${escapeHtml(detail.traceId)}</dd>
     <dt>Last activity</dt><dd>${formatTime(detail.lastActivityAt)}</dd>
     <dt>Runs</dt><dd>${detail.runCount ?? (detail.runs || []).length}</dd>
@@ -2890,11 +2895,14 @@ function renderTraceEnergy(detail, hasEnergy) {
   const allocated = detail.energyAllocated > 0
     ? detail.energyAllocated
     : (detail.energyBudget > 0 ? detail.energyBudget : 0);
-  const secondary = detail.energyAdded > 0
-    ? `<span class="muted trace-energy-seed">seed ${detail.energyBudget} · topped ${detail.energyAdded}</span>`
-    : '';
-  const primary = allocated > 0
-    ? `${detail.energyRemaining} / ${allocated}`
+  const denom = detail.standing && detail.energyBudget > 0 ? detail.energyBudget : allocated;
+  const secondary = detail.standing
+    ? `<span class="muted trace-energy-seed">stipend ${detail.energyBudget}</span>`
+    : (detail.energyAdded > 0
+      ? `<span class="muted trace-energy-seed">seed ${detail.energyBudget} · topped ${detail.energyAdded}</span>`
+      : '');
+  const primary = denom > 0
+    ? `${detail.energyRemaining} / ${denom}`
     : `${detail.energyRemaining ?? 0}`;
   const stats = hasEnergy
     ? `<span class="trace-energy-stats"><span>${primary}</span>${low}${secondary}</span>`

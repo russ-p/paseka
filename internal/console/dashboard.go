@@ -81,6 +81,7 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 	if err != nil {
 		return DashboardView{}, err
 	}
+	standing := hiveview.LoadStandingTraceIDs(ctx.ColonyRoot)
 	for i, trace := range traces {
 		if i >= dashboardTraceLimit {
 			break
@@ -88,6 +89,7 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		traceView := hiveview.TraceSummaryFromRuns(trace)
 		hiveview.EnrichTraceTitle(ctx, &traceView)
 		hiveview.EnrichTraceSummary(ctx, &traceView)
+		hiveview.EnrichTraceStanding(standing, &traceView)
 		view.RecentTraces = append(view.RecentTraces, traceView)
 	}
 

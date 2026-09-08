@@ -1462,6 +1462,116 @@ func writeConsoleCue(t *testing.T, repo, name, body string) {
 	}
 }
 
+func TestTracesAPIMarksStandingTrails(t *testing.T) {
+	repo := initConsoleRepo(t)
+	writeConsoleCue(t, repo, "daily-triage.yaml", `description: Daily triage
+emit: signal
+type: SIGNAL
+kind: triage.tick
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+	ctxColony := setupConsoleHome(t, repo)
+
+	for _, spec := range []struct{ traceID, agentID string }{
+		{"trail-daily-triage", "watch"},
+		{"trace-bloom", "scout"},
+	} {
+		started := time.Now().UTC().Add(-2 * time.Minute)
+		d := runs.Dir{ColonyRoot: repo, TraceID: spec.traceID, AgentID: spec.agentID}
+		if err := d.Prepare(); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.WriteRequest(protocol.Request{
+			ProtocolVersion: protocol.Version,
+			TraceID:         spec.traceID,
+			AgentID:         spec.agentID,
+			Bee:             spec.agentID,
+			Adapter:         "script",
+			Workspace:       repo,
+			ColonyRoot:      repo,
+			CreatedAt:       started,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+			ProtocolVersion: protocol.Version,
+			State:           protocol.StatusCompleted,
+			StartedAt:       started,
+			FinishedAt:      started.Add(time.Minute),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	tracesReq := httptest.NewRequest(http.MethodGet, "/api/traces", nil)
+	tracesRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(tracesRec, tracesReq)
+	if tracesRec.Code != http.StatusOK {
+		t.Fatalf("traces status = %d body=%s", tracesRec.Code, tracesRec.Body.String())
+	}
+	var listed []hiveview.TraceSummaryView
+	if err := json.NewDecoder(tracesRec.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	standing := map[string]bool{}
+	for _, tr := range listed {
+		standing[tr.TraceID] = tr.Standing
+	}
+	if !standing["trail-daily-triage"] {
+		t.Fatalf("standing flag missing: %+v", listed)
+	}
+	if standing["trace-bloom"] {
+		t.Fatalf("bloom marked standing: %+v", listed)
+	}
+
+	dashReq := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
+	dashRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(dashRec, dashReq)
+	if dashRec.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d body=%s", dashRec.Code, dashRec.Body.String())
+	}
+	var dash console.DashboardView
+	if err := json.NewDecoder(dashRec.Body).Decode(&dash); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tr := range dash.RecentTraces {
+		if tr.TraceID == "trail-daily-triage" {
+			found = tr.Standing
+		}
+		if tr.TraceID == "trace-bloom" && tr.Standing {
+			t.Fatalf("dashboard bloom marked standing: %+v", tr)
+		}
+	}
+	if !found {
+		t.Fatalf("dashboard standing flag missing: %+v", dash.RecentTraces)
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/traces/trail-daily-triage", nil)
+	detailRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(detailRec, detailReq)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("detail status = %d body=%s", detailRec.Code, detailRec.Body.String())
+	}
+	var detail hiveview.TraceDetailView
+	if err := json.NewDecoder(detailRec.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if !detail.Standing {
+		t.Fatalf("detail standing flag missing: %+v", detail.TraceSummaryView)
+	}
+}
+
 func TestReviewQueueAPIHandlers(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)

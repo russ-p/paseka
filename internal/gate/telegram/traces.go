@@ -33,6 +33,12 @@ func FormatTracesList(cfg Config, traces []hiveview.TraceSummaryView, now time.T
 
 func formatTraceListLine(cfg Config, trace hiveview.TraceSummaryView, now time.Time) string {
 	parts := []string{trace.TraceID, formatShortActivityTime(trace.LastActivityAt, now)}
+	if trace.Standing {
+		parts = append(parts, "standing")
+		if trace.EnergyBudget > 0 || trace.EnergyRemaining > 0 {
+			parts = append(parts, fmt.Sprintf("%d remaining", trace.EnergyRemaining))
+		}
+	}
 	if hint := formatTraceStatusHint(trace); hint != "" {
 		parts = append(parts, hint)
 	}

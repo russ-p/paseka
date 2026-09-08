@@ -336,6 +336,8 @@ func TestTracesTabStaticContract(t *testing.T) {
 		"function startTracesPolling()",
 		"function renderTraceDetail(detail)",
 		"function renderTraceArtifacts(items)",
+		"function standingBadge(trace)",
+		"badge standing",
 		"function loadTraceArtifacts(traceId)",
 		"`/api/traces/${encodeURIComponent(traceId)}/artifacts`",
 		"api('/api/traces')",

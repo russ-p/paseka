@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-Identity + stipend + overlap + first-title slices shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend, later-tick `energy.stipend` remaining replace, kill fail-closed on cue run, overlap refuse (open ledger tick or live AFK), first-tick `INSIGHT/trace.title` from cue description (or cue id) when none exists. Console badge, checkpoints/prompts still open.
+Identity + stipend + overlap + first-title + badge slices shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend, later-tick `energy.stipend` remaining replace, kill fail-closed on cue run, overlap refuse (open ledger tick or live AFK), first-tick `INSIGHT/trace.title` from cue description (or cue id) when none exists, standing badge in Queen Console / `paseka status` / Telegram `/traces`. Checkpoints/prompts and evals still open.
 
 ## Problem Statement
 

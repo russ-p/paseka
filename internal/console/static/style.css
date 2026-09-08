@@ -1216,6 +1216,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 0.9rem;
 }
 
+.trace-badges {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .session-item .bee { font-weight: 600; color: var(--text); }
 .session-item .id { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
 
@@ -1231,6 +1239,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .badge.active { color: var(--ok); border-color: #2f6b4a; }
 .badge.completed { color: var(--accent); }
+.badge.standing { color: var(--accent); border-color: #3d5a86; }
 .badge.failed, .badge.cancelled { color: var(--danger); }
 
 .meta {

@@ -185,6 +185,8 @@ Hive Dashboard and header expose **Run cue**:
 2. Enter text (and optional trace id in the API; omit it on a standing cue to use `standing.trace`).
 3. On success: toast with clickable `traceId` link to the trace view.
 
+Trail lists (Dashboard and Traces) show a **standing** badge on ids declared by a loaded standing cue, and trail detail marks the flag plus honey as `remaining / stipend`. The badge follows colony YAML, not a ledger flag: delete the cue and the trail looks like an ordinary leftover trail. `GET /api/traces`, `/api/traces/:id`, and `/api/dashboard` carry `standing: true` for those ids.
+
 API (NATS required):
 
 | Method | Path | Body |

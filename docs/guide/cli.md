@@ -371,6 +371,8 @@ paseka task retry --trace trace-1 --task task-1
 
 Read-only colony snapshot: hive runtime, live bees (AFK + interactive), task counts, honey for recent Flight Trails, attention items, and a short recent-trace list. Observe-only — does not start the runtime, dispatch work, or mutate colony state.
 
+Trails declared by a standing Forage Cue are marked `· standing` in the honey, low-honey, and recent-trace lines; JSON adds `standing: true` on those rows. The marker follows `.paseka/cues/*.yaml`, so removing the cue makes the trail read as an ordinary trail.
+
 | Flag | Short | Description |
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
