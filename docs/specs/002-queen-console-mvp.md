@@ -7,7 +7,7 @@
 Still deferred from this baseline:
 
 - Cross-process browser attach
-- Global WebSocket/SSE event stream (`/api/events/stream`)
+- Global WebSocket/SSE **domain** event stream (`/api/events/stream`) — not the chrome header stream in [029](./029-console-chrome-stream.md)
 - Per-run `MUTATION/code.proposal` diff preview for `review: required` (final merge gate diff is shipped)
 
 ## Purpose
@@ -98,7 +98,7 @@ Implemented backend behavior:
 Not implemented in the current baseline:
 
 - Cross-process browser attach (sessions started outside the current `paseka console` process).
-- Global WebSocket/SSE event stream (`/api/events/stream`).
+- Global WebSocket/SSE domain event stream (`/api/events/stream`). Header plaques and tab badges use [029](./029-console-chrome-stream.md) `GET /api/chrome/stream`.
 - Per-run `MUTATION/code.proposal` diff preview for `review: required` tasks (final merge gate diff is implemented).
 
 ## Primary User Outcomes
@@ -469,9 +469,9 @@ Deferred suggested endpoints:
 
 Deferred live endpoints:
 
-- `GET /api/events/stream` via WebSocket or Server-Sent Events
+- `GET /api/events/stream` via WebSocket or Server-Sent Events (domain Timeline). Chrome header streaming is [029](./029-console-chrome-stream.md).
 
-Per-session PTY streaming is implemented at `GET /api/sessions/:sessionId/pty`. Most other views still use polling.
+Per-session PTY streaming is implemented at `GET /api/sessions/:sessionId/pty`. Most other views still use polling. Header plaques use SSE ([029](./029-console-chrome-stream.md)).
 
 ## Data Projection Rules
 
@@ -719,7 +719,7 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 ## Open Questions
 
 - Should `paseka console` continue supervising an external `paseka run`, or should a future console mode embed the runtime in-process?
-- Should live updates move from polling to WebSocket or SSE once session/event volume grows?
+- Should live updates move from polling to WebSocket or SSE once session/event volume grows? (Chrome header: [029](./029-console-chrome-stream.md); domain events still open.)
 - Should the next UI expansion prioritize a dedicated Worktree view?
 - Should frontend code stay as embedded static assets, or move to a small bundled frontend workspace if UI complexity grows?
 
@@ -728,6 +728,8 @@ The UI may present friendly labels, but backend contracts should stay aligned wi
 - [007-colony-eda-topology.md](./007-colony-eda-topology.md) — Topology tab and `GET /api/colony/topology`
 - [004-live-bees-indicator.md](./004-live-bees-indicator.md) — header indicator for live agent processes (AFK runs and interactive sessions)
 - [022-console-system-info.md](./022-console-system-info.md) — Host CPU/RAM plaque and System tab (console OS view; Implemented)
+- [023-console-git.md](./023-console-git.md) — Git plaque and tab (Implemented)
+- [029-console-chrome-stream.md](./029-console-chrome-stream.md) — header plaques + tab badges over SSE
 - [005-feature-ideation-flow.md](./005-feature-ideation-flow.md) — feature idea → Scout intake → session invite → Drone grilling / breakdown (Console invite UX)
 
 ## Verification

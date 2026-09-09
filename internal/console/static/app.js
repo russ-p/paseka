@@ -59,6 +59,15 @@ const state = {
   tracesPollTimer: null,
   tasksPollTimer: null,
   attentionPollTimer: null,
+  chromeSource: null,
+  chromeFallback: false,
+  chromeErrors: 0,
+  chromeGen: 0,
+  chromeAttention: null,
+  systemPollTimer: null,
+  gitPollTimer: null,
+  reviewsPollTimer: null,
+  invitesPollTimer: null,
   topology: null,
   topologyLoading: false,
   topologyError: '',
@@ -484,8 +493,10 @@ function setTabBadge(badgeEl, tabBtn, label, count) {
 }
 
 function renderTabBadges() {
-  const inviteCount = Array.isArray(state.invites) ? state.invites.length : 0;
-  const reviewCount = state.reviews?.count
+  const inviteCount = state.chromeAttention?.sessions
+    ?? (Array.isArray(state.invites) ? state.invites.length : 0);
+  const reviewCount = state.chromeAttention?.reviews
+    ?? state.reviews?.count
     ?? (Array.isArray(state.reviews?.items) ? state.reviews.items.length : 0);
   setTabBadge(el.sessionsTabBadge, el.tabSessions, 'Sessions', inviteCount);
   setTabBadge(el.reviewsTabBadge, el.tabReviews, 'Reviews', reviewCount);
@@ -561,9 +572,13 @@ function gitSyncLabel(git) {
   return parts.join(' ') || 'git';
 }
 
+function gitPlaqueUsable(git) {
+  return Boolean(git && (git.branch || git.headShaShort || git.defaultBranch || git.originUrl));
+}
+
 function renderGitPlaque() {
   const git = state.git;
-  const failed = Boolean(state.gitError) && !git;
+  const failed = Boolean(state.gitError) && !gitPlaqueUsable(git);
   if (!el.gitBadge) return;
   if (failed || !git) {
     el.gitBadge.textContent = '—';
@@ -584,10 +599,14 @@ function renderGitPlaque() {
   if (!git.originUrl) {
     el.gitBadge.className = 'badge warn';
   }
+  if (state.gitError) {
+    el.gitBadge.className = 'badge idle';
+  }
   el.gitMeta.textContent = git.defaultBranch || git.branch || '—';
   const bits = [];
   if (git.headShaShort) bits.push(git.headShaShort);
   if (git.lastFetchAgeSeconds != null) bits.push(`fetch ${formatGitAge(git.lastFetchAgeSeconds)}`);
+  if (state.gitError) bits.push(state.gitError);
   el.gitDetail.textContent = bits.join(' · ');
 }
 
@@ -946,6 +965,171 @@ function startRuntimePolling() {
   }, 3000);
 }
 
+function stopRuntimePolling() {
+  if (state.runtimePollTimer) {
+    clearInterval(state.runtimePollTimer);
+    state.runtimePollTimer = null;
+  }
+}
+
+function applyChromeFrame(frame) {
+  if (!frame || typeof frame !== 'object') return;
+  if (frame.runtime) state.runtime = frame.runtime;
+  if (frame.agents) state.agents = frame.agents;
+  if (frame.host) {
+    const prev = state.system || {};
+    state.system = { ...prev, ...frame.host };
+    if (!Object.prototype.hasOwnProperty.call(frame.host, 'processes') && prev.processes) {
+      state.system.processes = prev.processes;
+    }
+    state.systemError = frame.hostError || '';
+  } else if (frame.hostError) {
+    state.systemError = frame.hostError;
+  }
+  if (frame.git && state.tab !== 'git') {
+    const prev = state.git || {};
+    state.git = { ...prev, ...frame.git };
+    if (!Object.prototype.hasOwnProperty.call(frame.git, 'worktrees') && prev.worktrees) {
+      state.git.worktrees = prev.worktrees;
+    }
+    if (!Object.prototype.hasOwnProperty.call(frame.git, 'branches') && prev.branches) {
+      state.git.branches = prev.branches;
+    }
+    if (!Object.prototype.hasOwnProperty.call(frame.git, 'unpublished') && prev.unpublished) {
+      state.git.unpublished = prev.unpublished;
+    }
+    state.gitError = frame.gitError || '';
+  } else if (frame.gitError && state.tab !== 'git') {
+    state.gitError = frame.gitError;
+    if (!gitPlaqueUsable(state.git)) {
+      state.git = null;
+    }
+  }
+  if (frame.attention) state.chromeAttention = frame.attention;
+  renderRuntime();
+  renderAgents();
+  renderHost();
+  renderGitPlaque();
+  renderTabBadges();
+}
+
+function stopChromeStream() {
+  state.chromeGen = (state.chromeGen || 0) + 1;
+  if (state.chromeSource) {
+    state.chromeSource.close();
+    state.chromeSource = null;
+  }
+}
+
+function startChromeStream() {
+  if (state.chromeFallback) {
+    startRuntimePolling();
+    return;
+  }
+  if (typeof EventSource === 'undefined') {
+    state.chromeFallback = true;
+    startRuntimePolling();
+    return;
+  }
+  if (state.chromeSource) return;
+  const gen = state.chromeGen;
+  const es = new EventSource('/api/chrome/stream');
+  state.chromeSource = es;
+  es.addEventListener('chrome', (ev) => {
+    if (gen !== state.chromeGen || state.chromeSource !== es) return;
+    state.chromeErrors = 0;
+    try {
+      applyChromeFrame(JSON.parse(ev.data));
+    } catch (err) {
+      console.error(err);
+    }
+  });
+  es.onerror = () => {
+    if (gen !== state.chromeGen || state.chromeSource !== es) return;
+    state.chromeErrors = (state.chromeErrors || 0) + 1;
+    if (state.chromeErrors >= 5) {
+      stopChromeStream();
+      state.chromeFallback = true;
+      startRuntimePolling();
+    }
+  };
+}
+
+function onChromeVisibility() {
+  if (document.hidden) {
+    stopChromeStream();
+    stopRuntimePolling();
+    return;
+  }
+  state.chromeErrors = 0;
+  if (state.chromeFallback) {
+    startRuntimePolling();
+    loadHeaderStatus().catch(console.error);
+    return;
+  }
+  startChromeStream();
+}
+
+function stopSystemPolling() {
+  if (state.systemPollTimer) {
+    clearInterval(state.systemPollTimer);
+    state.systemPollTimer = null;
+  }
+}
+
+function startSystemPolling() {
+  stopSystemPolling();
+  state.systemPollTimer = setInterval(() => {
+    refreshSystem().catch(console.error);
+  }, 3000);
+  refreshSystem().catch(console.error);
+}
+
+function stopGitTabPolling() {
+  if (state.gitPollTimer) {
+    clearInterval(state.gitPollTimer);
+    state.gitPollTimer = null;
+  }
+}
+
+function startGitTabPolling() {
+  stopGitTabPolling();
+  state.gitPollTimer = setInterval(() => {
+    refreshGit().catch(console.error);
+  }, 3000);
+  refreshGit().catch(console.error);
+}
+
+function stopReviewsPolling() {
+  if (state.reviewsPollTimer) {
+    clearInterval(state.reviewsPollTimer);
+    state.reviewsPollTimer = null;
+  }
+}
+
+function startReviewsPolling() {
+  stopReviewsPolling();
+  state.reviewsPollTimer = setInterval(() => {
+    loadReviews().catch(console.error);
+  }, 5000);
+  loadReviews().catch(console.error);
+}
+
+function stopInvitesPolling() {
+  if (state.invitesPollTimer) {
+    clearInterval(state.invitesPollTimer);
+    state.invitesPollTimer = null;
+  }
+}
+
+function startInvitesPolling() {
+  stopInvitesPolling();
+  state.invitesPollTimer = setInterval(() => {
+    loadInvites().catch(console.error);
+  }, 5000);
+  loadInvites().catch(console.error);
+}
+
 function escapeHtml(str) {
   return String(str)
     .replaceAll('&', '&amp;')
@@ -1023,6 +1207,10 @@ function setTab(tab) {
   stopDashboardPolling();
   stopTracesPolling();
   stopTasksPolling();
+  stopSystemPolling();
+  stopGitTabPolling();
+  stopReviewsPolling();
+  stopInvitesPolling();
   if (tab !== 'sessions') {
     detachSessionTerminal();
     setTerminalWide(false);
@@ -1032,8 +1220,9 @@ function setTab(tab) {
   }
   if (tab === 'sessions' && state.selectedId) {
     startSessionPolling();
+    startInvitesPolling();
   } else if (tab === 'sessions') {
-    loadInvites().catch(console.error);
+    startInvitesPolling();
   } else if (tab === 'runs' && state.selectedRunKey) {
     startRunPolling();
   } else if (tab === 'dashboard') {
@@ -1045,13 +1234,13 @@ function setTab(tab) {
   } else if (tab === 'tasks') {
     startTasksPolling();
   } else if (tab === 'reviews') {
-    loadReviews().catch(console.error);
+    startReviewsPolling();
   } else if (tab === 'topology') {
     loadTopology().catch(console.error);
   } else if (tab === 'system') {
-    renderSystem();
+    startSystemPolling();
   } else if (tab === 'git') {
-    renderGit();
+    startGitTabPolling();
   }
 }
 
@@ -3512,6 +3701,9 @@ function renderTaskDetail(task) {
 
 async function loadReviews() {
   state.reviews = await api('/api/review-queue');
+  if (state.reviews?.count != null) {
+    state.chromeAttention = { ...(state.chromeAttention || {}), reviews: state.reviews.count };
+  }
   renderReviewQueue();
   if (state.selectedReviewKey) {
     const [traceId, taskId] = state.selectedReviewKey.split('/');
@@ -3805,6 +3997,8 @@ async function loadBees() {
 
 async function loadInvites() {
   state.invites = await api('/api/invites');
+  const n = Array.isArray(state.invites) ? state.invites.length : 0;
+  state.chromeAttention = { ...(state.chromeAttention || {}), sessions: n };
   renderInvites();
   renderTabBadges();
 }
@@ -4351,7 +4545,7 @@ el.runtimeStartBtn.addEventListener('click', async () => {
   try {
     state.runtime = await api('/api/runtime/start', { method: 'POST' });
     renderRuntime();
-    startRuntimePolling();
+    startChromeStream();
   } catch (err) {
     alert(err.message);
     await loadHeaderStatus();
@@ -4459,10 +4653,9 @@ if (el.gitBatchDeleteBtn) {
 async function init() {
   try {
     await loadHeaderStatus();
-    startRuntimePolling();
-    startAttentionPolling();
+    startChromeStream();
+    document.addEventListener('visibilitychange', onChromeVisibility);
     await loadBees();
-    await refreshAttention();
     await loadSessions();
     await loadRuns();
     setTab('dashboard');

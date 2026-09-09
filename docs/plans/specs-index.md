@@ -34,5 +34,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [026-opencode-adapter](../specs/026-opencode-adapter.md) | Draft | OpenCode CLI as first-class AFK + interactive adapter; `paseka init --adapter opencode` |
 | [027-config-profiles](../specs/027-config-profiles.md) | Draft | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
 | [028-standing-trails](../specs/028-standing-trails.md) | Draft (identity + stipend + overlap + first-title + badge slices shipped) | Long-lived named Flight Trails for recurring cues; sidecar cron; comb checkpoints; per-tick honey stipend |
+| [029-console-chrome-stream](../specs/029-console-chrome-stream.md) | Implemented | Queen Console header plaques + tab badges over one SSE endpoint (`GET /api/chrome/stream`); REST GETs remain for tabs |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

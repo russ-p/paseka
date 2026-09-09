@@ -45,6 +45,10 @@ type procSample struct {
 }
 
 func collectFromFS(fs procFS, sampler *cpuSampler, colonyRoot string, diskFn diskUsageFunc) SystemView {
+	return collectHost(fs, sampler, colonyRoot, diskFn, true)
+}
+
+func collectHost(fs procFS, sampler *cpuSampler, colonyRoot string, diskFn diskUsageFunc, includeProcesses bool) SystemView {
 	view := baseSystemIdentity()
 	if fs == nil {
 		return view
@@ -93,52 +97,77 @@ func collectFromFS(fs procFS, sampler *cpuSampler, colonyRoot string, diskFn dis
 		errs = append(errs, "stat: parse failed")
 	}
 
-	samples, procErr := readProcSamples(fs)
-	if procErr != "" {
-		errs = append(errs, procErr)
-	}
-
-	current := &cpuSnapshot{
-		total: cpuTotal,
-		idle:  cpuIdle,
-		procs: make(map[int]uint64, len(samples)),
-	}
-	for _, s := range samples {
-		current.procs[s.pid] = s.ticks
-	}
-
 	ncpu := view.CPUs
 	if ncpu < 1 {
 		ncpu = 1
 	}
-	procCPU := map[int]float64{}
-	if sampler != nil && haveCPU {
-		sampler.mu.Lock()
-		prev := sampler.last
-		sampler.last = current
-		sampler.mu.Unlock()
-		if prev != nil && cpuTotal > prev.total {
-			deltaTotal := cpuTotal - prev.total
-			deltaIdle := uint64(0)
-			if cpuIdle >= prev.idle {
-				deltaIdle = cpuIdle - prev.idle
-			}
-			busy := 100.0 * (1.0 - float64(deltaIdle)/float64(deltaTotal))
-			if busy < 0 {
-				busy = 0
-			}
-			view.CPUPercent = &busy
-			for _, s := range samples {
-				prevTicks, ok := prev.procs[s.pid]
-				if !ok || s.ticks < prevTicks {
-					continue
+
+	if includeProcesses {
+		samples, procErr := readProcSamples(fs)
+		if procErr != "" {
+			errs = append(errs, procErr)
+		}
+
+		current := &cpuSnapshot{
+			total: cpuTotal,
+			idle:  cpuIdle,
+			procs: make(map[int]uint64, len(samples)),
+		}
+		for _, s := range samples {
+			current.procs[s.pid] = s.ticks
+		}
+
+		procCPU := map[int]float64{}
+		if sampler != nil && haveCPU {
+			sampler.mu.Lock()
+			prev := sampler.last
+			sampler.last = current
+			sampler.mu.Unlock()
+			if prev != nil && cpuTotal > prev.total {
+				deltaTotal := cpuTotal - prev.total
+				deltaIdle := uint64(0)
+				if cpuIdle >= prev.idle {
+					deltaIdle = cpuIdle - prev.idle
 				}
-				procCPU[s.pid] = 100.0 * float64(s.ticks-prevTicks) * float64(ncpu) / float64(deltaTotal)
+				busy := 100.0 * (1.0 - float64(deltaIdle)/float64(deltaTotal))
+				if busy < 0 {
+					busy = 0
+				}
+				view.CPUPercent = &busy
+				for _, s := range samples {
+					prevTicks, ok := prev.procs[s.pid]
+					if !ok || s.ticks < prevTicks {
+						continue
+					}
+					procCPU[s.pid] = 100.0 * float64(s.ticks-prevTicks) * float64(ncpu) / float64(deltaTotal)
+				}
 			}
 		}
-	}
 
-	view.Processes = rankProcesses(samples, procCPU)
+		view.Processes = rankProcesses(samples, procCPU)
+	} else if sampler != nil && haveCPU {
+		sampler.mu.Lock()
+		prev := sampler.last
+		if prev == nil {
+			sampler.last = &cpuSnapshot{total: cpuTotal, idle: cpuIdle, procs: map[int]uint64{}}
+		} else {
+			if cpuTotal > prev.total {
+				deltaTotal := cpuTotal - prev.total
+				deltaIdle := uint64(0)
+				if cpuIdle >= prev.idle {
+					deltaIdle = cpuIdle - prev.idle
+				}
+				busy := 100.0 * (1.0 - float64(deltaIdle)/float64(deltaTotal))
+				if busy < 0 {
+					busy = 0
+				}
+				view.CPUPercent = &busy
+			}
+			prev.total = cpuTotal
+			prev.idle = cpuIdle
+		}
+		sampler.mu.Unlock()
+	}
 
 	if colonyRoot != "" && diskFn != nil {
 		used, total, err := diskFn(colonyRoot)

@@ -55,6 +55,7 @@ func NewServer(opts Options) *Server {
 	}
 	mux := http.NewServeMux()
 	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup, sampler: newCPUSampler()}
+	apiHandler.chrome = newChromeHub(apiHandler)
 	mux.HandleFunc("/api/runtime", apiHandler.handleRuntime)
 	mux.HandleFunc("/api/runtime/start", apiHandler.handleRuntimeStart)
 	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
@@ -66,6 +67,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/git/pull", apiHandler.handleGitPull)
 	mux.HandleFunc("/api/git/branches/delete", apiHandler.handleGitBranchesDelete)
 	mux.HandleFunc("/api/git/worktrees/prune", apiHandler.handleGitWorktreesPrune)
+	mux.HandleFunc("/api/chrome/stream", apiHandler.handleChromeStream)
 	mux.HandleFunc("/api/dashboard", apiHandler.handleDashboard)
 	mux.HandleFunc("/api/cues", apiHandler.handleCues)
 	mux.HandleFunc("/api/cues/", apiHandler.handleCueByID)

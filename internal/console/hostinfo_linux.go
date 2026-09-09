@@ -12,6 +12,14 @@ func snapshotHost(sampler *cpuSampler, colonyRoot string) SystemView {
 	return collectFromFS(osProcFS{root: "/proc"}, sampler, colonyRoot, linuxDiskUsage)
 }
 
+func snapshotHostPlaque(sampler *cpuSampler, colonyRoot string) SystemView {
+	if sampler != nil {
+		sampler.collectMu.Lock()
+		defer sampler.collectMu.Unlock()
+	}
+	return collectHost(osProcFS{root: "/proc"}, sampler, colonyRoot, linuxDiskUsage, false)
+}
+
 func linuxDiskUsage(path string) (used, total uint64, err error) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(path, &st); err != nil {

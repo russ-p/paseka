@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Queen Console chrome stream
+
+Always-visible header plaques (Hive runtime, Live bees, Host, Git) and Reviews/Sessions tab badges now update from one Server-Sent Event stream instead of a bundle of timed GETs. System and Git tabs still poll their full snapshots while open. Git status never fetches remotes from the header clock.
+
+- Spec: [029-console-chrome-stream](../specs/029-console-chrome-stream.md)
+- Canonical: [Queen Console](../guide/queen-console.md)
+
+Deferred from that work: domain Timeline SSE (`/api/events/stream`) — see [Spec 002](../specs/002-queen-console-mvp.md).
+
 ## 2026-09 — Standing trail badge in Console, status, and Telegram
 
 Flight Trails bound to a standing Forage Cue are now visually distinct from bloom trails on every operator surface, so a months-old triage identity no longer reads as a stuck feature.

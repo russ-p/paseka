@@ -93,7 +93,7 @@ Reviews warn before Approve when `origin` is ahead of the merge target so a side
 - Fourth header plaque **Git** (alongside Hive runtime, Live bees, Host): compact sync summary (e.g. default-branch name plus ahead `↑N`, behind `↓N`, `dirty`, or `synced`; `no origin` when unset). Idle/error styling when status GET fails.
 - Click / Enter / Space opens the **Git** tab. Tab is also in the tab list.
 - Git tab layout, top to bottom: **Colony root vs origin**, **Worktrees**, **Branches** (leftovers highlighted + batch delete).
-- Refresh control on the tab; plaque may poll on the existing header timer using **GET status only** (no implicit fetch).
+- Refresh control on the tab; the Git plaque refreshes via the chrome stream ([029](./029-console-chrome-stream.md)) using **status only** (no implicit fetch). The Git tab polls `GET /api/git` while it is active.
 
 ### 3. Status snapshot (GET)
 

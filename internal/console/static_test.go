@@ -208,6 +208,7 @@ func TestHostPanelStaticContract(t *testing.T) {
 		"setTab('system')",
 		"class=\"live-bee\"",
 		"headerStatusInFlight",
+		"startSystemPolling()",
 	} {
 		if !strings.Contains(jsSrc, needle) {
 			t.Fatalf("app.js missing %q", needle)
@@ -227,6 +228,29 @@ func TestHostPanelStaticContract(t *testing.T) {
 	} {
 		if !strings.Contains(cssSrc, needle) {
 			t.Fatalf("style.css missing %s", needle)
+		}
+	}
+}
+
+func TestChromeStreamStaticContract(t *testing.T) {
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"new EventSource('/api/chrome/stream')",
+		"function startChromeStream()",
+		"function applyChromeFrame(",
+		"function onChromeVisibility()",
+		"state.tab !== 'git'",
+		"function gitPlaqueUsable(",
+		"chromeGen",
+		"startReviewsPolling()",
+		"startInvitesPolling()",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %q", needle)
 		}
 	}
 }
@@ -276,6 +300,7 @@ func TestGitPanelStaticContract(t *testing.T) {
 		"'/api/git/branches/delete'",
 		"'/api/git/worktrees/prune'",
 		"originBehindCount",
+		"startGitTabPolling()",
 	} {
 		if !strings.Contains(jsSrc, needle) {
 			t.Fatalf("app.js missing %q", needle)

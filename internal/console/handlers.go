@@ -31,6 +31,7 @@ type api struct {
 	sessions *sessions.Manager
 	runtime  *runtime.Supervisor
 	sampler  *cpuSampler
+	chrome   *chromeHub
 }
 
 func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {

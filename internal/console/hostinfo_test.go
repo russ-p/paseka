@@ -210,6 +210,37 @@ func TestCollectFromFSDiskFailureOmitsDisk(t *testing.T) {
 	}
 }
 
+func TestCollectHostPlaqueOmitsProcesses(t *testing.T) {
+	fs := fixtureFS()
+	view := collectHost(fs, newCPUSampler(), "", nil, false)
+	if len(view.Processes) != 0 {
+		t.Fatalf("plaque processes = %+v", view.Processes)
+	}
+	if view.MemTotalBytes == nil {
+		t.Fatal("memory should still be present")
+	}
+}
+
+func TestCollectHostPlaqueKeepsProcessTicks(t *testing.T) {
+	fs := fixtureFS()
+	sampler := newCPUSampler()
+	_ = collectFromFS(fs, sampler, "", nil)
+	fs.files["stat"] = "cpu  200 0 200 1400 0 0 0 0 0 0\n"
+	_ = collectHost(fs, sampler, "", nil, false)
+	fs.files["stat"] = "cpu  300 0 300 2000 0 0 0 0 0 0\n"
+	fs.files["10/stat"] = pidStatLine(10, "java", 30, 30, 400)
+	view := collectFromFS(fs, sampler, "", nil)
+	var java *SystemProcess
+	for i := range view.Processes {
+		if view.Processes[i].PID == 10 {
+			java = &view.Processes[i]
+		}
+	}
+	if java == nil || java.CPUPercent == nil {
+		t.Fatalf("expected process cpu after plaque tick: %+v", view.Processes)
+	}
+}
+
 func TestTruncateRunes(t *testing.T) {
 	s := strings.Repeat("й", 210)
 	got := truncateRunes(s, 200)

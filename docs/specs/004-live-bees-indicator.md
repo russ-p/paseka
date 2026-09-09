@@ -16,7 +16,7 @@ This spec captures the shared design agreed in flight trail `trace-019f51fd4b601
 - Show a compact header panel next to Hive runtime: total count, AFK/session breakdown, and a short `bee/pid` list.
 - Reuse filesystem projections and machine-local state as source of truth (same rule as Queen Console MVP).
 - Persist AFK adapter PIDs so the UI can verify process liveness.
-- Expose a dedicated JSON API for live agents, polled with the runtime header refresh.
+- Expose a dedicated JSON API for live agents; the header consumes it via the chrome stream ([029](./029-console-chrome-stream.md)) with REST GET kept for tests and fallback.
 
 ## Non-Goals (MVP)
 
@@ -24,7 +24,7 @@ This spec captures the shared design agreed in flight trail `trace-019f51fd4b601
 - A separate Dashboard stat-card duplicate of this indicator.
 - Rewriting `status.json` or auto-unregistering sessions on read when a PID is dead.
 - Per-item clicks on individual `bee/pid` rows in the header.
-- WebSocket / SSE push for live agent updates (stay on polling).
+- Dedicated Live-bees-only WebSocket. Header live updates (including this panel) are the chrome stream in [029](./029-console-chrome-stream.md), not a per-agent push API.
 - Cross-host or multi-user process supervision.
 
 ## Current System Context

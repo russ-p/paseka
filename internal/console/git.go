@@ -39,6 +39,36 @@ type GitBranchView struct {
 	Leftover     bool   `json:"leftover"`
 }
 
+// GitPlaqueView is the compact Git header snapshot (no worktrees/branches lists).
+type GitPlaqueView struct {
+	Branch              string `json:"branch"`
+	HeadSHA             string `json:"headSha"`
+	HeadSHAShort        string `json:"headShaShort"`
+	Dirty               bool   `json:"dirty"`
+	DefaultBranch       string `json:"defaultBranch"`
+	OriginURL           string `json:"originUrl,omitempty"`
+	Ahead               *int   `json:"ahead,omitempty"`
+	Behind              *int   `json:"behind,omitempty"`
+	LastFetchAgeSeconds *int64 `json:"lastFetchAgeSeconds,omitempty"`
+	Note                string `json:"note,omitempty"`
+}
+
+// GitPlaqueFrom copies header fields from a full Git view.
+func GitPlaqueFrom(v GitView) GitPlaqueView {
+	return GitPlaqueView{
+		Branch:              v.Branch,
+		HeadSHA:             v.HeadSHA,
+		HeadSHAShort:        v.HeadSHAShort,
+		Dirty:               v.Dirty,
+		DefaultBranch:       v.DefaultBranch,
+		OriginURL:           v.OriginURL,
+		Ahead:               v.Ahead,
+		Behind:              v.Behind,
+		LastFetchAgeSeconds: v.LastFetchAgeSeconds,
+		Note:                v.Note,
+	}
+}
+
 // GitView is GET /api/git.
 type GitView struct {
 	Branch              string            `json:"branch"`

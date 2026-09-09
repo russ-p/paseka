@@ -17,7 +17,7 @@ They do not want Docker APIs, cAdvisor, Prometheus, or a “tests are running”
 
 Add a third observe-only header panel (**Host**) showing compact CPU and RAM. Clicking it opens a Queen Console tab (**System**) with cheap identity (hostname, kernel, OS/arch, CPU count, uptime, console PID), load averages, the same memory figures, optional colony-root disk usage, and a capped top-process table.
 
-One read-only JSON API, Linux-first, polled with the existing header timer. Live bees stays the source of truth for adapter/session liveness; System Info does not replace it. Process names are a **hint** that work is happening, not a ledger or verification signal.
+One read-only JSON API, Linux-first. The Host plaque refreshes with the chrome stream ([029](./029-console-chrome-stream.md)); the System tab still uses `GET /api/system` (including the process table) while that tab is active. Live bees stays the source of truth for adapter/session liveness; System Info does not replace it. Process names are a **hint** that work is happening, not a ledger or verification signal.
 
 ## User Stories
 
@@ -43,7 +43,7 @@ One read-only JSON API, Linux-first, polled with the existing header timer. Live
 20. As a Beekeeper with no bees live but a compiler running, I want the Host plaque and process list still populated, so that host load is independent of hive choreography.
 21. As a Beekeeper with Hive runtime stopped, I want System Info still available, so that I can inspect the box before Start.
 22. As a Beekeeper with NATS down, I want System Info still available, so that this surface does not depend on the bus.
-23. As a Beekeeper, I want header CPU/RAM to refresh on the same ~3s timer as runtime and Live bees, so that one poll loop stays honest.
+23. As a Beekeeper, I want header CPU/RAM to refresh with runtime and Live bees, so that one chrome clock stays honest ([029](./029-console-chrome-stream.md)).
 24. As a Beekeeper on Dashboard or Traces, I want the Host plaque to keep updating, so that I do not have to stay on System to watch load.
 25. As a Beekeeper on System, I want the process table to refresh on that same timer (or when the tab is visible), so that the list is not stale after a test starts.
 26. As a Beekeeper, I want a Refresh control on System, so that I can force a snapshot without waiting for the timer.

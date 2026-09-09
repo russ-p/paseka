@@ -41,6 +41,11 @@ The Console process is separate from `paseka run`.
 Shows runtime health, live bees, recent Flight Trails, failed runs, pending
 reviews, honey pressure, and other items that need beekeeper attention.
 
+Header plaques (Hive runtime, Live bees, Host, Git) and Reviews/Sessions tab
+badges stay current over one Server-Sent Event stream (`GET /api/chrome/stream`).
+The System and Git tabs still poll their full JSON APIs while those tabs are
+open. Git status never fetches remotes on a timer.
+
 ### Traces and Timeline
 
 **Traces** groups tasks, runs, insights, usage, and artifacts by `traceId`.
@@ -120,7 +125,9 @@ fast-forward-only; Push is explicit and never uses `--force`.
 - **A session cannot attach:** check `paseka session list`; cross-process PTY
   attachment depends on the active session registry and terminal setup.
 - **Remote Git state looks stale:** use explicit Fetch. Polling `/api/git`
-  intentionally does not contact the remote.
+  and the header chrome stream intentionally do not contact the remote.
+- **Header plaques freeze behind a reverse proxy:** disable response buffering
+  for `/api/chrome/stream` (the Console already sends `X-Accel-Buffering: no`).
 - **Topology, Sessions, or merge preview load as HTML / fail as JS after
   `go install`:** third-party Console files are served from `/lib/...`
   (not `/vendor/...`). Module zips omit any `/vendor/` path, so an older
@@ -128,7 +135,8 @@ fast-forward-only; Push is explicit and never uses `--force`.
   version that ships `static/lib`.
 
 The implemented API and UI baseline is recorded in
-[Spec 002](../specs/002-queen-console-mvp.md). Durable operator behavior belongs
+[Spec 002](../specs/002-queen-console-mvp.md). Header chrome streaming is
+[Spec 029](../specs/029-console-chrome-stream.md). Durable operator behavior belongs
 in this guide; draft Console work remains in the specs index.
 
 ## Related docs
