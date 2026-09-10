@@ -76,11 +76,11 @@ Review approval does not push the default branch to its remote.
 
 ### Sessions and Runs
 
-**Sessions** launches, attaches to, stops, and inspects interactive bees.
+**Sessions** launches, attaches to, stops, and inspects interactive bees. Finished Cursor HITL sessions with a stored provider id offer **Resume** (optional continue line) — a new Paseka session in the same Cursor chat, without `create-chat`.
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
 
-CLI equivalents are `paseka bee chat`, `paseka session ...`, and
+CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
 
 ### Topology

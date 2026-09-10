@@ -2,6 +2,8 @@ package console
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -673,6 +675,16 @@ func (a *api) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		a.handleStop(w, r, sessionID)
 		return
 	}
+	if strings.HasSuffix(path, "/resume") {
+		sessionID := strings.TrimSuffix(path, "/resume")
+		sessionID = strings.Trim(sessionID, "/")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.handleResume(w, r, sessionID)
+		return
+	}
 
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -734,6 +746,65 @@ func (a *api) handleStop(w http.ResponseWriter, r *http.Request, sessionID strin
 		return
 	}
 	writeJSON(w, map[string]string{"status": "signalled"})
+}
+
+type resumeSessionRequest struct {
+	Body string `json:"body"`
+}
+
+func (a *api) handleResume(w http.ResponseWriter, r *http.Request, sessionID string) {
+	var req resumeSessionRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeResumeError(w, &sessions.ResumeError{Status: http.StatusBadRequest, Message: "invalid json"})
+			return
+		}
+	}
+	res, err := a.sessions.ResumeDetached(r.Context(), sessions.ResumeRequest{
+		StartDir:  a.ctx.ColonyRoot,
+		SessionID: sessionID,
+		Continue:  req.Body,
+	})
+	if err != nil {
+		writeResumeError(w, err)
+		return
+	}
+	view, ok, err := GetSession(a.ctx, a.sessions, res.SessionID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !ok {
+		view = SessionView{
+			SessionID: res.SessionID,
+			TraceID:   res.TraceID,
+			AgentID:   res.AgentID,
+			Workspace: res.Workspace,
+			RunDir:    res.RunDir,
+			State:     string(res.State),
+			Active:    true,
+		}
+	}
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, view)
+}
+
+func writeResumeError(w http.ResponseWriter, err error) {
+	re, ok := sessions.AsResumeError(err)
+	if !ok {
+		writeError(w, err)
+		return
+	}
+	status := re.Status
+	if status == 0 {
+		status = http.StatusBadRequest
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   re.Code,
+		"message": re.Message,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

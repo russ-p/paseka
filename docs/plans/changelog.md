@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Resume Cursor HITL sessions
+
+A finished Cursor HITL chat can continue in the same Cursor conversation without `create-chat`. Queen Console **Resume** (optional one-line continue) and `paseka session resume` start a **new** Paseka session that copies `providerSessionId`, records `resumedFrom`, skips honey, and fails closed when the source is ineligible or still live. New launches still create a fresh chat.
+
+- Spec: [025-cursor-session-resume](../specs/025-cursor-session-resume.md)
+- Canonical: [Interactive sessions](../guide/interactive-sessions.md), [CLI](../guide/cli.md) (`paseka session resume`), [Queen Console](../guide/queen-console.md)
+
 ## 2026-09 — Standing trail checkpoints and doctor smells
 
 Standing ticks keep procedure memory in the trail comb (`checkpoint.json`, optional `journal/`) and prompt partials tell bees to read that file first, write it atomically, and spawn bloom work on a **new** `traceId`. `paseka doctor` warns when a standing SIGNAL kind has only isolated worktree subscribers, when a standing tick bee publishes isolated `code.proposal`, or when an isolated proposal already sits on a standing trail. `purge --runs` is documented as wiping that memory.

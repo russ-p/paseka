@@ -48,6 +48,7 @@ type SessionView struct {
 	State             string     `json:"state"`
 	PID               int        `json:"pid,omitempty"`
 	ProviderSessionID string     `json:"providerSessionId,omitempty"`
+	ResumedFrom       string     `json:"resumedFrom,omitempty"`
 	StartedAt         time.Time  `json:"startedAt"`
 	FinishedAt        *time.Time `json:"finishedAt,omitempty"`
 	Active            bool       `json:"active"`
@@ -113,6 +114,9 @@ func ListSessions(ctx colony.Context, mgr *sessions.Manager) ([]SessionView, err
 		return nil, err
 	}
 	for _, e := range activeEntries {
+		if !colony.ProcessAlive(e.PID) {
+			continue
+		}
 		view := sessionViewFromRegistry(e, ctx.ColonyRoot)
 		view.Active = true
 		view.State = string(adapters.SessionActive)
@@ -152,7 +156,7 @@ func GetSession(ctx colony.Context, mgr *sessions.Manager, sessionID string) (Se
 		return view, true, nil
 	}
 
-	if reg, err := homestate.FindSession(ctx.Slug, sessionID); err == nil {
+	if reg, err := homestate.FindSession(ctx.Slug, sessionID); err == nil && colony.ProcessAlive(reg.PID) {
 		view := sessionViewFromRegistry(reg, ctx.ColonyRoot)
 		view.Active = true
 		view.State = string(adapters.SessionActive)
@@ -194,6 +198,7 @@ func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView 
 		State:             state,
 		PID:               h.PID,
 		ProviderSessionID: h.ProviderSessionID,
+		ResumedFrom:       h.ResumedFrom,
 		StartedAt:         h.StartedAt,
 		Active:            h.State == adapters.SessionActive || h.State == "",
 	}
@@ -236,6 +241,9 @@ func overlaySessionArtifacts(view SessionView, colonyRoot string) SessionView {
 	if view.Adapter == "" {
 		view.Adapter = meta.Adapter
 	}
+	if view.ResumedFrom == "" {
+		view.ResumedFrom = meta.ResumedFrom
+	}
 	return view
 }
 
@@ -252,8 +260,9 @@ func sessionViewFromMeta(meta runs.SessionMeta) SessionView {
 		State:             meta.State,
 		PID:               meta.PID,
 		ProviderSessionID: meta.ProviderSessionID,
+		ResumedFrom:       meta.ResumedFrom,
 		StartedAt:         meta.StartedAt,
-		Active:            meta.State == string(adapters.SessionActive),
+		Active:            meta.State == string(adapters.SessionActive) && colony.ProcessAlive(meta.PID),
 	}
 	if !meta.FinishedAt.IsZero() {
 		finished := meta.FinishedAt

@@ -1187,6 +1187,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .hint { color: var(--muted); font-weight: normal; }
 .muted { color: var(--muted); }
+.session-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.resume-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.resume-wrap input {
+  margin: 0;
+  min-width: 12rem;
+}
+
 .hidden { display: none !important; }
 .error { color: var(--danger); font-size: 0.9rem; }
 #git-action-msg.error { color: var(--danger); }

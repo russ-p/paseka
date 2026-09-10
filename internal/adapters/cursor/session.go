@@ -37,18 +37,26 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	if req.Workspace == "" {
 		return adapters.SessionCommand{}, errors.New("cursor: workspace is required")
 	}
-	if req.InitialPrompt == "" && req.SystemPrompt == "" {
+	resumeID := strings.TrimSpace(req.ResumeSessionID)
+	if resumeID == "" && req.InitialPrompt == "" && req.SystemPrompt == "" {
 		return adapters.SessionCommand{}, errors.New("cursor: initial prompt or system prompt is required")
 	}
 
 	prompt := JoinPrompt(req.SystemPrompt, req.InitialPrompt)
+	if resumeID != "" {
+		prompt = strings.TrimSpace(req.InitialPrompt)
+	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildInteractiveArgs(req, prompt, "")
+		seedResume := ""
+		if resumeID != "" {
+			seedResume = resumeID
+		}
+		return b, buildInteractiveArgs(req, prompt, seedResume)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
@@ -60,9 +68,12 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 
 	providerSessionID := ""
-	if len(req.Command) > 0 {
+	switch {
+	case resumeID != "":
+		providerSessionID = resumeID
+	case len(req.Command) > 0:
 		providerSessionID = strings.TrimSpace(adapters.FlagValue(args, "--resume"))
-	} else {
+	default:
 		id, err := runCreateChat(binary, env, req)
 		if err != nil {
 			logging.Component("adapter").Warn("cursor create-chat failed",

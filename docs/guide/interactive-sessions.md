@@ -204,7 +204,7 @@ If Ghostty is not installed, set `terminal: default` or omit `terminal.yaml`.
 | `params.force` | `--force` |
 | `params.plan` | `--plan` |
 | API key | `CURSOR_API_KEY` or `--api-key` from home config |
-| Provider chat | `agent create-chat` before PTY start; UUID stored as `providerSessionId`; TUI launched with `--resume <uuid>` |
+| Provider chat | **New HITL:** `agent create-chat` before PTY start; UUID stored as `providerSessionId`; TUI launched with `--resume <uuid>`. **Resume:** skip `create-chat`; `--resume` the stored id; new Paseka `sessionId` / run dir; optional continue line as the only positional prompt. |
 
 Interactive invocation:
 
@@ -220,7 +220,9 @@ agent --force \
 
 `command:` overrides do not call `create-chat` or inject `--resume`. If the custom argv already has `--resume`, that value is stored as `providerSessionId`. If `create-chat` fails, the TUI still starts without a pointer.
 
-When `system_template` is set and no task/prompt is given, the session starts without a positional prompt and waits for user input.
+**Resume** (Queen Console session detail, or `paseka session resume <sessionId>`) is a separate path from a new `bee chat` / `POST /api/sessions`. It is eligible only for a finished Cursor HITL session with a stored `providerSessionId` and a bee that still resolves to Cursor without a `command:` override. A registry row whose PID is no longer alive does not block Resume. The continuation is a new Paseka session on the same Flight Trail; `session.json` records `resumedFrom`. Honey is not charged. The Console transcript of the new session starts empty — Cursor history appears inside the TUI, not as NDJSON.
+
+When `system_template` is set and no task/prompt is given, a **new** session starts without a positional prompt and waits for user input. Resume with no continue line also omits the positional prompt.
 
 Worktrees: if the bee has `worktree: true`, the session cwd is `.paseka/worktrees/<traceId>/` (same as `bee run`). Git branch follows the same ensure/rename rules as AFK: latest `INSIGHT/worktree.branch`, else `paseka/<traceId>`.
 
@@ -374,7 +376,7 @@ paseka bee chat <role> [prompt]
 | ----- | -------- |
 | Session vs AFK | Separate `SessionAdapter`; do not overload `Adapter.Run()` |
 | Session ID | Same as `agentId` for MVP |
-| Provider session | Cursor HITL: `create-chat` + `--resume`; Pi HITL: pinned `--session-id`; OpenCode HITL: empty until a native pre-create exists. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
+| Provider session | Cursor HITL: new chat uses `create-chat` + `--resume`; **Resume** reuses the stored `providerSessionId` without `create-chat`. Pi HITL: pinned `--session-id`; OpenCode HITL: empty until a native pre-create exists. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
 | Run dir | `.paseka/runs/<traceId>/<agentId>/` — shared with AFK IPC |
 | Terminal config | `~/.config/paseka/<slug>/terminal.yaml` — not committed |
 | Ghostty | Optional UI; `session run` runs full session inside Ghostty window |

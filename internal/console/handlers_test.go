@@ -248,6 +248,121 @@ func TestListSessionsProjection(t *testing.T) {
 	}
 }
 
+func TestSessionResumeAPI(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-time.Hour)
+	src := runs.Dir{ColonyRoot: repo, TraceID: "trace-src", AgentID: "agent-src"}
+	if err := src.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.WriteSession(runs.SessionMeta{
+		SessionID:         "agent-src",
+		TraceID:           "trace-src",
+		AgentID:           "agent-src",
+		Bee:               "scout",
+		Adapter:           "cursor",
+		Workspace:         repo,
+		ColonyRoot:        repo,
+		State:             string(adapters.SessionCompleted),
+		ProviderSessionID: "cursor-uuid",
+		StartedAt:         started,
+		FinishedAt:        started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", &outputSessionAdapter{})
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: mgr,
+	})
+
+	resumeReq := httptest.NewRequest(http.MethodPost, "/api/sessions/agent-src/resume", bytes.NewBufferString(`{"body":"keep going"}`))
+	resumeRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(resumeRec, resumeReq)
+	if resumeRec.Code != http.StatusCreated {
+		t.Fatalf("resume status = %d body=%s", resumeRec.Code, resumeRec.Body.String())
+	}
+	var created console.SessionView
+	if err := json.NewDecoder(resumeRec.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.SessionID == "" || created.SessionID == "agent-src" {
+		t.Fatalf("created = %+v", created)
+	}
+	if created.TraceID != "trace-src" {
+		t.Fatalf("trace = %q", created.TraceID)
+	}
+	if created.ResumedFrom != "agent-src" {
+		t.Fatalf("resumedFrom = %q", created.ResumedFrom)
+	}
+	if created.ProviderSessionID != "cursor-uuid" {
+		t.Fatalf("providerSessionId = %q", created.ProviderSessionID)
+	}
+
+	missing := httptest.NewRequest(http.MethodPost, "/api/sessions/no-such/resume", bytes.NewBufferString(`{}`))
+	missingRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(missingRec, missing)
+	if missingRec.Code != http.StatusNotFound {
+		t.Fatalf("missing status = %d body=%s", missingRec.Code, missingRec.Body.String())
+	}
+
+	piDir := runs.Dir{ColonyRoot: repo, TraceID: "trace-pi", AgentID: "agent-pi"}
+	if err := piDir.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := piDir.WriteSession(runs.SessionMeta{
+		SessionID:         "agent-pi",
+		TraceID:           "trace-pi",
+		AgentID:           "agent-pi",
+		Bee:               "scout",
+		Adapter:           "pi",
+		Workspace:         repo,
+		ColonyRoot:        repo,
+		State:             string(adapters.SessionCompleted),
+		ProviderSessionID: "pi-id",
+		StartedAt:         started,
+		FinishedAt:        started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	piReq := httptest.NewRequest(http.MethodPost, "/api/sessions/agent-pi/resume", bytes.NewBufferString(`{}`))
+	piRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(piRec, piReq)
+	if piRec.Code != http.StatusBadRequest {
+		t.Fatalf("pi status = %d body=%s", piRec.Code, piRec.Body.String())
+	}
+	var piErr map[string]string
+	if err := json.NewDecoder(piRec.Body).Decode(&piErr); err != nil {
+		t.Fatal(err)
+	}
+	if piErr["error"] != sessions.ResumeErrNotCursor {
+		t.Fatalf("pi err = %+v", piErr)
+	}
+
+	createBody := `{"bee":"scout","body":"live hello"}`
+	createReq := httptest.NewRequest(http.MethodPost, "/api/sessions", bytes.NewBufferString(createBody))
+	createRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var live console.SessionView
+	if err := json.NewDecoder(createRec.Body).Decode(&live); err != nil {
+		t.Fatal(err)
+	}
+	activeReq := httptest.NewRequest(http.MethodPost, "/api/sessions/"+live.SessionID+"/resume", bytes.NewBufferString(`{}`))
+	activeRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(activeRec, activeReq)
+	if activeRec.Code != http.StatusConflict {
+		t.Fatalf("active status = %d body=%s", activeRec.Code, activeRec.Body.String())
+	}
+}
+
 func TestListSessionsRegistryOverlaysProviderSessionID(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)
@@ -267,7 +382,7 @@ func TestListSessionsRegistryOverlaysProviderSessionID(t *testing.T) {
 		ColonyRoot:        repo,
 		State:             string(adapters.SessionActive),
 		ProviderSessionID: "live-cursor-uuid",
-		PID:               4242,
+		PID:               99999999,
 		StartedAt:         started,
 	}); err != nil {
 		t.Fatal(err)
@@ -278,7 +393,7 @@ func TestListSessionsRegistryOverlaysProviderSessionID(t *testing.T) {
 		AgentID:   "agent-live",
 		RunDir:    d.Root(),
 		Bee:       "scout",
-		PID:       4242,
+		PID:       99999999,
 		StartedAt: started,
 	}); err != nil {
 		t.Fatal(err)
@@ -293,6 +408,9 @@ func TestListSessionsRegistryOverlaysProviderSessionID(t *testing.T) {
 	}
 	if list[0].ProviderSessionID != "live-cursor-uuid" {
 		t.Fatalf("list[0].ProviderSessionID = %q", list[0].ProviderSessionID)
+	}
+	if list[0].Active {
+		t.Fatal("stale registry pid must not be listed as active")
 	}
 
 	got, ok, err := console.GetSession(ctxColony, sessions.NewManager(), "agent-live")

@@ -18,6 +18,7 @@ func newSessionCmd() *cobra.Command {
 	cmd.AddCommand(newSessionListCmd())
 	cmd.AddCommand(newSessionAttachCmd())
 	cmd.AddCommand(newSessionStopCmd())
+	cmd.AddCommand(newSessionResumeCmd())
 	cmd.AddCommand(newSessionRunCmd())
 	return cmd
 }
@@ -87,6 +88,44 @@ func newSessionStopCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	return cmd
+}
+
+func newSessionResumeCmd() *cobra.Command {
+	var (
+		startDir string
+		body     string
+	)
+	cmd := &cobra.Command{
+		Use:   "resume <sessionId>",
+		Short: "Resume a finished Cursor HITL session (new Paseka session, same chat)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			printed := false
+			res, err := sessions.DefaultManager.ResumeInteractive(cmd.Context(), sessions.ResumeRequest{
+				StartDir:  startDir,
+				SessionID: args[0],
+				Continue:  body,
+				Ready: func(ready *sessions.RunResult) {
+					fmt.Printf("Resumed as session %s\n", ready.SessionID)
+					printed = true
+				},
+			})
+			if err != nil {
+				return err
+			}
+			if !printed {
+				fmt.Printf("Resumed as session %s\n", res.SessionID)
+			}
+			printSessionResult(res)
+			if res.State == adapters.SessionFailed {
+				return fmt.Errorf("session failed")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVarP(&body, "body", "b", "", "optional continue line (positional prompt, not a new task template)")
 	return cmd
 }
 

@@ -487,7 +487,14 @@
     <section class="panel detail-panel" id="detail-panel">
       <div class="panel-header">
         <h2>Session detail</h2>
-        <button type="button" id="stop-btn" class="danger hidden">Stop</button>
+        <div class="session-detail-actions">
+          <div id="resume-wrap" class="resume-wrap hidden">
+            <input id="resume-body" type="text" placeholder="Continue (optional)" autocomplete="off">
+            <button type="button" id="resume-btn">Resume</button>
+            <span id="resume-reason" class="muted hidden"></span>
+          </div>
+          <button type="button" id="stop-btn" class="danger hidden">Stop</button>
+        </div>
       </div>
       <div id="detail-empty" class="muted">Select a session to inspect metadata and transcript.</div>
       <dl id="detail-meta" class="meta hidden"></dl>

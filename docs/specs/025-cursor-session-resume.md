@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Draft)**
-First slice: Queen Console (and the same session-manager path) reopens a finished Cursor HITL chat via stored `providerSessionId`. New Paseka session; fail closed; no Pi/Claude/`command:` / AFK→HITL.
+**(Implemented)**
+Queen Console and `paseka session resume` reopen a finished Cursor HITL chat via stored `providerSessionId`. New Paseka session; fail closed; no Pi/Claude/`command:` / AFK→HITL.
 
 ## Problem Statement
 
@@ -215,5 +215,4 @@ Prior art: Cursor session adapter tests (`create-chat` / `--resume` / `command:`
 - [021](./021-provider-session-logs-export.md) already uses `--resume` only to **associate** a brand-new HITL chat. This spec is the deliberate multi-run continuation that 021 called out of scope.
 - Console transcript will remain a weak view of resumed work until Agent log export exists; product copy should not promise the old turns as NDJSON.
 - Related: [002](./002-queen-console-mvp.md) (Sessions PTY), [006](./006-human-gateway-invites.md) (honey on accept only), [019](./019-model-aliases.md), [020](./020-worktree-branch.md), [interactive sessions](../guide/interactive-sessions.md).
-- After implementation: changelog; interactive-sessions guide; Console sessions section; `paseka session` CLI help; 021 Further Notes can stay association-focused.
-- Ask before promoting this Draft to **Approved** after review.
+- Durable docs: changelog; interactive-sessions guide; Console Sessions; `paseka session resume`.

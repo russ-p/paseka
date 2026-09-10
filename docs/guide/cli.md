@@ -236,6 +236,15 @@ Stop a session by id. Tries the in-process manager first, then signals a remote 
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory (for remote stop) |
 
+### `paseka session resume <sessionId>`
+
+Continue a **finished** Cursor HITL session: new Paseka `sessionId` / run directory, same Cursor `providerSessionId`, no `create-chat`. Attaches in the current terminal. Ineligible sources (Pi/Claude, missing id, `command:` bee, still active, another live session on the same chat) exit non-zero.
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--body` | `-b` | Optional continue line (positional prompt only; not a new task template) |
+
 ### `paseka session run <role>` (hidden)
 
 Internal entry point used when `bee chat --terminal ghostty` launches a new terminal window. Same flags as `bee chat` (`--path`, `--body`, `--trace`, `--prompt`).
@@ -415,7 +424,7 @@ ignore unknown fields.
 | Snapshot signal | Command |
 | --------------- | ------- |
 | Runtime not alive | Beekeeper starts `paseka run` (status never starts it) |
-| Live `session` | `paseka session list` / `attach` / `stop` |
+| Live `session` | `paseka session list` / `attach` / `stop` / `resume` |
 | Live `afk` | `paseka task show`, `paseka kill` |
 | `waitingReview` | `paseka task show`, `paseka proposal approve\|reject` |
 | `pendingInvites` | `paseka invite list` / `accept` / `reject` |
@@ -1041,6 +1050,7 @@ paseka replay trace-1
 ```bash
 paseka bee chat scout "Let's design the notification system"
 paseka session list
+paseka session resume <sessionId>   # finished Cursor HITL only
 paseka session stop <sessionId>
 ```
 

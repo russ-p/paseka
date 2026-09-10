@@ -31,6 +31,10 @@ type SessionRequest struct {
 	Task          string
 	Intent        string
 	Insights      []string
+	// ResumeSessionID, when set, asks the adapter to continue an existing
+	// provider chat instead of creating a new one. Cursor uses --resume and
+	// skips create-chat; InitialPrompt is an optional continue line only.
+	ResumeSessionID string
 	// Detached is retained for compatibility but ignored by session adapters.
 	// StartDetached means "no local terminal attach / use PTY hub", not headless -p.
 	Detached bool
@@ -59,6 +63,7 @@ type SessionHandle struct {
 	State             SessionState
 	StartedAt         time.Time
 	ProviderSessionID string
+	ResumedFrom       string
 }
 
 // SessionEventKind categorizes normalized session events.

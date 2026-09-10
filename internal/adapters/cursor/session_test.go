@@ -163,6 +163,66 @@ func TestSessionCommandOverrideDoesNotCreateChat(t *testing.T) {
 	}
 }
 
+func TestSessionCommandResumeSkipsCreateChat(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "create-chat-called")
+	fake := writeCreateChatMarkerAgent(t, marker)
+	a := cursor.NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		Workspace:       "/tmp/ws",
+		ResumeSessionID: testChatUUID,
+		Params:          adapters.RunParams{Binary: fake, Force: true, Model: "composer-2.5"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("resume must not call create-chat")
+	}
+	if cmd.ProviderSessionID != testChatUUID {
+		t.Fatalf("provider session id = %q", cmd.ProviderSessionID)
+	}
+	want := []string{
+		"--workspace", "/tmp/ws",
+		"--force",
+		"--model", "composer-2.5",
+		"--resume", testChatUUID,
+	}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("got %d args, want %d: %v", len(cmd.Args), len(want), cmd.Args)
+	}
+	for i := range want {
+		if cmd.Args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], want[i], cmd.Args)
+		}
+	}
+}
+
+func TestSessionCommandResumeContinueIsPositionalOnly(t *testing.T) {
+	a := cursor.NewSession()
+	cmd, err := a.SessionCommand(adapters.SessionRequest{
+		Workspace:       "/tmp/ws",
+		InitialPrompt:   "keep going",
+		SystemPrompt:    "You are Scout.",
+		ResumeSessionID: testChatUUID,
+		Params:          adapters.RunParams{Binary: writeFakeCreateChatAgent(t, "should-not-be-used")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := cmd.Args[len(cmd.Args)-1]
+	if last != "keep going" {
+		t.Fatalf("continue arg = %q", last)
+	}
+	for _, arg := range cmd.Args {
+		if strings.Contains(arg, "You are Scout.") {
+			t.Fatalf("resume must not join system prompt, args=%v", cmd.Args)
+		}
+	}
+	if cmd.ProviderSessionID != testChatUUID {
+		t.Fatalf("provider session id = %q", cmd.ProviderSessionID)
+	}
+}
+
 func TestSessionCommandOverrideOmitsIDWithoutResume(t *testing.T) {
 	fake := writeFailingCreateChatAgent(t)
 	a := cursor.NewSession()

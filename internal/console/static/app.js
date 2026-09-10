@@ -262,6 +262,10 @@ const el = {
   transcriptHeading: document.getElementById('transcript-heading'),
   transcript: document.getElementById('transcript'),
   stopBtn: document.getElementById('stop-btn'),
+  resumeWrap: document.getElementById('resume-wrap'),
+  resumeBtn: document.getElementById('resume-btn'),
+  resumeBody: document.getElementById('resume-body'),
+  resumeReason: document.getElementById('resume-reason'),
   runList: document.getElementById('run-list'),
   runsRefreshBtn: document.getElementById('runs-refresh-btn'),
   runDetailEmpty: document.getElementById('run-detail-empty'),
@@ -328,6 +332,17 @@ async function api(path, options = {}) {
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+function apiErrorMessage(err) {
+  const text = err && err.message ? String(err.message) : String(err || '');
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && parsed.message) return parsed.message;
+  } catch {
+    /* not json */
+  }
+  return text;
 }
 
 function formatTime(iso) {
@@ -2563,6 +2578,8 @@ function renderSessionDetail(session) {
     el.terminalWrap.classList.add('hidden');
     el.transcriptWrap.classList.add('hidden');
     el.stopBtn.classList.add('hidden');
+    el.resumeWrap?.classList.add('hidden');
+    if (el.resumeReason) el.resumeReason.classList.add('hidden');
     detachSessionTerminal();
     setTerminalWide(false);
     return;
@@ -2579,9 +2596,12 @@ function renderSessionDetail(session) {
     ['Workspace', session.workspace],
     ['Run dir', session.runDir],
     ['Provider session', session.providerSessionId],
+  ];
+  if (session.resumedFrom) rows.push(['Resumed from', session.resumedFrom]);
+  rows.push(
     ['Started', formatTime(session.startedAt)],
     ['Finished', formatTime(session.finishedAt)],
-  ];
+  );
   if (session.pid) rows.push(['PID', String(session.pid)]);
 
   el.detailMeta.innerHTML = rows
@@ -2590,6 +2610,7 @@ function renderSessionDetail(session) {
 
   if (session.active) {
     el.stopBtn.classList.remove('hidden');
+    el.resumeWrap?.classList.add('hidden');
     el.terminalWrap.classList.remove('hidden');
     el.transcriptWrap.classList.add('hidden');
     el.transcriptWrap.classList.remove('inactive-only');
@@ -2598,6 +2619,7 @@ function renderSessionDetail(session) {
     }
   } else {
     el.stopBtn.classList.add('hidden');
+    setResumeControls(session);
     el.terminalWrap.classList.add('hidden');
     el.transcriptWrap.classList.remove('hidden');
     el.transcriptWrap.classList.add('inactive-only');
@@ -2606,6 +2628,22 @@ function renderSessionDetail(session) {
     }
     detachSessionTerminal();
     setTerminalWide(false);
+  }
+}
+
+function setResumeControls(session) {
+  if (!el.resumeWrap) return;
+  if (session.adapter !== 'cursor') {
+    el.resumeWrap.classList.add('hidden');
+    return;
+  }
+  el.resumeWrap.classList.remove('hidden');
+  const canResume = Boolean(session.providerSessionId);
+  if (el.resumeBtn) el.resumeBtn.disabled = !canResume;
+  if (el.resumeBody) el.resumeBody.disabled = !canResume;
+  if (el.resumeReason) {
+    el.resumeReason.textContent = canResume ? '' : 'No provider session id';
+    el.resumeReason.classList.toggle('hidden', canResume);
   }
 }
 
@@ -4533,9 +4571,27 @@ el.stopBtn.addEventListener('click', async () => {
     await loadSessions();
     await selectSession(state.selectedId);
   } catch (err) {
-    alert(err.message);
+    alert(apiErrorMessage(err));
   } finally {
     el.stopBtn.disabled = false;
+  }
+});
+
+el.resumeBtn?.addEventListener('click', async () => {
+  if (!state.selectedId) return;
+  el.resumeBtn.disabled = true;
+  try {
+    const created = await api(`/api/sessions/${encodeURIComponent(state.selectedId)}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ body: el.resumeBody?.value?.trim() || '' }),
+    });
+    if (el.resumeBody) el.resumeBody.value = '';
+    await loadSessions();
+    await selectSession(created.sessionId);
+  } catch (err) {
+    alert(apiErrorMessage(err));
+  } finally {
+    el.resumeBtn.disabled = false;
   }
 });
 

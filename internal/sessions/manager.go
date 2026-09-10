@@ -40,6 +40,9 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	InlinePrompt string
+
+	resumeFrom       string
+	resumeProviderID string
 }
 
 // RunResult summarizes a completed interactive session.
@@ -168,11 +171,15 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, err
 	}
-	if req.Task == "" && req.InlinePrompt == "" && !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
+	resuming := strings.TrimSpace(req.resumeProviderID) != ""
+	if !resuming && req.Task == "" && req.InlinePrompt == "" && !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
 		return nil, fmt.Errorf("sessions: task, inline prompt, or system_template is required")
 	}
 
 	traceID := req.TraceID
+	if resuming && strings.TrimSpace(traceID) == "" {
+		return nil, fmt.Errorf("sessions: resume requires traceId")
+	}
 	if traceID == "" {
 		id, err := colony.NewTraceID()
 		if err != nil {
@@ -214,62 +221,68 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 
-	loader, err := prompts.NewLoader(ctxColony.ColonyRoot)
-	if err != nil {
-		return nil, err
-	}
 	adapterName, err := bee.ResolveAdapter()
 	if err != nil {
 		return nil, err
 	}
-	knownIntents, defaultIntent, err := prompts.DiscoverIntents(ctxColony.ColonyRoot, bee)
-	if err != nil {
-		return nil, fmt.Errorf("sessions: discover intents: %w", err)
-	}
-	traceTitle, err := runs.ResolveTraceTitle(ctxColony.ColonyRoot, traceID)
-	if err != nil {
-		return nil, fmt.Errorf("sessions: resolve trace title: %w", err)
-	}
-	worktreeBranch, err := runs.ResolveWorktreeBranch(ctxColony.ColonyRoot, traceID)
-	if err != nil {
-		return nil, fmt.Errorf("sessions: resolve worktree branch: %w", err)
-	}
-	promptCtx := prompts.PromptContext(prompts.Context{
-		Bee:            bee.Role,
-		TraceID:        traceID,
-		TraceTitle:     traceTitle,
-		WorktreeBranch: worktreeBranch,
-		AgentID:        agentID,
-		TaskID:         req.TaskID,
-		ColonyRoot:     ctxColony.ColonyRoot,
-		Workspace:      workspace,
-		Task:           req.Task,
-		IntentRaw:      req.Intent,
-		Insights:       req.Insights,
-		ResultFile:     resultFile,
-		ArtifactsDir:   artifacts.DirForPrompt(ctxColony.ColonyRoot, traceID),
-		Interactive:    true,
-		Adapter:        adapterName,
-	}, knownIntents, defaultIntent)
 
-	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
-		BeeLocalTemplate: overlay.SystemTemplate,
-		BeeTemplate:      bee.SystemTemplate,
-		DefaultTemplate:  manifest.Defaults.SystemTemplate,
-	}, promptCtx)
-	if err != nil {
-		return nil, fmt.Errorf("sessions: render system prompt: %w", err)
-	}
+	var rendered, renderedSystem string
+	if resuming {
+		rendered = strings.TrimSpace(req.Task)
+	} else {
+		loader, err := prompts.NewLoader(ctxColony.ColonyRoot)
+		if err != nil {
+			return nil, err
+		}
+		knownIntents, defaultIntent, err := prompts.DiscoverIntents(ctxColony.ColonyRoot, bee)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: discover intents: %w", err)
+		}
+		traceTitle, err := runs.ResolveTraceTitle(ctxColony.ColonyRoot, traceID)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: resolve trace title: %w", err)
+		}
+		worktreeBranch, err := runs.ResolveWorktreeBranch(ctxColony.ColonyRoot, traceID)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: resolve worktree branch: %w", err)
+		}
+		promptCtx := prompts.PromptContext(prompts.Context{
+			Bee:            bee.Role,
+			TraceID:        traceID,
+			TraceTitle:     traceTitle,
+			WorktreeBranch: worktreeBranch,
+			AgentID:        agentID,
+			TaskID:         req.TaskID,
+			ColonyRoot:     ctxColony.ColonyRoot,
+			Workspace:      workspace,
+			Task:           req.Task,
+			IntentRaw:      req.Intent,
+			Insights:       req.Insights,
+			ResultFile:     resultFile,
+			ArtifactsDir:   artifacts.DirForPrompt(ctxColony.ColonyRoot, traceID),
+			Interactive:    true,
+			Adapter:        adapterName,
+		}, knownIntents, defaultIntent)
 
-	rendered, err := loader.RenderResolved(prompts.ResolveInput{
-		InlinePrompt:     req.InlinePrompt,
-		BeeLocalTemplate: overlay.PromptTemplate,
-		BeeTemplate:      bee.PromptTemplate,
-		DefaultTemplate:  manifest.Defaults.PromptTemplate,
-		AllowEmpty:       colony.HasSystemTemplate(bee, overlay, manifest.Defaults),
-	}, promptCtx)
-	if err != nil {
-		return nil, fmt.Errorf("sessions: render prompt: %w", err)
+		renderedSystem, err = loader.RenderSystemResolved(prompts.SystemResolveInput{
+			BeeLocalTemplate: overlay.SystemTemplate,
+			BeeTemplate:      bee.SystemTemplate,
+			DefaultTemplate:  manifest.Defaults.SystemTemplate,
+		}, promptCtx)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: render system prompt: %w", err)
+		}
+
+		rendered, err = loader.RenderResolved(prompts.ResolveInput{
+			InlinePrompt:     req.InlinePrompt,
+			BeeLocalTemplate: overlay.PromptTemplate,
+			BeeTemplate:      bee.PromptTemplate,
+			DefaultTemplate:  manifest.Defaults.PromptTemplate,
+			AllowEmpty:       colony.HasSystemTemplate(bee, overlay, manifest.Defaults),
+		}, promptCtx)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: render prompt: %w", err)
+		}
 	}
 
 	sessAdapter, ok := m.adapters[adapterName]
@@ -281,12 +294,12 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	colony.ApplyModelAliases(&params, ctxColony.ModelAliases)
 
 	commandPrompt := rendered
-	if adapterName == "cursor" || adapterName == "opencode" {
+	if !resuming && (adapterName == "cursor" || adapterName == "opencode") {
 		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
 	}
 
 	var command []string
-	if bee.Command.IsSet() {
+	if !resuming && bee.Command.IsSet() {
 		if bee.HasParams() {
 			logging.Component("sessions").Warn("bee command overrides params",
 				logging.F("bee", bee.Role),
@@ -306,8 +319,10 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	}
 
 	startedAt := time.Now().UTC()
-	if err := runDir.WritePrompt(rendered); err != nil {
-		return nil, err
+	if rendered != "" {
+		if err := runDir.WritePrompt(rendered); err != nil {
+			return nil, err
+		}
 	}
 	if renderedSystem != "" {
 		if err := runDir.WriteSystem(renderedSystem); err != nil {
@@ -315,12 +330,14 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		}
 	}
 	if err := runDir.WriteMeta(runs.Meta{
-		TraceID:   traceID,
-		AgentID:   agentID,
-		Bee:       bee.Role,
-		Adapter:   adapterName,
-		Workspace: workspace,
-		StartedAt: startedAt,
+		TraceID:           traceID,
+		AgentID:           agentID,
+		Bee:               bee.Role,
+		Adapter:           adapterName,
+		Workspace:         workspace,
+		ProviderSessionID: req.resumeProviderID,
+		ResumedFrom:       req.resumeFrom,
+		StartedAt:         startedAt,
 	}); err != nil {
 		return nil, err
 	}
@@ -360,19 +377,20 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	// Detached attach mode (PTY hub / no local terminal) must still launch the
 	// interactive agent TUI. Headless -p belongs to Adapter.Run(), not sessions.
 	sessReq := adapters.SessionRequest{
-		Bee:           bee.Role,
-		InitialPrompt: rendered,
-		SystemPrompt:  renderedSystem,
-		ColonyRoot:    ctxColony.ColonyRoot,
-		Workspace:     workspace,
-		Params:        params,
-		Command:       command,
-		TraceID:       traceID,
-		AgentID:       agentID,
-		TaskID:        req.TaskID,
-		Task:          req.Task,
-		Intent:        req.Intent,
-		Insights:      req.Insights,
+		Bee:             bee.Role,
+		InitialPrompt:   rendered,
+		SystemPrompt:    renderedSystem,
+		ColonyRoot:      ctxColony.ColonyRoot,
+		Workspace:       workspace,
+		Params:          params,
+		Command:         command,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		TaskID:          req.TaskID,
+		Task:            req.Task,
+		Intent:          req.Intent,
+		Insights:        req.Insights,
+		ResumeSessionID: req.resumeProviderID,
 	}
 
 	cmd, err := sessAdapter.SessionCommand(sessReq)
@@ -381,6 +399,9 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	}
 
 	providerSessionID := strings.TrimSpace(cmd.ProviderSessionID)
+	if providerSessionID == "" {
+		providerSessionID = strings.TrimSpace(req.resumeProviderID)
+	}
 	if providerSessionID != "" {
 		if err := runDir.WriteMeta(runs.Meta{
 			TraceID:           traceID,
@@ -389,6 +410,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			Adapter:           adapterName,
 			Workspace:         workspace,
 			ProviderSessionID: providerSessionID,
+			ResumedFrom:       req.resumeFrom,
 			StartedAt:         startedAt,
 		}); err != nil {
 			return nil, fmt.Errorf("sessions: write meta: %w", err)
@@ -413,6 +435,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		State:             adapters.SessionActive,
 		StartedAt:         startedAt,
 		ProviderSessionID: providerSessionID,
+		ResumedFrom:       req.resumeFrom,
 	}
 
 	if err := runDir.WriteSession(runs.SessionMeta{
@@ -426,6 +449,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		PID:               proc.PID(),
 		State:             string(adapters.SessionActive),
 		ProviderSessionID: providerSessionID,
+		ResumedFrom:       req.resumeFrom,
 		StartedAt:         startedAt,
 	}); err != nil {
 		_ = proc.Kill()
@@ -509,8 +533,14 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	finishedAt := time.Now().UTC()
 
 	providerSessionID := entry.Handle.ProviderSessionID
-	if existing, err := entry.RunDir.ReadSession(); err == nil && strings.TrimSpace(existing.ProviderSessionID) != "" {
-		providerSessionID = existing.ProviderSessionID
+	resumedFrom := entry.Handle.ResumedFrom
+	if existing, err := entry.RunDir.ReadSession(); err == nil {
+		if strings.TrimSpace(existing.ProviderSessionID) != "" {
+			providerSessionID = existing.ProviderSessionID
+		}
+		if strings.TrimSpace(existing.ResumedFrom) != "" {
+			resumedFrom = existing.ResumedFrom
+		}
 	}
 
 	_ = entry.RunDir.WriteSession(runs.SessionMeta{
@@ -523,6 +553,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		ColonyRoot:        entry.Handle.ColonyRoot,
 		State:             string(state),
 		ProviderSessionID: providerSessionID,
+		ResumedFrom:       resumedFrom,
 		StartedAt:         entry.Handle.StartedAt,
 		FinishedAt:        finishedAt,
 	})

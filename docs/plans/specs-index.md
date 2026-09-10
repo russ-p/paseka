@@ -30,7 +30,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [022-console-system-info](../specs/022-console-system-info.md) | Implemented | Queen Console Host plaque + System tab: CPU/RAM, cheap identity, top processes (console host view, no Docker APIs) |
 | [023-console-git](../specs/023-console-git.md) | Implemented | Queen Console Git tab: clone vs origin, explicit fetch/push/ff-only pull, worktrees, leftover branches (homelab; no auto-push on approve) |
 | [024-pull-request-delivery](../specs/024-pull-request-delivery.md) | Draft | Isolated trails: opt-in PR publish instead of local merge; bees `pr.body`; forge via external CLI script contract |
-| [025-cursor-session-resume](../specs/025-cursor-session-resume.md) | Draft | Console/CLI resume of a finished Cursor HITL chat via stored `providerSessionId`; new Paseka session, same UUID; no Pi/Claude/AFK |
+| [025-cursor-session-resume](../specs/025-cursor-session-resume.md) | Implemented | Console/CLI resume of a finished Cursor HITL chat via stored `providerSessionId`; new Paseka session, same UUID; no Pi/Claude/AFK |
 | [026-opencode-adapter](../specs/026-opencode-adapter.md) | Draft | OpenCode CLI as first-class AFK + interactive adapter; `paseka init --adapter opencode` |
 | [027-config-profiles](../specs/027-config-profiles.md) | Draft | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
 | [028-standing-trails](../specs/028-standing-trails.md) | Implemented | Long-lived named Flight Trails for recurring cues; sidecar cron; comb checkpoints; per-tick honey stipend |

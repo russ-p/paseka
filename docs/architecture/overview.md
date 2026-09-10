@@ -377,7 +377,7 @@ For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongsid
 | AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p`; OpenCode: `opencode run` |
 | Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`; OpenCode: TUI without `run`, PTY-owned by runtime |
 
-Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail the session). Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
+Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; **Resume** skips `create-chat` and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta). Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
 
 ---
 

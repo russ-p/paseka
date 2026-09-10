@@ -78,6 +78,42 @@ func TestAppJSRendersLLMUsage(t *testing.T) {
 	}
 }
 
+func TestSessionResumeStaticContract(t *testing.T) {
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	src := string(js)
+	for _, needle := range []string{
+		"/resume",
+		"session.resumedFrom",
+		"resumeBtn",
+		"resumeReason",
+		"No provider session id",
+		"Resume",
+		"adapter !== 'cursor'",
+	} {
+		if !strings.Contains(src, needle) {
+			t.Fatalf("app.js missing %s", needle)
+		}
+	}
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="resume-btn"`,
+		`id="resume-body"`,
+		`id="resume-wrap"`,
+		`id="resume-reason"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+}
+
 func TestColonyIdentityStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
