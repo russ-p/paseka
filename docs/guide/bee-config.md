@@ -23,12 +23,14 @@ Related: [bee routing](../reference/bee-routing.md) (`subscribes` / `publishes`)
 | `.paseka/bees/<role>.yaml` | Canonical role definition (committed) |
 | `.paseka/bees/<role>.local.yaml` | Machine-local overlay; `prompt_template` and `system_template` applied at resolve time |
 
-`paseka` loads bees via `colony.LoadBee(colonyRoot, role)` / `LoadAllBees`:
+`paseka` loads committed bees via `colony.LoadBee(colonyRoot, role)` / `LoadAllBees` (files on disk). Dispatch, doctor, status topology, reactor, and Console use the **effective** bee after a config profile is applied (see [colony layout](colony-layout.md)):
 
 1. Role must be non-empty and must not contain `/` or `..`.
 2. Base file is `.paseka/bees/<role>.yaml` (filename stem = role when `role:` is omitted).
 3. Event rules, `run_summary`, and adapter requirements are validated at load time.
-4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [prompt templates](prompt-templates.md)).
+4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [prompt templates](prompt-templates.md)). Profiles do **not** overlay prompts, routing, `command:`, or `post_exec` — `*.local.yaml` stays prompt-only.
+
+Trail export `--include bees` and Nuc pack the committed YAML files, not the overlayed view.
 
 `*.local.yaml` files are listed in `.paseka/.gitignore` and are skipped by `LoadAllBees`.
 
@@ -63,7 +65,7 @@ type Bee struct {
 | YAML field | Required | Meaning |
 | ---------- | -------- | ------- |
 | `role` | recommended | Role name. If empty, defaults to the filename stem (`builder.yaml` → `builder`). |
-| `adapter` | no | `cursor` (default), `pi`, `claude`, `opencode`, or `script`. Unknown names fail load. |
+| `adapter` | no | `cursor` (default), `pi`, `claude`, `opencode`, or `script`. Unknown names fail load. A process `--profile` with global `adapter:` **replaces** this for LLM bees that have no `command:`. |
 | `prompt_template` | usually | Path relative to `.paseka/prompts/`. User/task turn. Optional for `adapter: script` (no colony default applied when omitted). |
 | `system_template` | no | Path relative to `.paseka/prompts/`. Role / standing instructions injected by the adapter (see [prompt templates](prompt-templates.md)). |
 | `sector` | no | Default sector name from `colony.yaml` `sectors`. Task `sector` wins when set. |

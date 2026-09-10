@@ -1,9 +1,7 @@
 package console
 
 import (
-	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -49,6 +47,7 @@ type SessionView struct {
 	PID               int        `json:"pid,omitempty"`
 	ProviderSessionID string     `json:"providerSessionId,omitempty"`
 	ResumedFrom       string     `json:"resumedFrom,omitempty"`
+	Profile           string     `json:"profile,omitempty"`
 	StartedAt         time.Time  `json:"startedAt"`
 	FinishedAt        *time.Time `json:"finishedAt,omitempty"`
 	Active            bool       `json:"active"`
@@ -66,29 +65,19 @@ type EventsPage struct {
 	NextCursor int              `json:"nextCursor"`
 }
 
-// ListInteractiveBees returns bees whose adapters support interactive sessions.
-func ListInteractiveBees(colonyRoot string) ([]BeeView, error) {
-	beesDir := colony.BeesDir(colonyRoot)
-	entries, err := filepath.Glob(filepath.Join(beesDir, "*.yaml"))
+// ListInteractiveBees returns bees whose (effective) adapters support interactive sessions.
+func ListInteractiveBees(ctx colony.Context) ([]BeeView, error) {
+	bees, err := ctx.LoadAllBees()
 	if err != nil {
 		return nil, err
 	}
 	var out []BeeView
-	for _, path := range entries {
-		base := filepath.Base(path)
-		if strings.HasSuffix(base, ".local.yaml") {
-			continue
-		}
-		role := strings.TrimSuffix(base, ".yaml")
-		bee, _, err := colony.LoadBee(colonyRoot, role)
-		if err != nil {
-			continue
-		}
+	for _, bee := range bees {
 		adapterName, err := bee.ResolveAdapter()
 		if err != nil || !interactiveAdapters[adapterName] {
 			continue
 		}
-		intents, defaultIntent, err := prompts.DiscoverIntents(colonyRoot, bee)
+		intents, defaultIntent, err := prompts.DiscoverIntents(ctx.ColonyRoot, bee)
 		if err != nil {
 			continue
 		}
@@ -199,6 +188,7 @@ func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView 
 		PID:               h.PID,
 		ProviderSessionID: h.ProviderSessionID,
 		ResumedFrom:       h.ResumedFrom,
+		Profile:           h.Profile,
 		StartedAt:         h.StartedAt,
 		Active:            h.State == adapters.SessionActive || h.State == "",
 	}
@@ -244,6 +234,9 @@ func overlaySessionArtifacts(view SessionView, colonyRoot string) SessionView {
 	if view.ResumedFrom == "" {
 		view.ResumedFrom = meta.ResumedFrom
 	}
+	if view.Profile == "" {
+		view.Profile = meta.Profile
+	}
 	return view
 }
 
@@ -261,6 +254,7 @@ func sessionViewFromMeta(meta runs.SessionMeta) SessionView {
 		PID:               meta.PID,
 		ProviderSessionID: meta.ProviderSessionID,
 		ResumedFrom:       meta.ResumedFrom,
+		Profile:           meta.Profile,
 		StartedAt:         meta.StartedAt,
 		Active:            meta.State == string(adapters.SessionActive) && colony.ProcessAlive(meta.PID),
 	}

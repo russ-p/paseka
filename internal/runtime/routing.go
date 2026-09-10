@@ -21,6 +21,15 @@ func BuildBeeRegistry(colonyRoot string) (*BeeRegistry, error) {
 	return NewBeeRegistryFromBees(bees), nil
 }
 
+// BuildBeeRegistryFromContext loads bees with the process profile applied.
+func BuildBeeRegistryFromContext(ctx colony.Context) (*BeeRegistry, error) {
+	bees, err := ctx.LoadAllBees()
+	if err != nil {
+		return nil, err
+	}
+	return NewBeeRegistryFromBees(bees), nil
+}
+
 // NewBeeRegistryFromBees builds a registry from an in-memory bee map (tests).
 func NewBeeRegistryFromBees(bees map[string]colony.Bee) *BeeRegistry {
 	return &BeeRegistry{bees: bees}

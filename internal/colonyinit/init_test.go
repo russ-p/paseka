@@ -70,8 +70,15 @@ func TestInitScaffold(t *testing.T) {
 		}
 	}
 
-	if _, err := os.Stat(res.HomeDir); err != nil {
-		t.Fatalf("home dir: %v", err)
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "profiles")); !os.IsNotExist(err) {
+		t.Fatalf("init should not create profiles, err=%v", err)
+	}
+	homeCfg, err := os.ReadFile(filepath.Join(res.HomeDir, "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(homeCfg), "profile:") {
+		t.Fatalf("init should not write sticky profile:\n%s", homeCfg)
 	}
 
 	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "opencode.yaml")); err != nil {

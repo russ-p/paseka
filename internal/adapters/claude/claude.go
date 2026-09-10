@@ -87,6 +87,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		Bee:       req.Bee,
 		Adapter:   adapterName,
 		Workspace: req.Workspace,
+		Profile:   req.Profile,
 		StartedAt: startedAt,
 	}); err != nil {
 		return nil, fmt.Errorf("claude: write meta: %w", err)

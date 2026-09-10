@@ -64,6 +64,7 @@ type Meta struct {
 	Workspace         string    `json:"workspace"`
 	ProviderSessionID string    `json:"providerSessionId,omitempty"`
 	ResumedFrom       string    `json:"resumedFrom,omitempty"`
+	Profile           string    `json:"profile"`
 	StartedAt         time.Time `json:"startedAt"`
 }
 
@@ -298,6 +299,7 @@ type SessionMeta struct {
 	State             string    `json:"state"`
 	ProviderSessionID string    `json:"providerSessionId,omitempty"`
 	ResumedFrom       string    `json:"resumedFrom,omitempty"`
+	Profile           string    `json:"profile"`
 	StartedAt         time.Time `json:"startedAt"`
 	FinishedAt        time.Time `json:"finishedAt,omitempty"`
 }

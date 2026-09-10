@@ -94,7 +94,7 @@ func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	bees, err := ListInteractiveBees(a.ctx.ColonyRoot)
+	bees, err := ListInteractiveBees(a.ctx)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -107,7 +107,7 @@ func (a *api) handleColonyTopology(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	topo, err := colony.BuildTopology(a.ctx.ColonyRoot)
+	topo, err := colony.BuildEffectiveTopology(a.ctx)
 	if err != nil {
 		writeError(w, err)
 		return

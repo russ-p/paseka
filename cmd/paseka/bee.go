@@ -39,7 +39,7 @@ func newBeeRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, args[0])
+			bee, _, err := ctxColony.LoadBee(args[0])
 			if err != nil {
 				return err
 			}
@@ -105,7 +105,7 @@ func newBeeChatCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				bee, overlay, err := colony.LoadBee(ctxColony.ColonyRoot, beeRole)
+				bee, overlay, err := ctxColony.LoadBee(beeRole)
 				if err != nil {
 					return err
 				}

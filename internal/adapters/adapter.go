@@ -30,6 +30,7 @@ type RunRequest struct {
 	Task         string
 	Intent       string
 	Insights     []string
+	Profile      string
 }
 
 // RunParams holds adapter CLI flags and shared bee params.

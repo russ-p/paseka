@@ -69,6 +69,12 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	if err != nil {
 		return nil, err
 	}
+	if req.ProfileApply != nil {
+		bee, err = req.ProfileApply(bee)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	workspace := req.Workspace
 	if workspace == "" {
@@ -305,6 +311,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Task:         p.req.Task,
 		Intent:       p.req.Intent,
 		Insights:     p.insights,
+		Profile:      p.req.Profile,
 	})
 }
 

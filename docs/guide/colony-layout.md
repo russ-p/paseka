@@ -30,6 +30,8 @@ Version-controlled colony definition. Safe to commit; no secrets.
 ```
 .paseka/
 ├── colony.yaml          # colony manifest: bees, routes, defaults
+├── profiles/            # optional committed config overlays (not created by init)
+│   └── pi.yaml          # shareable recipe: adapter remap, params, model_aliases
 ├── bees/                # per-bee adapter bindings and non-secret params
 │   ├── scout.yaml
 │   └── builder.yaml
@@ -57,7 +59,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
     └── <traceId>/
 ```
 
-**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)).
+**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
 
 ```yaml
 defaults:
@@ -125,6 +127,10 @@ Per-colony state on this machine. Not committed.
 ~/.config/paseka/<project-slug>/
 ├── config.yaml                 # secrets refs, NATS URL, adapter env (overridable via PASEKA_NATS_URL)
 │                               # optional model_aliases — overlays colony.yaml keys on this machine
+│                               # optional profile: <name> — sticky overlay for this machine only
+├── profiles/<name>/            # optional machine-local overlay for that name
+│   ├── config.yaml             # nats + model_aliases only
+│   └── adapters/*.yaml         # binary / api_key_env overlays
 ├── state.json                  # runtime: active worktrees, last traceId, hive status
 ├── telegram.yaml               # optional: Telegram Human Gateway (not created by init)
 ├── telegram-notify-state.json  # optional: gate notify dedup (runtime)
@@ -142,6 +148,7 @@ Common environment overrides:
 | Variable | Purpose |
 | -------- | ------- |
 | `PASEKA_NATS_URL` | Overrides machine-local `nats.url` for CLI, runtime, Console, and gateways |
+| `PASEKA_PROFILE` | Selects a config profile when `--profile` / `--no-profile` are omitted |
 | `CURSOR_API_KEY` | Cursor Agent CLI authentication when not using `agent login` |
 | Adapter `api_key_env` target | Vendor key named by `adapters/<adapter>.yaml`, for example `GEMINI_API_KEY` |
 | `PASEKA_TRACE_ID`, `PASEKA_AGENT_ID`, `PASEKA_TASK_ID` | Injected into declared script adapter processes |
@@ -151,6 +158,7 @@ Common environment overrides:
 | Kind | Project `.paseka/` | Home `~/.config/paseka/<slug>/` |
 | ---- | ------------------ | ------------------------------- |
 | Bee roles & adapter choice | yes | — |
+| Config profile recipes | yes (`.paseka/profiles/<name>.yaml`) | yes (`profiles/<name>/`, sticky `profile:`) |
 | Model alias map (`model_aliases`) | yes (base) | yes (overlay same keys) |
 | Prompt templates (shareable) | yes | — |
 | API keys, tokens | — | yes (or env var refs) |
@@ -158,6 +166,8 @@ Common environment overrides:
 | Active worktrees registry | pointer only | authoritative state |
 | Active agent runs registry | pointer only | optional mirror in `state.json` |
 | Event replay cache | — | yes |
+
+A **profile** is an optional named overlay for the whole Queen Shell process (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`). `--no-profile` ignores sticky. Unknown names fail closed and list what exists on both layers. `paseka init` does not create profiles; Nuc does not pack `.paseka/profiles/`. Global `adapter:` replaces LLM bees without `command:`; `script` and custom argv stay committed unless `bees.<role>.adapter` is set. Details: [Bee config](bee-config.md), [CLI](cli.md).
 
 ---
 

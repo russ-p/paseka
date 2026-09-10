@@ -161,7 +161,7 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		Review:    protocol.TaskReviewPolicy(strings.TrimSpace(in.Review)),
 		DependsOn: ParseDependsOn(in.DependsOn),
 	}
-	bees, err := colony.LoadAllBees(session.Colony.ColonyRoot)
+	bees, err := session.Colony.LoadAllBees()
 	if err != nil {
 		return CreateResult{}, err
 	}

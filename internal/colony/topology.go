@@ -43,12 +43,25 @@ type TopologyEdge struct {
 	BeeFrom  string            `json:"beeFrom,omitempty"`
 }
 
-// BuildTopology projects colony EDA wiring from filesystem config only.
+// BuildTopology projects colony EDA wiring from committed bee YAML.
 func BuildTopology(colonyRoot string) (Topology, error) {
 	bees, err := LoadAllBees(colonyRoot)
 	if err != nil {
 		return Topology{}, err
 	}
+	return buildTopology(colonyRoot, bees)
+}
+
+// BuildEffectiveTopology projects EDA wiring from profile-applied bees.
+func BuildEffectiveTopology(ctx Context) (Topology, error) {
+	bees, err := ctx.LoadAllBees()
+	if err != nil {
+		return Topology{}, err
+	}
+	return buildTopology(ctx.ColonyRoot, bees)
+}
+
+func buildTopology(colonyRoot string, bees map[string]Bee) (Topology, error) {
 	manifest, err := LoadColony(colonyRoot)
 	if err != nil {
 		return Topology{}, err

@@ -167,7 +167,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, err
 	}
-	bee, overlay, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
+	bee, overlay, err := ctxColony.LoadBee(req.Bee)
 	if err != nil {
 		return nil, err
 	}
@@ -337,6 +337,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Workspace:         workspace,
 		ProviderSessionID: req.resumeProviderID,
 		ResumedFrom:       req.resumeFrom,
+		Profile:           ctxColony.Profile,
 		StartedAt:         startedAt,
 	}); err != nil {
 		return nil, err
@@ -411,6 +412,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			Workspace:         workspace,
 			ProviderSessionID: providerSessionID,
 			ResumedFrom:       req.resumeFrom,
+			Profile:           ctxColony.Profile,
 			StartedAt:         startedAt,
 		}); err != nil {
 			return nil, fmt.Errorf("sessions: write meta: %w", err)
@@ -436,6 +438,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		StartedAt:         startedAt,
 		ProviderSessionID: providerSessionID,
 		ResumedFrom:       req.resumeFrom,
+		Profile:           ctxColony.Profile,
 	}
 
 	if err := runDir.WriteSession(runs.SessionMeta{
@@ -450,6 +453,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		State:             string(adapters.SessionActive),
 		ProviderSessionID: providerSessionID,
 		ResumedFrom:       req.resumeFrom,
+		Profile:           ctxColony.Profile,
 		StartedAt:         startedAt,
 	}); err != nil {
 		_ = proc.Kill()
@@ -554,6 +558,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		State:             string(state),
 		ProviderSessionID: providerSessionID,
 		ResumedFrom:       resumedFrom,
+		Profile:           entry.Handle.Profile,
 		StartedAt:         entry.Handle.StartedAt,
 		FinishedAt:        finishedAt,
 	})

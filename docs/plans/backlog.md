@@ -199,6 +199,10 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 
 ## Assumptions and gotchas
 
+### Config profiles
+
+- **Concurrent `--profile` processes share worktrees and `state.json`** — two Queen Shell processes with different overlays are allowed, but they still use `.paseka/worktrees/<traceId>/` and the slug’s home registry. Compare adapters on separate traces. See [027](../specs/027-config-profiles.md).
+
 ### Eval colony
 
 #### Standing trail live case

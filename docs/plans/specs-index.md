@@ -32,7 +32,7 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [024-pull-request-delivery](../specs/024-pull-request-delivery.md) | Draft | Isolated trails: opt-in PR publish instead of local merge; bees `pr.body`; forge via external CLI script contract |
 | [025-cursor-session-resume](../specs/025-cursor-session-resume.md) | Implemented | Console/CLI resume of a finished Cursor HITL chat via stored `providerSessionId`; new Paseka session, same UUID; no Pi/Claude/AFK |
 | [026-opencode-adapter](../specs/026-opencode-adapter.md) | Draft | OpenCode CLI as first-class AFK + interactive adapter; `paseka init --adapter opencode` |
-| [027-config-profiles](../specs/027-config-profiles.md) | Draft | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
+| [027-config-profiles](../specs/027-config-profiles.md) | Implemented | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
 | [028-standing-trails](../specs/028-standing-trails.md) | Implemented | Long-lived named Flight Trails for recurring cues; sidecar cron; comb checkpoints; per-tick honey stipend |
 | [029-console-chrome-stream](../specs/029-console-chrome-stream.md) | Implemented | Queen Console header plaques + tab badges over one SSE endpoint (`GET /api/chrome/stream`); REST GETs remain for tabs |
 

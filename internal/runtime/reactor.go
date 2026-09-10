@@ -60,7 +60,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		return nil, fmt.Errorf("runtime: task ledger kv: %w", err)
 	}
 
-	registry, err := BuildBeeRegistry(ctxColony.ColonyRoot)
+	registry, err := BuildBeeRegistryFromContext(ctxColony)
 	if err != nil {
 		busClient.Close()
 		return nil, err

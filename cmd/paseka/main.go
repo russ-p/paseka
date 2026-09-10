@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/colonyinit"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/spf13/cobra"
@@ -19,6 +21,8 @@ func main() {
 func newRoot() *cobra.Command {
 	var logLevel string
 	var noColor bool
+	var profile string
+	var noProfile bool
 
 	root := &cobra.Command{
 		Use:   "paseka",
@@ -32,11 +36,26 @@ func newRoot() *cobra.Command {
 				Level:   level,
 				NoColor: noColor,
 			}))
+			profileChanged := flagChanged(cmd, "profile")
+			noProfileSet := noProfile || flagChanged(cmd, "no-profile")
+			if noProfileSet && profileChanged {
+				return fmt.Errorf("paseka: --no-profile cannot be combined with --profile")
+			}
+			if profileChanged && strings.TrimSpace(profile) == "" {
+				return fmt.Errorf("paseka: --profile requires a name (use --no-profile to ignore sticky default)")
+			}
+			colony.SetProcessProfile(colony.ProfileSelection{
+				NoProfile: noProfileSet,
+				Name:      strings.TrimSpace(profile),
+				FlagSet:   profileChanged,
+			})
 			return nil
 		},
 	}
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: error, warn, info, debug")
 	root.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable ANSI colors in logs")
+	root.PersistentFlags().StringVar(&profile, "profile", "", "named config overlay for this process")
+	root.PersistentFlags().BoolVar(&noProfile, "no-profile", false, "ignore sticky home profile for this process")
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newBeeCmd())
 	root.AddCommand(newSessionCmd())
@@ -60,6 +79,15 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newColonyCmd())
 	root.AddCommand(newNucCmd())
 	return root
+}
+
+func flagChanged(cmd *cobra.Command, name string) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Flags().Changed(name) || c.PersistentFlags().Changed(name) {
+			return true
+		}
+	}
+	return false
 }
 
 func newInitCmd() *cobra.Command {

@@ -54,7 +54,7 @@ func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, l
 		return ApproveResult{}, fmt.Errorf("task %q is not a review gate task", in.TaskID)
 	}
 
-	bees, err := colony.LoadAllBees(colonyCtx.ColonyRoot)
+	bees, err := colonyCtx.LoadAllBees()
 	if err != nil {
 		return ApproveResult{}, err
 	}

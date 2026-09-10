@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/adapters/pi"
 	"github.com/russ-p/paseka/internal/adapters/script"
 	"github.com/russ-p/paseka/internal/bus"
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 // DispatchRequest is input for spawning one bee/agent run.
@@ -29,6 +30,8 @@ type DispatchRequest struct {
 	AdapterExtra   adapters.RunParams
 	ModelAliases   map[string]string
 	IsLastWorkTask bool // set by AFK ledger task dispatch only
+	Profile        string
+	ProfileApply   func(colony.Bee) (colony.Bee, error)
 }
 
 // Dispatcher renders prompts and runs adapters.

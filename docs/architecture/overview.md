@@ -49,7 +49,7 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 ├── prompt.txt         # runtime → agent: rendered prompt_template (audit / replay)
 ├── system.txt         # optional — rendered system_template (adapter injection)
 ├── summary.md         # runtime log: human-readable summary (not a success contract)
-├── meta.json          # runtime → observers: bee, adapter, workspace, startedAt
+├── meta.json          # runtime → observers: bee, adapter, workspace, profile, startedAt
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
 ├── session.json       # interactive only: pid, state, session metadata
 └── transcript.ndjson  # interactive only: dialogue audit log
@@ -516,7 +516,7 @@ internal/
   console/                  # Queen Console HTTP API + embedded SPA (transport); chrome header SSE; Host/System/Git snapshots are console-local, not hiveview
   gate/telegram/            # Telegram Human Gateway (transport)
   export/                   # trace HTML/Markdown export (uses hiveview; agent-logs via adapter SessionLogResolver)
-  colony/                   # load .paseka + home config, bee schema, slug resolution
+  colony/                   # load .paseka + home config, config profiles, bee schema, slug resolution
   colonyinit/               # paseka init scaffolds (.paseka/, home config, default bees)
   homestate/                # machine-local state.json registry (runtime, sessions, invites, worktrees)
   purge/                    # FS + bus purge (runs, worktrees, cache, trace artifacts)
@@ -536,7 +536,7 @@ internal/
 
 **Bus seams:** `bus.Publisher`, `bus.TraceReplayer`, `bus.ArtifactStore`, `bus.EventSubscriber`, and `bus.TracePurger` are the narrow interfaces consumers depend on. `*bus.Client` (Connect, JetStream KV) stays at composition roots: CLI, Queen Console handlers, `NewReactor`, `NewNotifier`, `OpenLedger`, and `purge.connectBus`.
 
-**Runtime dispatch:** `Reactor` owns Task vs Direct choreography (`dispatch_task.go`, `dispatch_direct.go`) after ledger apply. `Dispatcher.Dispatch` is a thin orchestrator over **Prepare → Run → Finalize** (`dispatch_stages.go`): render prompts and run dir, adapter invocation, then deferred flush / run.summary / publish.
+**Runtime dispatch:** `Reactor` owns Task vs Direct choreography (`dispatch_task.go`, `dispatch_direct.go`) after ledger apply. `Dispatcher.Dispatch` is a thin orchestrator over **Prepare → Run → Finalize** (`dispatch_stages.go`): render prompts and run dir, adapter invocation, then deferred flush / run.summary / publish. `ResolveContext` merges an optional config profile (root `--profile` / `PASEKA_PROFILE` / home sticky) into adapters, aliases, NATS, and effective bee `adapter`/`params` for the process lifetime.
 
 ---
 
@@ -549,7 +549,7 @@ internal/
 | Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §1 Pi adapter |
 | Claude invocation | Claude Code CLI (`claude`) — AFK `claude -p`, interactive PTY; see §1 Claude adapter |
 | OpenCode invocation | OpenCode CLI (`opencode`) — AFK `opencode run`, interactive TUI; see §1 OpenCode adapter |
-| Supported adapters | `cursor` (default), `pi`, `claude`, `opencode` — selected per bee via `adapter:` in `bees/*.yaml` |
+| Supported adapters | `cursor` (default), `pi`, `claude`, `opencode` — selected per bee via `adapter:` in `bees/*.yaml`; a process **profile** may replace LLM adapters |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |
 | Prompt templates | `.paseka/prompts/` — committed; bee YAML references `prompt_template` and optional `system_template` |
 | Commit `.paseka/` | yes by default; `.gitignore` covers `worktrees/`, `runs/`, `*.local.yaml`, `cache/` |

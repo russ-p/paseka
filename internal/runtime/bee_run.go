@@ -43,7 +43,7 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		return nil, err
 	}
 
-	bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
+	bee, _, err := ctxColony.LoadBee(req.Bee)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		traceID = id
 	}
 
-	if registry, regErr := BuildBeeRegistry(ctxColony.ColonyRoot); regErr == nil {
+	if registry, regErr := BuildBeeRegistryFromContext(ctxColony); regErr == nil {
 		d.SetBeeRegistry(registry)
 	}
 

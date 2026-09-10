@@ -31,6 +31,10 @@ Resolution requires:
 | ---- | ------- | ----------- |
 | `--log-level` | `info` | Runtime log level: `error`, `warn`, `info`, or `debug` |
 | `--no-color` | off | Disable ANSI colors in logs |
+| `--profile` | | Named config overlay for this process (colony `.paseka/profiles/<name>.yaml` and/or home `profiles/<name>/`). Fails closed if the name is missing. Cannot combine with `--no-profile`. |
+| `--no-profile` | off | Ignore sticky `profile:` in home `config.yaml` for this process |
+
+Non-empty **`PASEKA_PROFILE`** selects a profile when the flags are omitted (flag wins over env; env wins over sticky home `profile:`). See [Colony layout](colony-layout.md).
 
 ### Identifiers
 
@@ -53,7 +57,7 @@ Resolution requires:
 
 Default NATS URL after `paseka init`: `nats://127.0.0.1:4222` (see `docker-compose.yml`).
 
-Non-empty **`PASEKA_NATS_URL`** overrides `nats.url` in home `config.yaml` (useful for containers and shared NATS hosts). Homelab / server container setup: [Homelab deployment](homelab-deployment.md).
+Non-empty **`PASEKA_NATS_URL`** overrides `nats.url` in home `config.yaml` (useful for containers and shared NATS hosts). Homelab / server container setup: [Homelab deployment](homelab-deployment.md). A home profile may overlay `nats.url`; `PASEKA_NATS_URL` still wins.
 
 ---
 
@@ -400,6 +404,7 @@ Minimal schema shape:
   "generatedAt": "RFC3339",
   "slug": "string",
   "colonyRoot": "string",
+  "profile": "",
   "runtime": {"status": "running|stopped|stale|stopping", "alive": false},
   "nats": {"configured": false, "connected": false},
   "agents": {"count": 0, "afk": 0, "sessions": 0, "items": []},
@@ -449,7 +454,7 @@ Check NATS connectivity, JetStream resources, and colony bee wiring for the colo
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail).
+**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail).
 
 Exits with an error if any check fails.
 

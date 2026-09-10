@@ -11,6 +11,8 @@ paseka console
 # Open http://127.0.0.1:8787
 ```
 
+`paseka --profile pi console` uses that overlay for the Console process (topology and bee list show effective adapters). There is no in-Console profile switcher.
+
 Use `--path` / `-C` to select a colony and `--addr` to change the listen
 address:
 

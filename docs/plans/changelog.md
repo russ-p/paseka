@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Config profiles
+
+A Beekeeper can run the same colony through a named overlay (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`) without rewriting committed bee YAML. Global `adapter:` replaces LLM bees (script and `command:` roles stay put unless a per-bee exception says otherwise). Unknown names fail closed and list what exists. `--no-profile` ignores a sticky default. Queen Console inherits the process overlay; there is no in-UI switcher.
+
+- Spec: [027-config-profiles](../specs/027-config-profiles.md)
+- Canonical: [Colony layout](../guide/colony-layout.md), [Bee config](../guide/bee-config.md), [CLI](../guide/cli.md) (global `--profile`), [Architecture overview](../architecture/overview.md)
+
+Deferred from that work: concurrent processes with different profiles still share worktrees and home `state.json` — see [Backlog](backlog.md).
+
 ## 2026-09 — Resume Cursor HITL sessions
 
 A finished Cursor HITL chat can continue in the same Cursor conversation without `create-chat`. Queen Console **Resume** (optional one-line continue) and `paseka session resume` start a **new** Paseka session that copies `providerSessionId`, records `resumedFrom`, skips honey, and fails closed when the source is ineligible or still live. New launches still create a fresh chat.

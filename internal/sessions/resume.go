@@ -129,7 +129,7 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 	if providerID == "" {
 		return RunRequest{}, resumeErr(ResumeErrNoProviderSessionID, 400, "source session has no providerSessionId")
 	}
-	bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, source.Bee)
+	bee, _, err := ctxColony.LoadBee(source.Bee)
 	if err != nil {
 		return RunRequest{}, resumeErr(ResumeErrBeeGone, 400, "source bee is gone or unreadable")
 	}

@@ -28,6 +28,7 @@ type ColonySnapshot struct {
 	GeneratedAt     string                `json:"generatedAt"`
 	Slug            string                `json:"slug"`
 	ColonyRoot      string                `json:"colonyRoot"`
+	Profile         string                `json:"profile"`
 	Runtime         SnapshotRuntime       `json:"runtime"`
 	NATS            SnapshotNATS          `json:"nats"`
 	Agents          AgentsView            `json:"agents"`
@@ -127,6 +128,7 @@ func BuildColonySnapshot(ctx colony.Context, sup *runtime.Supervisor, mgr *sessi
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Slug:          ctx.Slug,
 		ColonyRoot:    ctx.ColonyRoot,
+		Profile:       ctx.Profile,
 		TaskCounts:    map[string]int{},
 		Energy: SnapshotEnergy{
 			Traces: []SnapshotEnergyTrace{},
@@ -353,9 +355,14 @@ func snapshotAttentionTaskFromItem(task TaskListItem) SnapshotAttentionTask {
 func FormatColonySnapshot(s ColonySnapshot) string {
 	lines := []string{
 		fmt.Sprintf("Paseka · %s", s.Slug),
+	}
+	if s.Profile != "" {
+		lines = append(lines, fmt.Sprintf("Profile: %s", s.Profile))
+	}
+	lines = append(lines,
 		"",
 		fmt.Sprintf("Runtime: %s (alive=%v)", s.Runtime.Status, s.Runtime.Alive),
-	}
+	)
 	if s.Runtime.PID > 0 {
 		lines[len(lines)-1] = fmt.Sprintf("Runtime: %s pid=%d (alive=%v)", s.Runtime.Status, s.Runtime.PID, s.Runtime.Alive)
 	}

@@ -64,6 +64,7 @@ type SessionHandle struct {
 	StartedAt         time.Time
 	ProviderSessionID string
 	ResumedFrom       string
+	Profile           string
 }
 
 // SessionEventKind categorizes normalized session events.

@@ -94,6 +94,9 @@ func LoadColony(colonyRoot string) (Colony, error) {
 		}
 		return Colony{}, fmt.Errorf("colony: read manifest: %w", err)
 	}
+	if err := rejectColonyManifestProfileKey(data, path); err != nil {
+		return Colony{}, err
+	}
 	var c Colony
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return Colony{}, fmt.Errorf("colony: parse manifest: %w", err)

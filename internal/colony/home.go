@@ -16,6 +16,7 @@ const envNATSURL = "PASEKA_NATS_URL"
 type HomeConfig struct {
 	ColonyRoot   string            `yaml:"colony_root"`
 	Slug         string            `yaml:"slug"`
+	Profile      string            `yaml:"profile,omitempty"`
 	ModelAliases map[string]string `yaml:"model_aliases,omitempty"`
 	NATS         NATSConfig        `yaml:"nats"`
 	Adapters     map[string]any    `yaml:"adapters"`
@@ -59,14 +60,17 @@ type OpenCodeAdapterConfig struct {
 
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
-	ColonyRoot   string
-	Slug         string
-	Home         HomeConfig
-	ModelAliases map[string]string
-	Cursor       CursorAdapterConfig
-	Pi           PiAdapterConfig
-	Claude       ClaudeAdapterConfig
-	OpenCode     OpenCodeAdapterConfig
+	ColonyRoot    string
+	Slug          string
+	Home          HomeConfig
+	ModelAliases  map[string]string
+	Cursor        CursorAdapterConfig
+	Pi            PiAdapterConfig
+	Claude        ClaudeAdapterConfig
+	OpenCode      OpenCodeAdapterConfig
+	Profile       string
+	ProfileLayers ProfileLayers
+	colonyProfile ColonyProfile
 }
 
 // ResolveContext finds the git repo, loads colony + home config.
@@ -137,7 +141,7 @@ func ResolveContext(startDir string) (Context, error) {
 		return Context{}, err
 	}
 
-	return Context{
+	ctx := Context{
 		ColonyRoot:   colonyRoot,
 		Slug:         slug,
 		Home:         home,
@@ -146,7 +150,19 @@ func ResolveContext(startDir string) (Context, error) {
 		Pi:           pi,
 		Claude:       claude,
 		OpenCode:     opencode,
-	}, nil
+	}
+
+	name, err := selectedProfileName(ProcessProfile(), home.Profile)
+	if err != nil {
+		return Context{}, err
+	}
+	if name != "" {
+		if err := applySelectedProfile(&ctx, manifest, name); err != nil {
+			return Context{}, err
+		}
+	}
+
+	return ctx, nil
 }
 
 // EnrichFromHome fills machine-local Home (including NATS URL) when callers

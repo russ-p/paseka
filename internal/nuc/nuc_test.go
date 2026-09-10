@@ -1,6 +1,7 @@
 package nuc_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,6 +139,26 @@ spec:
 `))
 	if err == nil || !strings.Contains(err.Error(), "kind") {
 		t.Fatalf("expected kind error, got %v", err)
+	}
+}
+
+func TestExportOmitsProfilesDirectory(t *testing.T) {
+	src := setupNucFixture(t)
+	mustWrite(t, filepath.Join(src, ".paseka", "profiles", "pi.yaml"), "adapter: pi\n")
+
+	doc, err := nuc.ExportFromColony(nuc.ExportOptions{
+		ColonyRoot: src,
+		Name:       "fixture",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "profiles") || strings.Contains(string(raw), "adapter: pi") {
+		t.Fatalf("nuc export packed profiles: %s", raw)
 	}
 }
 

@@ -32,7 +32,7 @@ func newColonyTopologyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			topo, err := colony.BuildTopology(ctxColony.ColonyRoot)
+			topo, err := colony.BuildEffectiveTopology(ctxColony)
 			if err != nil {
 				return err
 			}

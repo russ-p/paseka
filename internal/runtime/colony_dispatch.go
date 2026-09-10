@@ -46,7 +46,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, fmt.Errorf("runtime: traceId is required")
 	}
 
-	bee, _, err := colony.LoadBee(ctxColony.ColonyRoot, req.Bee)
+	bee, _, err := ctxColony.LoadBee(req.Bee)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +115,11 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		AdapterExtra:   adapterExtra,
 		ModelAliases:   aliases,
 		IsLastWorkTask: isLastWorkTask,
+		Profile:        ctxColony.Profile,
+		ProfileApply: func(bee colony.Bee) (colony.Bee, error) {
+			applied, _, err := ctxColony.ApplyBeeProfile(bee)
+			return applied, err
+		},
 	})
 	if err != nil {
 		return nil, err

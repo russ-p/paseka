@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -26,14 +27,26 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			bees, beesErr := colony.LoadAllBeesForDiagnosis(ctxColony.ColonyRoot)
+			bees, beesErr := ctxColony.LoadAllBeesForDiagnosis()
 			if beesErr != nil {
 				report.Errors = append(report.Errors, beesErr.Error())
 				bees = map[string]colony.Bee{}
 			}
 			standing := cues.DiagnoseStanding(ctxColony.ColonyRoot, bees)
 			report.Warnings = append(report.Warnings, standing.Warnings...)
-			printDoctorReport(report)
+			profileView, profileErr := ctxColony.DoctorProfileView()
+			if profileErr != nil {
+				report.Errors = append(report.Errors, profileErr.Error())
+			} else {
+				for _, role := range profileView.SkippedScript {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("profile %q skipped script bee %s (global adapter not applied)", profileView.Name, role))
+				}
+				for _, role := range profileView.SkippedCommand {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("profile %q skipped command bee %s (global adapter not applied)", profileView.Name, role))
+				}
+			}
+			printProfileDoctor(cmd.OutOrStdout(), profileView)
+			printDoctorReport(cmd.OutOrStdout(), report)
 			if len(report.Errors) > 0 {
 				return fmt.Errorf("doctor: %d issue(s) found", len(report.Errors))
 			}
@@ -44,35 +57,71 @@ func newDoctorCmd() *cobra.Command {
 	return cmd
 }
 
-func printDoctorReport(r bus.DoctorReport) {
-	fmt.Println("NATS doctor")
-	fmt.Printf("  url:            %s\n", r.URL)
-	fmt.Printf("  subject prefix: %s\n", r.SubjectPrefix)
-	fmt.Printf("  connected:      %v\n", r.Connected)
-	fmt.Printf("  jetstream:      %v\n", r.JetStreamOK)
-	fmt.Printf("  event stream:   %v\n", r.StreamOK)
-	fmt.Printf("  task ledger kv: %v\n", r.KVOK)
-	fmt.Printf("  object store:   %v\n", r.ObjectStoreOK)
+func printProfileDoctor(w io.Writer, v colony.ProfileDoctorView) {
+	name := v.Name
+	if name == "" {
+		name = "none"
+	}
+	fmt.Fprintln(w, "Profile")
+	fmt.Fprintf(w, "  name:     %s\n", name)
+	layers := "none"
+	switch {
+	case v.Layers.Colony && v.Layers.Home:
+		layers = "colony+home"
+	case v.Layers.Colony:
+		layers = "colony"
+	case v.Layers.Home:
+		layers = "home"
+	}
+	fmt.Fprintf(w, "  layers:   %s\n", layers)
+	if len(v.Remapped) > 0 {
+		fmt.Fprintf(w, "  remapped: %s\n", strings.Join(v.Remapped, ", "))
+	}
+	fmt.Fprintf(w, "  available: %s\n", formatDoctorAvailable(v.ColonyAvailable, v.HomeAvailable))
+	fmt.Fprintln(w)
+}
+
+func formatDoctorAvailable(colonyNames, homeNames []string) string {
+	colonyPart := "none"
+	if len(colonyNames) > 0 {
+		colonyPart = strings.Join(colonyNames, ", ")
+	}
+	homePart := "none"
+	if len(homeNames) > 0 {
+		homePart = strings.Join(homeNames, ", ")
+	}
+	return fmt.Sprintf("colony [%s]; home [%s]", colonyPart, homePart)
+}
+
+func printDoctorReport(w io.Writer, r bus.DoctorReport) {
+	fmt.Fprintln(w, "NATS doctor")
+	fmt.Fprintf(w, "  url:            %s\n", r.URL)
+	fmt.Fprintf(w, "  subject prefix: %s\n", r.SubjectPrefix)
+	fmt.Fprintf(w, "  connected:      %v\n", r.Connected)
+	fmt.Fprintf(w, "  jetstream:      %v\n", r.JetStreamOK)
+	fmt.Fprintf(w, "  event stream:   %v\n", r.StreamOK)
+	fmt.Fprintf(w, "  task ledger kv: %v\n", r.KVOK)
+	fmt.Fprintf(w, "  object store:   %v\n", r.ObjectStoreOK)
 	if len(r.Errors) > 0 {
-		fmt.Println("\nIssues:")
+		fmt.Fprintln(w, "\nIssues:")
 		for _, e := range r.Errors {
-			fmt.Printf("  - %s\n", e)
+			fmt.Fprintf(w, "  - %s\n", e)
 		}
 	}
 	if len(r.Warnings) > 0 {
-		fmt.Println("\nWarnings:")
-		for _, w := range r.Warnings {
-			fmt.Printf("  - %s\n", w)
+		fmt.Fprintln(w, "\nWarnings:")
+		for _, wln := range r.Warnings {
+			fmt.Fprintf(w, "  - %s\n", wln)
 		}
 	}
 	if len(r.Advisories) > 0 {
-		fmt.Println("\nAdvisories:")
+		fmt.Fprintln(w, "\nAdvisories:")
 		for _, a := range r.Advisories {
-			fmt.Printf("  - %s\n", a)
+			fmt.Fprintf(w, "  - %s\n", a)
 		}
 	}
 	if len(r.Errors) == 0 && len(r.Warnings) == 0 && len(r.Advisories) == 0 {
-		fmt.Println("\nAll checks passed.")
+		fmt.Fprintln(w, "\nAll checks passed.")
 	}
 }
 

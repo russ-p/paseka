@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Draft)**
-Named settings overlays at colony + home layers so a Beekeeper can switch adapter and related settings for a process without editing committed bee YAML. Decisions locked: fail-closed profile names, global `adapter:` replaces LLM bee adapters, sticky default only in home `config.yaml`.
+**(Implemented)**
+Named colony + home settings overlays; `paseka --profile` / `PASEKA_PROFILE` / sticky home `profile:`; fail-closed; global `adapter:` replaces LLM bees.
 
 ## Problem Statement
 

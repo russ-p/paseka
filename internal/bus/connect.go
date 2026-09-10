@@ -79,7 +79,7 @@ func Diagnose(ctx colony.Context) (DoctorReport, error) {
 		report.ObjectStoreOK = true
 	}
 
-	bees, err := colony.LoadAllBeesForDiagnosis(ctx.ColonyRoot)
+	bees, err := ctx.LoadAllBeesForDiagnosis()
 	if err != nil {
 		report.Errors = append(report.Errors, err.Error())
 	} else {
