@@ -59,7 +59,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
     └── <traceId>/
 ```
 
-**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
+**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`defaults.delivery`** (`local_merge` or `pull_request`; see [pull-request delivery](pull-request-delivery.md)), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
 
 ```yaml
 defaults:
@@ -67,6 +67,7 @@ defaults:
   system_template: default-system.md   # optional colony-wide role context
   energy_budget: 12
   default_bee: builder                 # task role when task.bee is omitted
+  # delivery: pull_request             # isolated trails land as origin PRs; default is local_merge
 model_aliases:
   small: composer-2.5
   medium: cursor-grok-4.6-medium
@@ -128,6 +129,7 @@ Per-colony state on this machine. Not committed.
 ├── config.yaml                 # secrets refs, NATS URL, adapter env (overridable via PASEKA_NATS_URL)
 │                               # optional model_aliases — overlays colony.yaml keys on this machine
 │                               # optional profile: <name> — sticky overlay for this machine only
+│                               # optional forge.command — argv for PR hosting (tea/gh script; not a bee adapter)
 ├── profiles/<name>/            # optional machine-local overlay for that name
 │   ├── config.yaml             # nats + model_aliases only
 │   └── adapters/*.yaml         # binary / api_key_env overlays
@@ -163,7 +165,10 @@ Common environment overrides:
 | Prompt templates (shareable) | yes | — |
 | API keys, tokens | — | yes (or env var refs) |
 | NATS connection override | — | yes |
+| Isolated trail delivery (`defaults.delivery`) | yes | — |
+| Forge CLI argv (`forge.command`) | — | yes (tokens stay in `tea`/`gh` login) |
 | Active worktrees registry | pointer only | authoritative state |
+| Published PR identity | — | `state.json` `pullRequests[]` |
 | Active agent runs registry | pointer only | optional mirror in `state.json` |
 | Event replay cache | — | yes |
 

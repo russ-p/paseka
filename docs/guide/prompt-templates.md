@@ -83,7 +83,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `summary.md` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 | `{{.ArtifactsDir}}` | `string` | Absolute path to the trail comb for handoff files: `.paseka/runs/<traceId>/artifacts/`. Runtime announces this run's comb delta on successful exit; write files here during the run. Beekeeper annotated review packets use `review-comments.md` under this directory (see partial `artifacts-review-comments`). Standing procedure memory uses `checkpoint.json` and optional `journal/` here (see partial `standing-checkpoint`). |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
-| `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` guidance in emit partials. |
+| `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` and `pr.body` guidance in emit partials. |
 | `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `opencode`, `script`). |
 
 ### Field sources (MVP)
@@ -319,7 +319,7 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 | Partial | Role |
 | ------- | ---- |
 | `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (live default, `--defer` for handoffs including `task.plan` + post-plan `task.ready`; no type enumeration) |
-| `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) |
+| `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) plus operational `trace.title` / `trace.summary` / `pr.body` / `worktree.branch` |
 | `emit-signal` | `SIGNAL` kinds (`task.ready` — defer after plan, `taskId` only) |
 | `scout-emit-intake` | `SIGNAL/feature.classified`, deferred `INSIGHT/task.plan`, deferred `SIGNAL/task.ready` (Scout `intake` intent only) |
 | `drone-emit-grilling` | `SIGNAL/spec.ready` + optional `context.note` (Drone `grilling` intent only) |
@@ -359,5 +359,6 @@ Use `{{.TraceID}}` and `{{.AgentID}}` inside partials so examples match the curr
 - [architecture overview](../architecture/overview.md) — colony layout, adapter contract, runs/worktrees
 - [bee config](bee-config.md) — bee role YAML (`prompt_template` and other fields)
 - [task ledger](../reference/task-ledger.md) — task queue protocol and lifecycle
+- [pull-request delivery](pull-request-delivery.md) — `pr.body` must-emit on `{{.IsLastWorkTask}}`
 - [glossary](../idea/glossary.md) — bee language vs technical terms (`TraceID` / Flight Trail, `Task` / Nectar)
 - Agent run file protocol — `request.json`, `summary.md`, `events.ndjson` under `.paseka/runs/`

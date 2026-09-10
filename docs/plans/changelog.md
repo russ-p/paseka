@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Pull-request delivery
+
+Isolated final-gate approve can **publish a pull request** instead of merging into the colony clone. Colony `defaults.delivery: pull_request` is opt-in; empty still means local merge. The apiary points `forge.command` at a `tea` / `gh` / custom script (JSON stdin/stdout). Approve pushes the worktree head, upserts the PR, and keeps `waiting_review` until the host reports `merged`. Queen Console Reviews grows Open/Update PR; `paseka proposal approve` takes `--pr-title` / `--pr-body` / `--draft`. Telegram cards show the URL. The Git tab still only pushes default.
+
+- Spec: [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
+- Canonical: [Pull-request delivery](../guide/pull-request-delivery.md), [Colony layout](../guide/colony-layout.md), [Queen Console](../guide/queen-console.md), [CLI](../guide/cli.md) (`paseka proposal approve`), [INSIGHT kinds](../reference/insight-kinds.md) (`pr.body`)
+
+Deferred from that work: per-cue delivery, auto-detect forge, a dedicated `pr_open` task status — see [Backlog](backlog.md).
+
 ## 2026-09 — Config profiles
 
 A Beekeeper can run the same colony through a named overlay (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`) without rewriting committed bee YAML. Global `adapter:` replaces LLM bees (script and `command:` roles stay put unless a per-bee exception says otherwise). Unknown names fail closed and list what exists. `--no-profile` ignores a sticky default. Queen Console inherits the process overlay; there is no in-UI switcher.

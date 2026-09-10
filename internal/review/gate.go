@@ -21,6 +21,10 @@ type ApproveInput struct {
 	TaskID       string
 	Summary      string
 	MergeMessage string
+	PRTitle      string
+	PRBody       string
+	Draft        bool
+	RunHooks     bool
 	AgentID      string
 }
 
@@ -28,9 +32,14 @@ type ApproveInput struct {
 type ApproveResult struct {
 	CommitSHA    string
 	StashOutcome worktree.StashOutcome
+	Published    bool
+	PRURL        string
+	PRNumber     int
+	PRState      string
 }
 
-// Approve merges the trace worktree when present and completes the review task.
+// Approve merges the trace worktree or publishes a pull request, then completes the review task
+// except for pull_request delivery, which stays waiting_review until the forge reports merged.
 func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, ledger taskledger.Ledger, in ApproveInput, opts WriteOptions) (ApproveResult, error) {
 	if in.TraceID == "" || in.TaskID == "" {
 		return ApproveResult{}, fmt.Errorf("trace and task id are required")
@@ -64,6 +73,13 @@ func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, l
 	}
 
 	result := ApproveResult{}
+	if ShouldPublishOnApprove(task, bees, manifest.Defaults) {
+		published, err := publishPullRequest(ctx, colonyCtx, in.TraceID, in)
+		if err != nil {
+			return ApproveResult{}, err
+		}
+		return published, nil
+	}
 	if ShouldMergeOnApprove(task, bees, manifest.Defaults) {
 		wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
 		if gitroot.IsInsideWorkTree(wtPath) {

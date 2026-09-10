@@ -165,6 +165,15 @@ const el = {
   taskMergeMessage: document.getElementById('task-merge-message'),
   taskMergeBodyPreviewWrap: document.getElementById('task-merge-body-preview-wrap'),
   taskMergeBodyPreview: document.getElementById('task-merge-body-preview'),
+  taskApproveSubmitBtn: document.getElementById('task-approve-submit-btn'),
+  taskPrTitleLabel: document.getElementById('task-pr-title-label'),
+  taskPrTitle: document.getElementById('task-pr-title'),
+  taskPrBodyLabel: document.getElementById('task-pr-body-label'),
+  taskPrBody: document.getElementById('task-pr-body'),
+  taskPrDraftLabel: document.getElementById('task-pr-draft-label'),
+  taskPrDraft: document.getElementById('task-pr-draft'),
+  taskPrHooksLabel: document.getElementById('task-pr-hooks-label'),
+  taskPrRunHooks: document.getElementById('task-pr-run-hooks'),
   taskRejectForm: document.getElementById('task-reject-form'),
   taskRejectFeedback: document.getElementById('task-reject-feedback'),
   taskReviewError: document.getElementById('task-review-error'),
@@ -201,6 +210,16 @@ const el = {
   reviewMergeMessage: document.getElementById('review-merge-message'),
   reviewMergeBodyPreviewWrap: document.getElementById('review-merge-body-preview-wrap'),
   reviewMergeBodyPreview: document.getElementById('review-merge-body-preview'),
+  reviewPrTitleLabel: document.getElementById('review-pr-title-label'),
+  reviewPrTitle: document.getElementById('review-pr-title'),
+  reviewPrBodyLabel: document.getElementById('review-pr-body-label'),
+  reviewPrBody: document.getElementById('review-pr-body'),
+  reviewPrDraftLabel: document.getElementById('review-pr-draft-label'),
+  reviewPrDraft: document.getElementById('review-pr-draft'),
+  reviewPrHooksLabel: document.getElementById('review-pr-hooks-label'),
+  reviewPrRunHooks: document.getElementById('review-pr-run-hooks'),
+  reviewPrStatus: document.getElementById('review-pr-status'),
+  reviewApproveBtn: document.getElementById('review-approve-btn'),
   reviewRejectForm: document.getElementById('review-reject-form'),
   reviewRejectFeedback: document.getElementById('review-reject-feedback'),
   reviewOpenTimelineBtn: document.getElementById('review-open-timeline-btn'),
@@ -3032,11 +3051,16 @@ function renderTraceDetail(detail) {
   const wt = detail.worktree;
   el.traceWorktreeWrap.classList.toggle('hidden', !wt);
   if (wt) {
+    let extra = '';
+    if (detail.pullRequest?.url) {
+      extra = `<dt>Pull request</dt><dd><a href="${escapeHtml(detail.pullRequest.url)}" target="_blank" rel="noopener">${escapeHtml(detail.pullRequest.url)}</a> (${escapeHtml(detail.pullRequest.state || 'open')})</dd>`;
+    }
     el.traceWorktreeMeta.innerHTML = `
       <dt>Path</dt><dd><code>${escapeHtml(wt.path)}</code></dd>
       <dt>Branch</dt><dd>${escapeHtml(wt.branch || '—')}</dd>
       <dt>Base SHA</dt><dd><code>${escapeHtml(wt.baseSha || '—')}</code></dd>
       <dt>Created</dt><dd>${formatTime(wt.createdAt)}</dd>
+      ${extra}
     `;
   }
 
@@ -3443,6 +3467,12 @@ function renderReviewDetail(item) {
   if (item.reworkTaskId) {
     rows.push(['Rework', `${item.reworkTaskId} (${item.reworkStatus || 'in flight'})`]);
   }
+  if (item.pullRequest?.url) {
+    rows.push(['Pull request', item.pullRequest.url]);
+    if (item.pullRequest.state) {
+      rows.push(['PR state', item.pullRequest.state]);
+    }
+  }
   el.reviewDetailMeta.innerHTML = rows
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v || '—')}</dd>`)
     .join('');
@@ -3464,12 +3494,31 @@ function renderReviewDetail(item) {
   }
 
   const canAct = item.canApprove && item.canReject;
+  const prDelivery = isPullRequestDelivery(item);
   if (canAct) {
     el.reviewActionsWrap.classList.remove('hidden');
     el.reviewFinalHint.classList.toggle('hidden', !item.isFinal);
-    el.reviewMergeMessageLabel.classList.toggle('hidden', !item.isFinal);
+    if (el.reviewFinalHint && item.isFinal) {
+      el.reviewFinalHint.textContent = prDelivery
+        ? 'Final gate — Open/Update PR publishes the worktree branch. Request changes starts rework. Reject only publishes feedback (does not close the remote PR).'
+        : 'Final merge gate — approve merges the trace worktree. Request changes on the merge preview starts rework. Reject only publishes feedback (no rework).';
+    }
+    el.reviewMergeMessageLabel.classList.toggle('hidden', !item.isFinal || prDelivery);
+    toggleHidden(el.reviewPrTitleLabel, !(item.isFinal && prDelivery));
+    toggleHidden(el.reviewPrBodyLabel, !(item.isFinal && prDelivery));
+    toggleHidden(el.reviewPrDraftLabel, !(item.isFinal && prDelivery));
+    toggleHidden(el.reviewPrHooksLabel, !(item.isFinal && prDelivery));
+    if (item.isFinal && prDelivery) {
+      if (el.reviewPrTitle && !el.reviewPrTitle.value) el.reviewPrTitle.value = item.prTitle || '';
+      if (el.reviewPrBody && !el.reviewPrBody.value) el.reviewPrBody.value = item.prBody || '';
+      if (el.reviewApproveBtn) {
+        el.reviewApproveBtn.textContent = item.pullRequest?.url ? 'Update PR' : 'Open PR';
+      }
+    } else if (el.reviewApproveBtn) {
+      el.reviewApproveBtn.textContent = 'Approve';
+    }
     updateMergeBodyPreview(
-      { isFinal: item.isFinal, traceSummary: item.traceSummary },
+      { isFinal: item.isFinal && !prDelivery, traceSummary: item.traceSummary },
       el.reviewMergeBodyPreviewWrap,
       el.reviewMergeBodyPreview,
     );
@@ -3478,6 +3527,15 @@ function renderReviewDetail(item) {
     el.reviewMergeBodyPreviewWrap.classList.add('hidden');
   }
   updateReviewCommentsSubmitState();
+}
+
+function isPullRequestDelivery(item) {
+  return (item?.delivery || '') === 'pull_request';
+}
+
+function toggleHidden(node, hide) {
+  if (!node) return;
+  node.classList.toggle('hidden', !!hide);
 }
 
 function clearReviewMergeDiff() {
@@ -3557,10 +3615,27 @@ function renderReviewMergeDiff(view, preserve) {
     ['Base SHA', view.baseSha],
     ['Head SHA', view.headSha],
   ];
+  if (view.pullRequest?.url) {
+    metaRows.push(['Pull request', view.pullRequest.url]);
+    metaRows.push(['PR state', view.pullRequest.state || 'open']);
+  }
   el.reviewMergeDiffMeta.innerHTML = metaRows
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd><code>${escapeHtml(v || '—')}</code></dd>`)
     .join('');
   el.reviewMergeDiffMeta.classList.remove('hidden');
+  if (el.reviewPrStatus) {
+    if (view.pullRequest?.url) {
+      el.reviewPrStatus.classList.remove('hidden');
+      el.reviewPrStatus.innerHTML = `PR ${escapeHtml(view.pullRequest.state || 'open')}: <a href="${escapeHtml(view.pullRequest.url)}" target="_blank" rel="noopener">${escapeHtml(view.pullRequest.url)}</a>`;
+    } else {
+      el.reviewPrStatus.classList.add('hidden');
+      el.reviewPrStatus.textContent = '';
+    }
+  }
+  if (view.delivery === 'pull_request') {
+    if (el.reviewPrTitle && !el.reviewPrTitle.value && view.prTitle) el.reviewPrTitle.value = view.prTitle;
+    if (el.reviewPrBody && !el.reviewPrBody.value && view.prBody) el.reviewPrBody.value = view.prBody;
+  }
   setOriginBehindWarn(view);
 
   if (view.stat) {
@@ -3642,12 +3717,24 @@ function updateMergeBodyPreview({ isFinal, traceSummary }, wrapEl, previewEl) {
 
 function updateTaskReviewUI(task) {
   const canReview = task && task.canApprove && task.canReject;
+  const prDelivery = isPullRequestDelivery(task);
   el.taskApproveBtn.classList.toggle('hidden', !canReview);
   el.taskRejectBtn.classList.toggle('hidden', !canReview);
   el.taskReviewActions.classList.toggle('hidden', !canReview);
-  el.taskMergeMessageLabel.classList.toggle('hidden', !(canReview && task.isFinal));
+  el.taskMergeMessageLabel.classList.toggle('hidden', !(canReview && task.isFinal && !prDelivery));
+  toggleHidden(el.taskPrTitleLabel, !(canReview && task.isFinal && prDelivery));
+  toggleHidden(el.taskPrBodyLabel, !(canReview && task.isFinal && prDelivery));
+  toggleHidden(el.taskPrDraftLabel, !(canReview && task.isFinal && prDelivery));
+  toggleHidden(el.taskPrHooksLabel, !(canReview && task.isFinal && prDelivery));
+  if (canReview && task.isFinal && prDelivery) {
+    if (el.taskPrTitle && !el.taskPrTitle.value) el.taskPrTitle.value = task.prTitle || '';
+    if (el.taskPrBody && !el.taskPrBody.value) el.taskPrBody.value = task.prBody || '';
+    if (el.taskApproveSubmitBtn) {
+      el.taskApproveSubmitBtn.textContent = task.pullRequest?.url ? 'Update PR' : 'Open PR';
+    }
+  }
   updateMergeBodyPreview(
-    { isFinal: !!(canReview && task?.isFinal), traceSummary: task?.traceSummary },
+    { isFinal: !!(canReview && task?.isFinal && !prDelivery), traceSummary: task?.traceSummary },
     el.taskMergeBodyPreviewWrap,
     el.taskMergeBodyPreview,
   );
@@ -3786,10 +3873,14 @@ async function selectReview(traceId, taskId) {
   renderReviewDetail(state.selectedReviewDetail);
 }
 
-async function approveReview(traceId, taskId, { summary, mergeMessage }) {
+async function approveReview(traceId, taskId, { summary, mergeMessage, prTitle, prBody, draft, runHooks }) {
   const body = {};
   if (summary) body.summary = summary;
   if (mergeMessage) body.mergeMessage = mergeMessage;
+  if (prTitle) body.prTitle = prTitle;
+  if (prBody) body.prBody = prBody;
+  if (draft) body.draft = true;
+  if (runHooks) body.runHooks = true;
   return api(`/api/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/approve`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -4302,9 +4393,14 @@ el.taskApproveForm.addEventListener('submit', async (ev) => {
   const { traceId, taskId } = state.selectedTaskDetail;
   el.taskReviewError.classList.add('hidden');
   try {
+    const prDelivery = isPullRequestDelivery(state.selectedTaskDetail);
     const res = await approveReview(traceId, taskId, {
       summary: el.taskApproveSummary.value.trim(),
-      mergeMessage: el.taskMergeMessage.value.trim(),
+      mergeMessage: prDelivery ? '' : el.taskMergeMessage.value.trim(),
+      prTitle: el.taskPrTitle?.value.trim(),
+      prBody: el.taskPrBody?.value.trim(),
+      draft: !!(el.taskPrDraft && el.taskPrDraft.checked),
+      runHooks: !!(el.taskPrRunHooks && el.taskPrRunHooks.checked),
     });
     await loadTasks();
     await loadReviews();
@@ -4463,19 +4559,33 @@ el.reviewApproveForm.addEventListener('submit', async (ev) => {
   el.reviewActionError.classList.add('hidden');
   el.reviewActionSuccess.classList.add('hidden');
   try {
+    const prDelivery = isPullRequestDelivery(state.selectedReviewDetail);
     const res = await approveReview(traceId, taskId, {
       summary: el.reviewApproveSummary.value.trim(),
-      mergeMessage: el.reviewMergeMessage.value.trim(),
+      mergeMessage: prDelivery ? '' : el.reviewMergeMessage.value.trim(),
+      prTitle: el.reviewPrTitle?.value.trim(),
+      prBody: el.reviewPrBody?.value.trim(),
+      draft: !!(el.reviewPrDraft && el.reviewPrDraft.checked),
+      runHooks: !!(el.reviewPrRunHooks && el.reviewPrRunHooks.checked),
     });
-    const message = res.commitSha
-      ? `${res.message} Commit: ${res.commitSha}`
-      : (res.message || 'Task approved.');
-    state.selectedReviewKey = null;
-    state.selectedReviewDetail = null;
-    renderReviewDetail(null);
-    showReviewActionSuccess(message);
-    await loadReviews();
-    await loadTasks();
+    const message = res.prUrl
+      ? `${res.message || 'Pull request published.'} ${res.prUrl}`
+      : (res.commitSha
+        ? `${res.message} Commit: ${res.commitSha}`
+        : (res.message || 'Task approved.'));
+    if (res.published) {
+      showReviewActionSuccess(message);
+      await loadReviews();
+      await loadTasks();
+      await selectReview(traceId, taskId);
+    } else {
+      state.selectedReviewKey = null;
+      state.selectedReviewDetail = null;
+      renderReviewDetail(null);
+      showReviewActionSuccess(message);
+      await loadReviews();
+      await loadTasks();
+    }
   } catch (err) {
     el.reviewActionError.textContent = err.message;
     el.reviewActionError.classList.remove('hidden');

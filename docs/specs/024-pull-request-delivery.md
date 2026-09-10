@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Draft)**
-Captures the design conversation: isolated Flight Trails can publish a pull request instead of merging into the colony clone’s default branch. Forge hosting is an external CLI script, not a bee adapter and not an in-process SDK. Gaps that were not locked are marked in Implementation Decisions.
+**(Implemented)**
+Isolated Flight Trails can publish a pull request instead of merging into the colony clone’s default branch. Forge hosting is an external CLI script, not a bee adapter. Operator guide: [pull-request delivery](../guide/pull-request-delivery.md).
 
 ## Problem Statement
 
@@ -285,4 +285,4 @@ Do not require Gitea, GitHub, or `tea`/`gh` in unit tests. Optional later: examp
 - **Why a script, not `adapter: script`:** bee script runs are AFK dispatch with run dirs, honey, and optional auto-proposal. Hosting is a privileged operator side effect, like `git push`.
 - **Why stdin JSON:** PR bodies contain quotes and markdown; argv and env are the wrong place.
 - **Thin slice if implementation is staged:** `pr.body` + head push + upsert can land before reconcile-on-merged, but shipping publish-without-reconcile must not emit `task.completed` or operators will think the trail is done. Do not ship “complete on open” as a silent default.
-- Related: [008](./008-code-proposal-workspaces.md), [009](./009-merge-autostash.md), [012](./012-trace-summary.md), [017](./017-console-diff-review.md), [020](./020-worktree-branch.md), [023](./023-console-git.md), [insight kinds](../reference/insight-kinds.md), [task ledger](../reference/task-ledger.md), [homelab deployment](../guide/homelab-deployment.md).
+- Operator guide: [pull-request delivery](../guide/pull-request-delivery.md). Related: [008](./008-code-proposal-workspaces.md), [009](./009-merge-autostash.md), [012](./012-trace-summary.md), [017](./017-console-diff-review.md), [020](./020-worktree-branch.md), [023](./023-console-git.md), [insight kinds](../reference/insight-kinds.md), [task ledger](../reference/task-ledger.md), [homelab deployment](../guide/homelab-deployment.md).

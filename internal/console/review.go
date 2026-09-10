@@ -9,6 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/artifacts"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/hiveview"
+	"github.com/russ-p/paseka/internal/homestate"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/runs"
@@ -16,25 +17,39 @@ import (
 	"github.com/russ-p/paseka/internal/tasks"
 )
 
+// PullRequestView is machine-local forge identity for Console.
+type PullRequestView struct {
+	URL    string `json:"url,omitempty"`
+	Number int    `json:"number,omitempty"`
+	Head   string `json:"head,omitempty"`
+	Base   string `json:"base,omitempty"`
+	State  string `json:"state,omitempty"`
+	Draft  bool   `json:"draft,omitempty"`
+}
+
 // ReviewQueueItem is one task awaiting human review.
 type ReviewQueueItem struct {
-	TraceID           string    `json:"traceId"`
-	TaskID            string    `json:"taskId"`
-	Title             string    `json:"title"`
-	Review            string    `json:"review"`
-	Summary           string    `json:"summary,omitempty"`
-	TraceSummary      string    `json:"traceSummary,omitempty"`
-	Bee               string    `json:"bee,omitempty"`
-	Sector            string    `json:"sector,omitempty"`
-	RunCount          int       `json:"runCount"`
-	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
-	IsFinal           bool      `json:"isFinal"`
-	ProposalWorkspace string    `json:"proposalWorkspace,omitempty"`
-	CanApprove        bool      `json:"canApprove"`
-	CanReject         bool      `json:"canReject"`
-	CanRequestChanges bool      `json:"canRequestChanges,omitempty"`
-	ReworkTaskID      string    `json:"reworkTaskId,omitempty"`
-	ReworkStatus      string    `json:"reworkStatus,omitempty"`
+	TraceID           string           `json:"traceId"`
+	TaskID            string           `json:"taskId"`
+	Title             string           `json:"title"`
+	Review            string           `json:"review"`
+	Summary           string           `json:"summary,omitempty"`
+	TraceSummary      string           `json:"traceSummary,omitempty"`
+	Bee               string           `json:"bee,omitempty"`
+	Sector            string           `json:"sector,omitempty"`
+	RunCount          int              `json:"runCount"`
+	UpdatedAt         time.Time        `json:"updatedAt,omitempty"`
+	IsFinal           bool             `json:"isFinal"`
+	ProposalWorkspace string           `json:"proposalWorkspace,omitempty"`
+	Delivery          string           `json:"delivery,omitempty"`
+	PRTitle           string           `json:"prTitle,omitempty"`
+	PRBody            string           `json:"prBody,omitempty"`
+	PullRequest       *PullRequestView `json:"pullRequest,omitempty"`
+	CanApprove        bool             `json:"canApprove"`
+	CanReject         bool             `json:"canReject"`
+	CanRequestChanges bool             `json:"canRequestChanges,omitempty"`
+	ReworkTaskID      string           `json:"reworkTaskId,omitempty"`
+	ReworkStatus      string           `json:"reworkStatus,omitempty"`
 }
 
 // ReviewQueueView is the colony-wide review queue projection.
@@ -47,6 +62,10 @@ type ReviewQueueView struct {
 type ApproveTaskRequest struct {
 	Summary      string `json:"summary"`
 	MergeMessage string `json:"mergeMessage"`
+	PRTitle      string `json:"prTitle"`
+	PRBody       string `json:"prBody"`
+	Draft        bool   `json:"draft"`
+	RunHooks     bool   `json:"runHooks"`
 }
 
 // ApproveTaskResponse is returned after approving a review-gated task.
@@ -54,6 +73,9 @@ type ApproveTaskResponse struct {
 	TraceID   string `json:"traceId"`
 	TaskID    string `json:"taskId"`
 	CommitSHA string `json:"commitSha,omitempty"`
+	PRURL     string `json:"prUrl,omitempty"`
+	PRState   string `json:"prState,omitempty"`
+	Published bool   `json:"published,omitempty"`
 	Message   string `json:"message,omitempty"`
 }
 
@@ -112,6 +134,7 @@ func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
 				if traceSummary, err := runs.ResolveTraceSummary(ctx.ColonyRoot, trace.TraceID); err == nil {
 					qi.TraceSummary = traceSummary
 				}
+				attachReviewDelivery(ctx, trace.TraceID, &qi)
 			}
 			queue = append(queue, qi)
 		}
@@ -136,6 +159,10 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		TaskID:       taskID,
 		Summary:      req.Summary,
 		MergeMessage: req.MergeMessage,
+		PRTitle:      req.PRTitle,
+		PRBody:       req.PRBody,
+		Draft:        req.Draft,
+		RunHooks:     req.RunHooks,
 		AgentID:      "console",
 	}, review.WriteOptions{})
 	if err != nil {
@@ -152,11 +179,16 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		ProposalWorkspace: task.ProposalWorkspace,
 		CommitSHA:         approveRes.CommitSHA,
 		StashOutcome:      approveRes.StashOutcome,
+		Published:         approveRes.Published,
+		PRURL:             approveRes.PRURL,
 	})
 	return ApproveTaskResponse{
 		TraceID:   traceID,
 		TaskID:    taskID,
 		CommitSHA: approveRes.CommitSHA,
+		PRURL:     approveRes.PRURL,
+		PRState:   approveRes.PRState,
+		Published: approveRes.Published,
 		Message:   msg,
 	}, nil
 }
@@ -251,6 +283,28 @@ func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
 		CanRequestChanges: item.CanRequestChanges,
 		ReworkTaskID:      item.ReworkTaskID,
 		ReworkStatus:      item.ReworkStatus,
+	}
+}
+
+func attachReviewDelivery(ctx colony.Context, traceID string, qi *ReviewQueueItem) {
+	manifest, err := colony.LoadColony(ctx.ColonyRoot)
+	if err != nil {
+		return
+	}
+	qi.Delivery = manifest.Defaults.ResolvedDelivery()
+	if pubCopy, err := review.ResolvePublishCopy(ctx.ColonyRoot, traceID, "", ""); err == nil {
+		qi.PRTitle = pubCopy.Title
+		qi.PRBody = pubCopy.Body
+	}
+	if pr, ok, err := homestate.FindPullRequest(ctx.Slug, traceID); err == nil && ok {
+		qi.PullRequest = &PullRequestView{
+			URL:    pr.URL,
+			Number: pr.Number,
+			Head:   pr.Head,
+			Base:   pr.Base,
+			State:  pr.State,
+			Draft:  pr.Draft,
+		}
 	}
 }
 

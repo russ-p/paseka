@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/russ-p/paseka/internal/bus"
@@ -84,8 +85,54 @@ func (n *Notifier) Run(ctx context.Context) error {
 	defer func() { _ = sub.Unsubscribe() }()
 
 	log.Info("bus subscription active", logging.F("durable", durable))
+	go n.watchPublishedPRs(ctx)
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func (n *Notifier) watchPublishedPRs(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	_ = n.notifyPublishedPRs(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = n.notifyPublishedPRs(ctx)
+		}
+	}
+}
+
+func (n *Notifier) notifyPublishedPRs(ctx context.Context) error {
+	_ = ctx
+	entries, err := homestate.ListPullRequests(n.Colony.Slug)
+	if err != nil {
+		return err
+	}
+	mode := n.Config.Notify.Mode(NotifyCategoryReviewFinal)
+	if !mode.Enabled() {
+		return nil
+	}
+	for _, pr := range entries {
+		if strings.TrimSpace(pr.URL) == "" {
+			continue
+		}
+		state := strings.TrimSpace(pr.State)
+		if state == "" {
+			state = "open"
+		}
+		if pr.LastNotifiedState == state {
+			continue
+		}
+		text := FormatPullRequestCard(pr)
+		key := "pr:" + pr.TraceID + ":" + state
+		if err := n.broadcast(text, tgbotapi.InlineKeyboardMarkup{}, key, mode.Silent()); err != nil {
+			return err
+		}
+		_ = homestate.MarkPullRequestNotified(n.Colony.Slug, pr.TraceID, state)
+	}
+	return nil
 }
 
 // ReconcilePendingInvites pushes cards for pending invites not yet deduped.
@@ -300,6 +347,12 @@ func FormatTaskStatusCard(ctx colony.Context, cfg Config, ledger taskledger.Ledg
 	}
 	if status == protocol.TaskStatusWaitingReview && taskledger.IsReviewGate(task) {
 		lines = append(lines, proposalReviewLines(cfg, task)...)
+		if pr, ok, err := homestate.FindPullRequest(ctx.Slug, traceID); err == nil && ok && strings.TrimSpace(pr.URL) != "" {
+			lines = append(lines, fmt.Sprintf("Pull request: %s", pr.URL))
+			if s := strings.TrimSpace(pr.State); s != "" && s != "open" {
+				lines = append(lines, fmt.Sprintf("PR state: %s", s))
+			}
+		}
 	}
 	if status == protocol.TaskStatusBlocked || taskledger.IsEnergyBlockedTask(task) {
 		lines = append(lines, honeyLine(ctx, ledger, traceID))
@@ -328,6 +381,25 @@ func FormatTaskCompletedCard(traceID string, task taskledger.TaskSnapshot, paylo
 	}
 	if commit := strings.TrimSpace(payload.Commit); commit != "" {
 		lines = append(lines, fmt.Sprintf("Commit: %s", truncateText(commit, maxInviteTaskLen)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// FormatPullRequestCard renders a published-PR status card.
+func FormatPullRequestCard(pr homestate.PullRequestEntry) string {
+	state := strings.TrimSpace(pr.State)
+	if state == "" {
+		state = "open"
+	}
+	lines := []string{
+		"Pull request " + state,
+		fmt.Sprintf("Trace: %s", pr.TraceID),
+	}
+	if pr.Number > 0 {
+		lines = append(lines, fmt.Sprintf("Number: %d", pr.Number))
+	}
+	if strings.TrimSpace(pr.URL) != "" {
+		lines = append(lines, fmt.Sprintf("URL: %s", pr.URL))
 	}
 	return strings.Join(lines, "\n")
 }

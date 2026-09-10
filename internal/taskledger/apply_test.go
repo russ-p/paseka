@@ -78,6 +78,26 @@ func TestApplyEventTaskPlanPreservesIntent(t *testing.T) {
 	}
 }
 
+func TestApplyEventPRBodyNoOp(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
+
+	ev, err := protocol.NewEvent("trace-1", "builder", 1, protocol.EventInsight, protocol.PRBodyPayload{
+		Kind: protocol.InsightPRBody,
+		Body: "## Why\nPR copy",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Fatal("pr.body should not change ledger")
+	}
+}
+
 func TestApplyEventWorktreeBranchNoOp(t *testing.T) {
 	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
 

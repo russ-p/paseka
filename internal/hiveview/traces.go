@@ -113,7 +113,17 @@ type TraceDetailView struct {
 	Tasks        []TaskSummaryView `json:"tasks"`
 	Runs         []RunView         `json:"runs"`
 	Worktree     *WorktreeView     `json:"worktree,omitempty"`
+	PullRequest  *PullRequestView  `json:"pullRequest,omitempty"`
 	RecentEvents []EventFeedItem   `json:"recentEvents"`
+}
+
+// PullRequestView is machine-local forge identity on a trace.
+type PullRequestView struct {
+	URL    string `json:"url,omitempty"`
+	Number int    `json:"number,omitempty"`
+	Head   string `json:"head,omitempty"`
+	State  string `json:"state,omitempty"`
+	Draft  bool   `json:"draft,omitempty"`
 }
 
 // InsightHighlight is a recent narrative insight for the dashboard.
@@ -263,6 +273,15 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 				CreatedAt: wt.CreatedAt,
 			}
 			break
+		}
+	}
+	if pr, ok, err := homestate.FindPullRequest(ctx.Slug, traceID); err == nil && ok {
+		view.PullRequest = &PullRequestView{
+			URL:    pr.URL,
+			Number: pr.Number,
+			Head:   pr.Head,
+			State:  pr.State,
+			Draft:  pr.Draft,
 		}
 	}
 

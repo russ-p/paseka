@@ -181,6 +181,37 @@ func TestValidateWorktreeBranch(t *testing.T) {
 	}
 }
 
+func TestValidatePRBody(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"pr.body","body":"## Why\nShips isolated work as a PR."}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+
+	empty := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"pr.body","body":"   "}}`)
+	in2, err := ParseEventInput(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in2.Validate()
+	if len(details) != 1 || details[0].Path != "payload.body" {
+		t.Fatalf("empty details = %#v", details)
+	}
+
+	over := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"pr.body","body":"` + strings.Repeat("x", MaxPRBodyLen+1) + `"}}`)
+	in3, err := ParseEventInput(over)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details = in3.Validate()
+	if len(details) != 1 || details[0].Path != "payload.body" {
+		t.Fatalf("overlong details = %#v", details)
+	}
+}
+
 func TestValidateInvalidJSON(t *testing.T) {
 	_, err := ParseEventInput([]byte(`not-json`))
 	if err == nil {

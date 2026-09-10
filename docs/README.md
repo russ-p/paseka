@@ -33,6 +33,7 @@ Follow the shortest path from the model to a running colony:
 | [Telegram gateway](guide/telegram-gateway.md) | Setup and run `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Export/import portable bee + prompt packs |
 | [Homelab deployment](guide/homelab-deployment.md) | Server/apiary container, Queen Console, reuse NATS |
+| [Pull-request delivery](guide/pull-request-delivery.md) | Isolated trails as origin PRs (`defaults.delivery`, forge script, reconcile) |
 
 ## Reference
 

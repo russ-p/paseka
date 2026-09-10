@@ -68,13 +68,18 @@ Lists task-ledger state and task details. Common CLI equivalents are
 Lists tasks in `waiting_review`. Final isolated gates can open a merge preview
 with per-file diffs and line-anchored comments.
 
-- **Approve** merges an isolated final-gate worktree when applicable.
+- **Approve** merges an isolated final-gate worktree when `defaults.delivery` is
+  `local_merge` (default).
+- When delivery is `pull_request`, the same control is **Open PR** / **Update PR**
+  (title, body, draft). The gate stays `waiting_review` until the host reports
+  merged. See [pull-request delivery](pull-request-delivery.md).
 - **Request changes** writes `review-comments.md` to the trail comb, publishes
   `INSIGHT/human.feedback`, and plans rework on the same trail.
 - Plain reject records feedback without merging.
 
 CLI equivalents are `paseka proposal approve` and `paseka proposal reject`.
-Review approval does not push the default branch to its remote.
+Review approval does not push the default branch to its remote. The Git tab
+never pushes the worktree head; PR publish does.
 
 ### Sessions and Runs
 
@@ -101,7 +106,9 @@ container's PID namespace; no Docker API is queried.
 
 Shows colony root status relative to `origin`, managed worktrees, and leftover
 merged branches. Fetch only updates remote-tracking refs; Pull is
-fast-forward-only; Push is explicit and never uses `--force`.
+fast-forward-only; Push is explicit and never uses `--force`. This tab does
+**not** push worktree branches or open pull requests — that is Reviews publish
+when `defaults.delivery` is `pull_request`.
 
 ## Common operator actions
 
@@ -146,4 +153,5 @@ in this guide; draft Console work remains in the specs index.
 - [CLI reference](cli.md)
 - [Interactive sessions](interactive-sessions.md)
 - [Task ledger](../reference/task-ledger.md)
+- [Pull-request delivery](pull-request-delivery.md)
 - [Homelab deployment](homelab-deployment.md)

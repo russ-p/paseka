@@ -33,7 +33,15 @@ type Defaults struct {
 	SystemTemplate string `yaml:"system_template"`
 	EnergyBudget   int    `yaml:"energy_budget,omitempty"`
 	DefaultBee     string `yaml:"default_bee,omitempty"`
+	Delivery       string `yaml:"delivery,omitempty"`
 }
+
+const (
+	// DeliveryLocalMerge is the default isolated-trail landing: merge into the clone default branch.
+	DeliveryLocalMerge = "local_merge"
+	// DeliveryPullRequest publishes the worktree branch and upserts a forge pull request.
+	DeliveryPullRequest = "pull_request"
+)
 
 // BeeLocalOverlay holds optional per-machine overrides from bees/<role>.local.yaml.
 type BeeLocalOverlay struct {
@@ -108,7 +116,30 @@ func LoadColony(colonyRoot string) (Colony, error) {
 	if err := ValidateModelAliases(c.ModelAliases); err != nil {
 		return Colony{}, err
 	}
+	if err := ValidateDelivery(c.Defaults.Delivery); err != nil {
+		return Colony{}, err
+	}
 	return c, nil
+}
+
+// ResolvedDelivery returns the isolated-trail delivery policy. Empty defaults to local_merge.
+func (d Defaults) ResolvedDelivery() string {
+	v := strings.TrimSpace(d.Delivery)
+	if v == "" {
+		return DeliveryLocalMerge
+	}
+	return v
+}
+
+// ValidateDelivery rejects unknown defaults.delivery values.
+func ValidateDelivery(delivery string) error {
+	v := strings.TrimSpace(delivery)
+	switch v {
+	case "", DeliveryLocalMerge, DeliveryPullRequest:
+		return nil
+	default:
+		return fmt.Errorf("colony: defaults.delivery must be local_merge or pull_request (got %q)", delivery)
+	}
 }
 
 // ResolvedSystemTemplate returns the configured system template path using overlay precedence.

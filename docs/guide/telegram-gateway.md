@@ -156,7 +156,7 @@ The **reply keyboard** (refreshed on gate startup) offers one-tap `/status`, `/h
 
 On blocked / insufficient-honey replies: **`+1` / `+5` / `+12`** energy buttons (no confirm).
 
-**Proposal policy:** Reject always allowed. Approve allowed only for soft/mid review gates — **not** final-merge (`review: final` / `_review`). Final-merge cards offer Reject + “approve in Console/CLI only”.
+**Proposal policy:** Reject always allowed. Approve allowed only for soft/mid review gates — **not** final-merge (`review: final` / `_review`). Final-merge cards offer Reject + “approve in Console/CLI only”. When a published PR is on the trail, the card includes its URL; the gate does not merge on the forge. See [pull-request delivery](pull-request-delivery.md).
 
 On invite **Accept**, the gate starts a detached local session and replies that the PTY is on the gate host (not in Telegram). Attach with `paseka session attach` or Queen Console — see [interactive sessions](interactive-sessions.md).
 
@@ -200,5 +200,6 @@ On startup the gate **reconciles** pending invites and `waiting_review` / `block
 | [Colony layout](colony-layout.md) | Slug and machine-local secrets |
 | [Interactive sessions](interactive-sessions.md) | Local PTY after invite accept |
 | [Task ledger](../reference/task-ledger.md) | Energy, `waiting_review`, review policies |
+| [Pull-request delivery](pull-request-delivery.md) | PR URL on cards; no Telegram forge merge |
 | [specs/010-telegram-human-gateway.md](../specs/010-telegram-human-gateway.md) | Full MVP design |
 | [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) | Invite lifecycle |

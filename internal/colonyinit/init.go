@@ -689,9 +689,18 @@ Runtime automatically projects selected narrative INSIGHT kinds into {{.Insights
 | task.plan | Task ledger planning | no (operational) |
 | trace.title | Flight Trail display name | no (operational) |
 | trace.summary | Flight Trail description | no (operational) |
+| pr.body | Pull request description | no (operational) |
 | worktree.branch | Trace worktree git branch | no (operational) |
 
 {{if .IsLastWorkTask}}
+### pr.body — pull request description (required on last work task)
+
+You **must** emit one INSIGHT/pr.body with markdown describing the pull request. This is a prompt-level obligation, not a runtime completion-contract failure. Last write wins. Do not subscribe with dispatch: direct.
+
+paseka event emit --stdin <<'EOF'
+{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"pr.body","body":"## Why\\nShips the isolated trail as a reviewable pull request."}}
+EOF
+
 ### trace.summary — Flight trail summary (required on last work task)
 
 You **must** emit one INSIGHT/trace.summary with 1–3 sentences of plain prose describing what this flight trail accomplished. This is a prompt-level obligation, not a runtime completion-contract failure.

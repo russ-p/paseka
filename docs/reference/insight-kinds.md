@@ -26,6 +26,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | `task.plan` | `INSIGHT` | Scout/planner task breakdown for the task ledger |
 | `trace.title` | `INSIGHT` | Human-readable Flight Trail name for Console and `{{.TraceTitle}}` |
 | `trace.summary` | `INSIGHT` | Human-readable Flight Trail description for Console subtitle and merge commit body |
+| `pr.body` | `INSIGHT` | Markdown pull-request description (last-write-wins; not prompt memory) |
 | `worktree.branch` | `INSIGHT` | Git branch name for the trace isolated worktree (path stays `.paseka/worktrees/<traceId>/`) |
 
 `task.plan` is consumed by the Task Ledger and reactor. It is **not** auto-included in `{{.Insights}}` because it is structured queue data, not narrative memory.
@@ -34,7 +35,9 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 
 `trace.summary` is operational trail metadata (last-write-wins). It is **not** projected into `{{.Insights}}` or dashboard Recent insights. Runtime resolves the latest `INSIGHT/trace.summary` by `createdAt`, then `seq`. Payload shape: `{ "kind": "trace.summary", "summary": "<prose>" }` (max 800 characters after trim). Bees on the sole incomplete non-final AFK work task receive must-emit guidance via `{{.IsLastWorkTask}}` in emit partials. See [specs/012-trace-summary.md](../specs/012-trace-summary.md).
 
-`worktree.branch` is operational git metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime resolves the branch for ensure, rename, merge, and merge-diff: latest valid insight, else default `paseka/<traceId>`. Scout/Drone emit when planning isolated work. See [specs/020-worktree-branch.md](../specs/020-worktree-branch.md).
+`pr.body` is operational pull-request copy (last-write-wins). It is **not** projected into `{{.Insights}}`. Payload `{ "kind": "pr.body", "body": "<markdown>" }` (non-empty after trim, max 8000). Publish uses latest `pr.body`, else `trace.summary`. Last AFK work task gets must-emit guidance via `{{.IsLastWorkTask}}` in init emit partials (prompt-level, not a completion contract). Do not subscribe with `dispatch: direct`. See [pull-request delivery](../guide/pull-request-delivery.md).
+
+`worktree.branch` is operational git metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime resolves the branch for ensure, rename, merge, merge-diff, and PR head: latest valid insight, else default `paseka/<traceId>`. Scout/Drone emit when planning isolated work. See [specs/020-worktree-branch.md](../specs/020-worktree-branch.md).
 
 ### Narrative (projected into `{{.Insights}}`)
 
@@ -155,3 +158,4 @@ The `guard` bee requires exactly one `VERIFICATION` gate decision per run.
 - [prompt templates](../guide/prompt-templates.md) — template fields and partials
 - [task ledger](task-ledger.md) — `task.plan` lifecycle
 - [bee routing](bee-routing.md) — direct dispatch and advisory publishes
+- [pull-request delivery](../guide/pull-request-delivery.md) — `pr.body` and forge publish

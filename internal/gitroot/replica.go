@@ -312,6 +312,89 @@ func Push(opts PushOpts) (string, error) {
 	})
 }
 
+// PushBranchOpts configures git push of an isolated worktree branch (not default).
+type PushBranchOpts struct {
+	RepoRoot string
+	Branch   string
+	RunHooks bool
+}
+
+// PushWorktreeBranch publishes refs/heads/<branch> to origin without checking out default.
+// First push is a normal create. Later non-fast-forward updates use --force-with-lease on that branch only.
+func PushWorktreeBranch(opts PushBranchOpts) (string, error) {
+	repoRoot := opts.RepoRoot
+	branch := strings.TrimSpace(opts.Branch)
+	if branch == "" {
+		return "", Refused("worktree branch is required")
+	}
+	if isReservedPushBranch(branch) {
+		return "", Refused("cannot push reserved branch " + branch)
+	}
+	def, err := ResolvedDefaultBranch(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	if strings.EqualFold(branch, def) {
+		return "", Refused("cannot push the default branch as a worktree head")
+	}
+
+	origin, err := OriginURL(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	if origin == "" {
+		return "", Refused("no origin remote")
+	}
+
+	if _, err := Run(RunOpts{
+		Dir:     repoRoot,
+		Timeout: StatusTimeout,
+		Args:    []string{"show-ref", "--verify", "--quiet", "--", "refs/heads/" + branch},
+	}); err != nil {
+		return "", Refused("local branch not found: " + branch)
+	}
+
+	remoteExists := RemoteTrackingExists(repoRoot, branch)
+	forceLease := false
+	if remoteExists {
+		_, err := Run(RunOpts{
+			Dir:       repoRoot,
+			Timeout:   StatusTimeout,
+			AllowFail: true,
+			Args:      []string{"merge-base", "--is-ancestor", "refs/remotes/origin/" + branch, "refs/heads/" + branch},
+		})
+		if err != nil {
+			forceLease = true
+		}
+	}
+
+	args := []string{"push"}
+	var extra []string
+	if !opts.RunHooks {
+		args = append(args, "--no-verify")
+		extra = []string{"HUSKY=0"}
+	}
+	if forceLease {
+		args = append(args, "--force-with-lease=refs/heads/"+branch)
+	}
+	args = append(args, "origin", "refs/heads/"+branch+":refs/heads/"+branch)
+	return Run(RunOpts{
+		Dir:      repoRoot,
+		Timeout:  NetworkTimeout,
+		Args:     args,
+		ExtraEnv: extra,
+	})
+}
+
+func isReservedPushBranch(branch string) bool {
+	switch strings.ToLower(strings.TrimSpace(branch)) {
+	case "head", "main", "master", "detached":
+		return true
+	default:
+		return false
+	}
+}
+
 // PullFF fast-forwards the default branch from origin. Refuses dirty root and in-progress ops.
 func PullFF(repoRoot string) (string, error) {
 	origin, err := OriginURL(repoRoot)

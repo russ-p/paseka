@@ -86,6 +86,7 @@ nav:
       - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
       - Homelab deployment: guide/homelab-deployment.md
+      - Pull-request delivery: guide/pull-request-delivery.md
   - Reference:
       - Bee routing: reference/bee-routing.md
       - Event contracts: reference/event-contracts.md

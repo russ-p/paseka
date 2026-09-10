@@ -33,6 +33,7 @@
 | [Telegram gateway](guide/telegram-gateway.md) | Настройка и запуск `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Переносимые пакеты bees + prompts |
 | [Homelab deployment](guide/homelab-deployment.md) | Сервер/apiary в контейнере, Queen Console, внешний NATS |
+| [Pull-request delivery](guide/pull-request-delivery.md) | Изолированные trails как PR на origin (`defaults.delivery`, forge-скрипт, reconcile) |
 
 ## Справочник
 

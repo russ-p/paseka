@@ -80,6 +80,17 @@ func TestInitScaffold(t *testing.T) {
 	if strings.Contains(string(homeCfg), "profile:") {
 		t.Fatalf("init should not write sticky profile:\n%s", homeCfg)
 	}
+	if !strings.Contains(string(homeCfg), "forge:") || !strings.Contains(string(homeCfg), "command:") {
+		t.Fatalf("init home config should comment forge.command:\n%s", homeCfg)
+	}
+
+	emitInsight, err := os.ReadFile(filepath.Join(repo, ".paseka", "prompts", "_partials", "emit-insight.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(emitInsight), "pr.body") {
+		t.Fatal("init emit-insight partial must document pr.body")
+	}
 
 	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "opencode.yaml")); err != nil {
 		t.Fatalf("default init should write opencode.yaml: %v", err)

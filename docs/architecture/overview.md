@@ -416,7 +416,7 @@ SIGNAL / INSIGHT on bus
   guard (same worktree, direct dispatch) reviews disk
         │
         ▼
-  Human review → approve (merge when final gate) | reject
+  Human review → approve (merge when final gate and local_merge, else publish PR) | reject
 ```
 
 ### Root path (colony checkout)
@@ -449,9 +449,9 @@ Root proposals do **not** open the AFK receiver commit-gate defer (`waiting_revi
 
 **Auto-publish:** runtime publishes a proposal only when the bee explicitly declares the matching kind in `publishes` and `worktree` matches the kind. Empty `publishes` never auto-publishes (fail closed). Mismatch → skip + warn; hard mismatches are `paseka doctor` errors (see [bee config](../guide/bee-config.md)).
 
-**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...<resolvedTraceBranch>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). Resolved trace branch: live worktree HEAD, else registry, else latest `worktree.branch` insight, else `paseka/<traceId>`. See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
+**Merge preview:** before approving an **isolated** final merge gate (`review: final` / `_review`), Queen Console loads a three-dot diff of `defaultBranch...<resolvedTraceBranch>` via `worktree.MergeDiff` and `GET /api/traces/:traceId/merge-diff` (unified patch + `--stat`, truncated at 1 MiB). Resolved trace branch: live worktree HEAD, else registry, else latest `worktree.branch` insight, else `paseka/<traceId>`. When `defaults.delivery` is `pull_request`, approve publishes that head instead of merging — see [pull-request delivery](../guide/pull-request-delivery.md). See [specs/002-queen-console-mvp.md](../specs/002-queen-console-mvp.md).
 
-**Registry:** `~/.config/paseka/<slug>/state.json` tracks active worktrees, base SHA, branch, and linked `traceId` for cleanup on `paseka doctor`.
+**Registry:** `~/.config/paseka/<slug>/state.json` tracks active worktrees, published PR identity, base SHA, branch, and linked `traceId` for cleanup on `paseka doctor`.
 
 Commands (later): `paseka worktree list`, `paseka worktree clean`.
 
@@ -518,17 +518,18 @@ internal/
   export/                   # trace HTML/Markdown export (uses hiveview; agent-logs via adapter SessionLogResolver)
   colony/                   # load .paseka + home config, config profiles, bee schema, slug resolution
   colonyinit/               # paseka init scaffolds (.paseka/, home config, default bees)
-  homestate/                # machine-local state.json registry (runtime, sessions, invites, worktrees)
+  homestate/                # machine-local state.json registry (runtime, sessions, invites, worktrees, pull requests)
   purge/                    # FS + bus purge (runs, worktrees, cache, trace artifacts)
   prompts/                  # load + render .paseka/prompts/*.md templates
   runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
   adapters/                 # adapter registry + cursor/, pi/, claude/, opencode/, script/
   sessions/                 # interactive PTY sessions, terminal attach
-  gitroot/                  # repo identity, origin, replica fetch/push/ff-only pull, branch delete
-  worktree/                 # create, diff, merge, list, prune orphans
+  gitroot/                  # repo identity, origin, replica fetch/push/ff-only pull, worktree-branch push, branch delete
+  forge/                    # exec forge.command (capabilities/upsert/get JSON IPC); not a bee adapter
+  worktree/                 # create, diff, merge, remove, list, prune orphans
   bus/                      # NATS transport; Publisher, TraceReplayer, ArtifactStore, EventSubscriber, TracePurger seams
-  runtime/                  # reactor + dispatch: colony → prompts → adapter (AFK)
-  review/                   # HITL approve/reject + merge
+  runtime/                  # reactor + dispatch: colony → prompts → adapter (AFK); PR reconcile ticker
+  review/                   # HITL approve/reject + local merge or PR publish
   invites/                  # Human Gateway invite lifecycle
 ```
 

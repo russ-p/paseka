@@ -17,6 +17,7 @@ const (
 	InsightTraceTitle     InsightKind = "trace.title"
 	InsightTraceSummary   InsightKind = "trace.summary"
 	InsightWorktreeBranch InsightKind = "worktree.branch"
+	InsightPRBody         InsightKind = "pr.body"
 )
 
 // MaxTraceTitleLen is the maximum length of payload.title on INSIGHT/trace.title.
@@ -27,6 +28,9 @@ const MaxWorktreeBranchLen = 120
 
 // MaxTraceSummaryLen is the maximum length of payload.summary on INSIGHT/trace.summary.
 const MaxTraceSummaryLen = 800
+
+// MaxPRBodyLen is the maximum length of payload.body on INSIGHT/pr.body.
+const MaxPRBodyLen = 8000
 
 // NarrativeInsightPayload is the shared shape for narrative INSIGHT events.
 type NarrativeInsightPayload struct {
@@ -60,6 +64,12 @@ type TraceSummaryPayload struct {
 type WorktreeBranchPayload struct {
 	Kind   InsightKind `json:"kind"`
 	Branch string      `json:"branch"`
+}
+
+// PRBodyPayload is emitted as INSIGHT with payload.kind=pr.body.
+type PRBodyPayload struct {
+	Kind InsightKind `json:"kind"`
+	Body string      `json:"body"`
 }
 
 // IsPromptMemoryInsightKind reports whether an INSIGHT kind should be projected into prompt memory.

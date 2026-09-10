@@ -4,7 +4,7 @@ A **bee** is a named role bound to an adapter, prompt template, and optional rou
 
 Implementation: [`internal/colony/bee.go`](../../internal/colony/bee.go) (`Bee` struct, `LoadBee`), plus [`command.go`](../../internal/colony/command.go), [`params.go`](../../internal/colony/params.go), [`routing.go`](../../internal/colony/routing.go), [`run_summary.go`](../../internal/colony/run_summary.go), [`completion.go`](../../internal/colony/completion.go), [`bee_validate.go`](../../internal/colony/bee_validate.go).
 
-Related: [bee routing](../reference/bee-routing.md) (`subscribes` / `publishes`), [prompt templates](prompt-templates.md), [architecture overview](../architecture/overview.md) (adapters, colony layout).
+Related: [bee routing](../reference/bee-routing.md) (`subscribes` / `publishes`), [prompt templates](prompt-templates.md), [architecture overview](../architecture/overview.md) (adapters, colony layout), [pull-request delivery](pull-request-delivery.md) (`pr.body`; forge is not an adapter).
 
 ---
 
@@ -335,6 +335,7 @@ Documented in [bee routing](../reference/bee-routing.md). Summary:
 - Declaring `VERIFICATION/task.completed` marks the AFK commit gate: when another bee explicitly publishes an **isolated** `MUTATION/code.proposal` with a diff, runtime defers auto-complete until that commit-gate bee emits `task.completed`. Root proposals do not open this defer.
 - Declaring `MUTATION/code.proposal.isolated` (or alias `code.proposal`) on the dispatched bee (typically builder) is what opens the isolated defer path when a commit-gate publisher exists in the colony.
 - Declaring `MUTATION/code.proposal.root` on a `worktree: false` bee (typically hivewright) publishes from colony root; `main-guard` reviews on the same disk.
+- Do **not** subscribe to `INSIGHT/pr.body` with `dispatch: direct`. Pull-request copy is operational metadata; hosting is home `forge.command`, not a bee adapter. See [pull-request delivery](pull-request-delivery.md).
 
 ---
 

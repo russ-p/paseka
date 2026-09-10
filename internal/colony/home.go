@@ -20,6 +20,12 @@ type HomeConfig struct {
 	ModelAliases map[string]string `yaml:"model_aliases,omitempty"`
 	NATS         NATSConfig        `yaml:"nats"`
 	Adapters     map[string]any    `yaml:"adapters"`
+	Forge        ForgeConfig       `yaml:"forge,omitempty"`
+}
+
+// ForgeConfig is the apiary-local pull-request hosting driver (not a bee adapter).
+type ForgeConfig struct {
+	Command []string `yaml:"command,omitempty"`
 }
 
 // NATSConfig holds NATS connection settings.

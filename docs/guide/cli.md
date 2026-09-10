@@ -454,7 +454,7 @@ Check NATS connectivity, JetStream resources, and colony bee wiring for the colo
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail).
+**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning).
 
 Exits with an error if any check fails.
 
@@ -862,22 +862,26 @@ Human-in-the-loop actions for code proposals (`MUTATION` with `kind: code.propos
 
 ### `paseka proposal approve`
 
-Approve a review-gated task and publish `VERIFICATION` / `task.completed`. Behavior branches on proposal workspace:
+Approve a review-gated task. Isolated **final** gates either merge locally or publish a pull request, depending on colony `defaults.delivery` (see [pull-request delivery](pull-request-delivery.md)). Root approve is always an ack.
 
-| Task context | Merge trace worktree? | Auto-commit? |
-| ------------ | ---------------------- | ------------ |
-| Isolated final gate (`review: final` / `_review`, `proposalWorkspace: isolated`) | Yes, when worktree exists | Yes (merge commit) |
-| Root soft gate (`proposalWorkspace: root`, `review: required`) | **No** (R1 ack) | **No** |
-| Isolated `review: required` mid-task | No (unless final gate) | No |
+| Task context | `local_merge` (default) | `pull_request` |
+| ------------ | ----------------------- | -------------- |
+| Isolated final gate (`review: final` / `_review`) | Merge worktree + `task.completed` | Push head + forge upsert; gate stays `waiting_review` until the host reports merged |
+| Root soft gate (`proposalWorkspace: root`, `review: required`) | **No** merge (R1 ack) | Same — never a PR |
+| Isolated `review: required` mid-task | No merge unless final | No publish unless final |
 
-For **isolated** final merge gates, preview the accumulated worktree diff in Queen Console Reviews first (`paseka console`). Root approve advances the ledger only — beekeeper commits `.paseka/` / `docs/` changes on colony root manually.
+For **isolated** final gates, preview the accumulated worktree diff in Queen Console Reviews first (`paseka console`). Root approve advances the ledger only — beekeeper commits `.paseka/` / `docs/` changes on colony root manually.
 
 | Flag | Short | Required | Default | Description |
 | ---- | ----- | -------- | ------- | ----------- |
 | `--trace` | | yes | | Flight trail id |
 | `--task` | | yes | | Review task id (e.g. `task-1`, `_review`, or a `review: final` task) |
 | `--summary` | | | `approved by human` | `VERIFICATION/task.completed` completion note (not `INSIGHT/trace.summary`) |
-| `--merge-message` | | | | Merge commit **subject** for isolated final gate (optional HITL body); distinct from `INSIGHT/trace.summary`, which supplies the default merge **body** |
+| `--merge-message` | | | | Merge commit **subject** for isolated final gate under `local_merge` (optional HITL body). **Error** when `defaults.delivery` is `pull_request` |
+| `--pr-title` | | | | Pull request title overlay (`pull_request` delivery) |
+| `--pr-body` | | | | Pull request body overlay (`pull_request` delivery) |
+| `--draft` | | | off | Open the pull request as a draft |
+| `--run-hooks` | | | off | Run git hooks on the worktree-branch push (default skips `--no-verify` + `HUSKY=0`) |
 | `--path` | `-C` | | | Colony resolution start directory |
 
 ### `paseka proposal reject`
@@ -893,8 +897,10 @@ Reject a review-gated task — publishes human `INSIGHT` / `human.feedback`. Tas
 | `--path` | `-C` | | | Colony resolution start directory |
 
 ```bash
-# Isolated final gate — may print merge commit SHA
+# Isolated final gate, local_merge — may print merge commit SHA
 paseka proposal approve --trace trace-1 --task _review --summary "LGTM, merged"
+# Isolated final gate, pull_request
+paseka proposal approve --trace trace-1 --task _review --pr-title "Live bees" --pr-body "## Why\n…"
 # Root soft ack — no merge commit line
 paseka proposal approve --trace trace-1 --task task-cfg-1 --summary "Config changes acknowledged"
 paseka proposal reject --trace trace-1 --task task-1 --feedback "Use the existing auth middleware"
@@ -998,6 +1004,7 @@ paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
 | Task stays planned | `paseka task show`; inspect dependencies and honey | Complete dependencies, add honey, then `task start` |
 | Task failed or is stuck running | `paseka task show`, run logs | Fix the cause, then `paseka task retry` |
 | Review is waiting | `paseka status`, `paseka task show` | Use Queen Console or `proposal approve\|reject` |
+| Publish PR fails | `paseka doctor`; origin; home `forge.command` | See [pull-request delivery](pull-request-delivery.md) troubleshooting |
 | Invite cannot start | `paseka invite list`, `energy show` | Ensure NATS is reachable and at least one honey remains |
 | Deferred events do not appear | `paseka event pending` | Start NATS and run `paseka event flush` |
 | Console has filesystem data but no live updates | `paseka status --check` | Start the reactor and verify NATS |
@@ -1108,6 +1115,7 @@ See [specs/006-human-gateway-invites.md](../specs/006-human-gateway-invites.md) 
 | [architecture overview](../architecture/overview.md) | Colony layout, adapters, runs IPC |
 | [prompt templates](prompt-templates.md) | Prompt template resolution |
 | [task ledger](../reference/task-ledger.md) | Task lifecycle events on the bus |
+| [Pull-request delivery](pull-request-delivery.md) | `defaults.delivery`, forge script, `proposal approve` PR flags |
 | [interactive sessions](interactive-sessions.md) | `bee chat`, sessions, Ghostty |
 | [Telegram gateway](telegram-gateway.md) | Setup and run `paseka gate telegram` |
 | [specs/005-feature-ideation-flow.md](../specs/005-feature-ideation-flow.md) | Feature ideation soft path (intake → grill → breakdown) |

@@ -605,6 +605,42 @@ func TestEmbeddedStaticOmitsVendorPathSegment(t *testing.T) {
 	}
 }
 
+func TestSPAPublishPRContract(t *testing.T) {
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	htmlSrc := string(html)
+	for _, needle := range []string{
+		`id="review-pr-title"`,
+		`id="review-pr-body"`,
+		`id="task-pr-body"`,
+		`id="task-pr-run-hooks"`,
+	} {
+		if !strings.Contains(htmlSrc, needle) {
+			t.Fatalf("index.html missing %s", needle)
+		}
+	}
+
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	jsSrc := string(js)
+	for _, needle := range []string{
+		"Open PR",
+		"Update PR",
+		"pullRequest",
+		"prUrl",
+		"review-pr-title",
+		"prDelivery ? '' : el.reviewMergeMessage.value.trim()",
+	} {
+		if !strings.Contains(jsSrc, needle) {
+			t.Fatalf("app.js missing %s", needle)
+		}
+	}
+}
+
 func TestSPAHandlerMissingAssetIsNotIndex(t *testing.T) {
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {

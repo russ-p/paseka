@@ -57,7 +57,8 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `SIGNAL` | `artifact.written` | artifact `ref` and kind, singular or `artifacts[]` | bee/Console → trail consumers |
 
 Narrative and operational `INSIGHT` kinds are catalogued separately in
-[INSIGHT kinds](insight-kinds.md).
+[INSIGHT kinds](insight-kinds.md) (`pr.body` is operational pull-request copy;
+see [pull-request delivery](../guide/pull-request-delivery.md)).
 
 ## Colony-defined kinds
 

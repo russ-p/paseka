@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/homestate"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/tasks"
@@ -37,25 +39,29 @@ type TaskRunView struct {
 
 // TaskListItem is one task row on the board.
 type TaskListItem struct {
-	TraceID           string    `json:"traceId"`
-	TaskID            string    `json:"taskId"`
-	Title             string    `json:"title"`
-	Status            string    `json:"status"`
-	Review            string    `json:"review,omitempty"`
-	Bee               string    `json:"bee,omitempty"`
-	Sector            string    `json:"sector,omitempty"`
-	DependsOn         []string  `json:"dependsOn,omitempty"`
-	RunCount          int       `json:"runCount"`
-	CanStart          bool      `json:"canStart"`
-	CanRetry          bool      `json:"canRetry"`
-	CanApprove        bool      `json:"canApprove"`
-	CanReject         bool      `json:"canReject"`
-	CanRequestChanges bool      `json:"canRequestChanges,omitempty"`
-	ReworkTaskID      string    `json:"reworkTaskId,omitempty"`
-	ReworkStatus      string    `json:"reworkStatus,omitempty"`
-	IsFinal           bool      `json:"isFinal"`
-	ProposalWorkspace string    `json:"proposalWorkspace,omitempty"`
-	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
+	TraceID           string           `json:"traceId"`
+	TaskID            string           `json:"taskId"`
+	Title             string           `json:"title"`
+	Status            string           `json:"status"`
+	Review            string           `json:"review,omitempty"`
+	Bee               string           `json:"bee,omitempty"`
+	Sector            string           `json:"sector,omitempty"`
+	DependsOn         []string         `json:"dependsOn,omitempty"`
+	RunCount          int              `json:"runCount"`
+	CanStart          bool             `json:"canStart"`
+	CanRetry          bool             `json:"canRetry"`
+	CanApprove        bool             `json:"canApprove"`
+	CanReject         bool             `json:"canReject"`
+	CanRequestChanges bool             `json:"canRequestChanges,omitempty"`
+	ReworkTaskID      string           `json:"reworkTaskId,omitempty"`
+	ReworkStatus      string           `json:"reworkStatus,omitempty"`
+	IsFinal           bool             `json:"isFinal"`
+	ProposalWorkspace string           `json:"proposalWorkspace,omitempty"`
+	UpdatedAt         time.Time        `json:"updatedAt,omitempty"`
+	Delivery          string           `json:"delivery,omitempty"`
+	PRTitle           string           `json:"prTitle,omitempty"`
+	PRBody            string           `json:"prBody,omitempty"`
+	PullRequest       *PullRequestView `json:"pullRequest,omitempty"`
 }
 
 // TaskStatusGroup groups tasks by lifecycle status.
@@ -141,6 +147,22 @@ func GetTask(ctx colony.Context, traceID, taskID string) (TaskDetailView, bool, 
 	if taskledger.IsFinalReviewTask(task) {
 		if traceSummary, err := runs.ResolveTraceSummary(ctx.ColonyRoot, traceID); err == nil {
 			view.TraceSummary = traceSummary
+		}
+		if manifest, err := colony.LoadColony(ctx.ColonyRoot); err == nil {
+			view.Delivery = manifest.Defaults.ResolvedDelivery()
+		}
+		if pubCopy, err := review.ResolvePublishCopy(ctx.ColonyRoot, traceID, "", ""); err == nil {
+			view.PRTitle = pubCopy.Title
+			view.PRBody = pubCopy.Body
+		}
+		if pr, ok, err := homestate.FindPullRequest(ctx.Slug, traceID); err == nil && ok {
+			view.PullRequest = &PullRequestView{
+				URL:    pr.URL,
+				Number: pr.Number,
+				Head:   pr.Head,
+				State:  pr.State,
+				Draft:  pr.Draft,
+			}
 		}
 	}
 

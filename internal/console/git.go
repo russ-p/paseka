@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
@@ -25,6 +26,7 @@ type GitWorktreeView struct {
 	Branch  string `json:"branch,omitempty"`
 	BaseSHA string `json:"baseSha,omitempty"`
 	Dirty   bool   `json:"dirty"`
+	PRURL   string `json:"prUrl,omitempty"`
 }
 
 // GitBranchView is one local branch row.
@@ -237,13 +239,17 @@ func GetGit(colonyRoot, slug string) (GitView, error) {
 	byBranch := map[string]string{}
 	wts := make([]GitWorktreeView, 0, len(snaps))
 	for _, s := range snaps {
-		wts = append(wts, GitWorktreeView{
+		row := GitWorktreeView{
 			TraceID: s.TraceID,
 			Path:    s.Path,
 			Branch:  s.Branch,
 			BaseSHA: s.BaseSHA,
 			Dirty:   s.Dirty,
-		})
+		}
+		if pr, ok, err := homestate.FindPullRequest(slug, s.TraceID); err == nil && ok {
+			row.PRURL = pr.URL
+		}
+		wts = append(wts, row)
 		if s.Branch != "" {
 			byBranch[s.Branch] = s.TraceID
 		}

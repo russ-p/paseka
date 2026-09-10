@@ -55,6 +55,18 @@ func TestProjectInsightsExcludesTraceSummary(t *testing.T) {
 	}
 }
 
+func TestProjectInsightsExcludesPRBody(t *testing.T) {
+	now := time.Now().UTC()
+	events := []Event{
+		mustInsightEvent(t, now, `{"kind":"pr.body","body":"## Why\nPR copy"}`),
+		mustInsightEvent(t, now.Add(time.Second), `{"kind":"run.summary","summary":"Task run outcome","taskId":"task-1"}`),
+	}
+	got := ProjectInsights(events, DefaultInsightProjectionOptions("task-1"))
+	if len(got) != 1 {
+		t.Fatalf("got %d insights, want 1: %#v", len(got), got)
+	}
+}
+
 func TestProjectInsightsExcludesWorktreeBranch(t *testing.T) {
 	now := time.Now().UTC()
 	events := []Event{

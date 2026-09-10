@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
@@ -13,10 +14,11 @@ import (
 
 // State is persisted runtime state under ~/.config/paseka/<slug>/state.json.
 type State struct {
-	Worktrees []WorktreeEntry `json:"worktrees,omitempty"`
-	Sessions  []SessionEntry  `json:"sessions,omitempty"`
-	Invites   []InviteEntry   `json:"invites,omitempty"`
-	Runtime   *RuntimeEntry   `json:"runtime,omitempty"`
+	Worktrees    []WorktreeEntry    `json:"worktrees,omitempty"`
+	PullRequests []PullRequestEntry `json:"pullRequests,omitempty"`
+	Sessions     []SessionEntry     `json:"sessions,omitempty"`
+	Invites      []InviteEntry      `json:"invites,omitempty"`
+	Runtime      *RuntimeEntry      `json:"runtime,omitempty"`
 }
 
 // RuntimeEntry tracks the hive runtime (`paseka run`) for this colony on this machine.
@@ -62,6 +64,19 @@ type WorktreeEntry struct {
 	BaseSHA   string    `json:"baseSha"`
 	Branch    string    `json:"branch,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// PullRequestEntry is machine-local forge identity for one isolated trail (not ledger KV).
+type PullRequestEntry struct {
+	TraceID           string    `json:"traceId"`
+	URL               string    `json:"url,omitempty"`
+	Number            int       `json:"number,omitempty"`
+	Head              string    `json:"head,omitempty"`
+	Base              string    `json:"base,omitempty"`
+	State             string    `json:"state,omitempty"`
+	Draft             bool      `json:"draft,omitempty"`
+	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
+	LastNotifiedState string    `json:"lastNotifiedState,omitempty"`
 }
 
 // LoadState reads state.json for a colony slug.
@@ -130,6 +145,85 @@ func UpdateWorktreeBranch(slug, traceID, branch string) error {
 	if !found {
 		return nil
 	}
+	return SaveState(slug, st)
+}
+
+// FindPullRequest returns the machine-local PR identity for a trace, if any.
+func FindPullRequest(slug, traceID string) (PullRequestEntry, bool, error) {
+	st, err := LoadState(slug)
+	if err != nil {
+		return PullRequestEntry{}, false, err
+	}
+	for _, pr := range st.PullRequests {
+		if pr.TraceID == traceID {
+			return pr, true, nil
+		}
+	}
+	return PullRequestEntry{}, false, nil
+}
+
+// UpsertPullRequest stores forge identity keyed by traceId.
+func UpsertPullRequest(slug string, entry PullRequestEntry) error {
+	if strings.TrimSpace(entry.TraceID) == "" {
+		return fmt.Errorf("homestate: pull request traceId is required")
+	}
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	if entry.UpdatedAt.IsZero() {
+		entry.UpdatedAt = time.Now().UTC()
+	}
+	for i, pr := range st.PullRequests {
+		if pr.TraceID == entry.TraceID {
+			if entry.LastNotifiedState == "" {
+				entry.LastNotifiedState = pr.LastNotifiedState
+			}
+			st.PullRequests[i] = entry
+			return SaveState(slug, st)
+		}
+	}
+	st.PullRequests = append(st.PullRequests, entry)
+	return SaveState(slug, st)
+}
+
+// ListPullRequests returns all machine-local PR identities.
+func ListPullRequests(slug string) ([]PullRequestEntry, error) {
+	st, err := LoadState(slug)
+	if err != nil {
+		return nil, err
+	}
+	return st.PullRequests, nil
+}
+
+// MarkPullRequestNotified records the last Telegram/notify state for a published PR.
+func MarkPullRequestNotified(slug, traceID, state string) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	for i, pr := range st.PullRequests {
+		if pr.TraceID == traceID {
+			st.PullRequests[i].LastNotifiedState = state
+			return SaveState(slug, st)
+		}
+	}
+	return nil
+}
+
+// RemovePullRequest drops machine-local PR identity after the trail is closed.
+func RemovePullRequest(slug, traceID string) error {
+	st, err := LoadState(slug)
+	if err != nil {
+		return err
+	}
+	out := st.PullRequests[:0]
+	for _, pr := range st.PullRequests {
+		if pr.TraceID != traceID {
+			out = append(out, pr)
+		}
+	}
+	st.PullRequests = out
 	return SaveState(slug, st)
 }
 

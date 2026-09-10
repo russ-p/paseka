@@ -163,11 +163,18 @@ Interactive `bee chat` / Ghostty attach assume a usable TTY on that machine — 
 
 ## Git on the apiary
 
-Paseka remains the **local merger** (Console/CLI approve). **Outbound** publish is Queen Console **Git → Push** of the default branch, using the same system `git` and credential helper (`tea`, HTTPS) as a non-interactive `docker exec git push`. Bind-mount the same `HOME` (and `PATH`) the helper needs. Paseka does not store Gitea/GitHub tokens.
-
 **Inbound** fast-forward from Gitea/GitHub stays an operator **webhook sidecar** (`git pull --ff-only` into the colony clone). Console **Fetch** only updates remote-tracking refs. Console **Pull** is a backup when that sidecar missed a hook — not a second pull daemon inside Paseka.
 
-After Console Push, a sidecar pull is typically a no-op. Do not auto-push on review Approve.
+**Outbound** depends on colony `defaults.delivery`:
+
+| Policy | What leaves the apiary | Merger |
+| ------ | ---------------------- | ------ |
+| `local_merge` (default) | Console/CLI approve merges locally; Queen Console **Git → Push** publishes **default** | Paseka, then you push `main` |
+| `pull_request` | Final-gate approve pushes the **worktree head** and upserts a PR via home `forge.command` | The forge (Gitea/GitHub merge button). Then pull **default** |
+
+The Git tab never pushes worktree branches. Bind-mount the same `HOME` (and `PATH`) `tea` / `gh` / git credential helpers need. Paseka does not store Gitea/GitHub tokens. See [pull-request delivery](pull-request-delivery.md).
+
+Do not auto-push default on review Approve. After a forge merge, a sidecar pull updates the clone; Git-tab Push of default is not required.
 
 ## Security notes
 
@@ -190,6 +197,7 @@ Or rebuild the image (`docker compose build`) so `/usr/local/bin/paseka` is refr
 
 - [Colony layout](colony-layout.md) — `.paseka/` vs machine-local home
 - [CLI](cli.md) — `paseka console`, `paseka run`, `PASEKA_NATS_URL`
+- [Pull-request delivery](pull-request-delivery.md) — push head, pull default
 - [Interactive sessions](interactive-sessions.md) — HITL on the apiary
 - [Telegram gateway](telegram-gateway.md) — remote human gateway without exposing Console
 - Root NATS compose: [`docker-compose.yml`](../../docker-compose.yml)

@@ -1,6 +1,8 @@
 package review
 
 import (
+	"strings"
+
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/worktree"
 )
@@ -10,10 +12,18 @@ type ApproveMessageOptions struct {
 	ProposalWorkspace protocol.ProposalWorkspace
 	CommitSHA         string
 	StashOutcome      worktree.StashOutcome
+	Published         bool
+	PRURL             string
 }
 
 // ApproveMessage returns a user-facing message after a successful approve.
 func ApproveMessage(opts ApproveMessageOptions) string {
+	if opts.Published {
+		if u := strings.TrimSpace(opts.PRURL); u != "" {
+			return "Pull request published. Trail stays open until the PR is merged: " + u
+		}
+		return "Pull request published. Trail stays open until the PR is merged on the forge."
+	}
 	if opts.ProposalWorkspace == protocol.ProposalWorkspaceRoot {
 		return "Task approved (root proposal — no worktree merge)."
 	}
@@ -32,6 +42,12 @@ func ApproveMessage(opts ApproveMessageOptions) string {
 
 // CLIApproveMessage returns the CLI variant of the approve success message.
 func CLIApproveMessage(opts ApproveMessageOptions) string {
+	if opts.Published {
+		if u := strings.TrimSpace(opts.PRURL); u != "" {
+			return "Published pull request. Trail stays open until the PR is merged: " + u
+		}
+		return "Published pull request. Trail stays open until the PR is merged on the forge."
+	}
 	if opts.ProposalWorkspace == protocol.ProposalWorkspaceRoot {
 		return "Approved (root proposal — no worktree merge)."
 	}

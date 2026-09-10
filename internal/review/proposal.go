@@ -24,10 +24,24 @@ func IsRootProposalTask(task taskledger.TaskSnapshot, bees map[string]colony.Bee
 }
 
 // ShouldMergeOnApprove reports whether approve may merge the trace worktree.
-// Root proposals never merge (R1); isolated final merge gates keep existing behavior.
+// Root proposals never merge (R1). pull_request delivery publishes instead of merging.
 func ShouldMergeOnApprove(task taskledger.TaskSnapshot, bees map[string]colony.Bee, defaults colony.Defaults) bool {
 	if !taskledger.IsFinalReviewTask(task) {
 		return false
 	}
-	return !IsRootProposalTask(task, bees, defaults)
+	if IsRootProposalTask(task, bees, defaults) {
+		return false
+	}
+	return defaults.ResolvedDelivery() != colony.DeliveryPullRequest
+}
+
+// ShouldPublishOnApprove reports whether approve should push the worktree head and upsert a PR.
+func ShouldPublishOnApprove(task taskledger.TaskSnapshot, bees map[string]colony.Bee, defaults colony.Defaults) bool {
+	if !taskledger.IsFinalReviewTask(task) {
+		return false
+	}
+	if IsRootProposalTask(task, bees, defaults) {
+		return false
+	}
+	return defaults.ResolvedDelivery() == colony.DeliveryPullRequest
 }

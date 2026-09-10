@@ -116,6 +116,18 @@ func Merge(opts MergeOptions) (MergeResult, error) {
 	return result, nil
 }
 
+// Remove deletes the trace worktree, prunes, and unregisters. It does not merge.
+func Remove(colonyRoot, slug, traceID string) error {
+	if colonyRoot == "" || traceID == "" {
+		return fmt.Errorf("worktree: colony root and traceId are required")
+	}
+	abs, err := absPath(colonyRoot)
+	if err != nil {
+		return err
+	}
+	return removeTraceWorktree(abs, slug, traceID)
+}
+
 func failAfterStash(colonyRoot string, stashed bool, cause error) (MergeResult, error) {
 	if !stashed {
 		return MergeResult{}, cause

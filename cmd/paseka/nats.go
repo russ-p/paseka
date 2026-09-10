@@ -253,10 +253,14 @@ func newProposalApproveCmd() *cobra.Command {
 		taskID       string
 		summary      string
 		mergeMessage string
+		prTitle      string
+		prBody       string
+		draft        bool
+		runHooks     bool
 	)
 	cmd := &cobra.Command{
 		Use:   "approve",
-		Short: "Approve a review-gated task (R1 ack for root proposals; merge for isolated final gate)",
+		Short: "Approve a review-gated task (R1 ack, local merge, or pull-request publish)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" || taskID == "" {
 				return fmt.Errorf("--trace and --task are required")
@@ -278,6 +282,10 @@ func newProposalApproveCmd() *cobra.Command {
 				TaskID:       taskID,
 				Summary:      summary,
 				MergeMessage: mergeMessage,
+				PRTitle:      prTitle,
+				PRBody:       prBody,
+				Draft:        draft,
+				RunHooks:     runHooks,
 			}, review.WriteOptions{})
 			if err != nil {
 				return err
@@ -292,9 +300,14 @@ func newProposalApproveCmd() *cobra.Command {
 				ProposalWorkspace: task.ProposalWorkspace,
 				CommitSHA:         approveRes.CommitSHA,
 				StashOutcome:      approveRes.StashOutcome,
+				Published:         approveRes.Published,
+				PRURL:             approveRes.PRURL,
 			}))
 			if approveRes.CommitSHA != "" {
 				fmt.Printf("  merge commit: %s\n", approveRes.CommitSHA)
+			}
+			if approveRes.PRURL != "" {
+				fmt.Printf("  pull request: %s\n", approveRes.PRURL)
 			}
 			return nil
 		},
@@ -303,7 +316,11 @@ func newProposalApproveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&taskID, "task", "", "task id")
 	cmd.Flags().StringVar(&summary, "summary", "approved by human", "completion summary")
-	cmd.Flags().StringVar(&mergeMessage, "merge-message", "", "merge commit message")
+	cmd.Flags().StringVar(&mergeMessage, "merge-message", "", "merge commit message (local_merge only)")
+	cmd.Flags().StringVar(&prTitle, "pr-title", "", "pull request title overlay (pull_request delivery)")
+	cmd.Flags().StringVar(&prBody, "pr-body", "", "pull request body overlay (pull_request delivery)")
+	cmd.Flags().BoolVar(&draft, "draft", false, "open the pull request as a draft")
+	cmd.Flags().BoolVar(&runHooks, "run-hooks", false, "run git hooks on the worktree-branch push")
 	return cmd
 }
 

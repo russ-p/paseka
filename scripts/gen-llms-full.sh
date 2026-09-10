@@ -15,6 +15,7 @@ files=(
   reference/insight-kinds.md
   guide/colony-layout.md
   architecture/overview.md
+  guide/pull-request-delivery.md
 )
 
 {

@@ -272,7 +272,7 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		view, err := GetMergeDiff(a.ctx, traceID)
+		view, err := GetMergeDiff(r.Context(), a.ctx, traceID)
 		if err != nil {
 			writeError(w, err)
 			return

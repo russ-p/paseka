@@ -401,6 +401,31 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func TestPushWorktreeBranchCreateAndLease(t *testing.T) {
+	repo, _ := cloneWithBare(t)
+	runGit(t, repo, "checkout", "-b", "feature/head")
+	if err := os.WriteFile(filepath.Join(repo, "f.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "f.txt")
+	runGit(t, repo, "commit", "-m", "feat")
+	runGit(t, repo, "checkout", "main")
+
+	if _, err := PushWorktreeBranch(PushBranchOpts{RepoRoot: repo, Branch: "feature/head"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PushWorktreeBranch(PushBranchOpts{RepoRoot: repo, Branch: "main"}); err == nil {
+		t.Fatal("expected refuse default branch")
+	}
+
+	runGit(t, repo, "checkout", "feature/head")
+	runGit(t, repo, "commit", "--amend", "-m", "rewritten")
+	runGit(t, repo, "checkout", "main")
+	if _, err := PushWorktreeBranch(PushBranchOpts{RepoRoot: repo, Branch: "feature/head"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

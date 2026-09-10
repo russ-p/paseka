@@ -299,6 +299,20 @@
             <span class="label">Merge commit body <span class="hint">(from flight trail summary)</span></span>
             <pre id="task-merge-body-preview" class="transcript merge-body-preview"></pre>
           </div>
+          <label id="task-pr-title-label" class="hidden">
+            Pull request title
+            <input type="text" id="task-pr-title" placeholder="From trace.title">
+          </label>
+          <label id="task-pr-body-label" class="hidden">
+            Pull request body
+            <textarea id="task-pr-body" rows="4" placeholder="From INSIGHT/pr.body or trace.summary"></textarea>
+          </label>
+          <label id="task-pr-draft-label" class="hidden">
+            <input type="checkbox" id="task-pr-draft"> Open as draft
+          </label>
+          <label id="task-pr-hooks-label" class="hidden">
+            <input type="checkbox" id="task-pr-run-hooks"> Run git hooks on branch push
+          </label>
           <button type="submit" id="task-approve-submit-btn">Approve</button>
         </form>
         <form id="task-reject-form" class="review-form">
@@ -342,10 +356,11 @@
         <p id="review-merge-diff-missing" class="muted hidden">No trace worktree branch found — merge preview unavailable.</p>
         <p id="review-merge-diff-empty" class="muted hidden">No changes between the default branch and the trace branch.</p>
         <p id="review-merge-diff-truncated" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
-        <p id="review-origin-behind-warn" class="warn hidden">Local default branch is behind origin. Fetch or fast-forward pull before Approve so a sidecar pull cannot collide with a merge onto a stale HEAD.</p>
+        <p id="review-origin-behind-warn" class="warn hidden">Local default branch is behind origin. Fetch or fast-forward pull. A local merge or published PR may conflict with those commits.</p>
         <dl id="review-merge-diff-meta" class="meta compact-meta hidden"></dl>
         <pre id="review-merge-diff-stat" class="transcript hidden"></pre>
         <button type="button" id="review-open-diff-btn" class="secondary hidden">Open merge preview</button>
+        <p id="review-pr-status" class="hidden"></p>
       </div>
       <div id="review-actions-wrap" class="review-actions hidden">
         <p id="review-final-hint" class="muted hidden">Final merge gate — approve merges the trace worktree. Request changes on the merge preview starts rework. Reject only publishes feedback (no rework).</p>
@@ -362,6 +377,20 @@
             <span class="label">Merge commit body <span class="hint">(from flight trail summary)</span></span>
             <pre id="review-merge-body-preview" class="transcript merge-body-preview"></pre>
           </div>
+          <label id="review-pr-title-label" class="hidden">
+            Pull request title
+            <input type="text" id="review-pr-title" placeholder="From trace.title">
+          </label>
+          <label id="review-pr-body-label" class="hidden">
+            Pull request body
+            <textarea id="review-pr-body" rows="6" placeholder="From INSIGHT/pr.body or trace.summary"></textarea>
+          </label>
+          <label id="review-pr-draft-label" class="hidden">
+            <input type="checkbox" id="review-pr-draft"> Open as draft
+          </label>
+          <label id="review-pr-hooks-label" class="hidden">
+            <input type="checkbox" id="review-pr-run-hooks"> Run git hooks on branch push
+          </label>
           <button type="submit" id="review-approve-btn">Approve</button>
         </form>
         <form id="review-reject-form" class="review-form">
@@ -391,7 +420,7 @@
         </div>
       </div>
       <p id="review-merge-diff-truncated-preview" class="muted hidden">Diff truncated at 1&nbsp;MiB — open the worktree locally for the full patch.</p>
-      <p id="review-origin-behind-warn-preview" class="warn hidden">Local default branch is behind origin. Fetch or fast-forward pull before Approve so a sidecar pull cannot collide with a merge onto a stale HEAD.</p>
+        <p id="review-origin-behind-warn-preview" class="warn hidden">Local default branch is behind origin. Fetch or fast-forward pull. A local merge or published PR may conflict with those commits.</p>
       <dl id="review-merge-diff-meta-preview" class="meta compact-meta hidden"></dl>
       <div id="review-merge-diff-viewer" class="merge-diff-viewer hidden" tabindex="0" aria-label="Merge diff viewer">
         <div id="review-merge-diff-file-panel" class="merge-diff-file-panel">

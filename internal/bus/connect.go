@@ -88,5 +88,6 @@ func Diagnose(ctx colony.Context) (DoctorReport, error) {
 		report.Warnings = append(report.Warnings, proposal.Warnings...)
 		report.Advisories = append(report.Advisories, proposal.Advisories...)
 	}
+	report.Warnings = append(report.Warnings, colony.DiagnoseDelivery(ctx, manifest)...)
 	return report, nil
 }

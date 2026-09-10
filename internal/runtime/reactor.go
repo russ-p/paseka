@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
@@ -115,8 +116,28 @@ func (r *Reactor) Run(ctx context.Context) error {
 	}
 	defer func() { _ = sub.Unsubscribe() }()
 
+	go r.runPullRequestReconcile(ctx)
+
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+const pullRequestReconcileInterval = 30 * time.Second
+
+func (r *Reactor) runPullRequestReconcile(ctx context.Context) {
+	ticker := time.NewTicker(pullRequestReconcileInterval)
+	defer ticker.Stop()
+	_ = review.ReconcileAllPublished(ctx, r.colony, r.publisher, r.ledger, review.WriteOptions{AfterApply: r.rememberLocalEvent})
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := review.ReconcileAllPublished(ctx, r.colony, r.publisher, r.ledger, review.WriteOptions{AfterApply: r.rememberLocalEvent}); err != nil {
+				runtimeLog.Warn("pull request reconcile failed", logging.F("error", err.Error()))
+			}
+		}
+	}
 }
 
 func (r *Reactor) handleEvent(ev protocol.Event) error {

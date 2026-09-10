@@ -70,5 +70,8 @@ func homeConfigYAML(repoRoot, slug, adapter string) string {
 slug: %q
 nats:
   url: nats://127.0.0.1:4222
-%s`, repoRoot, slug, adaptersBlock)
+%s
+# forge:
+#   command: ["examples/forge/tea.sh"]
+`, repoRoot, slug, adaptersBlock)
 }

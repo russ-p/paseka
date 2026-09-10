@@ -95,6 +95,34 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Why deferred:** Final merge gate was enough for MVP; per-run preview is extra UI surface.
 - **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate.
 
+### Pull-request delivery
+
+Leftovers from [024-pull-request-delivery](../specs/024-pull-request-delivery.md). v1 is colony-wide `defaults.delivery`, an explicit home `forge.command`, and reconcile via forge `get`.
+
+#### Per-cue delivery
+
+- **Kind:** follow-up
+- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
+- **Summary:** Let a Forage Cue override `defaults.delivery` so one trail can publish a PR while the rest of the colony stays on `local_merge`.
+- **Why deferred:** Colony-wide policy was enough for homelab vs laptop; per-cue mixing needs cue schema and review UX.
+- **Revisit when:** Operators want a single colony that both merges locally and opens PRs depending on the cue.
+
+#### Auto-detect forge from origin
+
+- **Kind:** idea
+- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
+- **Summary:** Infer `tea` vs `gh` (or a bundled wrapper) from the `origin` host instead of requiring explicit `forge.command`.
+- **Why deferred:** Fail-closed explicit argv avoids guessing the wrong CLI or a missing login; v1 wants a visible home-config choice.
+- **Revisit when:** Beekeepers routinely have `tea`/`gh` on PATH and trip over the commented init example.
+
+#### Dedicated `pr_open` task status
+
+- **Kind:** follow-up
+- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
+- **Summary:** A ledger status (or Console badge) distinct from `waiting_review` while a published PR is open, so Reviews does not look like an un-reviewed merge gate.
+- **Why deferred:** Homestate PR identity plus URL/state on Reviews was enough for v1; a new status is a ledger/protocol change.
+- **Revisit when:** Operators confuse published-but-unmerged trails with “please approve this diff” gates.
+
 ### Console Git
 
 Leftovers from [023-console-git](../specs/023-console-git.md). The Git tab MVP covers status vs origin, fetch, explicit push, ff-only pull, worktrees, leftover branch delete, Reviews origin-ahead warn, and skip-hooks defaults.

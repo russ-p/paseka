@@ -110,4 +110,14 @@ func TestShouldMergeOnApproveMatrix(t *testing.T) {
 	if review.ShouldMergeOnApprove(requiredRoot, bees, colony.Defaults{}) {
 		t.Fatal("root required review must not merge")
 	}
+
+	if review.ShouldMergeOnApprove(finalIsolated, bees, colony.Defaults{Delivery: colony.DeliveryPullRequest}) {
+		t.Fatal("pull_request delivery must not local-merge")
+	}
+	if !review.ShouldPublishOnApprove(finalIsolated, bees, colony.Defaults{Delivery: colony.DeliveryPullRequest}) {
+		t.Fatal("isolated final + pull_request should publish")
+	}
+	if review.ShouldPublishOnApprove(finalRoot, bees, colony.Defaults{Delivery: colony.DeliveryPullRequest}) {
+		t.Fatal("root proposal must never publish a PR")
+	}
 }

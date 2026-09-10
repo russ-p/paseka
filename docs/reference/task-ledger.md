@@ -91,14 +91,14 @@ When a `MUTATION/code.proposal.*` event arrives, the ledger records `proposalWor
 | ------ | ----------------------------------- | --------------------------- |
 | AFK defer to receiver | Yes, when colony has `task.completed` publisher | No |
 | `waiting_review` on `review: required` | After guard path (or defer) | After `main-guard` emits `verification.success` |
-| `paseka proposal approve` | Merges trace worktree when `review: final` / `_review` and worktree exists | **R1:** records ack + `task.completed`; **no** merge, **no** auto-commit |
+| `paseka proposal approve` | Merges the trace worktree on isolated `review: final` / `_review` when `defaults.delivery` is `local_merge`; **publishes a PR** (no local merge) when delivery is `pull_request` | **R1:** records ack + `task.completed`; **no** merge, **no** PR, **no** auto-commit |
 | Beekeeper commit | Via merge approve on final gate | Manual git on colony root |
 
 When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes **only if** the trace has an isolated merge candidate: at least one task recorded `proposalWorkspace: isolated` (from `MUTATION/code.proposal.isolated`), or the trace worktree branch has a non-empty merge diff vs the default branch. Scout-only / no-diff runs do **not** open a hollow merge gate. An explicit `review: final` task with nothing to merge is auto-completed (`Nothing to merge — skipped final review gate`) instead of entering `waiting_review`.
 
 Human actions (CLI and Queen Console Reviews use the same domain flows):
 
-- `paseka proposal approve --trace <id> --task <id>` — **isolated final gate:** merge trace worktree when present and emit `task.completed`; **root / required soft gate:** ack only (no merge, no commit) and emit `task.completed`
+- `paseka proposal approve --trace <id> --task <id>` — **isolated final gate:** merge the trace worktree (`local_merge`) or push the head and upsert a PR (`pull_request`; gate stays `waiting_review` until forge `merged`); **root / required soft gate:** ack only (no merge, no PR) and emit `task.completed`. See [pull-request delivery](../guide/pull-request-delivery.md).
 - `paseka proposal reject --trace <id> --task <id>` — publish `human.feedback`; `required` tasks return to `ready` for rework. Optional `--comments-file` writes `review-comments.md` to the trail comb and announces `artifact.written` before feedback. On `review: final`, `--comments-file` also plans a new non-final rework task (`review: none`) for the last completed isolated-proposal Bee; the merge gate stays `waiting_review`. Unstructured reject on final does not plan rework.
 - `paseka task retry --trace <id> --task <id>` — re-publish `task.ready` for a `failed` or stuck `running` task (same bee, intent, body)
 
