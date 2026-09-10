@@ -81,7 +81,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.IntentRaw}}` | `string` | Caller-supplied intent before normalization (CLI `--intent`, task ledger, or bus payload). |
 | `{{.Insights}}` | `[]string` | Narrative INSIGHT strings projected from prior runs on the trace. See [insight kinds](../reference/insight-kinds.md). |
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `summary.md` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
-| `{{.ArtifactsDir}}` | `string` | Absolute path to the trail comb for handoff files: `.paseka/runs/<traceId>/artifacts/`. Runtime announces this run's comb delta on successful exit; write files here during the run. Beekeeper annotated review packets use `review-comments.md` under this directory (see partial `artifacts-review-comments`). |
+| `{{.ArtifactsDir}}` | `string` | Absolute path to the trail comb for handoff files: `.paseka/runs/<traceId>/artifacts/`. Runtime announces this run's comb delta on successful exit; write files here during the run. Beekeeper annotated review packets use `review-comments.md` under this directory (see partial `artifacts-review-comments`). Standing procedure memory uses `checkpoint.json` and optional `journal/` here (see partial `standing-checkpoint`). |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
 | `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` guidance in emit partials. |
 | `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `opencode`, `script`). |
@@ -152,6 +152,8 @@ _partials/emit-signal.md  →  {{template "emit-signal" .}}
 _partials/emit-verification.md  →  {{template "emit-verification" .}}
 _partials/emit-task-completed.md  →  {{template "emit-task-completed" .}}
 _partials/builder-intent-feature.md  →  {{template "builder-intent-feature" .}}
+_partials/standing-checkpoint.md  →  {{template "standing-checkpoint" .}} (included from emit-howto)
+_partials/watch-intent-tick.md  →  {{template "watch-intent-tick" .}} (Watch/Medic standing ticks)
 ```
 
 Builder Bee uses intent partials for mission-specific guidance while keeping one stable role prompt. The top-level `builder.md` routes by `{{.Intent}}` and falls back to `builder-intent-general`.

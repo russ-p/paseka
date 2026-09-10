@@ -4,7 +4,7 @@ A **cue** (bee language: **Forage Cue**) is a project-local YAML shortcut under 
 
 Optional **`standing`** binds a cue to a long-lived **Standing Trail** (stable `traceId`) so recurring procedures reuse the same comb instead of minting a new trail every tick.
 
-Design records: [spec 016](../specs/016-cue-layer.md), [spec 028](../specs/028-standing-trails.md) (identity + stipend + overlap + first-title slices). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue, Standing Trail).
+Design records: [spec 016](../specs/016-cue-layer.md), [spec 028](../specs/028-standing-trails.md). Vocabulary: [glossary](../idea/glossary.md) (Forage Cue, Standing Trail).
 
 Related: [CLI](cli.md), [Telegram gateway](telegram-gateway.md), [colony layout](colony-layout.md), [task ledger](../reference/task-ledger.md), [feature ideation flow](../specs/005-feature-ideation-flow.md), [homelab deployment](homelab-deployment.md).
 
@@ -28,8 +28,9 @@ Cue success means the bus publish(es) succeeded (and honey seed or standing stip
 
 ```
 .paseka/cues/
-├── feature.yaml    # signal → feature.requested (Scout intake)
-└── hotfix.yaml     # task → builder bugfix autorun (small energy_budget)
+├── feature.yaml       # signal → feature.requested (Scout intake)
+├── hotfix.yaml        # task → builder bugfix autorun (small energy_budget)
+└── daily-triage.yaml  # optional standing procedure (stable trace + stipend)
 ```
 
 Cue **id** = filename without extension. `paseka init` scaffolds `feature` and `hotfix` when missing.
@@ -90,7 +91,24 @@ Standing is a **cue** binding, not a ledger flag. Recommended ids look like `tra
 
 Standing `emit: task` cues require `review: none` (or omit review) and the named bee must have `worktree: false`. Load/import errors name the cue, bee, and field.
 
-First successful run seeds honey from `standing.stipend` and, if the trail has no `INSIGHT/trace.title` yet, publishes one from cue `description` (trimmed, 120-character cap) or the cue id when description is empty. Later ticks do not overwrite a human or bee title. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. A second tick is refused while any ledger task is `planned`, `ready`, `running`, or `waiting_review`, or a live AFK adapter is still running on that trail (interactive `bee chat` does not count). Remaining 028 work: [spec 028](../specs/028-standing-trails.md).
+First successful run seeds honey from `standing.stipend` and, if the trail has no `INSIGHT/trace.title` yet, publishes one from cue `description` (trimmed, 120-character cap) or the cue id when description is empty. Later ticks do not overwrite a human or bee title. Each later run publishes `SIGNAL` / `energy.stipend` **before** ingress, which **sets** `energyRemaining` to the stipend (does not add, does not change `energyBudget` / `energyAdded`, does not unblock leftover honey-blocked tasks). A killed standing trail refuses cue run (no stipend, no ingress); the error names `system.kill`. A second tick is refused while any ledger task is `planned`, `ready`, `running`, or `waiting_review`, or a live AFK adapter is still running on that trail (interactive `bee chat` does not count).
+
+`paseka doctor` **warns** (does not fail the cue) when a standing `emit: signal` kind has only `worktree: true` direct subscribers, when a standing tick bee publishes isolated `code.proposal`, or when an isolated proposal already appears on a standing trail. Config profiles do not overlay cues or stipend ([027](../specs/027-config-profiles.md) out of overlay).
+
+### Checkpoints and bloom spawn
+
+Standing ticks **observe and record**. Procedure memory is the trail comb (`{{.ArtifactsDir}}` = `.paseka/runs/<standing.trace>/artifacts/`), not `{{.Insights}}`. Recommended files:
+
+| File | `artifactKind` (014 basename-stem) | Role |
+| ---- | -------------------------------- | ---- |
+| `checkpoint.json` | `checkpoint` | Source of truth (skip lists, keys, SHAs) |
+| `journal/YYYY-MM-DD.md` | date basename (e.g. `2026-09-04`) | Optional human journal; 014 kind is basename-stem, not the `journal/` folder |
+
+The comb path is stable for the standing `traceId`, so the next tick sees yesterday’s files. Runtime still scan-flushes `artifact.written` only on content change (014). Prompt partial `standing-checkpoint` (included from `emit-howto`) tells bees to read the checkpoint first, write JSON via temp-file replace, and **spawn a bloom** (`paseka cue run <feature-or-hotfix> "…"` with no standing binding, or `signal`/`event emit` with a **new** `traceId`) instead of `task.plan` a builder on the procedure. Optional `watch-intent-tick` is for Watch/Medic bees. Hivewright edits of cues/prompts belong on a bloom hivewright trail with `code.proposal.root`.
+
+**`paseka purge --runs` deletes standing checkpoints** with the rest of `.paseka/runs/`. Facts the colony must keep belong in git (`docs/`, tracker), not the comb. Export `--include artifacts` still dumps the standing comb. Queen Console Artifacts can preview `checkpoint.json` like any comb JSON.
+
+Ad-hoc `bee run` / `bee chat` on the standing id shares the comb and does **not** apply stipend.
 
 ### Schema (MVP)
 

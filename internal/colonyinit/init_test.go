@@ -37,6 +37,8 @@ func TestInitScaffold(t *testing.T) {
 		".paseka/prompts/_partials/scout-intent-intake.md",
 		".paseka/prompts/_partials/scout-emit-intake.md",
 		".paseka/prompts/_partials/emit-howto.md",
+		".paseka/prompts/_partials/standing-checkpoint.md",
+		".paseka/prompts/_partials/watch-intent-tick.md",
 		".paseka/prompts/_partials/artifacts-review-comments.md",
 		".paseka/prompts/_partials/emit-insight.md",
 		".paseka/prompts/_partials/emit-signal.md",
@@ -48,6 +50,14 @@ func TestInitScaffold(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(repo, rel)); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
+	}
+
+	howto, err := os.ReadFile(filepath.Join(repo, ".paseka", "prompts", "_partials", "emit-howto.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(howto), `{{template "standing-checkpoint" .}}`) {
+		t.Fatal("emit-howto should include standing-checkpoint")
 	}
 
 	gitignore, err := os.ReadFile(filepath.Join(repo, ".paseka", ".gitignore"))

@@ -118,6 +118,8 @@ func (r *InitResult) scaffoldProject(slug string, manifest colony.Colony, adapte
 		colony.PasekaPath(root, "prompts", "hivewright-system.md"):                       hivewrightSystemPrompt,
 		colony.PasekaPath(root, "prompts", "hivewright-task.md"):                         hivewrightTaskPrompt,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-howto.md"):                 emitHowtoPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "standing-checkpoint.md"):        standingCheckpointPartial,
+		colony.PasekaPath(root, "prompts", "_partials", "watch-intent-tick.md"):          watchIntentTickPartial,
 		colony.PasekaPath(root, "prompts", "_partials", "artifacts-review-comments.md"):  artifactsReviewCommentsPartial,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-insight.md"):               emitInsightPartial,
 		colony.PasekaPath(root, "prompts", "_partials", "emit-signal.md"):                emitSignalPartial,
@@ -422,6 +424,9 @@ prompted, and wired into the Air — not the Colony's product code.
   the Paseka platform source tree (internal/, cmd/, Go packages).
 - Read the project only enough to sharpen each bee's focus for this Colony.
 - Prefer small, reviewable Comb Proposals with explicit rationale.
+- Do not treat a Standing Trail as the place to edit the colony. Hivewright
+  changes to cues or prompts belong on a bloom hivewright trail with
+  code.proposal.root, not on the procedure identity.
 - Do not implement product features; leave that to Builder / Worker bees.
 - Do not impersonate the Queen or invent central orchestration.
 
@@ -647,7 +652,28 @@ Each event JSON object must include:
 - type — the event type your bee role may publish (see role-specific emit guidance below)
 - payload — event-specific object with required payload.kind
 
-If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing. Deferred success includes "deferred": true and does not publish to the bus until flush.`
+If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing. Deferred success includes "deferred": true and does not publish to the bus until flush.
+
+{{template "standing-checkpoint" .}}
+`
+	standingCheckpointPartial = `## Standing Trail ticks
+
+When this flight trail is a Standing Trail (recurring procedure identity, same traceId every tick):
+
+- Procedure memory is the trail comb at {{.ArtifactsDir}}, not {{.Insights}} (narrative, capped).
+- Source of truth: {{.ArtifactsDir}}/checkpoint.json (skip lists, issue keys, SHAs). Optional human journal: {{.ArtifactsDir}}/journal/YYYY-MM-DD.md.
+- Read the checkpoint first. Do not re-triage keys already listed. Update the checkpoint when the skip list or recorded state changes.
+- Write checkpoint JSON atomically from your point of view (write a temp file in the comb, then replace) so a crash is less likely to leave truncated JSON.
+- Runtime announces artifact.written only when comb file content actually changed (014 scan-flush). Do not emit artifact.written on every save. Downstream bees should honor artifactKind checkpoint. Dated journal files under journal/ use the date as artifactKind (014 basename-stem); ignore them unless you are writing the journal.
+- A standing tick observes and records. If product work is needed (feature, hotfix, isolated implementation), spawn a bloom trail: paseka cue run <bloom-cue> "…" without a standing binding (new traceId), or paseka signal / event emit with a new traceId. Do not task.plan a builder on this standing id. Isolated code.proposal on a standing trail is a colony smell.
+- Ad-hoc bee run / bee chat on this id shares the same comb and does not apply stipend (stipend is cue-tick scoped).
+`
+	watchIntentTickPartial = `## Watch / medic tick
+
+You are observing a Standing Trail. Follow {{template "standing-checkpoint" .}}
+
+Tick body often includes the wrapper clock (tick 2026-09-04) for journal filenames. Keep the checkpoint small and structured. Quiet days should update little or nothing so Messenger is not woken by a no-op artifact.written.
+`
 	emitInsightPartial = `## INSIGHT events
 
 Use type: INSIGHT for context, audit, and dashboard narrative. INSIGHT events do not drive workflow routing.

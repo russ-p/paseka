@@ -17,7 +17,7 @@
 
 > **Forage Cue** — именованная точка входа в хореографию Colony (`.paseka/cues/<id>.yaml`): публикует `signal` или `task` без DAG-исполнителя. Технически: `paseka cue`, Queen Console **Run cue**, Telegram `cue:`. См. [cues](../guide/cues.md).
 
-> **Standing Trail** — long-lived Flight Trail bound to a Forage Cue (`standing.trace` + `standing.stipend`). Recurring procedures (daily triage and similar) reuse the same `traceId` instead of minting a bloom trail each tick. Later ticks replace remaining honey with the stipend; kill retires the identity. First seed sets `trace.title` from the cue description (or cue id) when none exists. Not a Loop. See [cues](../guide/cues.md), [spec 028](../specs/028-standing-trails.md).
+> **Standing Trail** — long-lived Flight Trail bound to a Forage Cue (`standing.trace` + `standing.stipend`). Recurring procedures (daily triage and similar) reuse the same `traceId` instead of minting a bloom trail each tick. Later ticks replace remaining honey with the stipend; kill retires the identity. First seed sets `trace.title` from the cue description (or cue id) when none exists. Checkpoints live in the trail comb (`checkpoint.json`). Not a Loop. See [cues](../guide/cues.md), [spec 028](../specs/028-standing-trails.md).
 
 ---
 

@@ -23,6 +23,14 @@ Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-inde
 - **Why deferred:** Snapshot reuse was enough for MVP retry; edit-on-retry needs UX and ledger rules. Eval colony has no case that needs a corrected retry.
 - **Revisit when:** Operators or eval cases need corrected retries without creating a new task.
 
+#### Compact standing-trail task history
+
+- **Kind:** follow-up
+- **Source:** [028-standing-trails](../specs/028-standing-trails.md)
+- **Summary:** Compact completed standing tick tasks in the ledger snapshot, or a Console “ticks” subset, after months of daily cue runs.
+- **Why deferred:** Spec 028 accepted ledger growth for MVP; boards stay usable in the first weeks without a rolling window.
+- **Revisit when:** Operators keep a year of ticks and Console/task list becomes noisy.
+
 ### Energy and honey
 
 MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion → `blocked` (`Honey reserve exhausted`). These items need separate design or evidence before expanding the MVP.
@@ -192,6 +200,14 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 ## Assumptions and gotchas
 
 ### Eval colony
+
+#### Standing trail live case
+
+- **Kind:** follow-up
+- **Source:** [028-standing-trails](../specs/028-standing-trails.md)
+- **Summary:** Add a scripted eval-colony case that ticks a standing cue twice on a fixed `traceId` (checkpoint file reuse + stipend replace + overlap refuse) against live NATS.
+- **Why deferred:** Platform tests already cover those behaviors in-process; the sibling eval runner is a separate repo and live LLM/script wiring is owned by [003](../specs/003-hive-evals.md).
+- **Revisit when:** Extending `paseka-eval-colony` cases past `01`–`14`.
 
 Wiring the side eval colony (`paseka-eval-colony`) and `runner/run-case.sh` against real NATS + `paseka run`. See [003-hive-evals](../specs/003-hive-evals.md).
 

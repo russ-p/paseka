@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Draft)**
-Identity + stipend + overlap + first-title + badge slices shipped: cue `standing.trace` / `standing.stipend`, load validation (collision, no `energy_budget`, standing task `review: none` + `worktree: false`), default trace resolution on CLI / Console / Telegram, first-tick `SeedEnergy` from stipend, later-tick `energy.stipend` remaining replace, kill fail-closed on cue run, overlap refuse (open ledger tick or live AFK), first-tick `INSIGHT/trace.title` from cue description (or cue id) when none exists, standing badge in Queen Console / `paseka status` / Telegram `/traces`. Checkpoints/prompts and evals still open.
+**(Implemented)**
+Standing Trails: cue `standing.trace` / `standing.stipend`, stipend replace, overlap refuse, first `trace.title`, Console/status/Telegram badge, comb checkpoints and prompt partials, doctor standing smells. Sidecar cron stays outside Paseka. Sibling eval-colony live case is a follow-up.
 
 ## Problem Statement
 
@@ -278,6 +278,7 @@ Good tests assert **external behavior**: cue validation, trace resolution, stipe
 ## Further Notes
 
 - Convention-only reuse of `--trace` + comb + `energy.add` was rejected as the product answer because add accumulates and omitted `--trace` is a footgun. This spec is the first-class version of that pattern.
-- Open product gap (not required to Approve the rest): whether doctor should **warn** or **error** when a standing `emit: signal` kind has only `worktree: true` subscribers. Prefer warn in MVP if mixed topologies exist.
+- Doctor **warns** (does not error) when a standing `emit: signal` kind has only `worktree: true` subscribers, so mixed topologies can still load.
 - Follow-up if operators actually keep a year of ticks: compact completed standing tasks in the ledger snapshot, or a Console “ticks” subset. Do not block MVP.
-- Durable docs after ship: cues guide (standing + cron example), task ledger honey section, glossary, CLI `paseka cue` / `paseka energy`, Console Run cue. Specs stay unpublished ([specs index](../plans/specs-index.md)).
+- Durable docs: [Forage Cues](../guide/cues.md), [Prompt templates](../guide/prompt-templates.md), [CLI](../guide/cli.md), glossary, task ledger honey. Specs stay unpublished ([specs index](../plans/specs-index.md)).
+- Live scripted standing case in `paseka-eval-colony` is a follow-up; platform tests cover two ticks, stipend replace, overlap refuse, and comb file reuse.

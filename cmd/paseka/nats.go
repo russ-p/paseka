@@ -7,6 +7,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/cues"
 	"github.com/russ-p/paseka/internal/review"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,13 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			bees, beesErr := colony.LoadAllBeesForDiagnosis(ctxColony.ColonyRoot)
+			if beesErr != nil {
+				report.Errors = append(report.Errors, beesErr.Error())
+				bees = map[string]colony.Bee{}
+			}
+			standing := cues.DiagnoseStanding(ctxColony.ColonyRoot, bees)
+			report.Warnings = append(report.Warnings, standing.Warnings...)
 			printDoctorReport(report)
 			if len(report.Errors) > 0 {
 				return fmt.Errorf("doctor: %d issue(s) found", len(report.Errors))

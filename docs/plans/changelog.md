@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Standing trail checkpoints and doctor smells
+
+Standing ticks keep procedure memory in the trail comb (`checkpoint.json`, optional `journal/`) and prompt partials tell bees to read that file first, write it atomically, and spawn bloom work on a **new** `traceId`. `paseka doctor` warns when a standing SIGNAL kind has only isolated worktree subscribers, when a standing tick bee publishes isolated `code.proposal`, or when an isolated proposal already sits on a standing trail. `purge --runs` is documented as wiping that memory.
+
+- Spec: [028-standing-trails](../specs/028-standing-trails.md)
+- Canonical: [Forage Cues](../guide/cues.md) § Checkpoints, [Prompt templates](../guide/prompt-templates.md), [CLI](../guide/cli.md) (`paseka doctor`, `paseka purge`)
+
+Deferred from that work: live eval-colony standing case, ledger compact after a year of ticks — see [Backlog](backlog.md).
+
 ## 2026-09 — Queen Console chrome stream
 
 Always-visible header plaques (Hive runtime, Live bees, Host, Git) and Reviews/Sessions tab badges now update from one Server-Sent Event stream instead of a bundle of timed GETs. System and Git tabs still poll their full snapshots while open. Git status never fetches remotes from the header clock.
@@ -21,19 +30,15 @@ Flight Trails bound to a standing Forage Cue are now visually distinct from bloo
 
 The badge is derived from colony cue YAML (`standing.trace`), not a ledger flag — delete the cue and the trail reads as an ordinary leftover trail.
 
-- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap + first-title + badge slices)
+- Spec: [028-standing-trails](../specs/028-standing-trails.md)
 - Canonical: [Queen Console](../guide/queen-console.md), [CLI](../guide/cli.md) (`paseka status`), [Forage Cues](../guide/cues.md), [Telegram gateway](../guide/telegram-gateway.md)
-
-Deferred from that work: standing comb checkpoints and prompt partials — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Standing trail first title
 
 The first standing `cue run` that seeds honey also publishes `INSIGHT` / `trace.title` when the trail has none yet: cue `description` (trimmed, 120-character cap), or the cue id if description is empty. Later ticks and a human/bee title already on the trail are left alone, so lists show “Daily triage” instead of a raw id without clobbering a refined name.
 
-- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap + first-title slices)
+- Spec: [028-standing-trails](../specs/028-standing-trails.md)
 - Canonical: [Forage Cues](../guide/cues.md), [INSIGHT kinds](../reference/insight-kinds.md) (`trace.title`)
-
-Deferred from that work: checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Console lib assets in `go install` binaries
 
@@ -45,25 +50,21 @@ Queen Console third-party files (xterm, Diff2Html, cytoscape, fonts) live under 
 
 A second standing `cue run` fails closed while the trail already has an open tick (`planned`, `ready`, `running`, `waiting_review`) or a live AFK adapter on that `traceId`. The error says the trail **is busy** and names the blocking task status or bee. No stipend and no ingress. `blocked` / finished tasks and interactive sessions do not block, so a drained tick can start the next ration and a HITL inspect is not a tick.
 
-- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend + overlap slices)
+- Spec: [028-standing-trails](../specs/028-standing-trails.md)
 - Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`)
-
-Deferred from that work: checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Standing trail stipend
 
 Later ticks of a Standing Trail **replace** remaining honey with the cue stipend (`SIGNAL` / `energy.stipend`) instead of leaving leftover tokens or stacking `energy.add`. The event does not change seed budget or `energyAdded`, and it does not unblock honey-blocked tasks from a previous tick. A killed standing trail refuses `cue run` (error names `system.kill`). First tick still seeds via `SeedEnergy` as in the identity slice.
 
-- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity + stipend slices)
+- Spec: [028-standing-trails](../specs/028-standing-trails.md)
 - Canonical: [Forage Cues](../guide/cues.md) § Honey, [Task ledger](../reference/task-ledger.md) § Honey reserve, [Event contracts](../reference/event-contracts.md)
-
-Deferred from that work: checkpoints/prompts — see [Spec 028](../specs/028-standing-trails.md).
 
 ## 2026-09 — Standing cue identity
 
 A Forage Cue may declare `standing.trace` and `standing.stipend`. Omitting `--trace` / API `traceId` / Telegram `cue:` then publishes on that stable Flight Trail instead of minting a disposable bloom id; a mismatched explicit id fails closed. First tick seeds honey from stipend. Standing task cues require `review: none` and `worktree: false`. Nuc export/import carries the YAML as today.
 
-- Spec: [028-standing-trails](../specs/028-standing-trails.md) (Draft; identity slice)
+- Spec: [028-standing-trails](../specs/028-standing-trails.md)
 - Canonical: [Forage Cues](../guide/cues.md), [CLI](../guide/cli.md) (`paseka cue`), [Glossary](../idea/glossary.md) (Standing Trail)
 
 ## 2026-09 — Cursor Agent log from local transcripts

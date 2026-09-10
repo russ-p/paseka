@@ -31,6 +31,12 @@ func TestArtifactKindAndTitleHeuristics(t *testing.T) {
 	if got := ArtifactKindFromRef(".paseka/runs/t/artifacts/draft-spec.md"); got != "draft-spec" {
 		t.Fatalf("kind = %q", got)
 	}
+	if got := ArtifactKindFromRef(".paseka/runs/t/artifacts/checkpoint.json"); got != "checkpoint" {
+		t.Fatalf("kind = %q", got)
+	}
+	if got := ArtifactKindFromRef(".paseka/runs/t/artifacts/journal/2026-09-04.md"); got != "2026-09-04" {
+		t.Fatalf("kind = %q", got)
+	}
 	title := TitleFromMarkdown([]byte("# Research brief\n\nbody"))
 	if title != "Research brief" {
 		t.Fatalf("title = %q", title)

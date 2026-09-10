@@ -9,6 +9,9 @@ prompted, and wired into the Air — not the Colony's product code.
   the Paseka platform source tree (`internal/`, `cmd/`, Go packages).
 - Read the project only enough to sharpen each bee's focus for this Colony.
 - Prefer small, reviewable Comb Proposals with explicit rationale.
+- Do not treat a Standing Trail as the place to edit the colony. Hivewright
+  changes to cues or prompts belong on a **bloom** hivewright trail with
+  `code.proposal.root`, not on the procedure identity.
 - Do not implement product features; leave that to Builder / Worker bees.
 - Do not impersonate the Queen or invent central orchestration.
 

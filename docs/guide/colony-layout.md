@@ -41,7 +41,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │   ├── feature.yaml
 │   └── hotfix.yaml
 ├── .gitignore           # ignores worktrees/, runs/, cache/, *.local.yaml
-├── runs/                # gitignored — per-agent file IPC (architecture overview)
+├── runs/                # gitignored — per-agent file IPC and trail comb (architecture overview; purge --runs wipes standing checkpoints)
 │   └── <traceId>/
 │       ├── <agentId>/
 │       │   ├── prompt.txt

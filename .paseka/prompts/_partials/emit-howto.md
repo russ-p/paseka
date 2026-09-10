@@ -49,3 +49,5 @@ Each event JSON object must include:
 - `payload` — event-specific object with required `payload.kind`
 
 If the command returns `"ok": false`, treat it as a failed publish and correct the payload before continuing. Deferred success includes `"deferred": true` and does not publish to the bus until flush.
+
+{{template "standing-checkpoint" .}}

@@ -440,7 +440,7 @@ Check NATS connectivity, JetStream resources, and colony bee wiring for the colo
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories).
+**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail).
 
 Exits with an error if any check fails.
 
@@ -959,6 +959,8 @@ At least one target flag (`--runs`, `--worktrees`, `--cache`, `--state`, `--all`
 **Stop the reactor first:** Stop `paseka run` before `purge --bus` so the reactor is not reading or writing task-ledger KV while keys and stream messages are deleted. Running bus purge against an active reactor can cause races and stale in-memory state.
 
 **`--reseed-energy`:** Operator hygiene for retrying work on a fixed trace — after a successful `--bus` purge, seeds the trace honey reserve (`budget` and `remaining`) to the colony `defaults.energy_budget` (same source as reactor first seed). Works with the reactor stopped; verify with `paseka energy show --trace <id>`. Not an eval harness command.
+
+**Standing checkpoints:** `purge --runs` removes `.paseka/runs/<traceId>/`, including the trail comb. On a Standing Trail that directory is procedure memory (`checkpoint.json` and journals). Do not purge the standing `traceId` unless you intend to wipe skip lists; keep durable facts in git.
 
 ```bash
 paseka purge --runs --yes

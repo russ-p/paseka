@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/russ-p/paseka/internal/artifacts"
 	"github.com/russ-p/paseka/internal/cues"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
@@ -1038,6 +1039,90 @@ body: "{{.Body}}"
 	}
 	if n := countKind(pub.events, string(protocol.InsightTraceTitle)); n != 1 {
 		t.Fatalf("trace.title count = %d, want 1", n)
+	}
+}
+
+func TestRunStandingSecondTickReusesCombCheckpoint(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeColonyManifest(t, root, 12)
+	writeBeeFile(t, root, "watch", `role: watch
+adapter: script
+command: ["true"]
+worktree: false
+`)
+	writeCueFile(t, root, "daily.yaml", `emit: task
+bee: watch
+intent: triage
+autorun: false
+standing:
+  trace: trail-daily-triage
+  stipend: 4
+title: "{{.Title}}"
+body: "{{.Body}}"
+`)
+
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	first, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily",
+		Text:       "tick 1",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	planEv, ok := eventByKind(pub.events, string(protocol.TaskEventPlan))
+	if !ok {
+		t.Fatalf("missing task.plan in %+v", kindsOf(pub.events))
+	}
+	if _, err := ledger.Apply(planEv); err != nil {
+		t.Fatal(err)
+	}
+	done, err := protocol.NewEvent(first.TraceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: first.TaskID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(done); err != nil {
+		t.Fatal(err)
+	}
+
+	comb := artifacts.Root(root, first.TraceID)
+	if err := os.MkdirAll(comb, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := filepath.Join(comb, "checkpoint.json")
+	if err := os.WriteFile(checkpoint, []byte(`{"skip":["ISSUE-1"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily",
+		Text:       "tick 2",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.TraceID != first.TraceID {
+		t.Fatalf("trace = %q, want %q", second.TraceID, first.TraceID)
+	}
+	if artifacts.DirForPrompt(root, second.TraceID) != comb {
+		t.Fatalf("comb path changed: %s vs %s", artifacts.DirForPrompt(root, second.TraceID), comb)
+	}
+	got, err := os.ReadFile(checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"skip":["ISSUE-1"]}` {
+		t.Fatalf("checkpoint = %s", got)
 	}
 }
 
