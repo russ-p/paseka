@@ -340,7 +340,7 @@ func TestSessionResumeAPI(t *testing.T) {
 	if err := json.NewDecoder(piRec.Body).Decode(&piErr); err != nil {
 		t.Fatal(err)
 	}
-	if piErr["error"] != sessions.ResumeErrNotCursor {
+	if piErr["error"] != sessions.ResumeErrNotResumable {
 		t.Fatalf("pi err = %+v", piErr)
 	}
 

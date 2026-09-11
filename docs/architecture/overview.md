@@ -278,7 +278,7 @@ opencode run --format json --dir "$WORKSPACE" --auto --title "$AGENT_ID" \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `opencode` exits, capture a **baseline-attributed** tracked diff in the **workspace**.
-5. **Stdout** — raw stdout is preserved as an artifact. In JSON format the adapter tolerantly reads `sessionID`, last `text` part for `summary.md`, and last `step_finish` `part.tokens` as optional `usage` (source `opencode.run-json`). The native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. HITL does not pre-create a session id. Export Agent log is unsupported in this slice (omit quietly).
+5. **Stdout** — raw stdout is preserved as an artifact. In JSON format the adapter tolerantly reads `sessionID`, last `text` part for `summary.md`, and last `step_finish` `part.tokens` as optional `usage` (source `opencode.run-json`). The native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. HITL pre-creates the id (`opencode serve` + `POST /session`) and launches the TUI with `--session`. Export Agent log is unsupported in this slice (omit quietly).
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 **Event publishing boundary:** OpenCode JSON is **not** parsed into domain bus events. Agents must publish via `paseka event emit --stdin`.
@@ -377,7 +377,7 @@ For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongsid
 | AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p`; OpenCode: `opencode run` |
 | Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`; OpenCode: TUI without `run`, PTY-owned by runtime |
 
-Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; **Resume** skips `create-chat` and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta). Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
+Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; OpenCode HITL pre-creates a session (`opencode serve` + `POST /session`, no model turn) and launches the TUI with `--session`. **Resume** skips pre-create for both and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta). Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
 
 ---
 

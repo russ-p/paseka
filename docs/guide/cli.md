@@ -242,7 +242,7 @@ Stop a session by id. Tries the in-process manager first, then signals a remote 
 
 ### `paseka session resume <sessionId>`
 
-Continue a **finished** Cursor HITL session: new Paseka `sessionId` / run directory, same Cursor `providerSessionId`, no `create-chat`. Attaches in the current terminal. Ineligible sources (Pi/Claude, missing id, `command:` bee, still active, another live session on the same chat) exit non-zero.
+Continue a **finished Cursor or OpenCode** HITL session: new Paseka `sessionId` / run directory, same provider `providerSessionId`, no `create-chat` / pre-create. Cursor resumes with `--resume`; OpenCode with `--session`. Attaches in the current terminal. Ineligible sources (Pi/Claude/script, missing id, `command:` bee, still active, another live session on the same chat) exit non-zero.
 
 | Flag | Short | Description |
 | ---- | ----- | ----------- |
@@ -649,7 +649,7 @@ Filesystem projections for flight trails and runs (no NATS).
 
 ### `paseka inspect usage`
 
-Show LLM token usage from `result.json` projections — trace aggregate by default, or one run with `--agent`. Mirrors Queen Console trace/run usage fields (`inputTokens`, `outputTokens`, cache read/write). Only Cursor AFK runs report usage today; others print `usage: (none)`. With `--agent`, if the run stored a native **`providerSessionId`**, it is printed as `providerSessionId:` (Cursor stream-json `session_id`, Cursor HITL `create-chat` UUID, or Pi session id).
+Show LLM token usage from `result.json` projections — trace aggregate by default, or one run with `--agent`. Mirrors Queen Console trace/run usage fields (`inputTokens`, `outputTokens`, cache read/write). Only Cursor AFK runs report usage today; others print `usage: (none)`. With `--agent`, if the run stored a native **`providerSessionId`**, it is printed as `providerSessionId:` (Cursor stream-json `session_id`, Cursor HITL `create-chat` UUID, OpenCode HITL `ses_*`, or Pi session id).
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
@@ -1062,7 +1062,7 @@ paseka replay trace-1
 ```bash
 paseka bee chat scout "Let's design the notification system"
 paseka session list
-paseka session resume <sessionId>   # finished Cursor HITL only
+paseka session resume <sessionId>   # finished Cursor/OpenCode HITL
 paseka session stop <sessionId>
 ```
 

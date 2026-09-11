@@ -153,7 +153,7 @@ func TestManagerResumeIneligible(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = mgr.ResumeDetached(ctx, sessions.ResumeRequest{StartDir: repo, SessionID: "pi-src"})
-	assertResumeCode(t, err, sessions.ResumeErrNotCursor, 400)
+	assertResumeCode(t, err, sessions.ResumeErrNotResumable, 400)
 
 	writeFinishedCursorSession(t, repo, "no-id", "trace-src", "", "")
 	_, err = mgr.ResumeDetached(ctx, sessions.ResumeRequest{StartDir: repo, SessionID: "no-id"})
@@ -280,7 +280,59 @@ func TestManagerResumeRejectsAdapterChanged(t *testing.T) {
 	assertResumeCode(t, err, sessions.ResumeErrAdapterChanged, 400)
 }
 
-func writeFinishedCursorSession(t *testing.T, repo, sessionID, traceID, providerID, resumedFrom string) runs.Dir {
+func TestManagerResumeOpenCodeHappyPath(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+	writeScoutBee(t, repo, "opencode")
+	writeFinishedSession(t, repo, "agent-oc", "trace-oc", "oc-id", "", "opencode")
+
+	rec := &recordingSessionAdapter{id: "oc-id"}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("opencode", rec)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := mgr.ResumeDetached(ctx, sessions.ResumeRequest{
+		StartDir:  repo,
+		SessionID: "agent-oc",
+		Continue:  "keep going",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.TraceID != "trace-oc" {
+		t.Fatalf("trace = %q", res.TraceID)
+	}
+	if rec.lastReq.ResumeSessionID != "oc-id" {
+		t.Fatalf("ResumeSessionID = %q", rec.lastReq.ResumeSessionID)
+	}
+	if rec.lastReq.InitialPrompt != "keep going" {
+		t.Fatalf("continue = %q", rec.lastReq.InitialPrompt)
+	}
+	waitSessionDone(t, mgr)
+	meta, err := runs.Dir{ColonyRoot: repo, TraceID: res.TraceID, AgentID: res.AgentID}.ReadSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.ProviderSessionID != "oc-id" || meta.ResumedFrom != "agent-oc" {
+		t.Fatalf("meta = %+v", meta)
+	}
+}
+
+func TestManagerResumeRejectsAdapterMismatch(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+	// scout bee keeps adapter: cursor; source session claims opencode -> adapter changed.
+	writeFinishedSession(t, repo, "agent-oc", "trace-oc", "oc-id", "", "opencode")
+
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", &recordingSessionAdapter{})
+	mgr.RegisterSessionAdapter("opencode", &recordingSessionAdapter{})
+	_, err := mgr.ResumeDetached(context.Background(), sessions.ResumeRequest{StartDir: repo, SessionID: "agent-oc"})
+	assertResumeCode(t, err, sessions.ResumeErrAdapterChanged, 400)
+}
+
+func writeFinishedSession(t *testing.T, repo, sessionID, traceID, providerID, resumedFrom, adapter string) runs.Dir {
 	t.Helper()
 	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: sessionID}
 	if err := d.Prepare(); err != nil {
@@ -292,7 +344,7 @@ func writeFinishedCursorSession(t *testing.T, repo, sessionID, traceID, provider
 		TraceID:           traceID,
 		AgentID:           sessionID,
 		Bee:               "scout",
-		Adapter:           "cursor",
+		Adapter:           adapter,
 		Workspace:         repo,
 		ColonyRoot:        repo,
 		State:             string(adapters.SessionCompleted),
@@ -304,6 +356,20 @@ func writeFinishedCursorSession(t *testing.T, repo, sessionID, traceID, provider
 		t.Fatal(err)
 	}
 	return d
+}
+
+func writeScoutBee(t *testing.T, repo, adapter string) {
+	t.Helper()
+	beePath := filepath.Join(repo, ".paseka", "bees", "scout.yaml")
+	body := "role: scout\nadapter: " + adapter + "\nprompt_template: scout.md\n"
+	if err := os.WriteFile(beePath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeFinishedCursorSession(t *testing.T, repo, sessionID, traceID, providerID, resumedFrom string) runs.Dir {
+	t.Helper()
+	return writeFinishedSession(t, repo, sessionID, traceID, providerID, resumedFrom, "cursor")
 }
 
 func waitSessionDone(t *testing.T, mgr *sessions.Manager) {

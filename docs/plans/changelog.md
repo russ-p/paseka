@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Resume OpenCode HITL sessions
+
+A new OpenCode HITL session now pre-creates its provider chat before the TUI starts — `opencode serve` + `POST /session`, the OpenCode analog of Cursor's `create-chat`, with **no model turn and no cost** — and launches the TUI with `--session <ses_*>`, storing `ses_*` as `providerSessionId`. A finished OpenCode HITL session can then **Resume** in Queen Console or via `paseka session resume`: a new Paseka session on the same Flight Trail that copies the id, records `resumedFrom`, skips honey, and fails closed when ineligible. Pre-create failure degrades to a normal TUI launch; Pi/Claude/script sources stay ineligible (the ineligible reason is now `not_resumable`).
+
+- Spec: [030-opencode-session-resume](../specs/030-opencode-session-resume.md)
+- Canonical: [Interactive sessions](../guide/interactive-sessions.md), [CLI](../guide/cli.md) (`paseka session resume`), [Queen Console](../guide/queen-console.md), [Architecture overview](../architecture/overview.md)
+
 ## 2026-09 — Pull-request delivery
 
 Isolated final-gate approve can **publish a pull request** instead of merging into the colony clone. Colony `defaults.delivery: pull_request` is opt-in; empty still means local merge. The apiary points `forge.command` at a `tea` / `gh` / custom script (JSON stdin/stdout). Approve pushes the worktree head, upserts the PR, and keeps `waiting_review` until the host reports `merged`. Queen Console Reviews grows Open/Update PR; `paseka proposal approve` takes `--pr-title` / `--pr-body` / `--draft`. Telegram cards show the URL. The Git tab still only pushes default.

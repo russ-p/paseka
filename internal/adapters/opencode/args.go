@@ -62,7 +62,7 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	return args
 }
 
-func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
+func buildInteractiveArgs(req adapters.SessionRequest, prompt, resumeID string) []string {
 	p := req.Params
 	var args []string
 	if p.Plan {
@@ -73,6 +73,9 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt string) []string {
 	}
 	if p.Thinking != "" {
 		args = append(args, "--variant", p.Thinking)
+	}
+	if resumeID != "" {
+		args = append(args, "--session", resumeID)
 	}
 	if prompt != "" {
 		args = append(args, "--prompt", prompt)

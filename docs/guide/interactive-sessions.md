@@ -220,7 +220,7 @@ agent --force \
 
 `command:` overrides do not call `create-chat` or inject `--resume`. If the custom argv already has `--resume`, that value is stored as `providerSessionId`. If `create-chat` fails, the TUI still starts without a pointer.
 
-**Resume** (Queen Console session detail, or `paseka session resume <sessionId>`) is a separate path from a new `bee chat` / `POST /api/sessions`. It is eligible only for a finished Cursor HITL session with a stored `providerSessionId` and a bee that still resolves to Cursor without a `command:` override. A registry row whose PID is no longer alive does not block Resume. The continuation is a new Paseka session on the same Flight Trail; `session.json` records `resumedFrom`. Honey is not charged. The Console transcript of the new session starts empty — Cursor history appears inside the TUI, not as NDJSON.
+**Resume** (Queen Console session detail, or `paseka session resume <sessionId>`) is a separate path from a new `bee chat` / `POST /api/sessions`. It is eligible for a finished **Cursor or OpenCode** HITL session with a stored `providerSessionId` and a bee that still resolves to the same adapter without a `command:` override (Pi, Claude, and script sources are not resumable; the API returns `not_resumable`). A registry row whose PID is no longer alive does not block Resume. The continuation is a new Paseka session on the same Flight Trail; `session.json` records `resumedFrom`. Honey is not charged. The Console transcript of the new session starts empty — provider history appears inside the TUI, not as NDJSON.
 
 When `system_template` is set and no task/prompt is given, a **new** session starts without a positional prompt and waits for user input. Resume with no continue line also omits the positional prompt.
 
@@ -306,15 +306,21 @@ Bees with `adapter: opencode` launch the OpenCode TUI (no `run` subcommand).
 | `params.thinking` | `--variant` |
 | `params.binary` | CLI binary name (default `opencode`) |
 | Auth | `opencode auth login` / provider env / project `.env` |
-| Provider chat | not pre-created; `providerSessionId` stays empty for HITL |
+| Provider chat | **pre-created** before the TUI via `opencode serve` + `POST /session` (`ses_*`); stored as `providerSessionId`; TUI launched with `--session <ses_*>` |
 
 Interactive invocation:
 
 ```bash
-opencode --prompt "$PROMPT"
+# pre-create (no model turn, no cost): opencode serve + POST /session -> ses_*
+opencode --session "$PROVIDER_SESSION_ID" \
+  --prompt "$PROMPT"
 ```
 
 `--auto`, `--format`, `--title`, and `--dir` are AFK `run`-only. Permission prompts stay in the TUI. The PTY process cwd is the workspace.
+
+Pre-create is the OpenCode analog of Cursor's `create-chat`: Paseka starts a short-lived `opencode serve` on a local ephemeral port with a generated `OPENCODE_SERVER_PASSWORD`, `POST`s `/session` with the workspace, reads the `ses_*` id, and stops the server (the session is durable in OpenCode's store). If `serve` is unavailable or the call fails, the TUI still launches without `--session` and `providerSessionId` stays empty — a best-effort policy with no hard failure.
+
+**Resume** (Queen Console session detail, or `paseka session resume <sessionId>`) is eligible for a finished **Cursor or OpenCode** HITL session with a stored `providerSessionId` and a bee that still resolves to the same adapter without a `command:` override. OpenCode skips pre-create and launches with `--session <ses_*>`; the optional continue line is the only new `--prompt`. Cursor keeps `--resume <uuid>`. Pi, Claude, and script sessions stay ineligible. `session.json` on the new session records `resumedFrom`; honey is not charged, and the Console transcript starts empty.
 
 **Event publishing boundary:** interactive OpenCode output is not parsed into domain bus events. Use `paseka event emit --stdin` during the session when the bee prompt requires bus events.
 
@@ -376,7 +382,7 @@ paseka bee chat <role> [prompt]
 | ----- | -------- |
 | Session vs AFK | Separate `SessionAdapter`; do not overload `Adapter.Run()` |
 | Session ID | Same as `agentId` for MVP |
-| Provider session | Cursor HITL: new chat uses `create-chat` + `--resume`; **Resume** reuses the stored `providerSessionId` without `create-chat`. Pi HITL: pinned `--session-id`; OpenCode HITL: empty until a native pre-create exists. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
+| Provider session | Cursor HITL: new chat uses `create-chat` + `--resume`; **Resume** reuses the stored `providerSessionId` without `create-chat`. OpenCode HITL: pre-created via `opencode serve` + `POST /session` (`ses_*`), TUI launched with `--session`; **Resume** reuses the stored id without pre-create. Pi HITL: pinned `--session-id`. Stored as `providerSessionId`; never overwrites Paseka `sessionId`. |
 | Run dir | `.paseka/runs/<traceId>/<agentId>/` — shared with AFK IPC |
 | Terminal config | `~/.config/paseka/<slug>/terminal.yaml` — not committed |
 | Ghostty | Optional UI; `session run` runs full session inside Ghostty window |

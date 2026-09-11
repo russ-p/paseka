@@ -35,5 +35,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [027-config-profiles](../specs/027-config-profiles.md) | Implemented | Named colony + home settings overlays; `paseka --profile`; fail-closed; global `adapter:` replaces LLM bees |
 | [028-standing-trails](../specs/028-standing-trails.md) | Implemented | Long-lived named Flight Trails for recurring cues; sidecar cron; comb checkpoints; per-tick honey stipend |
 | [029-console-chrome-stream](../specs/029-console-chrome-stream.md) | Implemented | Queen Console header plaques + tab badges over one SSE endpoint (`GET /api/chrome/stream`); REST GETs remain for tabs |
+| [030-opencode-session-resume](../specs/030-opencode-session-resume.md) | Implemented | OpenCode HITL pre-create (`opencode serve` + `POST /session`) and resume via stored `providerSessionId` (`--session`); Console/CLI resume accepts OpenCode next to Cursor |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

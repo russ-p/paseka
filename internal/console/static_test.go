@@ -91,7 +91,7 @@ func TestSessionResumeStaticContract(t *testing.T) {
 		"resumeReason",
 		"No provider session id",
 		"Resume",
-		"adapter !== 'cursor'",
+		"adapter !== 'opencode'",
 	} {
 		if !strings.Contains(src, needle) {
 			t.Fatalf("app.js missing %s", needle)

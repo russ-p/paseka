@@ -2652,7 +2652,7 @@ function renderSessionDetail(session) {
 
 function setResumeControls(session) {
   if (!el.resumeWrap) return;
-  if (session.adapter !== 'cursor') {
+  if (session.adapter !== 'cursor' && session.adapter !== 'opencode') {
     el.resumeWrap.classList.add('hidden');
     return;
   }

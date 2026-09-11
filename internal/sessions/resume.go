@@ -14,12 +14,19 @@ import (
 const (
 	ResumeErrStillActive         = "still_active"
 	ResumeErrProviderSessionBusy = "provider_session_busy"
-	ResumeErrNotCursor           = "not_cursor"
+	ResumeErrNotResumable        = "not_resumable"
 	ResumeErrNoProviderSessionID = "no_provider_session_id"
 	ResumeErrCommandOverride     = "command_override"
 	ResumeErrAdapterChanged      = "adapter_changed"
 	ResumeErrBeeGone             = "bee_gone"
 )
+
+// resumableSessionAdapters lists providers whose HITL sessions can continue by
+// native provider session id. Cursor uses --resume; OpenCode uses --session.
+var resumableSessionAdapters = map[string]bool{
+	"cursor":   true,
+	"opencode": true,
+}
 
 // ResumeError is an eligibility failure for Cursor HITL resume.
 type ResumeError struct {
@@ -122,8 +129,9 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 	} else if live {
 		return RunRequest{}, resumeErr(ResumeErrStillActive, 409, "source session is still active")
 	}
-	if strings.TrimSpace(source.Adapter) != "cursor" {
-		return RunRequest{}, resumeErr(ResumeErrNotCursor, 400, "source session is not a Cursor HITL chat")
+	sourceAdapter := strings.TrimSpace(source.Adapter)
+	if !resumableSessionAdapters[sourceAdapter] {
+		return RunRequest{}, resumeErr(ResumeErrNotResumable, 400, "source session adapter does not support resume")
 	}
 	providerID := strings.TrimSpace(source.ProviderSessionID)
 	if providerID == "" {
@@ -134,14 +142,14 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 		return RunRequest{}, resumeErr(ResumeErrBeeGone, 400, "source bee is gone or unreadable")
 	}
 	adapterName, err := bee.ResolveAdapter()
-	if err != nil || adapterName != "cursor" {
-		return RunRequest{}, resumeErr(ResumeErrAdapterChanged, 400, "source bee no longer uses the Cursor session adapter")
+	if err != nil || adapterName != sourceAdapter {
+		return RunRequest{}, resumeErr(ResumeErrAdapterChanged, 400, "source bee no longer uses the "+sourceAdapter+" session adapter")
 	}
 	m.mu.RLock()
 	_, adapterOK := m.adapters[adapterName]
 	m.mu.RUnlock()
 	if !adapterOK {
-		return RunRequest{}, resumeErr(ResumeErrAdapterChanged, 400, "source bee no longer uses the Cursor session adapter")
+		return RunRequest{}, resumeErr(ResumeErrAdapterChanged, 400, "source bee no longer uses the "+sourceAdapter+" session adapter")
 	}
 	if bee.Command.IsSet() {
 		return RunRequest{}, resumeErr(ResumeErrCommandOverride, 400, "source bee uses a command override")

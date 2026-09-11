@@ -83,7 +83,7 @@ never pushes the worktree head; PR publish does.
 
 ### Sessions and Runs
 
-**Sessions** launches, attaches to, stops, and inspects interactive bees. Finished Cursor HITL sessions with a stored provider id offer **Resume** (optional continue line) — a new Paseka session in the same Cursor chat, without `create-chat`.
+**Sessions** launches, attaches to, stops, and inspects interactive bees. Finished **Cursor or OpenCode** HITL sessions with a stored provider id offer **Resume** (optional continue line) — a new Paseka session in the same provider chat, without `create-chat` / pre-create.
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
 
