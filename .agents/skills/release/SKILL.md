@@ -1,11 +1,25 @@
 ---
 name: release
 description: Cut a Paseka version release — propose semver, draft release notes, create an annotated git tag, push to trigger GoReleaser, and polish the GitHub Release notes. Use when the user asks to cut a release, bump version, tag, write release notes, or runs /release.
+disable-model-invocation: true
 ---
 
 # Release
 
 Cut a `paseka` release for this repository. GoReleaser publishes binaries on `v*` tag push; this skill handles the human steps before and after.
+
+## Command
+
+This skill is invoked as `/release [bump]`:
+
+- `/release` or `/release patch` → bump patch
+- `/release minor` → bump minor
+- `/release major` → bump major
+- `/release vX.Y.Z` → use exact version
+
+Optional bump argument: `$ARGUMENTS` — defaults to `patch` if not provided.
+
+**Do not tag or push until the user confirms the proposed version and release notes.**
 
 ## Quick start
 
