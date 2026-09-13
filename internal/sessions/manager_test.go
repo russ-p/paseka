@@ -3,6 +3,8 @@ package sessions_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -218,6 +220,69 @@ func (f *instantSessionAdapter) SessionCommand(req adapters.SessionRequest) (ada
 		Env:    os.Environ(),
 		Dir:    req.Workspace,
 	}, nil
+}
+
+type promptDeliverySessionAdapter struct {
+	delivery *adapters.SessionPromptDelivery
+}
+
+func (p *promptDeliverySessionAdapter) Name() string { return "cursor" }
+
+func (p *promptDeliverySessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		return adapters.SessionCommand{}, err
+	}
+	return adapters.SessionCommand{
+		Binary: shell,
+		Args:   []string{"-c", "sleep 0.5; exit 0"},
+		Env:    os.Environ(),
+		Dir:    req.Workspace,
+		Prompt: p.delivery,
+	}, nil
+}
+
+func TestManagerDeliversSessionPrompt(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+
+	posted := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/session" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		posted <- struct{}{}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", &promptDeliverySessionAdapter{
+		delivery: &adapters.SessionPromptDelivery{
+			BaseURL:   srv.URL,
+			SessionID: "ses_x",
+			Username:  "opencode",
+			Password:  "secret",
+			Text:      "do the thing",
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := mgr.StartDetached(ctx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		Task:     "hello delivery",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-posted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("session prompt was not delivered")
+	}
 }
 
 func TestManagerStartDetachedCapturesOutput(t *testing.T) {

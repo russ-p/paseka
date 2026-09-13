@@ -40,6 +40,21 @@ type SessionRequest struct {
 	Detached bool
 }
 
+// SessionPromptDelivery describes an initial prompt that must be delivered to
+// a running provider session through the interactive process's HTTP control
+// server (used by OpenCode, whose TUI ignores --prompt when --session is set).
+type SessionPromptDelivery struct {
+	BaseURL       string // control server origin, e.g. http://127.0.0.1:4096
+	SessionID     string // provider session id to post to
+	Username      string // basic auth username
+	Password      string // basic auth password
+	Text          string // prompt text
+	Agent         string // optional agent name
+	Variant       string // optional reasoning variant
+	ModelProvider string // optional model provider id
+	ModelID       string // optional model id
+}
+
 // SessionCommand describes how to launch the external agent process.
 type SessionCommand struct {
 	Binary            string
@@ -47,6 +62,9 @@ type SessionCommand struct {
 	Env               []string
 	Dir               string
 	ProviderSessionID string // optional; native provider session id when known before PTY start
+	// Prompt, when set, must be delivered to ProviderSessionID through the
+	// process's HTTP control server once it becomes reachable.
+	Prompt *SessionPromptDelivery
 }
 
 // SessionHandle identifies a running or recently finished session.

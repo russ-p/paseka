@@ -40,7 +40,13 @@ func TestSessionCommandInteractive(t *testing.T) {
 	assertArgPair(t, cmd.Args, "--model", "anthropic/claude-sonnet-4")
 	assertArgPair(t, cmd.Args, "--variant", "high")
 	assertArgPair(t, cmd.Args, "--session", "ses_new")
-	assertArgPair(t, cmd.Args, "--prompt", "discuss feature")
+	assertPromptDelivery(t, cmd, "discuss feature", "ses_new")
+	if cmd.Prompt.Agent != "plan" || cmd.Prompt.Variant != "high" {
+		t.Fatalf("delivery agent/variant = %q/%q", cmd.Prompt.Agent, cmd.Prompt.Variant)
+	}
+	if cmd.Prompt.ModelProvider != "anthropic" || cmd.Prompt.ModelID != "claude-sonnet-4" {
+		t.Fatalf("delivery model = %q/%q", cmd.Prompt.ModelProvider, cmd.Prompt.ModelID)
+	}
 	if cmd.Dir != "/tmp/ws" {
 		t.Fatalf("dir = %q", cmd.Dir)
 	}
@@ -67,7 +73,28 @@ func TestSessionCommandJoinsSystemPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertArgPair(t, cmd.Args, "--prompt", "You are Scout.\nintake this idea")
+	assertPromptDelivery(t, cmd, "You are Scout.\nintake this idea", "ses_join")
+}
+
+func TestSessionCommandOverridesInheritedServerEnv(t *testing.T) {
+	t.Setenv("OPENCODE_SERVER_PASSWORD", "inherited")
+	t.Setenv("OPENCODE_SERVER_USERNAME", "someone")
+	fake := writeFakeBinary(t)
+	stubCreateSession(t, "ses_env", nil)
+	cmd, err := NewSession().SessionCommand(adapters.SessionRequest{
+		Workspace:     "/tmp/ws",
+		InitialPrompt: "hi",
+		Params:        adapters.RunParams{Binary: fake},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envHas(cmd.Env, "OPENCODE_SERVER_PASSWORD=inherited") || envHas(cmd.Env, "OPENCODE_SERVER_USERNAME=someone") {
+		t.Fatalf("inherited control-server env leaked: %v", cmd.Env)
+	}
+	if !envHas(cmd.Env, "OPENCODE_SERVER_USERNAME=opencode") {
+		t.Fatal("control-server username not pinned to opencode")
+	}
 }
 
 func TestSessionCommandSystemOnly(t *testing.T) {
@@ -81,8 +108,8 @@ func TestSessionCommandSystemOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertArgPair(t, cmd.Args, "--prompt", "You are Scout.")
 	assertArgPair(t, cmd.Args, "--session", "ses_sys")
+	assertPromptDelivery(t, cmd, "You are Scout.", "ses_sys")
 }
 
 func TestSessionCommandResumeSkipsCreateSession(t *testing.T) {
@@ -102,7 +129,7 @@ func TestSessionCommandResumeSkipsCreateSession(t *testing.T) {
 		t.Fatalf("resume must not create a session, calls=%d", rec.calls)
 	}
 	assertArgPair(t, cmd.Args, "--session", "ses_old")
-	assertArgPair(t, cmd.Args, "--prompt", "keep going")
+	assertPromptDelivery(t, cmd, "keep going", "ses_old")
 	for _, arg := range cmd.Args {
 		if strings.Contains(arg, "You are Scout.") {
 			t.Fatalf("resume must not join system prompt, args=%v", cmd.Args)
@@ -131,6 +158,14 @@ func TestSessionCommandResumeEmptyContinue(t *testing.T) {
 	if adapters.FlagValue(cmd.Args, "--prompt") != "" {
 		t.Fatalf("empty continue must omit --prompt, args=%v", cmd.Args)
 	}
+	if cmd.Prompt != nil {
+		t.Fatalf("empty continue must not schedule delivery, got %+v", cmd.Prompt)
+	}
+	for _, arg := range cmd.Args {
+		if arg == "--port" || strings.HasPrefix(arg, "--port=") {
+			t.Fatalf("no prompt means no control server, args=%v", cmd.Args)
+		}
+	}
 }
 
 func TestSessionCommandCreateSessionFailureStillLaunches(t *testing.T) {
@@ -151,6 +186,12 @@ func TestSessionCommandCreateSessionFailureStillLaunches(t *testing.T) {
 		if arg == "--session" || strings.HasPrefix(arg, "--session=") {
 			t.Fatalf("must not inject --session after pre-create failure, args=%v", cmd.Args)
 		}
+		if arg == "--port" || strings.HasPrefix(arg, "--port=") {
+			t.Fatalf("no session id means no control server, args=%v", cmd.Args)
+		}
+	}
+	if cmd.Prompt != nil {
+		t.Fatalf("no session id means no delivery, got %+v", cmd.Prompt)
 	}
 	assertArgPair(t, cmd.Args, "--prompt", "discuss feature")
 }
@@ -232,6 +273,46 @@ func writeFakeBinary(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func assertPromptDelivery(t *testing.T, cmd adapters.SessionCommand, text, sessionID string) {
+	t.Helper()
+	if cmd.Prompt == nil {
+		t.Fatalf("expected prompt delivery, args=%v", cmd.Args)
+	}
+	if cmd.Prompt.Text != text {
+		t.Fatalf("delivery text = %q, want %q", cmd.Prompt.Text, text)
+	}
+	if cmd.Prompt.SessionID != sessionID {
+		t.Fatalf("delivery session = %q, want %q", cmd.Prompt.SessionID, sessionID)
+	}
+	port := adapters.FlagValue(cmd.Args, "--port")
+	if port == "" {
+		t.Fatalf("missing --port, args=%v", cmd.Args)
+	}
+	if want := "http://127.0.0.1:" + port; cmd.Prompt.BaseURL != want {
+		t.Fatalf("delivery base url = %q, want %q", cmd.Prompt.BaseURL, want)
+	}
+	assertArgPair(t, cmd.Args, "--hostname", "127.0.0.1")
+	if cmd.Prompt.Password == "" {
+		t.Fatal("delivery password is empty")
+	}
+	if adapters.FlagValue(cmd.Args, "--prompt") != "" {
+		t.Fatalf("session launch must not pass --prompt, args=%v", cmd.Args)
+	}
+	want := "OPENCODE_SERVER_PASSWORD=" + cmd.Prompt.Password
+	if !envHas(cmd.Env, want) {
+		t.Fatalf("env missing %q", want)
+	}
+}
+
+func envHas(env []string, want string) bool {
+	for _, e := range env {
+		if e == want {
+			return true
+		}
+	}
+	return false
 }
 
 type createSessionCall struct {

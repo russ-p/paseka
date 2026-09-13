@@ -52,7 +52,9 @@ func createSession(binary, workspace string, env []string) (string, error) {
 
 	cmd := exec.CommandContext(ctx, binary, "serve", "--hostname", "127.0.0.1", "--port", strconv.Itoa(port))
 	cmd.Dir = workspace
-	cmd.Env = append(append([]string{}, env...), "OPENCODE_SERVER_PASSWORD="+password)
+	cmd.Env = append(envWithout(env, "OPENCODE_SERVER_PASSWORD", "OPENCODE_SERVER_USERNAME"),
+		"OPENCODE_SERVER_PASSWORD="+password,
+		"OPENCODE_SERVER_USERNAME=opencode")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

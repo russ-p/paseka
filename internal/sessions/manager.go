@@ -469,6 +469,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if detached {
 		sessCtx, cancel = context.WithCancel(context.Background())
 	}
+
+	if cmd.Prompt != nil {
+		go deliverSessionPrompt(sessCtx, *cmd.Prompt)
+	}
+
 	active := &activeSession{
 		entry: Entry{
 			Handle:     handle,
@@ -520,6 +525,7 @@ func (m *Manager) waitSession(ctx context.Context, sessionID string) {
 	} else if waitErr != nil {
 		state = adapters.SessionFailed
 	}
+	active.cancel()
 
 	m.finishSession(sessionID, state, waitErr)
 }

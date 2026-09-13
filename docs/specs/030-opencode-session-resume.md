@@ -3,7 +3,7 @@
 ## Status
 
 **(Implemented)**
-Adapter pre-create (`opencode serve` + `POST /session`), `--session` launch, resume eligibility, Console Resume, and `paseka session resume` are in the tree.
+Adapter pre-create (`opencode serve` + `POST /session`), `--session` launch, out-of-band prompt delivery through the TUI's loopback control server, resume eligibility, Console Resume, and `paseka session resume` are in the tree.
 
 ## Problem Statement
 
@@ -19,21 +19,24 @@ For a **new** OpenCode HITL session, Paseka pre-creates the provider session bef
 2. `POST /session` with the workspace directory.
 3. Read `id` (`ses_*`) from the response.
 4. Stop the server (the session is already durable in the shared OpenCode store).
-5. Launch the TUI with `--session <ses_*>`; store `ses_*` as `providerSessionId`.
+5. Launch the TUI with `--session <ses_*> --port <ephemeral> --hostname 127.0.0.1`; store `ses_*` as `providerSessionId`.
+6. Wait for the TUI's own control server, then `POST /session/<ses_*>/prompt_async` with the kickoff prompt.
 
-For **Resume**, Paseka skips pre-create and launches the TUI with `--session <stored providerSessionId>` on a new Paseka session (`resumedFrom` recorded), mirroring Cursor. OpenCode resume joins Cursor as an eligible source in the session manager; Pi and Claude stay ineligible.
+Step 6 exists because the OpenCode TUI **ignores `--prompt` whenever `--session` is set**: `--prompt` is only auto-submitted on the home route, while `--session` navigates straight to the session route. Passing the kickoff as `--prompt` alongside `--session` therefore left the pre-created chat empty. Delivering it through the TUI's loopback control server puts the kickoff in the right chat while keeping a deterministic provider id.
 
-If pre-create fails (no `serve` support, HTTP error, timeout), the TUI still launches without `--session` and `providerSessionId` stays empty — the same fail-soft policy Cursor uses when `create-chat` fails. Domain events, honey, and the bus are untouched.
+For **Resume**, Paseka skips pre-create and launches the TUI with `--session <stored providerSessionId>` on a new Paseka session (`resumedFrom` recorded), mirroring Cursor. When a continue line is supplied, it is delivered the same way (control server + `prompt_async`); with no continue line, no control server is started. OpenCode resume joins Cursor as an eligible source in the session manager; Pi and Claude stay ineligible.
+
+If pre-create fails (no `serve` support, HTTP error, timeout), the TUI still launches without `--session` and `providerSessionId` stays empty, but the kickoff is passed as `--prompt` so the home route creates and submits a fresh session — the same fail-soft policy Cursor uses when `create-chat` fails. Domain events, honey, and the bus are untouched.
 
 ## User Stories
 
 1. As a Beekeeper, I want a new OpenCode HITL session to store a real `providerSessionId`, so that the chat can be found and resumed later.
 2. As a Beekeeper, I want pre-create to run **no** model turn, so that opening a session costs nothing before I type.
-3. As a Beekeeper, I want the TUI launched with `--session <ses_*>`, so that my first turn lands in the pre-created chat.
+3. As a Beekeeper, I want the TUI launched with `--session <ses_*>`, so that my first turn lands in the pre-created chat (delivered via the TUI control server, not `--prompt`).
 4. As a Beekeeper on a finished OpenCode HITL session, I want Resume in Queen Console, so that I continue the same conversation.
 5. As a Beekeeper, I want `paseka session resume <sessionId>` to work for OpenCode, so that I have CLI parity with Cursor.
 6. As a Beekeeper, I want Resume to skip pre-create, so that a continuation never silently becomes a new empty chat.
-7. As a Beekeeper, I want an optional one-line continue message passed as `--prompt`, so that I can nudge the agent as the first new turn.
+7. As a Beekeeper, I want an optional one-line continue message delivered as the first new turn (via the control server), so that I can nudge the agent.
 8. As a Beekeeper who types nothing extra, I want the TUI to open on the existing chat with no kickoff replay, so that the agent does not redo the original task.
 9. As a Beekeeper, I want that continue line to bypass the bee task template, so that Resume is not a second new-task launch.
 10. As a Beekeeper, I want a new Paseka `sessionId` / run directory for the continuation, so that the source run stays an honest historical record.
@@ -78,20 +81,28 @@ If pre-create fails (no `serve` support, HTTP error, timeout), the TUI still lau
 
 - New HITL: `--session <ses_*>` when pre-create succeeded; otherwise no `--session`.
 - Resume: `--session <stored>` always; never pre-create.
-- `--prompt` carries the joined system+task kickoff on new sessions; on resume it carries only the optional continue line (never the system prompt).
+- When a session id and a prompt are both present, add `--port <ephemeral> --hostname 127.0.0.1` and set `OPENCODE_SERVER_PASSWORD`; the prompt goes through the control server, and `--prompt` is **not** passed (the TUI ignores it with `--session`).
+- When there is no session id (pre-create failed), `--prompt` carries the joined system+task kickoff and the home route creates and submits the session.
+- Resume's continue line is delivered through the control server; an empty continue line starts no control server.
 - `--agent plan`, `--model`, `--variant` unchanged. `--auto`, `--format`, `--title`, `--dir` remain AFK `run`-only.
 
-### 3. `command:` override
+### 3. Prompt delivery through the TUI control server
+
+- `SessionCommand` may carry a `Prompt` (`SessionPromptDelivery`): control-server base URL, provider session id, basic-auth user/password, text, and optional agent/model/variant.
+- The session manager, right after starting the PTY, polls `GET /session` on the loopback control server (proxy disabled) until it answers, then `POST /session/<id>/prompt_async` with a text part. Failures are advisory and logged; the TUI is already running, so the user can still type.
+- The control server is the TUI's own `--port`/`--hostname` server, not a Paseka-managed long-lived server. It is loopback-only and password-protected.
+
+### 4. `command:` override
 
 - When `req.Command` is set, Paseka never calls `serve`/`POST /session`.
 - If the argv contains `--session <id>` or `-s <id>`, that value is stored as `providerSessionId`; otherwise it stays empty.
 
-### 4. Identity
+### 5. Identity
 
 - New session: provider `ses_*` is stored as `providerSessionId` on `session.json` and `meta.json` before the PTY starts.
 - Resume: new Paseka `sessionId` / `agentId` / run dir; copy `providerSessionId`; record `resumedFrom` (source Paseka session id). Never overwrite Paseka ids with the OpenCode id, and never rewrite the source.
 
-### 5. Eligibility (all must hold)
+### 6. Eligibility (all must hold)
 
 - Source session exists on this colony (in-process manager, home registry, or run-tree `session.json`).
 - Source is **not** active (a registry row with a dead PID does not block).
@@ -103,13 +114,13 @@ If pre-create fails (no `serve` support, HTTP error, timeout), the TUI still lau
 
 The generic ineligible code becomes `not_resumable` (was `not_cursor`); `adapter_changed` keeps its meaning.
 
-### 6. Console and CLI
+### 7. Console and CLI
 
 - `POST /api/sessions/{sessionId}/resume` and `paseka session resume <sessionId>` are unchanged in shape; they now accept OpenCode sources.
 - The Console session detail shows Resume when `adapter` is `cursor` or `opencode`; the button remains disabled without a `providerSessionId`.
 - `POST /api/sessions` still always starts a **new** chat.
 
-### 7. Honey and bus
+### 8. Honey and bus
 
 - Resume does not consume honey, accept invites, or publish session-lifecycle events.
 
@@ -117,14 +128,16 @@ The generic ineligible code becomes `not_resumable` (was `not_cursor`); `adapter
 
 Good tests assert external behavior and stay hermetic:
 
-- Argv mapping: new HITL includes `--session <id>` after a stubbed pre-create; resume includes `--session <stored>` and no kickoff; pre-create failure omits `--session`; `--auto`/`--format`/`--title`/`--dir` never appear in the TUI argv.
+- Argv mapping: new HITL includes `--session <id>`, `--port`, and `--hostname` after a stubbed pre-create, and does **not** include `--prompt`; pre-create failure omits `--session` and passes `--prompt`; resume with an empty continue line has no `--port`; `--auto`/`--format`/`--title`/`--dir` never appear in the TUI argv.
+- Delivery description: `SessionCommand.Prompt` carries the expected text/session id/model/agent/variant and the argv/env carry the matching port and `OPENCODE_SERVER_PASSWORD`.
 - Pre-create stub: assert it is called with the resolved binary and workspace on new sessions, and **not** called on resume or `command:` override.
+- Control-server delivery: a hermetic `httptest` server asserts the readiness poll, basic auth, path `/session/<id>/prompt_async`, and the text-part/model/agent/variant body; the session manager test asserts a launch with `Prompt` actually delivers.
 - `command:` override with `--session` / `-s` stores the id; without it stays empty.
 - Resume manager: OpenCode happy path (copy id, `resumedFrom`, new session id, source unchanged); OpenCode resume with empty vs non-empty continue; ineligible Pi/Claude/script (`not_resumable`); missing id; active source; busy provider id; bee gone; adapter changed; `command:` override; chain resume.
 - Console handler: OpenCode resume returns 201; non-resumable returns 400 `not_resumable`.
 - Static contract: the SPA Resume control accepts `opencode`.
 
-Do not require a real OpenCode install, `serve`, or network. A package-level pre-create seam is overridden in the adapter tests; manager tests use the existing recording session adapter.
+Do not require a real OpenCode install, `serve`, or network. A package-level pre-create seam is overridden in the adapter tests; manager tests use the existing recording session adapter and an `httptest` control server.
 
 ## Out of Scope
 
@@ -145,5 +158,6 @@ Do not require a real OpenCode install, `serve`, or network. A package-level pre
 - Verified against OpenCode `1.18.30`: `POST /session` returns `cost: 0`, `tokens: 0`, persists to `~/.local/share/opencode/opencode.db`, survives `serve` exit, and is readable via `opencode export` / `opencode session list --format json`.
 - `opencode run` refuses to create a session with no message ("You must provide a message or a command"); a throwaway AFK turn is **not** used as `create-chat`.
 - `--continue` exists but resumes the most recent session globally, so it is not a substitute for a deterministic resume-by-id.
-- Capturing the exit banner (`Continue opencode -s ses_…`) or polling `opencode session list` are possible fallbacks but are non-deterministic (ANSI, hub-only, timing); pre-create is the primary path.
+- The TUI ignores `--prompt` when `--session` is set (verified in `packages/tui/src/routes/home.tsx`: auto-submit runs only on the home route). A pre-created session launched with `--session … --prompt …` stayed empty; `POST /session/<id>/prompt_async` on the TUI's own `--port` server delivered the turn (verified: 2 messages recorded, full TUI streaming).
+- Capturing the exit banner (`Continue opencode -s ses_…`) or polling `opencode session list` are possible fallbacks but are non-deterministic (ANSI, hub-only, timing); pre-create + control-server delivery is the primary path.
 - Related: [026-opencode-adapter](./026-opencode-adapter.md), [025-cursor-session-resume](./025-cursor-session-resume.md), [021-provider-session-logs-export](./021-provider-session-logs-export.md), [interactive sessions](../guide/interactive-sessions.md).
