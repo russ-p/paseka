@@ -18,9 +18,10 @@ const (
 )
 
 var interactiveAdapters = map[string]bool{
-	"cursor": true,
-	"pi":     true,
-	"claude": true,
+	"cursor":   true,
+	"pi":       true,
+	"claude":   true,
+	"opencode": true,
 }
 
 // BeeView is a launchable interactive bee.

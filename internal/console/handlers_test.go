@@ -26,6 +26,49 @@ import (
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
+func TestBeesAPIReturnsProfiledOpenCodeBees(t *testing.T) {
+	repo := initConsoleRepo(t)
+	profilesDir := filepath.Join(repo, ".paseka", "profiles")
+	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "opencode.yaml"), []byte("adapter: opencode\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "opencode", FlagSet: true})
+	t.Cleanup(func() {
+		colony.SetProcessProfile(colony.ProfileSelection{})
+	})
+
+	ctxColony := setupConsoleHome(t, repo)
+
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("opencode", &outputSessionAdapter{})
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: mgr,
+	})
+
+	beesReq := httptest.NewRequest(http.MethodGet, "/api/bees", nil)
+	beesRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(beesRec, beesReq)
+	if beesRec.Code != http.StatusOK {
+		t.Fatalf("bees status = %d body=%s", beesRec.Code, beesRec.Body.String())
+	}
+	var bees []console.BeeView
+	if err := json.NewDecoder(beesRec.Body).Decode(&bees); err != nil {
+		t.Fatal(err)
+	}
+	if len(bees) != 1 || bees[0].Role != "scout" {
+		t.Fatalf("bees = %+v", bees)
+	}
+	if bees[0].Adapter != "opencode" {
+		t.Fatalf("scout adapter = %q, want opencode", bees[0].Adapter)
+	}
+}
+
 func TestRuntimeAPIHandlers(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)
