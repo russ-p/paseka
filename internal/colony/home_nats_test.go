@@ -81,6 +81,7 @@ func TestEnrichFromHomeLoadsNATSURLWhenContextOmitsHome(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 	t.Setenv("PASEKA_NATS_URL", "")
+	t.Setenv("PASEKA_PROFILE", "")
 	homeDir := filepath.Join(xdg, "paseka", slug)
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatal(err)

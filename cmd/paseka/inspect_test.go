@@ -156,6 +156,7 @@ func TestInspectUsageCLI(t *testing.T) {
 
 func initInspectFixtureRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	runGitInspect(t, dir, "init")

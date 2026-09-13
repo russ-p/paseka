@@ -65,6 +65,7 @@ func readTopologyGoldenMermaid(t *testing.T) string {
 
 func initTopologyFixtureRepoCLI(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGitCLI(t, dir, "init")
 	runGitCLI(t, dir, "config", "user.email", "test@test.com")

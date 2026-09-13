@@ -174,6 +174,7 @@ func TestBeeRunScoutUsesColonyRoot(t *testing.T) {
 
 func initBeeRunRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")
@@ -218,6 +219,7 @@ worktree: true
 
 func initMixedAdapterRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")

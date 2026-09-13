@@ -466,6 +466,7 @@ func TestHandlerProposalRejectShowsConfirm(t *testing.T) {
 
 func initTestRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")

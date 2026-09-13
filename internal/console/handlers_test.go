@@ -2019,6 +2019,7 @@ func TestColonyTopologyAPIHandler(t *testing.T) {
 
 func initTopologyFixtureRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")
@@ -2037,6 +2038,7 @@ func initTopologyFixtureRepo(t *testing.T) string {
 
 func initConsoleRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")

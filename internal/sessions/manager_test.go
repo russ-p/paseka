@@ -502,6 +502,7 @@ func TestColonySessionRegistry(t *testing.T) {
 
 func initMixedSessionRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")
@@ -574,6 +575,7 @@ func setupMixedSessionHome(t *testing.T, repo string) {
 
 func initSessionRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("PASEKA_PROFILE", "")
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")
