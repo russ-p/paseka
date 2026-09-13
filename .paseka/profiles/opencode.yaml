@@ -1,0 +1,9 @@
+adapter: opencode
+model_aliases:
+  small: opencode/big-pickle
+  low: opencode/big-pickle
+  medium: opencode/big-pickle
+  high: opencode/big-pickle
+  medium-gpt: opencode/big-pickle
+params:
+  output_format: json
