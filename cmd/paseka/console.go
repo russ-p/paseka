@@ -33,6 +33,10 @@ func newConsoleCmd() *cobra.Command {
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			go func() {
+				<-ctx.Done()
+				fmt.Println("Shutting down Queen Console…")
+			}()
 			if err := srv.Run(ctx); err != nil {
 				return err
 			}
