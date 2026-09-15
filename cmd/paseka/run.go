@@ -38,7 +38,12 @@ func newRunCmd() *cobra.Command {
 			log := logging.Component("runtime")
 			log.Info("hive runtime started", logging.F("pid", strconv.Itoa(os.Getpid())))
 			log.Info("press Ctrl+C to stop")
-			return reactor.Run(ctx)
+			err = reactor.Run(ctx)
+			if ctx.Err() != nil {
+				log.Info("hive runtime stopped")
+				return nil
+			}
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
