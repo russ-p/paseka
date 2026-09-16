@@ -1006,9 +1006,24 @@ function stopRuntimePolling() {
   }
 }
 
+// isStaleRuntimeFrame reports whether an SSE runtime frame was snapshotted
+// before the last explicit start/stop lifecycle mutation and would regress the
+// indicator (e.g. a "running" frame computed mid-stop arriving after the stop
+// response). Genuine restarts carry a startedAt after the mutation epoch.
+function isStaleRuntimeFrame(frame) {
+  if (!frame || frame.status !== 'running') return false;
+  const cur = state.runtime || {};
+  const curStatus = (cur.status || '').toLowerCase();
+  if (curStatus !== 'stopped' && curStatus !== 'stopping') return false;
+  const epoch = state.runtimeEpoch || 0;
+  if (!epoch) return false;
+  const started = frame.startedAt ? new Date(frame.startedAt).getTime() : NaN;
+  return !Number.isNaN(started) && started < epoch;
+}
+
 function applyChromeFrame(frame) {
   if (!frame || typeof frame !== 'object') return;
-  if (frame.runtime) state.runtime = frame.runtime;
+  if (frame.runtime && !isStaleRuntimeFrame(frame.runtime)) state.runtime = frame.runtime;
   if (frame.agents) state.agents = frame.agents;
   if (frame.host) {
     const prev = state.system || {};
@@ -4707,6 +4722,7 @@ el.resumeBtn?.addEventListener('click', async () => {
 
 el.runtimeStartBtn.addEventListener('click', async () => {
   state.runtimeBusy = true;
+  state.runtimeEpoch = Date.now();
   renderRuntime();
   try {
     state.runtime = await api('/api/runtime/start', { method: 'POST' });
@@ -4724,6 +4740,7 @@ el.runtimeStartBtn.addEventListener('click', async () => {
 el.runtimeStopBtn.addEventListener('click', async () => {
   if (!confirm('Stop the hive runtime? In-flight dispatches may be interrupted.')) return;
   state.runtimeBusy = true;
+  state.runtimeEpoch = Date.now();
   renderRuntime();
   try {
     state.runtime = await api('/api/runtime/stop', { method: 'POST' });

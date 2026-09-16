@@ -1,11 +1,13 @@
 package homestate
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
@@ -284,59 +286,96 @@ func ListSessions(slug string) ([]SessionEntry, error) {
 	return st.Sessions, nil
 }
 
-// RegisterRuntime records the active hive runtime process.
-func RegisterRuntime(slug string, entry RuntimeEntry) error {
-	st, err := LoadState(slug)
+// withStateLock serializes read-modify-write access to state.json across
+// processes. The hive runtime heartbeat (paseka run) and the console
+// supervisor mutate the shared runtime registry concurrently; without a lock a
+// lost update can resurrect status:"running" in the middle of a stop. mutate
+// reports whether the state changed and must be written back.
+func withStateLock(slug string, mutate func(st *State) bool) error {
+	path, err := statePath(slug)
 	if err != nil {
 		return err
 	}
-	st.Runtime = &entry
-	return SaveState(slug, st)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("homestate: lock %s: %w", path, err)
+	}
+	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var st State
+	if len(bytes.TrimSpace(data)) > 0 {
+		if err := json.Unmarshal(data, &st); err != nil {
+			return fmt.Errorf("homestate: parse state: %w", err)
+		}
+	}
+	if !mutate(&st) {
+		return nil
+	}
+	out, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+	return os.WriteFile(path, out, 0o644)
+}
+
+// RegisterRuntime records the active hive runtime process.
+func RegisterRuntime(slug string, entry RuntimeEntry) error {
+	return withStateLock(slug, func(st *State) bool {
+		st.Runtime = &entry
+		return true
+	})
 }
 
 // TouchRuntimeHeartbeat updates lastHeartbeatAt for the registered runtime when pid matches.
+// The heartbeat never owns lifecycle status: once a stop has been recorded, it
+// must not re-introduce "running".
 func TouchRuntimeHeartbeat(slug string, pid int, at time.Time) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	if st.Runtime == nil || st.Runtime.PID != pid {
-		return nil
-	}
-	st.Runtime.LastHeartbeatAt = at
-	if st.Runtime.Status == "" {
-		st.Runtime.Status = "running"
-	}
-	return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		if st.Runtime == nil || st.Runtime.PID != pid {
+			return false
+		}
+		st.Runtime.LastHeartbeatAt = at
+		if st.Runtime.Status == "" {
+			st.Runtime.Status = "running"
+		}
+		return true
+	})
 }
 
 // UnregisterRuntimeIfPID clears the runtime registry when the stored pid matches.
 func UnregisterRuntimeIfPID(slug string, pid int) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	if st.Runtime == nil || st.Runtime.PID != pid {
-		return nil
-	}
-	st.Runtime = nil
-	return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		if st.Runtime == nil || st.Runtime.PID != pid {
+			return false
+		}
+		st.Runtime = nil
+		return true
+	})
 }
 
 // ClearRuntime removes any runtime registry entry.
 func ClearRuntime(slug string) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	if st.Runtime == nil {
-		return nil
-	}
-	st.Runtime = nil
-	return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		if st.Runtime == nil {
+			return false
+		}
+		st.Runtime = nil
+		return true
+	})
 }
 
-// RuntimeRegistry returns the persisted runtime entry, if any.
+// RuntimeRegistry returns the persisted runtime entry, if any. It reads
+// without the write lock so a missing registry resolves to nil, matching
+// LoadState's tolerance of a yet-uncreated state.json.
 func RuntimeRegistry(slug string) (*RuntimeEntry, error) {
 	st, err := LoadState(slug)
 	if err != nil {

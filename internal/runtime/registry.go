@@ -91,7 +91,13 @@ func ResolveStatus(slug string) (RuntimeStatus, error) {
 		status = RuntimeStatusRunning
 	}
 	if !alive {
-		status = RuntimeStatusStale
+		if status == RuntimeStatusStopping {
+			// A stop in progress that has finished dying resolves to stopped,
+			// not stale; the registry entry is removed right after.
+			status = RuntimeStatusStopped
+		} else {
+			status = RuntimeStatusStale
+		}
 	} else if status == RuntimeStatusStopping {
 		// keep stopping while process is still alive
 	} else {

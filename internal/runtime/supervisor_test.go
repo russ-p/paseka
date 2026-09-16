@@ -141,6 +141,49 @@ func TestSupervisorStopClearsStale(t *testing.T) {
 	}
 }
 
+func TestResolveStatusStopping(t *testing.T) {
+	ctx := setupSupervisorHome(t)
+	now := time.Now().UTC()
+	if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
+		PID:        os.Getpid(),
+		StartedAt:  now,
+		ColonyRoot: ctx.ColonyRoot,
+		Status:     runtime.RuntimeStatusStopping,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = homestate.ClearRuntime(ctx.Slug) })
+
+	st, err := runtime.ResolveStatus(ctx.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Status != runtime.RuntimeStatusStopping || !st.Alive {
+		t.Fatalf("stopping = %+v", st)
+	}
+}
+
+func TestResolveStatusDeadStoppingIsStopped(t *testing.T) {
+	ctx := setupSupervisorHome(t)
+	if err := homestate.RegisterRuntime(ctx.Slug, homestate.RuntimeEntry{
+		PID:        99999999,
+		StartedAt:  time.Now().UTC(),
+		ColonyRoot: ctx.ColonyRoot,
+		Status:     runtime.RuntimeStatusStopping,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = homestate.ClearRuntime(ctx.Slug) })
+
+	st, err := runtime.ResolveStatus(ctx.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Status != runtime.RuntimeStatusStopped || st.Alive {
+		t.Fatalf("dead stopping = %+v, want stopped", st)
+	}
+}
+
 func setupSupervisorHome(t *testing.T) colony.Context {
 	t.Helper()
 	dir := t.TempDir()

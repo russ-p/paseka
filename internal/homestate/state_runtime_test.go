@@ -94,6 +94,48 @@ func TestRuntimeRegistryStalePID(t *testing.T) {
 	}
 }
 
+func TestRuntimeHeartbeatDoesNotResurrectRunningDuringStop(t *testing.T) {
+	slug, _ := setupStateHome(t)
+	now := time.Now().UTC()
+	if err := homestate.RegisterRuntime(slug, homestate.RuntimeEntry{
+		PID:             os.Getpid(),
+		StartedAt:       now,
+		ColonyRoot:      "/tmp/colony",
+		Status:          "running",
+		LastHeartbeatAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := homestate.RuntimeRegistry(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Status = "stopping"
+	if err := homestate.RegisterRuntime(slug, *st); err != nil {
+		t.Fatal(err)
+	}
+
+	later := now.Add(5 * time.Second)
+	if err := homestate.TouchRuntimeHeartbeat(slug, os.Getpid(), later); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := homestate.RuntimeRegistry(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected runtime entry")
+	}
+	if got.Status != "stopping" {
+		t.Fatalf("status after heartbeat = %q, want stopping", got.Status)
+	}
+	if !got.LastHeartbeatAt.Equal(later) {
+		t.Fatalf("heartbeat = %v want %v", got.LastHeartbeatAt, later)
+	}
+}
+
 func setupStateHome(t *testing.T) (string, string) {
 	t.Helper()
 	slug := "state-test"
