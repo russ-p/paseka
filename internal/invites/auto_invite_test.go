@@ -209,9 +209,13 @@ func TestAutoInviteEmptyRulesNoInvite(t *testing.T) {
 
 type stubPublisher struct {
 	published []protocol.Event
+	err       error
 }
 
 func (s *stubPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.published = append(s.published, ev)
 	return nil
 }

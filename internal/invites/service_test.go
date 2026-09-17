@@ -1,6 +1,7 @@
 package invites
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -45,7 +46,7 @@ func TestRecordValidatesPayload(t *testing.T) {
 	}
 }
 
-func TestRejectPendingInviteRequiresBus(t *testing.T) {
+func TestRejectPendingInviteFailsWhenPublishFails(t *testing.T) {
 	repo := initTestRepo(t)
 	res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo})
 	if err != nil {
@@ -61,10 +62,14 @@ func TestRejectPendingInviteRequiresBus(t *testing.T) {
 	if err := homestate.UpsertInvite(res.Slug, entry); err != nil {
 		t.Fatal(err)
 	}
-	svc := &Service{Colony: colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot}}
+	publishErr := errors.New("bus unavailable")
+	svc := &Service{
+		Colony:    colony.Context{Slug: res.Slug, ColonyRoot: res.ColonyRoot},
+		Publisher: &stubPublisher{err: publishErr},
+	}
 	_, err = svc.Reject(t.Context(), "inv-test", false)
-	if err == nil {
-		t.Fatal("expected error without bus")
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("err = %v, want %v", err, publishErr)
 	}
 }
 
