@@ -245,7 +245,7 @@ func buildArgs(req adapters.RunRequest, prompt, systemFile, sessionDir string) [
 		args = append(args, "--api-key", p.APIKey)
 	}
 	if prompt != "" {
-		args = append(args, prompt)
+		args = append(args, "--", prompt)
 	}
 	return args
 }

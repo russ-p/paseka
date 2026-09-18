@@ -1,0 +1,9 @@
+adapter: pi
+model_aliases:
+  small: deepseek/deepseek-v4-flash
+  low: inception/mercury-2.5
+  medium: deepseek/deepseek-v4-flash
+  high: deepseek/deepseek-v4-flash
+  medium-gpt: inception/mercury-2.5
+params:
+  output_format: json

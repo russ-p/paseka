@@ -60,7 +60,7 @@ func TestBuildArgs(t *testing.T) {
 		"--thinking", "high",
 		"--plan",
 		"--api-key", "secret",
-		"implement feature",
+		"--", "implement feature",
 	}
 	if len(args) != len(want) {
 		t.Fatalf("got %d args, want %d: %v", len(args), len(want), args)

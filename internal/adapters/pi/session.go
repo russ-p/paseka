@@ -99,7 +99,7 @@ func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt, syste
 		args = append(args, "--api-key", p.APIKey)
 	}
 	if prompt != "" {
-		args = append(args, prompt)
+		args = append(args, "--", prompt)
 	}
 	return args
 }
