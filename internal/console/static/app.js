@@ -276,6 +276,7 @@ const el = {
   terminalWrap: document.getElementById('terminal-wrap'),
   terminalContainer: document.getElementById('terminal-container'),
   terminalStatus: document.getElementById('terminal-status'),
+  termEngineBtn: document.getElementById('term-engine-btn'),
   terminalWideBtn: document.getElementById('terminal-wide-btn'),
   transcriptWrap: document.getElementById('transcript-wrap'),
   transcriptHeading: document.getElementById('transcript-heading'),
@@ -1993,6 +1994,23 @@ function setTerminalStatus(text) {
   }
 }
 
+function renderTermEngineBtn() {
+  const btn = el.termEngineBtn;
+  if (!btn || !window.SessionTerminal) return;
+  const engine = window.SessionTerminal.getEngine();
+  const isGhostty = engine === 'ghostty';
+  btn.textContent = `engine: ${engine}`;
+  btn.setAttribute('aria-pressed', String(isGhostty));
+  btn.classList.toggle('ghostty', isGhostty);
+}
+
+function toggleTermEngine() {
+  if (!window.SessionTerminal) return;
+  const next = window.SessionTerminal.getEngine() === 'ghostty' ? 'xterm' : 'ghostty';
+  window.SessionTerminal.setEngine(next);
+  renderTermEngineBtn();
+}
+
 function setTerminalWide(wide) {
   state.terminalWide = !!wide;
   if (el.sessionsLayout) {
@@ -2598,11 +2616,17 @@ function attachSessionTerminal(session) {
         startSessionPolling();
       }
     },
-  });
-  setTerminalStatus('connected');
-  requestAnimationFrame(() => {
-    window.SessionTerminal.sendResize?.();
-  });
+  })
+    .then(() => {
+      setTerminalStatus('connected');
+      requestAnimationFrame(() => {
+        window.SessionTerminal.sendResize?.();
+      });
+    })
+    .catch((err) => {
+      console.error('Failed to start terminal:', err);
+      setTerminalStatus(`error — ${err && err.message ? err.message : String(err)}`);
+    });
 }
 
 function renderSessionDetail(session) {
@@ -4682,6 +4706,12 @@ el.refreshBtn.addEventListener('click', () => {
 el.terminalWideBtn?.addEventListener('click', () => {
   setTerminalWide(!state.terminalWide);
 });
+
+el.termEngineBtn?.addEventListener('click', toggleTermEngine);
+if (window.SessionTerminal) {
+  window.SessionTerminal.setOnEngineChange(() => renderTermEngineBtn());
+  renderTermEngineBtn();
+}
 
 el.runsRefreshBtn.addEventListener('click', () => {
   loadRuns().catch(console.error);

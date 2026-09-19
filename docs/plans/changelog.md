@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Queen Console selectable terminal engine
+
+Queen Console session views can now switch terminal engines per browser. xterm stays the stable default; the experimental **Ghostty WebGPU/WASM** engine is lazy-loaded on demand (vendored bundle, dynamic `import()`) and toggled from the session terminal header, with the choice remembered in `localStorage`. Switching engines while attached re-attaches the same session to the new renderer, and an async-recreate race guard keeps a stale load from closing the current session's relay or streaming a previous session's PTY. If the Ghostty bundle fails to load, the Console falls back to xterm for that session and clears the persisted choice.
+
+- Spec: [032-queen-console-term-engine](../specs/032-queen-console-term-engine.md)
+- Canonical: [Queen Console](../guide/queen-console.md)
+
 ## 2026-09 — Resume OpenCode HITL sessions
 
 A new OpenCode HITL session now pre-creates its provider chat before the TUI starts — `opencode serve` + `POST /session`, the OpenCode analog of Cursor's `create-chat`, with **no model turn and no cost** — and launches the TUI with `--session <ses_*>`, storing `ses_*` as `providerSessionId`. Because the OpenCode TUI ignores `--prompt` when `--session` is set, the kickoff (and any Resume continue line) is delivered out-of-band through the TUI's own loopback control server (`--port` + `/session/<id>/prompt_async`), so the first turn actually lands in the pre-created chat. A finished OpenCode HITL session can then **Resume** in Queen Console or via `paseka session resume`: a new Paseka session on the same Flight Trail that copies the id, records `resumedFrom`, skips honey, and fails closed when ineligible. Pre-create failure degrades to a normal TUI launch; Pi/Claude/script sources stay ineligible (the ineligible reason is now `not_resumable`).

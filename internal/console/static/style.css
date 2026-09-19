@@ -1314,6 +1314,18 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 0.8rem;
 }
 
+.term-engine-btn {
+  width: auto;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.term-engine-btn.ghostty {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 .terminal-container {
   width: 100%;
   min-height: 280px;
@@ -1327,6 +1339,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .terminal-container .xterm {
   height: 100%;
+}
+
+/* ghostty-web renders a canvas + hidden textarea inside the container. */
+.terminal-container.ghostty {
+  overflow: hidden;
+}
+.terminal-container.ghostty canvas {
+  display: block;
 }
 
 /* Full-page-wide terminal: hide launch/list, expand detail + terminal height. */

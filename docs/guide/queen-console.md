@@ -87,6 +87,13 @@ never pushes the worktree head; PR publish does.
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
 
+The terminal rendered in a session detail view uses **xterm** by default and
+switches to the experimental **Ghostty** WebGPU/WASM engine via the
+`engine: xterm` button in the terminal header. The choice is remembered per
+browser; switching engines while attached re-attaches the same session. If
+the Ghostty bundle fails to load, the Console falls back to xterm for that
+session. See [Spec 032](../specs/032-queen-console-term-engine.md).
+
 CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
 

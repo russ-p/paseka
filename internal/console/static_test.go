@@ -590,6 +590,96 @@ func TestCytoscapeVendorStaticContract(t *testing.T) {
 	}
 }
 
+func TestGhosttyWebVendorStaticContract(t *testing.T) {
+	files := []string{
+		"static/lib/ghostty-web/ghostty-web.js",
+		"static/lib/ghostty-web/vite-browser-external.js",
+		"static/lib/ghostty-web/package.json",
+	}
+	for _, path := range files {
+		if _, err := staticFiles.ReadFile(path); err != nil {
+			t.Fatalf("missing vendored asset %s: %v", path, err)
+		}
+	}
+
+	pkg, err := staticFiles.ReadFile("static/lib/ghostty-web/package.json")
+	if err != nil {
+		t.Fatalf("read ghostty-web package.json: %v", err)
+	}
+	if !strings.Contains(string(pkg), `"version": "0.4.0"`) {
+		t.Fatal("ghostty-web bundle must be version 0.4.0")
+	}
+
+	js, err := staticFiles.ReadFile("static/lib/ghostty-web/ghostty-web.js")
+	if err != nil {
+		t.Fatalf("read ghostty-web.js: %v", err)
+	}
+	src := string(js)
+	if !strings.Contains(src, "data:application/wasm;base64,") {
+		t.Fatal("ghostty-web.js must embed the WASM module inline (base64)")
+	}
+	if !strings.Contains(src, " as Terminal") {
+		t.Fatal("ghostty-web.js must export Terminal")
+	}
+
+	terminalJS, err := staticFiles.ReadFile("static/terminal.js")
+	if err != nil {
+		t.Fatalf("read terminal.js: %v", err)
+	}
+	tjs := string(terminalJS)
+	for _, needle := range []string{
+		"GHOSTTY_MODULE_URL",
+		"/lib/ghostty-web/ghostty-web.js",
+		"setEngine",
+		"getEngine",
+	} {
+		if !strings.Contains(tjs, needle) {
+			t.Fatalf("terminal.js missing %s", needle)
+		}
+	}
+
+	html, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	if !strings.Contains(string(html), `id="term-engine-btn"`) {
+		t.Fatal("index.html must include terminal engine toggle button")
+	}
+
+	jsApp, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	appSrc := string(jsApp)
+	for _, needle := range []string{
+		"termEngineBtn",
+		"toggleTermEngine",
+		"renderTermEngineBtn",
+	} {
+		if !strings.Contains(appSrc, needle) {
+			t.Fatalf("app.js missing %s", needle)
+		}
+	}
+
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/lib/ghostty-web/ghostty-web.js", nil)
+	spaHandler(staticFS).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /lib/ghostty-web/ghostty-web.js status = %d", rec.Code)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/javascript") && !strings.HasPrefix(ct, "application/javascript") {
+		t.Fatalf("GET /lib/ghostty-web/ghostty-web.js Content-Type = %q, want a JS MIME type", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "data:application/wasm;base64,") {
+		t.Fatal("HTTP response must serve embedded ghostty-web bundle")
+	}
+}
+
 func TestEmbeddedStaticOmitsVendorPathSegment(t *testing.T) {
 	err := fs.WalkDir(staticFiles, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
