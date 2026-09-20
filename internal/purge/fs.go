@@ -62,6 +62,7 @@ type PurgePlan struct {
 
 // BusPurgeResult reports bus artifacts removed for one trace.
 type BusPurgeResult struct {
+	TraceID        string
 	KeysRemoved    []string
 	EventsRemoved  int
 	ObjectsRemoved []string

@@ -35,6 +35,7 @@ type PurgeTraceResult struct {
 type TracePurger interface {
 	PlanPurgeTrace(traceID string) (PurgeTracePlan, error)
 	PurgeTrace(traceID string) (PurgeTraceResult, error)
+	ListTraceActivity() ([]TraceActivity, error)
 }
 
 var _ TracePurger = (*Client)(nil)
