@@ -40,5 +40,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [032-queen-console-term-engine](../specs/032-queen-console-term-engine.md) | Draft | Queen Console session view engine toggle: xterm (stable, default) vs experimental Ghostty WebGPU/WASM, browser-local, async-recreate race guarded |
 | [033-cli-prune](../specs/033-cli-prune.md) | Implemented | `paseka prune`: age-based cleanup of worktrees and run data (default 14 days) with optional correlatable NATS purge |
 | [034-swarm-mode](../specs/034-swarm-mode.md) | Draft | Best-of-N swarm: N variant adapter runs per task (own worktrees), `swarm.ready` + judge `swarm.winner`, shadow mode, `paseka swarm stats` |
+| [035-queen-console-redesign](../specs/035-queen-console-redesign.md) | Draft | Svelte 5 + Tailwind v4 + DaisyUI rewrite; right menu, top status panel, typed routes, theme support |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
