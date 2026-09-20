@@ -38,5 +38,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [030-opencode-session-resume](../specs/030-opencode-session-resume.md) | Implemented | OpenCode HITL pre-create (`opencode serve` + `POST /session`) and resume via stored `providerSessionId` (`--session`); Console/CLI resume accepts OpenCode next to Cursor |
 | [031-task-scheduler](../specs/031-task-scheduler.md) | Draft | Colony time slots (cron/window) for deferred task execution; reactor scheduler; CLI/Console override |
 | [032-queen-console-term-engine](../specs/032-queen-console-term-engine.md) | Draft | Queen Console session view engine toggle: xterm (stable, default) vs experimental Ghostty WebGPU/WASM, browser-local, async-recreate race guarded |
+| [033-cli-prune](../specs/033-cli-prune.md) | Implemented | `paseka prune`: age-based cleanup of worktrees and run data (default 14 days) with optional correlatable NATS purge |
 
 Deferred ideas (not specs): [Backlog](backlog.md).

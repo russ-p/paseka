@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Age-based prune
+
+`paseka prune` adds an age-aware sibling to `paseka purge`: it removes `.paseka/worktrees/` and `.paseka/runs/` trace directories whose last activity predates a retention period (default **14 days**, `--older-than 14d|2w|336h`) instead of wiping every trace. Filesystem flags mirror purge (`--runs`, `--worktrees`, `--all`, `--yes`, `-C`), and a plan is shown before deleting. Worktrees with uncommitted changes are never auto-removed. With `--bus`, prune also removes task-ledger KV, stream events, and artifacts for correlatable traces, using ledger task activity to protect traces whose files have gone quiet while their tasks were touched recently, and cleaning up stale ledger-only traces.
+
+- Spec: [033-cli-prune](../specs/033-cli-prune.md)
+- Canonical: [CLI](../guide/cli.md) (`paseka prune`)
+
 ## 2026-09 — Resume OpenCode HITL sessions
 
 A new OpenCode HITL session now pre-creates its provider chat before the TUI starts — `opencode serve` + `POST /session`, the OpenCode analog of Cursor's `create-chat`, with **no model turn and no cost** — and launches the TUI with `--session <ses_*>`, storing `ses_*` as `providerSessionId`. Because the OpenCode TUI ignores `--prompt` when `--session` is set, the kickoff (and any Resume continue line) is delivered out-of-band through the TUI's own loopback control server (`--port` + `/session/<id>/prompt_async`), so the first turn actually lands in the pre-created chat. A finished OpenCode HITL session can then **Resume** in Queen Console or via `paseka session resume`: a new Paseka session on the same Flight Trail that copies the id, records `resumedFrom`, skips honey, and fails closed when ineligible. Pre-create failure degrades to a normal TUI launch; Pi/Claude/script sources stay ineligible (the ineligible reason is now `not_resumable`).

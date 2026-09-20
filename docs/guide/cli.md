@@ -116,7 +116,8 @@ paseka
 ├── gate
 │   └── telegram
 ├── export
-└── purge
+├── purge
+└── prune
 ```
 
 ---
@@ -991,6 +992,41 @@ paseka purge --bus --trace my-trace --reseed-energy --yes
 
 # Eval case reset (filesystem + bus for one fixed trace)
 paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
+```
+
+---
+
+## `paseka prune`
+
+Remove worktrees and run data **older than a retention period** (default 14 days). Without `--yes`, shows a plan and asks for confirmation.
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--older-than` | | Retention period: `14d`, `2w`, or any Go duration such as `336h` (default `14d`) |
+| `--runs` | | Prune `.paseka/runs/` trace directories last used before the cutoff |
+| `--worktrees` | | Prune `.paseka/worktrees/` and associated git worktrees last used before the cutoff |
+| `--bus` | | Also remove JetStream task-ledger KV, stream events, and artifacts for correlatable traces (requires NATS) |
+| `--all` | | Prune runs and worktrees (does **not** include `--bus`) |
+| `--yes` | `-y` | Skip confirmation prompt |
+| `--path` | `-C` | Colony resolution start directory |
+
+When neither `--runs` nor `--worktrees` is given (and `--bus` is not the only target), both are pruned. `--bus` is never implied by `--all` — pass it explicitly.
+
+**Age is last activity, not creation time:** a trace is eligible when its newest filesystem activity predates the cutoff. A worktree is protected when a run for the same trace was active recently or when it has **uncommitted changes**. When `--bus` is set, the newest task-ledger `updatedAt` overrides stale file mtimes, so a trace whose files have been idle but whose tasks were touched recently is kept.
+
+**`--bus` correlation:** prune lists task-ledger KV traces and removes the ones that are stale, including ledger-only traces with no filesystem directory left. A ledger entry with no task timestamps cannot be correlated and is skipped. Requires a configured `nats.url`.
+
+**Standing checkpoints:** `prune --runs` removes `.paseka/runs/<traceId>/`, including the trail comb. Do not prune a standing `traceId` unless you intend to wipe skip lists; keep durable facts in git.
+
+```bash
+# Remove runs and worktrees idle for more than 14 days
+paseka prune
+
+# Reclaim run logs but keep worktrees for 30 days
+paseka prune --runs --older-than 30d
+
+# Age-aware filesystem and bus cleanup in a scheduled job
+paseka prune --all --bus --older-than 2w --yes
 ```
 
 ---
