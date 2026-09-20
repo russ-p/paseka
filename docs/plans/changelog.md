@@ -9,6 +9,12 @@ Shipped features worth calling out. Design records live under `docs/specs/` in t
 - Spec: [033-cli-prune](../specs/033-cli-prune.md)
 - Canonical: [CLI](../guide/cli.md) (`paseka prune`)
 
+## 2026-09 — Clean shutdown and serialized runtime state
+
+Runtime writes to home `state.json` are serialized so a stopped bee can never flip back to running from a stale write, and `paseka run` treats an OS signal (Ctrl+C) as a clean exit instead of a failed run — operators can shut the hive down without false error states. `paseka console` prints a shutdown notice on Ctrl+C.
+
+- Canonical: [CLI](../guide/cli.md) (`paseka run`, `paseka console`)
+
 ## 2026-09 — Resume OpenCode HITL sessions
 
 A new OpenCode HITL session now pre-creates its provider chat before the TUI starts — `opencode serve` + `POST /session`, the OpenCode analog of Cursor's `create-chat`, with **no model turn and no cost** — and launches the TUI with `--session <ses_*>`, storing `ses_*` as `providerSessionId`. Because the OpenCode TUI ignores `--prompt` when `--session` is set, the kickoff (and any Resume continue line) is delivered out-of-band through the TUI's own loopback control server (`--port` + `/session/<id>/prompt_async`), so the first turn actually lands in the pre-created chat. A finished OpenCode HITL session can then **Resume** in Queen Console or via `paseka session resume`: a new Paseka session on the same Flight Trail that copies the id, records `resumedFrom`, skips honey, and fails closed when ineligible. Pre-create failure degrades to a normal TUI launch; Pi/Claude/script sources stay ineligible (the ineligible reason is now `not_resumable`).
@@ -27,7 +33,7 @@ Deferred from that work: per-cue delivery, auto-detect forge, a dedicated `pr_op
 
 ## 2026-09 — Config profiles
 
-A Beekeeper can run the same colony through a named overlay (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`) without rewriting committed bee YAML. Global `adapter:` replaces LLM bees (script and `command:` roles stay put unless a per-bee exception says otherwise). Unknown names fail closed and list what exists. `--no-profile` ignores a sticky default. Queen Console inherits the process overlay; there is no in-UI switcher.
+A Beekeeper can run the same colony through a named overlay (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`) without rewriting committed bee YAML. Global `adapter:` replaces LLM bees (script and `command:` roles stay put unless a per-bee exception says otherwise). Unknown names fail closed and list what exists. `--no-profile` ignores a sticky default. Queen Console inherits the process overlay; there is no in-UI switcher. The Pi adapter ships a committed `.paseka/profiles/pi.yaml` (`--profile pi`) and no longer swallows or mispasses its prompt argument.
 
 - Spec: [027-config-profiles](../specs/027-config-profiles.md)
 - Canonical: [Colony layout](../guide/colony-layout.md), [Bee config](../guide/bee-config.md), [CLI](../guide/cli.md) (global `--profile`), [Architecture overview](../architecture/overview.md)
