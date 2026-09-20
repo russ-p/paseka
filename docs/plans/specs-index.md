@@ -39,5 +39,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [031-task-scheduler](../specs/031-task-scheduler.md) | Draft | Colony time slots (cron/window) for deferred task execution; reactor scheduler; CLI/Console override |
 | [032-queen-console-term-engine](../specs/032-queen-console-term-engine.md) | Draft | Queen Console session view engine toggle: xterm (stable, default) vs experimental Ghostty WebGPU/WASM, browser-local, async-recreate race guarded |
 | [033-cli-prune](../specs/033-cli-prune.md) | Implemented | `paseka prune`: age-based cleanup of worktrees and run data (default 14 days) with optional correlatable NATS purge |
+| [034-swarm-mode](../specs/034-swarm-mode.md) | Draft | Best-of-N swarm: N variant adapter runs per task (own worktrees), `swarm.ready` + judge `swarm.winner`, shadow mode, `paseka swarm stats` |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
