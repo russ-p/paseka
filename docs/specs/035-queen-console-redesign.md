@@ -8,7 +8,7 @@ Initial design spec for migrating Queen Console to Svelte 5 + Tailwind v4 + Dais
 ## Problem Statement
 
 The current Queen Console uses an older frontend stack that limits developer experience, theming flexibility, and component composability. Operators need a modern, responsive interface with:
-- Consistent theming (light/dark/custom) via DaisyUI
+- Consistent theming (light/dark/custom) via DaisyUI, including Catppuccin Latte, Frappé, Macchiato, Mocha
 - Clear navigation with right-side menu and top status panel
 - Dedicated routes for Dashboard, Traces, Bees, Worktrees, and Settings
 - Better TypeScript integration and component reuse
@@ -39,7 +39,7 @@ Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI fo
 ## Implementation Decisions
 
 - **Framework**: Svelte 5 (runes mode) with SvelteKit for file-based routing, SSR disabled (SPA mode), adapter-static for embedding in Go binary.
-- **Styling**: Tailwind v4 (CSS-first config) + DaisyUI 5 for themed components. DaisyUI `themes` array in `tailwind.config.js` includes `light`, `dark`, `cupcake`, `bumblebee`, `emerald`, `corporate`, `synthwave`, `retro`, `cyberpunk`, `valentine`, `halloween`, `garden`, `forest`, `aqua`, `lofi`, `pastel`, `fantasy`, `wireframe`, `black`, `luxury`, `dracula`, `cmyk`.
+- **Styling**: Tailwind v4 (CSS-first config) + DaisyUI 5 for themed components. DaisyUI `themes` array in `tailwind.config.js` includes built-in themes (`light`, `dark`, `cupcake`, `bumblebee`, `emerald`, `corporate`, `synthwave`, `retro`, `cyberpunk`, `valentine`, `halloween`, `garden`, `forest`, `aqua`, `lofi`, `pastel`, `fantasy`, `wireframe`, `black`, `luxury`, `dracula`, `cmyk`) plus custom Catppuccin themes: `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha` (defined in `tailwind.config.js` via `daisyui.themes` extension).
 - **Theme switching**: `data-theme` attribute on `<html>` toggled via Svelte store persisted to localStorage; DaisyUI handles CSS variables automatically.
 - **Layout shell**: `+layout.svelte` renders `<Header />` (top panel), `<RightMenu />` (slide-out), `<main>` slot. Right menu uses `<aside>` with `fixed inset-y-0 right-0 w-64 transform transition-transform` and `translate-x-full` when closed; mobile breakpoint switches to bottom sheet.
 - **Top panel**: Shows NATS status (connected/reconnecting/disconnected), active trace count, Queen version, current user/colony. Uses WebSocket subscription to `paseka.console.status` subject for live updates.
@@ -71,7 +71,7 @@ Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI fo
 
 ## Further Notes
 
-- DaisyUI theme list can be trimmed to 6–8 curated themes before release to reduce bundle size.
+- DaisyUI theme list can be trimmed to 6–8 curated themes before release to reduce bundle size; Catppuccin variants are strong candidates for defaults.
 - Consider `svelte-put/clickaway` and `svelte-put/escape` for menu/drawer interactions.
 - Go binary size impact: embedded SPA ~2–3 MB gzipped; acceptable for single-binary distribution.
 - Follow-up spec may cover "Console Plugin API" once shell is stable.
