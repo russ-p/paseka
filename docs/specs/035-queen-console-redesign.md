@@ -35,6 +35,7 @@ Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI fo
 13. As a developer, I want TypeScript types generated from the Go event contracts (SIGNAL, INSIGHT, MUTATION, VERIFICATION), so that frontend consumes typed payloads.
 14. As a developer, I want a component storybook or visual regression setup, so that UI changes are reviewed consistently.
 15. As a Beekeeper, I want the console to be responsive down to 768px width, collapsing the right menu into a bottom sheet on mobile, so that I can check status on a phone.
+16. As a Beekeeper, I want forms (new task, new bee, new worktree, settings edits) to open in a modal or drawer triggered by a button, not consume a full column, so that I keep context of the list view while creating or editing.
 
 ## Implementation Decisions
 
@@ -47,6 +48,7 @@ Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI fo
 - **API layer**: Central `api.ts` with typed fetch wrappers around `/api/v1/*` endpoints. Generates TypeScript types from Go `internal/console/api` via `go run ./cmd/paseka-gen-types` during build.
 - **State management**: Svelte 5 runes (`$state`, `$derived`, `$effect`) for local component state; cross-route stores in `stores/` (e.g., `themeStore`, `statusStore`, `traceStore`).
 - **Component library**: `lib/components/` with `DataTable`, `StatusBadge`, `SignalCard`, `TraceRow`, `BeeCard`, `WorktreeCard`, `Modal`, `Drawer`, `Toast`, `ThemeSelect`. All styled with DaisyUI classes + Tailwind utilities.
+- **Form pattern**: Create/edit forms (new task, bee, worktree, settings) use `<Modal>` or `<Drawer>` components triggered by action buttons; they never replace the list/grid column. `Modal` for focused, short forms; `Drawer` (slide-from-right) for multi-step or wider forms. Both trap focus, support ESC to close, and return focus to trigger on dismiss.
 - **Build integration**: `pnpm build` outputs to `internal/console/embed/dist`; Go `//go:embed` serves assets. `paseka console` runs `pnpm dev` in watch mode for development.
 - **Testing**: Vitest + @testing-library/svelte for unit/component tests; Playwright for E2E against running `paseka console`. Prior art: `internal/console/api/*_test.go` patterns.
 - **Accessibility**: Semantic HTML, ARIA labels on icon-only buttons, focus-visible outlines, color-contrast compliant DaisyUI themes.
@@ -56,6 +58,7 @@ Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI fo
 - Unit test each store (`themeStore`, `statusStore`) for persistence, hydration, and reactive updates.
 - Component test `RightMenu` open/close, keyboard navigation, mobile breakpoint toggle.
 - Component test `Header` status indicators reflect WebSocket events.
+- Component test `Modal`/`Drawer` form pattern: open on button click, trap focus, ESC closes, focus returns to trigger, list view unchanged.
 - Integration test route guards redirect unauthenticated users.
 - E2E test happy path: login → dashboard → traces filter → open detail → switch theme → reload → theme persists.
 - Visual regression on key pages (Dashboard, Traces list, Settings) using Playwright screenshot comparison.
