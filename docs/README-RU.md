@@ -49,6 +49,7 @@
 | Документ | Описание |
 | -------- | -------- |
 | [Overview](architecture/overview.md) | Адаптеры, run IPC, worktrees, раскладка пакетов |
+| [Queen Console design system](architecture/queen-console-design-system.md) | UI-контракт для Svelte-консоли: темы, инвентарь компонентов, цвета статусов, hard rules |
 | [Hive Runtime map](architecture/paseka-runtime.html) | Интерактивная Archify-диаграмма (собирается в docs CI) |
 
 ## Планы

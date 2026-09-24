@@ -49,6 +49,7 @@ Follow the shortest path from the model to a running colony:
 | Document | Description |
 | -------- | ----------- |
 | [Overview](architecture/overview.md) | Adapters, run IPC, worktrees, package layout |
+| [Queen Console design system](architecture/queen-console-design-system.md) | UI contract for the Svelte console: themes, component inventory, status colors, hard rules |
 | [Hive Runtime map](architecture/paseka-runtime.html) | Interactive Archify diagram (generated in docs CI) |
 
 ## Plans
