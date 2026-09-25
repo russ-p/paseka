@@ -1,0 +1,1 @@
+import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Timeline`,description:`Chronological feed of SIGNAL, INSIGHT, MUTATION, and VERIFICATION events with filters and pagination.`,emptyMessage:`The contract timeline is not migrated yet. Use the legacy console for event history.`})}export{t as component};

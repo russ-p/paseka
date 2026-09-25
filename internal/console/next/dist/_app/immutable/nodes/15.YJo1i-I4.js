@@ -1,0 +1,1 @@
+import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Worktrees`,description:`Isolated worktrees, branches, and their associated Flight Trails will be listed here.`,emptyMessage:`Worktree management is not migrated yet. Use the legacy console for pruning and branch cleanup.`})}export{t as component};

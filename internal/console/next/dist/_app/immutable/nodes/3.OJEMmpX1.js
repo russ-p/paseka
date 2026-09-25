@@ -1,0 +1,1 @@
+import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Bees`,description:`Registered bees, adapters, and live worker state will be composed here.`,emptyMessage:`Bee inventory is not migrated yet. Use the legacy console for topology and live agents.`})}export{t as component};

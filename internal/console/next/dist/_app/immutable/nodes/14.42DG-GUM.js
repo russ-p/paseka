@@ -1,0 +1,1 @@
+import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Traces`,description:`Filterable Flight Trail history and detail inspection will live here.`,emptyMessage:`Trace inspection is not migrated yet. Use the legacy console for trail detail and energy controls.`})}export{t as component};

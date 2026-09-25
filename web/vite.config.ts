@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { svelteTesting } from '@testing-library/svelte/vite';
 import { loadEnv } from 'vite';
 
 const basePath = '/next';
@@ -13,6 +14,7 @@ export default defineConfig(({ mode }) => {
 	return {
 		plugins: [
 			tailwindcss(),
+			svelteTesting(),
 			sveltekit({
 				compilerOptions: {
 					runes: true
@@ -38,7 +40,8 @@ export default defineConfig(({ mode }) => {
 		},
 		test: {
 			expect: { requireAssertions: true },
-			environment: 'node',
+			environment: 'jsdom',
+			setupFiles: ['./src/tests/setup.ts'],
 			include: ['src/**/*.{test,spec}.{js,ts}'],
 			exclude: ['src/lib/server/**']
 		}

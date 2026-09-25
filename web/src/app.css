@@ -7,7 +7,7 @@
 		catppuccin-macchiato,
 		catppuccin-mocha,
 		light,
-		dark --prefersdark;
+		dark;
 }
 
 @plugin "daisyui/theme" {
@@ -118,7 +118,7 @@
 @plugin "daisyui/theme" {
 	name: "catppuccin-mocha";
 	default: false;
-	prefersdark: true;
+	prefersdark: false;
 	color-scheme: dark;
 	--color-base-100: #1e1e2e;
 	--color-base-200: #181825;
