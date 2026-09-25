@@ -6,6 +6,15 @@
 ARG GO_VERSION=1.25.0
 ARG UBUNTU_VERSION=24.04
 
+FROM node:24-bookworm-slim AS web-builder
+
+WORKDIR /src/web
+RUN npm install --global pnpm@12.5.1
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml web/.npmrc ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY web/ ./
+RUN pnpm build
+
 # ── build paseka once into the image ──────────────────────────────────────────
 FROM ubuntu:${UBUNTU_VERSION} AS builder
 
@@ -30,6 +39,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+COPY --from=web-builder /src/internal/console/next/dist ./internal/console/next/dist
 RUN go build -o /out/paseka ./cmd/paseka
 
 # ── runtime = host-like minimal toolbelt ──────────────────────────────────────

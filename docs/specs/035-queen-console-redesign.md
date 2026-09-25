@@ -16,26 +16,27 @@ The current Queen Console uses an older frontend stack that limits developer exp
 
 ## Solution
 
-Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI for styling. Adopt a file-based router (e.g., SvelteKit or vite-plugin-ssr) with explicit routes. Implement a persistent shell layout: top panel with cluster/NATS status indicators, right slide-out menu replacing current tabs, and a main content area per route. Extract shared UI components (cards, tables, forms, status badges) into a component library. Configure DaisyUI themes and expose a theme selector in Settings.
+Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI for styling. Adopt file-based routing with explicit routes and implement a persistent shell layout: top panel with cluster/NATS status indicators, right slide-out menu replacing current tabs, and a main content area per route. Extract shared UI components (cards, tables, forms, status badges) into a component library. Configure DaisyUI themes and expose a theme selector in Settings. During migration, the redesigned console is published as a preview under `/next/` while the legacy console remains the default at `/`; the root route is not redirected or replaced until feature parity and cutover approval.
 
 ## User Stories
 
 1. As a Beekeeper, I want to switch between light, dark, and custom DaisyUI themes, so that the console matches my environment and accessibility needs.
 2. As a Beekeeper, I want a top panel that always shows NATS connection status, active trace count, and Queen health, so that I can assess system state at a glance.
 3. As a Beekeeper, I want a right-side navigation menu with icons and labels for Dashboard, Traces, Bees, Worktrees, Settings, so that I can switch contexts without losing scroll position.
-4. As a Beekeeper, I want a dedicated Dashboard route (/dashboard) showing colony overview, recent signals, and quick actions, so that I land on a useful summary after login.
-5. As a Beekeeper, I want a Traces route (/traces) with a filterable, paginated list of traces and a detail drawer, so that I can inspect execution history efficiently.
-6. As a Beekeeper, I want a Bees route (/bees) listing all registered bees with status, last run, and adapter info, so that I can monitor bee health.
-7. As a Beekeeper, I want a Worktrees route (/worktrees) showing active worktrees, their branches, and associated traces, so that I can manage isolation contexts.
-8. As a Beekeeper, I want a Settings route (/settings) to configure themes, NATS endpoints, API keys, and notification preferences, so that I can customize the console without editing files.
+4. As a Beekeeper, I want a dedicated Dashboard route (`/next/dashboard`) showing colony overview, recent signals, and quick actions, so that I land on a useful summary when I open the redesigned console.
+5. As a Beekeeper, I want a Traces route (`/next/traces`) with a filterable, paginated list of traces and a detail drawer, so that I can inspect execution history efficiently.
+6. As a Beekeeper, I want a Bees route (`/next/bees`) listing all registered bees with status, last run, and adapter info, so that I can monitor bee health.
+7. As a Beekeeper, I want a Worktrees route (`/next/worktrees`) showing active worktrees, their branches, and associated traces, so that I can manage isolation contexts.
+8. As a Beekeeper, I want a Settings route (`/next/settings`) to configure themes, NATS endpoints, API keys, and notification preferences, so that I can customize the console without editing files.
 9. As a Beekeeper, I want the console to persist my last active route and theme in localStorage, so that my preferences survive reloads.
 10. As a Beekeeper, I want keyboard shortcuts (e.g., `g d` for Dashboard, `g t` for Traces) to jump between routes, so that I can navigate quickly.
 11. As a Beekeeper, I want the console to gracefully degrade when NATS disconnects, showing a reconnecting banner and queuing mutations locally, so that I don't lose work during transient outages.
-12. As a Beekeeper, I want the new console to be served from the same Go binary via `paseka console`, so that deployment stays a single binary.
+12. As a Beekeeper, I want the redesigned console preview to be served from the same Go binary via `paseka console` at `/next/`, so that deployment stays a single binary while I compare it with the legacy console.
 13. As a developer, I want TypeScript types generated from the Go event contracts (SIGNAL, INSIGHT, MUTATION, VERIFICATION), so that frontend consumes typed payloads.
 14. As a developer, I want a component storybook or visual regression setup, so that UI changes are reviewed consistently.
 15. As a Beekeeper, I want the console to be responsive down to 768px width, collapsing the right menu into a bottom sheet on mobile, so that I can check status on a phone.
 16. As a Beekeeper, I want forms (new task, new bee, new worktree, settings edits) to open in a modal or drawer triggered by a button, not consume a full column, so that I keep context of the list view while creating or editing.
+17. As a Beekeeper, I want the legacy console to remain available at `/` throughout migration, so that unfinished redesign work cannot block current operator workflows.
 
 ## Current Section Design Audit
 
@@ -45,13 +46,13 @@ Each current tab audited for the redesign: what it does, which components it rel
 
 - **Functionality:** Colony-wide snapshot. Stat grid (NATS status, active sessions, active worktrees, task counts by status), recent traces, failed runs, recent insights. Quick actions: "Run cue" (opens cue modal) and "Refresh". Header panels show Hive runtime (Start/Stop), Live bees, Host, Git.
 - **Components:** `stat-grid` tiles; compact lists (recent traces / failed runs / recent insights); cue modal (mnemonic picker + text form); header runtime/agents/host/git panels; toast container.
-- **Design proposal:** Keep as the post-login landing page. Collapse "Run cue" into a header quick-action button; drop the manual "Refresh" in favor of polling + WebSocket status updates. Keep stat grid + recent traces front and center; move failed runs and recent insights down or push them to Traces/Timeline routes.
+- **Design proposal:** Keep as the redesigned landing page. Collapse "Run cue" into a header quick-action button; drop the manual "Refresh" in favor of polling and the existing console event stream. Keep stat grid + recent traces front and center; move failed runs and recent insights down or push them to Traces/Timeline routes.
 
 ### Traces
 
 - **Functionality:** Scrollable trace list and a detail panel: meta (ID, title, status, standing), energy budget bar with top-up buttons (+1/+5/+12), LLM usage, worktree block, trail artifacts with inline preview, tasks, runs, recent events. "Open timeline" jumps to Timeline pre-filtered by the trace.
 - **Components:** `session-list` rows (`TraceRow`), detail panel with collapsible `trace-section` blocks, artifact preview area, `compact-meta` definition lists, energy bar controls.
-- **Design proposal:** Keep — this is the core inspection surface. Move to `/traces` + `/traces/:id` route with the detail collapsing into a drawer (user story #5). Collapse energy / LLM usage / artifacts under an "Expand" accordion, since operators rarely need them on first pass.
+- **Design proposal:** Keep — this is the core inspection surface. Move to `/next/traces` + `/next/traces/:id` with the detail collapsing into a drawer (user story #5). Collapse energy / LLM usage / artifacts under an "Expand" accordion, since operators rarely need them on first pass.
 
 ### Timeline
 
@@ -103,30 +104,35 @@ Each current tab audited for the redesign: what it does, which components it rel
 
 ## Implementation Decisions
 
-- **Framework**: Svelte 5 (runes mode) with SvelteKit for file-based routing, SSR disabled (SPA mode), adapter-static for embedding in Go binary.
-- **Styling**: Tailwind v4 (CSS-first config) + DaisyUI 5 for themed components. DaisyUI `themes` array in `tailwind.config.js` includes built-in themes (`light`, `dark`, `cupcake`, `bumblebee`, `emerald`, `corporate`, `synthwave`, `retro`, `cyberpunk`, `valentine`, `halloween`, `garden`, `forest`, `aqua`, `lofi`, `pastel`, `fantasy`, `wireframe`, `black`, `luxury`, `dracula`, `cmyk`) plus custom Catppuccin themes: `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha` (defined in `tailwind.config.js` via `daisyui.themes` extension).
-- **Theme switching**: `data-theme` attribute on `<html>` toggled via Svelte store persisted to localStorage; DaisyUI handles CSS variables automatically.
-- **Layout shell**: `+layout.svelte` renders `<Header />` (top panel), `<RightMenu />` (slide-out), `<main>` slot. Right menu uses `<aside>` with `fixed inset-y-0 right-0 w-64 transform transition-transform` and `translate-x-full` when closed; mobile breakpoint switches to bottom sheet.
-- **Top panel**: Shows NATS status (connected/reconnecting/disconnected), active trace count, Queen version, current user/colony. Uses WebSocket subscription to `paseka.console.status` subject for live updates.
-- **Routing**: Routes map to `(app)/dashboard/+page.svelte`, `(app)/traces/+page.svelte`, `(app)/bees/+page.svelte`, `(app)/worktrees/+page.svelte`, `(app)/settings/+page.svelte`. Auth guard redirects to `/login` if no session cookie.
-- **API layer**: Central `api.ts` with typed fetch wrappers around `/api/v1/*` endpoints. Generates TypeScript types from Go `internal/console/api` via `go run ./cmd/paseka-gen-types` during build.
-- **State management**: Svelte 5 runes (`$state`, `$derived`, `$effect`) for local component state; cross-route stores in `stores/` (e.g., `themeStore`, `statusStore`, `traceStore`).
-- **Component library**: `lib/components/` with `DataTable`, `StatusBadge`, `SignalCard`, `TraceRow`, `BeeCard`, `WorktreeCard`, `Modal`, `Drawer`, `Toast`, `ThemeSelect`. All styled with DaisyUI classes + Tailwind utilities.
-- **Form pattern**: Create/edit forms (new task, bee, worktree, settings) use `<Modal>` or `<Drawer>` components triggered by action buttons; they never replace the list/grid column. `Modal` for focused, short forms; `Drawer` (slide-from-right) for multi-step or wider forms. Both trap focus, support ESC to close, and return focus to trigger on dismiss.
-- **Build integration**: `pnpm build` outputs to `internal/console/embed/dist`; Go `//go:embed` serves assets. `paseka console` runs `pnpm dev` in watch mode for development.
-- **Testing**: Vitest + @testing-library/svelte for unit/component tests; Playwright for E2E against running `paseka console`. Prior art: `internal/console/api/*_test.go` patterns.
-- **Accessibility**: Semantic HTML, ARIA labels on icon-only buttons, focus-visible outlines, color-contrast compliant DaisyUI themes.
+- **Framework**: Svelte 5 in runes mode with SvelteKit for file-based routing. SSR is disabled for SPA mode and the static adapter produces an embeddable fallback page.
+- **Frontend isolation**: The redesign lives in a dedicated top-level frontend module with its own pnpm lockfile and build lifecycle. The legacy vanilla JavaScript console remains a separate, untouched bundle until cutover.
+- **URL coexistence**: The redesigned application's base path is `/next`. `/next/` and its routes such as `/next/dashboard` are served by the new bundle; `/next` redirects to `/next/`; `/` continues to serve the legacy console. SPA fallback is confined to the `/next/` prefix so a missing preview asset cannot change legacy routing behavior.
+- **Styling**: Tailwind v4 uses its CSS-first configuration and first-party Vite plugin. DaisyUI 5 is loaded from the main stylesheet. The initial theme set is limited to `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha`, `light`, and `dark`.
+- **Theme switching**: A `data-theme` attribute on `<html>` is driven by a Svelte store persisted to `localStorage`; DaisyUI owns the resulting CSS variables.
+- **Layout shell**: The root application layout renders the top status panel, the responsive right-side menu, and the routed main content. Below 768px, the right menu becomes a bottom sheet.
+- **Top panel**: Shows NATS status (connected/reconnecting/disconnected), active trace count, Queen version, and current user/colony using the existing console status stream.
+- **Routing**: Application routes are Dashboard, Traces, Bees, Worktrees, and Settings beneath the `/next` base path. Authentication behavior must match the existing console rather than introducing a new login boundary during the redesign.
+- **API layer**: A central typed client calls the existing root-relative `/api/*` endpoints; the `/next` URL prefix applies to frontend routes and assets, not the API. TypeScript payload types are generated from Go event contracts.
+- **State management**: Svelte 5 runes (`$state`, `$derived`, `$effect`) handle local state; small cross-route stores handle theme, status, and trace data.
+- **Component library**: Shared DataTable, StatusBadge, SignalCard, TraceRow, BeeCard, WorktreeCard, Modal, Drawer, Toast, and ThemeSelect components use DaisyUI primitives and Tailwind utilities.
+- **Form pattern**: Create/edit forms use a Modal or Drawer triggered from the current list or grid; they never replace a full column. Both variants trap focus, close on Escape, and restore focus to their trigger.
+- **Build lifecycle**: The frontend exposes `dev`, `build`, `check`, and `test` pnpm scripts. Development runs at the `/next/` base path and proxies root-relative API traffic to a separately running Go console. Production build output is written into the Go embed tree and embedded independently from the legacy assets.
+- **Build safety**: The generated production bundle is committed with the Go module so `go install` remains a complete single-binary deployment. A checked-in preview fallback keeps source-only Go builds compilable, while release and container builds refresh the frontend before compiling Go. The legacy bundle is never removed or redirected by the frontend build.
+- **Testing**: Vitest and Testing Library cover stores and components; Playwright covers end-to-end behavior. Go route tests verify `/next` redirect behavior, preview SPA fallback, missing-asset 404s, unchanged legacy root behavior, and unchanged API routing.
+- **Accessibility**: Use semantic HTML, ARIA labels for icon-only controls, visible focus states, and color-contrast-compliant DaisyUI themes.
 
 ## Testing Decisions
 
 - Unit test each store (`themeStore`, `statusStore`) for persistence, hydration, and reactive updates.
 - Component test `RightMenu` open/close, keyboard navigation, mobile breakpoint toggle.
-- Component test `Header` status indicators reflect WebSocket events.
+- Component test `Header` status indicators reflect console event-stream updates.
 - Component test `Modal`/`Drawer` form pattern: open on button click, trap focus, ESC closes, focus returns to trigger, list view unchanged.
-- Integration test route guards redirect unauthenticated users.
-- E2E test happy path: login → dashboard → traces filter → open detail → switch theme → reload → theme persists.
+- Integration test client-side navigation stays under `/next` and never captures the legacy root or root-relative API.
+- E2E test happy path: preview root → dashboard → traces filter → open detail → switch theme → reload → theme persists.
 - Visual regression on key pages (Dashboard, Traces list, Settings) using Playwright screenshot comparison.
 - Contract test: generated TS types decode sample SIGNAL/INSIGHT/MUTATION/VERIFICATION payloads without error.
+- Go routing regression tests assert that `/next` redirects to `/next/`, preview routes resolve to the new SPA fallback, missing preview assets return 404, `/` still serves the legacy console, and `/api/*` remains outside the preview mount.
+- Build smoke test runs the frontend `check`, `test`, and `build` scripts before the Go build used for release artifacts.
 
 ## Out of Scope
 
@@ -135,10 +141,12 @@ Each current tab audited for the redesign: what it does, which components it rel
 - Historical analytics charts (Grafana/Prometheus integration remains separate).
 - Mobile app or PWA offline support beyond localStorage persistence.
 - Migration of existing console code — this is a clean rewrite.
+- Replacing, redirecting, or removing the legacy console at `/` before feature parity and explicit cutover approval.
 
 ## Further Notes
 
-- DaisyUI theme list can be trimmed to 6–8 curated themes before release to reduce bundle size; Catppuccin variants are strong candidates for defaults.
+- Keep the theme list at the six curated themes; add or remove themes only with an explicit design decision.
 - Consider `svelte-put/clickaway` and `svelte-put/escape` for menu/drawer interactions.
 - Go binary size impact: embedded SPA ~2–3 MB gzipped; acceptable for single-binary distribution.
+- Delivery is phased: embeddable frontend foundation and preview route, application shell, feature-by-feature parity, then an explicit root cutover that removes or archives the legacy bundle.
 - Follow-up spec may cover "Console Plugin API" once shell is stable.
