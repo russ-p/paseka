@@ -2,6 +2,8 @@ version: 2
 
 before:
   hooks:
+    - pnpm --dir web install --frozen-lockfile
+    - pnpm --dir web build
     - go mod tidy
 
 builds:

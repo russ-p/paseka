@@ -24,6 +24,13 @@ Queen Console does **not** enforce authentication. Keep it on localhost or a
 trusted private network. For a persistent container deployment, see
 [Homelab deployment](homelab-deployment.md).
 
+## Preview the redesign
+
+The Svelte-based Queen Console redesign is available at
+`http://127.0.0.1:8787/next/`. It is an in-progress preview; `/` continues to
+serve the legacy console until the redesign reaches feature parity and an
+explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
+
 ## What requires the Hive Runtime
 
 The Console process is separate from `paseka run`.

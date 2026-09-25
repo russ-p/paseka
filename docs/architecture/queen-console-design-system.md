@@ -10,7 +10,7 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 
 ## Theming
 
-- Curated themes only (registered in the Tailwind config `daisyui.themes` map):
+- Curated themes only (registered in the main stylesheet through DaisyUI's CSS-first plugin):
   `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha`, `light`, `dark`.
   Do **not** add more — bundle size and predictability are the reason.
 - Theme is applied via `data-theme` on `<html>`, driven by `themeStore` (Svelte store), persisted to `localStorage`.
@@ -22,8 +22,9 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 
 - `+layout.svelte` renders `<Header />` (top status panel), `<RightMenu />`, and `<main>`.
 - Right menu is a fixed right-side panel; below **768px** it becomes a bottom sheet.
-- Routes: `/dashboard`, `/traces`, `/bees`, `/worktrees`, `/settings`. Last route + theme persist in `localStorage`.
-- Header shows NATS status (connected / reconnecting / disconnected), active trace count, Queen version, current user/colony — fed by the `paseka.console.status` WebSocket subscription.
+- Routes: `/next/dashboard`, `/next/traces`, `/next/bees`, `/next/worktrees`, `/next/settings`. Last route + theme persist in `localStorage`.
+- Header shows NATS status (connected / reconnecting / disconnected), active trace count, Queen version, current user/colony — fed by the existing `/api/chrome/stream` event stream.
+- The redesigned app is mounted at `/next/`; the legacy console remains the default at `/` until explicit cutover.
 
 ## Component inventory (`lib/components/`)
 
@@ -71,7 +72,7 @@ Map domain status to a DaisyUI semantic badge. Do not pick colors per context.
 
 1. Read this doc + [Spec 035](../specs/035-queen-console-redesign.md) before writing UI code.
 2. Compose from the shell and `lib/components/`; only add a component if the inventory genuinely lacks it (and extend the table).
-3. Verify with component tests (Vitest + @testing-library/svelte) and Playwright visual regression on Dashboard, Traces, Settings.
+3. Verify with Vitest component tests and Playwright visual regression on Dashboard, Traces, Settings.
 4. Theme store and route persistence must be covered by unit tests (hydration, reload persistence).
 
 ## Scope

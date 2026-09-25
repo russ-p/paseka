@@ -11,6 +11,8 @@ docs
 .idea
 .vscode
 **/node_modules
+**/.svelte-kit
+web/build
 *.exe
 .env
 docker/dev/.env

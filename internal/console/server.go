@@ -86,6 +86,8 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
 
 	staticFS, _ := fs.Sub(staticFiles, "static")
+	mux.Handle("/next", http.RedirectHandler("/next/", http.StatusPermanentRedirect))
+	mux.Handle("/next/", nextSPAHandler(nextFiles))
 	mux.Handle("/", spaHandler(staticFS))
 
 	s.http = &http.Server{
@@ -112,6 +114,7 @@ func (s *Server) Run(ctx context.Context) error {
 		host = "127.0.0.1" + host
 	}
 	fmt.Printf("%s listening at http://%s\n", boldYellow("Queen Console 🐝"), host)
+	fmt.Printf("  Redesign preview: http://%s/next/\n", host)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -141,6 +144,50 @@ func boldYellow(s string) string {
 		return s
 	}
 	return "\033[1;33m" + s + "\033[0m"
+}
+
+const nextConsoleBasePath = "/next/"
+
+func nextSPAHandler(consoleFiles fs.FS) http.Handler {
+	distFS, err := fs.Sub(consoleFiles, "next/dist")
+	if err != nil {
+		panic(fmt.Sprintf("prepare next console assets: %v", err))
+	}
+	fallbackHTML, err := fs.ReadFile(consoleFiles, "next/fallback.html")
+	if err != nil {
+		panic(fmt.Sprintf("read next console fallback: %v", err))
+	}
+	fileServer := http.FileServer(http.FS(distFS))
+	_, buildErr := fs.Stat(distFS, "200.html")
+	hasBuild := buildErr == nil
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rel := strings.TrimPrefix(r.URL.Path, nextConsoleBasePath)
+		rel = strings.TrimPrefix(rel, "/")
+		if hasBuild {
+			if rel == "" {
+				rel = "200.html"
+			}
+			if _, err := fs.Stat(distFS, rel); err != nil {
+				if looksLikeStaticAsset(rel) {
+					http.NotFound(w, r)
+					return
+				}
+				rel = "200.html"
+			}
+			request := r.Clone(r.Context())
+			url := *r.URL
+			url.Path = "/" + rel
+			request.URL = &url
+			fileServer.ServeHTTP(w, request)
+			return
+		}
+		if rel != "" && looksLikeStaticAsset(rel) {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(fallbackHTML)
+	})
 }
 
 func spaHandler(staticFS fs.FS) http.Handler {

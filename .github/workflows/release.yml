@@ -21,6 +21,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

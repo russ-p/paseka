@@ -8,3 +8,6 @@ import "embed"
 //
 //go:embed static/*
 var staticFiles embed.FS
+
+//go:embed all:next
+var nextFiles embed.FS
