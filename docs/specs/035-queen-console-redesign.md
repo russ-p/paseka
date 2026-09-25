@@ -9,20 +9,20 @@ Initial design spec for migrating Queen Console to Svelte 5 + Tailwind v4 + Dais
 
 The current Queen Console uses an older frontend stack that limits developer experience, theming flexibility, and component composability. Operators need a modern, responsive interface with:
 - Consistent theming (light/dark/custom) via DaisyUI, including Catppuccin Latte, Frappé, Macchiato, Mocha
-- Clear navigation with right-side menu and top status panel
+- Clear navigation with left-side slide-out menu and top status panel
 - Dedicated routes for Dashboard, Traces, Bees, Worktrees, and Settings
 - Better TypeScript integration and component reuse
 - Faster builds and hot-module replacement during development
 
 ## Solution
 
-Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI for styling. Adopt file-based routing with explicit routes and implement a persistent shell layout: top panel with cluster/NATS status indicators, right slide-out menu replacing current tabs, and a main content area per route. Extract shared UI components (cards, tables, forms, status badges) into a component library. Configure DaisyUI themes and expose a theme selector in Settings. During migration, the redesigned console is published as a preview under `/next/` while the legacy console remains the default at `/`; the root route is not redirected or replaced until feature parity and cutover approval.
+Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI for styling. Adopt file-based routing with explicit routes and implement a persistent shell layout: top panel with cluster/NATS status indicators, left slide-out menu replacing current tabs, and a main content area per route. Extract shared UI components (cards, tables, forms, status badges) into a component library. Configure DaisyUI themes and expose a theme selector in Settings. During migration, the redesigned console is published as a preview under `/next/` while the legacy console remains the default at `/`; the root route is not redirected or replaced until feature parity and cutover approval.
 
 ## User Stories
 
 1. As a Beekeeper, I want to switch between light, dark, and custom DaisyUI themes, so that the console matches my environment and accessibility needs.
 2. As a Beekeeper, I want a top panel that always shows NATS connection status, active trace count, and Queen health, so that I can assess system state at a glance.
-3. As a Beekeeper, I want a right-side navigation menu with icons and labels for Dashboard, Traces, Bees, Worktrees, Settings, so that I can switch contexts without losing scroll position.
+3. As a Beekeeper, I want a left-side navigation menu with icons and labels for Dashboard, Traces, Bees, Worktrees, Settings, so that I can switch contexts without losing scroll position.
 4. As a Beekeeper, I want a dedicated Dashboard route (`/next/dashboard`) showing colony overview, recent signals, and quick actions, so that I land on a useful summary when I open the redesigned console.
 5. As a Beekeeper, I want a Traces route (`/next/traces`) with a filterable, paginated list of traces and a detail drawer, so that I can inspect execution history efficiently.
 6. As a Beekeeper, I want a Bees route (`/next/bees`) listing all registered bees with status, last run, and adapter info, so that I can monitor bee health.
@@ -34,7 +34,7 @@ Rebuild Queen Console as a Svelte 5 application using Tailwind v4 and DaisyUI fo
 12. As a Beekeeper, I want the redesigned console preview to be served from the same Go binary via `paseka console` at `/next/`, so that deployment stays a single binary while I compare it with the legacy console.
 13. As a developer, I want TypeScript types generated from the Go event contracts (SIGNAL, INSIGHT, MUTATION, VERIFICATION), so that frontend consumes typed payloads.
 14. As a developer, I want a component storybook or visual regression setup, so that UI changes are reviewed consistently.
-15. As a Beekeeper, I want the console to be responsive down to 768px width, collapsing the right menu into a bottom sheet on mobile, so that I can check status on a phone.
+15. As a Beekeeper, I want the console to be responsive down to 768px width, collapsing the left menu into a bottom sheet on mobile, so that I can check status on a phone.
 16. As a Beekeeper, I want forms (new task, new bee, new worktree, settings edits) to open in a modal or drawer triggered by a button, not consume a full column, so that I keep context of the list view while creating or editing.
 17. As a Beekeeper, I want the legacy console to remain available at `/` throughout migration, so that unfinished redesign work cannot block current operator workflows.
 
@@ -109,9 +109,9 @@ Each current tab audited for the redesign: what it does, which components it rel
 - **URL coexistence**: The redesigned application's base path is `/next`. `/next/` and its routes such as `/next/dashboard` are served by the new bundle; `/next` redirects to `/next/`; `/` continues to serve the legacy console. SPA fallback is confined to the `/next/` prefix so a missing preview asset cannot change legacy routing behavior.
 - **Styling**: Tailwind v4 uses its CSS-first configuration and first-party Vite plugin. DaisyUI 5 is loaded from the main stylesheet. The initial theme set is limited to `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha`, `light`, and `dark`.
 - **Theme switching**: A `data-theme` attribute on `<html>` is driven by a Svelte store persisted to `localStorage`; DaisyUI owns the resulting CSS variables.
-- **Layout shell**: The root application layout renders the top status panel, the responsive right-side menu, and the routed main content. Below 768px, the right menu becomes a bottom sheet.
-- **Top panel**: Shows NATS status (connected/reconnecting/disconnected), active trace count, Queen version, and current user/colony using the existing console status stream.
-- **Routing**: Application routes are Dashboard, Traces, Bees, Worktrees, and Settings beneath the `/next` base path. Authentication behavior must match the existing console rather than introducing a new login boundary during the redesign.
+- **Layout shell**: The root application layout renders the top status panel, the responsive left-side menu, and the routed main content. Below 768px, the left menu becomes a bottom sheet.
+- **Top panel**: Shows NATS status, hive runtime, live bees, active trail count in the dashboard window, review and invite attention, and the colony slug. The existing console status stream supplies runtime, agents, and attention; a dashboard poll supplies NATS and active trails. Queen version is deferred until the API exposes it.
+- **Routing**: Application routes are Dashboard, Traces, Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Git, Topology, System, and Settings beneath the `/next` base path. The side menu groups them as Work (Dashboard, Traces, Timeline, Tasks, Reviews, Sessions), Colony (Bees, Worktrees, Runs, Git), Diagnostics (Topology, System), and Configuration (Settings); every route resolves to a `PagePlaceholder` until its section is migrated. Authentication behavior must match the existing console rather than introducing a new login boundary during the redesign.
 - **API layer**: A central typed client calls the existing root-relative `/api/*` endpoints; the `/next` URL prefix applies to frontend routes and assets, not the API. TypeScript payload types are generated from Go event contracts.
 - **State management**: Svelte 5 runes (`$state`, `$derived`, `$effect`) handle local state; small cross-route stores handle theme, status, and trace data.
 - **Component library**: Shared DataTable, StatusBadge, SignalCard, TraceRow, BeeCard, WorktreeCard, Modal, Drawer, Toast, and ThemeSelect components use DaisyUI primitives and Tailwind utilities.
@@ -124,8 +124,8 @@ Each current tab audited for the redesign: what it does, which components it rel
 ## Testing Decisions
 
 - Unit test each store (`themeStore`, `statusStore`) for persistence, hydration, and reactive updates.
-- Component test `RightMenu` open/close, keyboard navigation, mobile breakpoint toggle.
-- Component test `Header` status indicators reflect console event-stream updates.
+- Component test `SideMenu` open/close, keyboard navigation, mobile breakpoint toggle.
+- Component test `Header` status indicators reflect console event-stream and dashboard-poll updates.
 - Component test `Modal`/`Drawer` form pattern: open on button click, trap focus, ESC closes, focus returns to trigger, list view unchanged.
 - Integration test client-side navigation stays under `/next` and never captures the legacy root or root-relative API.
 - E2E test happy path: preview root → dashboard → traces filter → open detail → switch theme → reload → theme persists.

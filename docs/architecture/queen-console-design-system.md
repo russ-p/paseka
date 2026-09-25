@@ -20,10 +20,10 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 
 ## Layout shell
 
-- `+layout.svelte` renders `<Header />` (top status panel), `<RightMenu />`, and `<main>`.
-- Right menu is a fixed right-side panel; below **768px** it becomes a bottom sheet.
-- Routes: `/next/dashboard`, `/next/traces`, `/next/bees`, `/next/worktrees`, `/next/settings`. Last route + theme persist in `localStorage`.
-- Header shows NATS status (connected / reconnecting / disconnected), active trace count, Queen version, current user/colony — fed by the existing `/api/chrome/stream` event stream.
+- `+layout.svelte` renders `<Header />` (top status panel), `<SideMenu />`, and `<main>`.
+- Side menu is a fixed left-side panel; below **768px** it becomes a bottom sheet.
+- Routes: `/next/dashboard`, `/next/traces`, `/next/timeline`, `/next/tasks`, `/next/reviews`, `/next/sessions`, `/next/bees`, `/next/worktrees`, `/next/runs`, `/next/git`, `/next/topology`, `/next/system`, `/next/settings`. The menu groups them as Work, Colony, Diagnostics, and Configuration, and each `g <key>` chord is unique. Last route + theme persist in `localStorage`.
+- Header shows NATS status, hive runtime, live bees, active trails in the dashboard window, attention counts, and the colony slug. The `/api/chrome/stream` event stream supplies runtime, agents, and attention; a dashboard poll supplies NATS and active-trail data.
 - The redesigned app is mounted at `/next/`; the legacy console remains the default at `/` until explicit cutover.
 
 ## Component inventory (`lib/components/`)
@@ -42,6 +42,7 @@ Use these. If a page needs a missing element, add the component here and extend 
 | `BeeCard` | Bee / worker cards | Status, last run, adapter |
 | `WorktreeCard` | Worktree rows | Branch, associated trace |
 | `ThemeSelect` | Theme picker | Settings route, optional header |
+| `PagePlaceholder` | Routes awaiting feature migration | Shared empty state; never a hand-rolled per-route card |
 
 ## Status → semantic colors
 
@@ -53,7 +54,7 @@ Map domain status to a DaisyUI semantic badge. Do not pick colors per context.
 | success, approved, merged, ready, open | `badge-success` |
 | waiting_review, pending, reconnecting | `badge-warning` |
 | failed, rejected, killed, disconnected, error | `badge-error` |
-| idle, archived, unknown | `badge-neutral` |
+| idle, stopped, stopping, unavailable, archived, unknown | `badge-neutral` |
 
 ## Hard rules (agent contract)
 
@@ -63,7 +64,7 @@ Map domain status to a DaisyUI semantic badge. Do not pick colors per context.
 4. Lists are `DataTable`s (filter, paginate) — not hand-rolled `<table>` markup per page.
 5. Icon-only buttons must carry an `aria-label`; rely on DaisyUI/Tailwind focus-visible outlines.
 6. Render loading (skeleton), empty, and error states — not just the happy path.
-7. Stay responsive to **768px**: right menu collapses, tables never force horizontal scroll on mobile.
+7. Stay responsive to **768px**: side menu collapses, tables never force horizontal scroll on mobile.
 8. Keyboard shortcuts across routes (e.g. `g d` dashboard, `g t` traces).
 9. On NATS disconnect show a reconnecting banner (`badge-warning`) and queue mutations locally; do not lose operator input.
 10. Consume typed payloads generated from the Go event contracts; no `any`-typed event handling.
