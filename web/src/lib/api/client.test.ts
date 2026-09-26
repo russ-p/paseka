@@ -3,6 +3,7 @@ import {
 	ApiError,
 	addTraceEnergy,
 	getGit,
+	getSystem,
 	getTrace,
 	getTraceArtifactContent,
 	gitDeleteBranches,
@@ -159,5 +160,15 @@ describe('git endpoints', () => {
 		expect(failure).toBeInstanceOf(ApiError);
 		expect((failure as ApiError).message).toBe('live bee is using the colony root checkout; refuse pull');
 		expect((failure as ApiError).status).toBe(409);
+	});
+});
+
+describe('system endpoints', () => {
+	it('reads the host snapshot with a bodiless GET and no query', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await getSystem();
+
+		expect(mock).toHaveBeenCalledWith('/api/system', undefined);
 	});
 });

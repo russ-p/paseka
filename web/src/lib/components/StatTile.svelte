@@ -16,8 +16,12 @@
 		label: string;
 		/** Rendered as the big line unless a content snippet replaces it. */
 		value?: string | number;
-		/** Full text for the hover/focus popover when the line truncates. */
-		hint?: string;
+		/**
+		 * Full text for the hover/focus popover, one line per entry — the same
+		 * `string[]` shape `MetaRow.hint` and `Hint` use, so a caller with two
+		 * lines of explanation does not have to join them into one sentence.
+		 */
+		hint?: string[];
 		href?: string;
 		/** Extra classes for the tile itself, e.g. a grid span. */
 		class?: string;
@@ -35,7 +39,7 @@
 	{#if children}
 		<div class="mt-1">{@render children()}</div>
 	{:else if hint}
-		<Hint lines={[hint]}>
+		<Hint lines={hint}>
 			<p class="truncate text-xl leading-tight font-bold">{value}</p>
 		</Hint>
 	{:else}

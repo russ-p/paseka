@@ -85,22 +85,22 @@
 			<StatTile
 				label="Active traces"
 				value={store.activeTraceCount}
-				hint="Trails with a run still in flight."
+				hint={["Trails with a run still in flight."]}
 			/>
 			<StatTile
 				label="Active sessions"
 				value={dashboard?.activeSessions ?? 0}
-				hint="Interactive HITL sessions currently attached."
+				hint={["Interactive HITL sessions currently attached."]}
 			/>
 			<StatTile
 				label="Active worktrees"
 				value={dashboard?.activeWorktrees ?? 0}
-				hint="Isolated checkouts under .paseka/worktrees."
+				hint={["Isolated checkouts under .paseka/worktrees."]}
 			/>
 			<StatTile
 				id="dashboard-task-counts"
 				label="Task counts"
-				hint="Tasks across the recent traces, by status."
+				hint={["Tasks across the recent traces, by status."]}
 				class="lg:col-span-2"
 			>
 				{#if taskCounts.length === 0}

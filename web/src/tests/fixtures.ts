@@ -8,6 +8,8 @@ import type {
 	GitWorktree,
 	InsightHighlight,
 	RunSummary,
+	SystemProcess,
+	SystemView,
 	TraceDetail,
 	TraceSummary
 } from '$lib/api/types';
@@ -215,6 +217,56 @@ export function gitView(overrides: Partial<GitView> = {}): GitView {
 				worktreePath: '/colony/.paseka/worktrees/trace-01a09966fdbe6771',
 				traceId: 'trace-01a09966fdbe6771',
 				subject: 'Wire the export format flag'
+			})
+		],
+		...overrides
+	};
+}
+
+export function systemProcess(overrides: Partial<SystemProcess> = {}): SystemProcess {
+	return {
+		pid: 4242,
+		rssBytes: 214_958_080,
+		cpuPercent: 12.4,
+		comm: 'agent',
+		cmd: 'cursor-agent --print --output-format stream-json',
+		...overrides
+	};
+}
+
+export function systemView(overrides: Partial<SystemView> = {}): SystemView {
+	return {
+		hostname: 'apiary',
+		kernel: '6.11.0-21-generic',
+		os: 'linux',
+		arch: 'amd64',
+		cpus: 8,
+		uptimeSeconds: 604_800,
+		consolePid: 1,
+		goVersion: 'go1.25.1',
+		load1: 1.42,
+		load5: 0.98,
+		load15: 0.61,
+		cpuPercent: 18,
+		memUsedBytes: 6_442_450_944,
+		memTotalBytes: 17_179_869_184,
+		memAvailableBytes: 10_737_418_240,
+		diskUsedBytes: 42_949_672_960,
+		diskTotalBytes: 214_748_364_800,
+		processes: [
+			systemProcess(),
+			systemProcess({
+				pid: 1187,
+				rssBytes: 1_073_741_824,
+				cpuPercent: 41.8,
+				comm: 'java',
+				cmd: 'java -jar node_modules/.bin/jest --runInBand'
+			}),
+			systemProcess({
+				pid: 909,
+				rssBytes: 3_145_728,
+				comm: 'paseka',
+				cmd: 'paseka console --addr :8787'
 			})
 		],
 		...overrides
