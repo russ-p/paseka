@@ -24,6 +24,21 @@ Queen Console does **not** enforce authentication. Keep it on localhost or a
 trusted private network. For a persistent container deployment, see
 [Homelab deployment](homelab-deployment.md).
 
+## Preview the redesign
+
+The Svelte-based Queen Console redesign is available at
+`http://127.0.0.1:8787/next/`. It is an in-progress preview; `/` continues to
+serve the legacy console until the redesign reaches feature parity and an
+explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
+
+The preview currently ships the shell (top status panel, side menu, theme
+switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
+page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
+detail), **Tasks** (board and task detail), and **Reviews** (queue, proposal, and
+merge preview). Every other route under `/next/` renders a "migration pending"
+card that links back to the legacy console, so use `/` for Sessions, Bees, and
+Worktrees for now.
+
 ## What requires the Hive Runtime
 
 The Console process is separate from `paseka run`.
@@ -46,7 +61,9 @@ reviews, honey pressure, and other items that need beekeeper attention.
 Header plaques (Hive runtime, Live bees, Host, Git) and Reviews/Sessions tab
 badges stay current over one Server-Sent Event stream (`GET /api/chrome/stream`).
 The System and Git tabs still poll their full JSON APIs while those tabs are
-open. Git status never fetches remotes on a timer.
+open — in the preview, a route's store starts its poll on mount and stops it on
+unmount, so an idle console holds none. Git status never fetches remotes on a
+timer.
 
 ### Traces and Timeline
 
@@ -54,14 +71,32 @@ open. Git status never fetches remotes on a timer.
 **Timeline** exposes the event stream for diagnosing routing and handoffs.
 Use `paseka replay <traceId>` for the CLI equivalent.
 
+On `/next/timeline` the feed starts unscoped and the filter panel stays folded
+until something is in it, so the events own the screen. A trail's *Open
+timeline* button links to `/next/timeline?trace=<id>`, which arrives with the
+panel open and the feed already scoped — bookmarkable, unlike the legacy tab
+switch that set the filter in memory. Six filters (trace, task, bee, contract,
+payload kind, severity) apply on **Apply** rather than as you type, and
+**Clear N filters** in the header returns to the colony-wide feed. **Load more**
+pages strictly older events; if a page fails the button stays, so it is a retry.
+
+The feed does not refresh itself — it is recorded history, and a timer that
+moved rows under you while you were reading one would be worse than useless.
+Press **Refresh** when you want the newest events. Every row's *Raw event*
+disclosure shows the underlying `protocol.Event`; it costs no request, because
+the raw envelope already arrives with the row.
+
 Trails bound to a standing Forage Cue carry a **standing** badge, and their
 honey reads `remaining / stipend` — see [Forage Cues](cues.md).
 
-### Tasks
-
-Lists task-ledger state and task details. Common CLI equivalents are
-`paseka task list`, `paseka task show`, `paseka task start`, and
-`paseka task retry`.
+The list shows the most recent trails and stops at what the server sends; **Load
+older trails** pulls the next page when there is more history. A trail with
+something to say — running now, or carrying failures — is badged in the State
+column; a settled trail leaves it empty, so the eye lands on the rows that need
+you. Opening a trail goes to its own page (`/next/traces/<traceId>`), so the URL
+can be shared and the browser back button works. From there: **+1 / +5 / +12**
+top up the honey reserve, **View** on a comb file opens it in a dialog, and
+**Open timeline** jumps to the event feed for that trail.
 
 ### Reviews
 
@@ -81,11 +116,94 @@ CLI equivalents are `paseka proposal approve` and `paseka proposal reject`.
 Review approval does not push the default branch to its remote. The Git tab
 never pushes the worktree head; PR publish does.
 
+### Tasks
+
+The **task board** groups every task the colony's ledger knows into one column
+per lifecycle status, in the order the pipeline runs — ready, running, waiting
+review, planned, blocked, failed, completed. A card says what it is, who takes
+it, how many runs it has made, what it waits on, and whether the ledger says it
+is startable or retryable right now. Each column scrolls on its own, because a
+colony is mostly completed history and the work should not be buried under it. A
+status the colony has no task in is left out rather than shown empty.
+
+**New task** opens a form from the side. Pick the bee and the intents narrow to
+the prompt templates that bee actually declares. Leave the trail id empty for a
+new trail, or name a standing one to add the task to it; both ids are generated
+server-side otherwise. Each review policy says what it means as you pick it, and
+**Start immediately** publishes `task.ready` so a dispatcher picks the task up
+without a trip through the board. Creating and starting both need NATS and a
+running `paseka run`.
+
+Open a task for its metadata, the body it was handed (folded — reading a task is
+about what it did, not what it was given), the bee's own summary, and its linked
+runs, each linking on to the run's own page. **Start** and **Retry** appear only
+when the server says the task is eligible, and report the ledger's refusal in its
+own words when it says no. A task waiting on you carries **Approve** and
+**Request changes** here rather than only on the review queue: the pull-request
+fields sit under Approve and appear only for a task delivered as a pull request,
+and Request changes is one box — your feedback becomes the rework task's body.
+Creating a task from the CLI is `paseka task create`; the other task CLI
+equivalents are `paseka task list`, `paseka task show`, `paseka task start`, and
+`paseka task retry`.
+
+### Reviews
+
+The **queue** is every task that stopped at a review gate. A final merge gate is
+badged apart from a mid-trail review, and each row says what approving will
+actually do — merging a local branch, or opening a pull request — because that is
+the question a reviewer has not yet asked of it.
+
+Open a proposal for what the bee wrote, what changed, and the decision. **Open
+merge preview** goes to a full-screen diff: the changed files on the left with
+their per-file counts, the patch itself as numbered lines, and a path filter that
+narrows the list without hiding the body — a hidden file would move every line
+number a note is attached to. The preview is its own page, so it can be linked to
+and Back behaves.
+
+**Unified** shows the patch as one column, the way the server sent it. **Split**
+puts the old and new side by side, which is easier for a rewritten block and is
+the only way to leave a note on the *old* line of a line that did not change. The
+toggle is next to the filter and applies to the whole diff, and it keeps the
+filter you typed.
+
+**Click a line to leave a note on it**; click a second line in the same file to
+widen the range. Drafts stay in your browser until you send them, and a single
+note about one line is submitted without a pointless zero-width range. **Request
+changes** sends the notes with your overall summary and starts a rework task; it
+is disabled while a rework from an earlier rejection is still in flight.
+
+If the bee pushes while you are reviewing, the panel says so, names both commits,
+and holds the send until you confirm you have re-read the diff — your notes are
+kept rather than dropped, because their line numbers may no longer mean the same
+thing but the thinking behind them is still yours. On the proposal page, **Approve** (or **Open PR** / **Update PR**)
+asks for an approval summary and, for a final gate, an optional commit message;
+plain **Reject** publishes your feedback without starting a rework, which is the
+difference the two buttons make.
+
 ### Sessions and Runs
 
 **Sessions** launches, attaches to, stops, and inspects interactive bees. Finished **Cursor or OpenCode** HITL sessions with a stored provider id offer **Resume** (optional continue line) — a new Paseka session in the same provider chat, without `create-chat` / pre-create.
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
+
+On `/next/runs` the list is compact: the state is badged, the trail and the run
+are both links, and the adapter is searchable rather than a column. Opening a run
+gives its metadata, the adapter's own summary, the task body, and the events it
+recorded. **Those events are a readable list** — contract, payload kind, and what
+was said — with the raw event folded away on each row, where the legacy console
+printed `[TYPE #seq] {json}`. An event whose payload carries no summary still says
+something, because the row falls back to the payload's own fields and an
+`artifact.written` shows the artifact it wrote.
+
+**The chevrons either side of a run's id step through that trail's runs** in start
+order — the previous attempt, the next one — which is how you read what a bee did
+across retries. They are real links, so a run in a trail can be shared and Back
+behaves. A run with no sibling that way leaves its chevron disabled, and a run
+older than the recent window says it has no known position rather than pretending
+it is alone. The page refreshes every 5 seconds, because a run's state is the one
+thing on these pages that moves while you watch. A run's *events* are what it
+announced on the bus, not its transcript; the transcript is the task body above
+them.
 
 CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
@@ -96,11 +214,42 @@ Visualizes bee subscriptions, publications, dispatch mode, and automatic
 invites from colony YAML. Generate the same graph as Mermaid with
 `paseka colony topology`.
 
+On `/next/topology` the same graph is drawn, with bees in a left column and
+event kinds wrapped beside them. Solid edges are subscriptions, dashed are
+declared publications, dotted are colony invites, and a faded edge is a
+subscription the bee never wrote down — an empty `subscribes` means any
+`task.ready` reaches it. Each contract keeps one hue, taken from the console
+theme, so the graph follows a theme switch instead of staying dark. Drag a node
+to rearrange; the shape is remembered per colony, and **Reset layout** puts it
+back. The page re-reads only when you press **Refresh**, because the projection
+comes from committed config and changes when a commit lands rather than on a
+clock. **Copy Mermaid** and the Mermaid block below the graph are the same data
+as text — the graph is a picture, so this is the form you can paste into a pull
+request or read aloud.
+
 ### System
 
 Shows the OS view of the Console process: host identity, CPU, memory, uptime,
 load, colony disk, and a capped process list. In a container this is the
-container's PID namespace; no Docker API is queried.
+container's PID namespace; no Docker API is queried. Read it, do not act on it:
+there are no kill, nice, or signal controls, and a process name is a hint that
+work is happening rather than a ledger of what the colony started.
+
+On `/next/system` the metrics lead the page, and the Host plaque in the topbar
+links here. Three of them — available memory, the 5 and 15 minute load, and
+colony disk — are here precisely because the plaque has no room for them. A
+figure the server could not measure leaves its tile out instead of showing a
+dash, so a box that is missing memory looks missing rather than broken. The
+process table starts folded with the count in its summary line, and a live
+adapter's row is badged so you can find it without cross-referencing the Live
+bees panel.
+
+Two numbers on this page use different denominators: the CPU tile is the whole
+machine and stops at 100%, while a process row is measured against a single
+core, so a busy process reads 172%. That is the server's arithmetic, not a
+broken table. CPU percent also needs two samples, so it shows a dash with the
+reason on the very first poll after a restart. Nothing here needs the Hive
+runtime, and the page keeps working when it is stopped.
 
 ### Git
 
@@ -109,6 +258,20 @@ merged branches. Fetch only updates remote-tracking refs; Pull is
 fast-forward-only; Push is explicit and never uses `--force`. This tab does
 **not** push worktree branches or open pull requests — that is Reviews publish
 when `defaults.delivery` is `pull_request`.
+
+On `/next/git` the same three actions sit as one compact group in the page
+header, with **Push** highlighted only while the clone has commits it has not
+published. A worktree row links to the trail that owns it, and a branch row
+carries one word — `current`, `leftover`, or `merged` — so a settled branch does
+not repeat its flags. **Prune orphans** and **Delete N leftovers** remove local
+state, so they ask first and the delete names every branch involved; a refusal
+(say, a branch a live worktree still holds) is reported per branch instead of
+being rounded up to a failure. Without an `origin` remote the three actions are
+disabled and the page says why. The preview re-reads the clone after every
+action and otherwise refreshes on a 15-second timer — slower than the legacy tab
+because each read shells out to `git` several times — and it runs one action at
+a time, so a second click is refused rather than queued behind a push. Nothing
+here needs the Hive Runtime.
 
 ## Common operator actions
 

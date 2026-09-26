@@ -161,15 +161,108 @@ func ParseEventFilter(values url.Values) EventFilter {
 	}
 }
 
-// ListTraces returns recent trace summaries.
-func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
-	if limit <= 0 {
-		limit = 20
+// DefaultTracePageLimit is the trace page size when the caller asks for none.
+const DefaultTracePageLimit = 20
+
+// MaxTracePageLimit caps how much one trace page may cost the scan.
+const MaxTracePageLimit = 200
+
+// TracePageQuery is one page of the trace history: the newest `Limit` traces,
+// optionally starting strictly after the `Before` cursor.
+type TracePageQuery struct {
+	Limit  int
+	Before string
+}
+
+// ParseTracePageQuery reads limit and before from a query string. An absent
+// limit falls back to the default and an oversized one clamps; a limit that is
+// not a positive integer, or a malformed cursor, is an error the caller should
+// answer 400 with.
+func ParseTracePageQuery(values url.Values) (TracePageQuery, error) {
+	query := TracePageQuery{Limit: DefaultTracePageLimit}
+	if raw := strings.TrimSpace(values.Get("limit")); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 {
+			return TracePageQuery{}, fmt.Errorf("limit must be a positive integer")
+		}
+		query.Limit = min(limit, MaxTracePageLimit)
 	}
-	summaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, limit)
+	if raw := strings.TrimSpace(values.Get("before")); raw != "" {
+		if _, _, err := ParseTraceCursor(raw); err != nil {
+			return TracePageQuery{}, err
+		}
+		query.Before = raw
+	}
+	return query, nil
+}
+
+// ParseTraceCursor splits a `<rfc3339nano>|<traceId>` cursor. The timestamp is
+// the last row's activity and the id breaks ties, so paging over traces that
+// share an activity instant stays exact.
+func ParseTraceCursor(cursor string) (time.Time, string, error) {
+	at, id, found := strings.Cut(strings.TrimSpace(cursor), "|")
+	if !found || strings.TrimSpace(id) == "" {
+		return time.Time{}, "", fmt.Errorf("before must look like <rfc3339nano>|<traceId>")
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(at))
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("before must start with an RFC3339 timestamp")
+	}
+	return parsed, strings.TrimSpace(id), nil
+}
+
+// TraceCursorFor builds the cursor that resumes after the given summary.
+func TraceCursorFor(summary runs.TraceSummary) string {
+	return summary.LastActivityAt.UTC().Format(time.RFC3339Nano) + "|" + summary.TraceID
+}
+
+// ListTracesPage returns one page of trace summaries, newest first. A `Before`
+// cursor is exclusive, so paging with the last row of a page never repeats it.
+func ListTracesPage(ctx colony.Context, query TracePageQuery) ([]TraceSummaryView, error) {
+	limit := query.Limit
+	if limit <= 0 {
+		limit = DefaultTracePageLimit
+	}
+	limit = min(limit, MaxTracePageLimit)
+
+	if query.Before == "" {
+		summaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, limit)
+		if err != nil {
+			return nil, err
+		}
+		return projectTraces(ctx, summaries)
+	}
+
+	beforeAt, beforeID, err := ParseTraceCursor(query.Before)
 	if err != nil {
 		return nil, err
 	}
+	// The scan sorts everything and slices, so a cursor page must look past the
+	// page it keeps; only then is the cursor applied.
+	summaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, cursorPageScanLimit(limit))
+	if err != nil {
+		return nil, err
+	}
+	cursor := runs.TraceSummary{TraceID: beforeID, LastActivityAt: beforeAt}
+	kept := summaries[:0]
+	for _, s := range summaries {
+		if runs.TraceOrderBefore(cursor, s) {
+			kept = append(kept, s)
+		}
+	}
+	if len(kept) > limit {
+		kept = kept[:limit]
+	}
+	return projectTraces(ctx, kept)
+}
+
+// cursorPageScanLimit bounds how deep a cursor page may scan.
+func cursorPageScanLimit(limit int) int {
+	return limit * 10
+}
+
+// projectTraces enriches raw run summaries into the Console projection.
+func projectTraces(ctx colony.Context, summaries []runs.TraceSummary) ([]TraceSummaryView, error) {
 	standing := LoadStandingTraceIDs(ctx.ColonyRoot)
 	out := make([]TraceSummaryView, 0, len(summaries))
 	for _, s := range summaries {
@@ -183,6 +276,18 @@ func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
 		out = append(out, view)
 	}
 	return out, nil
+}
+
+// ListTraces returns recent trace summaries.
+func ListTraces(ctx colony.Context, limit int) ([]TraceSummaryView, error) {
+	if limit <= 0 {
+		limit = DefaultTracePageLimit
+	}
+	summaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, limit)
+	if err != nil {
+		return nil, err
+	}
+	return projectTraces(ctx, summaries)
 }
 
 // GetTrace returns one trace detail view.

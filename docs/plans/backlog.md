@@ -2,6 +2,7 @@
 
 Deferred ideas, follow-ups, bugs, and implementation assumptions outside the active change.
 Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-index.md).
+Console redesign navigation debt lives in [UI migration backlog](ui-migration-backlog.md) — dead links, unbuilt transitions, and placeheld sections.
 
 ## Deferred work
 
@@ -87,6 +88,22 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 
 API fields for energy and merge-diff exist; per-run proposal preview is still thin.
 
+#### Range reads for oversized comb files
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
+- **Summary:** The trace comb modal reports `file too large for inline preview` for anything over 512 KiB, with no way to read the rest. A byte-range or line-range read, or a download link beside the omission, would make a large `checkpoint.json` inspectable without raising the inline cap.
+- **Why deferred:** The cap is the server's and predates the redesign; the legacy console had the same dead end. Trail comb files are usually small, and raising the cap trades memory for a case that is rare.
+- **Revisit when:** An operator hits an unreadable comb file in a real trail, or comb files start growing past a few hundred KiB.
+
+#### Console redesign `/next` parity sweep
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- **Summary:** Migrate the remaining `/next` routes (Sessions, Bees, Worktrees, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
+- **Why deferred:** Deliberate phase order — the shell and the two highest-traffic surfaces (Dashboard, Traces) land first so the design system is proven on real data before the rest depend on it. Git followed, because its page forced the mutating-action questions (button sizing, what confirms, what a partial success says) that every later route with a button will face.
+- **Revisit when:** The next route is picked up. Nothing blocks it technically; the ordering was a risk choice.
+
 #### Per-run proposal diff in Reviews
 
 - **Kind:** follow-up
@@ -164,7 +181,7 @@ Leftovers from [023-console-git](../specs/023-console-git.md). The Git tab MVP c
 - **Kind:** follow-up
 - **Source:** [023-console-git](../specs/023-console-git.md)
 - **Summary:** Disable Push and branch-delete (not Fetch) while Live bees or a merge is in progress. Pull already refuses colony-root bees and in-progress merge in 023.
-- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API.
+- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API. The `/next/git` store serialises its own mutations so two clicks cannot race, but that is a UI guard against one page, not this lock — it sees nothing about live bees.
 - **Revisit when:** A Push or branch delete races an in-flight adapter in practice, or operators ask for a hard lock.
 
 #### Gitea (or origin host) commit links

@@ -414,7 +414,7 @@ Implemented HTTP endpoints:
 - `GET /api/dashboard`
 - `GET /api/tasks`
 - `POST /api/tasks`
-- `GET /api/traces`
+- `GET /api/traces` — recent trail summaries, newest activity first (trace id breaks ties so the order is total). `?limit=` sets the page size (default 20, clamped to 200); `?before=` pages strictly older than a `<rfc3339nano>|<traceId>` cursor, which the client builds from the last row of the previous page. A non-positive or non-numeric `limit` and a malformed `before` answer 400 with the reason.
 - `GET /api/traces/:traceId`
 - `GET /api/traces/:traceId/merge-diff` — three-dot worktree merge preview (`defaultBranch...traceBranch`, unified diff + stat; truncated at 1 MiB). Response shape:
 

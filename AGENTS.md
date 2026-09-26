@@ -40,6 +40,7 @@ Read these before making architectural or naming decisions:
 - [docs/guide/interactive-sessions.md](docs/guide/interactive-sessions.md) — Interactive agent sessions (HITL), `bee chat`, session registry, Ghostty attach.
 - [docs/guide/bee-config.md](docs/guide/bee-config.md) — Bee role YAML: adapter, params, command/post_exec, routing and completion fields.
 - [docs/guide/homelab-deployment.md](docs/guide/homelab-deployment.md) — Server/apiary container + Queen Console.
+- [docs/architecture/queen-console-design-system.md](docs/architecture/queen-console-design-system.md) — Queen Console UI contract (themes, component inventory, hard rules) — read before writing any console UI.
 
 ## After Go changes
 
