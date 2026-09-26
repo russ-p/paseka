@@ -21,7 +21,10 @@ import type {
 	TaskListItem,
 	Topology,
 	TraceDetail,
-	TraceSummary
+	Invite,
+	Session,
+	TraceSummary,
+	TranscriptEntry
 } from '$lib/api/types';
 
 export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummary {
@@ -566,6 +569,48 @@ export function mergeDiff(overrides: Partial<MergeDiff> = {}): MergeDiff {
 			''
 		].join('\n'),
 		delivery: 'local_merge',
+		...overrides
+	};
+}
+
+/** One interactive session, running or finished. */
+export function session(overrides: Partial<Session> = {}): Session {
+	return {
+		sessionId: 'agent-01a0bd743c33d82c',
+		traceId: 'trace-01a0bd6963faa14f',
+		agentId: '01a0bd743c33d82c',
+		bee: 'builder',
+		adapter: 'cursor',
+		workspace: 'isolated',
+		runDir: '.paseka/runs/trace-01a0bd6963faa14f/01a0bd743c33d82c',
+		state: 'active',
+		pid: 48213,
+		providerSessionId: 'prov-9f2c',
+		startedAt: '2026-09-25T18:01:00Z',
+		active: true,
+		...overrides
+	};
+}
+
+export function transcriptEntry(overrides: Partial<TranscriptEntry> = {}): TranscriptEntry {
+	return {
+		at: '2026-09-25T18:01:05Z',
+		role: 'agent',
+		content: 'Looking at the gate now.',
+		...overrides
+	};
+}
+
+export function invite(overrides: Partial<Invite> = {}): Invite {
+	return {
+		inviteId: 'invite-01',
+		traceId: 'trace-01a0bd6963faa14f',
+		bee: 'builder',
+		intent: 'feature',
+		task: 'Add the --format flag to paseka export.',
+		status: 'pending',
+		createdAt: '2026-09-25T17:58:00Z',
+		updatedAt: '2026-09-25T17:58:00Z',
 		...overrides
 	};
 }

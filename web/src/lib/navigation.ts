@@ -55,6 +55,11 @@ export function reviewPreviewPath(base: string, traceId: string, taskId: string)
 	return `${reviewDetailPath(base, traceId, taskId)}/preview`;
 }
 
+/** One interactive session; a child path of the Sessions menu entry. */
+export function sessionDetailPath(base: string, sessionId: string): string {
+	return `${consolePath(base, '/sessions')}/${encodeURIComponent(sessionId)}`;
+}
+
 /** The Timeline feed scoped to one trail. */
 export function traceTimelinePath(base: string, traceId: string): string {
 	return `${consolePath(base, '/timeline')}?trace=${encodeURIComponent(traceId)}`;

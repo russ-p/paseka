@@ -1,9 +1,11 @@
 import type {
 	ApproveTaskRequest,
+	AcceptInviteResult,
 	ApproveTaskResult,
 	ArtifactContent,
 	ArtifactView,
 	Bee,
+	CreateSessionRequest,
 	CreateTaskRequest,
 	CreateTaskResult,
 	Cue,
@@ -13,6 +15,7 @@ import type {
 	EventFilters,
 	GitActionResult,
 	GitView,
+	Invite,
 	MergeDiff,
 	RejectTaskRequest,
 	RejectTaskResult,
@@ -22,13 +25,16 @@ import type {
 	RunEventsPage,
 	RunSummary,
 	RuntimeStatus,
+	Session,
 	StartTaskResult,
+	StopSessionResult,
 	SystemView,
 	TaskBoard,
 	TaskDetail,
 	Topology,
 	TraceDetail,
-	TraceSummary
+	TraceSummary,
+	TranscriptPage
 } from '$lib/api/types';
 
 /**
@@ -336,4 +342,56 @@ export function getMergeDiff(traceId: string): Promise<MergeDiff> {
  */
 export function listBees(): Promise<Bee[]> {
 	return request<Bee[]>('/bees');
+}
+
+/**
+ * Every session the colony knows about, newest activity first: the live registry,
+ * this process's own sessions, and a scan of `.paseka/runs`. One request rather
+ * than a list plus a detail per row, because a run's identity is already on it.
+ */
+export function listSessions(): Promise<Session[]> {
+	return request<Session[]>('/sessions');
+}
+
+export function getSession(sessionId: string): Promise<Session> {
+	return request<Session>(`/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+/** A slice of the transcript from `after`, which is an entry index. */
+export function getSessionTranscript(sessionId: string, after: number): Promise<TranscriptPage> {
+	return request<TranscriptPage>(
+		`/sessions/${encodeURIComponent(sessionId)}/transcript?after=${after}`
+	);
+}
+
+/**
+ * Start a session. The form sends only the fields the operator filled: the server
+ * treats a present-but-blank trace id differently from an absent one, where absent
+ * means "generate one".
+ */
+export function createSession(session: CreateSessionRequest): Promise<Session> {
+	return post<Session>('/sessions', session);
+}
+
+export function stopSession(sessionId: string): Promise<StopSessionResult> {
+	return post<StopSessionResult>(`/sessions/${encodeURIComponent(sessionId)}/stop`, {});
+}
+
+/** Continue a finished session in a *new* one; the result is the new session. */
+export function resumeSession(sessionId: string, body: string): Promise<Session> {
+	return post<Session>(`/sessions/${encodeURIComponent(sessionId)}/resume`, { body });
+}
+
+/** Pending invites, which are tasks waiting for a human to start them. */
+export function listInvites(): Promise<Invite[]> {
+	return request<Invite[]>('/invites');
+}
+
+/** Starts a session when the invite names one, so the caller can go straight to it. */
+export function acceptInvite(inviteId: string): Promise<AcceptInviteResult> {
+	return post<AcceptInviteResult>(`/invites/${encodeURIComponent(inviteId)}/accept`, {});
+}
+
+export function rejectInvite(inviteId: string): Promise<Invite> {
+	return post<Invite>(`/invites/${encodeURIComponent(inviteId)}/reject`, {});
 }

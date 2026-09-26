@@ -8,6 +8,7 @@ import {
 	insightHighlight,
 	protocolEvent,
 	runSummary,
+	session,
 	taskDetail,
 	taskListItem,
 	systemView,
@@ -18,6 +19,12 @@ import {
 	agentsDetail,
 	agentsDetailFull,
 	agentsMeta,
+	sessionDuration,
+	sessionIdentityRows,
+	sessionRelayBlocker,
+	sessionResumeBlocker,
+	sessionRowMeta,
+	sessionStateLabel,
 	dashboardFailedRuns,
 	formatTimestamp,
 	insightTime,
@@ -1087,5 +1094,81 @@ describe('task formatters', () => {
 		expect(taskRunMeta(run)).toContain('.paseka/runs/trace-01a0bd6963faa14f/run-02');
 		// A run with neither a start time nor a directory leaves no empty separator.
 		expect(taskRunMeta({ agentId: 'run-01' })).toBe('');
+	});
+});
+
+describe('session formatting', () => {
+	it('reads a stopped session as stopped, not as a failure', () => {
+		// The legacy badged `cancelled` with the `failed` class, so stopping a session
+		// and watching one crash were the same red badge.
+		expect(sessionStateLabel(session({ active: true, state: 'active' }))).toBe('running');
+		expect(sessionStateLabel(session({ active: false, state: 'completed' }))).toBe('completed');
+		expect(sessionStateLabel(session({ active: false, state: 'cancelled' }))).toBe('stopped');
+		expect(sessionStateLabel(session({ active: false, state: 'failed' }))).toBe('failed');
+		expect(sessionStateLabel(session({ active: false, state: '' }))).toBe('unknown');
+	});
+
+	it('measures a running session against now, and a finished one against its end', () => {
+		const started = '2026-09-25T18:01:00Z';
+		const done = session({
+			active: false,
+			state: 'completed',
+			startedAt: started,
+			finishedAt: '2026-09-25T18:11:30Z'
+		});
+		expect(sessionDuration(done)).toBe('10m 30s');
+
+		// A session with no end has not ended: the elapsed time is the only honest number.
+		const live = session({ active: true, startedAt: '2026-09-25T18:01:00Z' });
+		expect(sessionDuration(live, Date.parse('2026-09-25T18:01:45Z'))).toBe('45s');
+		expect(sessionDuration(session({ startedAt: 'not a date' }))).toBe('—');
+	});
+
+	it('shows the adapter, because resume eligibility is decided by it', () => {
+		// The legacy read `adapter` on every poll and never rendered it, so a session that
+		// could not be resumed gave no clue why.
+		const rows = sessionIdentityRows(session({ adapter: 'opencode' }));
+		expect(rows.find((row) => row.label === 'Adapter')?.value).toBe('opencode');
+		expect(rows.map((row) => row.label)).toContain('Duration');
+	});
+
+	it('explains every reason a session cannot be resumed', () => {
+		expect(sessionResumeBlocker(session({ adapter: 'pi' }))).toMatch(/does not support resuming/);
+		expect(
+			sessionResumeBlocker(session({ adapter: 'cursor', providerSessionId: undefined }))
+		).toMatch(/never reported a session id/);
+		// Both halves present is the only resumable shape, and then there is nothing to say.
+		expect(sessionResumeBlocker(session({ adapter: 'cursor', providerSessionId: 'prov-1' }))).toBe('');
+	});
+
+	it('turns a relay refusal into something an operator can act on', () => {
+		// These are the two reasons the server sends, captured from a live console against
+		// a session owned by another process: the socket opens, the server reports
+		// `exited` with the reason, and closes 1008 with the same text.
+		expect(
+			sessionRelayBlocker('sessions: session "01a0b84b39c3b538" not active in this process')
+		).toMatch(/another process/);
+		expect(
+			sessionRelayBlocker('sessions: session "agent-1" has no pty hub (not detached)')
+		).toMatch(/no terminal relay/);
+		// An unrecognised reason is passed through rather than swallowed: the operator can
+		// read it and report it, where a generic message would hide the actual failure.
+		expect(sessionRelayBlocker('pty read error: broken pipe')).toBe('pty read error: broken pipe');
+		expect(sessionRelayBlocker('')).toBe('');
+	});
+
+	it('summarises a row with the adapter, which is what tells two sessions apart', () => {
+		// Two sessions from the same bee are told apart by the agent, not the date: the
+		// legacy row showed the bee, the id, and the time, and the id was the only one
+		// that differed usefully.
+		const row = session({
+			bee: 'builder',
+			adapter: 'cursor',
+			active: false,
+			state: 'completed',
+			startedAt: '2026-09-25T18:01:00Z',
+			finishedAt: '2026-09-25T18:01:30Z'
+		});
+		expect(sessionRowMeta(row)).toBe('builder · cursor · 30s');
 	});
 });

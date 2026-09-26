@@ -17,6 +17,7 @@ import type {
 	PullRequest,
 	RunSummary,
 	RuntimeStatus,
+	Session,
 	SignalSummary,
 	TaskDetail,
 	TaskListItem,
@@ -1064,4 +1065,156 @@ export function taskRunMeta(run: TaskRun): string {
 		(part) => part !== '' && part !== '—'
 	);
 	return parts.join(' · ');
+}
+
+/**
+ * The adapters whose sessions can be continued. Mirrors
+ * `sessions.resumableSessionAdapters` on the server: a resume needs the provider's own
+ * conversation id, and only these two hand one back.
+ */
+export function sessionResumable(session: Session): boolean {
+	return session.adapter === 'cursor' || session.adapter === 'opencode';
+}
+
+/**
+ * Why a session cannot be resumed, or `''` when it can.
+ *
+ * The legacy hid the resume control entirely for an adapter that does not support it,
+ * which left an operator with no explanation and nothing to click; it showed a bare
+ * "No provider session id" for the other case. Both are now reasons, because both are
+ * things an operator would otherwise ask about.
+ */
+export function sessionResumeBlocker(session: Session): string {
+	if (!sessionResumable(session)) {
+		return `The ${session.adapter ?? 'unknown'} adapter does not support resuming a session.`;
+	}
+	if (!session.providerSessionId) {
+		return 'The provider never reported a session id, so there is no conversation to continue.';
+	}
+	return '';
+}
+
+/**
+ * A session's state, as the operator reads it. `cancelled` is folded into the stopped
+ * bucket rather than shown as a failure: the legacy badged it with the `failed` class,
+ * so stopping a session and watching it crash looked identical.
+ */
+export function sessionStateLabel(session: Session): string {
+	if (session.active) return 'running';
+	switch (session.state) {
+		case 'completed':
+			return 'completed';
+		case 'failed':
+			return 'failed';
+		case 'cancelled':
+			return 'stopped';
+		default:
+			return session.state === '' ? 'unknown' : session.state;
+	}
+}
+
+export function sessionStateStatus(session: Session): 'active' | 'completed' | 'failed' {
+	if (session.active) return 'active';
+	return session.state === 'completed' ? 'completed' : 'failed';
+}
+
+/**
+ * How long a session has been running, or ran for. The legacy computed a duration
+ * formatter for Runs and Traces and never used it here, so a session's length was only
+ * knowable by subtracting two timestamps by hand.
+ */
+export function sessionDuration(session: Session, now = Date.now()): string {
+	const started = Date.parse(session.startedAt);
+	if (Number.isNaN(started)) return '—';
+	const finished = session.finishedAt ? Date.parse(session.finishedAt) : NaN;
+	const end = Number.isNaN(finished) ? (session.active ? now : started) : finished;
+	return formatDuration(end - started);
+}
+
+/**
+ * A session's identity rows. The adapter is here because resume eligibility is decided
+ * by it, and the legacy read `adapter` on every poll and never showed it — so a session
+ * that could not be resumed gave no clue why.
+ */
+export function sessionIdentityRows(
+	session: Session | null,
+	trailHref?: (traceId: string) => string,
+	runHref?: (traceId: string, agentId: string) => string
+): MetaRow[] {
+	if (!session) return [];
+	const rows: MetaRow[] = [];
+	rows.push({ label: 'Session', value: session.sessionId, mono: true, copy: true });
+	rows.push({
+		label: 'Trail',
+		value: session.traceId,
+		mono: true,
+		href: trailHref?.(session.traceId)
+	});
+	rows.push({
+		label: 'Agent',
+		value: session.agentId,
+		mono: true,
+		href: runHref?.(session.traceId, session.agentId)
+	});
+	rows.push({ label: 'Bee', value: session.bee, mono: true });
+	rows.push({ label: 'Adapter', value: session.adapter ?? '—', mono: true });
+	rows.push({ label: 'Workspace', value: session.workspace, mono: true });
+	rows.push({
+		label: 'Run directory',
+		value: session.runDir,
+		mono: true,
+		hint: [session.runDir],
+		copy: true
+	});
+	rows.push({
+		label: 'Provider session',
+		value: session.providerSessionId ?? '—',
+		mono: true,
+		copy: session.providerSessionId !== undefined
+	});
+	if (session.resumedFrom) {
+		rows.push({ label: 'Resumed from', value: session.resumedFrom, mono: true, copy: true });
+	}
+	if (session.profile) rows.push({ label: 'Profile', value: session.profile, mono: true });
+	rows.push({ label: 'State', value: sessionStateLabel(session) });
+	rows.push({ label: 'Started', value: formatTimestamp(session.startedAt) });
+	rows.push({ label: 'Finished', value: formatTimestamp(session.finishedAt) });
+	rows.push({ label: 'Duration', value: sessionDuration(session) });
+	if (session.pid !== undefined) rows.push({ label: 'PID', value: String(session.pid), mono: true });
+	return rows;
+}
+
+/**
+ * The list row's label: the bee and the agent behind it. A colony runs the same bee
+ * repeatedly — this one had three `main-guard` sessions in a row — so a row showing only
+ * the bee is three identical-looking rows, and the adapter is what tells them apart.
+ */
+export function sessionLabel(session: Session): string {
+	return session.adapter ? `${session.bee} · ${session.adapter}` : session.bee;
+}
+
+/** The same row, with how long it has run — for a filter match or a summary line. */
+export function sessionRowMeta(session: Session): string {
+	return `${sessionLabel(session)} · ${sessionDuration(session)}`;
+}
+
+/**
+ * What a terminal relay's failure means, in the operator's terms.
+ *
+ * The relay only carries a PTY the console's own process holds, so the two failures
+ * worth naming are "another process owns this session" and "this session has no relay".
+ * The server's reasons are Go error strings, so this recognises them rather than
+ * pretending the client can know in advance — which it cannot: a session started by
+ * `paseka bee chat` in another terminal looks exactly like a live one on the list, and
+ * the only honest answer comes from asking.
+ */
+export function sessionRelayBlocker(reason: string): string {
+	if (reason === '') return '';
+	if (reason.includes('not active in this process')) {
+		return 'This session is running in another process, so the console cannot relay its terminal. Its output is in the run directory, and paseka session attach opens it locally. Stop still works: it signals the process by PID.';
+	}
+	if (reason.includes('has no pty hub')) {
+		return 'This session has no terminal relay attached, so there is nothing for the console to stream. Stop and resume still work.';
+	}
+	return reason;
 }

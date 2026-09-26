@@ -34,10 +34,10 @@ explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
 page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
-detail), **Tasks** (board and task detail), and **Reviews** (queue, proposal, and
-merge preview). Every other route under `/next/` renders a "migration pending"
-card that links back to the legacy console, so use `/` for Sessions, Bees, and
-Worktrees for now.
+detail), **Tasks** (board and task detail), **Reviews** (queue, proposal, and
+merge preview), and **Sessions** (list and session detail). Every other route under
+`/next/` renders a "migration pending" card that links back to the legacy console,
+so use `/` for Bees and Worktrees for now.
 
 ## What requires the Hive Runtime
 
@@ -116,38 +116,6 @@ CLI equivalents are `paseka proposal approve` and `paseka proposal reject`.
 Review approval does not push the default branch to its remote. The Git tab
 never pushes the worktree head; PR publish does.
 
-### Tasks
-
-The **task board** groups every task the colony's ledger knows into one column
-per lifecycle status, in the order the pipeline runs — ready, running, waiting
-review, planned, blocked, failed, completed. A card says what it is, who takes
-it, how many runs it has made, what it waits on, and whether the ledger says it
-is startable or retryable right now. Each column scrolls on its own, because a
-colony is mostly completed history and the work should not be buried under it. A
-status the colony has no task in is left out rather than shown empty.
-
-**New task** opens a form from the side. Pick the bee and the intents narrow to
-the prompt templates that bee actually declares. Leave the trail id empty for a
-new trail, or name a standing one to add the task to it; both ids are generated
-server-side otherwise. Each review policy says what it means as you pick it, and
-**Start immediately** publishes `task.ready` so a dispatcher picks the task up
-without a trip through the board. Creating and starting both need NATS and a
-running `paseka run`.
-
-Open a task for its metadata, the body it was handed (folded — reading a task is
-about what it did, not what it was given), the bee's own summary, and its linked
-runs, each linking on to the run's own page. **Start** and **Retry** appear only
-when the server says the task is eligible, and report the ledger's refusal in its
-own words when it says no. A task waiting on you carries **Approve** and
-**Request changes** here rather than only on the review queue: the pull-request
-fields sit under Approve and appear only for a task delivered as a pull request,
-and Request changes is one box — your feedback becomes the rework task's body.
-Creating a task from the CLI is `paseka task create`; the other task CLI
-equivalents are `paseka task list`, `paseka task show`, `paseka task start`, and
-`paseka task retry`.
-
-### Reviews
-
 The **queue** is every task that stopped at a review gate. A final merge gate is
 badged apart from a mid-trail review, and each row says what approving will
 actually do — merging a local branch, or opening a pull request — because that is
@@ -180,9 +148,39 @@ asks for an approval summary and, for a final gate, an optional commit message;
 plain **Reject** publishes your feedback without starting a rework, which is the
 difference the two buttons make.
 
-### Sessions and Runs
 
-**Sessions** launches, attaches to, stops, and inspects interactive bees. Finished **Cursor or OpenCode** HITL sessions with a stored provider id offer **Resume** (optional continue line) — a new Paseka session in the same provider chat, without `create-chat` / pre-create.
+### Tasks
+
+The **task board** groups every task the colony's ledger knows into one column
+per lifecycle status, in the order the pipeline runs — ready, running, waiting
+review, planned, blocked, failed, completed. A card says what it is, who takes
+it, how many runs it has made, what it waits on, and whether the ledger says it
+is startable or retryable right now. Each column scrolls on its own, because a
+colony is mostly completed history and the work should not be buried under it. A
+status the colony has no task in is left out rather than shown empty.
+
+**New task** opens a form from the side. Pick the bee and the intents narrow to
+the prompt templates that bee actually declares. Leave the trail id empty for a
+new trail, or name a standing one to add the task to it; both ids are generated
+server-side otherwise. Each review policy says what it means as you pick it, and
+**Start immediately** publishes `task.ready` so a dispatcher picks the task up
+without a trip through the board. Creating and starting both need NATS and a
+running `paseka run`.
+
+Open a task for its metadata, the body it was handed (folded — reading a task is
+about what it did, not what it was given), the bee's own summary, and its linked
+runs, each linking on to the run's own page. **Start** and **Retry** appear only
+when the server says the task is eligible, and report the ledger's refusal in its
+own words when it says no. A task waiting on you carries **Approve** and
+**Request changes** here rather than only on the review queue: the pull-request
+fields sit under Approve and appear only for a task delivered as a pull request,
+and Request changes is one box — your feedback becomes the rework task's body.
+Creating a task from the CLI is `paseka task create`; the other task CLI
+equivalents are `paseka task list`, `paseka task show`, `paseka task start`, and
+`paseka task retry`.
+
+### Runs
+
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
 
@@ -207,6 +205,29 @@ them.
 
 CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
+
+### Sessions
+
+Every interactive session the colony knows about, newest activity first: **Launch
+session** opens a form for a bee, an intent drawn from that bee's own prompt
+templates, the task, and an optional trail id. **Pending invites** are folded away
+when there are none.
+
+Open a session for what it is and what it wrote. A running one gets a **terminal**
+you can type into, with **Full screen** for when the surrounding page is in the way
+and **Detach** to let go of it without stopping anything. A finished one gets its
+**transcript** instead — kept to the most recent lines, following the newest one
+only while you are already at the bottom, with a **Latest** button the moment you
+reach back into history. **Stop** asks first, then says whether it killed the
+process outright or asked it to exit, because those are not the same act.
+**Resume** continues the provider's conversation as a *new* session; where it cannot
+— an adapter that does not support it, or a provider that never reported a session
+to continue — the page says which, rather than showing nothing.
+
+If a session is running in another process (`paseka bee chat` in a terminal), the
+console says so and points at `paseka session attach`: it can only relay a terminal
+its own process holds. Stop still works, because that is a signal rather than a
+socket.
 
 ### Topology
 

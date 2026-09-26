@@ -364,6 +364,101 @@ export interface RetryTaskResult {
 	message?: string;
 }
 
+/**
+ * Mirrors `console.SessionView`, one interactive session.
+ *
+ * `active` is a separate field rather than a reading of `state`, because the list is a
+ * merge of three sources — the colony registry, this process's own sessions, and a scan
+ * of `.paseka/runs` — and only the first two can be running. A session launched by
+ * `paseka bee chat` in another shell is `state: "active"` with a live PID and no PTY
+ * hub here, which is why `active` is what the console branches on.
+ */
+export interface Session {
+	sessionId: string;
+	traceId: string;
+	agentId: string;
+	bee: string;
+	/** Decides whether the session can be resumed; the legacy read it and never showed it. */
+	adapter?: string;
+	workspace: string;
+	/** `.paseka/runs/<traceId>/<agentId>` — where the transcript and artifacts land. */
+	runDir: string;
+	state: string;
+	/** Present only while running. `Process.Kill` locally, `SIGTERM` across processes. */
+	pid?: number;
+	/** The upstream conversation a resume continues; without it there is nothing to resume. */
+	providerSessionId?: string;
+	/** The session this one continued, on a resume. */
+	resumedFrom?: string;
+	profile?: string;
+	startedAt: string;
+	finishedAt?: string;
+	active: boolean;
+}
+
+/** Mirrors `runs.TranscriptEntry`, one line of `transcript.ndjson`. */
+export interface TranscriptEntry {
+	at: string;
+	/** `user`, `agent`, or `system`. The session path only ever writes `agent` and `system`. */
+	role: string;
+	content: string;
+}
+
+/**
+ * Mirrors `console.TranscriptPage`. `nextCursor` is an *entry index*, not a byte offset
+ * or an opaque token, so it can be sent straight back as `after`.
+ */
+export interface TranscriptPage {
+	entries: TranscriptEntry[];
+	nextCursor: number;
+}
+
+/** Mirrors `hiveview.InviteView`, a task waiting for a human to start it. */
+export interface Invite {
+	inviteId: string;
+	traceId: string;
+	bee: string;
+	intent?: string;
+	task: string;
+	status: string;
+	artifactRef?: string;
+	/** Set once an invite has been accepted into a session. */
+	sessionId?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** Mirrors `console.createSessionRequest`. */
+export interface CreateSessionRequest {
+	bee: string;
+	/** The task, templated by the intent. Ignored when `useRawPrompt` is set. */
+	body?: string;
+	rawPrompt?: string;
+	/** Omitted rather than sent blank: the server generates one. */
+	traceId?: string;
+	intent?: string;
+	useRawPrompt?: boolean;
+}
+
+/**
+ * What a stop actually did, which the two endpoints are not: a session in this process
+ * is `Process.Kill`ed, a session in another is `SIGTERM`ed from the colony registry.
+ * The legacy discarded this and the operator could not tell a hard kill from a request
+ * to exit.
+ */
+export interface StopSessionResult {
+	status: 'stopped' | 'signalled';
+}
+
+/** Mirrors the accept response: the invite, and the session it started when it started one. */
+export interface AcceptInviteResult {
+	inviteId: string;
+	traceId: string;
+	/** Absent when the invite is accepted but dispatched rather than launched. */
+	sessionId?: string;
+	session?: Session;
+}
+
 /** Mirrors `console.ReviewQueueItem`, one task waiting on a human. */
 export interface ReviewQueueItem {
 	traceId: string;
