@@ -42,6 +42,7 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 - **One mutation in flight per store.** `gitStore.run()` refuses a second call with a `busy` outcome rather than queueing it, because a push during a prune would race on the same refs. That guard is UI-level: it stops two clicks, not two browser tabs, and it is not the lock against live bees (see [Backlog](../plans/backlog.md)). A mutation that fails re-reads nothing — the view keeps the state before it, and the reason is reported.
 - A getter is for a **derived** value only (`natsStatus` maps a raw report to a status word, `activeTraceCount` counts in-flight trails). Pass-through fields (`activeSessions`, `activeWorktrees`, `taskCounts`) are read straight off `store.dashboard` instead — a getter that only forwards one field is noise.
 - `store.refresh()` forces an out-of-band poll; it is how a route updates itself after a mutation, in place of a manual Refresh button.
+- A truncating value needs `min-w-0` as well as `truncate`. A flex item defaults to `min-width: auto`, so a long path refuses to shrink and overruns its own label; and `Hint`'s wrapper is `min-w-0 flex-1` rather than `w-full`, because it is sometimes a flex item beside a copy button and claiming the whole row makes the pair overflow leftwards.
 - `lib/clipboard.ts` owns `copyText()`. `navigator.clipboard` only exists in a secure context and the documented homelab setup is plain http on a Tailscale IP, so the selection path is a real fallback, not defensive padding — and the scratch field is always removed, including when the copy is refused.
 - Formatters live in `lib/format.ts` and take plain values, not components, so they stay unit-testable. Take the narrowest structural type that covers what you read (`Pick<ArtifactView, 'announced'>`), so a formatter can be called with a literal in a test. Row timestamps use `formatTimestamp` (local, 24-hour, `YYYY-MM-DD HH:MM:SS`); `formatClock` stays for the topbar's time-of-day lines.
 
@@ -111,6 +112,17 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 - **The projection does not poll.** It is derived from committed bee YAML and colony `auto_invites`, so it changes when a commit lands, not on a clock; Refresh is the honest control.
 - The three actions stay visible. The audit wanted *Copy Mermaid* and *Reset layout* hidden behind a menu, which is right for a page that is mostly a picture — but both are things an operator reaches for *while looking at* the graph, and a menu would put them one click further from the thing they act on.
 
+## Runs routes (`/next/runs`, `/next/runs/:traceId/:agentId`)
+
+- **The list is compact: five columns, and the adapter is searchable rather than shown.** Which adapter ran is a real question, but the detail page answers it and a sixth column of identifiers is what pushed the run's own link off the right edge. The trail column is `grow`, so it absorbs the leftover width and truncates instead of shoving the last column out of the table.
+- **A wide table scrolls; it does not clip.** The table wrapper is `overflow-x-auto`, not `hidden`. A phone cannot fit six columns, and clipping the last one puts a link somewhere with no way to reveal it. The region scrolls and the page around it does not.
+- **The run's own state is the row's headline.** `State` carries the badge and the run id links to the detail; the trail id links to the trail. Both targets exist, so both are links, and neither repeats the other's words.
+- **Prev/next are real links, not buttons that swap a store.** A run has its own URL, so stepping to a sibling has to put that URL in the address bar — otherwise a run in a trail cannot be shared and Back does the wrong thing. `isRouteActive` treats the detail as a child of `/runs`, and the route change drives the store's select, which is the same shape the trail detail uses.
+- **Neighbours are by start time within the trail, not by list position.** A fresh run shifts list positions; "the previous run" means the one that started before this one, which is how an operator reads a trail. A run outside the recent window reports no position rather than a confident `1 of 1`.
+- **Events are projected, not dumped.** The run's events endpoint hands back raw `protocol.Event` envelopes, so `runEventSummary` derives the handful of fields a human reads — contract, payload kind, severity, summary — and the row is the same `SignalCard` the Dashboard and the Timeline feed already use. **A payload with no `summary` still says something**: `payloadDigest` lists the payload's readable fields, and a list of records contributes its first element, because `artifact.written` announces `{"artifacts": [...]}` and has no top-level scalar at all. The raw envelope stays one folded disclosure away, on the row, costing no request.
+- **The run summary is literal text, not prose.** Whatever the adapter wrote, terminal escapes included, stays in a scroll box rather than being reflowed or treated as markup. The task body is folded by default: reading a run is about what it did, not what it was handed.
+- **This route polls, unlike the feed and the topology.** A run's state moves from queued to running to completed while an operator watches, which is the one thing on these pages a timer is for.
+
 ## Component inventory (`lib/components/`)
 
 Use these. If a page needs a missing element, add the component here and extend this table — do not duplicate one-off markup across pages.
@@ -164,7 +176,7 @@ A status missing from the table falls through to `neutral` — that is a deliber
 4. Tabular lists are `DataTable`s (filter, paginate) — not hand-rolled `<table>` markup per page. A short list of related rows (a trail's tasks, runs, comb files) is a `<ul>` of `DetailRow`s, not a table.
 5. Icon-only buttons must carry an `aria-label`; rely on DaisyUI/Tailwind focus-visible outlines.
 6. Render loading (skeleton), empty, and error states — not just the happy path.
-7. Stay responsive to **768px**: side menu collapses, tables never force horizontal scroll on mobile.
+7. Stay responsive to **768px**: side menu collapses, and the **page** never scrolls sideways on mobile. A wide `DataTable` scrolls inside its own bordered region instead — a table that clips its last column puts a link somewhere with no way to reveal it, which is worse than a scroll the operator can see.
 8. Keyboard shortcuts across routes (e.g. `g d` dashboard, `g t` traces).
 9. On NATS disconnect show a reconnecting banner (`badge-warning`) and queue mutations locally; do not lose operator input. Never fire two runtime mutations at once.
 10. Consume typed payloads generated from the Go event contracts; no `any`-typed event handling.

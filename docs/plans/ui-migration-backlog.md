@@ -12,9 +12,9 @@ A link or control that resolves to a page which does not exist yet. Each one is 
 
 - **Kind:** blocker
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Task rows and run rows render as plain text because `/next/tasks` and `/next/runs` are `PagePlaceholder`. `DetailRow` already takes an `href` and nothing passes it.
-- **Why deferred:** A row that promises a destination and dead-ends is worse than a row that only shows state. The Dashboard set this precedent and the trail detail followed it.
-- **Revisit when:** Tasks and Runs land. Each row gets an `href` and nothing else changes — no markup work is left.
+- **Summary:** Task rows render as plain text because `/next/tasks` is still a `PagePlaceholder`. `DetailRow` already takes an `href` and nothing passes it. The run rows beside them now link, so the block visibly mixes linked and unlinked rows.
+- **Why deferred:** A row that promises a destination and dead-ends is worse than a row that only shows state. The Dashboard set this precedent, the trail detail followed it, and Runs has now landed so its half of the block can link.
+- **Revisit when:** Tasks lands. Each task row gets an `href` and nothing else changes — no markup work is left. The run rows already link, which is why the two blocks now differ.
 
 #### `PagePlaceholder` sends the operator to the legacy root
 
@@ -80,8 +80,8 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Tasks, Reviews, Sessions, Bees, Worktrees, and Runs. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down.
+- **Summary:** `PagePlaceholder` on Tasks, Reviews, Sessions, Bees, and Worktrees. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down. Runs opened the Colony group and, with it, the first detail route that steps between siblings of one parent.
 - **Revisit when:** The next route is picked up; nothing blocks it technically. **Tasks is next** — it is the last Work route, and the trail detail already links its task rows nowhere, so it is the one place where `DetailRow.href` has a real target waiting.
 
 ## Components the inventory promises
@@ -137,6 +137,22 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Summary:** `/next/timeline?trace=<id>` is a real deep link, but the other five filters live in the store and reset on reload, so `?type=VERIFICATION&bee=scout` cannot be shared or bookmarked.
 - **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
 - **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
+
+#### A run's events have no paging, because the endpoint caps nothing
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Runs migration)
+- **Summary:** `runs.Dir.readEventsFrom` returns `all[skip:]` with no limit, so `GET /api/runs/:traceId/:agentId/events` returns a run's entire event log in one response and `nextCursor` is an index rather than a promise of more. The run page therefore shows no paging control — a button could only ever confirm there was nothing left.
+- **Why deferred:** Adding a cap is a server change with a real cost: a run that emits thousands of events would need a bounded response and a client that pages it. That is worth doing only if a run is ever observed emitting that many; the busiest real run in this colony records three.
+- **Revisit when:** a run's event log is big enough to be slow, or the endpoint grows a `limit`. The client already knows the cursor shape — `listRunEvents(traceId, agentId, after)` takes an index — so restoring the control is a page change, not a rewrite.
+
+#### A wide table scrolls on a phone rather than reflowing
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Runs migration)
+- **Summary:** `DataTable`'s wrapper is `overflow-x-auto`, so a table too wide for the viewport scrolls inside its bordered region. Six columns of monospace identifiers do not reflow into anything readable on a 390px phone, and the previous `overflow-x-hidden` clipped the last column outright — putting a link with no way to reveal it.
+- **Why deferred:** Scrolling is the honest floor, not a good answer. A phone operator still has to pan sideways to compare two trails.
+- **Revisit when:** A route's table is genuinely unusable at phone width, which the Runs list is close to. The fix is a card layout below 768px — the Dashboard's `TraceRow` list is the precedent — rather than another column of `secondary` hiding, which only removes information.
 
 #### The colony graph is a picture with no text equivalent beside it
 

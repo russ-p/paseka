@@ -43,17 +43,20 @@
 				{#snippet value()}
 					{#if row.href}
 						<a
-							class="link truncate {row.mono ? 'font-mono' : ''}"
+							class="link min-w-0 flex-1 truncate {row.mono ? 'font-mono' : ''}"
 							href={row.href}
 							target="_blank"
 							rel="noopener noreferrer">{row.value}</a
 						>
 					{:else}
-						<span class="truncate {row.mono ? 'font-mono' : ''}">{row.value}</span>
+						<!-- `min-w-0` is what lets this shrink. A flex item defaults to
+						     `min-width: auto`, so without it a long path refuses to
+						     truncate and overruns its own label. -->
+						<span class="min-w-0 flex-1 truncate {row.mono ? 'font-mono' : ''}">{row.value}</span>
 					{/if}
 				{/snippet}
 				{#if row.hint?.length}
-					<Hint lines={row.hint}><span class="block truncate">{@render value()}</span></Hint>
+					<Hint lines={row.hint}><span class="block min-w-0 truncate">{@render value()}</span></Hint>
 				{:else}
 					{@render value()}
 				{/if}

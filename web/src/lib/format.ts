@@ -11,7 +11,9 @@ import type {
 	HoneyReserve,
 	HostStatus,
 	InsightHighlight,
+	JsonValue,
 	NATSStatusView,
+	ProtocolEvent,
 	RunSummary,
 	RuntimeStatus,
 	SignalSummary,
@@ -763,4 +765,164 @@ export function topologyCounts(topology: Topology | null): { label: string; valu
 		{ label: 'Event kinds', value: String(topology.events.length) },
 		{ label: 'Rules', value: String(topology.edges.length) }
 	];
+}
+
+/**
+ * The readable fields of an event payload, in a stable order.
+ *
+ * A payload is most often flat scalars, but not always: `artifact.written`
+ * announces `{"artifacts": [{artifactKind, ref, title}]}` and has no scalar at
+ * the top level at all, so a scalars-only digest renders that row blank. An array
+ * of objects therefore contributes its first element's readable fields, which is
+ * enough to say what arrived without a per-kind lookup table that would need
+ * updating every time the protocol grows a payload.
+ */
+function payloadFields(payload: JsonValue | undefined): [string, string, boolean][] {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+	const out: [string, string, boolean][] = [];
+	for (const [key, value] of Object.entries(payload)) {
+		if (key === 'kind') continue;
+		if (isScalar(value)) {
+			out.push([key, String(value), false]);
+			continue;
+		}
+		const first = Array.isArray(value) ? value[0] : undefined;
+		if (!first || typeof first !== 'object' || Array.isArray(first)) continue;
+		const inner = Object.entries(first)
+			.filter(([, item]) => isScalar(item))
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([, item]) => String(item));
+		if (inner.length > 0) out.push([key, inner.join(' · '), true]);
+	}
+	return out.sort(([a], [b]) => a.localeCompare(b));
+}
+
+function isScalar(value: JsonValue | undefined): value is string | number | boolean {
+	return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+}
+
+/**
+ * A readable line for an event payload that has no `summary`. Most payloads carry
+ * one, but not all — `trace.title` carries a `title` — so the fallback lists the
+ * payload's scalar fields rather than special-casing kinds, which would need
+ * updating every time the protocol grows one.
+ */
+export function payloadDigest(payload: JsonValue | undefined, limit = 3): string {
+	const fields = payloadFields(payload);
+	if (fields.length === 0) return '';
+	const shown = fields
+		.slice(0, limit)
+		.map(([key, value, fromList]) => `${key}${fromList ? ':' : '='}${value}`);
+	const rest = fields.length - shown.length;
+	return `${shown.join(' · ')}${rest > 0 ? ` · +${rest}` : ''}`;
+}
+
+/**
+ * A recorded run event as a feed row, so the run detail reuses `SignalCard` — the
+ * same component the Dashboard and the Timeline feed — instead of growing a
+ * second event row. The projection is derived here rather than asked for twice:
+ * the run's events endpoint hands back raw envelopes, and the fields a human reads
+ * are a handful of keys inside each payload.
+ */
+export function runEventSummary(event: ProtocolEvent): SignalSummary {
+	const payload = event.payload;
+	const object = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : undefined;
+	const pick = (key: string): string | undefined => {
+		const value = object?.[key];
+		return isScalar(value) && String(value).trim() !== '' ? String(value) : undefined;
+	};
+	return {
+		createdAt: event.createdAt,
+		traceId: event.traceId,
+		agentId: event.agentId,
+		type: event.type,
+		payloadKind: pick('kind'),
+		severity: pick('severity'),
+		// A payload without a summary still says something, so the digest stands in
+		// rather than the row rendering blank.
+		summary: pick('summary') ?? payloadDigest(payload) ?? ''
+	};
+}
+
+/** How long a run took, or `null` while it is still going. */
+export function runDurationMs(run: Pick<RunSummary, 'startedAt' | 'finishedAt'>): number | null {
+	if (!run.finishedAt) return null;
+	const started = Date.parse(run.startedAt);
+	const finished = Date.parse(run.finishedAt);
+	if (!Number.isFinite(started) || !Number.isFinite(finished) || finished < started) return null;
+	return finished - started;
+}
+
+/**
+ * What a run is, as `MetaList` rows. Every row is conditional: a run that never
+ * reported usage, an intent, or a provider session leaves those out rather than
+ * padding the block with dashes.
+ */
+export function runIdentityRows(
+	run: RunSummary | null,
+	/** Where a trail id leads. The base path is the caller's, not a formatter's. */
+	trailHref?: (traceId: string) => string
+): MetaRow[] {
+	if (!run) return [];
+	const rows: MetaRow[] = [];
+	rows.push({
+		label: 'Trail',
+		value: run.traceId,
+		mono: true,
+		href: trailHref?.(run.traceId)
+	});
+	rows.push({ label: 'Agent', value: run.agentId, mono: true, copy: true, hint: [run.agentId] });
+	rows.push({ label: 'Bee', value: run.bee, mono: true });
+	rows.push({ label: 'Adapter', value: run.adapter, mono: true });
+	if (run.taskId) rows.push({ label: 'Task', value: run.taskId, mono: true });
+	if (run.intent) rows.push({ label: 'Intent', value: run.intent, mono: true });
+	rows.push({
+		label: 'Started',
+		value: formatTimestamp(run.startedAt),
+		hint: [formatTimestamp(run.startedAt), run.startedAt]
+	});
+	if (run.finishedAt) {
+		rows.push({
+			label: 'Finished',
+			value: formatTimestamp(run.finishedAt),
+			hint: [formatTimestamp(run.finishedAt), run.finishedAt]
+		});
+	}
+	const duration = runDurationMs(run);
+	if (duration !== null) {
+		rows.push({ label: 'Duration', value: formatDuration(duration) });
+	} else if (run.state === 'running') {
+		// A run still going has no finish line, so the row says so rather than
+		// reporting a duration of zero.
+		rows.push({ label: 'Duration', value: 'running' });
+	}
+	if (run.providerSessionId) {
+		rows.push({
+			label: 'Provider session',
+			value: run.providerSessionId,
+			mono: true,
+			copy: true,
+			hint: [run.providerSessionId]
+		});
+	}
+	rows.push({ label: 'Workspace', value: run.workspace, mono: true, hint: [run.workspace] });
+	// The run directory is where the prompt, events, and meta live, so it is the one
+	// path an operator is likely to open a terminal on.
+	rows.push({ label: 'Run dir', value: run.runDir, mono: true, copy: true, hint: [run.runDir] });
+	return rows;
+}
+
+/** One run's token spend as rows, reusing the trail's token formatters. */
+export function runUsageRows(usage: Usage | undefined): MetaRow[] {
+	if (!usage) return [];
+	const rows: MetaRow[] = [
+		{ label: 'Input tokens', value: formatTokenCount(usage.inputTokens) },
+		{ label: 'Output tokens', value: formatTokenCount(usage.outputTokens) }
+	];
+	const cacheRead = usage.cacheReadTokens ?? 0;
+	const cacheWrite = usage.cacheWriteTokens ?? 0;
+	if (cacheRead > 0) rows.push({ label: 'Cache read', value: formatTokenCount(cacheRead) });
+	if (cacheWrite > 0) rows.push({ label: 'Cache write', value: formatTokenCount(cacheWrite) });
+	if (usage.source) rows.push({ label: 'Counted by', value: usage.source });
+	return rows;
 }

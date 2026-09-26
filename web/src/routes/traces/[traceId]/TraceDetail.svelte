@@ -9,7 +9,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
-	import { consolePath, traceTimelinePath } from '$lib/navigation';
+	import { consolePath, runDetailPath, traceTimelinePath } from '$lib/navigation';
 	import {
 		artifactLabel,
 		artifactMeta,
@@ -225,6 +225,7 @@
 							title={run.bee || run.agentId}
 							meta={run.taskId ? `${run.agentId} · ${run.taskId}` : run.agentId}
 							detail={runMeta(run)}
+							href={runDetailPath(base, run.traceId, run.agentId)}
 							dataKey={run.agentId}
 						>
 							{#snippet side()}

@@ -9,6 +9,8 @@ import type {
 	GitActionResult,
 	GitView,
 	RunCueResult,
+	RunEventsPage,
+	RunSummary,
 	RuntimeStatus,
 	SystemView,
 	Topology,
@@ -210,4 +212,29 @@ export function listEvents(filters: EventFilters = {}, after?: string): Promise<
  */
 export function getTopology(): Promise<Topology> {
 	return request<Topology>('/colony/topology');
+}
+
+/** Recent headless adapter runs, newest first. Each row carries the whole run view. */
+export function listRuns(): Promise<RunSummary[]> {
+	return request<RunSummary[]>('/runs');
+}
+
+/** One run by its trail and agent ids, for a run too old to be in the recent list. */
+export function getRun(traceId: string, agentId: string): Promise<RunSummary> {
+	return request<RunSummary>(`/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}`);
+}
+
+/**
+ * The events a run recorded, oldest first. `after` is an index into that sequence
+ * rather than a trace cursor, so paging is append-only and cannot skip a repeat.
+ */
+export function listRunEvents(
+	traceId: string,
+	agentId: string,
+	after?: number
+): Promise<RunEventsPage> {
+	const suffix = after === undefined ? '' : `?after=${after}`;
+	return request<RunEventsPage>(
+		`/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}/events${suffix}`
+	);
 }

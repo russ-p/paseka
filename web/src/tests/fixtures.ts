@@ -8,6 +8,7 @@ import type {
 	GitView,
 	GitWorktree,
 	InsightHighlight,
+	ProtocolEvent,
 	RunSummary,
 	SystemProcess,
 	SystemView,
@@ -328,4 +329,56 @@ export function topology(overrides: Partial<Topology> = {}): Topology {
 		mermaid: 'flowchart LR\n  bee:scout --> event:task.ready\n',
 		...overrides
 	};
+}
+
+/** A raw `protocol.Event` as the run events endpoint returns it. */
+export function protocolEvent(overrides: Partial<ProtocolEvent> = {}): ProtocolEvent {
+	return {
+		protocolVersion: '1',
+		traceId: 'trace-01a0bd6963faa14f',
+		agentId: 'run-01',
+		seq: 1,
+		type: 'INSIGHT',
+		createdAt: '2026-09-25T18:00:30Z',
+		payload: { kind: 'run.summary', summary: 'Committed the prune cleanup command.' },
+		...overrides
+	};
+}
+
+/** Three runs of one trail, newest first, plus a run from another trail. */
+export function runList(): RunSummary[] {
+	return [
+		runSummary({
+			agentId: 'run-03',
+			state: 'running',
+			startedAt: '2026-09-25T18:06:00Z',
+			finishedAt: undefined,
+			summary: undefined,
+			hasEvents: false
+		}),
+		runSummary({
+			agentId: 'run-02',
+			state: 'completed',
+			startedAt: '2026-09-25T18:03:00Z',
+			finishedAt: '2026-09-25T18:05:00Z',
+			summary: 'Wired the export format flag.'
+		}),
+		runSummary({
+			agentId: 'run-01',
+			adapter: 'claude-code',
+			intent: 'debugging',
+			state: 'failed',
+			startedAt: '2026-09-25T18:00:00Z',
+			finishedAt: '2026-09-25T18:02:00Z',
+			body: 'Fix the flaky retry test.',
+			usage: { inputTokens: 12_000, outputTokens: 900, cacheReadTokens: 40_000 }
+		}),
+		runSummary({
+			traceId: 'trace-01a09966fdbe6771',
+			agentId: 'run-09',
+			state: 'completed',
+			startedAt: '2026-09-25T17:00:00Z',
+			finishedAt: '2026-09-25T17:01:00Z'
+		})
+	];
 }

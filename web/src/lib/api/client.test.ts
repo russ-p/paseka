@@ -4,7 +4,10 @@ import {
 	addTraceEnergy,
 	getGit,
 	getSystem,
+	getRun,
 	getTopology,
+	listRunEvents,
+	listRuns,
 	getTrace,
 	listEvents,
 	getTraceArtifactContent,
@@ -230,5 +233,43 @@ describe('topology endpoint', () => {
 		await getTopology();
 
 		expect(mock).toHaveBeenCalledWith('/api/colony/topology', undefined);
+	});
+});
+
+describe('run endpoints', () => {
+	it('reads the recent runs with a bodiless GET', async () => {
+		const mock = stubFetch(() => new Response('[]'));
+
+		await listRuns();
+
+		expect(mock).toHaveBeenCalledWith('/api/runs', undefined);
+	});
+
+	it('escapes both ids on the detail and the events path', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await getRun('trace 1/a', 'run 1/b');
+
+		expect(mock).toHaveBeenCalledWith('/api/runs/trace%201%2Fa/run%201%2Fb', undefined);
+	});
+
+	it('sends no cursor on the first events read, and an index on the next', async () => {
+		// The events cursor is an index into the run's own sequence, not a trace
+		// cursor, so paging is append-only.
+		const mock = stubFetch(() => new Response('{"entries":[],"nextCursor":0}'));
+
+		await listRunEvents('trace-1', 'run-1');
+		await listRunEvents('trace-1', 'run-1', 7);
+
+		expect(mock.mock.calls[0][0]).toBe('/api/runs/trace-1/run-1/events');
+		expect(mock.mock.calls[1][0]).toBe('/api/runs/trace-1/run-1/events?after=7');
+	});
+
+	it('keeps a zero cursor rather than dropping it, because zero is the first page', async () => {
+		const mock = stubFetch(() => new Response('{"entries":[],"nextCursor":0}'));
+
+		await listRunEvents('trace-1', 'run-1', 0);
+
+		expect(String(mock.mock.calls[0][0])).toContain('after=0');
 	});
 });
