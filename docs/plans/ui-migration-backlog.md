@@ -12,9 +12,9 @@ A link or control that resolves to a page which does not exist yet. Each one is 
 
 - **Kind:** blocker
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Task rows render as plain text because `/next/tasks` is still a `PagePlaceholder`. `DetailRow` already takes an `href` and nothing passes it. The run rows beside them now link, so the block visibly mixes linked and unlinked rows.
-- **Why deferred:** A row that promises a destination and dead-ends is worse than a row that only shows state. The Dashboard set this precedent, the trail detail followed it, and Runs has now landed so its half of the block can link.
-- **Revisit when:** Tasks lands. Each task row gets an `href` and nothing else changes — no markup work is left. The run rows already link, which is why the two blocks now differ.
+- **Summary:** Both row blocks are live. The run rows link to `/next/runs/:traceId/:agentId` and the task rows to `/next/tasks/:traceId/:taskId`, so the trail detail is the one place with no inert rows left, and it was a real target waiting rather than a nicety: a task row on a trail is how an operator walks from a trail to the work it produced.
+- **Why deferred:** A row that promises a destination and dead-ends is worse than a row that only shows state. The Dashboard set this precedent, the trail detail followed it, and Runs and Tasks have now landed so neither half of the block is mute.
+- **Revisit when:** Never. Tasks landed and the task rows link, which closes this; the run rows linked a route earlier. The precedent stands for any future list: a row that promises a destination and dead-ends is worse than one that only shows state, so a new column should link from its first commit rather than after a backlog item.
 
 #### `PagePlaceholder` sends the operator to the legacy root
 
@@ -80,9 +80,9 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Tasks, Reviews, Sessions, Bees, and Worktrees. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down. Runs opened the Colony group and, with it, the first detail route that steps between siblings of one parent.
-- **Revisit when:** The next route is picked up; nothing blocks it technically. **Tasks is next** — it is the last Work route, and the trail detail already links its task rows nowhere, so it is the one place where `DetailRow.href` has a real target waiting.
+- **Summary:** `PagePlaceholder` on Reviews, Sessions, Bees, and Worktrees. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down. Runs opened the Colony group and, with it, the first detail route that steps between siblings of one parent; Tasks closed the audit's other full-column form and was the first user of `Drawer`.
+- **Revisit when:** The next route is picked up; nothing blocks it technically. **Reviews is next** — it is the last Work route, and it is the surface the task page deliberately does not duplicate: the approve form moved onto the task so a gated task can be answered where it is read, which leaves Reviews owning the diff, the inline comments, and the final merge gate.
 
 ## Components the inventory promises
 
@@ -94,7 +94,7 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #17)
 - **Summary:** Promised as the wide-form variant of `Modal` — slide from right, same focus trap, ESC, and focus restoration. Needed by the Sessions launch form and the Tasks create form, the two surfaces spec'd as wide or multi-step.
 - **Why deferred:** Every form that has landed fits `Modal`. `Drawer` is the first component whose only justification is a route that does not exist.
-- **Revisit when:** Sessions or Tasks is migrated. It should be `Modal` plus a placement and width, not a second focus implementation.
+- **Revisit when:** Sessions is migrated. `Drawer` now exists as `Modal` with `placement="right"`, which is what this asked for; the session launch form should use it as-is rather than reaching for a second focus implementation.
 
 #### `BeeCard` and `WorktreeCard`
 

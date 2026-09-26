@@ -9,7 +9,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
-	import { consolePath, runDetailPath, traceTimelinePath } from '$lib/navigation';
+	import { consolePath, runDetailPath, taskDetailPath, traceTimelinePath } from '$lib/navigation';
 	import {
 		artifactLabel,
 		artifactMeta,
@@ -205,7 +205,12 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each tasks as task (task.taskId)}
-						<DetailRow title={taskPrimaryLabel(task)} meta={taskMeta(task)} dataKey={task.taskId}>
+						<DetailRow
+							title={taskPrimaryLabel(task)}
+							meta={taskMeta(task)}
+							href={taskDetailPath(base, detail.traceId, task.taskId)}
+							dataKey={task.taskId}
+						>
 							{#snippet side()}
 								<StatusBadge status={task.status} label={task.status} />
 							{/snippet}

@@ -8,6 +8,8 @@ import {
 	insightHighlight,
 	protocolEvent,
 	runSummary,
+	taskDetail,
+	taskListItem,
 	systemView,
 	topology,
 	traceSummary
@@ -28,6 +30,13 @@ import {
 	runtimeActionLabel,
 	runtimeDetail,
 	runtimeStateNote,
+	taskCardShowsId,
+	taskIdentityRows,
+	taskReviewLabel,
+	taskRowMeta,
+	taskRunMeta,
+	taskStatusLabel,
+	taskTitle,
 	formatBytes,
 	formatClock,
 	formatFetchAge,
@@ -964,5 +973,119 @@ describe('runUsageRows', () => {
 
 	it('is empty for a run that reported no usage', () => {
 		expect(runUsageRows(undefined)).toEqual([]);
+	});
+});
+
+describe('task formatters', () => {
+	it('says the one status an operator cannot read as a single word in words', () => {
+		// `waiting_review` is the status a board exists to make visible, so the badge
+		// spells it; every other status is already one word and is passed through.
+		expect(taskStatusLabel('waiting_review')).toBe('waiting review');
+		expect(taskStatusLabel('ready')).toBe('ready');
+		expect(taskStatusLabel('')).toBe('unknown');
+	});
+
+	it('says what a review policy means rather than printing the enum', () => {
+		expect(taskReviewLabel('none')).toBe('not gated');
+		expect(taskReviewLabel(undefined)).toBe('not gated');
+		expect(taskReviewLabel('required')).toBe('required');
+		// The final gate is the one that holds the whole trail, so it says so.
+		expect(taskReviewLabel('final')).toBe('final gate');
+	});
+
+	it('names a task by its title, falling back to the id when there is none', () => {
+		expect(taskTitle(taskListItem())).toBe('Wire the export format flag');
+		expect(taskTitle(taskListItem({ title: '' }))).toBe('task-01');
+	});
+
+	it('puts the second line of a card in the order an operator reads it', () => {
+		expect(taskRowMeta(taskListItem())).toBe('builder · api · 0 runs');
+		expect(taskRowMeta(taskListItem({ sector: undefined, runCount: 1 }))).toBe('builder · 1 run');
+		expect(taskRowMeta(taskListItem({ bee: undefined, sector: undefined, runCount: 2 }))).toBe(
+			'2 runs'
+		);
+	});
+
+	it('leaves dependencies out of the card\'s second line, because the badge has them', () => {
+		// The card prints `after task-01, task-02` as its own badge already, and a
+		// dependency printed twice on one card is noise rather than emphasis.
+		expect(taskRowMeta(taskListItem({ dependsOn: ['task-01', 'task-02'], runCount: 3 }))).toBe(
+			'builder · api · 3 runs'
+		);
+	});
+
+	it('does not repeat a card\'s id line when the title already is the id', () => {
+		expect(taskCardShowsId(taskListItem())).toBe(true);
+		// A task the ledger named after its own trail arrives with title === taskId,
+		// and printing it twice says nothing twice.
+		expect(
+			taskCardShowsId(taskListItem({ title: 'trace-01', taskId: 'trace-01' }))
+		).toBe(false);
+		// An empty title is printed as the id, so the id line would repeat that too.
+		expect(taskCardShowsId(taskListItem({ title: '', taskId: 'task-01' }))).toBe(false);
+	});
+
+	it('leaves out identity rows a task does not carry', () => {
+		const rows = taskIdentityRows(
+			taskDetail({ sector: undefined, intent: undefined, commit: undefined })
+		);
+		const labels = rows.map((row) => row.label);
+
+		// A row with nothing in it is noise, and every one of these is optional on the
+		// wire: a task planned by a planner may have no sector, and one that has not
+		// finished has no commit.
+		expect(labels).not.toContain('Sector');
+		expect(labels).not.toContain('Intent');
+		expect(labels).not.toContain('Commit');
+		expect(labels).toContain('Trail');
+		expect(labels).toContain('Task');
+	});
+
+	it('offers the trail id a way out through the caller\'s builder', () => {
+		const rows = taskIdentityRows(taskDetail(), (id) => `/next/traces/${id}`);
+
+		expect(rows[0]).toEqual({
+			label: 'Trail',
+			value: 'trace-01a0bd6963faa14f',
+			mono: true,
+			href: '/next/traces/trace-01a0bd6963faa14f'
+		});
+		// The base path belongs to the caller, so a formatter never builds a URL.
+		expect(taskIdentityRows(taskDetail())[0].href).toBeUndefined();
+	});
+
+	it('spells out the workspace, because isolated and root mean opposite things', () => {
+		expect(
+			taskIdentityRows(taskDetail({ proposalWorkspace: 'root' })).find(
+				(row) => row.label === 'Workspace'
+			)
+		).toMatchObject({ value: 'root checkout' });
+		expect(
+			taskIdentityRows(taskDetail()).find((row) => row.label === 'Workspace')
+		).toMatchObject({ value: 'isolated' });
+	});
+
+	it('says which ledger answered, because disk and JetStream are different facts', () => {
+		expect(
+			taskIdentityRows(taskDetail({ source: 'jetstream-kv' })).find(
+				(row) => row.label === 'Ledger'
+			)
+		).toMatchObject({ value: 'jetstream kv' });
+		expect(
+			taskIdentityRows(taskDetail({ source: 'filesystem' })).find(
+				(row) => row.label === 'Ledger'
+			)
+		).toMatchObject({ value: 'filesystem' });
+	});
+
+	it('returns nothing for a task that is not loaded', () => {
+		expect(taskIdentityRows(null)).toEqual([]);
+	});
+
+	it('puts a linked run\'s time and directory on one line', () => {
+		const run = taskDetail().runs[0];
+		expect(taskRunMeta(run)).toContain('.paseka/runs/trace-01a0bd6963faa14f/run-02');
+		// A run with neither a start time nor a directory leaves no empty separator.
+		expect(taskRunMeta({ agentId: 'run-01' })).toBe('');
 	});
 });

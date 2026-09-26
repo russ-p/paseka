@@ -6,6 +6,7 @@
 		title,
 		description,
 		size = 'md',
+		placement = 'center',
 		onclose,
 		children,
 		footer
@@ -15,12 +16,38 @@
 		description?: string;
 		/** `md` fits a short form; `lg` a document preview. The body scrolls either way. */
 		size?: 'md' | 'lg';
+		/**
+		 * `right` fills the height and slides in from the edge, which is what a form
+		 * long enough to need its own scroll wants. It is a placement, not a second
+		 * dialog: the focus trap, the ESC key, and the focus return below are the
+		 * same ones a centered dialog uses, which is the whole point of `Drawer`
+		 * being this component rather than a new one.
+		 */
+		placement?: 'center' | 'right';
 		onclose: () => void;
 		children: Snippet;
 		footer?: Snippet;
 	} = $props();
 
 	const sizeClass = $derived(size === 'lg' ? 'max-w-3xl' : 'max-w-md');
+	const side = $derived(placement === 'right');
+	/**
+	 * The panel is mounted off-screen first and stepped in on the next frame, since
+	 * a transform that is already at its final value on the first paint cannot
+	 * transition. There is no exit animation: the dialog is removed outright, and a
+	 * delayed close would leave a keyboard trap live after ESC.
+	 */
+	let slid = $state(false);
+	$effect(() => {
+		if (!open) {
+			slid = false;
+			return;
+		}
+		const frame = requestAnimationFrame(() => {
+			slid = true;
+		});
+		return () => cancelAnimationFrame(frame);
+	});
 
 	let dialog = $state<HTMLElement | null>(null);
 	let trigger = $state<HTMLElement | null>(null);
@@ -70,7 +97,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+	<div
+		class="fixed inset-0 z-50 flex {side
+			? 'justify-end'
+			: 'items-center justify-center p-4'}"
+	>
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default bg-neutral/40"
@@ -79,7 +110,9 @@
 		></button>
 		<div
 			bind:this={dialog}
-			class="card relative flex max-h-[90vh] w-full flex-col {sizeClass} bg-base-100 shadow-xl"
+			class="card relative flex w-full flex-col bg-base-100 shadow-xl {side
+				? `h-full max-h-none max-w-2xl transition-transform duration-200 ${slid ? 'translate-x-0' : 'translate-x-full'}`
+				: `max-h-[90vh] ${sizeClass}`}"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}

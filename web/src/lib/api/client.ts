@@ -1,6 +1,11 @@
 import type {
+	ApproveTaskRequest,
+	ApproveTaskResult,
 	ArtifactContent,
 	ArtifactView,
+	Bee,
+	CreateTaskRequest,
+	CreateTaskResult,
 	Cue,
 	DashboardSummary,
 	EnergyAddResult,
@@ -8,11 +13,17 @@ import type {
 	EventFilters,
 	GitActionResult,
 	GitView,
+	RejectTaskRequest,
+	RejectTaskResult,
+	RetryTaskResult,
 	RunCueResult,
 	RunEventsPage,
 	RunSummary,
 	RuntimeStatus,
+	StartTaskResult,
 	SystemView,
+	TaskBoard,
+	TaskDetail,
 	Topology,
 	TraceDetail,
 	TraceSummary
@@ -237,4 +248,73 @@ export function listRunEvents(
 	return request<RunEventsPage>(
 		`/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}/events${suffix}`
 	);
+}
+
+/**
+ * The colony-wide task board. One bodiless read, grouped by status in lifecycle
+ * order by the server: the order encodes the pipeline, so the client does not
+ * re-sort it.
+ */
+export function listTasks(): Promise<TaskBoard> {
+	return request<TaskBoard>('/tasks');
+}
+
+/** A task is addressed by both ids, so a task id alone is not a URL. */
+export function getTask(traceId: string, taskId: string): Promise<TaskDetail> {
+	return request<TaskDetail>(`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}`);
+}
+
+function post<T>(path: string, body?: unknown): Promise<T> {
+	return request<T>(path, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body ?? {})
+	});
+}
+
+export function createTask(task: CreateTaskRequest): Promise<CreateTaskResult> {
+	return post<CreateTaskResult>('/tasks', task);
+}
+
+export function startTask(traceId: string, taskId: string): Promise<StartTaskResult> {
+	return post<StartTaskResult>(
+		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/start`
+	);
+}
+
+export function retryTask(traceId: string, taskId: string): Promise<RetryTaskResult> {
+	return post<RetryTaskResult>(
+		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/retry`
+	);
+}
+
+export function approveTask(
+	traceId: string,
+	taskId: string,
+	review: ApproveTaskRequest
+): Promise<ApproveTaskResult> {
+	return post<ApproveTaskResult>(
+		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/approve`,
+		review
+	);
+}
+
+export function rejectTask(
+	traceId: string,
+	taskId: string,
+	review: RejectTaskRequest
+): Promise<RejectTaskResult> {
+	return post<RejectTaskResult>(
+		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/reject`,
+		review
+	);
+}
+
+/**
+ * The interactive bees: role, adapter, and the intents its prompt templates
+ * declare. The launch and create forms build their intent list from this, so a
+ * bee that adds an intent needs no console change.
+ */
+export function listBees(): Promise<Bee[]> {
+	return request<Bee[]>('/bees');
 }

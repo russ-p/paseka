@@ -6,6 +6,9 @@ node_modules
 .netlify
 .wrangler
 /.svelte-kit
+# Kit also generates this one next to `app.html` when there is no
+# svelte.config.js at the workspace root.
+/src/.svelte-kit
 /build
 
 # OS

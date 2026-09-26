@@ -1,5 +1,6 @@
 import type {
 	ArtifactView,
+	Bee,
 	DashboardSummary,
 	EventFeedItem,
 	EventFeedPage,
@@ -12,6 +13,9 @@ import type {
 	RunSummary,
 	SystemProcess,
 	SystemView,
+	TaskBoard,
+	TaskDetail,
+	TaskListItem,
 	Topology,
 	TraceDetail,
 	TraceSummary
@@ -380,5 +384,119 @@ export function runList(): RunSummary[] {
 			startedAt: '2026-09-25T17:00:00Z',
 			finishedAt: '2026-09-25T17:01:00Z'
 		})
+	];
+}
+
+/** A board row. The `can*` flags are the server's eligibility answer. */
+export function taskListItem(overrides: Partial<TaskListItem> = {}): TaskListItem {
+	return {
+		traceId: 'trace-01a0bd6963faa14f',
+		taskId: 'task-01',
+		title: 'Wire the export format flag',
+		status: 'ready',
+		review: 'none',
+		bee: 'builder',
+		sector: 'api',
+		runCount: 0,
+		canStart: true,
+		canRetry: false,
+		canApprove: false,
+		canReject: false,
+		isFinal: false,
+		proposalWorkspace: 'isolated',
+		updatedAt: '2026-09-25T18:00:00Z',
+		...overrides
+	};
+}
+
+/**
+ * A board in server order: `ready` and `waiting_review` first, because the server
+ * orders groups by the pipeline rather than alphabetically and a test that
+ * reshuffled them would be testing the wrong thing.
+ */
+export function taskBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
+	return {
+		groups: [
+			{
+				status: 'ready',
+				tasks: [taskListItem()]
+			},
+			{
+				status: 'waiting_review',
+				tasks: [
+					taskListItem({
+						taskId: 'task-02',
+						title: 'Add the retry backoff',
+						status: 'waiting_review',
+						review: 'final',
+						canStart: false,
+						canApprove: true,
+						canReject: true,
+						runCount: 2,
+						updatedAt: '2026-09-25T18:04:00Z'
+					})
+				]
+			},
+			{
+				status: 'failed',
+				tasks: [
+					taskListItem({
+						taskId: 'task-03',
+						title: 'Fix the flaky retry test',
+						status: 'failed',
+						canStart: false,
+						canRetry: true,
+						dependsOn: ['task-01'],
+						runCount: 3,
+						updatedAt: '2026-09-25T17:30:00Z'
+					})
+				]
+			}
+		],
+		taskCounts: { ready: 1, waiting_review: 1, failed: 1 },
+		...overrides
+	};
+}
+
+/** A detail: the board row plus body, summary, and the runs the task produced. */
+export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
+	return {
+		...taskListItem(),
+		body: 'Add an --format flag to `paseka export`.',
+		intent: 'implementation',
+		source: 'jetstream-kv',
+		runs: [
+			{
+				agentId: 'run-02',
+				bee: 'builder',
+				runStatus: 'completed',
+				runDir: '.paseka/runs/trace-01a0bd6963faa14f/run-02',
+				startedAt: '2026-09-25T18:01:00Z',
+				finishedAt: '2026-09-25T18:03:00Z'
+			}
+		],
+		...overrides
+	};
+}
+
+/** The interactive bees, which is what `GET /api/bees` returns. */
+export function beeList(overrides: Partial<Bee> = {}): Bee[] {
+	return [
+		{
+			role: 'builder',
+			adapter: 'cursor',
+			promptTemplate: 'implementation',
+			worktree: true,
+			intents: ['implementation', 'debugging']
+		},
+		{
+			role: 'drone',
+			adapter: 'pi',
+			promptTemplate: 'grilling',
+			worktree: false,
+			intents: ['grilling'],
+			defaultIntent: 'grilling',
+			...overrides
+		}
 	];
 }
