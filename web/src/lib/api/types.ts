@@ -276,6 +276,48 @@ export interface ProtocolEvent {
 	payload?: JsonValue;
 }
 
+/** How a subscription triggers a bee: a dispatched run, or a direct call. */
+export type DispatchMode = 'task' | 'direct';
+
+/** Mirrors `colony.TopologyBee`: one bee node with its prompt vocabulary. */
+export interface TopologyBee {
+	role: string;
+	adapter: string;
+	intents?: string[];
+	defaultIntent?: string;
+}
+
+/** Mirrors `colony.TopologyEvent`: one bus event kind an edge references. */
+export interface TopologyEvent {
+	type: string;
+	kind?: string;
+	id: string;
+}
+
+/** Mirrors `colony.TopologyEdge`: a subscribe, publish, or invite rule. */
+export interface TopologyEdge {
+	kind: 'subscribe' | 'publish' | 'invite';
+	from: string;
+	to?: string;
+	dispatch?: DispatchMode;
+	/** The bee declared no `subscribes`, so any `task.ready` reaches it. */
+	implicit?: boolean;
+	/** Prompt vocabulary the invite hands the invited bee. */
+	intent?: string;
+	match?: Record<string, string>;
+	/** An invite chained off another bee's output rather than a fixed role. */
+	beeFrom?: string;
+}
+
+/** Mirrors `colony.Topology`, the config-derived EDA projection. */
+export interface Topology {
+	bees: TopologyBee[];
+	events: TopologyEvent[];
+	edges: TopologyEdge[];
+	/** The same graph as Mermaid, identical to `paseka colony topology`. */
+	mermaid?: string;
+}
+
 /** Mirrors `hiveview.EventLink`: the resource an event points at, when it names one. */
 export interface EventLink {
 	kind: string;

@@ -33,9 +33,10 @@ explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
 The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
-page), **Git**, **System**, and **Timeline**. Every other route under `/next/`
-renders a "migration pending" card that links back to the legacy console, so use
-`/` for Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology for now.
+page), **Git**, **System**, **Timeline**, and **Topology**. Every other route
+under `/next/` renders a "migration pending" card that links back to the legacy
+console, so use `/` for Tasks, Reviews, Sessions, Bees, Worktrees, and Runs for
+now.
 
 ## What requires the Hive Runtime
 
@@ -134,6 +135,19 @@ CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session 
 Visualizes bee subscriptions, publications, dispatch mode, and automatic
 invites from colony YAML. Generate the same graph as Mermaid with
 `paseka colony topology`.
+
+On `/next/topology` the same graph is drawn, with bees in a left column and
+event kinds wrapped beside them. Solid edges are subscriptions, dashed are
+declared publications, dotted are colony invites, and a faded edge is a
+subscription the bee never wrote down — an empty `subscribes` means any
+`task.ready` reaches it. Each contract keeps one hue, taken from the console
+theme, so the graph follows a theme switch instead of staying dark. Drag a node
+to rearrange; the shape is remembered per colony, and **Reset layout** puts it
+back. The page re-reads only when you press **Refresh**, because the projection
+comes from committed config and changes when a commit lands rather than on a
+clock. **Copy Mermaid** and the Mermaid block below the graph are the same data
+as text — the graph is a picture, so this is the form you can paste into a pull
+request or read aloud.
 
 ### System
 

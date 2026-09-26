@@ -4,6 +4,7 @@ import {
 	addTraceEnergy,
 	getGit,
 	getSystem,
+	getTopology,
 	getTrace,
 	listEvents,
 	getTraceArtifactContent,
@@ -219,5 +220,15 @@ describe('event feed endpoint', () => {
 		expect(query.has('traceId')).toBe(false);
 		expect(query.get('bee')).toBe('scout');
 		expect(query.get('after')).toBe('cursor-1');
+	});
+});
+
+describe('topology endpoint', () => {
+	it('reads the projection with a bodiless GET and no query', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await getTopology();
+
+		expect(mock).toHaveBeenCalledWith('/api/colony/topology', undefined);
 	});
 });

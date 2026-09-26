@@ -80,8 +80,8 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse.
+- **Summary:** `PagePlaceholder` on Tasks, Reviews, Sessions, Bees, Worktrees, and Runs. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down.
 - **Revisit when:** The next route is picked up; nothing blocks it technically. **Tasks is next** — it is the last Work route, and the trail detail already links its task rows nowhere, so it is the one place where `DetailRow.href` has a real target waiting.
 
 ## Components the inventory promises
@@ -137,6 +137,22 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Summary:** `/next/timeline?trace=<id>` is a real deep link, but the other five filters live in the store and reset on reload, so `?type=VERIFICATION&bee=scout` cannot be shared or bookmarked.
 - **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
 - **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
+
+#### The colony graph is a picture with no text equivalent beside it
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Topology migration)
+- **Summary:** The Mermaid block is the graph as text, and it is the same data — but Mermaid is a diagram *description*, not a table, so "which events has nobody subscribed to" is still an eyeball job across a canvas and a wall of Mermaid source.
+- **Why deferred:** A wiring table was considered and dropped when the graph was chosen. The canvas carries a label with its size and points at the Mermaid, which is the accessibility floor for an image, so nothing is unreachable — but a sortable table of `Event | Bee | Relation | Dispatch` would answer the gap question directly, and that is a different page rather than a fix.
+- **Revisit when:** An operator hunts for an unsubscribed event and cannot find it, or the colony grows past what fits one screen. The projection already carries every field such a table needs, and `DataTable` would compose it without new work.
+
+#### The graph scales down before an operator can read it
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Topology migration)
+- **Summary:** Bees are one column and event kinds wrap, so a seven-bee colony fits legibly. Past roughly twenty event kinds the `fit` that frames the graph shrinks the labels again, and the operator has to zoom before they can read anything. The legacy console had the same ceiling and answered it with pan and zoom.
+- **Why deferred:** Solving it properly means either measuring label widths (which needs a laid-out canvas, and so cannot be unit-tested — the reason the layout maths is pure) or dropping labels in favour of hover, both of which are worse at the sizes colonies actually run at. Zoom and drag already work.
+- **Revisit when:** a real colony crosses roughly twenty event kinds. The cheapest fix is a taller container plus a higher `minZoom` floor, so the graph opens cropped and pannable rather than illegible.
 
 #### The topbar plaque is a link, not a click target
 

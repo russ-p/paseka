@@ -11,6 +11,7 @@ import type {
 	RunSummary,
 	SystemProcess,
 	SystemView,
+	Topology,
 	TraceDetail,
 	TraceSummary
 } from '$lib/api/types';
@@ -287,6 +288,44 @@ export function systemView(overrides: Partial<SystemView> = {}): SystemView {
 				cmd: 'paseka console --addr :8787'
 			})
 		],
+		...overrides
+	};
+}
+
+export function topology(overrides: Partial<Topology> = {}): Topology {
+	return {
+		bees: [
+			{ role: 'scout', adapter: 'cursor-agent', intents: ['discovery', 'triage'] },
+			{ role: 'builder', adapter: 'claude-code', intents: ['implementation'] },
+			{ role: 'drone', adapter: 'pi', defaultIntent: 'grilling' }
+		],
+		events: [
+			{ id: 'SIGNAL/task.ready', type: 'SIGNAL', kind: 'task.ready' },
+			{ id: 'SIGNAL/feature.classified', type: 'SIGNAL', kind: 'feature.classified' },
+			{ id: 'INSIGHT/review.note', type: 'INSIGHT', kind: 'review.note' },
+			{ id: 'MUTATION/code.proposal.isolated', type: 'MUTATION', kind: 'code.proposal.isolated' },
+			{ id: 'VERIFICATION/verification.success', type: 'VERIFICATION', kind: 'verification.success' }
+		],
+		edges: [
+			// No `subscribes` declared, so the projection synthesises this implicit rule.
+			{ kind: 'subscribe', from: 'SIGNAL/task.ready', to: 'scout', dispatch: 'task', implicit: true },
+			{
+				kind: 'subscribe',
+				from: 'INSIGHT/review.note',
+				to: 'builder',
+				dispatch: 'direct'
+			},
+			{
+				kind: 'invite',
+				from: 'SIGNAL/feature.classified',
+				to: 'drone',
+				intent: 'grilling',
+				match: { decision: 'grill' }
+			},
+			{ kind: 'publish', from: 'builder', to: 'MUTATION/code.proposal.isolated' },
+			{ kind: 'publish', from: 'guard', to: 'VERIFICATION/verification.success' }
+		],
+		mermaid: 'flowchart LR\n  bee:scout --> event:task.ready\n',
 		...overrides
 	};
 }

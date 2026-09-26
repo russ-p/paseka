@@ -99,6 +99,18 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 - **Navigation belongs on the identifier, not the prose.** On a colony-wide feed the row's trace id links to the trail; the summary stays plain text, because a feed of underlined headlines reads as a wall of links. A feed already scoped to one trail drops both the id and the link — the open filter panel says which trail it is, and repeating it on every row says nothing new.
 - **A feed row is not a table row.** `SignalCard` clamps the summary to two lines and lets the meta line wrap; the "cells never wrap" rule exists so table rows keep a uniform height, and a feed is not a scan surface. `SignalCard` gained two optional props for this: an `expand` snippet under the meta line, and a `traceHref` for the id. The Dashboard and the trail detail pass neither, so all three surfaces stay one component.
 
+## Topology route (`/next/topology`)
+
+- **This route owns the console's one imperative component.** The colony graph is drawn by cytoscape, which is not a Svelte component and does not know about themes, tokens, or this contract. Everything else on every other route is declarative. Two rules keep that exception contained:
+  - **The graph takes its colours from the theme, not from the source.** `topology-theme.ts` reads the active DaisyUI custom properties and maps them onto cytoscape's own properties, so a Svelte file contains token *names* and no colour literal. A theme switch re-reads and restyles the live instance rather than rebuilding it, because rebuilding would throw away the operator's in-progress drag.
+  - **The layout maths is pure and lives outside the library.** `lib/topology.ts` builds the element set, orders the two sides by barycentre, and computes positions as plain functions, so the graph's behaviour is unit-tested without a canvas. The component only owns the instance lifecycle.
+- **cytoscape is imported dynamically.** It is the largest dependency in the console and only this route draws a graph, so it is code-split into this route's chunk rather than charged to the initial bundle every route pays for.
+- **The bee side is one column and the event side wraps.** Bees stay in a single left column — that is what makes the graph read as bees versus events — while event kinds wrap into a block whose width-to-height roughly matches the viewport. A single row of fourteen event ids is a line several thousand pixels long, and the `fit` that framed it shrank every label to nothing.
+- **A dragged shape is remembered per colony.** Positions persist to `localStorage` under a key namespaced by the colony slug, so two colonies on one browser do not fight over one layout, and *Reset layout* clears the stored shape so it cannot come back on the next read.
+- **The graph is an image, so the Mermaid is the text path.** A canvas cannot be read by a screen reader or pasted into a PR, so the container's `aria-label` carries the size and points at the Mermaid block, which is the same graph in the form `paseka colony topology` prints.
+- **The projection does not poll.** It is derived from committed bee YAML and colony `auto_invites`, so it changes when a commit lands, not on a clock; Refresh is the honest control.
+- The three actions stay visible. The audit wanted *Copy Mermaid* and *Reset layout* hidden behind a menu, which is right for a page that is mostly a picture — but both are things an operator reaches for *while looking at* the graph, and a menu would put them one click further from the thing they act on.
+
 ## Component inventory (`lib/components/`)
 
 Use these. If a page needs a missing element, add the component here and extend this table — do not duplicate one-off markup across pages.
@@ -148,7 +160,7 @@ A status missing from the table falls through to `neutral` — that is a deliber
 
 1. Create/edit forms open in `<Modal>` or `<Drawer>` triggered by a button — never a full-column form replacing the list view.
 2. Every status is a `StatusBadge` with a semantic class from the mapping above.
-3. No inline styles, no raw color literals, no custom fonts. Tailwind + DaisyUI only. The single exception is the `Hint` popover, which sets `top`/`left` from `getBoundingClientRect()` — that is geometry, not styling; it must never carry a color or a font.
+3. No inline styles, no raw color literals, no custom fonts. Tailwind + DaisyUI only. Two exceptions, both narrow: the `Hint` popover, which sets `top`/`left` from `getBoundingClientRect()` — that is geometry, not styling; it must never carry a color or a font — and the cytoscape topology graph, which is not a Svelte component and resolves its colors from the active theme's DaisyUI custom properties at runtime. The exception is for *reading* a token, never for writing a literal; a hard-coded hex in the graph is a bug the same as one in a page.
 4. Tabular lists are `DataTable`s (filter, paginate) — not hand-rolled `<table>` markup per page. A short list of related rows (a trail's tasks, runs, comb files) is a `<ul>` of `DetailRow`s, not a table.
 5. Icon-only buttons must carry an `aria-label`; rely on DaisyUI/Tailwind focus-visible outlines.
 6. Render loading (skeleton), empty, and error states — not just the happy path.

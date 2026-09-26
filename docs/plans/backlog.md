@@ -100,7 +100,7 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Migrate the remaining `/next` routes (Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Topology, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
+- **Summary:** Migrate the remaining `/next` routes (Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
 - **Why deferred:** Deliberate phase order — the shell and the two highest-traffic surfaces (Dashboard, Traces) land first so the design system is proven on real data before the rest depend on it. Git followed, because its page forced the mutating-action questions (button sizing, what confirms, what a partial success says) that every later route with a button will face.
 - **Revisit when:** The next route is picked up. Nothing blocks it technically; the ordering was a risk choice.
 
