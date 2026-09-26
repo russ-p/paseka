@@ -58,6 +58,7 @@
 
 <button
 	bind:this={trigger}
+	id="side-menu-trigger"
 	type="button"
 	class="btn btn-ghost btn-sm fixed top-3 left-3 z-50"
 	aria-label="Menu"
@@ -70,6 +71,7 @@
 
 {#if open}
 	<button
+		id="side-menu-backdrop"
 		type="button"
 		class="fixed inset-0 z-30 cursor-default bg-neutral/40"
 		aria-label="Close navigation"
@@ -92,7 +94,7 @@
 				<p class="font-semibold">Navigate</p>
 				<p class="text-xs text-base-content/60">Queen Console Next</p>
 			</div>
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => void closeMenu()}>
+			<button id="side-menu-close" type="button" class="btn btn-ghost btn-sm" onclick={() => void closeMenu()}>
 				Close
 			</button>
 		</div>
@@ -119,7 +121,7 @@
 		</ul>
 
 		<div class="border-t border-base-300 p-4">
-			<a class="btn btn-ghost btn-sm w-full" href="/">Open legacy console</a>
+			<a id="side-menu-legacy" class="btn btn-ghost btn-sm w-full" href="/">Open legacy console</a>
 		</div>
 	</div>
 </aside>

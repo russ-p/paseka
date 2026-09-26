@@ -8,6 +8,14 @@ export const statusToneClasses = {
 	neutral: 'badge-neutral'
 } as const satisfies Record<StatusTone, string>;
 
+export const statusToneTextClasses = {
+	info: 'text-info',
+	success: 'text-success',
+	warning: 'text-warning',
+	error: 'text-error',
+	neutral: 'text-neutral'
+} as const satisfies Record<StatusTone, string>;
+
 const statusTones: Record<string, StatusTone> = {
 	running: 'info',
 	interacting: 'info',

@@ -16,9 +16,6 @@ export default defineConfig(({ mode }) => {
 			tailwindcss(),
 			svelteTesting(),
 			sveltekit({
-				compilerOptions: {
-					runes: true
-				},
 				adapter: adapter({
 					pages: outputPath,
 					assets: outputPath,
