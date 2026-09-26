@@ -103,11 +103,16 @@
 			{#each visibleGroups as group (group.status)}
 				{@const count = store.counts[group.status] ?? group.tasks.length}
 				<section class="rounded-box border border-base-300" aria-label={`${taskStatusLabel(group.status)} tasks`}>
-					<header class="flex items-center justify-between gap-2 border-b border-base-300 px-3 py-2">
-						<div class="flex items-center gap-2">
-							<StatusBadge status={group.status} label={taskStatusLabel(group.status)} />
-						</div>
-						<span class="text-xs text-base-content/50">{count}</span>
+					<!-- The topbar's panel header, reused: the status names the column in
+					     the same uppercase small-caps the runtime and bees panels use, and
+					     the count is the badge on the right. The badge carries the status
+					     tone, so moving the status word out of a badge and into the title
+					     costs the colour nothing. -->
+					<header class="flex min-h-8 items-center justify-between gap-2 border-b border-base-300 px-3 py-2">
+						<span class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+							{taskStatusLabel(group.status)}
+						</span>
+						<StatusBadge status={group.status} label={String(count)} />
 					</header>
 					<!-- Each column scrolls inside its own bounded box. This colony keeps 29
 					     completed tasks beside one ready one, and an unbounded column turns

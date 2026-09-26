@@ -52,6 +52,40 @@ describe('tasks board', () => {
 		expect(screen.queryByText('waiting_review')).not.toBeInTheDocument();
 	});
 
+	it('names each column in the topbar\'s panel style and badges the count', async () => {
+		const { store } = harness();
+		render(Tasks, { store });
+		await waitFor(() => expect(screen.getByLabelText('ready tasks')).toBeInTheDocument());
+
+		const column = screen.getByLabelText('ready tasks');
+		const title = within(column).getByText('ready');
+		// The console already has one pattern for naming a small panel of state, and a
+		// second one here would read as two different ideas about the same thing.
+		expect(title.className).toBe(
+			'text-xs font-semibold tracking-wide text-base-content/60 uppercase'
+		);
+		// The count is the badge, and it is toned by the status so moving the status
+		// word out of a badge and into the title costs the colour nothing.
+		const count = within(column).getByText('1');
+		expect(count.className).toContain('badge');
+		expect(count.className).toContain('badge-success');
+	});
+
+	it('uses the server count, not the number of cards it happened to render', async () => {
+		// The board is capped by the trace window, so a count can be larger than what
+		// arrived, and the header is where an operator would notice that.
+		const { store } = harness(
+			taskBoard({
+				groups: [{ status: 'ready', tasks: [taskListItem()] }],
+				taskCounts: { ready: 42 }
+			})
+		);
+		render(Tasks, { store });
+		await waitFor(() => expect(screen.getByLabelText('ready tasks')).toBeInTheDocument());
+
+		expect(within(screen.getByLabelText('ready tasks')).getByText('42')).toBeInTheDocument();
+	});
+
 	it('links every card to its own task page', async () => {
 		const { store } = harness();
 		render(Tasks, { store });
