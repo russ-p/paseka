@@ -16,7 +16,7 @@
 	import { consolePath, runDetailPath, taskDetailPath, traceDetailPath } from '$lib/navigation';
 	import { createTaskStore, type TaskStore } from '$lib/stores/task.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
-	import TaskReviewActions from './TaskReviewActions.svelte';
+	import ReviewActions from '$lib/components/ReviewActions.svelte';
 
 	let {
 		store = createTaskStore(),
@@ -261,7 +261,7 @@
 		     PR fields are collapsed under Approve, and Reject stays one box. -->
 		{#if reviewable}
 			<Section id="task-review" title="Review" note="this task is waiting on you">
-				<TaskReviewActions {task} onsettled={settled} />
+				<ReviewActions {task} onsettled={settled} />
 			</Section>
 		{/if}
 	{/if}

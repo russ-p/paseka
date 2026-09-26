@@ -10,6 +10,9 @@ import type {
 	GitWorktree,
 	InsightHighlight,
 	ProtocolEvent,
+	MergeDiff,
+	ReviewQueue,
+	ReviewQueueItem,
 	RunSummary,
 	SystemProcess,
 	SystemView,
@@ -499,4 +502,70 @@ export function beeList(overrides: Partial<Bee> = {}): Bee[] {
 			...overrides
 		}
 	];
+}
+
+/** One row of the review queue. */
+export function reviewQueueItem(overrides: Partial<ReviewQueueItem> = {}): ReviewQueueItem {
+	return {
+		traceId: 'trace-01a0bd6963faa14f',
+		taskId: '002-merge-body-compose',
+		title: 'Merge body compose + approve preview',
+		review: 'required',
+		summary: 'Composed the merge body from the trail summary.',
+		bee: 'builder',
+		sector: 'api',
+		runCount: 1,
+		updatedAt: '2026-09-25T18:00:00Z',
+		isFinal: false,
+		canApprove: true,
+		canReject: true,
+		...overrides
+	};
+}
+
+/** A queue with a mid-trail review and a final gate, which are the two shapes. */
+export function reviewQueue(overrides: Partial<ReviewQueue> = {}): ReviewQueue {
+	return {
+		items: [
+			reviewQueueItem(),
+			reviewQueueItem({
+				taskId: '_review',
+				title: 'Human review and merge',
+				review: 'final',
+				summary: 'Ready for a human to merge the trail.',
+				isFinal: true,
+				delivery: 'local_merge',
+				proposalWorkspace: 'isolated',
+				prTitle: 'Add paseka export --format',
+				updatedAt: '2026-09-25T18:04:00Z'
+			})
+		],
+		count: 2,
+		...overrides
+	};
+}
+
+/** A worktree diff as `GetMergeDiff` returns it. */
+export function mergeDiff(overrides: Partial<MergeDiff> = {}): MergeDiff {
+	return {
+		traceId: 'trace-01a0bd6963faa14f',
+		defaultBranch: 'main',
+		branch: 'paseka/trace-01a0bd6963faa14f',
+		baseSha: 'a'.repeat(40),
+		headSha: 'b'.repeat(40),
+		stat: ' web/src/lib/diff.ts | 3 +++\n 1 file changed, 3 insertions(+)\n',
+		diff: [
+			'diff --git a/web/src/lib/diff.ts b/web/src/lib/diff.ts',
+			'index 1111111..2222222 100644',
+			'--- a/web/src/lib/diff.ts',
+			'+++ b/web/src/lib/diff.ts',
+			'@@ -1,2 +1,3 @@',
+			' export const first = 1;',
+			' export const second = 2;',
+			'+export const third = 3;',
+			''
+		].join('\n'),
+		delivery: 'local_merge',
+		...overrides
+	};
 }

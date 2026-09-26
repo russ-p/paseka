@@ -80,9 +80,9 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Reviews, Sessions, Bees, and Worktrees. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down. Runs opened the Colony group and, with it, the first detail route that steps between siblings of one parent; Tasks closed the audit's other full-column form and was the first user of `Drawer`.
-- **Revisit when:** The next route is picked up; nothing blocks it technically. **Reviews is next** — it is the last Work route, and it is the surface the task page deliberately does not duplicate: the approve form moved onto the task so a gated task can be answered where it is read, which leaves Reviews owning the diff, the inline comments, and the final merge gate.
+- **Summary:** `PagePlaceholder` on Sessions, Bees, and Worktrees. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down. Runs opened the Colony group and, with it, the first detail route that steps between siblings of one parent; Tasks closed the audit's other full-column form and was the first user of `Drawer`; Reviews landed the audit's `DiffViewer` and `CommentThreads` and is the second user of the shared `ReviewActions`.
+- **Revisit when:** The next route is picked up; nothing blocks it technically. **Sessions is next** — the last legacy surface left. Bees, Worktrees, and Settings are the remaining three, and none of them is a port: the legacy console has no such tab, so each needs a scope decision rather than a migration, and parity cannot be their acceptance criterion.
 
 ## Components the inventory promises
 
@@ -137,6 +137,22 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Summary:** `/next/timeline?trace=<id>` is a real deep link, but the other five filters live in the store and reset on reload, so `?type=VERIFICATION&bee=scout` cannot be shared or bookmarked.
 - **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
 - **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
+
+#### The merge diff is parsed here, not by diff2html
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Reviews migration)
+- **Summary:** The legacy console vendored diff2html v3 and then scraped its generated DOM for the line numbers a review comment anchors to (`td.d2h-ins .line-num2`). `lib/diff.ts` parses a patch into rows carrying their own line numbers instead, so the anchors are a field read and the console depends on no diff library.
+- **Why deferred:** A side-by-side layout and per-word intra-line highlighting went with it, and neither is what a reviewer reads first. The cost is a parser to maintain against git's output format, in exchange for no `@html`, no third-party CSS, and comment anchors that survive a dependency bump.
+- **Revisit when:** A reviewer asks for side-by-side, or a diff format appears that the parser mishandles. Rendering is per-row and isolated in `DiffViewer`, so adding a second layout is a renderer rather than a rewrite.
+
+#### A moved diff head silently discards review drafts
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Reviews migration)
+- **Summary:** Comment drafts live in the browser, pinned to the diff's `headSha`. When the agent pushes and the head moves, the drafts and the overall note are dropped without a word to the reviewer. The line numbers they carry are meaningless against the new commit, so re-aiming them would be worse than losing them — but losing them silently is still the wrong shape.
+- **Why deferred:** The right fix is to say so: keep the drafts, show that the head moved, and let the reviewer re-read the diff before sending. That is a UI decision about interrupting a review, not a parser fix, and it is not worth guessing at.
+- **Revisit when:** Someone loses a review to it.
 
 #### A run's events have no paging, because the endpoint caps nothing
 

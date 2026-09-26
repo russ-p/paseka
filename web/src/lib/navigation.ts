@@ -45,6 +45,16 @@ export function taskDetailPath(base: string, traceId: string, taskId: string): s
 	return `${consolePath(base, '/tasks')}/${encodeURIComponent(traceId)}/${encodeURIComponent(taskId)}`;
 }
 
+/** One proposal awaiting review; a child path of the Reviews menu entry. */
+export function reviewDetailPath(base: string, traceId: string, taskId: string): string {
+	return `${consolePath(base, '/reviews')}/${encodeURIComponent(traceId)}/${encodeURIComponent(taskId)}`;
+}
+
+/** The full-screen merge diff for one proposal, a child of its own detail. */
+export function reviewPreviewPath(base: string, traceId: string, taskId: string): string {
+	return `${reviewDetailPath(base, traceId, taskId)}/preview`;
+}
+
 /** The Timeline feed scoped to one trail. */
 export function traceTimelinePath(base: string, traceId: string): string {
 	return `${consolePath(base, '/timeline')}?trace=${encodeURIComponent(traceId)}`;
