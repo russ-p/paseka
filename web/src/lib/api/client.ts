@@ -8,6 +8,7 @@ import type {
 	GitView,
 	RunCueResult,
 	RuntimeStatus,
+	SystemView,
 	TraceDetail,
 	TraceSummary
 } from '$lib/api/types';
@@ -162,4 +163,15 @@ export function gitDeleteBranches(names: string[]): Promise<GitActionResult> {
 /** Drops checkouts under `.paseka/worktrees` that no trail claims any more. */
 export function gitPruneWorktrees(): Promise<GitActionResult> {
 	return request<GitActionResult>('/git/worktrees/prune', { method: 'POST' });
+}
+
+/**
+ * The observe-only host snapshot behind `GET /api/system`: the same identity
+ * and metrics the topbar's Host plaque carries, plus the capped process list
+ * the plaque leaves out. The server answers 200 with an `error` string when
+ * part of the snapshot failed, so the page shows what it got and says what
+ * it did not get.
+ */
+export function getSystem(): Promise<SystemView> {
+	return request<SystemView>('/system');
 }

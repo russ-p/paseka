@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
+import type { AgentItem, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
 import {
 	dashboardSummary,
 	gitBranch,
@@ -7,6 +7,7 @@ import {
 	gitWorktree,
 	insightHighlight,
 	runSummary,
+	systemView,
 	traceSummary
 } from '../tests/fixtures';
 import {
@@ -29,7 +30,15 @@ import {
 	formatClock,
 	formatFetchAge,
 	formatPercent,
+	formatProcessBytes,
 	formatUptime,
+	systemAvailableWord,
+	systemCpuPending,
+	systemDiskWord,
+	systemIdentityRows,
+	systemLoadWord,
+	systemMemoryWord,
+	liveBeePids,
 	gitDetail,
 	gitMeta,
 	gitNeedsAttention,
@@ -601,5 +610,128 @@ describe('git route formatting', () => {
 		expect(gitActionLabel('prune', false)).toBe('Prune orphans');
 		expect(gitActionLabel('prune', true)).toBe('Pruning…');
 		expect(gitActionLabel('delete', true)).toBe('Deleting…');
+	});
+});
+
+describe('formatProcessBytes', () => {
+	it('picks the unit from the value, because most processes are MiB', () => {
+		// The GiB formatter the metric tiles use would print 0.00 GiB down the
+		// whole process column and make the rows incomparable. For the same reason
+		// this never climbs back to GiB: a column that changes unit halfway down
+		// is the thing it exists to prevent.
+		expect(formatProcessBytes(1_073_741_824)).toBe('1024 MiB');
+		expect(formatProcessBytes(214_958_080)).toBe('205 MiB');
+		expect(formatProcessBytes(52_428_800)).toBe('50 MiB');
+		expect(formatProcessBytes(5_242_880)).toBe('5.0 MiB');
+		expect(formatProcessBytes(3_145_728)).toBe('3.0 MiB');
+		expect(formatProcessBytes(65_536)).toBe('64 KiB');
+		expect(formatProcessBytes(512)).toBe('512 B');
+	});
+
+	it('is null when the server could not measure the process', () => {
+		expect(formatProcessBytes(undefined)).toBeNull();
+		expect(formatProcessBytes(Number.NaN)).toBeNull();
+	});
+});
+
+describe('system metric words', () => {
+	const host: HostStatus = {
+		os: 'linux',
+		arch: 'amd64',
+		cpus: 8,
+		load1: 1.424,
+		load5: 0.981,
+		load15: 0.612,
+		cpuPercent: 18,
+		memUsedBytes: 6_442_450_944,
+		memTotalBytes: 17_179_869_184,
+		memAvailableBytes: 10_737_418_240,
+		diskUsedBytes: 42_949_672_960,
+		diskTotalBytes: 214_748_364_800
+	};
+
+	it('pairs used with total and leaves a half-measured figure unsaid', () => {
+		expect(systemMemoryWord(host)).toBe('6.00 GiB / 16.0 GiB');
+		expect(systemDiskWord(host)).toBe('40.0 GiB / 200 GiB');
+		expect(systemAvailableWord(host)).toBe('10.0 GiB');
+		expect(systemMemoryWord({ ...host, memTotalBytes: undefined })).toBeNull();
+		expect(systemDiskWord({ ...host, diskUsedBytes: undefined })).toBeNull();
+		expect(systemMemoryWord(null)).toBeNull();
+	});
+
+	it('reports the three averages together, because a partial set is not a load', () => {
+		expect(systemLoadWord(host)).toBe('1.42 / 0.98 / 0.61');
+		expect(systemLoadWord({ ...host, load15: undefined })).toBeNull();
+		expect(systemLoadWord(null)).toBeNull();
+	});
+
+	it('treats a missing cpu percent as the first sample, not a fault', () => {
+		// CPU percent is a delta between two /proc/stat reads, so the first poll of a
+		// fresh console cannot have one.
+		expect(systemCpuPending({ ...host, cpuPercent: undefined })).toBe(true);
+		expect(systemCpuPending(host)).toBe(false);
+		expect(systemCpuPending(null)).toBe(false);
+	});
+});
+
+describe('systemIdentityRows', () => {
+	it('names the box and offers the values an operator pastes elsewhere', () => {
+		const rows = systemIdentityRows(systemView());
+
+		expect(rows.map((row) => row.label)).toEqual([
+			'Hostname',
+			'Kernel',
+			'OS / arch',
+			'CPUs',
+			'Uptime',
+			'Console PID',
+			'Go'
+		]);
+		const hostname = rows[0];
+		expect(hostname.value).toBe('apiary');
+		expect(hostname.copy).toBe(true);
+		expect(hostname.mono).toBe(true);
+		expect(rows.find((row) => row.label === 'OS / arch')?.value).toBe('linux / amd64');
+		expect(rows.find((row) => row.label === 'CPUs')?.value).toBe('8');
+		expect(rows.find((row) => row.label === 'Uptime')?.value).toBe('7d 0h');
+		expect(rows.find((row) => row.label === 'Console PID')?.mono).toBe(true);
+	});
+
+	it('drops the rows a degraded snapshot could not measure', () => {
+		// Off Linux the identity fields still work while load, memory, and the
+		// process list do not, so the block must not be padded with dashes.
+		const rows = systemIdentityRows({
+			os: 'darwin',
+			arch: 'arm64',
+			cpus: 10,
+			consolePid: 4242
+		});
+
+		expect(rows.map((row) => row.label)).toEqual(['OS / arch', 'CPUs', 'Console PID']);
+	});
+
+	it('is empty with no snapshot at all', () => {
+		expect(systemIdentityRows(null)).toEqual([]);
+	});
+});
+
+describe('liveBeePids', () => {
+	const item = (pid: number): AgentItem => ({
+		kind: 'afk',
+		bee: 'scout',
+		pid,
+		traceId: 'trace-01a0bd6963faa14f',
+		agentId: 'agent-1',
+		startedAt: '2026-09-25T18:04:22Z',
+		runDir: '/colony/.paseka/runs/trace-01a0bd6963faa14f/agent-1'
+	});
+
+	it('marks the adapter pids the Live bees panel reports', () => {
+		expect([...liveBeePids([item(4242), item(1187)])]).toEqual([4242, 1187]);
+	});
+
+	it('is an empty set when no bee is live, which is not an error', () => {
+		expect(liveBeePids(undefined).size).toBe(0);
+		expect(liveBeePids([]).size).toBe(0);
 	});
 });

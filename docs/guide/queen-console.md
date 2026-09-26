@@ -33,9 +33,9 @@ explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
 The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
-page), and **Git**. Every other route under `/next/` renders a "migration
-pending" card that links back to the legacy console, so use `/` for Timeline,
-Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Topology, and System for now.
+page), **Git**, and **System**. Every other route under `/next/` renders a
+"migration pending" card that links back to the legacy console, so use `/` for
+Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology for now.
 
 ## What requires the Hive Runtime
 
@@ -124,7 +124,25 @@ invites from colony YAML. Generate the same graph as Mermaid with
 
 Shows the OS view of the Console process: host identity, CPU, memory, uptime,
 load, colony disk, and a capped process list. In a container this is the
-container's PID namespace; no Docker API is queried.
+container's PID namespace; no Docker API is queried. Read it, do not act on it:
+there are no kill, nice, or signal controls, and a process name is a hint that
+work is happening rather than a ledger of what the colony started.
+
+On `/next/system` the metrics lead the page, and the Host plaque in the topbar
+links here. Three of them — available memory, the 5 and 15 minute load, and
+colony disk — are here precisely because the plaque has no room for them. A
+figure the server could not measure leaves its tile out instead of showing a
+dash, so a box that is missing memory looks missing rather than broken. The
+process table starts folded with the count in its summary line, and a live
+adapter's row is badged so you can find it without cross-referencing the Live
+bees panel.
+
+Two numbers on this page use different denominators: the CPU tile is the whole
+machine and stops at 100%, while a process row is measured against a single
+core, so a busy process reads 172%. That is the server's arithmetic, not a
+broken table. CPU percent also needs two samples, so it shows a dash with the
+reason on the very first poll after a restart. Nothing here needs the Hive
+runtime, and the page keeps working when it is stopped.
 
 ### Git
 

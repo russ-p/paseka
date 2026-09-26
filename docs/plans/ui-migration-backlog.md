@@ -88,8 +88,8 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Topology, and System. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face.
+- **Summary:** `PagePlaceholder` on Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit.
 - **Revisit when:** The next route is picked up; nothing blocks it technically. **Timeline is next** — the trail detail already links into it, and it is the other half of the event story.
 
 ## Components the inventory promises
@@ -122,13 +122,21 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** `DataTable` cells are declarative by contract — a Svelte snippet cannot be built inside `<script>`, so a button in a cell needs a new intent that no other table has asked for. The sweep is the operation the section exists for, and deleting one branch is `git branch -d` away.
 - **Revisit when:** A second table needs per-row actions (Tasks, Runs, or Reviews are the likely candidates), or an operator reaches for a shell to delete a single branch. The fix is a DataTable action intent, not a Git-page workaround.
 
-#### A branch subject truncates at 768px
+#### A truncated cell cannot be read in full
 
 - **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git migration)
-- **Summary:** The Branches table gives the leftover width to the commit subject, so it is complete on a desktop and truncates with `…` at the 768px design target. The full text is one `git log` away. The worktree table has no such column.
-- **Why deferred:** The alternative — letting the subject wrap — was tried and is worse: a `wrap` intent is silently defeated by the `grow` column's own truncation, so it would have been a trap in the component contract, and wrapping fights the "cells never wrap" rule that keeps row heights uniform.
-- **Revisit when:** A second visibility tier is needed anyway (`lg:` for desktop-only columns), or an operator scans subjects at 768px and cannot tell branches apart. The fix is a breakpoint, not a wrap.
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git and System migrations)
+- **Summary:** A `grow` cell truncates with `…` and offers no way to see the rest. The Branches commit subject is complete on a desktop and clipped at the 768px design target; the System process command line is clipped at *every* width, because the server already truncates it at 200 runes and a real adapter command is longer than that.
+- **Why deferred:** There is no reveal mechanism, and both obvious ones are wrong. Letting the cell wrap is silently defeated by the `grow` column's own truncation — it would have been a trap in the component contract — and it fights the "cells never wrap" rule that keeps row heights uniform. A native `title` would be a second, inconsistent way to show full text next to the `Hint` component that already owns that job.
+- **Revisit when:** A third table needs a prose column, or an operator cannot tell two processes apart on the System page. The fix is one `hint` intent on a `grow` cell feeding the existing `Hint` popover, plus the `lg:` visibility tier the desktop-only columns will want anyway — not a wrap and not a `title`.
+
+#### The topbar plaque is a link, not a click target
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (System migration)
+- **Summary:** The legacy console made the whole Host, Live bees, and Git panel a click target, keyboard-operable with Enter and Space. `/next` makes the Host and Git *labels* links instead, and Live bees is not a link at all until Runs and Sessions land.
+- **Why deferred:** A stretched overlay over the panel (`after:absolute after:inset-0`) would swallow the `Hint` popover that sits inside it, because the pseudo-element paints above the panel's own content and intercepts its pointer events — so the panel would either stop being hoverable or stop being clickable. The label link keeps both, and it is visible, which the legacy's invisible target was not.
+- **Revisit when:** Runs and Sessions exist and Live bees can link somewhere, or an operator reports not noticing the labels. If whole-panel clicking is ever wanted, the fix is to lift the popover out of the hit area rather than to re-add a keydown handler on a `div`.
 
 #### An oversized comb file is unreadable
 

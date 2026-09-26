@@ -12,7 +12,7 @@ describe('StatTile', () => {
 	});
 
 	it('keeps the full hint text for a truncated value line', () => {
-		render(StatTile, { label: 'NATS', value: 'not configured', hint: 'transport is optional' });
+		render(StatTile, { label: 'NATS', value: 'not configured', hint: ['transport is optional'] });
 
 		expect(screen.getByText('not configured')).toBeInTheDocument();
 		expect(screen.getByText('transport is optional')).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('StatTile', () => {
 		const { container } = render(StatTile, {
 			label: 'Active worktrees',
 			value: 12,
-			hint: 'Isolated checkouts under .paseka/worktrees.'
+			hint: ['Isolated checkouts under .paseka/worktrees.']
 		});
 
 		expect(container.querySelector('.truncate')).toHaveTextContent('12');

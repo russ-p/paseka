@@ -621,3 +621,103 @@ export function artifactMeta(artifact: Pick<ArtifactView, 'artifactKind' | 'prod
 export function artifactState(artifact: Pick<ArtifactView, 'announced'>): 'announced' | 'staged' {
 	return artifact.announced ? 'announced' : 'staged';
 }
+
+/**
+ * Byte counts in a process column are a different scale from machine memory:
+ * most processes are MiB, so the GiB formatter the metric tiles use would print
+ * `0.00 GiB` down the whole table and make the rows incomparable. The unit
+ * follows the value here.
+ */
+export function formatProcessBytes(value: number | undefined): string | null {
+	if (value === undefined || !Number.isFinite(value)) return null;
+	const mib = value / 1024 ** 2;
+	if (mib >= 10) return `${mib.toFixed(0)} MiB`;
+	if (mib >= 1) return `${mib.toFixed(1)} MiB`;
+	const kib = value / 1024;
+	if (kib >= 1) return `${kib.toFixed(0)} KiB`;
+	return `${Math.round(value)} B`;
+}
+
+/** `used / total`, or `null` when the server could not measure either half. */
+function bytePairWord(used: number | undefined, total: number | undefined): string | null {
+	const usedWord = formatBytes(used);
+	const totalWord = formatBytes(total);
+	if (!usedWord || !totalWord) return null;
+	return `${usedWord} / ${totalWord}`;
+}
+
+export function systemMemoryWord(host: HostStatus | null): string | null {
+	if (!host) return null;
+	return bytePairWord(host.memUsedBytes, host.memTotalBytes);
+}
+
+export function systemDiskWord(host: HostStatus | null): string | null {
+	if (!host) return null;
+	return bytePairWord(host.diskUsedBytes, host.diskTotalBytes);
+}
+
+export function systemAvailableWord(host: HostStatus | null): string | null {
+	return formatBytes(host?.memAvailableBytes);
+}
+
+/** The three averages together: a partial set is not a load number. */
+export function systemLoadWord(host: HostStatus | null): string | null {
+	if (!host || host.load1 === undefined || host.load5 === undefined || host.load15 === undefined) {
+		return null;
+	}
+	return `${host.load1.toFixed(2)} / ${host.load5.toFixed(2)} / ${host.load15.toFixed(2)}`;
+}
+
+/**
+ * CPU percent is a delta between two `/proc/stat` samples, so the first poll of
+ * a fresh console cannot have one. That absence is expected, not a fault, and
+ * the tile says so instead of pretending the box is idle.
+ */
+export function systemCpuPending(host: HostStatus | null): boolean {
+	return host !== null && host.cpuPercent === undefined;
+}
+
+export const cpuPendingHint = [
+	'CPU percent is the difference between two /proc/stat samples.',
+	'It appears on the next poll.'
+];
+
+/** Which box this is. Every row is conditional, so a degraded snapshot is quiet rather than padded. */
+export function systemIdentityRows(host: HostStatus | null): MetaRow[] {
+	if (!host) return [];
+	const rows: MetaRow[] = [];
+	if (host.hostname) {
+		// The hostname is the first thing pasted into a bug report or an ssh command.
+		rows.push({ label: 'Hostname', value: host.hostname, mono: true, copy: true, hint: [host.hostname] });
+	}
+	if (host.kernel) rows.push({ label: 'Kernel', value: host.kernel, mono: true, hint: [host.kernel] });
+	if (host.os || host.arch) {
+		const platform = `${host.os || '—'} / ${host.arch || '—'}`;
+		rows.push({ label: 'OS / arch', value: platform, hint: [platform] });
+	}
+	if (host.cpus) {
+		// Without the cpu count a load average is an unreadable number.
+		rows.push({ label: 'CPUs', value: String(host.cpus) });
+	}
+	const uptime = formatUptime(host.uptimeSeconds);
+	if (uptime) rows.push({ label: 'Uptime', value: uptime });
+	if (host.consolePid) {
+		const pid = String(host.consolePid);
+		rows.push({ label: 'Console PID', value: pid, mono: true, copy: true, hint: [pid] });
+	}
+	if (host.goVersion) {
+		// The toolchain that built the running binary, for "it works on my box" reports.
+		rows.push({ label: 'Go', value: host.goVersion, mono: true, copy: true, hint: [host.goVersion] });
+	}
+	return rows;
+}
+
+/**
+ * The pids the Live bees panel reports, for marking adapter processes in the
+ * table. A client-side join is the whole point: System Info never asks the
+ * agents API whether a process is a bee, so a compiler or a test runner still
+ * shows up here as ordinary load.
+ */
+export function liveBeePids(items: AgentItem[] | undefined): Set<number> {
+	return new Set((items ?? []).map((item) => item.pid));
+}

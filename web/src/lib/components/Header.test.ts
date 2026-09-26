@@ -100,6 +100,19 @@ describe('Header', () => {
 		expect(screen.getByLabelText('Git')).toHaveTextContent('ba7b43c');
 	});
 
+	it('links the Host and Git plaques to their own routes', () => {
+		// Legacy parity: the plaque is the way into the page it summarizes. The label
+		// is the link rather than the whole panel, because a stretched overlay would
+		// swallow the hover popover underneath it.
+		const { store, toasts } = harness();
+		render(Header, { store, toasts });
+
+		expect(screen.getByRole('link', { name: 'Host' })).toHaveAttribute('href', '/next/system');
+		expect(screen.getByRole('link', { name: 'Git' })).toHaveAttribute('href', '/next/git');
+		// Live bees points at Runs and Sessions, which are still placeheld.
+		expect(screen.queryByRole('link', { name: 'Live bees' })).not.toBeInTheDocument();
+	});
+
 	it('keeps the full text of every clipped line in a multi-line hint', () => {
 		const { store, toasts } = harness();
 		render(Header, { store, toasts });

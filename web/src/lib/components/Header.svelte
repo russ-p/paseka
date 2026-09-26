@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import Hint from '$lib/components/Hint.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import StatusIcon from '$lib/components/StatusIcon.svelte';
+	import { consolePath } from '$lib/navigation';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import {
 		agentsDetail,
@@ -175,7 +177,10 @@
 				aria-label="Host"
 			>
 				<div class="flex min-h-8 items-center justify-between gap-2">
-					<span class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">Host</span>
+					<!-- The label is the link, not the whole panel. A stretched overlay would
+					     swallow the hover popover underneath it, and the legacy console's
+					     invisible click target over a `<div>` is not worth restoring. -->
+					<a class="link text-xs font-semibold tracking-wide text-base-content/60 uppercase" href={consolePath(base, '/system')}>Host</a>
 					<StatusBadge status={store.host ? 'live' : 'unavailable'} label={hostBadge(store.host)} />
 				</div>
 				<Hint lines={hostDetailLines(store.host, store.hostError)}>
@@ -196,7 +201,7 @@
 				aria-label="Git"
 			>
 				<div class="flex min-h-8 items-center justify-between gap-2">
-					<span class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">Git</span>
+					<a class="link text-xs font-semibold tracking-wide text-base-content/60 uppercase" href={consolePath(base, '/git')}>Git</a>
 					<StatusBadge
 						status={gitNeedsAttention(store.git) ? 'pending' : 'success'}
 						label={gitSyncLabel(store.git)}

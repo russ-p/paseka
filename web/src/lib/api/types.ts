@@ -53,6 +53,26 @@ export interface HostStatus {
 	error?: string;
 }
 
+/** Mirrors `console.SystemProcess`, one row of the process table. */
+export interface SystemProcess {
+	pid: number;
+	rssBytes: number;
+	/** A delta between two samples, so it is absent on the first poll. */
+	cpuPercent?: number;
+	comm: string;
+	cmd: string;
+}
+
+/**
+ * Mirrors `console.SystemView`. It extends the plaque's `HostStatus` because the
+ * server embeds the very same struct in the chrome frame: the System route's
+ * snapshot is the Host plaque plus the process list, not a parallel shape.
+ */
+export interface SystemView extends HostStatus {
+	/** Absent off Linux, and when `/proc` could not be read. */
+	processes?: SystemProcess[];
+}
+
 export interface GitPlaque {
 	branch: string;
 	headSha: string;
