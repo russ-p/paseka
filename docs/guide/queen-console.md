@@ -33,9 +33,9 @@ explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
 The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
-page), **Git**, and **System**. Every other route under `/next/` renders a
-"migration pending" card that links back to the legacy console, so use `/` for
-Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology for now.
+page), **Git**, **System**, and **Timeline**. Every other route under `/next/`
+renders a "migration pending" card that links back to the legacy console, so use
+`/` for Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology for now.
 
 ## What requires the Hive Runtime
 
@@ -68,6 +68,21 @@ timer.
 **Traces** groups tasks, runs, insights, usage, and artifacts by `traceId`.
 **Timeline** exposes the event stream for diagnosing routing and handoffs.
 Use `paseka replay <traceId>` for the CLI equivalent.
+
+On `/next/timeline` the feed starts unscoped and the filter panel stays folded
+until something is in it, so the events own the screen. A trail's *Open
+timeline* button links to `/next/timeline?trace=<id>`, which arrives with the
+panel open and the feed already scoped — bookmarkable, unlike the legacy tab
+switch that set the filter in memory. Six filters (trace, task, bee, contract,
+payload kind, severity) apply on **Apply** rather than as you type, and
+**Clear N filters** in the header returns to the colony-wide feed. **Load more**
+pages strictly older events; if a page fails the button stays, so it is a retry.
+
+The feed does not refresh itself — it is recorded history, and a timer that
+moved rows under you while you were reading one would be worse than useless.
+Press **Refresh** when you want the newest events. Every row's *Raw event*
+disclosure shows the underlying `protocol.Event`; it costs no request, because
+the raw envelope already arrives with the row.
 
 Trails bound to a standing Forage Cue carry a **standing** badge, and their
 honey reads `remaining / stipend` — see [Forage Cues](cues.md).

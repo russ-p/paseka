@@ -8,14 +8,6 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 A link or control that resolves to a page which does not exist yet. Each one is a promise the operator can see and cannot keep.
 
-#### Trail detail links into a placeholder Timeline
-
-- **Kind:** blocker
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
-- **Summary:** "Open timeline" on `/next/traces/:id` points at `/next/timeline?trace=<id>`, which renders `PagePlaceholder`. The route exists and the query is right; nothing reads the param.
-- **Why deferred:** Timeline is not migrated, and a filter that scopes a placeholder is invisible. The link was kept because it names the intended contract and costs nothing to honour later.
-- **Revisit when:** Timeline is migrated. It must read `trace` on mount, and the filter bar should open with the field filled rather than reading it from the URL behind a "Filters" button.
-
 #### Task and run rows on the trail detail carry no link
 
 - **Kind:** blocker
@@ -88,9 +80,9 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit.
-- **Revisit when:** The next route is picked up; nothing blocks it technically. **Timeline is next** — the trail detail already links into it, and it is the other half of the event story.
+- **Summary:** `PagePlaceholder` on Tasks, Reviews, Sessions, Bees, Worktrees, Runs, and Topology. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse.
+- **Revisit when:** The next route is picked up; nothing blocks it technically. **Tasks is next** — it is the last Work route, and the trail detail already links its task rows nowhere, so it is the one place where `DetailRow.href` has a real target waiting.
 
 ## Components the inventory promises
 
@@ -130,6 +122,22 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** There is no reveal mechanism, and both obvious ones are wrong. Letting the cell wrap is silently defeated by the `grow` column's own truncation — it would have been a trap in the component contract — and it fights the "cells never wrap" rule that keeps row heights uniform. A native `title` would be a second, inconsistent way to show full text next to the `Hint` component that already owns that job.
 - **Revisit when:** A third table needs a prose column, or an operator cannot tell two processes apart on the System page. The fix is one `hint` intent on a `grow` cell feeding the existing `Hint` popover, plus the `lg:` visibility tier the desktop-only columns will want anyway — not a wrap and not a `title`.
 
+#### The event feed does not update itself
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline migration)
+- **Summary:** `/next/timeline` reads on mount, on apply, on load-more, and on an explicit Refresh. Nothing arrives on its own, so watching a trail during an AFK run means pressing Refresh. The audit's "chunked or streamed loading" was deferred with it.
+- **Why deferred:** The feed is cursor-paginated history, so a live update has to answer three questions the current design has no opinion on: whether to prepend or replace, whether to do it while the operator has scrolled away from the top, and how to dedupe a boundary event that arrives on two pages. Guessing wrong is worse than a button — prepending yanks rows out from under a reader, and replacing silently discards their scroll position. The legacy console made the same choice, so nothing regressed.
+- **Revisit when:** An operator actually leaves the page open during a run and misses events, or the chrome stream grows a domain event feed to subscribe to. The design needs a scroll-position rule and an id-based dedupe before it needs an endpoint.
+
+#### Only the `?trace=` scope is shareable
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline migration)
+- **Summary:** `/next/timeline?trace=<id>` is a real deep link, but the other five filters live in the store and reset on reload, so `?type=VERIFICATION&bee=scout` cannot be shared or bookmarked.
+- **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
+- **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
+
 #### The topbar plaque is a link, not a click target
 
 - **Kind:** follow-up
@@ -151,8 +159,8 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
 - **Summary:** The trail detail shows the newest 8 of the projection's 20 events and writes "N older on the timeline". Eight was picked because the section is a preview, not because anything measured it.
-- **Why deferred:** The projection is capped at 20 server-side, so no number of rendered rows reaches the full feed.
-- **Revisit when:** Timeline lands and can take a `before` cursor — then the preview can be a real "latest 8" window of an arbitrarily long feed rather than a slice of a fixed 20.
+- **Why deferred:** The cap is the *projection*, which embeds at most 20 events, so no number of rendered rows reaches the full feed. The feed itself pages back without limit.
+- **Revisit when:** A trail with more than 20 events makes the preview look broken. The fix is for the trail detail to read a page of `/api/events?traceId=<id>` — the Timeline route already does — instead of the projection's embedded list; it needs no new cursor, because the feed is newest-first and `after` walks backwards.
 
 #### Only the trail id is copyable
 

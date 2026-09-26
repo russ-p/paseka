@@ -2,6 +2,7 @@ import type {
 	AgentItem,
 	ArtifactView,
 	DashboardSummary,
+	EventFilters,
 	GitActionResult,
 	GitBranch,
 	GitPlaque,
@@ -13,6 +14,7 @@ import type {
 	NATSStatusView,
 	RunSummary,
 	RuntimeStatus,
+	SignalSummary,
 	TaskSummary,
 	TraceSummary,
 	Usage,
@@ -720,4 +722,33 @@ export function systemIdentityRows(host: HostStatus | null): MetaRow[] {
  */
 export function liveBeePids(items: AgentItem[] | undefined): Set<number> {
 	return new Set((items ?? []).map((item) => item.pid));
+}
+
+/**
+ * The feed row's provenance line: the contract and the payload kind, which are
+ * different things (`VERIFICATION` carrying `review.gate`) and are worth showing
+ * together. When they happen to be the same word the line says it once, and an
+ * absent half leaves the other alone rather than adding a dangling separator.
+ */
+export function eventKindLine(event: Pick<SignalSummary, 'type' | 'payloadKind'>): string {
+	if (!event.payloadKind) return event.type ?? '';
+	if (!event.type || event.type === event.payloadKind) return event.payloadKind;
+	return `${event.type} · ${event.payloadKind}`;
+}
+
+/** How many filters narrow the feed, so the collapsed panel can say so. */
+export function activeFilterCount(filters: EventFilters): number {
+	return Object.values(filters).filter((value) => value && value.trim() !== '').length;
+}
+
+/** The active filters as one readable phrase for the collapsed panel's summary. */
+export function eventFilterSummary(filters: EventFilters): string {
+	const parts: string[] = [];
+	if (filters.traceId) parts.push(filters.traceId);
+	if (filters.taskId) parts.push(`task ${filters.taskId}`);
+	if (filters.bee) parts.push(filters.bee);
+	if (filters.type) parts.push(filters.type);
+	if (filters.kind) parts.push(`kind ${filters.kind}`);
+	if (filters.severity) parts.push(`severity ${filters.severity}`);
+	return parts.join(' · ');
 }

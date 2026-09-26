@@ -2,6 +2,7 @@ import type {
 	ArtifactView,
 	DashboardSummary,
 	EventFeedItem,
+	EventFeedPage,
 	GitBranch,
 	GitCommit,
 	GitView,
@@ -125,7 +126,7 @@ export function traceDetail(overrides: Partial<TraceDetail> = {}): TraceDetail {
 }
 
 export function eventFeedItem(overrides: Partial<EventFeedItem> = {}): EventFeedItem {
-	return {
+	const item: EventFeedItem = {
 		id: '2026-09-25T18:04:22Z|trace-01a0bd6963faa14f|run-01|7',
 		createdAt: '2026-09-25T18:04:22Z',
 		traceId: 'trace-01a0bd6963faa14f',
@@ -136,8 +137,25 @@ export function eventFeedItem(overrides: Partial<EventFeedItem> = {}): EventFeed
 		taskId: 'task-b2',
 		severity: 'warning',
 		summary: 'The cursor adapter still reaches for the provider registry directly.',
+		raw: {
+			protocolVersion: '1',
+			traceId: 'trace-01a0bd6963faa14f',
+			agentId: 'run-01',
+			seq: 7,
+			type: 'INSIGHT',
+			createdAt: '2026-09-25T18:04:22Z',
+			payload: { kind: 'seam.note', severity: 'warning' }
+		},
 		...overrides
 	};
+	return item;
+}
+
+export function eventFeedPage(
+	items: EventFeedItem[] = [eventFeedItem()],
+	overrides: Partial<EventFeedPage> = {}
+): EventFeedPage {
+	return { items, hasMore: false, ...overrides };
 }
 
 export function gitCommit(overrides: Partial<GitCommit> = {}): GitCommit {

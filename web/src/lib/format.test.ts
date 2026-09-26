@@ -39,6 +39,9 @@ import {
 	systemLoadWord,
 	systemMemoryWord,
 	liveBeePids,
+	eventKindLine,
+	activeFilterCount,
+	eventFilterSummary,
 	gitDetail,
 	gitMeta,
 	gitNeedsAttention,
@@ -733,5 +736,52 @@ describe('liveBeePids', () => {
 	it('is an empty set when no bee is live, which is not an error', () => {
 		expect(liveBeePids(undefined).size).toBe(0);
 		expect(liveBeePids([]).size).toBe(0);
+	});
+});
+
+describe('eventKindLine', () => {
+	it('names the contract and the payload kind, which are different things', () => {
+		expect(eventKindLine({ type: 'VERIFICATION', payloadKind: 'review.gate' })).toBe(
+			'VERIFICATION · review.gate'
+		);
+	});
+
+	it('leaves the contract alone rather than adding a dangling separator', () => {
+		expect(eventKindLine({ type: 'SIGNAL' })).toBe('SIGNAL');
+		expect(eventKindLine({ payloadKind: 'seam.note' })).toBe('seam.note');
+		expect(eventKindLine({})).toBe('');
+	});
+
+	it('says the word once when the contract and the payload kind agree', () => {
+		// The dashboard's insight projection carries one word for both, and
+		// "INSIGHT · INSIGHT" is the kind of thing a reviewer notices.
+		expect(eventKindLine({ type: 'INSIGHT', payloadKind: 'INSIGHT' })).toBe('INSIGHT');
+	});
+});
+
+describe('activeFilterCount', () => {
+	it('counts what narrows the feed and ignores blank fields', () => {
+		expect(activeFilterCount({})).toBe(0);
+		expect(activeFilterCount({ traceId: 'trace-1' })).toBe(1);
+		// A stray space is not a filter, and must not read as one in the summary line.
+		expect(activeFilterCount({ traceId: 'trace-1', bee: '  ', type: '' })).toBe(1);
+	});
+});
+
+describe('eventFilterSummary', () => {
+	it('reads as a phrase naming what is narrowing the feed', () => {
+		expect(
+			eventFilterSummary({ traceId: 'trace-01a0bd6963faa14f', type: 'VERIFICATION', severity: 'high' })
+		).toBe('trace-01a0bd6963faa14f · VERIFICATION · severity high');
+	});
+
+	it('labels the fields that are not self-describing', () => {
+		expect(eventFilterSummary({ taskId: 'task-b2', bee: 'scout', kind: 'seam.note' })).toBe(
+			'task task-b2 · scout · kind seam.note'
+		);
+	});
+
+	it('is empty for the colony-wide feed, so the panel has nothing to say', () => {
+		expect(eventFilterSummary({})).toBe('');
 	});
 });
