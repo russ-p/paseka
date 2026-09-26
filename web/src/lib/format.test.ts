@@ -1083,7 +1083,7 @@ describe('task formatters', () => {
 	});
 
 	it('puts a linked run\'s time and directory on one line', () => {
-		const run = taskDetail().runs[0];
+		const run = (taskDetail().runs ?? [])[0];
 		expect(taskRunMeta(run)).toContain('.paseka/runs/trace-01a0bd6963faa14f/run-02');
 		// A run with neither a start time nor a directory leaves no empty separator.
 		expect(taskRunMeta({ agentId: 'run-01' })).toBe('');

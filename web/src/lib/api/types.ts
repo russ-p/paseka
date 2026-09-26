@@ -305,7 +305,13 @@ export interface TaskDetail extends TaskListItem {
 	/** The trail's prose, on a final gate only. */
 	traceSummary?: string;
 	commit?: string;
-	runs: TaskRun[];
+	/**
+	 * `null`, not `[]`, for a task no run has touched: Go marshals a nil slice as
+	 * `null` and this field carries no `omitempty`, so a task planned by a planner
+	 * and never dispatched answers with a null. `TraceDetail` says the same about its
+	 * own lists, and every page normalises with `?? []`.
+	 */
+	runs: TaskRun[] | null;
 	/** Where the ledger answered from: `jetstream-kv`, or `filesystem`. */
 	source: string;
 }
@@ -316,7 +322,8 @@ export interface TaskDetail extends TaskListItem {
  */
 export interface TaskBoard {
 	groups: { status: string; tasks: TaskListItem[] }[];
-	taskCounts: Record<string, number>;
+	/** `null` for a colony with no tasks at all, for the same nil-map reason as above. */
+	taskCounts: Record<string, number> | null;
 }
 
 /** Mirrors `console.CreateTaskRequest`, the body of `POST /api/tasks`. */

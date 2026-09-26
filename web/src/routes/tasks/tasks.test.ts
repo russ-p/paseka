@@ -201,6 +201,18 @@ describe('tasks board', () => {
 		]);
 	});
 
+	it('renders a board whose taskCounts came back null', async () => {
+		// A colony with no tasks at all answers with a null map rather than `{}`, for
+		// the same nil-value reason, and the header count is read from it.
+		const { store } = harness(taskBoard({ groups: [taskBoard().groups[0]], taskCounts: null }));
+		render(Tasks, { store });
+		await waitFor(() => expect(screen.getByLabelText('ready tasks')).toBeInTheDocument());
+
+		// Falls back to what actually rendered, which is honest: a missing count is
+		// better than a crash and better than a fabricated zero.
+		expect(within(screen.getByLabelText('ready tasks')).getByText('1')).toBeInTheDocument();
+	});
+
 	it('reports a board that could not be read', async () => {
 		const listTasks = vi.fn(async () => {
 			throw new Error('colony root unreadable');
@@ -435,6 +447,27 @@ describe('task detail', () => {
 		render(TaskDetail, { store: h.store, traceId: 'trace-01a0bd6963faa14f', taskId: 'task-01' });
 
 		expect(await screen.findByText(/No runs yet/)).toBeInTheDocument();
+	});
+
+	it('survives a null runs list, which is what the server sends for one', async () => {
+		// A task planned by a planner and never dispatched answers with `runs: null`,
+		// because `TaskDetailView.Runs` has no `omitempty` and Go marshals a nil
+		// slice that way. The fixture default was `[]`, so this shape was invisible
+		// until a real task with no runs was opened — and it took the whole page down
+		// with it, because the render asked the list for its length.
+		const h = harness(taskBoard(), [taskDetail({ runs: null })]);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-01',
+			toasts: h.toasts
+		});
+
+		expect(await screen.findByText(/No runs yet/)).toBeInTheDocument();
+		// The rest of the page survived, which is the point: a null list is an empty
+		// list, not a broken page.
+		expect(screen.getByLabelText('Task identity')).toBeInTheDocument();
+		expect(screen.getByText('Add an --format flag to `paseka export`.')).toBeInTheDocument();
 	});
 
 	it('offers Start only when the server says the task is eligible', async () => {
