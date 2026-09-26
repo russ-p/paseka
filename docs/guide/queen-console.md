@@ -31,6 +31,11 @@ The Svelte-based Queen Console redesign is available at
 serve the legacy console until the redesign reaches feature parity and an
 explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
+The preview currently ships the shell (top status panel, side menu, theme
+switcher) and the **Dashboard**. Every other route under `/next/` renders a
+"migration pending" card that links back to the legacy console, so use `/` for
+Traces, Tasks, Reviews, Sessions, Runs, Git, Topology, and System for now.
+
 ## What requires the Hive Runtime
 
 The Console process is separate from `paseka run`.

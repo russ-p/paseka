@@ -2,6 +2,17 @@
 
 Frontend foundation for the Svelte-based Queen Console redesign described in [Spec 035](../docs/specs/035-queen-console-redesign.md). The development and production app is mounted by the Go console at `/next/`; the legacy console remains at `/`.
 
+## Layout
+
+| Path | Holds |
+| ---- | ----- |
+| `src/lib/api/` | `client.ts` — the only module that fetches; `types.ts` mirrors the Go JSON views |
+| `src/lib/components/` | Shared components from the design-system inventory |
+| `src/lib/stores/` | Runes stores: `consoleStatusStore` (chrome stream + the one dashboard poll), `themeStore`, `toastStore` |
+| `src/lib/format.ts` | Pure formatters, unit-tested |
+| `src/routes/` | One directory per route; unmigrated routes render `PagePlaceholder` |
+| `src/tests/` | Test-only fixtures shared across suites |
+
 ## Development
 
 ```sh
