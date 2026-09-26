@@ -577,7 +577,13 @@ export interface Bee {
 	adapter: string;
 	promptTemplate: string;
 	worktree: boolean;
-	intents: string[];
+	/**
+	 * `null`, not `[]`, for a bee whose prompt templates yield no intents:
+	 * `console.BeeView.Intents` carries no `omitempty`, so Go marshals the nil slice
+	 * that `prompts.DiscoverIntents` returns as `null`. Read it through
+	 * `beeIntents`, which is the one place that knows.
+	 */
+	intents: string[] | null;
 	defaultIntent?: string;
 }
 

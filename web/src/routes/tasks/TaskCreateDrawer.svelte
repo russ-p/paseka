@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Drawer from '$lib/components/Drawer.svelte';
 	import { createTask, listBees } from '$lib/api/client';
+	import { beeIntents } from '$lib/format';
 	import type { Bee, CreateTaskResult } from '$lib/api/types';
 
 	let {
@@ -38,11 +39,11 @@
 	/**
 	 * The bee's own prompt templates are the intents it can be launched under, so
 	 * the list comes from the colony rather than from a constant here — a bee that
-	 * adds an intent needs no console change.
+	 * adds an intent needs no console change. `beeIntents` is shared with the session
+	 * launch form so the two cannot drift, and it copes with a bee that declares no
+	 * intents at all: the server sends `null` there, not `[]`.
 	 */
-	const intents = $derived(
-		selectedBee ? (selectedBee.defaultIntent && !selectedBee.intents.includes(selectedBee.defaultIntent) ? [...selectedBee.intents, selectedBee.defaultIntent] : selectedBee.intents) : []
-	);
+	const intents = $derived(beeIntents(selectedBee));
 
 	$effect(() => {
 		if (!open) return;

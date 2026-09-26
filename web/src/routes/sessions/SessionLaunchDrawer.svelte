@@ -2,6 +2,7 @@
 	import Drawer from '$lib/components/Drawer.svelte';
 	import { listBees } from '$lib/api/client';
 	import { createSessionStore } from '$lib/stores/session.svelte';
+	import { beeIntents } from '$lib/format';
 	import type { Bee, Session } from '$lib/api/types';
 
 	let {
@@ -48,16 +49,11 @@
 	/**
 	 * The bee's own prompt templates are the intents it can be launched under, so the
 	 * list comes from the colony rather than from a constant here — a bee that adds an
-	 * intent needs no console change. The task create form reads the same endpoint the
-	 * same way.
+	 * intent needs no console change. `beeIntents` also folds in a default the discovery
+	 * did not report, and copes with a bee that has no intents at all: the server sends
+	 * `null` there, and reading `bee.intents.length` on it is a crash.
 	 */
-	const intents = $derived(
-		selectedBee
-			? selectedBee.defaultIntent && !selectedBee.intents.includes(selectedBee.defaultIntent)
-				? [...selectedBee.intents, selectedBee.defaultIntent]
-				: selectedBee.intents
-			: []
-	);
+	const intents = $derived(beeIntents(selectedBee));
 
 	$effect(() => {
 		if (!open) return;

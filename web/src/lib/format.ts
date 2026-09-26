@@ -1,6 +1,7 @@
 import type {
 	AgentItem,
 	ArtifactView,
+	Bee,
 	DashboardSummary,
 	EventFilters,
 	GitActionResult,
@@ -1217,4 +1218,24 @@ export function sessionRelayBlocker(reason: string): string {
 		return 'This session has no terminal relay attached, so there is nothing for the console to stream. Stop and resume still work.';
 	}
 	return reason;
+}
+
+/**
+ * A bee's intents, as a list, with its own default folded in.
+ *
+ * Two things are wrong with reading `bee.intents` directly. It is `null` for a bee whose
+ * prompt templates yield nothing — `BeeView.Intents` has no `omitempty`, so Go marshals
+ * the nil slice as `null` — and the default intent is not always *in* the list, because
+ * a colony can name a default the discovery did not report. Both were read inline in two
+ * drawers, which is how the same crash arrived in the Sessions drawer and was already
+ * waiting in the Tasks one.
+ */
+export function beeIntents(bee: Bee | null | undefined): string[] {
+	if (!bee) return [];
+	const intents = bee.intents ?? [];
+	const { defaultIntent } = bee;
+	if (defaultIntent === undefined || defaultIntent === '' || intents.includes(defaultIntent)) {
+		return intents;
+	}
+	return [...intents, defaultIntent];
 }

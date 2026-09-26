@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentItem, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
+import type { AgentItem, Bee, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
 import {
 	dashboardSummary,
 	gitBranch,
@@ -19,6 +19,7 @@ import {
 	agentsDetail,
 	agentsDetailFull,
 	agentsMeta,
+	beeIntents,
 	sessionDuration,
 	sessionIdentityRows,
 	sessionRelayBlocker,
@@ -1170,5 +1171,40 @@ describe('session formatting', () => {
 			finishedAt: '2026-09-25T18:01:30Z'
 		});
 		expect(sessionRowMeta(row)).toBe('builder · cursor · 30s');
+	});
+});
+
+describe('beeIntents', () => {
+	const bee = (overrides: Partial<Bee>): Bee => ({
+		role: 'builder',
+		adapter: 'cursor',
+		promptTemplate: 'builder.md',
+		worktree: true,
+		intents: ['bugfix', 'feature'],
+		...overrides
+	});
+
+	it('answers a bee that declares no intents, because the server sends null for one', () => {
+		// `console.BeeView.Intents` carries no `omitempty`, so the nil slice that
+		// `prompts.DiscoverIntents` returns for a bee with no templates arrives as `null`
+		// — and reading `.length` on it took down the page that rendered it.
+		expect(beeIntents(bee({ intents: null }))).toEqual([]);
+		expect(beeIntents(bee({ intents: null, defaultIntent: 'general' }))).toEqual(['general']);
+	});
+
+	it('folds in a default intent the discovery did not report', () => {
+		// A colony can name a default that is not among the discovered templates, and a
+		// launch form that cannot offer it cannot launch under it.
+		expect(beeIntents(bee({ defaultIntent: 'general' }))).toEqual(['bugfix', 'feature', 'general']);
+	});
+
+	it('does not repeat a default that is already listed, or invent a blank one', () => {
+		expect(beeIntents(bee({ intents: ['bugfix'], defaultIntent: 'bugfix' }))).toEqual(['bugfix']);
+		expect(beeIntents(bee({ defaultIntent: '' }))).toEqual(['bugfix', 'feature']);
+	});
+
+	it('answers for no bee at all, which is the state before one is chosen', () => {
+		expect(beeIntents(null)).toEqual([]);
+		expect(beeIntents(undefined)).toEqual([]);
 	});
 });

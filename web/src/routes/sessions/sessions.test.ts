@@ -85,6 +85,13 @@ function harness(
 	};
 }
 
+function stubFetch(handler: (url: string) => Response): void {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (input: RequestInfo | URL) => handler(String(input)))
+	);
+}
+
 describe('sessions list', () => {
 	it('lists what is running and links each row to its own page', async () => {
 		const h = harness();
@@ -140,6 +147,33 @@ describe('sessions list', () => {
 		// `loadSessions` had no try/catch at all: the failure became an unhandled
 		// rejection and the list silently kept whatever it had.
 		expect(await screen.findByRole('alert')).toHaveTextContent('scan failed');
+	});
+
+	it('opens the launch form on a bee whose intents are null, rather than crashing on them', async () => {
+		// A bee with no prompt templates answers `intents: null`, because `BeeView.Intents`
+		// has no `omitempty` and Go marshals a nil slice as null. Reading `.length` on it
+		// took the whole page down — and the identical expression was already sitting in
+		// the task create form, waiting for the same bee.
+		stubFetch(() =>
+			new Response(
+				JSON.stringify([
+					{ role: 'builder', adapter: 'cursor', promptTemplate: '', worktree: false, intents: null }
+				])
+			)
+		);
+		const h = harness();
+		render(SessionList, { store: h.store });
+		await waitFor(() => expect(screen.getByLabelText('Sessions')).toBeInTheDocument());
+
+		await userEvent.click(screen.getByRole('button', { name: 'Launch session' }));
+
+		const drawer = await screen.findByRole('dialog');
+		expect(within(drawer).getByLabelText('Bee')).toBeInTheDocument();
+		expect(within(drawer).getByText('The selected bee declares no intents.')).toBeInTheDocument();
+		// Scoped to the drawer, because the button that opens it carries the same name —
+		// and the launch itself needs a bee and a prompt, so a bee with no intents is a
+		// narrower form rather than a dead end.
+		expect(within(drawer).getByRole('button', { name: 'Launch session' })).toBeDisabled();
 	});
 
 	it('folds invites under a header that is closed when there are none', async () => {

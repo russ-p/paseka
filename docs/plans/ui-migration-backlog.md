@@ -138,6 +138,14 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
 - **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
 
+#### A nullable list is read in one place
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Sessions migration)
+- **Summary:** `Bee.intents` is `null`, not `[]` — `console.BeeView.Intents` has no `omitempty`, so a bee with no prompt templates sends a nil slice as null, and four of this colony's seven bees do. Both launch forms read it inline, which put a live page-killing crash in each. `beeIntents` is now the only reader.
+- **Why deferred:** Nothing is deferred; the fix shipped with Sessions. It is recorded because the shape is not visible from the endpoint's name and the next nullable list will be read inline again by whoever meets it first.
+- **Revisit when:** A new nullable list appears — check whether the Go field has `omitempty` before typing it as `[]`, and read it through one helper rather than at each use site.
+
 #### The merge diff has no per-word intra-line highlighting
 
 - **Kind:** follow-up
