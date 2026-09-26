@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
-import { dashboardSummary, insightHighlight, runSummary, traceSummary } from '../tests/fixtures';
+import {
+	dashboardSummary,
+	gitBranch,
+	gitView,
+	gitWorktree,
+	insightHighlight,
+	runSummary,
+	traceSummary
+} from '../tests/fixtures';
 import {
 	agentsDetail,
 	agentsDetailFull,
@@ -26,6 +34,15 @@ import {
 	gitMeta,
 	gitNeedsAttention,
 	gitSyncLabel,
+	gitActionLabel,
+	gitLeftoverNames,
+	gitActionMessage,
+	gitBranchFlags,
+	gitBranchState,
+	gitCloneRows,
+	gitOriginRows,
+	gitSyncWord,
+	gitWorktreeState,
 	hostBadge,
 	hostDetail,
 	hostLoad,
@@ -54,6 +71,7 @@ import {
 	taskPrimaryLabel,
 	usageRows
 } from './format';
+import type { MetaRow } from './format';
 
 const running: RuntimeStatus = { status: 'running', alive: true, pid: 42, startedAt: '2026-09-25T10:00:00Z' };
 const stopped: RuntimeStatus = { status: 'stopped', alive: false };
@@ -433,5 +451,155 @@ describe('trace row and comb formatting', () => {
 		expect(traceBees(traceSummary({ bees: ['builder', 'guard'] }))).toBe('builder, guard');
 		expect(traceBees(traceSummary({ bees: [] }))).toBe('—');
 		expect(traceBees(traceSummary({ bees: undefined }))).toBe('—');
+	});
+});
+
+describe('git route formatting', () => {
+	/** Row lookup by label, so a test asserts on the value rather than the array order. */
+	function row(rows: MetaRow[], label: string): string | undefined {
+		return rows.find((entry) => entry.label === label)?.value;
+	}
+
+	it('says the clone stands uncompared instead of borrowing the branch name', () => {
+		const never = gitView({ ahead: undefined, behind: undefined, dirty: false });
+		expect(gitSyncWord(gitView())).toBe('↑3');
+		expect(gitSyncWord(never)).toBe('not compared');
+		expect(gitSyncWord(gitView({ ahead: undefined, behind: undefined, dirty: true }))).toBe(
+			'dirty · not compared'
+		);
+		expect(gitSyncWord(gitView({ originUrl: undefined }))).toBe('no origin');
+		expect(gitSyncWord(null)).toBe('—');
+	});
+
+	it('splits the clone from the origin so a two-column block pairs like with like', () => {
+		const git = gitView();
+		const clone = gitCloneRows(git);
+		const origin = gitOriginRows(git);
+
+		expect(clone.map((entry) => entry.label)).toEqual(['Branch', 'HEAD', 'Default branch', 'Working tree']);
+		expect(origin.map((entry) => entry.label)).toEqual(['Sync', 'Origin', 'Last fetch']);
+		// The divergence numbers live inside the sync word, so they are not rows of their own.
+		expect(origin.some((entry) => entry.label === 'Ahead' || entry.label === 'Behind')).toBe(false);
+		expect(row(origin, 'Sync')).toBe('↑3');
+	});
+
+	it('leaves out a row that would only say nothing', () => {
+		const bare = gitView({
+			dirty: false,
+			lastFetchAgeSeconds: undefined,
+			originUrl: undefined,
+			note: undefined
+		});
+
+		expect(row(gitCloneRows(bare), 'Working tree')).toBeUndefined();
+		expect(row(gitOriginRows(bare), 'Origin')).toBeUndefined();
+		expect(row(gitOriginRows(bare), 'Last fetch')).toBeUndefined();
+		expect(gitOriginRows(bare)).toEqual([{ label: 'Sync', value: 'no origin' }]);
+		expect(gitCloneRows(null)).toEqual([]);
+		expect(gitOriginRows(null)).toEqual([]);
+	});
+
+	it('keeps the server note, which is the only thing explaining an empty publish list', () => {
+		const unfetched = gitView({
+			ahead: undefined,
+			behind: undefined,
+			unpublished: undefined,
+			note: 'fetch to update remote-tracking refs'
+		});
+
+		expect(row(gitOriginRows(unfetched), 'Note')).toBe('fetch to update remote-tracking refs');
+	});
+
+	it('makes the two values an operator pastes into a shell copyable and readable in full', () => {
+		const clone = gitCloneRows(gitView());
+		const origin = gitOriginRows(gitView());
+
+		expect(row(clone, 'Branch')).toBe('main');
+		expect(clone[0]).toMatchObject({ mono: true, copy: true, hint: ['main'] });
+		expect(clone[1].hint).toEqual(['02453e88445ce591e01200c507bce35bc5071656']);
+		expect(clone[1].value).toBe('02453e8');
+		expect(row(origin, 'Origin')).toBe('git@github.com:russ-p/paseka.git');
+		expect(origin[1]).toMatchObject({ mono: true, copy: true });
+		// A short sha needs no hint, or the popover would repeat the visible line.
+		expect(gitCloneRows(gitView({ headSha: '02453e8' }))[1].hint).toBeUndefined();
+	});
+
+	it('names one branch state, in the order the operator acts on it', () => {
+		expect(gitBranchState(gitBranch())).toEqual({ status: 'active', label: 'current' });
+		// Current wins over merged: you are standing on it, so that is the fact that matters.
+		expect(gitBranchState(gitBranch({ merged: true, leftover: true }))).toEqual({
+			status: 'active',
+			label: 'current'
+		});
+		expect(gitBranchState(gitBranch({ current: false, leftover: true }))).toEqual({
+			status: 'leftover',
+			label: 'leftover'
+		});
+		expect(gitBranchState(gitBranch({ current: false, merged: true }))).toEqual({
+			status: 'merged',
+			label: 'merged'
+		});
+		expect(gitBranchState(gitBranch({ current: false }))).toBeNull();
+	});
+
+	it('keeps the two branch facts that are not state out of the badge', () => {
+		expect(gitBranchFlags(gitBranch())).toBe('default');
+		expect(gitBranchFlags(gitBranch({ default: false, worktreePath: '/colony/wt' }))).toBe('worktree');
+		expect(
+			gitBranchFlags(gitBranch({ default: false, worktreePath: '/colony/wt', current: false }))
+		).toBe('worktree');
+		expect(gitBranchFlags(gitBranch({ default: false }))).toBe('');
+	});
+
+	it('badges a worktree dirty or clean, so neither reads as an empty cell', () => {
+		expect(gitWorktreeState(gitWorktree())).toEqual({ status: 'clean', label: 'clean' });
+		expect(gitWorktreeState(gitWorktree({ dirty: true }))).toEqual({ status: 'dirty', label: 'dirty' });
+	});
+
+	it('names the branches the maintenance sweep is allowed to delete', () => {
+		expect(
+			gitLeftoverNames([
+				gitBranch(),
+				gitBranch({ name: 'paseka/a', merged: true, leftover: true }),
+				gitBranch({ name: 'paseka/b', merged: true, leftover: true })
+			])
+		).toEqual(['paseka/a', 'paseka/b']);
+		expect(gitLeftoverNames(undefined)).toEqual([]);
+	});
+
+	it('reports what a git POST did, preferring git output over the caller word', () => {
+		expect(gitActionMessage({ ok: true, message: 'From github.com' }, 'Fetch complete')).toBe(
+			'From github.com'
+		);
+		// `git worktree prune` and `git fetch` print nothing on success, so the fallback carries it.
+		expect(gitActionMessage({ ok: true }, 'No orphan worktrees')).toBe('No orphan worktrees');
+		expect(gitActionMessage(null, 'Pull complete')).toBe('Pull complete');
+	});
+
+	it('names the branches a batch delete lost instead of claiming it worked', () => {
+		const partial = gitActionMessage(
+			{
+				ok: false,
+				results: [
+					{ name: 'paseka/a', ok: true },
+					{ name: 'main', ok: false, error: 'branch is checked out' }
+				]
+			},
+			'Merged leftovers deleted'
+		);
+
+		expect(partial).toBe('main: branch is checked out');
+		expect(gitActionMessage({ ok: true, results: [{ name: 'paseka/a', ok: true }] }, 'x')).toBe('1 deleted');
+		expect(
+			gitActionMessage({ ok: false, results: [{ name: 'paseka/a', ok: false }] }, 'x')
+		).toBe('paseka/a: failed');
+	});
+
+	it('names a button action in the present tense only while it is in flight', () => {
+		expect(gitActionLabel('fetch', false)).toBe('Fetch');
+		expect(gitActionLabel('fetch', true)).toBe('Fetching…');
+		expect(gitActionLabel('prune', false)).toBe('Prune orphans');
+		expect(gitActionLabel('prune', true)).toBe('Pruning…');
+		expect(gitActionLabel('delete', true)).toBe('Deleting…');
 	});
 });

@@ -13,10 +13,16 @@
 		 * trace id behind a titled row, a standing flag, an adapter name.
 		 */
 		searchText?: (row: T) => string;
-		/** Render the cell as a link to this destination. */
-		href?: (row: T) => string;
+		/**
+		 * Render the cell as a link to this destination. A row with nowhere to
+		 * go returns `null` and falls back to plain text, so a column can link
+		 * the rows that have a target and leave the rest quiet.
+		 */
+		href?: (row: T) => string | null;
 		/** Render the cell as a `StatusBadge`, or nothing when the row returns `null`. */
 		badge?: (row: T) => { status: string; label: string } | null;
+		/** Render the cell's text in a monospace face: refs, SHAs, paths. */
+		mono?: boolean;
 		align?: 'left' | 'right';
 		/**
 		 * The column absorbs the leftover width, so a long cell truncates
@@ -87,8 +93,9 @@
 
 	/**
 	 * Cells never wrap: a table is a scan surface, and a wrapped date or bee
-	 * list doubles the row height. The one `grow` column takes the leftover
-	 * width and truncates, so a long label can never push the table sideways.
+	 * list doubles the row height. A cell that runs out of room truncates
+	 * instead, and the one `grow` column takes the leftover width so a long
+	 * value can never push the table sideways.
 	 */
 	function cellClass(column: DataColumn<T>): string {
 		return [
@@ -97,6 +104,13 @@
 			column.grow ? 'w-full max-w-0' : '',
 			column.secondary ? 'hidden md:table-cell' : ''
 		]
+			.filter(Boolean)
+			.join(' ');
+	}
+
+	/** The `grow` cell's text truncates too, or it overflows its `max-w-0` cell. */
+	function textClass(column: DataColumn<T>): string {
+		return [column.grow ? 'block truncate' : '', column.mono ? 'font-mono' : '']
 			.filter(Boolean)
 			.join(' ');
 	}
@@ -167,27 +181,30 @@
 						</td>
 					</tr>
 				{:else}
-					{#each visible as row (rowKey(row))}
-						<tr>
-							{#each columns as column (column.key)}
-								{@const cellBadge = column.badge?.(row) ?? null}
-								<td class={cellClass(column)}>
-									{#if column.href}
-										<div class="flex min-w-0 flex-wrap items-center gap-2">
-											<a class="link truncate" href={column.href(row)}>{column.text(row)}</a>
-											{#if cellBadge}
-												<StatusBadge status={cellBadge.status} label={cellBadge.label} />
-											{/if}
-										</div>
-									{:else if cellBadge}
-										<StatusBadge status={cellBadge.status} label={cellBadge.label} />
-									{:else if !column.badge}
-										{column.text(row)}
-									{/if}
-								</td>
-							{/each}
-						</tr>
-					{/each}
+						{#each visible as row (rowKey(row))}
+							<tr>
+								{#each columns as column (column.key)}
+									{@const cellBadge = column.badge?.(row) ?? null}
+									{@const cellHref = column.href?.(row) ?? null}
+									<td class={cellClass(column)}>
+										{#if cellHref}
+											<div class="flex min-w-0 flex-wrap items-center gap-2">
+												<a class="link {column.grow ? 'truncate' : ''} {column.mono ? 'font-mono' : ''}" href={cellHref}
+													>{column.text(row)}</a
+												>
+												{#if cellBadge}
+													<StatusBadge status={cellBadge.status} label={cellBadge.label} />
+												{/if}
+											</div>
+										{:else if cellBadge}
+											<StatusBadge status={cellBadge.status} label={cellBadge.label} />
+										{:else if !column.badge}
+											<span class={textClass(column)}>{column.text(row)}</span>
+										{/if}
+									</td>
+								{/each}
+							</tr>
+						{/each}
 				{/if}
 			</tbody>
 		</table>

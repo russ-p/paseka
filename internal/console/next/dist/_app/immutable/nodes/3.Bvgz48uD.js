@@ -1,0 +1,1 @@
+import"../chunks/DbQC_bmz.js";import"../chunks/xihTtKlq.js";import"../chunks/CCjptyS1.js";import{t as e}from"../chunks/BsgiCrd5.js";function t(t){e(t,{title:`Bees`,description:`Registered bees, adapters, and live worker state will be composed here.`,emptyMessage:`Bee inventory is not migrated yet. Use the legacy console for topology and live agents.`})}export{t as component};

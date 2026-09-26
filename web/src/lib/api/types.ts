@@ -66,6 +66,64 @@ export interface GitPlaque {
 	note?: string;
 }
 
+/** Mirrors `console.GitCommitView`, one commit the default branch has but origin does not. */
+export interface GitCommit {
+	sha: string;
+	subject: string;
+}
+
+/** Mirrors `console.GitWorktreeView`, one colony-managed isolated checkout. */
+export interface GitWorktree {
+	traceId?: string;
+	path: string;
+	branch?: string;
+	baseSha?: string;
+	dirty: boolean;
+	prUrl?: string;
+}
+
+/** Mirrors `console.GitBranchView`, one local branch. */
+export interface GitBranch {
+	name: string;
+	current: boolean;
+	default: boolean;
+	merged: boolean;
+	worktreePath?: string;
+	traceId?: string;
+	subject?: string;
+	/** Merged, prefixed `paseka/`/`feature/`/`hotfix/`/`fix/`, not the default branch, no worktree. */
+	leftover: boolean;
+}
+
+/**
+ * Mirrors `console.GitView` from GET /api/git. The header fields are
+ * `console.GitPlaqueView` flattened in, so one payload serves the topbar plaque
+ * and this page.
+ */
+export interface GitView extends GitPlaque {
+	unpublished?: GitCommit[];
+	worktrees: GitWorktree[];
+	branches: GitBranch[];
+}
+
+/** Mirrors `console.GitBranchDeleteItem`, the per-name outcome of a branch delete. */
+export interface GitBranchDeleteItem {
+	name: string;
+	ok: boolean;
+	error?: string;
+}
+
+/**
+ * Mirrors `console.GitActionResult`, the answer to every git POST. `message` is
+ * whatever git printed and is often empty; a batch delete reports per name in
+ * `results` instead.
+ */
+export interface GitActionResult {
+	ok: boolean;
+	message?: string;
+	results?: GitBranchDeleteItem[];
+}
+
 export interface ChromeFrame {
 	schemaVersion: number;
 	runtime?: RuntimeStatus;

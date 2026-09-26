@@ -2,7 +2,11 @@ import type {
 	AgentItem,
 	ArtifactView,
 	DashboardSummary,
+	GitActionResult,
+	GitBranch,
 	GitPlaque,
+	GitView,
+	GitWorktree,
 	HoneyReserve,
 	HostStatus,
 	InsightHighlight,
@@ -268,6 +272,132 @@ export function gitDetail(git: GitPlaque | null, error: string): string {
 	if (age) parts.push(`fetch ${age}`);
 	if (error) parts.push(error);
 	return parts.join(' · ');
+}
+
+/**
+ * How the clone stands against origin, in one word. The topbar's
+ * `gitSyncLabel` falls back to the branch name when the remote-tracking refs are
+ * missing, which would repeat the Default branch row sitting next to it; here
+ * the missing comparison is said outright and the server's `Note` explains it.
+ */
+export function gitSyncWord(git: GitView | null): string {
+	if (!git) return '—';
+	if (!git.originUrl) return 'no origin';
+	if (git.ahead === undefined && git.behind === undefined) {
+		return git.dirty ? 'dirty · not compared' : 'not compared';
+	}
+	return gitSyncLabel(git);
+}
+
+/**
+ * The checkout itself: where HEAD is, what is published, and whether the working
+ * tree is dirty. Split from the origin half so a two-column block pairs a row
+ * with a row about the same thing instead of an arbitrary neighbour.
+ */
+export function gitCloneRows(git: GitView | null): MetaRow[] {
+	if (!git) return [];
+	const rows: MetaRow[] = [];
+	if (git.branch) {
+		// The branch is what the operator types into `paseka` commands, so it copies.
+		rows.push({ label: 'Branch', value: git.branch, mono: true, copy: true, hint: [git.branch] });
+	}
+	rows.push({
+		label: 'HEAD',
+		value: git.headShaShort || git.headSha || '—',
+		mono: true,
+		// The copy button takes width, so the short sha truncates first; the full one is the truth.
+		hint: git.headSha && git.headSha !== git.headShaShort ? [git.headSha] : undefined
+	});
+	if (git.defaultBranch) {
+		rows.push({ label: 'Default branch', value: git.defaultBranch, mono: true });
+	}
+	if (git.dirty) rows.push({ label: 'Working tree', value: 'uncommitted changes' });
+	return rows;
+}
+
+/**
+ * How the clone stands against origin. A row appears only when it says
+ * something: no origin, no divergence, and no note leave the block quiet instead
+ * of padding it with `—`. The divergence numbers live inside the sync word
+ * (`↑3 ↓1`), so they are not repeated as rows of their own.
+ */
+export function gitOriginRows(git: GitView | null): MetaRow[] {
+	if (!git) return [];
+	const rows: MetaRow[] = [{ label: 'Sync', value: gitSyncWord(git) }];
+	if (git.originUrl) {
+		// An operator rewrites this into a remote, so it copies.
+		rows.push({ label: 'Origin', value: git.originUrl, mono: true, copy: true, hint: [git.originUrl] });
+	}
+	const fetched = formatFetchAge(git.lastFetchAgeSeconds);
+	if (fetched) rows.push({ label: 'Last fetch', value: fetched });
+	// The server sets this when the comparison is impossible; without it an empty
+	// unpublished list looks like there is nothing to push.
+	if (git.note) rows.push({ label: 'Note', value: git.note });
+	return rows;
+}
+
+/**
+ * One word per branch, naming the thing that decides what happens next. Order is
+ * the operator's: you cannot delete the branch you are standing on, a leftover is
+ * the sweep target, and a merged branch is merely tidyable.
+ */
+export function gitBranchState(branch: GitBranch): { status: string; label: string } | null {
+	if (branch.current) return { status: 'active', label: 'current' };
+	if (branch.leftover) return { status: 'leftover', label: 'leftover' };
+	if (branch.merged) return { status: 'merged', label: 'merged' };
+	return null;
+}
+
+/** The facts that are not state: which branch gets published, which holds a checkout. */
+export function gitBranchFlags(branch: GitBranch): string {
+	const flags: string[] = [];
+	if (branch.default) flags.push('default');
+	if (branch.worktreePath) flags.push('worktree');
+	return flags.join(' · ');
+}
+
+export function gitWorktreeState(worktree: GitWorktree): { status: string; label: string } {
+	return worktree.dirty
+		? { status: 'dirty', label: 'dirty' }
+		: { status: 'clean', label: 'clean' };
+}
+
+/** The branches the maintenance sweep is allowed to delete. */
+export function gitLeftoverNames(branches: GitBranch[] | undefined): string[] {
+	return (branches ?? []).filter((branch) => branch.leftover).map((branch) => branch.name);
+}
+
+/**
+ * What a git POST actually did. `message` is whatever git printed and is often
+ * empty, so each call site passes the word it would have used; a batch delete
+ * reports per name instead of a single message.
+ */
+export function gitActionMessage(result: GitActionResult | null, fallback: string): string {
+	if (!result) return fallback;
+	if (result.message) return result.message;
+	const items = result.results ?? [];
+	const failed = items.filter((item) => !item.ok);
+	if (failed.length > 0) {
+		return failed.map((item) => `${item.name}: ${item.error || 'failed'}`).join(' · ');
+	}
+	if (items.length > 0) return `${items.length} deleted`;
+	return fallback;
+}
+
+/** The five things an operator can ask of the clone, and the only mutations the page offers. */
+export type GitAction = 'fetch' | 'push' | 'pull' | 'prune' | 'delete';
+
+/** Button label: the verb while idle, the present participle while in flight. */
+export function gitActionLabel(action: GitAction, busy: boolean): string {
+	const verbs: Record<GitAction, [idle: string, pending: string]> = {
+		fetch: ['Fetch', 'Fetching…'],
+		push: ['Push', 'Pushing…'],
+		pull: ['Pull', 'Pulling…'],
+		prune: ['Prune orphans', 'Pruning…'],
+		delete: ['Delete leftovers', 'Deleting…']
+	};
+	const [idle, pending] = verbs[action];
+	return busy ? pending : idle;
 }
 
 /** Timestamp for a row: `2026-09-25 18:04:22`, locale-independent, 24-hour. */

@@ -30,10 +30,15 @@ const statusTones: Record<string, StatusTone> = {
 	completed: 'success',
 	announced: 'success',
 	open: 'success',
+	// A worktree with nothing uncommitted in it.
+	clean: 'success',
 	waiting_review: 'warning',
 	pending: 'warning',
 	reconnecting: 'warning',
 	low: 'warning',
+	// A checkout with uncommitted changes, and a branch nothing claims any more, both want a sweep.
+	dirty: 'warning',
+	leftover: 'warning',
 	failed: 'error',
 	rejected: 'error',
 	killed: 'error',
