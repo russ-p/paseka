@@ -2,6 +2,10 @@ import type {
 	ArtifactView,
 	DashboardSummary,
 	EventFeedItem,
+	GitBranch,
+	GitCommit,
+	GitView,
+	GitWorktree,
 	InsightHighlight,
 	RunSummary,
 	TraceDetail,
@@ -130,6 +134,89 @@ export function eventFeedItem(overrides: Partial<EventFeedItem> = {}): EventFeed
 		taskId: 'task-b2',
 		severity: 'warning',
 		summary: 'The cursor adapter still reaches for the provider registry directly.',
+		...overrides
+	};
+}
+
+export function gitCommit(overrides: Partial<GitCommit> = {}): GitCommit {
+	return {
+		sha: '02453e88445ce591e01200c507bce35bc5071656',
+		subject: 'feat(console): migrate the traces list and trail detail to /next',
+		...overrides
+	};
+}
+
+export function gitWorktree(overrides: Partial<GitWorktree> = {}): GitWorktree {
+	return {
+		traceId: 'trace-01a0bd6963faa14f',
+		path: '/colony/.paseka/worktrees/trace-01a0bd6963faa14f',
+		branch: 'paseka/trace-01a0bd6963faa14f',
+		baseSha: '03cd2afb188522ea31ae662dc9d7300883a7f531',
+		dirty: false,
+		...overrides
+	};
+}
+
+export function gitBranch(overrides: Partial<GitBranch> = {}): GitBranch {
+	return {
+		name: 'main',
+		current: true,
+		default: true,
+		merged: false,
+		subject: 'Merge the console redesign',
+		leftover: false,
+		...overrides
+	};
+}
+
+/** The full `GET /api/git` payload: compared against origin, three commits to publish. */
+export function gitView(overrides: Partial<GitView> = {}): GitView {
+	return {
+		branch: 'main',
+		headSha: '02453e88445ce591e01200c507bce35bc5071656',
+		headShaShort: '02453e8',
+		dirty: true,
+		defaultBranch: 'main',
+		originUrl: 'git@github.com:russ-p/paseka.git',
+		ahead: 3,
+		behind: 0,
+		lastFetchAgeSeconds: 524_156,
+		unpublished: [
+			gitCommit(),
+			gitCommit({
+				sha: '70b7bedf3fb1f645f3082f3fe0f5d459e7bd9d11',
+				subject: 'docs: record the dashboard grid contract'
+			})
+		],
+		worktrees: [
+			gitWorktree(),
+			gitWorktree({
+				traceId: 'trace-01a09966fdbe6771',
+				path: '/colony/.paseka/worktrees/trace-01a09966fdbe6771',
+				branch: 'paseka/trace-01a09966fdbe6771',
+				dirty: true,
+				prUrl: 'https://github.com/russ-p/paseka/pull/42'
+			})
+		],
+		branches: [
+			gitBranch(),
+			gitBranch({
+				name: 'paseka/trace-019f76d17ca323c8',
+				current: false,
+				default: false,
+				merged: true,
+				leftover: true,
+				subject: 'Add a prune cleanup command'
+			}),
+			gitBranch({
+				name: 'paseka/trace-01a09966fdbe6771',
+				current: false,
+				default: false,
+				worktreePath: '/colony/.paseka/worktrees/trace-01a09966fdbe6771',
+				traceId: 'trace-01a09966fdbe6771',
+				subject: 'Wire the export format flag'
+			})
+		],
 		...overrides
 	};
 }

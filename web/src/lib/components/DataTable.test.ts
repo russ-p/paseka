@@ -200,3 +200,85 @@ describe('DataTable cell intents', () => {
 		}
 	});
 });
+
+describe('DataTable conditional cells', () => {
+	interface Row {
+		branch: string;
+		traceId?: string;
+		prUrl?: string;
+	}
+	/** An unregistered worktree: no trail to open, no pull request. */
+	const rows: Row[] = [
+		{ branch: 'paseka/trace-01' },
+		{ branch: 'paseka/trace-02', traceId: 'trace-02', prUrl: 'https://example.test/2' }
+	];
+	const columnList: DataColumn<Row>[] = [
+		{ key: 'branch', label: 'Branch', text: (row) => row.branch, mono: true, grow: true },
+		{
+			key: 'trace',
+			label: 'Trace',
+			text: (row) => row.traceId || '—',
+			href: (row) => (row.traceId ? `/next/traces/${row.traceId}` : null)
+		},
+		{
+			key: 'pr',
+			label: 'Pull request',
+			text: (row) => (row.prUrl ? 'open' : ''),
+			href: (row) => row.prUrl ?? null,
+			// The declared-but-null badge is what keeps the cell empty; without it the
+			// link's fallback text would read as a dead `open`.
+			badge: () => null
+		}
+	];
+
+	function renderRows() {
+		return render(Table as unknown as Component<Record<string, unknown>>, {
+			columns: columnList,
+			rows,
+			rowKey: (row: Row) => row.branch,
+			label: 'Worktrees'
+		});
+	}
+
+	it('falls back to plain text when a row has nowhere to link', () => {
+		renderRows();
+
+		const orphan = screen.getByText('paseka/trace-01').closest('tr');
+		const cells = within(orphan as HTMLElement).getAllByRole('cell');
+		// A link to the empty string would be a promise the page cannot keep.
+		expect(cells[1]).toHaveTextContent('—');
+		expect(within(cells[1] as HTMLElement).queryByRole('link')).not.toBeInTheDocument();
+	});
+
+	it('keeps a cell empty when a declared badge declines and there is no link either', () => {
+		renderRows();
+
+		const orphan = screen.getByText('paseka/trace-01').closest('tr');
+		const cells = within(orphan as HTMLElement).getAllByRole('cell');
+		expect(cells[2]).toBeEmptyDOMElement();
+	});
+
+	it('links the rows that do have a target', () => {
+		renderRows();
+
+		expect(screen.getByRole('link', { name: 'trace-02' })).toHaveAttribute(
+			'href',
+			'/next/traces/trace-02'
+		);
+		expect(screen.getByRole('link', { name: 'open' })).toHaveAttribute('href', 'https://example.test/2');
+	});
+
+	it('renders a ref or sha in a monospace face', () => {
+		renderRows();
+
+		expect(screen.getByText('paseka/trace-01')).toHaveClass('font-mono');
+	});
+
+	it('truncates the grow column text, or it overflows its own cell', () => {
+		const { container } = renderRows();
+
+		const text = container.querySelector('tbody td span');
+		expect(text?.className).toContain('truncate');
+		expect(text?.className).toContain('block');
+	});
+});

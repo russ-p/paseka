@@ -32,10 +32,10 @@ serve the legacy console until the redesign reaches feature parity and an
 explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
 The preview currently ships the shell (top status panel, side menu, theme
-switcher), the **Dashboard**, and **Traces** (both the list and a trail's own
-detail page). Every other route under `/next/` renders a "migration pending"
-card that links back to the legacy console, so use `/` for Timeline, Tasks,
-Reviews, Sessions, Bees, Worktrees, Runs, Git, Topology, and System for now.
+switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
+page), and **Git**. Every other route under `/next/` renders a "migration
+pending" card that links back to the legacy console, so use `/` for Timeline,
+Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Topology, and System for now.
 
 ## What requires the Hive Runtime
 
@@ -131,6 +131,16 @@ merged branches. Fetch only updates remote-tracking refs; Pull is
 fast-forward-only; Push is explicit and never uses `--force`. This tab does
 **not** push worktree branches or open pull requests — that is Reviews publish
 when `defaults.delivery` is `pull_request`.
+
+On `/next/git` the same three actions sit as one compact group in the page
+header, with **Push** highlighted only while the clone has commits it has not
+published. A worktree row links to the trail that owns it, and a branch row
+carries one word — `current`, `leftover`, or `merged` — so a settled branch does
+not repeat its flags. **Prune orphans** and **Delete N leftovers** remove local
+state, so they ask first and the delete names every branch involved; a refusal
+(say, a branch a live worktree still holds) is reported per branch instead of
+being rounded up to a failure. Without an `origin` remote the three actions are
+disabled and the page says why. Nothing here needs the Hive Runtime.
 
 ## Common operator actions
 

@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	ApiError,
 	addTraceEnergy,
+	getGit,
 	getTrace,
 	getTraceArtifactContent,
+	gitDeleteBranches,
+	gitFetch,
+	gitPruneWorktrees,
+	gitPull,
+	gitPush,
 	listTraceArtifacts,
 	listTraces,
 	traceCursor
@@ -90,5 +96,68 @@ describe('trace endpoints', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ amount: 12 })
 		});
+	});
+});
+
+describe('git endpoints', () => {
+	it('reads the clone without a query', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await getGit();
+
+		expect(mock).toHaveBeenCalledWith('/api/git', undefined);
+	});
+
+	it('posts the three sync actions with no body at all', async () => {
+		const mock = stubFetch(() => new Response('{"ok":true}'));
+
+		await gitFetch();
+		await gitPull();
+
+		expect(mock.mock.calls).toEqual([
+			['/api/git/fetch', { method: 'POST' }],
+			['/api/git/pull', { method: 'POST' }]
+		]);
+	});
+
+	it('sends the push-hooks flag as JSON, since the server reads a body for it', async () => {
+		const mock = stubFetch(() => new Response('{"ok":true}'));
+
+		await gitPush(true);
+
+		expect(mock).toHaveBeenCalledWith('/api/git/push', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ runHooks: true })
+		});
+	});
+
+	it('deletes every branch in one request and prunes worktrees in another', async () => {
+		const mock = stubFetch(() => new Response('{"ok":true}'));
+
+		await gitDeleteBranches(['paseka/a', 'paseka/b']);
+		await gitPruneWorktrees();
+
+		expect(mock.mock.calls).toEqual([
+			[
+				'/api/git/branches/delete',
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ names: ['paseka/a', 'paseka/b'] })
+				}
+			],
+			['/api/git/worktrees/prune', { method: 'POST' }]
+		]);
+	});
+
+	it('carries a server refusal through, so the page can say why the pull was refused', async () => {
+		stubFetch(() => new Response('live bee is using the colony root checkout; refuse pull', { status: 409 }));
+
+		const failure = await gitPull().catch((error: unknown) => error);
+
+		expect(failure).toBeInstanceOf(ApiError);
+		expect((failure as ApiError).message).toBe('live bee is using the colony root checkout; refuse pull');
+		expect((failure as ApiError).status).toBe(409);
 	});
 });

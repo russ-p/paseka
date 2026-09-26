@@ -4,6 +4,8 @@ import type {
 	Cue,
 	DashboardSummary,
 	EnergyAddResult,
+	GitActionResult,
+	GitView,
 	RunCueResult,
 	RuntimeStatus,
 	TraceDetail,
@@ -114,4 +116,50 @@ export function addTraceEnergy(traceId: string, amount: number): Promise<EnergyA
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ amount })
 	});
+}
+
+/**
+ * The colony clone against origin, without contacting the remote: the checked
+ * out branch, its divergence from the last fetch, the unpublished commits, the
+ * colony-managed worktrees, and the local branches.
+ */
+export function getGit(): Promise<GitView> {
+	return request<GitView>('/git');
+}
+
+/** Updates remote-tracking refs only; the working tree is untouched. */
+export function gitFetch(): Promise<GitActionResult> {
+	return request<GitActionResult>('/git/fetch', { method: 'POST' });
+}
+
+/** Publishes the default branch. The server never passes `--force`. */
+export function gitPush(runHooks: boolean): Promise<GitActionResult> {
+	return request<GitActionResult>('/git/push', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ runHooks })
+	});
+}
+
+/**
+ * Fast-forward only, and a backup for when the inbound webhook sidecar did not
+ * update this clone. The server refuses it while live bees sit on the colony
+ * root, so a refusal is a 409 carrying the reason.
+ */
+export function gitPull(): Promise<GitActionResult> {
+	return request<GitActionResult>('/git/pull', { method: 'POST' });
+}
+
+/** One request for every name; the answer reports each name separately. */
+export function gitDeleteBranches(names: string[]): Promise<GitActionResult> {
+	return request<GitActionResult>('/git/branches/delete', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ names })
+	});
+}
+
+/** Drops checkouts under `.paseka/worktrees` that no trail claims any more. */
+export function gitPruneWorktrees(): Promise<GitActionResult> {
+	return request<GitActionResult>('/git/worktrees/prune', { method: 'POST' });
 }

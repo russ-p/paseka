@@ -100,8 +100,8 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Migrate the remaining `/next` routes (Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Git, Topology, System, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
-- **Why deferred:** Deliberate phase order — the shell and the two highest-traffic surfaces (Dashboard, Traces) land first so the design system is proven on real data before thirteen routes depend on it.
+- **Summary:** Migrate the remaining `/next` routes (Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Topology, System, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
+- **Why deferred:** Deliberate phase order — the shell and the two highest-traffic surfaces (Dashboard, Traces) land first so the design system is proven on real data before the rest depend on it. Git followed, because its page forced the mutating-action questions (button sizing, what confirms, what a partial success says) that every later route with a button will face.
 - **Revisit when:** The next route is picked up. Nothing blocks it technically; the ordering was a risk choice.
 
 #### Per-run proposal diff in Reviews
@@ -181,7 +181,7 @@ Leftovers from [023-console-git](../specs/023-console-git.md). The Git tab MVP c
 - **Kind:** follow-up
 - **Source:** [023-console-git](../specs/023-console-git.md)
 - **Summary:** Disable Push and branch-delete (not Fetch) while Live bees or a merge is in progress. Pull already refuses colony-root bees and in-progress merge in 023.
-- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API.
+- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API. The `/next/git` store serialises its own mutations so two clicks cannot race, but that is a UI guard against one page, not this lock — it sees nothing about live bees.
 - **Revisit when:** A Push or branch delete races an in-flight adapter in practice, or operators ask for a hard lock.
 
 #### Gitea (or origin host) commit links

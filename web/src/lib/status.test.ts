@@ -46,3 +46,15 @@ describe('domain statuses the trace surfaces introduced', () => {
 		expect(statusTone('BLOCKED')).toBe('error');
 	});
 });
+
+describe('domain statuses the git route introduced', () => {
+	// `current` is a branch *label*; the tone travels as `active`, so it has no row of its own.
+	it.each([
+		['clean', 'success'],
+		['merged', 'success'],
+		['dirty', 'warning'],
+		['leftover', 'warning']
+	])('maps %s to %s', (status, expected) => {
+		expect(statusTone(status)).toBe(expected);
+	});
+});

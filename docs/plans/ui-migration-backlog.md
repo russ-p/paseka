@@ -87,9 +87,9 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 ## Sections still placeheld
 
 - **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** `PagePlaceholder` on Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Git, Topology, and System. Settings is partial — theme selection only; the rest of its surface migrates later.
-- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before thirteen routes depend on it.
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
+- **Summary:** `PagePlaceholder` on Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Topology, and System. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face.
 - **Revisit when:** The next route is picked up; nothing blocks it technically. **Timeline is next** — the trail detail already links into it, and it is the other half of the event story.
 
 ## Components the inventory promises
@@ -110,9 +110,25 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
 - **Summary:** Both are in the component inventory; neither has been written. The audit proposes them for `/next/bees` and for the read-only worktree list split out of the Git route.
 - **Why deferred:** The Traces work showed that `DataTable` covers a list and `DetailRow` covers a short related list. Whether bees and worktrees need a card at all is unproven.
-- **Revisit when:** `/next/bees` or `/next/worktrees` is migrated — and the first question then is whether to build the card or drop it from the inventory and use what exists.
+- **Revisit when:** `/next/bees` or `/next/worktrees` is migrated — and the first question then is whether to build the card or drop it from the inventory and use what exists. The Git migration is evidence for dropping it: the worktree list on `/next/git` is a `DataTable`, and nothing about it wanted a card.
 
 ## Polish on landed routes
+
+#### A branch cannot be deleted from its own row
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git migration)
+- **Summary:** `/next/git` deletes only the merged leftovers, in one confirmed sweep. A single branch that is merged but not a leftover — or one a live worktree no longer holds — has no delete path in the console; the operator filters to it and then has nothing to press. The legacy console had a per-row Delete (with no confirmation at all, which was worse).
+- **Why deferred:** `DataTable` cells are declarative by contract — a Svelte snippet cannot be built inside `<script>`, so a button in a cell needs a new intent that no other table has asked for. The sweep is the operation the section exists for, and deleting one branch is `git branch -d` away.
+- **Revisit when:** A second table needs per-row actions (Tasks, Runs, or Reviews are the likely candidates), or an operator reaches for a shell to delete a single branch. The fix is a DataTable action intent, not a Git-page workaround.
+
+#### A branch subject truncates at 768px
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git migration)
+- **Summary:** The Branches table gives the leftover width to the commit subject, so it is complete on a desktop and truncates with `…` at the 768px design target. The full text is one `git log` away. The worktree table has no such column.
+- **Why deferred:** The alternative — letting the subject wrap — was tried and is worse: a `wrap` intent is silently defeated by the `grow` column's own truncation, so it would have been a trap in the component contract, and wrapping fights the "cells never wrap" rule that keeps row heights uniform.
+- **Revisit when:** A second visibility tier is needed anyway (`lg:` for desktop-only columns), or an operator scans subjects at 768px and cannot tell branches apart. The fix is a breakpoint, not a wrap.
 
 #### An oversized comb file is unreadable
 
