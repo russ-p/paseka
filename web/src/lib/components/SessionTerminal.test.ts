@@ -283,6 +283,26 @@ describe('SessionTerminal', () => {
 		expect(FakeSocket.last?.url).toContain('agent-02');
 	});
 
+	it('does not open a second socket when the page around it re-renders', async () => {
+		// The store replaces the selected session with a fresh projection on every poll,
+		// which re-runs any effect downstream of it. This one is idempotent instead: a
+		// re-run with the same session must find the relay already open and do nothing.
+		// It used to return a cleanup that closed the socket, so every poll tore the relay
+		// down and opened another one — several times a second, leaving the old sockets
+		// open and flashing the "relay closed" notice each time.
+		const { rerender } = renderTerminal();
+		const first = FakeSocket.last;
+		first?.open_();
+		expect(FakeSocket.instances).toHaveLength(1);
+
+		for (let poll = 0; poll < 5; poll += 1) {
+			await rerender({ sessionId: 'agent 01/a', attachable: true, enabled: true });
+		}
+
+		expect(FakeSocket.instances).toHaveLength(1);
+		expect(first?.closed).toBe(false);
+	});
+
 	it('closes the socket when it is detached, which is what the page Detach means', async () => {
 		const { rerender } = renderTerminal();
 		const first = FakeSocket.last;

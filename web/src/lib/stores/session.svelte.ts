@@ -220,11 +220,22 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
 		}
 	}
 
-	/** The poll the selected session actually wants, and the switch between them. */
+	/**
+	 * The poll the selected session actually wants, and the switch between them.
+	 *
+	 * The cadence is re-armed here and only when the mode actually changes, because this
+	 * is a timer callback: reading `current` from a callback is not tracked, while
+	 * reading it from the effect that *starts* the store is. That distinction was the
+	 * whole bug — see `start`.
+	 */
 	async function tick(): Promise<void> {
 		if (selectedId === '') return;
-		if (current?.active) await pollActive();
+		const wasActive = current?.active === true;
+		if (wasActive) await pollActive();
 		else await pollTranscript();
+		if ((current?.active === true) !== wasActive) {
+			restartTimer(current?.active === true ? activeIntervalMs : transcriptIntervalMs);
+		}
 	}
 
 	async function select(sessionId: string): Promise<void> {
@@ -267,7 +278,9 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
 		} else {
 			await pollTranscript();
 		}
-		restartTimer();
+		// Past the `await` above, so reading `current` here is not something the calling
+		// effect subscribes to.
+		restartTimer(current?.active === true ? activeIntervalMs : transcriptIntervalMs);
 	}
 
 	/** Re-reads the list, the invites, and the selected session, on demand. */
@@ -321,18 +334,26 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
 		await refreshInvites();
 	}
 
-	function restartTimer(): void {
+	/**
+	 * One timer for the selected session, at the period it is given.
+	 *
+	 * The period is a *parameter* rather than something read from `current` here, and
+	 * that is not a style choice. This is called from `start`, which a page calls from
+	 * inside an effect; an effect that reads reactive state depends on it, so reading
+	 * `current` here would make the effect that starts the polling depend on the very
+	 * value the polling writes. The first list poll then refreshes the selected session,
+	 * that write invalidates the effect, the effect stops and restarts the store, and the
+	 * restart fires another poll — a loop that runs at request latency and reopens the
+	 * terminal socket on every turn.
+	 */
+	function restartTimer(periodMs: number): void {
 		if (timer !== undefined) clearInterval(timer);
 		timer = undefined;
 		if (!started || selectedId === '') return;
-		// One timer, and the interval follows what is being watched: a running session
-		// moves, a finished one only appends. The legacy started one timer per tab and
-		// never handed the cadence over when a session died.
-		const every = current?.active ? activeIntervalMs : transcriptIntervalMs;
 		// `0` means off, the way it means off for the list timer. A zero interval is not
 		// "very often": it is a self-rescheduling loop that never lets the process idle.
-		if (every <= 0) return;
-		timer = setInterval(() => void tick(), every);
+		if (periodMs <= 0) return;
+		timer = setInterval(() => void tick(), periodMs);
 	}
 
 	function stop(): void {
@@ -343,6 +364,13 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
 		listTimer = undefined;
 	}
 
+	/**
+	 * Begins polling. Deliberately reads **no** reactive state: a page calls this from
+	 * inside an effect, and anything read here becomes a dependency of that effect — so
+	 * the list poll, whose whole job is to write the selected session back, would
+	 * invalidate the effect that started it and restart itself. The session timer is armed
+	 * by `select` and re-armed by `tick` instead.
+	 */
 	function start(): void {
 		if (started) return;
 		started = true;
@@ -350,7 +378,6 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
 		if (listIntervalMs > 0) {
 			listTimer = setInterval(() => void refresh(), listIntervalMs);
 		}
-		restartTimer();
 	}
 
 	return {

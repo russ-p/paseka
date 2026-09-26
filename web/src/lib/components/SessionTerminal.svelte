@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { FitAddon } from '@xterm/addon-fit';
 	import { WebLinksAddon } from '@xterm/addon-web-links';
 	import { Terminal } from '@xterm/xterm';
@@ -43,6 +43,8 @@
 		observer: ResizeObserver | null;
 		/** The session the open socket belongs to, so a prop change can tell. */
 		id: string;
+		/** Set once the server has explained the session's end, so the close is not news. */
+		reportedExited: boolean;
 	}
 
 	/**
@@ -53,7 +55,15 @@
 	 * which is the right trade for a live terminal and the wrong one for a patch.
 	 */
 	function empty(): Attachment {
-		return { terminal: null, socket: null, fit: null, container: null, observer: null, id: '' };
+		return {
+			terminal: null,
+			socket: null,
+			fit: null,
+			container: null,
+			observer: null,
+			id: '',
+			reportedExited: false
+		};
 	}
 
 	/**
@@ -62,12 +72,19 @@
 	 * would retrigger the effect that opened it.
 	 */
 	let attach: Attachment = empty();
+	/**
+	 * The session the live socket belongs to, as a plain variable. It is bookkeeping for
+	 * the connect effect and nothing renders from it, so it is deliberately not `$state` —
+	 * see the effect below for why that distinction matters here.
+	 */
+	let connectedId = '';
 	let host = $state<HTMLDivElement | null>(null);
-	let status = $state<TerminalStatus>({ state: 'connecting', reason: '' });
 
 	function report(next: TerminalStatus): void {
-		status = next;
-		onstatus?.(next);
+		// `untrack` because the callback belongs to the *parent*: read as a dependency, a
+		// parent passing an inline arrow would re-open the socket on every render of its
+		// own page — the same loop wearing a different hat.
+		untrack(() => onstatus?.(next));
 	}
 
 	/**
@@ -132,7 +149,7 @@
 			return;
 		}
 
-		attach = { terminal, socket: null, fit, container: host, observer: null, id };
+		attach = { terminal, socket: null, fit, container: host, observer: null, id, reportedExited: false };
 		report({ state: 'connecting', reason: '' });
 
 		const socket = new WebSocket(socketUrl(id));
@@ -160,6 +177,9 @@
 					return;
 				}
 				if (control?.type === 'status') {
+					// Remembered, so the close that follows this frame is not also reported
+					// as a bare disconnect.
+					attach.reportedExited = true;
 					report({ state: 'exited', reason: control.reason ?? control.state ?? '' });
 				}
 				return;
@@ -167,14 +187,13 @@
 			terminal.write(new Uint8Array(event.data));
 		};
 		socket.onclose = () => {
-			// A close the server already explained reads as `exited`; anything else is the
-			// socket going away underneath us, which is worth saying rather than leaving
-			// a frozen terminal under a stale "connected".
-			if (status.state !== 'exited') report({ state: 'closed', reason: '' });
+			// A close the server already explained is not news; anything else is the socket
+			// going away underneath us, which is worth saying rather than leaving a frozen
+			// terminal under a stale "connected".
+			if (attach.reportedExited) return;
+			report({ state: 'closed', reason: '' });
 		};
-		socket.onerror = () => {
-			if (status.state === 'connected') report({ state: 'closed', reason: '' });
-		};
+		socket.onerror = () => report({ state: 'closed', reason: '' });
 
 		// Every keystroke is the agent's, which is the point of an interactive session
 		// and also why the terminal needs a way out: the page offers focus mode and a
@@ -200,18 +219,40 @@
 		current.terminal?.dispose();
 	}
 
+	/**
+	 * Reconnect when the session changes, when it becomes attachable, or when the operator
+	 * detaches.
+	 *
+	 * **This effect is idempotent, and it returns no cleanup on purpose.** A store that
+	 * polls replaces its selected session with a fresh projection every tick, which
+	 * re-runs any effect downstream of it — several times a second. A cleanup that closed
+	 * the socket therefore tore the relay down and opened a new one on every poll, left
+	 * the old sockets open, and flashed the "relay closed" notice each time. So the body
+	 * decides what should be connected *now* and does nothing when that is already true,
+	 * and teardown happens only where a change is actually observed: a different session,
+	 * a detach, or the component going away. Being re-run is then harmless by
+	 * construction rather than by hoping nothing re-runs it.
+	 */
 	$effect(() => {
 		const id = sessionId;
-		const canAttach = attachable && enabled && host !== null;
+		const canAttach = attachable && enabled && untrack(() => host !== null);
 		if (!canAttach || id === '') {
-			close();
+			if (connectedId !== '') {
+				close();
+				connectedId = '';
+			}
 			return;
 		}
-		open(id);
-		return () => close();
+		if (connectedId === id) return;
+		close();
+		untrack(() => open(id));
+		connectedId = id;
 	});
 
-	onMount(() => () => close());
+	onMount(() => () => {
+		close();
+		connectedId = '';
+	});
 </script>
 
 {#if attachable && sessionId !== ''}

@@ -412,6 +412,45 @@ describe('session detail', () => {
 		expect(screen.getByRole('button', { name: 'Full screen' })).toBeInTheDocument();
 	});
 
+	it('does not let a refresh re-arm the polling that issued it', async () => {
+		// The page starts the store from inside an effect, so anything the start path
+		// *reads* becomes a dependency of that effect. It used to read the selected
+		// session, which a list poll then writes back — so every poll invalidated the
+		// effect that started polling, that effect stopped and restarted the store, and
+		// the restart issued another poll. It ran at request latency: hundreds of reads a
+		// second, with the terminal socket torn down and reopened on every turn.
+		//
+		// Counted on `setInterval` rather than by advancing time, because the cascade is
+		// self-sustaining: waiting for it to settle is waiting for the bug to be slow.
+		const intervals = vi.spyOn(globalThis, 'setInterval');
+		try {
+			const h = harness();
+			const store = createSessionStore({
+				listSessions: h.listSessions,
+				listInvites: h.listInvites,
+				getSession: h.getSession,
+				getTranscript: h.getTranscript,
+				listIntervalMs: 1000,
+				activeIntervalMs: 0,
+				transcriptIntervalMs: 0
+			});
+			render(SessionDetail, { store, sessionId: 'agent-01a0bd743c33d82c', toasts: h.toasts });
+			await waitFor(() => expect(store.current).not.toBeNull());
+			const armed = intervals.mock.calls.length;
+
+			// A list poll rewrites the selected session, which is the write the loop turned
+			// on. Each of these must leave the timers exactly as they were.
+			await store.refresh();
+			await store.refresh();
+			await store.refresh();
+
+			expect(intervals.mock.calls.length).toBe(armed);
+			store.stop();
+		} finally {
+			intervals.mockRestore();
+		}
+	});
+
 	it('offers a way out of a live terminal, which the legacy had none of', async () => {
 		await openDetail([session({ active: true })]);
 

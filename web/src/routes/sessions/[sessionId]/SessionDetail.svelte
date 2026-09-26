@@ -49,7 +49,23 @@
 	 * can act on — which is the whole difference from the legacy, where the same failure
 	 * left a dead terminal under a raw Go error string with Stop and Resume hidden.
 	 */
-	const attachable = $derived(session?.active === true);
+	/**
+	 * Whether the relay can be attached — held as its own signal rather than derived from
+	 * `store.current`.
+	 *
+	 * Derived straight from the session it reads as a boolean but behaves like an object
+	 * identity: every poll replaces `current` with a fresh projection, the derived
+	 * re-evaluates, and an effect downstream of it re-runs even though the answer never
+	 * changed. For the terminal that meant tearing the relay down and opening another
+	 * socket on every poll — several times a second for as long as a session ran, with the
+	 * previous sockets left open. Moving only when the answer moves is what makes this a
+	 * signal the terminal can depend on.
+	 */
+	let attachable = $state(false);
+	$effect(() => {
+		const next = session?.active === true;
+		if (next !== attachable) attachable = next;
+	});
 	const relayBlocker = $derived(sessionRelayBlocker(link.reason));
 	/** Resume is a server rule, and the reason is shown rather than the control vanishing. */
 	const resumeBlocker = $derived(session ? sessionResumeBlocker(session) : '');
