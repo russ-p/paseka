@@ -378,34 +378,149 @@ describe('merge preview', () => {
 		]);
 	});
 
-	it('drops a packet whose head commit moved, because its line numbers are void', async () => {
+	it('holds a packet whose head commit moved, and asks the reviewer to re-read', async () => {
+		// The head is a variable, so the *same open page* sees the bee push. A remount
+		// would prove nothing: a fresh component has no drafts to lose, which is
+		// exactly the case the old assertion was passing on.
+		let head = 'b'.repeat(40);
+		let sent: Record<string, unknown> = {};
+		stubFetch((url, init) => {
+			if (url.endsWith('/reject')) {
+				sent = JSON.parse(String(init?.body ?? '{}'));
+				return new Response(
+					JSON.stringify({ traceId: 'trace-1', taskId: '_review', reworkTaskId: 'task-09' })
+				);
+			}
+			return new Response('{}');
+		});
+		const store = createReviewStore({
+			listReviews: vi.fn(async () => reviewQueue()),
+			getTask: vi.fn(async () => taskDetail({ taskId: '_review', isFinal: true })),
+			getMergeDiff: vi.fn(async (traceId: string) => mergeDiff({ traceId, headSha: head })),
+			pollIntervalMs: 0
+		});
+		render(MergePreview, {
+			store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: '_review',
+			toasts: createToastStore(0)
+		});
+		await waitFor(() => expect(store.diff).not.toBeNull());
+		const diff = await screen.findByLabelText('Merge diff');
+		await userEvent.click(within(diff).getByText('export const third = 3;'));
+		await userEvent.type(screen.getByLabelText('Note'), 'Name this constant.');
+		await userEvent.click(screen.getByRole('button', { name: 'Add draft' }));
+		expect(screen.getByText('1 draft')).toBeInTheDocument();
+
+		head = 'c'.repeat(40);
+		await store.reloadDiff();
+
+		expect(await screen.findByText(/The agent pushed while you were writing/)).toBeInTheDocument();
+		// Kept rather than eaten: a reviewer's notes are their work, and a moved head
+		// makes the packet untrustworthy, not worthless.
+		expect(screen.getByText('1 draft')).toBeInTheDocument();
+		expect(screen.getByText('Name this constant.')).toBeInTheDocument();
+		// The warning names both commits, so a reviewer can see which one their line
+		// numbers came from without leaving the page.
+		expect(screen.getByText('bbbbbbb')).toBeInTheDocument();
+		expect(screen.getAllByText('ccccccc').length).toBeGreaterThan(0);
+		// And held, so a note cannot be aimed at lines that have moved.
+		expect(screen.getByRole('button', { name: 'Request changes' })).toBeDisabled();
+
+		await userEvent.click(screen.getByRole('button', { name: "I've re-read the diff" }));
+
+		expect(screen.queryByText(/The agent pushed while you were writing/)).not.toBeInTheDocument();
+		expect(screen.getByText('1 draft')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Request changes' }));
+
+		// The commit sent is the one the reviewer acknowledged, not the one the line
+		// numbers came from.
+		await waitFor(() => expect(sent.headSha).toBe('c'.repeat(40)));
+		expect((sent.comments as { startLine: number }[])[0].startLine).toBe(3);
+	});
+
+	it('reads a context line on both sides when split, and can note the old one', async () => {
 		const h = harness();
-		const { unmount } = render(MergePreview, {
+		render(MergePreview, {
 			store: h.store,
 			traceId: 'trace-01a0bd6963faa14f',
 			taskId: '_review',
 			toasts: h.toasts
 		});
 		await waitFor(() => expect(h.getMergeDiff).toHaveBeenCalled());
-		const diff = await screen.findByLabelText('Merge diff');
-		await userEvent.click(within(diff).getByText('export const third = 3;'));
-		await userEvent.type(screen.getByLabelText('Note'), 'Name this constant.');
-		await userEvent.click(screen.getByRole('button', { name: 'Add draft' }));
-		expect(screen.getByText('1 draft')).toBeInTheDocument();
-		unmount();
+		const body = await screen.findByLabelText('Merge diff');
 
-		// The bee pushed while the reviewer was writing: the same trail, a new head.
-		const moved = harness(reviewQueue(), mergeDiff({ headSha: 'c'.repeat(40) }));
+		// Unified is the default: a patch is what the server sent, and it reads as one.
+		expect(screen.getByRole('button', { name: 'Unified' })).toHaveAttribute('aria-pressed', 'true');
+		expect(within(body).getAllByText('export const first = 1;')).toHaveLength(1);
+
+		await userEvent.click(screen.getByRole('button', { name: 'Split' }));
+
+		expect(screen.getByRole('button', { name: 'Split' })).toHaveAttribute('aria-pressed', 'true');
+		// The layout says which half is which, for anyone not reading the colours.
+		expect(within(body).getByText(/before on the left, after on the right/)).toBeInTheDocument();
+		// A context line now occupies both halves, which is the whole point: only a
+		// split view can put a note on the *old* line of an unchanged line.
+		expect(within(body).getAllByText('export const first = 1;')).toHaveLength(2);
+
+		const halves = within(body).getAllByText('export const first = 1;');
+		await userEvent.click(halves[0]);
+
+		expect(screen.getByText(/web\/src\/lib\/diff\.ts · old L1/)).toBeInTheDocument();
+		await userEvent.click(halves[1]);
+
+		expect(screen.getByText(/web\/src\/lib\/diff\.ts · new L1/)).toBeInTheDocument();
+	});
+
+	it('keeps the path filter across a layout switch, because the list is not the layout', async () => {
+		const h = harness(
+			reviewQueue({
+				items: [reviewQueueItem()],
+				count: 1
+			}),
+			mergeDiff({
+				stat: ' web/src/lib/diff.ts | 3 +++\n internal/console/api.go | 1 +\n 2 files changed',
+				diff: [
+					'diff --git a/web/src/lib/diff.ts b/web/src/lib/diff.ts',
+					'index 1111111..2222222 100644',
+					'--- a/web/src/lib/diff.ts',
+					'+++ b/web/src/lib/diff.ts',
+					'@@ -1,2 +1,3 @@',
+					' export const first = 1;',
+					' export const second = 2;',
+					'+export const third = 3;',
+					'diff --git a/internal/console/api.go b/internal/console/api.go',
+					'index 3333333..4444444 100644',
+					'--- a/internal/console/api.go',
+					'+++ b/internal/console/api.go',
+					'@@ -1 +1,2 @@',
+					' package console',
+					'+import "net/http"'
+				].join('\n')
+			})
+		);
 		render(MergePreview, {
-			store: moved.store,
+			store: h.store,
 			traceId: 'trace-01a0bd6963faa14f',
 			taskId: '_review',
-			toasts: moved.toasts
+			toasts: h.toasts
 		});
-		await waitFor(() => expect(moved.getMergeDiff).toHaveBeenCalled());
+		await waitFor(() => expect(h.getMergeDiff).toHaveBeenCalled());
+		const nav = await screen.findByLabelText('Changed files');
 
-		// A fresh mount has no drafts to lose, and the commit it pins is the new one.
-		expect(screen.getByText('0 drafts')).toBeInTheDocument();
+		await userEvent.type(screen.getByLabelText('Filter files by path'), 'console');
+		expect(within(nav).getByText('internal/console/api.go')).toBeInTheDocument();
+		expect(within(nav).queryByText('web/src/lib/diff.ts')).not.toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole('button', { name: 'Split' }));
+
+		// The filter belongs to the list rather than the layout, so switching views
+		// keeps the list as it was — and the body still holds both files, because a
+		// hidden file would move every line number an anchored note points at.
+		expect(within(nav).getByText('internal/console/api.go')).toBeInTheDocument();
+		const body = screen.getByLabelText('Merge diff');
+		expect(within(body).getAllByText('import "net/http"')).toHaveLength(1);
+		expect(within(body).getAllByText('export const first = 1;')).toHaveLength(2);
 	});
 
 	it('disables Request changes while a rework task is in flight', async () => {

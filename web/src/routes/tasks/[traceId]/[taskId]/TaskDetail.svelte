@@ -65,9 +65,26 @@
 	 * stayed open — the badge would disagree with the board it links back to.
 	 */
 	const status = $derived(row?.status ?? task?.status ?? '');
-	const canStart = $derived(row?.canStart ?? false);
-	const canRetry = $derived(row?.canRetry ?? false);
-	const reviewable = $derived(row?.canApprove === true || row?.canReject === true);
+	/**
+	 * The board row's answer when there is one — it is the thing the board itself
+	 * renders, so a task approved in another tab stops offering the decision the
+	 * moment the board stops offering it. A deep link has no row at all, and the
+	 * fetched detail carries the same flags, so the answer falls back rather than
+	 * failing closed: a task linked from a trail would otherwise have no way to be
+	 * approved at all.
+	 */
+	const canStart = $derived(row?.canStart ?? task?.canStart ?? false);
+	const canRetry = $derived(row?.canRetry ?? task?.canRetry ?? false);
+	/**
+	 * Both flags, not either. `ReviewActions` always renders approve and reject
+	 * together, so offering it on a task the server lets you approve but not reject
+	 * would put a button on screen that the server refuses — and the legacy required
+	 * both as well.
+	 */
+	const reviewable = $derived(
+		(row?.canApprove ?? task?.canApprove ?? false) &&
+			(row?.canReject ?? task?.canReject ?? false)
+	);
 
 	async function act(action: 'start' | 'retry'): Promise<void> {
 		if (!task) return;

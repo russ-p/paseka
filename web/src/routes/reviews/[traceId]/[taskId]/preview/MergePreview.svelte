@@ -71,17 +71,20 @@
 		<a class="btn btn-sm" href={consolePath(base, '/reviews')}>All reviews</a>
 	</header>
 
-	{#if store.diffError}
+	{#if store.diffError && !diff}
 		<div class="alert alert-error" role="alert"><span>{store.diffError}</span></div>
-	{:else if store.diffLoading}
-		<div class="space-y-2" aria-busy="true">
-			<span class="skeleton block h-3 w-1/3"></span>
-			<span class="skeleton block h-96 w-full"></span>
-		</div>
 	{:else if diff}
 		<div class="grid gap-4 xl:grid-cols-[1fr_20rem]">
 			<DiffViewer {diff} onpickline={pick} />
 			<aside class="xl:sticky xl:top-4 xl:self-start">
+				{#if store.diffLoading}
+					<!-- A re-read in flight, over a diff that is still on screen: the
+					     reviewer keeps their place and their drafts, and is told why the
+					     commit under them may have changed. -->
+					<p class="mb-2 text-xs text-base-content/60" aria-live="polite">
+						Re-reading the diff…
+					</p>
+				{/if}
 				{#if item}
 					<CommentThreads
 						bind:this={comments}
@@ -91,6 +94,11 @@
 					/>
 				{/if}
 			</aside>
+		</div>
+	{:else if store.diffLoading}
+		<div class="space-y-2" aria-busy="true">
+			<span class="skeleton block h-3 w-1/3"></span>
+			<span class="skeleton block h-96 w-full"></span>
 		</div>
 	{/if}
 </div>

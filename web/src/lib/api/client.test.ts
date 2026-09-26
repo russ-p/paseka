@@ -26,7 +26,9 @@ import {
 	gitPush,
 	listTraceArtifacts,
 	listTraces,
-	traceCursor
+	traceCursor,
+	listReviews,
+	getMergeDiff
 } from './client';
 import { traceSummary } from '../../tests/fixtures';
 
@@ -183,6 +185,78 @@ describe('system endpoints', () => {
 		await getSystem();
 
 		expect(mock).toHaveBeenCalledWith('/api/system', undefined);
+	});
+});
+
+describe('review endpoints', () => {
+	it('asks for the queue and a trail diff by the paths the server routes', async () => {
+		const mock = stubFetch(() => new Response('{"items":[],"count":0}'));
+
+		await listReviews();
+		await getMergeDiff('trace 1/2');
+
+		expect(mock.mock.calls[0][0]).toBe('/api/review-queue');
+		// The trail id is a path segment, so it has to be escaped rather than pasted:
+		// a slash in it would otherwise read as a different route.
+		expect(mock.mock.calls[1][0]).toBe('/api/traces/trace%201%2F2/merge-diff');
+	});
+
+	it('carries the comment packet and the head it was read against on a reject', async () => {
+		const mock = stubFetch(() => new Response('{"traceId":"trace-1","taskId":"_review"}'));
+
+		await rejectTask('trace 1', '_review', {
+			feedback: 'Two things before this merges.',
+			headSha: 'b'.repeat(40),
+			comments: [
+				{
+					path: 'web/src/lib/diff.ts',
+					side: 'new',
+					startLine: 3,
+					snippet: 'export const third = 3;',
+					body: 'Name this constant.'
+				},
+				{
+					path: 'web/src/lib/diff.ts',
+					side: 'old',
+					startLine: 12,
+					endLine: 14,
+					body: 'This block is gone.'
+				}
+			]
+		});
+
+		const [url, init] = mock.mock.calls[0];
+		expect(url).toBe('/api/traces/trace%201/tasks/_review/reject');
+		expect(init?.method).toBe('POST');
+		// The head is what makes the packet checkable against the branch later, and the
+		// comments are what the rework prompt quotes; dropping either loses the review.
+		expect(JSON.parse(String(init?.body)).comments).toEqual([
+			{
+				path: 'web/src/lib/diff.ts',
+				side: 'new',
+				startLine: 3,
+				snippet: 'export const third = 3;',
+				body: 'Name this constant.'
+			},
+			{
+				path: 'web/src/lib/diff.ts',
+				side: 'old',
+				startLine: 12,
+				endLine: 14,
+				body: 'This block is gone.'
+			}
+		]);
+	});
+
+	it('omits an absent head and an absent comment list rather than sending them null', async () => {
+		const mock = stubFetch(() => new Response('{"traceId":"trace-1","taskId":"_review"}'));
+
+		await rejectTask('trace-1', '_review', { feedback: 'Not yet.' });
+
+		const sent = JSON.parse(String(mock.mock.calls[0][1]?.body));
+		// A plain rejection is a real thing to send: no head and no comments, rather
+		// than two nulls the server would have to guess the meaning of.
+		expect(sent).toEqual({ feedback: 'Not yet.' });
 	});
 });
 
