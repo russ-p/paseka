@@ -40,6 +40,11 @@ export function runDetailPath(base: string, traceId: string, agentId: string): s
 	return `${consolePath(base, '/runs')}/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}`;
 }
 
+/** One task of one trail; a child path of the Tasks menu entry. */
+export function taskDetailPath(base: string, traceId: string, taskId: string): string {
+	return `${consolePath(base, '/tasks')}/${encodeURIComponent(traceId)}/${encodeURIComponent(taskId)}`;
+}
+
 /** The Timeline feed scoped to one trail. */
 export function traceTimelinePath(base: string, traceId: string): string {
 	return `${consolePath(base, '/timeline')}?trace=${encodeURIComponent(traceId)}`;

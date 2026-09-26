@@ -17,6 +17,9 @@ import type {
 	RunSummary,
 	RuntimeStatus,
 	SignalSummary,
+	TaskDetail,
+	TaskListItem,
+	TaskRun,
 	TaskSummary,
 	Topology,
 	TopologyEdge,
@@ -925,4 +928,128 @@ export function runUsageRows(usage: Usage | undefined): MetaRow[] {
 	if (cacheWrite > 0) rows.push({ label: 'Cache write', value: formatTokenCount(cacheWrite) });
 	if (usage.source) rows.push({ label: 'Counted by', value: usage.source });
 	return rows;
+}
+
+/**
+ * `waiting_review` is the one status an operator cannot read as a single word
+ * while skimming, and it is the one a board exists to make visible — the badge
+ * says "waiting review" and the reason the task stopped is the review policy, not
+ * the spelling.
+ */
+export function taskStatusLabel(status: string): string {
+	return status === 'waiting_review' ? 'waiting review' : status || 'unknown';
+}
+
+export function taskReviewLabel(review: string | undefined): string {
+	if (!review || review === 'none') return 'not gated';
+	return review === 'final' ? 'final gate' : review;
+}
+
+/** What the task is, and where it sits: the two words a board card is scanned by. */
+export function taskTitle(task: TaskListItem): string {
+	return task.title || task.taskId;
+}
+
+/**
+ * The second line of a board card: who takes it, what it is scoped to, and how
+ * many runs it has made. Dependencies are deliberately absent — the card shows
+ * them as their own badge, and a dependency printed twice on one card is noise.
+ * A card has room for this and a table has room for a column of it, which is why
+ * it is not a column.
+ */
+export function taskRowMeta(task: TaskListItem): string {
+	const parts: string[] = [];
+	if (task.bee) parts.push(task.bee);
+	if (task.sector) parts.push(task.sector);
+	parts.push(plural(task.runCount, 'run'));
+	return parts.join(' · ');
+}
+
+/**
+ * A card repeats its title as the id line only when the two differ. The server
+ * substitutes the id for an empty title, and a task the ledger named after its
+ * own trail arrives with the two already equal, so this compares the title the
+ * card actually prints.
+ */
+export function taskCardShowsId(task: TaskListItem): boolean {
+	return taskTitle(task) !== task.taskId;
+}
+
+export function taskIdentityRows(
+	task: TaskDetail | null,
+	/** Where the trail leads. The base path is the caller's, not a formatter's. */
+	trailHref?: (traceId: string) => string
+): MetaRow[] {
+	if (!task) return [];
+	const rows: MetaRow[] = [];
+	rows.push({
+		label: 'Trail',
+		value: task.traceId,
+		mono: true,
+		href: trailHref?.(task.traceId)
+	});
+	rows.push({ label: 'Task', value: task.taskId, mono: true, copy: true, hint: [task.taskId] });
+	if (task.bee) rows.push({ label: 'Bee', value: task.bee, mono: true });
+	if (task.sector) rows.push({ label: 'Sector', value: task.sector, mono: true });
+	if (task.intent) rows.push({ label: 'Intent', value: task.intent, mono: true });
+	rows.push({ label: 'Review', value: taskReviewLabel(task.review) });
+	if (task.proposalWorkspace) {
+		// `isolated` means the bee worked in its own worktree, `root` in the
+		// checkout, which is the difference between a diff to review and changes an
+		// operator already has in their working tree.
+		rows.push({
+			label: 'Workspace',
+			value: task.proposalWorkspace === 'root' ? 'root checkout' : task.proposalWorkspace,
+			hint: [
+				task.proposalWorkspace === 'root'
+					? 'The bee worked in the root checkout, not an isolated worktree.'
+					: 'The bee worked in an isolated worktree.'
+			]
+		});
+	}
+	rows.push({
+		label: 'Updated',
+		value: formatTimestamp(task.updatedAt),
+		hint: [formatTimestamp(task.updatedAt), task.updatedAt ?? '']
+	});
+	if (task.dependsOn?.length) {
+		rows.push({ label: 'Depends on', value: task.dependsOn.join(', '), mono: true });
+	}
+	if (task.commit) {
+		rows.push({ label: 'Commit', value: task.commit, mono: true, copy: true, hint: [task.commit] });
+	}
+	if (task.pullRequest?.url) {
+		rows.push({
+			label: 'Pull request',
+			value: task.pullRequest.url,
+			href: task.pullRequest.url
+		});
+	}
+	// The ledger answers from JetStream when it is configured and from the
+	// filesystem otherwise, and a task read from disk is a different kind of fact
+	// from one read from the live ledger — so the page says which.
+	if (task.source) {
+		rows.push({
+			label: 'Ledger',
+			value: task.source === 'filesystem' ? 'filesystem' : 'jetstream kv',
+			hint: [
+				task.source === 'filesystem'
+					? 'Read from .paseka/runs on disk, not from the JetStream task ledger.'
+					: 'Read from the JetStream task ledger.'
+			]
+		});
+	}
+	return rows;
+}
+
+/**
+ * What a linked run was, and where its files are. A run id alone says nothing, so
+ * the bee and the run directory sit with it; the row links on to the run's own
+ * page rather than restating that run's events here.
+ */
+export function taskRunMeta(run: TaskRun): string {
+	const parts = [formatTimestamp(run.startedAt), run.runDir].filter(
+		(part) => part !== '' && part !== '—'
+	);
+	return parts.join(' · ');
 }

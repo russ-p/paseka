@@ -244,6 +244,164 @@ export interface TaskSummary {
 	bee?: string;
 }
 
+/** Mirrors `hiveview.TaskRunView`: one adapter run a task produced. */
+export interface TaskRun {
+	agentId: string;
+	bee?: string;
+	runDir?: string;
+	runStatus?: string;
+	startedAt?: string;
+	finishedAt?: string;
+}
+
+/**
+ * Mirrors `hiveview.TaskListItem`, one row on the board.
+ *
+ * The `can*` flags are the server's answer to "what may the operator do with
+ * this row", derived from the ledger's eligibility rules. The page asks the
+ * server rather than re-deciding them, because a task's dependencies can change
+ * underneath a stale board.
+ */
+export interface TaskListItem {
+	traceId: string;
+	taskId: string;
+	title: string;
+	status: string;
+	/** Normalized, so `none` rather than empty. */
+	review?: string;
+	bee?: string;
+	sector?: string;
+	dependsOn?: string[];
+	runCount: number;
+	canStart: boolean;
+	canRetry: boolean;
+	canApprove: boolean;
+	canReject: boolean;
+	canRequestChanges?: boolean;
+	reworkTaskId?: string;
+	reworkStatus?: string;
+	isFinal: boolean;
+	/** `isolated` or `root`: where the bee's work is expected to land. */
+	proposalWorkspace?: string;
+	updatedAt?: string;
+	/**
+	 * `delivery`, `prTitle`, `prBody`, and `pullRequest` are populated only for a
+	 * final task's detail. The board builds rows through the same projection as the
+	 * plain trail view, so these never appear on one.
+	 */
+	delivery?: string;
+	prTitle?: string;
+	prBody?: string;
+	pullRequest?: PullRequest;
+}
+
+/** Mirrors `hiveview.TaskDetailView`: a board row plus what only the task knows. */
+export interface TaskDetail extends TaskListItem {
+	/** The literal task text the bee is handed. */
+	body?: string;
+	intent?: string;
+	/** The bee's own completion summary. */
+	summary?: string;
+	/** The trail's prose, on a final gate only. */
+	traceSummary?: string;
+	commit?: string;
+	runs: TaskRun[];
+	/** Where the ledger answered from: `jetstream-kv`, or `filesystem`. */
+	source: string;
+}
+
+/**
+ * Mirrors `hiveview.TaskBoardView`. `groups` arrives in lifecycle order from the
+ * server, so the board keeps that order rather than sorting statuses itself.
+ */
+export interface TaskBoard {
+	groups: { status: string; tasks: TaskListItem[] }[];
+	taskCounts: Record<string, number>;
+}
+
+/** Mirrors `console.CreateTaskRequest`, the body of `POST /api/tasks`. */
+export interface CreateTaskRequest {
+	traceId?: string;
+	taskId?: string;
+	title?: string;
+	body?: string;
+	bee: string;
+	sector?: string;
+	intent?: string;
+	dependsOn?: string[];
+	review?: string;
+	/** Publish `task.ready` on create, so the dispatcher picks it up at once. */
+	autorun?: boolean;
+}
+
+/** Mirrors `console.CreateTaskResponse`. */
+export interface CreateTaskResult {
+	traceId: string;
+	taskId: string;
+	bee: string;
+	autorun: boolean;
+	message?: string;
+}
+
+/** Mirrors `console.StartTaskResponse`; `taskIds` is empty when one task was named. */
+export interface StartTaskResult {
+	traceId: string;
+	taskIds: string[];
+	message?: string;
+}
+
+/** Mirrors `console.RetryTaskResponse`. */
+export interface RetryTaskResult {
+	traceId: string;
+	taskId: string;
+	message?: string;
+}
+
+/** Mirrors `console.ApproveTaskRequest`; only the delivery fields are sent when set. */
+export interface ApproveTaskRequest {
+	summary?: string;
+	mergeMessage?: string;
+	prTitle?: string;
+	prBody?: string;
+	draft?: boolean;
+	runHooks?: boolean;
+}
+
+/** Mirrors `console.ApproveTaskResponse`. */
+export interface ApproveTaskResult {
+	traceId: string;
+	taskId: string;
+	commitSha?: string;
+	prUrl?: string;
+	prState?: string;
+	published?: boolean;
+	message?: string;
+}
+
+/** Mirrors `console.RejectTaskRequest`. */
+export interface RejectTaskRequest {
+	feedback: string;
+	headSha?: string;
+}
+
+/** Mirrors `console.RejectTaskResponse`; a rework task is created for the bee. */
+export interface RejectTaskResult {
+	traceId: string;
+	taskId: string;
+	reworkTaskId?: string;
+	message?: string;
+}
+
+/** Mirrors `console.BeeView`, the interactive bees the launch forms offer. */
+export interface Bee {
+	role: string;
+	adapter: string;
+	promptTemplate: string;
+	worktree: boolean;
+	intents: string[];
+	defaultIntent?: string;
+}
+
 /** Mirrors `hiveview.WorktreeView`. */
 export interface Worktree {
 	traceId: string;
