@@ -1,4 +1,14 @@
-import type { AgentItem, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
+import type {
+	AgentItem,
+	DashboardSummary,
+	GitPlaque,
+	HostStatus,
+	InsightHighlight,
+	NATSStatusView,
+	RunSummary,
+	RuntimeStatus,
+	TraceSummary
+} from '$lib/api/types';
 import type { StatusIconGlyph } from '$lib/components/StatusIcon.svelte';
 
 export function formatBytes(value: number | undefined): string | null {
@@ -133,8 +143,8 @@ export function runtimeStateNote(runtime: RuntimeStatus | null): string {
 export function agentsMeta(agents: { count: number; afk: number; sessions: number } | null): string {
 	if (!agents || agents.count === 0) return 'None active';
 	const parts: string[] = [`${agents.count} live`];
-	if (agents.afk > 0) parts.push(`${agents.afk} afk`);
-	if (agents.sessions > 0) parts.push(`${agents.sessions} session`);
+	if (agents.afk > 0) parts.push(plural(agents.afk, 'afk'));
+	if (agents.sessions > 0) parts.push(plural(agents.sessions, 'session'));
 	return parts.join(' · ');
 }
 
@@ -239,4 +249,94 @@ export function gitDetail(git: GitPlaque | null, error: string): string {
 	if (age) parts.push(`fetch ${age}`);
 	if (error) parts.push(error);
 	return parts.join(' · ');
+}
+
+/** Timestamp for a row: `2026-09-25 18:04:22`, locale-independent, 24-hour. */
+export function formatTimestamp(iso: string | undefined): string {
+	if (!iso) return '—';
+	const parsed = new Date(iso);
+	if (Number.isNaN(parsed.getTime())) return '—';
+	const pad = (value: number) => String(value).padStart(2, '0');
+	return [
+		parsed.getFullYear(),
+		pad(parsed.getMonth() + 1),
+		pad(parsed.getDate())
+	].join('-') + ` ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+}
+
+/** NATS report to a transport status. `idle` means NATS is simply not configured. */
+export function natsStatus(nats: NATSStatusView | undefined): string {
+	if (!nats) return 'unknown';
+	if (!nats.configured) return 'idle';
+	return nats.connected ? 'connected' : 'disconnected';
+}
+
+/** The same status as an operator-facing word, so `idle` does not leak into the UI. */
+export function natsLabel(status: string): string {
+	switch (status) {
+		case 'connected':
+			return 'connected';
+		case 'disconnected':
+			return 'disconnected';
+		case 'idle':
+			return 'not configured';
+		default:
+			return 'unknown';
+	}
+}
+
+/** Task counts sorted by status so the tile reads the same way every poll. */
+export function taskCountEntries(counts: Record<string, number> | undefined): Array<[string, number]> {
+	return Object.entries(counts ?? {}).sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** `1 run` but `4 runs`; the count is always right of the noun. */function plural(count: number, noun: string): string {
+	return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+/** A trace reads as active, failed, or idle; the raw status never invents a new word. */
+export function traceState(trace: TraceSummary): 'active' | 'failed' | 'idle' {
+	if (trace.hasActive) return 'active';
+	if (trace.hasFailures) return 'failed';
+	return 'idle';
+}
+
+export function traceStateLabel(trace: TraceSummary): string {
+	switch (traceState(trace)) {
+		case 'active':
+			return 'active';
+		case 'failed':
+			return 'failures';
+		default:
+			return plural(trace.runCount, 'run');
+	}
+}
+
+export function tracePrimaryLabel(trace: TraceSummary): string {
+	return trace.title || trace.traceId;
+}
+
+export function traceMeta(trace: TraceSummary): string {
+	const parts: string[] = [plural(trace.runCount, 'run'), plural(trace.taskCount, 'task')];
+	const at = formatTimestamp(trace.lastActivityAt);
+	if (at !== '—') parts.push(at);
+	return parts.join(' · ');
+}
+
+export function runStateLabel(state: string): string {
+	return state || 'unknown';
+}
+
+/** A failed or cancelled run is why it is on the dashboard. */
+export function runNeedsAttention(run: RunSummary): boolean {
+	const state = run.state.trim().toLowerCase();
+	return state === 'failed' || state === 'cancelled' || state === 'killed';
+}
+
+export function insightTime(insight: InsightHighlight): string {
+	return formatTimestamp(insight.createdAt);
+}
+
+export function dashboardFailedRuns(dashboard: DashboardSummary | null): RunSummary[] {
+	return (dashboard?.failedRuns ?? []).filter(runNeedsAttention);
 }

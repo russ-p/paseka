@@ -22,6 +22,7 @@ describe('StatusIcon', () => {
 	it.each([
 		['running', 'play'],
 		['live', 'play'],
+		['active', 'play'],
 		['stopped', 'stop'],
 		['starting', 'pending'],
 		['stopping', 'pending'],

@@ -21,6 +21,7 @@ const statusTones: Record<string, StatusTone> = {
 	interacting: 'info',
 	connected: 'info',
 	live: 'info',
+	active: 'info',
 	success: 'success',
 	approved: 'success',
 	merged: 'success',

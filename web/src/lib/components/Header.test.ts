@@ -6,6 +6,7 @@ import { createConsoleStatusStore } from '$lib/stores/console-status.svelte';
 import { createToastStore } from '$lib/stores/toast.svelte';
 import type { ChromeFrame } from '$lib/api/types';
 import { formatClock } from '$lib/format';
+import { dashboardSummary, traceSummary } from '../../tests/fixtures';
 
 function chromeFrame(overrides: Partial<ChromeFrame> = {}): ChromeFrame {
 	return {
@@ -50,10 +51,9 @@ function harness(frame: ChromeFrame = chromeFrame()) {
 	const stop = vi.fn(async () => ({ status: 'stopped', alive: false, slug: 'demo' }));
 	const store = createConsoleStatusStore({ runtime: { start, stop }, pollIntervalMs: 0 });
 	store.applyChromeFrame(frame);
-	store.applyDashboard({
-		nats: { configured: true, connected: true, ok: true },
-		recentTraces: [{ traceId: 'trace-active', hasActive: true }]
-	});
+	store.applyDashboard(
+		dashboardSummary({ recentTraces: [traceSummary({ traceId: 'trace-active', hasActive: true })] })
+	);
 	const toasts = createToastStore(0);
 	return { store, toasts, start, stop };
 }

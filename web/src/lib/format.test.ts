@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
+import { dashboardSummary, insightHighlight, runSummary, traceSummary } from '../tests/fixtures';
 import {
 	agentsDetail,
 	agentsDetailFull,
 	agentsMeta,
+	dashboardFailedRuns,
+	formatTimestamp,
+	insightTime,
+	natsLabel,
+	natsStatus,
+	runNeedsAttention,
+	runStateLabel,
 	runtimeAction,
 	runtimeActionGlyph,
 	runtimeActionLabel,
@@ -22,7 +30,12 @@ import {
 	hostDetail,
 	hostLoad,
 	hostMeta,
-	runtimeMeta
+	runtimeMeta,
+	taskCountEntries,
+	traceMeta,
+	tracePrimaryLabel,
+	traceState,
+	traceStateLabel
 } from './format';
 
 const running: RuntimeStatus = { status: 'running', alive: true, pid: 42, startedAt: '2026-09-25T10:00:00Z' };
@@ -131,7 +144,8 @@ describe('topbar formatting', () => {
 	it('summarises live bees from the agents projection', () => {
 		expect(agentsMeta(null)).toBe('None active');
 		expect(agentsMeta({ count: 0, afk: 0, sessions: 0 })).toBe('None active');
-		expect(agentsMeta({ count: 3, afk: 1, sessions: 2 })).toBe('3 live · 1 afk · 2 session');
+		expect(agentsMeta({ count: 3, afk: 1, sessions: 2 })).toBe('3 live · 1 afk · 2 sessions');
+		expect(agentsMeta({ count: 4, afk: 2, sessions: 1 })).toBe('4 live · 2 afks · 1 session');
 		expect(
 			agentsDetail([
 				{ kind: 'afk', bee: 'builder', pid: 1, traceId: 't1', agentId: 'a1', startedAt: '', runDir: '' },
@@ -184,5 +198,92 @@ describe('topbar formatting', () => {
 		expect(gitSyncLabel(null)).toBe('—');
 		expect(gitMeta(null, 'git failed')).toBe('git failed');
 		expect(gitDetail(null, '')).toBe('');
+	});
+});
+
+describe('dashboard projections', () => {
+	it('stamps row timestamps in 24-hour local time', () => {
+		expect(formatTimestamp('2026-09-25T18:04:22Z')).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+		expect(formatTimestamp('2026-09-25T18:04:22Z')).toMatch(/ (0[0-9]|1[0-9]|2[0-3]):\d{2}:\d{2}$/);
+		expect(formatTimestamp(undefined)).toBe('—');
+		expect(formatTimestamp('not-a-date')).toBe('—');
+	});
+
+	it('maps the NATS report to a transport status and an operator word', () => {
+		expect(natsStatus(undefined)).toBe('unknown');
+		expect(natsStatus({ configured: true, connected: true, ok: true })).toBe('connected');
+		expect(natsStatus({ configured: true, connected: false, ok: false })).toBe('disconnected');
+		expect(natsStatus({ configured: false, connected: false, ok: false })).toBe('idle');
+	});
+
+	it('keeps the internal idle status out of the NATS label', () => {
+		expect(natsLabel('connected')).toBe('connected');
+		expect(natsLabel('disconnected')).toBe('disconnected');
+		expect(natsLabel('idle')).toBe('not configured');
+		expect(natsLabel('unknown')).toBe('unknown');
+		expect(natsLabel('reconnecting')).toBe('unknown');
+	});
+
+	it('sorts task counts so the tile reads the same on every poll', () => {
+		expect(taskCountEntries({ running: 2, blocked: 5, done: 1 })).toEqual([
+			['blocked', 5],
+			['done', 1],
+			['running', 2]
+		]);
+		expect(taskCountEntries({})).toEqual([]);
+		expect(taskCountEntries(undefined)).toEqual([]);
+	});
+
+	it('reads a trace as active, failed, or idle', () => {
+		const active = traceSummary({ hasActive: true, hasFailures: true, runCount: 6 });
+		expect(traceState(active)).toBe('active');
+		expect(traceStateLabel(active)).toBe('active');
+
+		const failed = traceSummary({ hasActive: false, hasFailures: true, runCount: 6 });
+		expect(traceState(failed)).toBe('failed');
+		expect(traceStateLabel(failed)).toBe('failures');
+
+		expect(traceState(traceSummary({ hasActive: false, hasFailures: false, runCount: 3 }))).toBe('idle');
+		expect(traceStateLabel(traceSummary({ hasActive: false, hasFailures: false, runCount: 3 }))).toBe(
+			'3 runs'
+		);
+		expect(traceStateLabel(traceSummary({ hasActive: false, hasFailures: false, runCount: 1 }))).toBe(
+			'1 run'
+		);
+	});
+
+	it('prefers the trace title and falls back to the id', () => {
+		expect(tracePrimaryLabel(traceSummary())).toBe('Refactor the adapter seam');
+		expect(tracePrimaryLabel(traceSummary({ title: '' }))).toBe('trace-01a0bd6963faa14f');
+	});
+
+	it('builds the trace meta line with counts that agree in number', () => {
+		expect(traceMeta(traceSummary({ runCount: 4, taskCount: 2 }))).toMatch(
+			/^4 runs · 2 tasks · \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
+		);
+		expect(traceMeta(traceSummary({ runCount: 1, taskCount: 1, lastActivityAt: '' }))).toBe('1 run · 1 task');
+	});
+
+	it('keeps only the runs that need attention on the dashboard', () => {
+		expect(runStateLabel('failed')).toBe('failed');
+		expect(runStateLabel('')).toBe('unknown');
+		expect(runNeedsAttention(runSummary({ state: 'failed' }))).toBe(true);
+		expect(runNeedsAttention(runSummary({ state: 'cancelled' }))).toBe(true);
+		expect(runNeedsAttention(runSummary({ state: 'killed' }))).toBe(true);
+		expect(runNeedsAttention(runSummary({ state: 'success' }))).toBe(false);
+
+		const summary = dashboardSummary({
+			failedRuns: [
+				runSummary({ agentId: 'a', state: 'failed' }),
+				runSummary({ agentId: 'b', state: 'cancelled' }),
+				runSummary({ agentId: 'c', state: 'success' })
+			]
+		});
+		expect(dashboardFailedRuns(summary).map((run) => run.agentId)).toEqual(['a', 'b']);
+		expect(dashboardFailedRuns(null)).toEqual([]);
+	});
+
+	it('stamps an insight with a 24-hour local timestamp', () => {
+		expect(insightTime(insightHighlight())).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
 	});
 });

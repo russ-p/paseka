@@ -1,1 +1,0 @@
-import"../chunks/DKFnqCY3.js";import"../chunks/xihTtKlq.js";import"../chunks/Fj6Hkni7.js";import{t as e}from"../chunks/DA96ZQX7.js";function t(t){e(t,{title:`System`,description:`Queen process identity, CPU and memory metrics, and the process table.`,emptyMessage:`System metrics are not migrated yet. Use the legacy console for host diagnostics.`})}export{t as component};
