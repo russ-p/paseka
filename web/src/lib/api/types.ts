@@ -364,6 +364,78 @@ export interface RetryTaskResult {
 	message?: string;
 }
 
+/** Mirrors `console.ReviewQueueItem`, one task waiting on a human. */
+export interface ReviewQueueItem {
+	traceId: string;
+	taskId: string;
+	title: string;
+	review: string;
+	summary?: string;
+	/** The trail's prose, on a final gate only; also the merge commit body. */
+	traceSummary?: string;
+	bee?: string;
+	sector?: string;
+	runCount: number;
+	updatedAt?: string;
+	isFinal: boolean;
+	proposalWorkspace?: string;
+	/** `local_merge` or `pull_request`; decides whether approving merges or publishes. */
+	delivery?: string;
+	prTitle?: string;
+	prBody?: string;
+	pullRequest?: PullRequest;
+	canApprove: boolean;
+	canReject: boolean;
+	/** False while a rework task from an earlier rejection is still in flight. */
+	canRequestChanges?: boolean;
+	reworkTaskId?: string;
+	reworkStatus?: string;
+}
+
+/** Mirrors `console.ReviewQueueView`. */
+export interface ReviewQueue {
+	items: ReviewQueueItem[] | null;
+	count: number;
+}
+
+/** Mirrors `console.MergeDiffView`: the worktree diff for a trace's final gate. */
+export interface MergeDiff {
+	traceId: string;
+	defaultBranch: string;
+	branch: string;
+	baseSha: string;
+	/** Pins a review to the commit it was read against; a moved head voids it. */
+	headSha: string;
+	/** Raw `git diff --stat`, parsed for the per-file counts. */
+	stat?: string;
+	/** Raw `git diff`, cut at the server's byte cap when `truncated` is set. */
+	diff?: string;
+	truncated?: boolean;
+	empty?: boolean;
+	/** The trace branch is not on this machine, so there is nothing to show. */
+	missingWorktree?: boolean;
+	/** Commits the local default branch is behind origin by; merging may conflict. */
+	originBehindCount?: number;
+	delivery?: string;
+	prTitle?: string;
+	prBody?: string;
+	pullRequest?: PullRequest;
+}
+
+/**
+ * One line-anchored review note, as `console.ReviewCommentInput` reads it. A
+ * single-line comment omits `endLine` and an empty one omits `snippet`, because
+ * the bee's rework prompt quotes the range and a zero-width range reads as a typo.
+ */
+export interface ReviewComment {
+	path: string;
+	side: 'old' | 'new';
+	startLine: number;
+	endLine?: number;
+	snippet?: string;
+	body: string;
+}
+
 /** Mirrors `console.ApproveTaskRequest`; only the delivery fields are sent when set. */
 export interface ApproveTaskRequest {
 	summary?: string;
@@ -385,10 +457,15 @@ export interface ApproveTaskResult {
 	message?: string;
 }
 
-/** Mirrors `console.RejectTaskRequest`. */
+/**
+ * Mirrors `console.RejectTaskRequest`. `headSha` pins the rejection to the commit
+ * the reviewer read, and `comments` carries the annotated packet the bee is
+ * reworked from; a plain rejection sends only the feedback.
+ */
 export interface RejectTaskRequest {
 	feedback: string;
 	headSha?: string;
+	comments?: ReviewComment[];
 }
 
 /** Mirrors `console.RejectTaskResponse`; a rework task is created for the bee. */

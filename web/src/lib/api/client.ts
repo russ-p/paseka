@@ -13,9 +13,11 @@ import type {
 	EventFilters,
 	GitActionResult,
 	GitView,
+	MergeDiff,
 	RejectTaskRequest,
 	RejectTaskResult,
 	RetryTaskResult,
+	ReviewQueue,
 	RunCueResult,
 	RunEventsPage,
 	RunSummary,
@@ -308,6 +310,23 @@ export function rejectTask(
 		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/reject`,
 		review
 	);
+}
+
+/**
+ * The tasks waiting on a human, colony-wide. `count` is the server's own figure
+ * and can exceed the items it chose to send, so it is what a tab badge shows.
+ */
+export function listReviews(): Promise<ReviewQueue> {
+	return request<ReviewQueue>('/review-queue');
+}
+
+/**
+ * The accumulated worktree diff for a trail's merge gate. Trace-scoped rather than
+ * task-scoped: the branch is the trail's, and several final-gate tasks can look at
+ * the same one.
+ */
+export function getMergeDiff(traceId: string): Promise<MergeDiff> {
+	return request<MergeDiff>(`/traces/${encodeURIComponent(traceId)}/merge-diff`);
 }
 
 /**

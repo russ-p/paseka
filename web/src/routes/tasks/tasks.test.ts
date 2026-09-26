@@ -548,6 +548,9 @@ describe('task detail', () => {
 	});
 
 	it('collapses the review form until asked, and keeps Reject to one box', async () => {
+		// The task page offers Approve and Reject, as the legacy task tab did.
+		// Request changes, which starts a rework task and carries an annotated
+		// comment packet, belongs to the merge preview where the lines are.
 		const h = harness();
 		render(TaskDetail, {
 			store: h.store,
@@ -567,14 +570,43 @@ describe('task detail', () => {
 		// Not a PR-delivered task, so there is nothing to title.
 		expect(screen.queryByLabelText('PR title')).not.toBeInTheDocument();
 
-		await userEvent.click(screen.getByRole('button', { name: 'Request changes…' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Reject…' }));
 
 		expect(screen.getByLabelText('Feedback')).toBeInTheDocument();
 		expect(screen.queryByLabelText('Approval summary')).not.toBeInTheDocument();
 	});
 
 	it('asks for the PR fields only when the task delivers as a pull request', async () => {
-		const h = harness(taskBoard(), [taskDetail({ taskId: 'task-02', delivery: 'pr' })]);
+		// `pull_request` is `colony.DeliveryPullRequest`. An earlier version compared
+		// against `pr`, which no delivery is ever equal to, so these fields silently
+		// never appeared on a colony that publishes them.
+		// A final gate is the only thing with a branch to publish, so `isFinal` is part
+		// of the condition and not decoration.
+		const h = harness(taskBoard(), [
+			taskDetail({ taskId: 'task-02', isFinal: true, delivery: 'pull_request' })
+		]);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-02',
+			toasts: h.toasts
+		});
+		await waitFor(() => expect(h.getTask).toHaveBeenCalled());
+		// The toggle names the action it will take, not the generic verb.
+		await userEvent.click(await screen.findByRole('button', { name: 'Open PR…' }));
+
+		expect(screen.getByLabelText('PR title')).toBeInTheDocument();
+		expect(screen.getByLabelText('PR body')).toBeInTheDocument();
+		expect(screen.getByLabelText('Open as draft')).toBeInTheDocument();
+		expect(screen.getByLabelText('Run git hooks on push')).toBeInTheDocument();
+		// The verb says what it will do, and says "Open" until a PR exists.
+		expect(screen.getByRole('button', { name: 'Open PR…' })).toBeInTheDocument();
+	});
+
+	it('offers the commit message on a final merge, and no PR fields', async () => {
+		const h = harness(taskBoard(), [
+			taskDetail({ taskId: 'task-02', isFinal: true, delivery: 'local_merge' })
+		]);
 		render(TaskDetail, {
 			store: h.store,
 			traceId: 'trace-01a0bd6963faa14f',
@@ -584,10 +616,29 @@ describe('task detail', () => {
 		await waitFor(() => expect(h.getTask).toHaveBeenCalled());
 		await userEvent.click(await screen.findByRole('button', { name: 'Approve…' }));
 
-		expect(screen.getByLabelText('PR title')).toBeInTheDocument();
-		expect(screen.getByLabelText('PR body')).toBeInTheDocument();
-		expect(screen.getByLabelText('Draft')).toBeInTheDocument();
-		expect(screen.getByLabelText('Run hooks')).toBeInTheDocument();
+		expect(screen.getByLabelText('Commit message')).toBeInTheDocument();
+		expect(screen.queryByLabelText('PR title')).not.toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+	});
+
+	it('says Update PR once the task already has one', async () => {
+		const h = harness(taskBoard(), [
+			taskDetail({
+				taskId: 'task-02',
+				isFinal: true,
+				delivery: 'pull_request',
+				pullRequest: { url: 'https://forge.example/paseka/12', number: 12, state: 'open' }
+			})
+		]);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-02',
+			toasts: h.toasts
+		});
+		await waitFor(() => expect(h.getTask).toHaveBeenCalled());
+
+		expect(await screen.findByRole('button', { name: 'Update PR…' })).toBeInTheDocument();
 	});
 
 	it('approves with a summary and no commit message of its own', async () => {
@@ -635,10 +686,10 @@ describe('task detail', () => {
 			toasts: h.toasts
 		});
 		await waitFor(() => expect(h.getTask).toHaveBeenCalled());
-		await userEvent.click(await screen.findByRole('button', { name: 'Request changes…' }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Reject…' }));
 
 		await userEvent.type(screen.getByLabelText('Feedback'), 'The flag needs a default.');
-		await userEvent.click(screen.getByRole('button', { name: 'Request changes' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
 		await waitFor(() =>
 			expect(h.toasts.items.at(-1)?.message).toBe('Rework task task-05 created')

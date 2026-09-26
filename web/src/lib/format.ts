@@ -14,6 +14,7 @@ import type {
 	JsonValue,
 	NATSStatusView,
 	ProtocolEvent,
+	PullRequest,
 	RunSummary,
 	RuntimeStatus,
 	SignalSummary,
@@ -1040,6 +1041,17 @@ export function taskIdentityRows(
 		});
 	}
 	return rows;
+}
+
+/** The delivery a final gate will actually perform, as the queue shows it. */
+export function reviewDeliveryLabel(item: {
+	isFinal: boolean;
+	delivery?: string;
+	pullRequest?: PullRequest;
+}): string {
+	if (!item.isFinal) return '—';
+	if (item.pullRequest?.url || item.delivery === 'pull_request') return 'pull request';
+	return 'local merge';
 }
 
 /**
