@@ -95,4 +95,77 @@ describe('consoleStatusStore', () => {
 		expect(store.connection).toBe('disconnected');
 		store.stop();
 	});
+
+	it('keeps host and git projections from the chrome frame', () => {
+		const store = createConsoleStatusStore({ pollIntervalMs: 0 });
+
+		store.applyChromeFrame({
+			schemaVersion: 1,
+			host: { os: 'linux', arch: 'amd64', cpus: 16, hostname: 'thinkpad' },
+			git: { branch: 'main', headSha: 'abc123', headShaShort: 'abc', dirty: true, defaultBranch: 'main' }
+		});
+		expect(store.host?.hostname).toBe('thinkpad');
+		expect(store.git?.branch).toBe('main');
+		expect(store.gitError).toBe('');
+
+		store.applyChromeFrame({ schemaVersion: 1, hostError: 'collect failed', gitError: 'git failed' });
+		expect(store.hostError).toBe('collect failed');
+		expect(store.gitError).toBe('git failed');
+	});
+
+	it('starts and stops the runtime through the injected calls', async () => {
+		const start = vi.fn(async () => ({ status: 'running', alive: true, pid: 7, slug: 'demo' }));
+		const stop = vi.fn(async () => ({ status: 'stopped', alive: false, slug: 'demo' }));
+		const store = createConsoleStatusStore({ runtime: { start, stop }, pollIntervalMs: 0 });
+
+		store.applyChromeFrame({ schemaVersion: 1, runtime: { status: 'stopped', alive: false } });
+
+		expect(await store.startRuntime()).toBe(true);
+		expect(start).toHaveBeenCalledTimes(1);
+		expect(store.runtimeStatus).toBe('running');
+		expect(store.runtime?.pid).toBe(7);
+		expect(store.runtimeAction).toBeNull();
+
+		expect(await store.stopRuntime()).toBe(true);
+		expect(stop).toHaveBeenCalledTimes(1);
+		expect(store.runtimeStatus).toBe('stopped');
+		expect(store.runtimeError).toBe('');
+	});
+
+	it('records runtime failures and ignores overlapping actions', async () => {
+		let release: (() => void) | undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const stop = vi.fn(async () => {
+			await gate;
+			return { status: 'stopped', alive: false };
+		});
+		const store = createConsoleStatusStore({ pollIntervalMs: 0 });
+		const failing = createConsoleStatusStore({
+			runtime: {
+				start: async () => {
+					throw new Error('runtime start failed: 500');
+				},
+				stop
+			},
+			pollIntervalMs: 0
+		});
+
+		expect(await failing.startRuntime()).toBe(false);
+		expect(failing.runtimeError).toBe('runtime start failed: 500');
+
+		failing.clearRuntimeError();
+		expect(failing.runtimeError).toBe('');
+
+		const first = failing.stopRuntime();
+		expect(failing.runtimeAction).toBe('stopping');
+		expect(await failing.stopRuntime()).toBe(false);
+		expect(stop).toHaveBeenCalledTimes(1);
+
+		release?.();
+		expect(await first).toBe(true);
+		expect(failing.runtimeAction).toBeNull();
+		expect(store.runtimeAction).toBeNull();
+	});
 });

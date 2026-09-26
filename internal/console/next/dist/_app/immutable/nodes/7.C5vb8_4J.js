@@ -1,1 +1,0 @@
-import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Runs`,description:`Headless adapter runs with metadata, summary, and the emitted event stream.`,emptyMessage:`Run history is not migrated yet. Use the legacy console for adapter run details.`})}export{t as component};

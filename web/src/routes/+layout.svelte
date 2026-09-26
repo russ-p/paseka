@@ -5,6 +5,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
 	import SideMenu from '$lib/components/SideMenu.svelte';
+	import Toast from '$lib/components/Toast.svelte';
 	import { consolePath, matchShortcut, rememberRoute } from '$lib/navigation';
 	import { consoleStatusStore } from '$lib/stores/console-status.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -68,16 +69,19 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <a
+	id="skip-to-content"
 	href="#main-content"
 	class="btn btn-primary btn-sm fixed top-3 left-1/2 z-50 -translate-x-1/2 -translate-y-20 focus:translate-y-0"
 >
 	Skip to content
 </a>
 
-<div class="min-h-screen bg-base-200 text-base-content">
+<div id="console-shell" class="min-h-screen bg-base-200 text-base-content">
 	<Header />
 	<SideMenu />
 	<main id="main-content" class="mx-auto w-full max-w-7xl px-4 pt-6 pb-16 md:px-6">
 		{@render children()}
 	</main>
 </div>
+
+	<Toast />

@@ -1,1 +1,0 @@
-import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Tasks`,description:`Kanban board of colony tasks with dependencies, review policy, and linked runs.`,emptyMessage:`Task management is not migrated yet. Use the legacy console to create and track tasks.`})}export{t as component};

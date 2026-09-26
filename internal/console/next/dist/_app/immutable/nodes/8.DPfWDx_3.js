@@ -1,1 +1,0 @@
-import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Sessions`,description:`Interactive HITL sessions with invites, a PTY terminal, resume, and transcript.`,emptyMessage:`Interactive sessions are not migrated yet. Use the legacy console to launch and attach to a session.`})}export{t as component};

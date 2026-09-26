@@ -1,1 +1,0 @@
-import"../chunks/BwvSJygW.js";import"../chunks/xihTtKlq.js";import{t as e}from"../chunks/YpK5lQJP.js";function t(t){e(t,{title:`Reviews`,description:`Review queue with merge diff preview, inline comments, and pull request delivery.`,emptyMessage:`Review workflows are not migrated yet. Use the legacy console to approve or reject proposals.`})}export{t as component};

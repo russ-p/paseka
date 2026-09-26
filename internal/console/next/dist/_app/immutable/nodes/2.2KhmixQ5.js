@@ -1,1 +1,0 @@
-import{Q as e}from"../chunks/BwvSJygW.js";import{o as t,s as n}from"../chunks/6r6Rwp1u.js";import{a as r,r as i}from"../chunks/BzeOc4Cb.js";function a(e,t){throw new n(e,t.toString())}var o=e({load:()=>s});function s(){a(307,i(t,r()))}export{o as universal};
