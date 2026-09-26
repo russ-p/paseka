@@ -17,13 +17,18 @@ Short contract for agents that write Queen Console UI. Targets the Svelte 5 + Ta
 - Dark mode is a theme switch, not `@media (prefers-color-scheme)`.
 - Semantic color classes only: `base-100/200/300`, `primary`, `secondary`, `accent`, `neutral`,
   `info`, `success`, `warning`, `error`, `*-content`. No hex/RGB literals in Svelte files.
+- Icons come from `lucide-svelte` and are used through `StatusIcon` only. They render on `currentColor`, so they inherit the semantic classes above; a hand-rolled SVG is not an accepted substitute.
 
 ## Layout shell
 
 - `+layout.svelte` renders `<Header />` (top status panel), `<SideMenu />`, and `<main>`.
 - Side menu is a fixed left-side panel; below **768px** it becomes a bottom sheet.
 - Routes: `/next/dashboard`, `/next/traces`, `/next/timeline`, `/next/tasks`, `/next/reviews`, `/next/sessions`, `/next/bees`, `/next/worktrees`, `/next/runs`, `/next/git`, `/next/topology`, `/next/system`, `/next/settings`. The menu groups them as Work, Colony, Diagnostics, and Configuration, and each `g <key>` chord is unique. Last route + theme persist in `localStorage`.
-- Header shows NATS status, hive runtime, live bees, active trails in the dashboard window, attention counts, and the colony slug. The `/api/chrome/stream` event stream supplies runtime, agents, and attention; a dashboard poll supplies NATS and active-trail data.
+- Header is one row: the identity block (console name, colony slug, `StatusIcon` for the NATS transport), attention badges that render only when reviews or invites are pending, then four bordered panels — Hive runtime, Live bees, Host, Git. Panel header rows are `justify-between`: label left, status right. The `/api/chrome/stream` event stream supplies runtime, agents, host, git, and attention; a dashboard poll supplies NATS. The active trail count is not in the top panel.
+- The Hive runtime panel owns one icon control, not two buttons. The **icon is the action**, never the status: `runtimeAction()` returns `start` (`stopped`, `stale`), `stop` (`running`), `busy` (in-flight or `stopping`, disabled), or `choose` (anything unclear — opens a `Modal` with both actions). With a `glyph` override the icon drops the status tone and inherits the button colour, so only one colour drives it; `aria-label` spells the action out. `stopping` stays blocked because `Start` mid-shutdown would spawn a second runtime, and the result is reported with a `Toast`. Stop always opens a `Modal` confirmation.
+- Every truncating line is wrapped in `Hint`: the row scrolls horizontally, so an in-flow tooltip would be clipped; the popover therefore lives in `body`. Panel header rows are `min-h-8` so a 32px icon button and a 24px badge share one label baseline, and the four panels sit in a `ml-auto` wrapper so they align to the right edge.
+- The **status is the second line**: `runtimeStateNote()` is the raw status word plus a hint for the unusual values (`starting · coming up`, `stopping · shutting down`, `stale · registry entry, start respawns`, `degraded · hive reported an error`), so any status the server invents stays readable verbatim. `runtimeDetail()` (`pid · started · heartbeat`) is the third line, rendered only when it has content — the same three-line shape as the other panels.
+- Below **768px** the row scrolls horizontally; panels keep their fixed widths so nothing reflows mid-scroll.
 - The redesigned app is mounted at `/next/`; the legacy console remains the default at `/` until explicit cutover.
 
 ## Component inventory (`lib/components/`)
@@ -33,16 +38,18 @@ Use these. If a page needs a missing element, add the component here and extend 
 | Component | Use for | Notes |
 | --------- | ------- | ----- |
 | `StatusBadge` | Any status or state label | `badge` + one semantic class; see mapping below |
+| `StatusIcon` | Status where the word is redundant (a runtime already labelled "Hive runtime") | Inline SVG on `currentColor`, `role="img"` + `aria-label` + `title` = raw status, `sr-only` text; `sm` 12px, `md` 16px, `lg` 20px |
 | `DataTable` | Tabular lists: traces, bees, runs, worktrees, branches | filtering / pagination via props |
-| `Modal` | Short, focused forms | Focus trap, ESC closes, restores focus to trigger |
+| `Modal` | Short, focused forms and destructive confirmations | Focus trap, ESC closes, restores focus to trigger |
 | `Drawer` | Wide or multi-step forms (launch session, task create) | Slide from right; same focus rules |
-| `Toast` | Transient notifications | For action results, not persistent state |
+| `Toast` | Transient notifications | For action results, not persistent state; mounted once in the root layout |
 | `SignalCard` | SIGNAL / INSIGHT / MUTATION / VERIFICATION presentation | In feeds and detail blocks |
 | `TraceRow` | Trace list rows | Title, status, energy |
 | `BeeCard` | Bee / worker cards | Status, last run, adapter |
 | `WorktreeCard` | Worktree rows | Branch, associated trace |
 | `ThemeSelect` | Theme picker | Settings route, optional header |
 | `PagePlaceholder` | Routes awaiting feature migration | Shared empty state; never a hand-rolled per-route card |
+| `Hint` | Full text of a line that CSS truncates | Portaled to `body` (a scrolling ancestor would clip it), placed below the anchor and flipped above when the viewport has no room, `aria-hidden` because the visible line already holds the same text; hover and focus open it |
 
 ## Status → semantic colors
 
@@ -56,17 +63,19 @@ Map domain status to a DaisyUI semantic badge. Do not pick colors per context.
 | failed, rejected, killed, disconnected, error | `badge-error` |
 | idle, stopped, stopping, unavailable, archived, unknown | `badge-neutral` |
 
+`StatusIcon` reuses the same tone via `statusToneTextClasses` (`text-info`, `text-success`, `text-warning`, `text-error`, `text-neutral`) beside `statusToneClasses`. Glyph by status (`data-glyph` exposes it for tests): `play` for `running`/`live`, `stop` for `stopped`, `pending` for `starting`/`stopping`, `link` for `connected`, `broken` for `disconnected`, `alert` for `failed`/`error`/`killed`, `unknown` for anything else including `idle`. Icons are lucide components: `play` = `Play`, `stop` = `Square`, `pending` = `LoaderCircle`, `link` = `Link`, `broken` = `Unlink`, `alert` = `CircleAlert`, `unknown` = `CircleDashed`. Pass `label` when the bare status is ambiguous — the topbar renders `NATS connected`, not `connected`. Pass `glyph` to force an icon regardless of status; the component then drops the status tone and the accessible name, because the surrounding control owns both.
+
 ## Hard rules (agent contract)
 
 1. Create/edit forms open in `<Modal>` or `<Drawer>` triggered by a button — never a full-column form replacing the list view.
 2. Every status is a `StatusBadge` with a semantic class from the mapping above.
-3. No inline styles, no raw color literals, no custom fonts. Tailwind + DaisyUI only.
+3. No inline styles, no raw color literals, no custom fonts. Tailwind + DaisyUI only. The single exception is the `Hint` popover, which sets `top`/`left` from `getBoundingClientRect()` — that is geometry, not styling; it must never carry a color or a font.
 4. Lists are `DataTable`s (filter, paginate) — not hand-rolled `<table>` markup per page.
 5. Icon-only buttons must carry an `aria-label`; rely on DaisyUI/Tailwind focus-visible outlines.
 6. Render loading (skeleton), empty, and error states — not just the happy path.
 7. Stay responsive to **768px**: side menu collapses, tables never force horizontal scroll on mobile.
 8. Keyboard shortcuts across routes (e.g. `g d` dashboard, `g t` traces).
-9. On NATS disconnect show a reconnecting banner (`badge-warning`) and queue mutations locally; do not lose operator input.
+9. On NATS disconnect show a reconnecting banner (`badge-warning`) and queue mutations locally; do not lose operator input. Never fire two runtime mutations at once.
 10. Consume typed payloads generated from the Go event contracts; no `any`-typed event handling.
 
 ## Agent workflow
