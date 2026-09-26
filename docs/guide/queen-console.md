@@ -127,6 +127,25 @@ never pushes the worktree head; PR publish does.
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
 
+On `/next/runs` the list is compact: the state is badged, the trail and the run
+are both links, and the adapter is searchable rather than a column. Opening a run
+gives its metadata, the adapter's own summary, the task body, and the events it
+recorded. **Those events are a readable list** — contract, payload kind, and what
+was said — with the raw event folded away on each row, where the legacy console
+printed `[TYPE #seq] {json}`. An event whose payload carries no summary still says
+something, because the row falls back to the payload's own fields and an
+`artifact.written` shows the artifact it wrote.
+
+**The chevrons either side of a run's id step through that trail's runs** in start
+order — the previous attempt, the next one — which is how you read what a bee did
+across retries. They are real links, so a run in a trail can be shared and Back
+behaves. A run with no sibling that way leaves its chevron disabled, and a run
+older than the recent window says it has no known position rather than pretending
+it is alone. The page refreshes every 5 seconds, because a run's state is the one
+thing on these pages that moves while you watch. A run's *events* are what it
+announced on the bus, not its transcript; the transcript is the task body above
+them.
+
 CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
 

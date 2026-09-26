@@ -45,8 +45,12 @@
 	}
 </script>
 
+<!-- `min-w-0 flex-1` rather than `w-full`: this span is sometimes a flex item
+     beside another control (the copy button in `MetaList`), and `w-full` claims
+     the whole row, so the pair overflows and `justify-end` spills the value back
+     over its own label. Outside a flex row both classes are inert. -->
 <span
-	class="block w-full"
+	class="block min-w-0 flex-1"
 	role="presentation"
 	data-hint={id}
 	onmouseenter={show}

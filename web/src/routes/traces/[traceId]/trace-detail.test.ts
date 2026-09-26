@@ -213,14 +213,22 @@ describe('trace detail', () => {
 		expect(within(runs).getByText(/1\.2k in · 340 out · 800 cache/)).toBeInTheDocument();
 	});
 
-	it('leaves task and run rows inert until their own routes exist', async () => {
+	it('links a run row to its own page and leaves task rows inert', async () => {
+		// Runs migrated, Tasks has not, so the two blocks now differ on purpose: a row
+		// that promises a destination and dead-ends is worse than one that only shows
+		// state, and a row with a real target should not stay mute.
 		renderDetail();
 		await screen.findByText('Introduce the Adapter interface');
 
 		const tasks = await section('trace-tasks');
 		const runs = await section('trace-runs');
 		expect(within(tasks).queryByRole('link')).not.toBeInTheDocument();
-		expect(within(runs).queryByRole('link')).not.toBeInTheDocument();
+
+		const runLink = within(runs).getAllByRole('link')[0];
+		expect(runLink).toHaveAttribute(
+			'href',
+			expect.stringContaining('/next/runs/trace-01a0bd6963faa14f/') as unknown as string
+		);
 	});
 
 	it('says so for a trail with no tasks, runs, or events', async () => {

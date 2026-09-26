@@ -152,7 +152,11 @@
 		{/if}
 	</div>
 
-	<div class="overflow-x-hidden rounded-box border border-base-300 bg-base-100">
+	<!-- Scrollable, not hidden. A wide table on a phone must not push the page
+	     sideways, but clipping the last column outright makes a link in it
+	     unreachable with no way to reveal it. The region scrolls instead, and the
+	     page around it does not. -->
+	<div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
 		<table class="table table-sm">
 			<thead>
 				<tr>

@@ -213,14 +213,27 @@ export interface RunSummary {
 	adapter: string;
 	workspace: string;
 	taskId?: string;
+	/** The literal task text the adapter was handed. */
+	body?: string;
+	/** Prompt vocabulary the run was launched under. */
+	intent?: string;
 	state: string;
 	summary?: string;
 	usage?: Usage;
+	/** The upstream session this run continued, when the adapter supports one. */
+	providerSessionId?: string;
 	runDir: string;
 	startedAt: string;
 	finishedAt?: string;
 	hasEvents: boolean;
 	hasSession: boolean;
+}
+
+/** Mirrors `console.EventsPage`, one page of a run's recorded events. */
+export interface RunEventsPage {
+	entries: ProtocolEvent[];
+	/** An index, not a trace cursor; `0` means the beginning. */
+	nextCursor: number;
 }
 
 /** Mirrors `hiveview.TaskSummaryView`. */

@@ -6,6 +6,7 @@ import {
 	gitView,
 	gitWorktree,
 	insightHighlight,
+	protocolEvent,
 	runSummary,
 	systemView,
 	topology,
@@ -44,6 +45,11 @@ import {
 	activeFilterCount,
 	eventFilterSummary,
 	topologyCounts,
+	runDurationMs,
+	runEventSummary,
+	runIdentityRows,
+	runUsageRows,
+	payloadDigest,
 	gitDetail,
 	gitMeta,
 	gitNeedsAttention,
@@ -799,5 +805,164 @@ describe('topologyCounts', () => {
 
 	it('says nothing before there is a projection', () => {
 		expect(topologyCounts(null)).toEqual([]);
+	});
+});
+
+describe('runEventSummary', () => {
+	it('projects a recorded event into a readable feed row', () => {
+		expect(
+			runEventSummary(
+				protocolEvent({
+					seq: 4,
+					type: 'VERIFICATION',
+					createdAt: '2026-09-25T18:04:00Z',
+					payload: { kind: 'verification.success', summary: 'All requirements met.', severity: 'high' }
+				})
+			)
+		).toEqual({
+			createdAt: '2026-09-25T18:04:00Z',
+			traceId: 'trace-01a0bd6963faa14f',
+			agentId: 'run-01',
+			type: 'VERIFICATION',
+			payloadKind: 'verification.success',
+			severity: 'high',
+			summary: 'All requirements met.'
+		});
+	});
+
+	it('falls back to the payload fields when an event carries no summary', () => {
+		// `trace.title` announces a title and nothing else; a blank row would say
+		// less than the payload already does.
+		expect(
+			runEventSummary(protocolEvent({ payload: { kind: 'trace.title', title: 'Add prune cleanup' } }))
+				.summary
+		).toBe('title=Add prune cleanup');
+	});
+
+	it('renders an event with neither a summary nor scalars as an empty row, not a crash', () => {
+		const row = runEventSummary(protocolEvent({ payload: { kind: 'task.ready' } }));
+
+		expect(row.summary).toBe('');
+		expect(row.payloadKind).toBe('task.ready');
+	});
+
+	it('copes with a payload that is not an object at all', () => {
+		expect(runEventSummary(protocolEvent({ payload: 'raw string' })).summary).toBe('');
+		expect(runEventSummary(protocolEvent({ payload: undefined })).summary).toBe('');
+	});
+});
+
+describe('payloadDigest', () => {
+	it('lists the payload scalars in a stable order and counts the rest', () => {
+		expect(payloadDigest({ kind: 'x', decision: 'grill', confidence: 0.9, extra: 'e' }, 2)).toBe(
+			'confidence=0.9 · decision=grill · +1'
+		);
+	});
+
+	it('reads a payload whose only content is a list of objects', () => {
+		// `artifact.written` announces a list and has no top-level scalar, so a
+		// scalars-only digest leaves the row blank.
+		expect(
+			payloadDigest({
+				artifacts: [
+					{
+						artifactKind: 'review-report',
+						ref: '.paseka/runs/trace-1/artifacts/review-report.md',
+						title: 'Guard Review'
+					}
+				]
+			})
+		).toBe('artifacts:review-report · .paseka/runs/trace-1/artifacts/review-report.md · Guard Review');
+	});
+
+	it('skips a list of scalars rather than pretending it is a record', () => {
+		expect(payloadDigest({ tags: ['a', 'b'] })).toBe('');
+	});
+
+	it('is empty for a payload with nothing but a kind', () => {
+		expect(payloadDigest({ kind: 'task.ready' })).toBe('');
+		expect(payloadDigest(undefined)).toBe('');
+	});
+});
+
+describe('runDurationMs', () => {
+	it('measures a finished run', () => {
+		expect(
+			runDurationMs({ startedAt: '2026-09-25T18:00:00Z', finishedAt: '2026-09-25T18:02:30Z' })
+		).toBe(150_000);
+	});
+
+	it('is null while a run is still going, rather than reporting zero', () => {
+		// A running run has no finish line, and a duration of zero reads as "instant".
+		expect(runDurationMs({ startedAt: '2026-09-25T18:00:00Z', finishedAt: undefined })).toBeNull();
+	});
+
+	it('is null for a finish line that precedes the start', () => {
+		expect(
+			runDurationMs({ startedAt: '2026-09-25T18:02:00Z', finishedAt: '2026-09-25T18:00:00Z' })
+		).toBeNull();
+	});
+});
+
+describe('runIdentityRows', () => {
+	it('names the run and links its trail through the caller href builder', () => {
+		const rows = runIdentityRows(runSummary(), (id) => `/next/traces/${id}`);
+
+		expect(rows.find((row) => row.label === 'Trail')).toMatchObject({
+			value: 'trace-01a0bd6963faa14f',
+			href: '/next/traces/trace-01a0bd6963faa14f'
+		});
+		// The agent id and the run directory are what an operator pastes elsewhere.
+		expect(rows.find((row) => row.label === 'Agent')?.copy).toBe(true);
+		expect(rows.find((row) => row.label === 'Run dir')?.copy).toBe(true);
+	});
+
+	it('leaves the trail unlinked when no builder is given', () => {
+		const rows = runIdentityRows(runSummary());
+
+		expect(rows.find((row) => row.label === 'Trail')?.href).toBeUndefined();
+	});
+
+	it('drops the rows a run never reported instead of padding with dashes', () => {
+		const rows = runIdentityRows(
+			runSummary({ intent: undefined, taskId: undefined, providerSessionId: undefined })
+		);
+		const labels = rows.map((row) => row.label);
+
+		expect(labels).not.toContain('Intent');
+		expect(labels).not.toContain('Task');
+		expect(labels).not.toContain('Provider session');
+		expect(labels).toContain('Duration');
+	});
+
+	it('says a run is still running rather than reporting no duration', () => {
+		const rows = runIdentityRows(
+			runSummary({ state: 'running', finishedAt: undefined })
+		);
+
+		expect(rows.find((row) => row.label === 'Duration')?.value).toBe('running');
+		expect(rows.find((row) => row.label === 'Finished')).toBeUndefined();
+	});
+
+	it('is empty with no run', () => {
+		expect(runIdentityRows(null)).toEqual([]);
+	});
+});
+
+describe('runUsageRows', () => {
+	it('lists the tokens a run reported', () => {
+		const rows = runUsageRows({ inputTokens: 12_000, outputTokens: 900, cacheReadTokens: 40_000 });
+
+		expect(rows.map((row) => row.label)).toEqual(['Input tokens', 'Output tokens', 'Cache read']);
+	});
+
+	it('leaves out a cache half the adapter did not report', () => {
+		const rows = runUsageRows({ inputTokens: 10, outputTokens: 2, cacheReadTokens: 0 });
+
+		expect(rows.map((row) => row.label)).toEqual(['Input tokens', 'Output tokens']);
+	});
+
+	it('is empty for a run that reported no usage', () => {
+		expect(runUsageRows(undefined)).toEqual([]);
 	});
 });
