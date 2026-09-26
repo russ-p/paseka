@@ -1,29 +1,40 @@
 <script lang="ts">
 	import Hint from '$lib/components/Hint.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { formatTimestamp } from '$lib/format';
+	import { eventKindLine, formatTimestamp } from '$lib/format';
 	import type { SignalSummary } from '$lib/api/types';
+	import type { Snippet } from 'svelte';
 
 	let {
 		signal,
 		href,
-		showTrace = true
+		showTrace = true,
+		traceHref,
+		expand
 	}: {
 		signal: SignalSummary;
-		/** Detail destination; omitted while the feed has no target surface yet. */
+		/** Detail destination for the headline; omitted while the feed has no target surface yet. */
 		href?: string;
 		/** Inside a trace the id is in the page header, so it can be dropped. */
 		showTrace?: boolean;
+		/**
+		 * Where the row's trace id leads. Separate from `href` on purpose: the
+		 * headline is prose and reads as content, while the id is the identifier an
+		 * operator pastes or follows, so it is the thing that should look clickable.
+		 */
+		traceHref?: string;
+		/**
+		 * Extra content under the meta line — the Timeline's per-event raw view.
+		 * The raw JSON ships on every feed row, so revealing it costs no request
+		 * and does not belong in a modal the operator has to open and close per event.
+		 */
+		expand?: Snippet;
 	} = $props();
 
 	const time = $derived(formatTimestamp(signal.createdAt));
 
 	/** A feed row names both the contract and the payload kind; the dashboard's insight projection carries one word. */
-	const kindLine = $derived(
-		signal.type && signal.payloadKind && signal.type !== signal.payloadKind
-			? `${signal.type} · ${signal.payloadKind}`
-			: (signal.payloadKind ?? signal.type ?? '')
-	);
+	const kindLine = $derived(eventKindLine(signal));
 </script>
 
 <li class="signal-card rounded-box border border-base-300 bg-base-100 p-3" data-trace={signal.traceId}>
@@ -46,10 +57,17 @@
 			</span>
 		</Hint>
 		{#if showTrace}
-			<span class="font-mono">{signal.traceId}</span>
+			{#if traceHref}
+				<a class="link font-mono" href={traceHref}>{signal.traceId}</a>
+			{:else}
+				<span class="font-mono">{signal.traceId}</span>
+			{/if}
 		{/if}
 		{#if signal.agentId}
 			<span class="font-mono">{signal.agentId}</span>
 		{/if}
 	</div>
+	{#if expand}
+		{@render expand()}
+	{/if}
 </li>

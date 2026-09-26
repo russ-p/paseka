@@ -56,4 +56,24 @@ describe('SignalCard feed rows', () => {
 		expect(screen.queryByText('trace-01a0bd6963faa14f')).not.toBeInTheDocument();
 		expect(screen.getByText('run-01')).toBeInTheDocument();
 	});
+
+	it('links the trace id rather than the headline when a trail target is known', () => {
+		render(SignalCard, {
+			signal: { ...eventFeedItem(), summary: 'A prose summary.' },
+			traceHref: '/next/traces/trace-01a0bd6963faa14f'
+		});
+
+		// Prose that reads as content, and an identifier that reads as clickable.
+		const link = screen.getByRole('link', { name: 'trace-01a0bd6963faa14f' });
+		expect(link).toHaveAttribute('href', '/next/traces/trace-01a0bd6963faa14f');
+		expect(screen.getByText('A prose summary.').tagName).toBe('P');
+	});
+
+	it('leaves the trace id as plain text when no trail route exists yet', () => {
+		render(SignalCard, { signal: eventFeedItem() });
+
+		expect(screen.queryByRole('link')).not.toBeInTheDocument();
+		expect(screen.getByText('trace-01a0bd6963faa14f')).toBeInTheDocument();
+	});
+
 });

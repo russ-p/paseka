@@ -5,6 +5,7 @@ import {
 	getGit,
 	getSystem,
 	getTrace,
+	listEvents,
 	getTraceArtifactContent,
 	gitDeleteBranches,
 	gitFetch,
@@ -170,5 +171,53 @@ describe('system endpoints', () => {
 		await getSystem();
 
 		expect(mock).toHaveBeenCalledWith('/api/system', undefined);
+	});
+});
+
+describe('event feed endpoint', () => {
+	it('sends the colony-wide feed as a bare page request', async () => {
+		const mock = stubFetch(() => new Response('{"items":[],"hasMore":false}'));
+
+		await listEvents();
+
+		expect(mock).toHaveBeenCalledWith('/api/events?limit=50', undefined);
+	});
+
+	it('sends every filter under the name the server parses', async () => {
+		const mock = stubFetch(() => new Response('{"items":[],"hasMore":false}'));
+
+		await listEvents({
+			traceId: 'trace-1',
+			taskId: 'task-b2',
+			bee: 'scout',
+			type: 'VERIFICATION',
+			kind: 'review.gate',
+			severity: 'high'
+		});
+
+		const url = String(mock.mock.calls[0][0]);
+		expect(url.startsWith('/api/events?')).toBe(true);
+		const query = new URLSearchParams(url.split('?')[1]);
+		expect(Object.fromEntries(query)).toEqual({
+			traceId: 'trace-1',
+			taskId: 'task-b2',
+			bee: 'scout',
+			type: 'VERIFICATION',
+			kind: 'review.gate',
+			severity: 'high',
+			limit: '50'
+		});
+	});
+
+	it('omits an absent filter rather than sending it blank', async () => {
+		const mock = stubFetch(() => new Response('{"items":[],"hasMore":false}'));
+
+		await listEvents({ traceId: '', bee: 'scout' }, 'cursor-1');
+
+		const query = new URLSearchParams(String(mock.mock.calls[0][0]).split('?')[1]);
+		// A blank field would ask the server to match emptiness, which says nothing useful.
+		expect(query.has('traceId')).toBe(false);
+		expect(query.get('bee')).toBe('scout');
+		expect(query.get('after')).toBe('cursor-1');
 	});
 });

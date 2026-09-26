@@ -1,0 +1,1 @@
+import{_t as e}from"../chunks/DbQC_bmz.js";import{o as t,s as n}from"../chunks/BdTXbevj.js";import{i as r,o as i}from"../chunks/sRe24dVf.js";function a(e,t){throw new n(e,t.toString())}var o=e({load:()=>s});function s(){a(307,r(t,i()))}export{o as universal};

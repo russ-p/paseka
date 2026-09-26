@@ -262,11 +262,59 @@ export interface SignalSummary {
 	severity?: string;
 }
 
+/** Any JSON value; an event payload is author-supplied, so nothing narrower is true. */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/** Mirrors `protocol.Event`, the raw envelope the feed carries beside its projection. */
+export interface ProtocolEvent {
+	protocolVersion: string;
+	traceId: string;
+	agentId: string;
+	seq: number;
+	type: string;
+	createdAt: string;
+	payload?: JsonValue;
+}
+
+/** Mirrors `hiveview.EventLink`: the resource an event points at, when it names one. */
+export interface EventLink {
+	kind: string;
+	traceId?: string;
+	agentId?: string;
+	taskId?: string;
+	sessionId?: string;
+}
+
 /** Mirrors `hiveview.EventFeedItem`. */
 export interface EventFeedItem extends SignalSummary {
 	id: string;
 	type: string;
 	taskId?: string;
+	/** Present on every feed row; the per-event raw view is this, not a second request. */
+	raw: ProtocolEvent;
+	/** Unused by the feed today: it names a related resource whose route is still a placeholder. */
+	link?: EventLink;
+}
+
+/** Mirrors `hiveview.EventFeedPage`, one cursor-paginated page of the feed. */
+export interface EventFeedPage {
+	items: EventFeedItem[];
+	nextCursor?: string;
+	hasMore: boolean;
+}
+
+/** The four choreographed contracts, in the order the reference documents them. */
+export const eventTypes = ['SIGNAL', 'INSIGHT', 'MUTATION', 'VERIFICATION'] as const;
+export type EventType = (typeof eventTypes)[number];
+
+/** A feed filter. Every field is optional because the colony-wide feed sets none. */
+export interface EventFilters {
+	traceId?: string;
+	taskId?: string;
+	bee?: string;
+	type?: string;
+	kind?: string;
+	severity?: string;
 }
 
 /**

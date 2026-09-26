@@ -4,6 +4,8 @@ import type {
 	Cue,
 	DashboardSummary,
 	EnergyAddResult,
+	EventFeedPage,
+	EventFilters,
 	GitActionResult,
 	GitView,
 	RunCueResult,
@@ -174,4 +176,27 @@ export function gitPruneWorktrees(): Promise<GitActionResult> {
  */
 export function getSystem(): Promise<SystemView> {
 	return request<SystemView>('/system');
+}
+
+/** One page of the event feed. The server defaults to 50 rows and caps at 200. */
+const eventFeedPageLimit = 50;
+
+/**
+ * The colony-wide event feed, or one trail's when `filters.traceId` is set. An
+ * `after` cursor pages strictly older, so `loadMore` appends without repeating
+ * or skipping an event.
+ */
+export function listEvents(filters: EventFilters = {}, after?: string): Promise<EventFeedPage> {
+	const query = new URLSearchParams();
+	// An empty filter is not a filter: the server matches a blank field against
+	// everything, but sending it would make the request say something it does not mean.
+	if (filters.traceId) query.set('traceId', filters.traceId);
+	if (filters.taskId) query.set('taskId', filters.taskId);
+	if (filters.bee) query.set('bee', filters.bee);
+	if (filters.type) query.set('type', filters.type);
+	if (filters.kind) query.set('kind', filters.kind);
+	if (filters.severity) query.set('severity', filters.severity);
+	query.set('limit', String(eventFeedPageLimit));
+	if (after) query.set('after', after);
+	return request<EventFeedPage>(`/events?${query.toString()}`);
 }
