@@ -166,6 +166,9 @@ importers:
 
   .:
     dependencies:
+      cytoscape:
+        specifier: 3.31.0
+        version: 3.31.0
       lucide-svelte:
         specifier: ^1.0.1
         version: 1.0.1(svelte@5.57.1)
@@ -698,6 +701,10 @@ packages:
 
   css.escape@1.5.1:
     resolution: {integrity: sha512-YUifsXXuknHlUsmlgyY0PKzgPOr7/FjCePfHNt0jxm83wHZi44VDMQ7/fGNkjY3/jV1MC+1CmZbaHzugyeRtpg==}
+
+  cytoscape@3.31.0:
+    resolution: {integrity: sha512-zDGn1K/tfZwEnoGOcHc0H4XazqAAXAuDpcYw9mUnUjATjqljyCNGJv8uEvbvxGaGHaVshxMecyl6oc6uKzRfbw==}
+    engines: {node: '>=0.10'}
 
   daisyui@5.7.44:
     resolution: {integrity: sha512-6lI20/C6tv3t52cVTffFALou6bStVq6miGeZ35H/2/L3JxabpnDiqnBsa7MLRFRc0JEZr4MQdrw8weUUC0puig==}
@@ -1702,6 +1709,8 @@ snapshots:
       source-map-js: 1.2.1
 
   css.escape@1.5.1: {}
+
+  cytoscape@3.31.0: {}
 
   daisyui@5.7.44: {}
 

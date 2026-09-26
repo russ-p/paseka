@@ -11,6 +11,7 @@ import type {
 	RunCueResult,
 	RuntimeStatus,
 	SystemView,
+	Topology,
 	TraceDetail,
 	TraceSummary
 } from '$lib/api/types';
@@ -199,4 +200,14 @@ export function listEvents(filters: EventFilters = {}, after?: string): Promise<
 	query.set('limit', String(eventFeedPageLimit));
 	if (after) query.set('after', after);
 	return request<EventFeedPage>(`/events?${query.toString()}`);
+}
+
+/**
+ * The config-derived EDA topology: bees, the event kinds their rules reference,
+ * the edges between them, and the same graph as Mermaid. Built from bee YAML and
+ * colony `auto_invites` on the filesystem, so it answers with NATS and the hive
+ * runtime down.
+ */
+export function getTopology(): Promise<Topology> {
+	return request<Topology>('/colony/topology');
 }

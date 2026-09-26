@@ -8,6 +8,7 @@ import {
 	insightHighlight,
 	runSummary,
 	systemView,
+	topology,
 	traceSummary
 } from '../tests/fixtures';
 import {
@@ -42,6 +43,7 @@ import {
 	eventKindLine,
 	activeFilterCount,
 	eventFilterSummary,
+	topologyCounts,
 	gitDetail,
 	gitMeta,
 	gitNeedsAttention,
@@ -783,5 +785,19 @@ describe('eventFilterSummary', () => {
 
 	it('is empty for the colony-wide feed, so the panel has nothing to say', () => {
 		expect(eventFilterSummary({})).toBe('');
+	});
+});
+
+describe('topologyCounts', () => {
+	it('leads with bees, event kinds, and rules', () => {
+		expect(topologyCounts(topology())).toEqual([
+			{ label: 'Bees', value: '3' },
+			{ label: 'Event kinds', value: '5' },
+			{ label: 'Rules', value: '5' }
+		]);
+	});
+
+	it('says nothing before there is a projection', () => {
+		expect(topologyCounts(null)).toEqual([]);
 	});
 });

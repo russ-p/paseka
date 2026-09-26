@@ -16,6 +16,8 @@ import type {
 	RuntimeStatus,
 	SignalSummary,
 	TaskSummary,
+	Topology,
+	TopologyEdge,
 	TraceSummary,
 	Usage,
 	UsageAggregate
@@ -751,4 +753,14 @@ export function eventFilterSummary(filters: EventFilters): string {
 	if (filters.kind) parts.push(`kind ${filters.kind}`);
 	if (filters.severity) parts.push(`severity ${filters.severity}`);
 	return parts.join(' · ');
+}
+
+/** The counts the topology header leads with, in the order the legacy showed them. */
+export function topologyCounts(topology: Topology | null): { label: string; value: string }[] {
+	if (!topology) return [];
+	return [
+		{ label: 'Bees', value: String(topology.bees.length) },
+		{ label: 'Event kinds', value: String(topology.events.length) },
+		{ label: 'Rules', value: String(topology.edges.length) }
+	];
 }

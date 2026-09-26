@@ -1,1 +1,0 @@
-import"../chunks/DbQC_bmz.js";import"../chunks/xihTtKlq.js";import"../chunks/CCjptyS1.js";import{t as e}from"../chunks/BsgiCrd5.js";function t(t){e(t,{title:`Topology`,description:`Colony EDA topology graph derived from bee definitions and auto invites.`,emptyMessage:`Topology rendering is not migrated yet. Use the legacy console for the colony graph.`})}export{t as component};
