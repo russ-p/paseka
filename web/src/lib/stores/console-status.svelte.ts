@@ -1,3 +1,9 @@
+import { natsStatus as natsTransportStatus } from '$lib/format';
+import {
+	fetchDashboard as requestDashboard,
+	startRuntime as requestStart,
+	stopRuntime as requestStop
+} from '$lib/api/client';
 import type {
 	AgentsStatus,
 	AttentionStatus,
@@ -26,22 +32,10 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-async function postRuntime(action: 'start' | 'stop'): Promise<RuntimeStatus> {
-	const response = await fetch(`/api/runtime/${action}`, { method: 'POST' });
-	if (!response.ok) throw new Error(`runtime ${action} failed: ${response.status}`);
-	return (await response.json()) as RuntimeStatus;
-}
-
-async function loadDashboard(): Promise<DashboardSummary> {
-	const response = await fetch('/api/dashboard');
-	if (!response.ok) throw new Error(`dashboard request failed: ${response.status}`);
-	return (await response.json()) as DashboardSummary;
-}
-
 export function createConsoleStatusStore(options: ConsoleStatusOptions = {}) {
-	const readDashboard = options.loadDashboard ?? loadDashboard;
-	const startRuntimeCall = options.runtime?.start ?? (() => postRuntime('start'));
-	const stopRuntimeCall = options.runtime?.stop ?? (() => postRuntime('stop'));
+	const readDashboard = options.loadDashboard ?? requestDashboard;
+	const startRuntimeCall = options.runtime?.start ?? requestStart;
+	const stopRuntimeCall = options.runtime?.stop ?? requestStop;
 	const pollIntervalMs = options.pollIntervalMs ?? 15000;
 
 	let connection = $state<ConnectionStatus>('reconnecting');
@@ -50,8 +44,7 @@ export function createConsoleStatusStore(options: ConsoleStatusOptions = {}) {
 	let attention = $state<AttentionStatus | null>(null);
 	let host = $state<HostStatus | null>(null);
 	let git = $state<GitPlaque | null>(null);
-	let nats = $state<DashboardSummary['nats'] | undefined>(undefined);
-	let activeTraceCount = $state(0);
+	let dashboard = $state<DashboardSummary | null>(null);
 	let loading = $state(true);
 	let frameError = $state('');
 	let hostError = $state('');
@@ -92,8 +85,7 @@ export function createConsoleStatusStore(options: ConsoleStatusOptions = {}) {
 	}
 
 	function applyDashboard(summary: DashboardSummary): void {
-		nats = summary.nats;
-		activeTraceCount = summary.recentTraces?.filter((trace) => trace.hasActive).length ?? 0;
+		dashboard = summary;
 		loading = false;
 	}
 
@@ -213,12 +205,14 @@ export function createConsoleStatusStore(options: ConsoleStatusOptions = {}) {
 			return attention?.sessions ?? 0;
 		},
 		get natsStatus(): string {
-			if (!nats) return 'unknown';
-			if (!nats.configured) return 'idle';
-			return nats.connected ? 'connected' : 'disconnected';
+			return natsTransportStatus(dashboard?.nats);
+		},
+		/** Whole colony snapshot; `null` until the first dashboard poll resolves. */
+		get dashboard(): DashboardSummary | null {
+			return dashboard;
 		},
 		get activeTraceCount(): number {
-			return activeTraceCount;
+			return dashboard?.recentTraces?.filter((trace) => trace.hasActive).length ?? 0;
 		},
 		get loading(): boolean {
 			return loading;
@@ -231,6 +225,8 @@ export function createConsoleStatusStore(options: ConsoleStatusOptions = {}) {
 		clearRuntimeError,
 		startRuntime,
 		stopRuntime,
+		/** Force an out-of-band poll; the route uses it instead of a manual Refresh button. */
+		refresh: refreshDashboard,
 		start,
 		stop
 	};

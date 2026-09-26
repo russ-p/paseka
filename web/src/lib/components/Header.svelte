@@ -18,6 +18,7 @@
 		hostDetailLines,
 		hostLoad,
 		hostMeta,
+		natsLabel,
 		runtimeAction,
 		runtimeActionGlyph,
 		runtimeActionLabel,
@@ -36,21 +37,12 @@
 	}: { store?: ConsoleStatusStore; toasts?: ToastStore } = $props();
 
 	let confirmStop = $state(false);
-
-	const natsLabel = $derived(
-		store.natsStatus === 'connected'
-			? 'connected'
-			: store.natsStatus === 'disconnected'
-				? 'disconnected'
-				: store.natsStatus === 'idle'
-					? 'not configured'
-					: 'unknown'
-	);
 	let chooseAction = $state(false);
 
 	const runtime = $derived(store.runtime);
 	const action = $derived(runtimeAction(runtime, store.runtimeAction !== null));
 	const actionLabel = $derived(runtimeActionLabel(action, store.runtimeStatus, store.runtimeAction));
+	const natsWord = $derived(natsLabel(store.natsStatus));
 
 	function requestAction(): void {
 		if (action === 'stop') {
@@ -98,7 +90,7 @@
 			</div>
 			<StatusIcon
 				status={store.natsStatus}
-				label={`NATS ${natsLabel}`}
+				label={`NATS ${natsWord}`}
 				size="lg"
 			/>
 		</div>

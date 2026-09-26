@@ -5,6 +5,8 @@ describe('statusTone', () => {
 	it.each([
 		['running', 'info'],
 		['connected', 'info'],
+		['live', 'info'],
+		['active', 'info'],
 		['approved', 'success'],
 		['waiting_review', 'warning'],
 		['reconnecting', 'warning'],

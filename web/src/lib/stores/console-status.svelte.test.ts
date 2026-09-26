@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChromeFrame } from '$lib/api/types';
+import { dashboardSummary, traceSummary } from '../../tests/fixtures';
 import { createConsoleStatusStore } from './console-status.svelte';
 
 class FakeEventSource {
@@ -42,13 +43,14 @@ afterEach(() => {
 describe('consoleStatusStore', () => {
 	it('merges chrome frames and dashboard summaries', async () => {
 		vi.stubGlobal('EventSource', FakeEventSource);
-		const loadDashboard = vi.fn(async () => ({
-			nats: { configured: true, connected: true, ok: true },
-			recentTraces: [
-				{ traceId: 'trace-active', hasActive: true },
-				{ traceId: 'trace-idle', hasActive: false }
-			]
-		}));
+		const loadDashboard = vi.fn(async () =>
+			dashboardSummary({
+				recentTraces: [
+					traceSummary({ traceId: 'trace-active', hasActive: true }),
+					traceSummary({ traceId: 'trace-idle', hasActive: false })
+				]
+			})
+		);
 		const store = createConsoleStatusStore({ loadDashboard, pollIntervalMs: 0 });
 
 		store.start();
@@ -130,6 +132,24 @@ describe('consoleStatusStore', () => {
 		expect(stop).toHaveBeenCalledTimes(1);
 		expect(store.runtimeStatus).toBe('stopped');
 		expect(store.runtimeError).toBe('');
+	});
+
+	it('keeps the whole dashboard snapshot and forces an out-of-band poll', async () => {
+		const summary = dashboardSummary();
+		const loadDashboard = vi.fn(async () => summary);
+		const store = createConsoleStatusStore({ loadDashboard, pollIntervalMs: 0 });
+
+		expect(store.dashboard).toBeNull();
+		store.applyDashboard(summary);
+		expect(store.dashboard).toStrictEqual(summary);
+		expect(store.dashboard?.activeSessions).toBe(summary.activeSessions);
+		expect(store.dashboard?.activeWorktrees).toBe(summary.activeWorktrees);
+		expect(store.dashboard?.taskCounts).toEqual(summary.taskCounts);
+		expect(store.activeTraceCount).toBe(1);
+
+		await store.refresh();
+		expect(loadDashboard).toHaveBeenCalledTimes(1);
+		expect(store.dashboard).toStrictEqual(summary);
 	});
 
 	it('records runtime failures and ignores overlapping actions', async () => {
