@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { consolePath, consoleRoutes } from '$lib/navigation';
+	import { consolePath, consoleRoutes, isRouteActive } from '$lib/navigation';
 	import { tick } from 'svelte';
 
 	let { currentPath = page.url.pathname }: { currentPath?: string } = $props();
@@ -103,14 +103,15 @@
 			{#each consoleRoutes as route, index (route.path)}
 				{@const href = consolePath(base, route.path)}
 				{@const group = consoleRoutes[index - 1]?.group}
+				{@const active = isRouteActive(href, currentPath)}
 				{#if route.group !== group}
 					<li class="menu-title">{route.group}</li>
 				{/if}
 				<li>
 					<a
 						{href}
-						class={currentPath === href ? 'menu-active' : ''}
-						aria-current={currentPath === href ? 'page' : undefined}
+						class={active ? 'menu-active' : ''}
+						aria-current={active ? 'page' : undefined}
 						onclick={() => void closeMenu()}
 					>
 						<span>{route.label}</span>

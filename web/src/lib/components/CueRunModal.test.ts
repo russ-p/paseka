@@ -103,7 +103,7 @@ describe('CueRunModal', () => {
 		await user.type(screen.getByLabelText('Text'), 'Ship the release');
 		await user.click(screen.getByRole('button', { name: 'Publish' }));
 
-		expect(await screen.findByRole('alert')).toHaveTextContent('request failed: 500');
+		expect(await screen.findByRole('alert')).toHaveTextContent('nats url not configured');
 		expect(onclose).not.toHaveBeenCalled();
 	});
 
@@ -114,7 +114,7 @@ describe('CueRunModal', () => {
 		);
 		render(CueRunModal, { open: true, onclose: vi.fn() });
 
-		expect(await screen.findByRole('alert')).toHaveTextContent('request failed: 503');
+		expect(await screen.findByRole('alert')).toHaveTextContent('boom');
 		expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
 	});
 

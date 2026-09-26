@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2111,5 +2112,63 @@ func runGit(t *testing.T, dir string, args ...string) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestTracesAPIListPaging(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	started := time.Now().UTC().Add(-time.Hour)
+	for i, id := range []string{"trace-p1", "trace-p2", "trace-p3"} {
+		writeConsoleRun(t, repo, id, "agent-a", started.Add(time.Duration(i)*time.Minute), protocol.StatusCompleted, "")
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	get := func(t *testing.T, target string) []hiveview.TraceSummaryView {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d body=%s", target, rec.Code, rec.Body.String())
+		}
+		var out []hiveview.TraceSummaryView
+		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+
+	first := get(t, "/api/traces?limit=2")
+	if len(first) != 2 {
+		t.Fatalf("limit=2 returned %d traces: %+v", len(first), first)
+	}
+	if first[0].TraceID != "trace-p3" {
+		t.Fatalf("page 1 order = %+v, want newest first", first)
+	}
+
+	cursor := hiveview.TraceCursorFor(runs.TraceSummary{
+		TraceID:        first[len(first)-1].TraceID,
+		LastActivityAt: first[len(first)-1].LastActivityAt,
+	})
+	second := get(t, "/api/traces?limit=2&before="+url.QueryEscape(cursor))
+	if len(second) != 1 || second[0].TraceID != "trace-p1" {
+		t.Fatalf("page 2 = %+v, want only trace-p1", second)
+	}
+
+	for _, bad := range []string{"/api/traces?limit=0", "/api/traces?before=nope", "/api/traces?limit=many"} {
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, bad, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("GET %s status = %d, want 400", bad, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "limit") && !strings.Contains(rec.Body.String(), "before") {
+			t.Fatalf("GET %s body = %q, want the reason", bad, rec.Body.String())
+		}
 	}
 }

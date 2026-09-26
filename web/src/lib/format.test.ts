@@ -35,7 +35,24 @@ import {
 	traceMeta,
 	tracePrimaryLabel,
 	traceState,
-	traceStateLabel
+	traceStateLabel,
+	traceBees,
+	traceFlags,
+	energyAvailable,
+	energyDenominator,
+	energyLabel,
+	energyLowLabel,
+	energyMetaLabel,
+	formatDuration,
+	formatTokenCount,
+	artifactLabel,
+	artifactMeta,
+	artifactState,
+	runMeta,
+	runUsageLabel,
+	taskMeta,
+	taskPrimaryLabel,
+	usageRows
 } from './format';
 
 const running: RuntimeStatus = { status: 'running', alive: true, pid: 42, startedAt: '2026-09-25T10:00:00Z' };
@@ -285,5 +302,136 @@ describe('dashboard projections', () => {
 
 	it('stamps an insight with a 24-hour local timestamp', () => {
 		expect(insightTime(insightHighlight())).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+	});
+});
+
+describe('honey reserve formatting', () => {
+	it('caps a standing trail by its stipend and any other by what was added', () => {
+		expect(energyDenominator({ standing: true, energyBudget: 12, energyAllocated: 30 })).toBe(12);
+		expect(energyDenominator({ energyBudget: 4, energyAdded: 6, energyAllocated: 10 })).toBe(10);
+		expect(energyDenominator({ energyBudget: 4 })).toBe(4);
+		expect(energyDenominator({})).toBe(0);
+	});
+
+	it('reads remaining over denominator, or bare when there is no budget', () => {
+		expect(energyLabel({ energyBudget: 12, energyRemaining: 3 })).toBe('3 / 12');
+		expect(energyLabel({ energyRemaining: 4 })).toBe('4');
+	});
+
+	it('names the provenance of the reserve', () => {
+		expect(energyMetaLabel({ standing: true, energyBudget: 12 })).toBe('stipend 12');
+		expect(energyMetaLabel({ energyBudget: 4, energyAdded: 6 })).toBe('seed 4 · topped 6');
+		expect(energyMetaLabel({ energyBudget: 4 })).toBe('');
+	});
+
+	it('flags a low reserve and an absent one differently', () => {
+		expect(energyLowLabel({ lowEnergy: true })).toBe('low');
+		expect(energyLowLabel({})).toBeNull();
+		expect(energyAvailable({ energyBudget: 12, energyRemaining: 3 })).toBe(true);
+		expect(energyAvailable({ energyRemaining: 2 })).toBe(true);
+		expect(energyAvailable({})).toBe(false);
+	});
+});
+
+describe('usage formatting', () => {
+	it('compacts token counts and keeps small ones exact', () => {
+		expect(formatTokenCount(0)).toBe('0');
+		expect(formatTokenCount(940)).toBe('940');
+		expect(formatTokenCount(1234)).toBe('1.2k');
+		expect(formatTokenCount(3_400_000)).toBe('3.4M');
+		expect(formatTokenCount(undefined)).toBe('—');
+	});
+
+	it('scales a duration to the largest unit that reads', () => {
+		expect(formatDuration(840)).toBe('840ms');
+		expect(formatDuration(12_000)).toBe('12s');
+		expect(formatDuration(185_000)).toBe('3m 5s');
+		expect(formatDuration(7_800_000)).toBe('2h 10m');
+		expect(formatDuration(undefined)).toBe('—');
+	});
+
+	it('turns an aggregate into MetaList rows and drops the runs count at zero', () => {
+		expect(usageRows(undefined)).toEqual([]);
+		expect(
+			usageRows({
+				inputTokens: 1200,
+				outputTokens: 34,
+				cacheReadTokens: 8000,
+				cacheWriteTokens: 0,
+				runCountWithUsage: 2
+			})
+		).toEqual([
+			{ label: 'Input tokens', value: '1.2k' },
+			{ label: 'Output tokens', value: '34' },
+			{ label: 'Cache read', value: '8.0k' },
+			{ label: 'Cache write', value: '0' },
+			{ label: 'Runs with usage', value: '2' }
+		]);
+	});
+
+	it('sums cache read and write into one run-row figure, and stays silent at zero', () => {
+		expect(runUsageLabel({ inputTokens: 1200, outputTokens: 340, cacheReadTokens: 800 })).toBe(
+			'1.2k in · 340 out · 800 cache'
+		);
+		expect(runUsageLabel({ inputTokens: 0, outputTokens: 0 })).toBe('');
+		expect(runUsageLabel(undefined)).toBe('');
+	});
+
+	it('dates a run and adds its duration only when it finished', () => {
+		const base = runSummary({
+			startedAt: '2026-09-25T18:00:00Z',
+			finishedAt: '2026-09-25T18:02:00Z',
+			usage: { inputTokens: 100, outputTokens: 10 }
+		});
+		expect(runMeta(base)).toContain('100 in · 10 out');
+		expect(runMeta(base)).toContain('2m 0s');
+		expect(runMeta({ ...base, finishedAt: undefined })).not.toContain('2m');
+	});
+});
+
+describe('trace row and comb formatting', () => {
+	it('falls back to the identifier for an unnamed task', () => {
+		expect(taskPrimaryLabel({ taskId: 'task-1', title: 'Ship it', status: 'ready' })).toBe('Ship it');
+		expect(taskPrimaryLabel({ taskId: 'task-1', title: '', status: 'ready' })).toBe('task-1');
+	});
+
+	it('keeps the bee off a task that has none', () => {
+		expect(taskMeta({ taskId: 'task-1', title: 'a', status: 'ready', bee: 'builder' })).toBe(
+			'task-1 · builder'
+		);
+		expect(taskMeta({ taskId: 'task-1', title: 'a', status: 'ready' })).toBe('task-1');
+	});
+
+	it('prefers the author title for an artifact, then kind, then ref', () => {
+		expect(artifactLabel({ ref: 'n.md', artifactKind: 'note', title: 'Notes' })).toBe('Notes');
+		expect(artifactLabel({ ref: 'n.md', artifactKind: 'note' })).toBe('note');
+		expect(artifactLabel({ ref: 'n.md', artifactKind: '' })).toBe('n.md');
+	});
+
+	it('joins kind, producer, and canonical comb path', () => {
+		expect(artifactMeta({ ref: 'runs/t/artifacts/n.md', artifactKind: 'note', producer: 'a1' })).toBe(
+			'note · a1 · runs/t/artifacts/n.md'
+		);
+		expect(artifactMeta({ ref: 'n.md', artifactKind: 'note' })).toBe('note · n.md');
+	});
+
+	it('separates an announced comb file from a staged one', () => {
+		expect(artifactState({ announced: true })).toBe('announced');
+		expect(artifactState({ announced: false })).toBe('staged');
+	});
+
+	it('lists the flags a trail actually carries', () => {
+		expect(traceFlags(traceSummary({ standing: true, hasActive: true, hasFailures: true }))).toEqual([
+			'standing',
+			'active',
+			'failures'
+		]);
+		expect(traceFlags(traceSummary({ standing: false, hasActive: false, hasFailures: false }))).toEqual([]);
+	});
+
+	it('says so when a trail has picked no worker yet', () => {
+		expect(traceBees(traceSummary({ bees: ['builder', 'guard'] }))).toBe('builder, guard');
+		expect(traceBees(traceSummary({ bees: [] }))).toBe('—');
+		expect(traceBees(traceSummary({ bees: undefined }))).toBe('—');
 	});
 });

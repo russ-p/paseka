@@ -30,6 +30,21 @@ export function consolePath(base: string, path: string): string {
 	return `${base}${path}`;
 }
 
+/** The detail surface for one trail; a child path of the Traces menu entry. */
+export function traceDetailPath(base: string, traceId: string): string {
+	return consolePath(base, `/traces/${encodeURIComponent(traceId)}`);
+}
+
+/** The Timeline feed scoped to one trail. */
+export function traceTimelinePath(base: string, traceId: string): string {
+	return `${consolePath(base, '/timeline')}?trace=${encodeURIComponent(traceId)}`;
+}
+
+/** A menu entry is active on its own path and on any child of it. */
+export function isRouteActive(href: string, currentPath: string): boolean {
+	return currentPath === href || currentPath.startsWith(`${href}/`);
+}
+
 export function readStoredRoute(storage: RouteStorage | undefined = browserStorage()): string | null {
 	try {
 		return storage?.getItem(lastRouteStorageKey) ?? null;

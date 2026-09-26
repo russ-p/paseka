@@ -236,7 +236,12 @@ func (a *api) handleTraces(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := hiveview.ListTraces(a.ctx, 20)
+	query, err := hiveview.ParseTracePageQuery(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	list, err := hiveview.ListTracesPage(a.ctx, query)
 	if err != nil {
 		writeError(w, err)
 		return

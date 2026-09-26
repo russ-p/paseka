@@ -25,3 +25,24 @@ describe('statusTone', () => {
 		);
 	});
 });
+
+describe('domain statuses the trace surfaces introduced', () => {
+	it.each([
+		['queued', 'info'],
+		['completed', 'success'],
+		['announced', 'success'],
+		['low', 'warning'],
+		['blocked', 'error'],
+		['cancelled', 'error'],
+		['planned', 'neutral'],
+		['standing', 'neutral'],
+		['staged', 'neutral']
+	])('maps %s to %s', (status, expected) => {
+		expect(statusTone(status)).toBe(expected);
+	});
+
+	it('ignores case and padding so a payload cannot slip past the table', () => {
+		expect(statusTone('  Waiting_Review ')).toBe('warning');
+		expect(statusTone('BLOCKED')).toBe('error');
+	});
+});

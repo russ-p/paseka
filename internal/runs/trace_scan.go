@@ -70,12 +70,22 @@ func ScanRecentTraces(colonyRoot string, limit int) ([]TraceSummary, error) {
 	}
 
 	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].LastActivityAt.After(summaries[j].LastActivityAt)
+		return TraceOrderBefore(summaries[i], summaries[j])
 	})
 	if len(summaries) > limit {
 		summaries = summaries[:limit]
 	}
 	return summaries, nil
+}
+
+// TraceOrderBefore reports whether a sorts ahead of b: newest activity first,
+// with the trace id breaking ties so the order is total and a paging cursor
+// built from the last row cannot skip or repeat a trace.
+func TraceOrderBefore(a, b TraceSummary) bool {
+	if !a.LastActivityAt.Equal(b.LastActivityAt) {
+		return a.LastActivityAt.After(b.LastActivityAt)
+	}
+	return a.TraceID < b.TraceID
 }
 
 // ScanRecentEvents loads events from recent traces and returns them newest-first.

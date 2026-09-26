@@ -5,6 +5,7 @@
 		open,
 		title,
 		description,
+		size = 'md',
 		onclose,
 		children,
 		footer
@@ -12,10 +13,14 @@
 		open: boolean;
 		title: string;
 		description?: string;
+		/** `md` fits a short form; `lg` a document preview. The body scrolls either way. */
+		size?: 'md' | 'lg';
 		onclose: () => void;
 		children: Snippet;
 		footer?: Snippet;
 	} = $props();
+
+	const sizeClass = $derived(size === 'lg' ? 'max-w-3xl' : 'max-w-md');
 
 	let dialog = $state<HTMLElement | null>(null);
 	let trigger = $state<HTMLElement | null>(null);
@@ -74,13 +79,13 @@
 		></button>
 		<div
 			bind:this={dialog}
-			class="card relative w-full max-w-md bg-base-100 shadow-xl"
+			class="card relative flex max-h-[90vh] w-full flex-col {sizeClass} bg-base-100 shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
 			tabindex="-1"
 		>
-			<div class="card-body gap-4">
+			<div class="card-body min-h-0 grow gap-4 overflow-y-auto">
 				<div class="space-y-1">
 					<h2 class="card-title">{title}</h2>
 					{#if description}
@@ -88,12 +93,12 @@
 					{/if}
 				</div>
 				{@render children()}
-				{#if footer}
-					<div class="card-actions justify-end">
-						{@render footer()}
-					</div>
-				{/if}
 			</div>
+			{#if footer}
+				<div class="card-actions shrink-0 justify-end border-t border-base-300 px-6 py-3">
+					{@render footer()}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}

@@ -1,15 +1,34 @@
 import type {
 	AgentItem,
+	ArtifactView,
 	DashboardSummary,
 	GitPlaque,
+	HoneyReserve,
 	HostStatus,
 	InsightHighlight,
 	NATSStatusView,
 	RunSummary,
 	RuntimeStatus,
-	TraceSummary
+	TaskSummary,
+	TraceSummary,
+	Usage,
+	UsageAggregate
 } from '$lib/api/types';
 import type { StatusIconGlyph } from '$lib/components/StatusIcon.svelte';
+
+/** One label/value line of a `MetaList`; the shape stays plain so it is unit-testable. */
+export interface MetaRow {
+	label: string;
+	value: string;
+	/** Render the value in a monospace face: paths, refs, SHAs. */
+	mono?: boolean;
+	/** Full text for the `Hint` popover when the line truncates. */
+	hint?: string[];
+	/** Render the value as an external link. */
+	href?: string;
+	/** Offer a copy button for the value — an id the operator pastes elsewhere. */
+	copy?: boolean;
+}
 
 export function formatBytes(value: number | undefined): string | null {
 	if (value === undefined || !Number.isFinite(value)) return null;
@@ -339,4 +358,136 @@ export function insightTime(insight: InsightHighlight): string {
 
 export function dashboardFailedRuns(dashboard: DashboardSummary | null): RunSummary[] {
 	return (dashboard?.failedRuns ?? []).filter(runNeedsAttention);
+}
+
+/** `standing`, `active`, `failures` — the flags the trace summary carries, or nothing. */
+export function traceFlags(trace: TraceSummary): string[] {
+	const flags: string[] = [];
+	if (trace.standing) flags.push('standing');
+	if (trace.hasActive) flags.push('active');
+	if (trace.hasFailures) flags.push('failures');
+	return flags;
+}
+
+/** Bees joined for display; a trail with none has not picked a worker yet. */
+export function traceBees(trace: TraceSummary): string {
+	return trace.bees?.join(', ') || '—';
+}
+
+/**
+ * What the honey bar is measured against. A standing trail is capped by its
+ * stipend; any other trail by whatever the top-ups have added so far.
+ */
+export function energyDenominator(energy: HoneyReserve): number {
+	const budget = energy.energyBudget ?? 0;
+	if (energy.standing && budget > 0) return budget;
+	const allocated = energy.energyAllocated ?? 0;
+	return allocated > 0 ? allocated : budget;
+}
+
+export function energyLabel(energy: HoneyReserve): string {
+	const denominator = energyDenominator(energy);
+	if (denominator > 0) return `${energy.energyRemaining ?? 0} / ${denominator}`;
+	return String(energy.energyRemaining ?? 0);
+}
+
+/** Provenance of the reserve: a standing stipend, or a seed plus top-ups. */
+export function energyMetaLabel(energy: HoneyReserve): string {
+	if (energy.standing) return `stipend ${energy.energyBudget ?? 0}`;
+	if ((energy.energyAdded ?? 0) > 0) {
+		return `seed ${energy.energyBudget ?? 0} · topped ${energy.energyAdded}`;
+	}
+	return '';
+}
+
+/** No reserve means NATS or the task ledger is not wired, not that the trail is empty. */
+export function energyAvailable(energy: HoneyReserve): boolean {
+	return energyDenominator(energy) > 0 || (energy.energyRemaining ?? 0) > 0;
+}
+
+export function energyLowLabel(energy: HoneyReserve): string | null {
+	return energy.lowEnergy ? 'low' : null;
+}
+
+/** Compacts a token count: `940`, `1.2k`, `3.4M`. */
+export function formatTokenCount(value: number | undefined): string {
+	if (value === undefined || !Number.isFinite(value)) return '—';
+	if (value < 1000) return String(value);
+	if (value < 1_000_000) return `${(value / 1000).toFixed(1)}k`;
+	return `${(value / 1_000_000).toFixed(1)}M`;
+}
+
+/** `840ms`, `12s`, `3m 5s`, `2h 10m`. */
+export function formatDuration(ms: number | undefined): string {
+	if (ms === undefined || !Number.isFinite(ms) || ms < 0) return '—';
+	if (ms < 1000) return `${Math.round(ms)}ms`;
+	const seconds = Math.floor(ms / 1000);
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** The trace's token spend; zero counts stay visible because the trail reported them. */
+export function usageRows(usage: UsageAggregate | undefined): MetaRow[] {
+	if (!usage) return [];
+	const rows: MetaRow[] = [
+		{ label: 'Input tokens', value: formatTokenCount(usage.inputTokens) },
+		{ label: 'Output tokens', value: formatTokenCount(usage.outputTokens) },
+		{ label: 'Cache read', value: formatTokenCount(usage.cacheReadTokens) },
+		{ label: 'Cache write', value: formatTokenCount(usage.cacheWriteTokens) }
+	];
+	if (usage.runCountWithUsage > 0) {
+		rows.push({ label: 'Runs with usage', value: String(usage.runCountWithUsage) });
+	}
+	return rows;
+}
+
+/** One-line token spend for a run row, or an empty string when it reported none. */
+export function runUsageLabel(usage: Usage | undefined): string {
+	if (!usage) return '';
+	const parts: string[] = [];
+	if (usage.inputTokens > 0) parts.push(`${formatTokenCount(usage.inputTokens)} in`);
+	if (usage.outputTokens > 0) parts.push(`${formatTokenCount(usage.outputTokens)} out`);
+	const cache = (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+	if (cache > 0) parts.push(`${formatTokenCount(cache)} cache`);
+	return parts.join(' · ');
+}
+
+/** A run's third line: when it started, what it spent, and how long it took. */
+export function runMeta(run: RunSummary): string {
+	const parts: string[] = [formatTimestamp(run.startedAt)];
+	const usage = runUsageLabel(run.usage);
+	if (usage) parts.push(usage);
+	const duration = run.finishedAt
+		? formatDuration(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime())
+		: '';
+	if (duration && duration !== '—') parts.push(duration);
+	return parts.join(' · ');
+}
+
+export function taskPrimaryLabel(task: TaskSummary): string {
+	return task.title || task.taskId;
+}
+
+export function taskMeta(task: TaskSummary): string {
+	return task.bee ? `${task.taskId} · ${task.bee}` : task.taskId;
+}
+
+/** An artifact's headline: the author's title, else its kind, else the raw ref. */
+export function artifactLabel(artifact: Pick<ArtifactView, 'title' | 'artifactKind' | 'ref'>): string {
+	return artifact.title || artifact.artifactKind || artifact.ref;
+}
+
+/** The artifact's second line: kind, producer, and the canonical comb path. */
+export function artifactMeta(artifact: Pick<ArtifactView, 'artifactKind' | 'producer' | 'ref'>): string {
+	const parts = [artifact.artifactKind];
+	if (artifact.producer) parts.push(artifact.producer);
+	parts.push(artifact.ref);
+	return parts.join(' · ');
+}
+
+/** `announced` means the colony was told; `staged` means only the comb has it. */
+export function artifactState(artifact: Pick<ArtifactView, 'announced'>): 'announced' | 'staged' {
+	return artifact.announced ? 'announced' : 'staged';
 }
