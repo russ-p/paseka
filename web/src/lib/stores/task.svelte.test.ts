@@ -155,6 +155,15 @@ describe('createTaskStore', () => {
 		}
 	});
 
+	it('answers an empty board, whose counts the server sends as null', async () => {
+		const { store } = harness(taskBoard({ groups: [], taskCounts: null }));
+		await store.start();
+
+		// Go marshals a nil map as null, and the store is the boundary that hands the
+		// page a list rather than whatever the wire had.
+		expect(store.counts).toEqual({});
+	});
+
 	it('keeps two trails\' identically named tasks apart', async () => {
 		// `_review` is the default id for a rework task, so a colony with five trails
 		// that have each been reviewed has five tasks with the same name. The board

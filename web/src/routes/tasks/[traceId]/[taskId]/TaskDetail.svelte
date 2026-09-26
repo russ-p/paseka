@@ -50,6 +50,13 @@
 	 * row's answer can be minutes old — so the button re-reads the row rather than
 	 * re-deciding the rule, and reports the server's refusal as itself.
 	 */
+	/**
+	 * The server answers `null` for a task no run has touched, and Go marshals a nil
+	 * slice that way, so the list is normalised once here rather than at each of the
+	 * three places that ask it how long it is.
+	 */
+	const linkedRuns = $derived(task?.runs ?? []);
+
 	const row = $derived(store.row);
 	/**
 	 * The status comes from the board row when there is one. The detail is read once
@@ -216,16 +223,16 @@
 		<Section
 			id="task-runs"
 			title="Linked runs"
-			note={task.runs.length > 0 ? `${task.runs.length} recorded` : undefined}
+			note={linkedRuns.length > 0 ? `${linkedRuns.length} recorded` : undefined}
 		>
-			{#if task.runs.length === 0}
+			{#if linkedRuns.length === 0}
 				<p class="text-base-content/70">
 					No runs yet. A task's runs appear once a bee picks it up and the dispatcher starts a
 					run for it.
 				</p>
 			{:else}
 				<ul class="space-y-2" aria-label="Linked runs">
-					{#each task.runs as run (run.agentId)}
+					{#each linkedRuns as run (run.agentId)}
 						<li>
 							<a
 								class="flex flex-wrap items-center gap-2 rounded-box bg-base-100 p-3 shadow-sm transition-colors hover:bg-base-200"

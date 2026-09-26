@@ -53,8 +53,12 @@ export function createTaskStore(options: TaskStoreOptions = {}) {
 		return board.groups;
 	}
 
+	/**
+	 * Normalised here rather than at each read: the server answers a colony with no
+	 * tasks with a null map, and the store is the boundary that hands the page a list.
+	 */
 	function counts(): Record<string, number> {
-		return board.taskCounts;
+		return board.taskCounts ?? {};
 	}
 
 	function find(traceId: string, taskId: string): TaskListItem | null {
