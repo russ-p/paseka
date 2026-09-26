@@ -52,6 +52,23 @@ export interface DiffFile {
 /** The side of a diff a line exists on, which is what a comment is anchored to. */
 export type DiffSide = 'old' | 'new';
 
+/**
+ * One side of a row in a side-by-side layout. `tone` is empty on a *filler* cell —
+ * the blank a remove with no matching add leaves on the right — which is how the
+ * renderer knows to draw nothing rather than an empty numbered line.
+ */
+export interface DiffCell {
+	text: string;
+	line: number | null;
+	tone: '' | 'add' | 'remove' | 'context';
+	/** The side this cell is on, or `null` on a filler. */
+	side: DiffSide | null;
+}
+
+export type SplitRow =
+	| { kind: 'banner'; banner: 'meta' | 'hunk' | 'binary' | 'truncated'; text: string }
+	| { kind: 'split'; left: DiffCell; right: DiffCell };
+
 export interface DiffAnchor {
 	path: string;
 	side: DiffSide;
@@ -118,6 +135,15 @@ export function parseDiffRows(patch: string, truncated: boolean): DiffRow[] {
 	const rows: DiffRow[] = [];
 	let oldLine: number | null = null;
 	let newLine: number | null = null;
+	/**
+	 * What the hunk header says is left on each side. A patch ends in a newline, so
+	 * splitting it yields a trailing empty line that is not a line of the file at all
+	 * — without this, every diff renders a phantom context row past the end of its
+	 * last hunk, numbered one past the end of the file. The header is git's own count,
+	 * so it is what decides when a hunk is over.
+	 */
+	let oldLeft = 0;
+	let newLeft = 0;
 
 	for (const line of patch.split('\n')) {
 		// A hunk header resets both counters; without one, a line's number is
@@ -127,13 +153,15 @@ export function parseDiffRows(patch: string, truncated: boolean): DiffRow[] {
 		if (hunk) {
 			oldLine = Number.parseInt(hunk[1], 10);
 			newLine = Number.parseInt(hunk[3], 10);
+			oldLeft = hunk[2] === undefined ? 1 : Number.parseInt(hunk[2], 10);
+			newLeft = hunk[4] === undefined ? 1 : Number.parseInt(hunk[4], 10);
 			rows.push({
 				kind: 'hunk',
 				text: line,
 				oldStart: oldLine,
-				oldLines: hunk[2] === undefined ? 1 : Number.parseInt(hunk[2], 10),
+				oldLines: oldLeft,
 				newStart: newLine,
-				newLines: hunk[4] === undefined ? 1 : Number.parseInt(hunk[4], 10)
+				newLines: newLeft
 			});
 			continue;
 		}
@@ -156,11 +184,18 @@ export function parseDiffRows(patch: string, truncated: boolean): DiffRow[] {
 			continue;
 		}
 		if (line.startsWith('+')) {
+			// Past the hunk's own count this is not a line of the file. Skipping it
+			// rather than rendering it is what stops a patch's trailing newline from
+			// becoming a numbered row.
+			if (newLeft <= 0) continue;
+			newLeft -= 1;
 			rows.push({ kind: 'add', text: line.slice(1), oldLine: null, newLine });
 			newLine = newLine === null ? null : newLine + 1;
 			continue;
 		}
 		if (line.startsWith('-')) {
+			if (oldLeft <= 0) continue;
+			oldLeft -= 1;
 			rows.push({ kind: 'remove', text: line.slice(1), oldLine, newLine: null });
 			oldLine = oldLine === null ? null : oldLine + 1;
 			continue;
@@ -168,12 +203,20 @@ export function parseDiffRows(patch: string, truncated: boolean): DiffRow[] {
 		// A context line is a leading space, but a patch that has been through an
 		// editor can have that space stripped, and an empty line is still context
 		// rather than a header.
+		//
+		// A context line is present in *both* versions, so it is only a line if both
+		// hunk counts still have one. Guarding per side would let a remaining old-side
+		// budget carry a row whose new side is already past its count, and that row
+		// would be numbered past the end of the file.
+		if (oldLeft <= 0 || newLeft <= 0) continue;
 		rows.push({
 			kind: 'context',
 			text: line.startsWith(' ') ? line.slice(1) : line,
 			oldLine,
 			newLine
 		});
+		if (oldLeft > 0) oldLeft -= 1;
+		if (newLeft > 0) newLeft -= 1;
 		if (oldLine !== null) oldLine += 1;
 		if (newLine !== null) newLine += 1;
 	}
@@ -266,4 +309,84 @@ export function rowAnchor(file: DiffFile, row: DiffRow): DiffAnchor | null {
 		return { path: file.path, side: 'new', line: row.newLine, snippet: row.text };
 	}
 	return null;
+}
+
+function cell(text: string, line: number | null, tone: DiffCell['tone'], side: DiffSide): DiffCell {
+	return { text, line, tone, side };
+}
+
+/** The blank half of a row where the other side has no line. */
+function filler(): DiffCell {
+	return { text: '', line: null, tone: '', side: null };
+}
+
+/**
+ * Rows into side-by-side pairs.
+ *
+ * A unified patch is already a sequence of removals followed by the additions that
+ * replace them, so the split layout pairs each run one-for-one and leaves a filler
+ * where one side runs out. That is the whole algorithm, and it is why a side-by-side
+ * view needs no per-file state: the pairing is a property of the patch, not of the
+ * renderer.
+ *
+ * A context line occupies both halves. In the unified view it is anchored to the new
+ * side only, because there is one row; here each half is its own cell, so a note can
+ * be left against the old line it is about — which is the whole reason to read a
+ * diff side-by-side rather than unified.
+ */
+export function pairDiffRows(rows: DiffRow[]): SplitRow[] {
+	const out: SplitRow[] = [];
+	let index = 0;
+	while (index < rows.length) {
+		const row = rows[index];
+		if (row.kind === 'meta' || row.kind === 'hunk' || row.kind === 'binary' || row.kind === 'truncated') {
+			out.push({ kind: 'banner', banner: row.kind, text: row.text });
+			index += 1;
+			continue;
+		}
+		if (row.kind === 'context') {
+			out.push({
+				kind: 'split',
+				left: cell(row.text, row.oldLine, 'context', 'old'),
+				right: cell(row.text, row.newLine, 'context', 'new')
+			});
+			index += 1;
+			continue;
+		}
+		const removes: DiffRow[] = [];
+		while (index < rows.length && rows[index].kind === 'remove') {
+			removes.push(rows[index]);
+			index += 1;
+		}
+		const adds: DiffRow[] = [];
+		while (index < rows.length && rows[index].kind === 'add') {
+			adds.push(rows[index]);
+			index += 1;
+		}
+		// Whatever is longer sets the row count, so a run of five removals replaced by
+		// two additions is five rows rather than losing three lines.
+		for (let n = 0; n < Math.max(removes.length, adds.length); n += 1) {
+			const removed = removes[n];
+			const added = adds[n];
+			out.push({
+				kind: 'split',
+				left:
+					removed && removed.kind === 'remove'
+						? cell(removed.text, removed.oldLine, 'remove', 'old')
+						: filler(),
+				right:
+					added && added.kind === 'add' ? cell(added.text, added.newLine, 'add', 'new') : filler()
+			});
+		}
+	}
+	return out;
+}
+
+/**
+ * The anchor for one half of a split row, or `null` for a filler. A filler has no line
+ * on its side, so there is nothing to point a note at.
+ */
+export function cellAnchor(path: string, side: DiffCell): DiffAnchor | null {
+	if (side.line === null || side.side === null) return null;
+	return { path, side: side.side, line: side.line, snippet: side.text };
 }

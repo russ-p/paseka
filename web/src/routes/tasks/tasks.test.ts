@@ -547,6 +547,64 @@ describe('task detail', () => {
 		expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
 	});
 
+	it('offers the decision on a deep link, from the task detail rather than no board row', async () => {
+		// A task linked from a trail or a run is not on the board, so there is no row
+		// to ask. The fetched detail carries the same flags, and failing closed here
+		// would leave a gated task with no way to be approved at all — the one thing a
+		// review gate must never do.
+		const h = harness(
+			taskBoard(),
+			[taskDetail({ taskId: 'task-42', canApprove: true, canReject: true, review: 'final' })]
+		);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-42',
+			toasts: h.toasts
+		});
+
+		expect(await screen.findByRole('button', { name: 'Approve…' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Reject…' })).toBeInTheDocument();
+	});
+
+	it('hides the decision when only one half of it is allowed, rather than offering a refusal', async () => {
+		// `ReviewActions` renders Approve and Reject together, so offering it on a task
+		// the ledger lets you approve but not reject would put a button on screen that
+		// the server refuses. The legacy required both as well.
+		const h = harness(
+			taskBoard({
+				groups: [
+					{
+						status: 'waiting_review',
+						tasks: [
+							taskListItem({
+								taskId: 'task-04',
+								status: 'waiting_review',
+								canStart: false,
+								canApprove: true,
+								canReject: false
+							})
+						]
+					}
+				],
+				taskCounts: { waiting_review: 1 }
+			}),
+			[taskDetail({ taskId: 'task-04', canApprove: true, canReject: false, review: 'final' })]
+		);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-04',
+			toasts: h.toasts
+		});
+
+		await waitFor(() => expect(h.getTask).toHaveBeenCalled());
+		expect(screen.queryByRole('button', { name: 'Approve…' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Reject…' })).not.toBeInTheDocument();
+		// The task is still readable; only the decision is withheld.
+		expect(screen.getByText('Wire the export format flag')).toBeInTheDocument();
+	});
+
 	it('collapses the review form until asked, and keeps Reject to one box', async () => {
 		// The task page offers Approve and Reject, as the legacy task tab did.
 		// Request changes, which starts a rework task and carries an annotated

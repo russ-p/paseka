@@ -84,12 +84,22 @@ export function createReviewStore(options: ReviewStoreOptions = {}) {
 		);
 	}
 
-	/** The diff is only a thing for a final gate, and only for its own trail. */
-	async function loadDiff(traceId: string): Promise<void> {
-		if (traceId === '' || diffTraceId === traceId) return;
+	/**
+	 * The diff is only a thing for a final gate, and only for its own trail.
+	 *
+	 * A re-read of the *same* trail deliberately leaves the old diff in place while it
+	 * is in flight. Clearing it would blank the patch a reviewer is reading, and — since
+	 * the comments panel is mounted beside the diff — would unmount that panel too and
+	 * take every draft with it, which is the one thing a review must never do because
+	 * the agent happened to push. A different trail does get a blank, because its diff
+	 * is a different patch.
+	 */
+	async function loadDiff(traceId: string, force = false): Promise<void> {
+		if (traceId === '' || (diffTraceId === traceId && !force)) return;
 		const token = ++diffToken;
+		const sameTrail = diffTraceId === traceId;
 		diffTraceId = traceId;
-		diff = null;
+		if (!sameTrail) diff = null;
 		diffError = '';
 		diffLoading = true;
 		try {
@@ -129,16 +139,22 @@ export function createReviewStore(options: ReviewStoreOptions = {}) {
 			}
 		}
 		if (current?.isFinal) await loadDiff(traceId);
+		else clearDiff();
 	}
 
-	/** Re-read the diff, which is how a review notices the bee pushed new commits. */
+	/**
+	 * Re-read the diff, which is how a review notices the bee pushed new commits. It
+	 * does not clear what is on screen, so the panel a reviewer is annotating survives
+	 * and can warn them instead of quietly losing their notes.
+	 */
 	async function reloadDiff(): Promise<void> {
 		if (selectedTraceId === '') return;
-		diffTraceId = '';
-		await loadDiff(selectedTraceId);
+		await loadDiff(selectedTraceId, true);
 	}
 
 	function clearDiff(): void {
+		// Also invalidates an in-flight read, so a diff that was already on the wire for
+		// the previous trail cannot land under a task that has no diff of its own.
 		diffToken += 1;
 		diffTraceId = '';
 		diff = null;

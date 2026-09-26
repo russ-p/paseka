@@ -184,6 +184,82 @@ describe('createReviewStore', () => {
 		expect(getTask).toHaveBeenCalledWith('trace-01a0bd6963faa14f', '_review');
 	});
 
+	it('drops the previous trail\u2019s diff when the selection is not a final gate', async () => {
+		// A mid-trail review has no diff of its own, so leaving the last final gate's
+		// patch on screen would put one proposal's code under another proposal's
+		// heading — the kind of mistake a reviewer approves straight through.
+		const h = harness(
+			reviewQueue(),
+			[taskDetail({ taskId: '_review', isFinal: true }), taskDetail({ taskId: '_step' })]
+		);
+		await h.store.start();
+		await h.store.select('trace-01a0bd6963faa14f', '_review');
+		expect(h.store.diff).not.toBeNull();
+		const reads = h.getMergeDiff.mock.calls.length;
+
+		await h.store.select('trace-01a0bd6963faa14f', '_step');
+
+		expect(h.store.diff).toBeNull();
+		expect(h.store.diffLoading).toBe(false);
+		// And it did not go looking for a diff the gate cannot have.
+		expect(h.getMergeDiff).toHaveBeenCalledTimes(reads);
+	});
+
+	it('keeps the diff on screen through a re-read of the same trail', async () => {
+		// The comments panel is mounted beside the diff, so blanking the diff on a
+		// refresh would unmount it and take every draft with it. A reviewer must not
+		// lose their notes because the agent happened to push.
+		let head = 'b'.repeat(40);
+		const store = createReviewStore({
+			listReviews: vi.fn(async () => reviewQueue()),
+			getTask: vi.fn(async () => taskDetail({ taskId: '_review', isFinal: true })),
+			getMergeDiff: vi.fn(async (traceId: string) => mergeDiff({ traceId, headSha: head })),
+			pollIntervalMs: 0
+		});
+		await store.start();
+		await store.select('trace-01a0bd6963faa14f', '_review');
+		const first = store.diff;
+		expect(first?.headSha).toBe('b'.repeat(40));
+
+		head = 'c'.repeat(40);
+		const pending = store.reloadDiff();
+
+		// Mid-flight: still the old diff, and the loading flag the page shows its
+		// "re-reading" hint from.
+		expect(store.diff).toBe(first);
+		expect(store.diffLoading).toBe(true);
+		await pending;
+
+		expect(store.diff?.headSha).toBe('c'.repeat(40));
+		expect(store.diffLoading).toBe(false);
+	});
+
+	it('drops a diff that arrives after the selection moved on', async () => {
+		let release: (() => void) | undefined;
+		const store = createReviewStore({
+			listReviews: vi.fn(async () => reviewQueue()),
+			getTask: vi.fn(async () => taskDetail({ taskId: '_review', isFinal: true })),
+			getMergeDiff: vi.fn(
+				(traceId: string) =>
+					new Promise<ReturnType<typeof mergeDiff>>((resolve) => {
+						release = () => resolve(mergeDiff({ traceId }));
+					})
+			),
+			pollIntervalMs: 0
+		});
+		await store.start();
+		const pending = store.select('trace-01a0bd6963faa14f', '_review');
+		await Promise.resolve();
+
+		// The reviewer gives up on this gate and opens another before the read lands.
+		await store.clearDiff();
+		release?.();
+		await pending;
+
+		// A late response must not paint under a page that has moved on.
+		expect(store.diff).toBeNull();
+	});
+
 	it('ignores a select with no ids', async () => {
 		const { store, getTask } = harness();
 		await store.start();

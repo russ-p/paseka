@@ -160,13 +160,22 @@ narrows the list without hiding the body — a hidden file would move every line
 number a note is attached to. The preview is its own page, so it can be linked to
 and Back behaves.
 
+**Unified** shows the patch as one column, the way the server sent it. **Split**
+puts the old and new side by side, which is easier for a rewritten block and is
+the only way to leave a note on the *old* line of a line that did not change. The
+toggle is next to the filter and applies to the whole diff, and it keeps the
+filter you typed.
+
 **Click a line to leave a note on it**; click a second line in the same file to
 widen the range. Drafts stay in your browser until you send them, and a single
-note about one line is submitted without a pointless zero-width range. If the bee
-pushes while you are writing, the drafts are dropped rather than re-aimed at lines
-that have moved. **Request changes** sends the notes with your overall summary and
-starts a rework task; it is disabled while a rework from an earlier rejection is
-still in flight. On the proposal page, **Approve** (or **Open PR** / **Update PR**)
+note about one line is submitted without a pointless zero-width range. **Request
+changes** sends the notes with your overall summary and starts a rework task; it
+is disabled while a rework from an earlier rejection is still in flight.
+
+If the bee pushes while you are reviewing, the panel says so, names both commits,
+and holds the send until you confirm you have re-read the diff — your notes are
+kept rather than dropped, because their line numbers may no longer mean the same
+thing but the thinking behind them is still yours. On the proposal page, **Approve** (or **Open PR** / **Update PR**)
 asks for an approval summary and, for a final gate, an optional commit message;
 plain **Reject** publishes your feedback without starting a rework, which is the
 difference the two buttons make.

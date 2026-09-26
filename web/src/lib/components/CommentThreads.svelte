@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MessageSquarePlus, Trash2 } from 'lucide-svelte';
+	import { AlertTriangle, MessageSquarePlus, Trash2 } from 'lucide-svelte';
 	import { rejectTask } from '$lib/api/client';
 	import type { ReviewComment, ReviewQueueItem, TaskDetail } from '$lib/api/types';
 	import type { DiffAnchor } from '$lib/diff';
@@ -43,22 +43,31 @@
 	}
 
 	/**
-	 * A moved head voids the packet. The line numbers a note is anchored to are
-	 * meaningless against a different commit, and sending them anyway would attach
-	 * the bee's rework to the wrong lines — so drafts and the summary are dropped
-	 * rather than silently re-aimed.
+	 * A moved head makes the packet untrustworthy, but it does not make it worthless.
+	 * The line numbers a note is anchored to are meaningless against a different
+	 * commit, so sending them anyway would aim the bee's rework at the wrong lines —
+	 * and silently dropping them takes a reviewer's work with them, which is the
+	 * worse of the two failures.
+	 *
+	 * So the drafts are kept and the send is *held*: `headMoved` names the commit they
+	 * were written against, blocks the request, and clears only when the reviewer says
+	 * they have re-read the diff. Re-pinning then sends the head they acknowledged
+	 * rather than the one the lines came from.
 	 */
 	let pinnedSha = $state('');
+	let headMoved = $state(false);
 	$effect(() => {
 		const next = headSha;
-		if (pinnedSha !== '' && next !== '' && pinnedSha !== next) {
-			drafts = [];
-			summary = '';
-			pending = null;
-			editing = '';
-		}
-		if (next !== '') pinnedSha = next;
+		if (pinnedSha !== '' && next !== '' && pinnedSha !== next) headMoved = true;
+		if (next !== '' && !headMoved) pinnedSha = next;
 	});
+
+	/** The reviewer has re-read the diff, so the notes can be sent against it. */
+	function acknowledgeMovedHead(): void {
+		headMoved = false;
+		if (headSha !== '') pinnedSha = headSha;
+	}
+
 
 	/**
 	 * Called by the diff body when a line is clicked. Exposed on the instance so the
@@ -88,7 +97,7 @@
 
 	const canSave = $derived(pending !== null && noteBody.trim() !== '');
 	const canSubmit = $derived(
-		!submitting && (drafts.length > 0 || summary.trim() !== '')
+		!submitting && !headMoved && (drafts.length > 0 || summary.trim() !== '')
 	);
 	/** A rework task already in flight means the bee is busy; a second one would collide. */
 	const reworkInFlight = $derived(task.reworkTaskId !== undefined && task.reworkTaskId !== '');
@@ -202,6 +211,31 @@
 
 	{#if error}
 		<div class="alert alert-error" role="alert"><span>{error}</span></div>
+	{/if}
+
+	{#if headMoved}
+		<!-- `alert` rather than a quiet line: a reviewer who sends a packet aimed at the
+		     previous commit is worse off than one who is interrupted. -->
+		<div class="alert alert-warning" role="alert">
+			<AlertTriangle class="h-5 w-5" strokeWidth={2.5} />
+			<div class="space-y-2">
+				<span>
+					The agent pushed while you were writing. Your {drafts.length === 1 ? 'note is' : 'notes are'}
+					written against
+					<span class="font-mono">{pinnedSha.slice(0, 7)}</span> and the diff now shows
+					<span class="font-mono">{headSha.slice(0, 7)}</span>, so the line numbers may no longer
+					mean the same thing. They are kept — re-read the diff, check they still point where you
+					meant, then continue.
+				</span>
+				<button
+					type="button"
+					class="btn btn-warning btn-sm"
+					onclick={acknowledgeMovedHead}
+				>
+					I've re-read the diff
+				</button>
+			</div>
+		</div>
 	{/if}
 
 	{#if pending}

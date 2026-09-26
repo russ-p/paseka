@@ -1,6 +1,15 @@
 <script lang="ts">
-	import { AlertTriangle, FileText } from 'lucide-svelte';
-	import { buildMergeDiffFiles, filterDiffFiles, rowAnchor, type DiffFile, type DiffRow } from '$lib/diff';
+	import { AlertTriangle, Columns2, FileText, Rows3 } from 'lucide-svelte';
+	import {
+		buildMergeDiffFiles,
+		cellAnchor,
+		filterDiffFiles,
+		pairDiffRows,
+		rowAnchor,
+		type DiffCell,
+		type DiffFile,
+		type DiffRow
+	} from '$lib/diff';
 	import type { MergeDiff } from '$lib/api/types';
 
 	let {
@@ -19,6 +28,13 @@
 	let filter = $state('');
 	/** The file whose section the body is scrolled to, as a path rather than an index. */
 	let selectedPath = $state('');
+	/**
+	 * Unified is the default because a patch is what the server sent and a reviewer
+	 * can read it as one; split is there because a rewritten block reads better with
+	 * both versions in view, and because only split can anchor a note to the *old*
+	 * line of a context line — see `pairDiffRows`.
+	 */
+	let layout = $state<'unified' | 'split'>('unified');
 
 	const files = $derived(buildMergeDiffFiles(diff));
 	const visible = $derived(filterDiffFiles(files, filter));
@@ -38,8 +54,8 @@
 	 * The legacy walked the list with `j`/`k` from a `tabindex="0"` div. A focusable
 	 * div is not a control — it is a `<div>` that swallowed Tab — so this uses real
 	 * buttons, which the keyboard reaches and Enter activates on its own. The
-	 * legacy also marked the `<ul>` as a listbox while leaving every `<li>` without
-	 * a role, so no option was ever announced; a nav of buttons has no such gap.
+	 * legacy also marked the `<ul>` as a listbox while leaving every `<li>` without a
+	 * role, so no option was ever announced; a nav of buttons has no such gap.
 	 */
 	function select(path: string): void {
 		selectedPath = path;
@@ -61,6 +77,20 @@
 		remove: 'bg-error/10',
 		context: ''
 	};
+
+	/** The same tints, keyed on a split cell instead of a unified row. */
+	const cellTone: Record<DiffCell['tone'], string> = {
+		add: 'bg-success/10',
+		remove: 'bg-error/10',
+		context: '',
+		'': ''
+	};
+
+	/** A marker, so a change is not carried by colour alone. */
+	function marker(tone: DiffCell['tone']): string {
+		return tone === 'add' ? '+' : tone === 'remove' ? '−' : ' ';
+	}
+
 </script>
 
 {#if diff.missingWorktree}
@@ -96,16 +126,40 @@
 			</div>
 		{/if}
 
-		<label class="input input-sm flex w-full items-center gap-2">
-			<FileText class="h-4 w-4 text-base-content/40" strokeWidth={2.5} />
-			<input
-				type="search"
-				class="grow"
-				placeholder="Filter files by path"
-				aria-label="Filter files by path"
-				bind:value={filter}
-			/>
-		</label>
+		<div class="flex flex-wrap items-center gap-2">
+			<label class="input input-sm flex min-w-48 grow items-center gap-2">
+				<FileText class="h-4 w-4 text-base-content/40" strokeWidth={2.5} />
+				<input
+					type="search"
+					class="grow"
+					placeholder="Filter files by path"
+					aria-label="Filter files by path"
+					bind:value={filter}
+				/>
+			</label>
+			<div class="join" role="group" aria-label="Diff layout">
+				<button
+					type="button"
+					class="btn btn-sm join-item"
+					class:btn-active={layout === 'unified'}
+					aria-pressed={layout === 'unified'}
+					onclick={() => (layout = 'unified')}
+				>
+					<Rows3 class="h-4 w-4" strokeWidth={2.5} />
+					Unified
+				</button>
+				<button
+					type="button"
+					class="btn btn-sm join-item"
+					class:btn-active={layout === 'split'}
+					aria-pressed={layout === 'split'}
+					onclick={() => (layout = 'split')}
+				>
+					<Columns2 class="h-4 w-4" strokeWidth={2.5} />
+					Split
+				</button>
+			</div>
+		</div>
 
 		<div class="grid gap-3 md:grid-cols-[16rem_1fr]">
 			<nav class="max-h-[32rem] overflow-y-auto" aria-label="Changed files">
@@ -159,6 +213,75 @@
 							<p class="px-2 py-1 text-xs text-base-content/60">
 								Binary file — there is no text diff to show.
 							</p>
+						{:else if layout === 'split'}
+							<!-- `table-fixed` with two 1fr text columns is what makes the halves
+							     equal: an auto table would size them by content, and a rewritten
+							     block would show one side squeezed while the other sprawled. -->
+							<table class="w-full table-fixed font-mono text-xs">
+								<caption class="sr-only">
+									Diff of {file.path}: before on the left, after on the right. Line numbers
+									are on the outside of each half.
+								</caption>
+								<!-- The widths live here rather than on the cells, because in a
+								     fixed-layout table the *first row* sets the columns — and the first
+								     row of every patch is a `colspan` banner, which cannot. Sizing from
+								     the content instead is what left one half of the diff twice as wide as
+								     the other. -->
+								<colgroup>
+									<col class="w-8" />
+									<col class="w-[calc(50%_-_2rem)]" />
+									<col class="w-8" />
+									<col class="w-[calc(50%_-_2rem)]" />
+								</colgroup>
+								<tbody>
+									{#each pairDiffRows(file.rows) as row, index (`${file.path}-split-${index}`)}
+										{#if row.kind === 'banner'}
+											<tr class={tone[row.banner]}>
+												<td colspan="4" class="px-1 whitespace-pre-wrap">{row.text}</td>
+											</tr>
+										{:else}
+											{@const left = cellAnchor(file.path, row.left)}
+											{@const right = cellAnchor(file.path, row.right)}
+											<tr>
+												<td class="w-8 border-r border-base-300 px-1 text-right align-top text-base-content/30">
+													{row.left.line ?? ''}
+												</td>
+												<td
+													class="px-1 align-top whitespace-pre-wrap {cellTone[
+														row.left.tone
+													]} {left !== null && onpickline
+														? 'cursor-pointer decoration-dotted underline-offset-4 decoration-base-content/30'
+														: ''}"
+													onclick={() => {
+														if (left && onpickline) onpickline(left);
+													}}
+												>
+													<span class="select-none text-base-content/40">{marker(
+															row.left.tone
+														)}</span>{row.left.text}
+												</td>
+												<td class="w-8 border-l border-base-300 px-1 text-right align-top text-base-content/30">
+													{row.right.line ?? ''}
+												</td>
+												<td
+													class="px-1 align-top whitespace-pre-wrap {cellTone[
+														row.right.tone
+													]} {right !== null && onpickline
+														? 'cursor-pointer decoration-dotted underline-offset-4 decoration-base-content/30'
+														: ''}"
+													onclick={() => {
+														if (right && onpickline) onpickline(right);
+													}}
+												>
+													<span class="select-none text-base-content/40">{marker(
+															row.right.tone
+														)}</span>{row.right.text}
+												</td>
+											</tr>
+										{/if}
+									{/each}
+								</tbody>
+							</table>
 						{:else}
 							<table class="w-full font-mono text-xs">
 								<tbody>

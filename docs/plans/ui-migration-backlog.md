@@ -138,21 +138,13 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
 - **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
 
-#### The merge diff is parsed here, not by diff2html
+#### The merge diff has no per-word intra-line highlighting
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Reviews migration)
-- **Summary:** The legacy console vendored diff2html v3 and then scraped its generated DOM for the line numbers a review comment anchors to (`td.d2h-ins .line-num2`). `lib/diff.ts` parses a patch into rows carrying their own line numbers instead, so the anchors are a field read and the console depends on no diff library.
-- **Why deferred:** A side-by-side layout and per-word intra-line highlighting went with it, and neither is what a reviewer reads first. The cost is a parser to maintain against git's output format, in exchange for no `@html`, no third-party CSS, and comment anchors that survive a dependency bump.
-- **Revisit when:** A reviewer asks for side-by-side, or a diff format appears that the parser mishandles. Rendering is per-row and isolated in `DiffViewer`, so adding a second layout is a renderer rather than a rewrite.
-
-#### A moved diff head silently discards review drafts
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Reviews migration)
-- **Summary:** Comment drafts live in the browser, pinned to the diff's `headSha`. When the agent pushes and the head moves, the drafts and the overall note are dropped without a word to the reviewer. The line numbers they carry are meaningless against the new commit, so re-aiming them would be worse than losing them — but losing them silently is still the wrong shape.
-- **Why deferred:** The right fix is to say so: keep the drafts, show that the head moved, and let the reviewer re-read the diff before sending. That is a UI decision about interrupting a review, not a parser fix, and it is not worth guessing at.
-- **Revisit when:** Someone loses a review to it.
+- **Summary:** `lib/diff.ts` reads a patch line by line, so it knows which lines changed but not which words inside them did. diff2html did, by word-diffing each changed line — the reason the legacy vendored it at all, once the DOM-scraping for line numbers is set aside. The side-by-side layout came back with the parser rather than with the library, so this is the last of diff2html's reasons to exist here.
+- **Why deferred:** Intra-line highlighting is a second pass over the two versions of a changed line, and a reviewer reads a diff for *what changed*, which the line tint and the `+`/`−` marker already answer. It is also the feature most likely to be wrong in a way nobody notices: a misaligned word range is worse than no highlight.
+- **Revisit when:** A reviewer asks for it on a long line — a minified lockfile or a generated file, where a changed line is a wall of text. `DiffViewer` renders per row, so it is a second pass in the parser and a span in the cell rather than a rewrite.
 
 #### A run's events have no paging, because the endpoint caps nothing
 
