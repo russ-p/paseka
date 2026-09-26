@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
 	import CueRunModal from '$lib/components/CueRunModal.svelte';
@@ -11,6 +12,7 @@
 		runStateLabel,
 		taskCountEntries
 	} from '$lib/format';
+	import { traceDetailPath } from '$lib/navigation';
 	import {
 		consoleStatusStore,
 		type ConsoleStatusStore
@@ -138,7 +140,7 @@
 		{:else}
 			<ul class="space-y-2">
 				{#each dashboard?.recentTraces ?? [] as trace (trace.traceId)}
-					<TraceRow {trace} />
+					<TraceRow {trace} href={traceDetailPath(base, trace.traceId)} />
 				{/each}
 			</ul>
 		{/if}
@@ -167,7 +169,7 @@
 		{:else}
 			<ul class="space-y-2">
 				{#each dashboard?.recentInsights ?? [] as insight (`${insight.traceId}/${insight.agentId}/${insight.createdAt}`)}
-					<SignalCard {insight} />
+					<SignalCard signal={insight} />
 				{/each}
 			</ul>
 		{/if}

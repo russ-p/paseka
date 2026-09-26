@@ -67,7 +67,7 @@ describe('dashboard route', () => {
 
 		const count = tile?.querySelector('.badge');
 		expect(count).toHaveTextContent('1');
-		expect(count?.className).toContain('badge-neutral');
+		expect(count?.className).toContain('badge-error');
 
 		const ready = within(tile as HTMLElement).getByText('ready')
 			.nextElementSibling as HTMLElement;
@@ -171,13 +171,16 @@ describe('dashboard route', () => {
 		expect(toasts.items[0].message).toBe('Cue published — trace trace-new');
 	});
 
-	it('keeps the recent-trace list free of legacy navigation targets', () => {
+	it('keeps the recent-trace list on the trace detail route', () => {
 		const { store, toasts } = harness(
 			dashboardSummary({ recentInsights: [insightHighlight({ agentId: '' })] })
 		);
 		render(Dashboard, { store, toasts });
 
 		expect(screen.getByRole('link', { name: 'All traces' })).toHaveAttribute('href', '/next/traces');
-		expect(screen.queryByRole('link', { name: 'Refactor the adapter seam' })).not.toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Refactor the adapter seam' })).toHaveAttribute(
+			'href',
+			'/next/traces/trace-01a0bd6963faa14f'
+		);
 	});
 });

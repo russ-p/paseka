@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { Component } from 'svelte';
 import DataTable from './DataTable.svelte';
 import type { DataColumn } from './DataTable.svelte';
-import { runSummary } from '../../tests/fixtures';
-import type { RunSummary } from '$lib/api/types';
+import { runSummary, traceSummary } from '../../tests/fixtures';
+import { tracePrimaryLabel, traceState, traceStateLabel } from '$lib/format';
+import type { RunSummary, TraceSummary } from '$lib/api/types';
 
 const columns: DataColumn<RunSummary>[] = [
 	{ key: 'bee', label: 'Bee', text: (run) => run.bee },
@@ -31,6 +32,12 @@ interface TableProps {
 
 /** `render` erases a generic component's type parameter to `unknown`, so bind `T` here. */
 const Table = DataTable as unknown as Component<TableProps>;
+const TraceTable = DataTable as unknown as Component<{
+	columns: DataColumn<TraceSummary>[];
+	rows: TraceSummary[];
+	rowKey: (row: TraceSummary) => string;
+	label: string;
+}>;
 
 function renderTable(overrides: Partial<TableProps> = {}) {
 	return render(Table, {
@@ -100,5 +107,96 @@ describe('DataTable', () => {
 	it('renders a custom empty message for an empty result', () => {
 		renderTable({ rows: [], emptyMessage: 'No failed runs.' });
 		expect(screen.getByText('No failed runs.')).toBeInTheDocument();
+	});
+});
+
+describe('DataTable cell intents', () => {
+	const traceColumns: DataColumn<TraceSummary>[] = [
+		{
+			key: 'trace',
+			label: 'Trace',
+			text: (trace) => tracePrimaryLabel(trace),
+			searchText: (trace) => `${trace.traceId} ${trace.standing ? 'standing' : ''}`,
+			href: (trace) => `/next/traces/${trace.traceId}`,
+			badge: (trace) => (trace.standing ? { status: 'standing', label: 'standing' } : null),
+			grow: true
+		},
+		{
+			key: 'state',
+			label: 'State',
+			text: (trace) => traceStateLabel(trace),
+			badge: (trace) =>
+				trace.hasActive || trace.hasFailures
+					? { status: traceState(trace), label: traceState(trace) }
+					: null
+		}
+	];
+	const traceRows = [
+		traceSummary({ traceId: 'trace-a', title: 'Alpha trail', hasActive: true }),
+		traceSummary({ traceId: 'trace-b', title: 'Beta trail', standing: true, hasActive: false })
+	];
+
+	function renderTraces() {
+		return render(TraceTable, {
+			columns: traceColumns,
+			rows: traceRows,
+			rowKey: (trace: TraceSummary) => trace.traceId,
+			label: 'Traces'
+		});
+	}
+
+	it('links a cell and badges the same cell when both are declared', () => {
+		renderTraces();
+
+		expect(screen.getByRole('link', { name: 'Alpha trail' })).toHaveAttribute(
+			'href',
+			'/next/traces/trace-a'
+		);
+		expect(screen.getByText('standing')).toBeInTheDocument();
+		expect(screen.getByText('active')).toBeInTheDocument();
+	});
+
+	it('leaves the cell empty when a declared badge has nothing to say', () => {
+		renderTraces();
+
+		const beta = screen.getByRole('link', { name: 'Beta trail' }).closest('tr');
+		const cells = within(beta as HTMLElement).getAllByRole('cell');
+		expect(cells[1]).toBeEmptyDOMElement();
+	});
+
+	it('matches the filter against terms the cell does not show', async () => {
+		const user = userEvent.setup();
+		renderTraces();
+
+		await user.type(screen.getByLabelText('Filter'), 'trace-b');
+		expect(screen.getByRole('link', { name: 'Beta trail' })).toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'Alpha trail' })).not.toBeInTheDocument();
+	});
+
+	it('matches the filter on a flag that only the badge shows', async () => {
+		const user = userEvent.setup();
+		renderTraces();
+
+		await user.type(screen.getByLabelText('Filter'), 'standing');
+		expect(screen.getByRole('link', { name: 'Beta trail' })).toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'Alpha trail' })).not.toBeInTheDocument();
+	});
+
+	it('gives the grow column the leftover width and pins it to one line', () => {
+		const { container } = renderTraces();
+
+		const header = container.querySelector('th');
+		expect(header?.className).toContain('w-full');
+		expect(header?.className).toContain('max-w-0');
+		const cell = container.querySelector('tbody td');
+		expect(cell?.className).toContain('whitespace-nowrap');
+	});
+
+	it('keeps every cell on one line so a table never doubles its row height', () => {
+		const { container } = renderTraces();
+
+		for (const cell of container.querySelectorAll('td')) {
+			expect(cell.className).toContain('whitespace-nowrap');
+		}
 	});
 });

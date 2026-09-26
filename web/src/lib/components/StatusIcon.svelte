@@ -37,7 +37,7 @@
 	const name = $derived(label ?? status);
 	const tone = $derived(statusTone(status));
 	const derivedGlyph: StatusIconGlyph = $derived(
-		status === 'running' || status === 'live' || status === 'active'
+		status === 'running' || status === 'live' || status === 'active' || status === 'queued'
 			? 'play'
 			: status === 'starting' || status === 'stopping'
 				? 'pending'

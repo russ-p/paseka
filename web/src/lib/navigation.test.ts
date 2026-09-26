@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
 	consolePath,
 	consoleRoutes,
+	isRouteActive,
 	landingPath,
 	lastRouteStorageKey,
 	matchShortcut,
 	rememberRoute,
+	traceDetailPath,
+	traceTimelinePath,
 	type RouteStorage
 } from './navigation';
 
@@ -48,5 +51,28 @@ describe('console navigation', () => {
 
 		expect(new Set(shortcuts).size).toBe(shortcuts.length);
 		expect(changes).toHaveLength(new Set(groups).size - 1);
+	});
+});
+
+describe('trace paths', () => {
+	it('builds the detail route under the base and escapes the id', () => {
+		expect(traceDetailPath('/next', 'trace-01a0')).toBe('/next/traces/trace-01a0');
+		expect(traceDetailPath('/next', 'trace/../evil')).toBe('/next/traces/trace%2F..%2Fevil');
+	});
+
+	it('scopes the timeline feed to one trail', () => {
+		expect(traceTimelinePath('/next', 'trace-01a0')).toBe('/next/timeline?trace=trace-01a0');
+		expect(traceTimelinePath('/next', 'trace/../evil')).toBe(
+			'/next/timeline?trace=trace%2F..%2Fevil'
+		);
+	});
+});
+
+describe('isRouteActive', () => {
+	it('marks a menu entry active on its own path and on any child of it', () => {
+		expect(isRouteActive('/next/traces', '/next/traces')).toBe(true);
+		expect(isRouteActive('/next/traces', '/next/traces/trace-01a0')).toBe(true);
+		expect(isRouteActive('/next/traces', '/next/tracesomething')).toBe(false);
+		expect(isRouteActive('/next/traces', '/next/timeline')).toBe(false);
 	});
 });

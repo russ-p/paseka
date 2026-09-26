@@ -59,6 +59,7 @@ Follow the shortest path from the model to a running colony:
 | [Changelog](plans/changelog.md) | Shipped features with links to specs and canonical docs |
 | [Specs index](plans/specs-index.md) | Short map of `docs/specs/` (bodies stay in the repo only) |
 | [Backlog](plans/backlog.md) | Deferred work and implementation assumptions |
+| [UI migration backlog](plans/ui-migration-backlog.md) | Deferred Console redesign decisions: dead links, unbuilt transitions, placeheld sections |
 
 Russian index: [README-RU.md](README-RU.md).
 

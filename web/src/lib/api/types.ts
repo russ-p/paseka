@@ -80,8 +80,41 @@ export interface ChromeFrame {
 	attentionError?: string;
 }
 
+/** Mirrors `protocol.Usage`, the token accounting one adapter run reports. */
+export interface Usage {
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens?: number;
+	cacheWriteTokens?: number;
+	durationMs?: number;
+	source?: string;
+}
+
+/** Mirrors `runs.UsageAggregate`, the token accounting summed over a trace. */
+export interface UsageAggregate {
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	runCountWithUsage: number;
+}
+
+/**
+ * The honey reserve a trail carries. A standing trail is capped by its stipend;
+ * any other trail by whatever top-ups have been added. Mirrors the
+ * `Energy*`/`LowEnergy`/`Standing` fields of `hiveview.TraceSummaryView`.
+ */
+export interface HoneyReserve {
+	energyBudget?: number;
+	energyRemaining?: number;
+	energyAdded?: number;
+	energyAllocated?: number;
+	lowEnergy?: boolean;
+	standing?: boolean;
+}
+
 /** Mirrors `hiveview.TraceSummaryView`. */
-export interface TraceSummary {
+export interface TraceSummary extends HoneyReserve {
 	traceId: string;
 	title?: string;
 	summary?: string;
@@ -91,12 +124,7 @@ export interface TraceSummary {
 	bees?: string[];
 	hasFailures: boolean;
 	hasActive: boolean;
-	energyBudget?: number;
-	energyRemaining?: number;
-	energyAdded?: number;
-	energyAllocated?: number;
-	lowEnergy?: boolean;
-	standing?: boolean;
+	usage?: UsageAggregate;
 }
 
 /** Mirrors `hiveview.RunView`. */
@@ -109,6 +137,7 @@ export interface RunSummary {
 	taskId?: string;
 	state: string;
 	summary?: string;
+	usage?: Usage;
 	runDir: string;
 	startedAt: string;
 	finishedAt?: string;
@@ -116,15 +145,91 @@ export interface RunSummary {
 	hasSession: boolean;
 }
 
-/** Mirrors `hiveview.InsightHighlight`. */
-export interface InsightHighlight {
+/** Mirrors `hiveview.TaskSummaryView`. */
+export interface TaskSummary {
+	taskId: string;
+	title: string;
+	status: string;
+	bee?: string;
+}
+
+/** Mirrors `hiveview.WorktreeView`. */
+export interface Worktree {
+	traceId: string;
+	path: string;
+	baseSha: string;
+	branch?: string;
+	createdAt: string;
+}
+
+/** Mirrors `hiveview.PullRequestView`. */
+export interface PullRequest {
+	url?: string;
+	number?: number;
+	head?: string;
+	state?: string;
+	draft?: boolean;
+}
+
+/** Fields `SignalCard` needs from any SIGNAL/INSIGHT/MUTATION/VERIFICATION feed row. */
+export interface SignalSummary {
 	createdAt: string;
 	traceId: string;
 	agentId: string;
 	bee?: string;
-	payloadKind: string;
+	payloadKind?: string;
+	/** Event type, set on feed rows; absent on the dashboard's insight projection. */
+	type?: string;
 	summary: string;
 	severity?: string;
+}
+
+/** Mirrors `hiveview.EventFeedItem`. */
+export interface EventFeedItem extends SignalSummary {
+	id: string;
+	type: string;
+	taskId?: string;
+}
+
+/**
+ * Mirrors `hiveview.TraceDetailView`; the embedded `TraceSummaryView` fields
+ * are flattened into the same object. `tasks`, `runs`, and `recentEvents` are
+ * `null` for an empty projection.
+ */
+export interface TraceDetail extends TraceSummary {
+	tasks: TaskSummary[] | null;
+	runs: RunSummary[] | null;
+	worktree?: Worktree;
+	pullRequest?: PullRequest;
+	recentEvents: EventFeedItem[] | null;
+}
+
+/** Mirrors `hiveview.ArtifactView`, one trail comb file. */
+export interface ArtifactView {
+	ref: string;
+	artifactKind: string;
+	title?: string;
+	updated?: number;
+	producer?: string;
+	announced: boolean;
+	staged: boolean;
+}
+
+/**
+ * Mirrors `hiveview.ArtifactContentView`. The server refuses to inline binary
+ * or oversized bodies, so `omitted` replaces both content fields instead of
+ * truncating them.
+ */
+export interface ArtifactContent {
+	ref: string;
+	content?: string;
+	contentHtml?: string;
+	omitted?: string;
+}
+
+/** Mirrors `hiveview.InsightHighlight`. */
+export interface InsightHighlight extends SignalSummary {
+	payloadKind: string;
 }
 
 export interface NATSStatusView {
@@ -160,4 +265,15 @@ export interface RunCueResult {
 	taskId?: string;
 	eventType?: string;
 	kind?: string;
+}
+
+/** Mirrors `console.EnergyAddResponse` from POST /api/traces/:id/energy/add. */
+export interface EnergyAddResult {
+	traceId: string;
+	amount: number;
+	energyBudget: number;
+	energyRemaining: number;
+	energyAdded: number;
+	energyAllocated: number;
+	lowEnergy: boolean;
 }

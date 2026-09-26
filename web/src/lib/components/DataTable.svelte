@@ -1,22 +1,36 @@
 <script module lang="ts">
-	import type { Snippet } from 'svelte';
-
 	export interface DataColumn<T> {
 		key: string;
 		label: string;
 		/**
-		 * Plain-text projection. Drives the cell when `cell` is absent and always
-		 * feeds the filter box, so every column should provide it.
+		 * Plain-text projection. Renders the cell when neither `href` nor `badge`
+		 * is set, and always feeds the filter box, so every column should
+		 * provide it.
 		 */
 		text: (row: T) => string;
-		cell?: Snippet<[T]>;
+		/**
+		 * Extra terms that should match the filter but are not on screen — the
+		 * trace id behind a titled row, a standing flag, an adapter name.
+		 */
+		searchText?: (row: T) => string;
+		/** Render the cell as a link to this destination. */
+		href?: (row: T) => string;
+		/** Render the cell as a `StatusBadge`, or nothing when the row returns `null`. */
+		badge?: (row: T) => { status: string; label: string } | null;
 		align?: 'left' | 'right';
+		/**
+		 * The column absorbs the leftover width, so a long cell truncates
+		 * instead of pushing the table past the viewport. At most one per table.
+		 */
+		grow?: boolean;
 		/** Hidden below 768px; the table must not force horizontal scroll on a phone. */
 		secondary?: boolean;
 	}
 </script>
 
 <script lang="ts" generics="T">
+	import StatusBadge from '$lib/components/StatusBadge.svelte';
+
 	let {
 		columns,
 		rows,
@@ -47,7 +61,11 @@
 		const needle = filter.trim().toLowerCase();
 		if (needle === '') return rows;
 		return rows.filter((row) =>
-			columns.some((column) => column.text(row).toLowerCase().includes(needle))
+			columns.some((column) =>
+				`${column.text(row)} ${column.searchText?.(row) ?? ''}`
+					.toLowerCase()
+					.includes(needle)
+			)
 		);
 	});
 
@@ -66,6 +84,22 @@
 	});
 
 	const alignClass = { left: 'text-left', right: 'text-right' } as const;
+
+	/**
+	 * Cells never wrap: a table is a scan surface, and a wrapped date or bee
+	 * list doubles the row height. The one `grow` column takes the leftover
+	 * width and truncates, so a long label can never push the table sideways.
+	 */
+	function cellClass(column: DataColumn<T>): string {
+		return [
+			'whitespace-nowrap',
+			column.align === 'right' ? alignClass.right : alignClass.left,
+			column.grow ? 'w-full max-w-0' : '',
+			column.secondary ? 'hidden md:table-cell' : ''
+		]
+			.filter(Boolean)
+			.join(' ');
+	}
 </script>
 
 <section class="space-y-3" aria-label={label}>
@@ -109,11 +143,7 @@
 			<thead>
 				<tr>
 					{#each columns as column (column.key)}
-						<th
-							class={(column.align === 'right' ? alignClass.right : alignClass.left) +
-								(column.secondary ? ' hidden md:table-cell' : '')}
-							scope="col"
-						>
+						<th class={cellClass(column)} scope="col">
 							{column.label}
 						</th>
 					{/each}
@@ -124,7 +154,7 @@
 					{#each Array.from({ length: Math.min(pageSize, 3) }) as _, index (index)}
 						<tr>
 							{#each columns as column (column.key)}
-								<td class={column.secondary ? 'hidden md:table-cell' : ''}>
+								<td class={cellClass(column)}>
 									<span class="skeleton block h-3 w-full"></span>
 								</td>
 							{/each}
@@ -140,10 +170,20 @@
 					{#each visible as row (rowKey(row))}
 						<tr>
 							{#each columns as column (column.key)}
-								<td class={(column.align === 'right' ? alignClass.right : alignClass.left) +
-										(column.secondary ? ' hidden md:table-cell' : '')}
-								>
-									{#if column.cell}{@render column.cell(row)}{:else}{column.text(row)}{/if}
+								{@const cellBadge = column.badge?.(row) ?? null}
+								<td class={cellClass(column)}>
+									{#if column.href}
+										<div class="flex min-w-0 flex-wrap items-center gap-2">
+											<a class="link truncate" href={column.href(row)}>{column.text(row)}</a>
+											{#if cellBadge}
+												<StatusBadge status={cellBadge.status} label={cellBadge.label} />
+											{/if}
+										</div>
+									{:else if cellBadge}
+										<StatusBadge status={cellBadge.status} label={cellBadge.label} />
+									{:else if !column.badge}
+										{column.text(row)}
+									{/if}
 								</td>
 							{/each}
 						</tr>

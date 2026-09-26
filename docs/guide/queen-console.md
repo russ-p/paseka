@@ -32,9 +32,10 @@ serve the legacy console until the redesign reaches feature parity and an
 explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
 The preview currently ships the shell (top status panel, side menu, theme
-switcher) and the **Dashboard**. Every other route under `/next/` renders a
-"migration pending" card that links back to the legacy console, so use `/` for
-Traces, Tasks, Reviews, Sessions, Runs, Git, Topology, and System for now.
+switcher), the **Dashboard**, and **Traces** (both the list and a trail's own
+detail page). Every other route under `/next/` renders a "migration pending"
+card that links back to the legacy console, so use `/` for Timeline, Tasks,
+Reviews, Sessions, Bees, Worktrees, Runs, Git, Topology, and System for now.
 
 ## What requires the Hive Runtime
 
@@ -68,6 +69,15 @@ Use `paseka replay <traceId>` for the CLI equivalent.
 
 Trails bound to a standing Forage Cue carry a **standing** badge, and their
 honey reads `remaining / stipend` — see [Forage Cues](cues.md).
+
+The list shows the most recent trails and stops at what the server sends; **Load
+older trails** pulls the next page when there is more history. A trail with
+something to say — running now, or carrying failures — is badged in the State
+column; a settled trail leaves it empty, so the eye lands on the rows that need
+you. Opening a trail goes to its own page (`/next/traces/<traceId>`), so the URL
+can be shared and the browser back button works. From there: **+1 / +5 / +12**
+top up the honey reserve, **View** on a comb file opens it in a dialog, and
+**Open timeline** jumps to the event feed for that trail.
 
 ### Tasks
 

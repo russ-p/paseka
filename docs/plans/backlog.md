@@ -2,6 +2,7 @@
 
 Deferred ideas, follow-ups, bugs, and implementation assumptions outside the active change.
 Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-index.md).
+Console redesign navigation debt lives in [UI migration backlog](ui-migration-backlog.md) — dead links, unbuilt transitions, and placeheld sections.
 
 ## Deferred work
 
@@ -86,6 +87,22 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 ### Queen Console
 
 API fields for energy and merge-diff exist; per-run proposal preview is still thin.
+
+#### Range reads for oversized comb files
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
+- **Summary:** The trace comb modal reports `file too large for inline preview` for anything over 512 KiB, with no way to read the rest. A byte-range or line-range read, or a download link beside the omission, would make a large `checkpoint.json` inspectable without raising the inline cap.
+- **Why deferred:** The cap is the server's and predates the redesign; the legacy console had the same dead end. Trail comb files are usually small, and raising the cap trades memory for a case that is rare.
+- **Revisit when:** An operator hits an unreadable comb file in a real trail, or comb files start growing past a few hundred KiB.
+
+#### Console redesign `/next` parity sweep
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- **Summary:** Migrate the remaining `/next` routes (Timeline, Tasks, Reviews, Sessions, Bees, Worktrees, Runs, Git, Topology, System, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
+- **Why deferred:** Deliberate phase order — the shell and the two highest-traffic surfaces (Dashboard, Traces) land first so the design system is proven on real data before thirteen routes depend on it.
+- **Revisit when:** The next route is picked up. Nothing blocks it technically; the ordering was a risk choice.
 
 #### Per-run proposal diff in Reviews
 
