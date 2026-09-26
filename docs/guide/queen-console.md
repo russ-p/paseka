@@ -59,7 +59,9 @@ reviews, honey pressure, and other items that need beekeeper attention.
 Header plaques (Hive runtime, Live bees, Host, Git) and Reviews/Sessions tab
 badges stay current over one Server-Sent Event stream (`GET /api/chrome/stream`).
 The System and Git tabs still poll their full JSON APIs while those tabs are
-open. Git status never fetches remotes on a timer.
+open — in the preview, a route's store starts its poll on mount and stops it on
+unmount, so an idle console holds none. Git status never fetches remotes on a
+timer.
 
 ### Traces and Timeline
 
@@ -140,7 +142,11 @@ not repeat its flags. **Prune orphans** and **Delete N leftovers** remove local
 state, so they ask first and the delete names every branch involved; a refusal
 (say, a branch a live worktree still holds) is reported per branch instead of
 being rounded up to a failure. Without an `origin` remote the three actions are
-disabled and the page says why. Nothing here needs the Hive Runtime.
+disabled and the page says why. The preview re-reads the clone after every
+action and otherwise refreshes on a 15-second timer — slower than the legacy tab
+because each read shells out to `git` several times — and it runs one action at
+a time, so a second click is refused rather than queued behind a push. Nothing
+here needs the Hive Runtime.
 
 ## Common operator actions
 
