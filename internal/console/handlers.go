@@ -107,6 +107,19 @@ func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, bees)
 }
 
+func (a *api) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := GetConfig(a.ctx)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
+}
+
 func (a *api) handleColonyTopology(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

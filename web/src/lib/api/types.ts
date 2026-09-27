@@ -835,3 +835,88 @@ export interface EnergyAddResult {
 	energyAllocated: number;
 	lowEnergy: boolean;
 }
+
+/**
+ * One setting's effective value and the source that decides it, mirroring
+ * `console.ConfigValue`.
+ *
+ * The source is the whole point of the type. `NATSConfig.EffectiveURL` prefers
+ * `PASEKA_NATS_URL` over the home config, so a view showing only the value would
+ * report a URL the process does not use, and a form that wrote the file would
+ * look successful while changing nothing.
+ */
+export interface ConfigValue {
+	value: string;
+	/** Display-ready: `config.yaml`, `colony.yaml`, `default`, `unset`, `env:NAME`, or `flag`. */
+	source: string;
+}
+
+/** Mirrors `console.ConfigAdapterView`. */
+export interface ConfigAdapter {
+	name: string;
+	binary: ConfigValue;
+	apiKeyEnv: ConfigValue;
+	/** Whether `apiKeyEnv` resolves right now. The key itself is never sent. */
+	apiKeySet: boolean;
+	/** Whether `adapters/<name>.yaml` exists, as opposed to every value being a loader default. */
+	configured: boolean;
+}
+
+/** Mirrors `console.ConfigNotifyView`. */
+export interface ConfigNotify {
+	category: string;
+	mode: string;
+}
+
+/**
+ * Mirrors `console.ConfigTelegramView`.
+ *
+ * `present` is separate from `enabled` because `telegram.Load` treats a missing
+ * file and `enabled: false` as errors: a settings page has to be able to say the
+ * gate is off, which reading it through `Load` would render as a failed read.
+ */
+export interface ConfigTelegram {
+	present: boolean;
+	enabled: boolean;
+	mode: ConfigValue;
+	botTokenSet: boolean;
+	botTokenEnv: string;
+	allowFrom: number[];
+	chatIds: number[];
+	consoleBaseUrl?: string;
+	/** Empty for an absent gate, so the page does not report modes nobody chose. */
+	notify: ConfigNotify[];
+}
+
+/** Mirrors `console.ConfigTerminalView`. */
+export interface ConfigTerminal {
+	terminal: string;
+	ghosttyBinary: string;
+	configured: boolean;
+}
+
+/** Mirrors `console.ConfigProfileView`. */
+export interface ConfigProfile {
+	selected: ConfigValue;
+	colony: string[];
+	home: string[];
+	layers: { colony: boolean; home: boolean };
+}
+
+/** Mirrors `console.ConfigNATSView`. */
+export interface ConfigNATS {
+	url: ConfigValue;
+	/** Committed config, so it stays read-only in the console even though the URL beside it is not. */
+	subjectPrefix: ConfigValue;
+}
+
+/** Mirrors `console.ConfigView` from GET /api/config. */
+export interface ColonyConfig {
+	slug: string;
+	colonyRoot: string;
+	profile: ConfigProfile;
+	nats: ConfigNATS;
+	adapters: ConfigAdapter[];
+	telegram: ConfigTelegram;
+	terminal: ConfigTerminal;
+}

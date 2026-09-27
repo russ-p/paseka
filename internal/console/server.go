@@ -77,6 +77,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/traces/", apiHandler.handleTraceByID)
 	mux.HandleFunc("/api/events", apiHandler.handleEvents)
 	mux.HandleFunc("/api/bees", apiHandler.handleBees)
+	mux.HandleFunc("/api/config", apiHandler.handleConfig)
 	mux.HandleFunc("/api/colony/topology", apiHandler.handleColonyTopology)
 	mux.HandleFunc("/api/sessions", apiHandler.handleSessions)
 	mux.HandleFunc("/api/sessions/", apiHandler.handleSessionByID)

@@ -54,7 +54,14 @@ const statusTones: Record<string, StatusTone> = {
 	planned: 'neutral',
 	standing: 'neutral',
 	staged: 'neutral',
-	unknown: 'neutral'
+	unknown: 'neutral',
+	// A Telegram push mode, read as "will this interrupt me": sound is the only
+	// mode that alerts, silent delivers without noise, and off is the absence of
+	// a push. They take the in-flight and idle tones the table already uses, so
+	// a settings page cannot invent a palette beside the rest of the console.
+	sound: 'warning',
+	silent: 'info',
+	off: 'neutral'
 };
 
 export function statusTone(status: string): StatusTone {

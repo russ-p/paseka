@@ -14,6 +14,11 @@ describe('statusTone', () => {
 		['disconnected', 'error'],
 		['idle', 'neutral'],
 		['stopped', 'neutral'],
+		// A push mode read as "will this interrupt me": sound is the only mode that
+		// alerts, silent delivers quietly, and off is the absence of a push.
+		['sound', 'warning'],
+		['silent', 'info'],
+		['off', 'neutral'],
 		['unexpected', 'neutral']
 	])('maps %s to %s', (status, expected) => {
 		expect(statusTone(status)).toBe(expected);

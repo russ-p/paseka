@@ -35,10 +35,10 @@ The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
 page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
 detail), **Tasks** (board and task detail), **Reviews** (queue, proposal, and
-merge preview), **Sessions** (list and session detail), **Worktrees**, and
-**Bees**. The one route still pending is **Settings**; every other route under
-`/next/` renders a "migration pending" card that links back to the legacy
-console, so use `/` for Settings for now.
+merge preview), **Sessions** (list and session detail), **Worktrees**,
+**Bees**, and **Settings**. Every route under `/next/` is now migrated; a route
+that still renders a "migration pending" card is a bug. The legacy console at
+`/` remains the default until the redesign reaches an explicit cutover.
 
 ## What requires the Hive Runtime
 
@@ -343,6 +343,49 @@ The rest of the page is committed configuration, so it is read once and does not
 refresh on a timer; press **Refresh** after a commit adds or changes a bee, or
 after a run lands and you want to see it. Nothing here needs the Hive Runtime.
 
+### Settings
+
+Shows what the colony is actually configured with, and **where each value came
+from**. That second half is the reason the page exists: several settings are
+decided by something other than the file you would edit, and an operator who
+changes the file and watches nothing happen needs to be told why.
+
+- **Transport** — the NATS URL and subject prefix in force.
+- **Adapters** — one row per adapter with its binary, the environment variable it
+  reads its API key from, whether that variable resolves, and whether the value
+  came from `adapters/<name>.yaml` or was inferred from a default.
+- **Human gateway** — whether the Telegram gate is configured and switched on,
+  whether a bot token resolves, and the push mode of each of the seven
+  categories.
+- **Colony** — the slug, the checkout root, the selected profile, and the
+  terminal a session attaches with.
+- **Appearance** — the theme picker, the one setting the console keeps itself.
+
+Read the three things on this page carefully:
+
+- **A value in brackets was not read from a file.** `(the default)` means the code
+  supplied it because nothing wrote it; `$PASEKA_NATS_URL` means an environment
+  variable is deciding it. A **warning** appears when an environment variable
+  outranks the file, because editing the file then changes nothing until the
+  process is started differently.
+- **The console never receives a secret.** An adapter row shows the *name* of the
+  variable it reads and whether that variable currently resolves, and the gate
+  reports `botTokenSet` rather than the token. This is the same rule the adapters
+  follow at runtime, so a key never enters the colony config at all.
+- **The gate is reported whether or not it works.** A missing `telegram.yaml` and
+  `enabled: false` are both configurations, not failures, so the page says which
+  one you have instead of showing a read error.
+
+The page is **read-only** apart from the theme, and that is a scope decision
+rather than a missing feature: letting the console write configuration means
+giving it a merge-not-clobber path onto YAML that nothing outside `paseka init`
+currently writes, which is a platform change and not a route. The page says it is
+read-only rather than offering a control that would quietly do nothing.
+
+To change a setting today, edit `~/.config/paseka/<slug>/` or `.paseka/` and
+restart the console. The page therefore reads once and waits for **Refresh**
+rather than polling. Nothing here needs the Hive Runtime.
+
 ## Common operator actions
 
 | Goal | Console | Queen Shell |
@@ -357,6 +400,7 @@ after a run lands and you want to see it. Nothing here needs the Hive Runtime.
 | See what a colony can do, and what ran last | Bees | `paseka bee run`, `paseka status` |
 | Publish repository changes | Git | regular `git` commands |
 | Clean up isolated checkouts | Worktrees | `paseka prune` |
+| See what a setting resolves to, and why | Settings | `paseka doctor` |
 
 ## Troubleshooting
 

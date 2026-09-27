@@ -10,6 +10,7 @@ import {
 	rejectTask,
 	retryTask,
 	startTask,
+	getConfig,
 	getGit,
 	getSystem,
 	getRun,
@@ -185,6 +186,18 @@ describe('system endpoints', () => {
 		await getSystem();
 
 		expect(mock).toHaveBeenCalledWith('/api/system', undefined);
+	});
+});
+
+describe('config endpoint', () => {
+	it('reads the config with a bodiless GET and no query', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await getConfig();
+
+		// The `/next` prefix belongs to frontend routes, never to the API, and this
+		// endpoint takes no parameters — a write would be a POST on the same path.
+		expect(mock).toHaveBeenCalledWith('/api/config', undefined);
 	});
 });
 

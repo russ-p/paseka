@@ -10,6 +10,7 @@ import type {
 	CreateTaskRequest,
 	CreateTaskResult,
 	Cue,
+	ColonyConfig,
 	DashboardSummary,
 	EnergyAddResult,
 	EventFeedPage,
@@ -222,6 +223,24 @@ export function listEvents(filters: EventFilters = {}, after?: string): Promise<
 	query.set('limit', String(eventFeedPageLimit));
 	if (after) query.set('after', after);
 	return request<EventFeedPage>(`/events?${query.toString()}`);
+}
+
+/**
+ * The colony's effective configuration: NATS, the profile, every adapter's
+ * machine-local settings, the Telegram gate's push modes, and the attach
+ * terminal — each value carrying the source that decides it.
+ *
+ * Credentials are references, not values: an adapter arrives as the name of the
+ * variable it reads plus whether that variable resolves, and the gate as
+ * `botTokenSet`. The key itself is never sent, because the credential model
+ * stores a reference and reads the environment at call time.
+ *
+ * This is configuration, not liveness. Whether NATS is connected belongs to the
+ * topbar's chrome stream and the one dashboard poll, so this page reads that
+ * store rather than asking the server a second time.
+ */
+export function getConfig(): Promise<ColonyConfig> {
+	return request<ColonyConfig>('/config');
 }
 
 /**

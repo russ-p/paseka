@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentItem, Bee, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
 import {
+	colonyConfig,
+	configAdapter,
 	dashboardSummary,
 	gitBranch,
 	gitView,
@@ -26,6 +28,15 @@ import {
 	beeLiveCount,
 	beeWorkspaceLabel,
 	beesHeadline,
+	configApiKeyLabel,
+	configIsOverridden,
+	configNatsHeadline,
+	configNotifyEnabled,
+	configProfileLabel,
+	configSourceHint,
+	configSourceLabel,
+	configTelegramHeadline,
+	configValueText,
 	sessionDuration,
 	sessionIdentityRows,
 	sessionRelayBlocker,
@@ -1293,5 +1304,111 @@ describe('bee formatters', () => {
 		expect(beesHeadline(0)).toBe('No bee is registered in this colony.');
 		expect(beesHeadline(1)).toBe('One bee, with the adapter and prompt vocabulary it works through.');
 		expect(beesHeadline(4)).toBe('4 bees, each with the adapter and prompt vocabulary it works through.');
+	});
+
+	it('names a source in the words an operator would use', () => {
+		expect(configSourceLabel({ value: 'x', source: 'config.yaml' })).toBe('config.yaml');
+		expect(configSourceLabel({ value: 'x', source: 'default' })).toBe('the default');
+		expect(configSourceLabel({ value: '', source: 'unset' })).toBe('not written');
+		expect(configSourceLabel({ value: 'x', source: 'env:PASEKA_NATS_URL' })).toBe('$PASEKA_NATS_URL');
+		expect(configSourceLabel({ value: 'x', source: 'flag' })).toBe('a command-line flag');
+		expect(configSourceLabel(null)).toBe('not written');
+	});
+
+	it('separates a value someone wrote from one the code supplied', () => {
+		// The home config needs no annotation: it is what an operator editing the
+		// file expects. Everything else is the surprising case.
+		expect(configValueText({ value: 'nats://127.0.0.1:4222', source: 'config.yaml' })).toBe(
+			'nats://127.0.0.1:4222'
+		);
+		expect(configValueText({ value: 'paseka.demo', source: 'colony.yaml' })).toBe('paseka.demo');
+		// A default nobody wrote, an env var that outranks the file, and an unset
+		// value each say so in the cell rather than in a hover.
+		expect(configValueText({ value: 'agent', source: 'default' })).toBe('agent (the default)');
+		expect(configValueText({ value: 'nats://x:4222', source: 'env:PASEKA_NATS_URL' })).toBe(
+			'nats://x:4222 ($PASEKA_NATS_URL)'
+		);
+		expect(configValueText({ value: '', source: 'unset' })).toBe('not set');
+		// A value the server paired with no source is contradictory, so the value
+		// wins and the source is still said rather than dropped.
+		expect(configValueText({ value: 'x', source: 'unset' })).toBe('x (not written)');
+		expect(configValueText(null)).toBe('not set');
+	});
+
+	it('knows which values something else already owns', () => {
+		// An env var and a flag both outrank the machine-local file, and that is
+		// the case a write has to refuse rather than silently ignore.
+		expect(configIsOverridden({ value: 'x', source: 'env:PASEKA_NATS_URL' })).toBe(true);
+		expect(configIsOverridden({ value: 'x', source: 'flag' })).toBe(true);
+		expect(configIsOverridden({ value: 'x', source: 'config.yaml' })).toBe(false);
+		expect(configIsOverridden({ value: '', source: 'unset' })).toBe(false);
+		expect(configIsOverridden(null)).toBe(false);
+	});
+
+	it('explains a source in a hint only when the hint adds something', () => {
+		expect(configSourceHint({ value: 'x', source: 'config.yaml' })).toEqual([]);
+		expect(configSourceHint(null)).toEqual([]);
+		expect(configSourceHint({ value: 'x', source: 'default' })[0]).toContain('the value the code falls back to');
+		expect(configSourceHint({ value: 'x', source: 'unset' })[0]).toContain('no source');
+		expect(configSourceHint({ value: 'x', source: 'env:PASEKA_NATS_URL' })[0]).toContain(
+			'Editing the file will not change it'
+		);
+	});
+
+	it('says the transport in three forms rather than showing a URL', () => {
+		expect(
+			configNatsHeadline({ url: { value: '', source: 'unset' }, subjectPrefix: { value: 'p', source: 'default' } })
+		).toBe('NATS is not configured, so nothing is connected.');
+		expect(
+			configNatsHeadline({ url: { value: 'nats://x:4222', source: 'config.yaml' }, subjectPrefix: { value: 'p', source: 'default' } })
+		).toContain('configured in the home config');
+		expect(configNatsHeadline(null)).toContain('not configured');
+		// The overridden case is named outright: an operator who edits the file while
+		// the env var is set needs to be told the file is not consulted.
+		expect(
+			configNatsHeadline({ url: { value: 'nats://x:4222', source: 'env:PASEKA_NATS_URL' }, subjectPrefix: { value: 'p', source: 'default' } })
+		).toContain('$PASEKA_NATS_URL');
+	});
+
+	it('names an adapter credential without ever printing a key', () => {
+		expect(configApiKeyLabel(configAdapter({ apiKeyEnv: { value: 'CURSOR_API_KEY', source: 'default' }, apiKeySet: true }))).toBe(
+			'CURSOR_API_KEY'
+		);
+		expect(configApiKeyLabel(configAdapter({ apiKeyEnv: { value: 'CURSOR_API_KEY', source: 'default' }, apiKeySet: false }))).toBe(
+			'CURSOR_API_KEY (not set)'
+		);
+		expect(configApiKeyLabel(configAdapter({ apiKeyEnv: { value: '', source: 'unset' } }))).toBe('No key');
+		expect(configApiKeyLabel(null)).toBe('No key');
+	});
+
+	it('reads a push mode as delivering or not', () => {
+		expect(configNotifyEnabled('sound')).toBe(true);
+		expect(configNotifyEnabled('silent')).toBe(true);
+		expect(configNotifyEnabled('off')).toBe(false);
+		// A blank mode is not a delivery: `??` alone would let the empty string
+		// through and report a push nobody configured.
+		expect(configNotifyEnabled('')).toBe(false);
+		expect(configNotifyEnabled(null)).toBe(false);
+	});
+
+	it('names the gate in three forms, an absent one included', () => {
+		// `telegram.Load` errors on a missing file and on `enabled: false`, so a page
+		// that inherited that would render "switched off" as a failed read.
+		expect(configTelegramHeadline(colonyConfig().telegram)).toContain('will push');
+		expect(configTelegramHeadline(colonyConfig({ telegram: { ...colonyConfig().telegram, enabled: false } }).telegram)).toBe(
+			'The gate is configured and switched off.'
+		);
+		expect(configTelegramHeadline(colonyConfig({ telegram: { ...colonyConfig().telegram, present: false } }).telegram)).toContain(
+			'No telegram.yaml'
+		);
+		expect(configTelegramHeadline(null)).toContain('No telegram.yaml');
+	});
+
+	it('names the profile in force and says when there is none', () => {
+		expect(configProfileLabel(colonyConfig())).toBe('No profile selected');
+		expect(
+			configProfileLabel(colonyConfig({ profile: { ...colonyConfig().profile, selected: { value: 'homelab', source: 'config.yaml' } } }))
+		).toBe('homelab');
+		expect(configProfileLabel(null)).toBe('No profile selected');
 	});
 });

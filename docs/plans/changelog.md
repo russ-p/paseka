@@ -2,6 +2,20 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Settings, and what each setting resolves to
+
+`/next/settings` is the last route of the console redesign, and the first one whose subject the legacy console never had at all. It answers what the colony is configured with **and what decided each value** — which is the part that matters, because several settings are decided by something other than the file you would edit. An operator who changes `config.yaml` and watches nothing happen can now see why: the page names `PASEKA_NATS_URL` as the thing actually in force and warns that the file is not consulted. Values nobody wrote are labelled as defaults, a value the code supplied is distinguished from one the file declares, and a colon-separated prefix nobody declared is reported as the bus default rather than named after a file that never mentioned it.
+
+- **Transport, Adapters, Human gateway, Colony, Appearance.** The adapter table shows each adapter's binary, the environment variable it reads its API key from, whether that variable currently resolves, and whether the value came from `adapters/<name>.yaml` or was inferred from a default — a distinction no loaded config can make on its own, because every adapter loader fills in a default for a key the file omits. The gate's seven push categories are listed with their modes, and a gate that is present but switched off is reported as a configuration rather than as a failed read.
+- **The console never receives a secret.** An adapter row carries the *name* of a variable and whether it resolves; the gate reports `botTokenSet`, never the token. That is the model the adapters already follow at runtime, so a key never enters the colony config at all.
+- `GET /api/config` is new, read-only, and reports no liveness — whether NATS is connected is already on the status stream the topbar keeps, and asking twice would be the duplicate poll the console's store contract forbids. The page reads once and waits for **Refresh** rather than polling, because configuration changes when a human edits a file.
+
+**This closes the redesign's route set: no page under `/next/` is placeheld any more.** The legacy console remains at `/` until the explicit root cutover.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Settings)
+- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md)
+- Out of scope for that work: user story #9 also asks for these settings to be *editable* "without editing files", and the console still cannot write configuration. That is a platform capability rather than a route — nothing outside `paseka init` writes the colony's YAML, and that writer is create-only — so it is tracked separately — see [Backlog](backlog.md).
+
 ## 2026-09 — Bees roster in Queen Console
 
 `/next/bees` lists the colony's whole roster: role, adapter, intent vocabulary, sector, whether it works in an isolated worktree or against the colony root, how many adapter processes it holds live, and its most recent run with that run's state badged. The page shows **every** bee, including `script` adapters that run headless and cannot be started as an interactive session — the launch dropdowns in Sessions and Tasks deliberately still offer only the bees a session can start.

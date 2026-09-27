@@ -2,6 +2,11 @@ import type {
 	AgentItem,
 	ArtifactView,
 	Bee,
+	ColonyConfig,
+	ConfigAdapter,
+	ConfigNATS,
+	ConfigTelegram,
+	ConfigValue,
 	DashboardSummary,
 	EventFilters,
 	GitActionResult,
@@ -1321,4 +1326,102 @@ export function beesHeadline(count: number): string {
 	if (count === 0) return 'No bee is registered in this colony.';
 	if (count === 1) return 'One bee, with the adapter and prompt vocabulary it works through.';
 	return `${count} bees, each with the adapter and prompt vocabulary it works through.`;
+}
+
+/**
+ * Where a setting's value came from, in the words an operator would use.
+ *
+ * The source is not a nicety: `PASEKA_NATS_URL` outranks the home config, and a
+ * page that showed only the value would report a URL the process does not use.
+ * This is what puts the two side by side.
+ */
+export function configSourceLabel(value: ConfigValue | null | undefined): string {
+	const source = value?.source ?? 'unset';
+	if (source === 'unset') return 'not written';
+	if (source === 'default') return 'the default';
+	if (source === 'flag') return 'a command-line flag';
+	if (source.startsWith('env:')) return `$${source.slice(4)}`;
+	return source;
+}
+
+/**
+ * Whether something else already owns this value, so editing the file beside it
+ * would change nothing. An env var and a command-line flag both outrank the
+ * machine-local file, which is the case that has to be refused rather than
+ * silently ignored.
+ */
+export function configIsOverridden(value: ConfigValue | null | undefined): boolean {
+	const source = value?.source ?? 'unset';
+	return source.startsWith('env:') || source === 'flag';
+}
+
+/**
+ * A setting as one cell shows it: the value, with its source folded in whenever
+ * the source is anything other than the home config.
+ *
+ * `config.yaml` needs no announcement — it is what an operator editing the file
+ * would expect. Everything else is the surprising case and must not hide behind
+ * a hover, which is the whole reason the server sends a source at all: a default
+ * nobody wrote, an env var that outranks the file, or a value that is not set.
+ */
+export function configValueText(value: ConfigValue | null | undefined): string {
+	if (!value) return 'not set';
+	if (value.value === '') return 'not set';
+	if (value.source === 'config.yaml' || value.source === 'colony.yaml') return value.value;
+	return `${value.value} (${configSourceLabel(value)})`;
+}
+
+/** The full sentence a row needs when a value is not its own source. */
+export function configSourceHint(value: ConfigValue | null | undefined): string[] {
+	if (!value) return [];
+	const source = configSourceLabel(value);
+	if (configIsOverridden(value)) {
+		return [`Set by ${source}, which outranks ~/.config/paseka. Editing the file will not change it.`];
+	}
+	if (value.source === 'default') {
+		return ['Not written anywhere — this is the value the code falls back to.'];
+	}
+	if (value.source === 'unset') {
+		// The server pairs `unset` with an empty value; a value beside it would
+		// contradict itself, so the value wins and the source stays said.
+		return ['Not written anywhere — the server reported no source for this value.'];
+	}
+	return [];
+}
+
+/** What the Settings page says about the transport, in three forms rather than one count. */
+export function configNatsHeadline(nats: ConfigNATS | null | undefined): string {
+	if (!nats || nats.url.value === '') return 'NATS is not configured, so nothing is connected.';
+	if (configIsOverridden(nats.url)) {
+		return `NATS is configured by $${nats.url.source.slice(4)}; the home config is not consulted.`;
+	}
+	return 'NATS is configured in the home config, and every bee connects with it.';
+}
+
+/** An adapter's credential row: the variable, and whether it resolves right now. */
+export function configApiKeyLabel(adapter: ConfigAdapter | null | undefined): string {
+	if (!adapter || adapter.apiKeyEnv.value === '') return 'No key';
+	return adapter.apiKeySet ? adapter.apiKeyEnv.value : `${adapter.apiKeyEnv.value} (not set)`;
+}
+
+/** Whether a notify mode delivers a push at all. */
+export function configNotifyEnabled(mode: string | null | undefined): boolean {
+	// An absent or blank mode is not a delivery. `??` alone would let an empty
+	// string through and report a push nobody configured.
+	const normalized = (mode ?? '').trim().toLowerCase();
+	return normalized !== '' && normalized !== 'off';
+}
+
+/** The gate's own sentence, in three forms: absent, present but off, running. */
+export function configTelegramHeadline(telegram: ConfigTelegram | null | undefined): string {
+	if (!telegram?.present) return 'No telegram.yaml, so the human gateway is not configured.';
+	if (!telegram.enabled) return 'The gate is configured and switched off.';
+	return 'The gate is running and will push according to the modes below.';
+}
+
+/** The profile in force, with the layers it actually loaded spelled out. */
+export function configProfileLabel(config: ColonyConfig | null | undefined): string {
+	const selected = config?.profile.selected;
+	if (!selected?.value) return 'No profile selected';
+	return selected.value;
 }

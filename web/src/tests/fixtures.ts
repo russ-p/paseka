@@ -1,6 +1,8 @@
 import type {
 	ArtifactView,
 	Bee,
+	ColonyConfig,
+	ConfigAdapter,
 	DashboardSummary,
 	EventFeedItem,
 	EventFeedPage,
@@ -668,6 +670,82 @@ export function invite(overrides: Partial<Invite> = {}): Invite {
 		status: 'pending',
 		createdAt: '2026-09-25T17:58:00Z',
 		updatedAt: '2026-09-25T17:58:00Z',
+		...overrides
+	};
+}
+
+/** One adapter's machine-local settings, as GET /api/config reports them. */
+export function configAdapter(overrides: Partial<ConfigAdapter> = {}): ConfigAdapter {
+	return {
+		name: 'cursor',
+		binary: { value: 'agent', source: 'default' },
+		apiKeyEnv: { value: 'CURSOR_API_KEY', source: 'default' },
+		apiKeySet: false,
+		configured: false,
+		...overrides
+	};
+}
+
+/** The four adapters a colony always carries, one of them with no key at all. */
+export function configAdapters(): ConfigAdapter[] {
+	return [
+		configAdapter(),
+		configAdapter({
+			name: 'pi',
+			binary: { value: 'pi', source: 'config.yaml' },
+			apiKeyEnv: { value: 'GEMINI_API_KEY', source: 'config.yaml' },
+			apiKeySet: true,
+			configured: true
+		}),
+		configAdapter({
+			name: 'claude',
+			binary: { value: 'claude', source: 'default' },
+			apiKeyEnv: { value: 'ANTHROPIC_API_KEY', source: 'default' },
+			apiKeySet: true
+		}),
+		configAdapter({ name: 'opencode', apiKeyEnv: { value: '', source: 'unset' } })
+	];
+}
+
+/** The seven canonical push categories, in the order the config file declares them. */
+export function configNotify(): ColonyConfig['telegram']['notify'] {
+	return [
+		{ category: 'invites', mode: 'sound' },
+		{ category: 'blocked', mode: 'sound' },
+		{ category: 'failed', mode: 'sound' },
+		{ category: 'review_required', mode: 'silent' },
+		{ category: 'review_final', mode: 'silent' },
+		{ category: 'commit_gate', mode: 'off' },
+		{ category: 'completed', mode: 'silent' }
+	];
+}
+
+export function colonyConfig(overrides: Partial<ColonyConfig> = {}): ColonyConfig {
+	return {
+		slug: 'paseka',
+		colonyRoot: '/colony',
+		profile: {
+			selected: { value: '', source: 'unset' },
+			colony: [],
+			home: [],
+			layers: { colony: false, home: false }
+		},
+		nats: {
+			url: { value: 'nats://127.0.0.1:4222', source: 'config.yaml' },
+			subjectPrefix: { value: 'paseka.paseka', source: 'default' }
+		},
+		adapters: configAdapters(),
+		telegram: {
+			present: true,
+			enabled: true,
+			mode: { value: 'longpoll', source: 'config.yaml' },
+			botTokenSet: true,
+			botTokenEnv: 'PASEKA_TELEGRAM_BOT_TOKEN',
+			allowFrom: [7],
+			chatIds: [7],
+			notify: configNotify()
+		},
+		terminal: { terminal: 'default', ghosttyBinary: 'ghostty', configured: false },
 		...overrides
 	};
 }

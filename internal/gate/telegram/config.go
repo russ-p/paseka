@@ -23,8 +23,9 @@ var reservedTelegramCommands = map[string]struct{}{
 	"task":    {},
 }
 
+// EnvBotToken overrides Config.Token when set.
 const (
-	envBotToken     = "PASEKA_TELEGRAM_BOT_TOKEN"
+	EnvBotToken     = "PASEKA_TELEGRAM_BOT_TOKEN"
 	modeLongPoll    = "longpoll"
 	modeWebhook     = "webhook"
 	callbackRefresh = "gate:status:refresh"
@@ -154,6 +155,34 @@ func Load(slug string) (Config, error) {
 	return cfg, nil
 }
 
+// Inspect reads telegram.yaml without the validation Load performs, for a
+// read-only view that has to describe a gate which is disabled, half-configured,
+// or absent rather than treat all three as an error. The bool reports whether
+// the file was there, and a false carries a zero Config on purpose: applying
+// defaults to a file that does not exist would report a mode nobody chose.
+//
+// The returned Config still holds the token, so a caller must not serialise it.
+func Inspect(slug string) (Config, bool, error) {
+	path, err := ConfigPath(slug)
+	if err != nil {
+		return Config{}, false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Config{}, false, nil
+		}
+		return Config{}, false, fmt.Errorf("telegram gate: read config: %w", err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return Config{}, true, fmt.Errorf("telegram gate: parse config: %w", err)
+	}
+	cfg.applyDefaults()
+	cfg.Notify.applyLegacyWaitingReview()
+	return cfg, true, nil
+}
+
 func (c *Config) applyDefaults() {
 	if c.Mode == "" {
 		c.Mode = modeLongPoll
@@ -178,7 +207,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("telegram gate: disabled in telegram.yaml (set enabled: true)")
 	}
 	if strings.TrimSpace(c.BotToken()) == "" {
-		return fmt.Errorf("telegram gate: bot_token is required (or set %s)", envBotToken)
+		return fmt.Errorf("telegram gate: bot_token is required (or set %s)", EnvBotToken)
 	}
 	mode := strings.ToLower(strings.TrimSpace(c.Mode))
 	if mode != modeLongPoll && mode != modeWebhook {
@@ -250,7 +279,7 @@ func (c CommandsConfig) CustomCommand(name string) (CustomCommandConfig, bool) {
 
 // BotToken returns the configured token, preferring PASEKA_TELEGRAM_BOT_TOKEN.
 func (c Config) BotToken() string {
-	if v := strings.TrimSpace(os.Getenv(envBotToken)); v != "" {
+	if v := strings.TrimSpace(os.Getenv(EnvBotToken)); v != "" {
 		return v
 	}
 	return strings.TrimSpace(c.Token)
