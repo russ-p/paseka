@@ -35,7 +35,9 @@
 </script>
 
 <script lang="ts" generics="T">
+	import { untrack } from 'svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { readListState, writeListState } from '$lib/list-state';
 
 	let {
 		columns,
@@ -46,7 +48,8 @@
 		filterLabel = 'Filter',
 		filterPlaceholder = 'Filter',
 		pageSize = 10,
-		loading = false
+		loading = false,
+		stateKey
 	}: {
 		columns: DataColumn<T>[];
 		rows: T[];
@@ -58,10 +61,24 @@
 		filterPlaceholder?: string;
 		pageSize?: number;
 		loading?: boolean;
+		/**
+		 * Namespaces `?q=&page=` for a route that carries more than one table. Absent
+		 * everywhere today, so the query is the plain one; the first page with a second
+		 * table sets it.
+		 */
+		stateKey?: string;
 	} = $props();
 
-	let filter = $state('');
-	let page = $state(0);
+	/**
+	 * The filter and the page are the URL's, seeded once on mount: that is what makes a
+	 * list a link an operator can send, and what puts Back from a trail detail on the page
+	 * they left rather than on page one. The untrack says the seed is one-time on purpose
+	 * — a table that re-seeded on every URL write would feed its own write-back into
+	 * itself.
+	 */
+	const seed = untrack(() => readListState(stateKey));
+	let filter = $state(seed.q);
+	let page = $state(seed.page);
 
 	const filtered = $derived.by(() => {
 		const needle = filter.trim().toLowerCase();
@@ -85,9 +102,21 @@
 	);
 
 	$effect(() => {
-		filter;
-		page = 0;
+		// The page written is the one on screen, so a bookmark whose page a poll has
+		// invalidated corrects itself in the address bar rather than sitting there lying.
+		writeListState({ q: filter, page: currentPage }, stateKey);
 	});
+
+	/**
+	 * Typing narrows the rows, so the page it was on is usually gone; going back to page
+	 * one is what "the list is now shorter" means. Done at the input rather than in an
+	 * effect, because an effect that resets the page also runs on mount — which would
+	 * throw away the very `?page=` this table was seeded with.
+	 */
+	function applyFilter(value: string): void {
+		filter = value;
+		page = 0;
+	}
 
 	const alignClass = { left: 'text-left', right: 'text-right' } as const;
 
@@ -124,7 +153,8 @@
 				type="search"
 				class="input input-sm w-full max-w-xs"
 				placeholder={filterPlaceholder}
-				bind:value={filter}
+				value={filter}
+				oninput={(event) => applyFilter(event.currentTarget.value)}
 			/>
 		</label>
 		{#if pageCount > 1}

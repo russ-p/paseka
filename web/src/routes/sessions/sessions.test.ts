@@ -36,7 +36,15 @@ vi.mock('$lib/components/SessionTerminal.svelte', () => ({
  * would describe a session that no longer runs.
  */
 const goto = vi.fn(async () => {});
-vi.mock('$app/navigation', () => ({ goto: (...args: unknown[]) => goto(...(args as [])) }));
+vi.mock('$app/navigation', () => ({
+	goto: (...args: unknown[]) => goto(...(args as [])),
+	// A mock this narrow replaces the whole module, including the `replaceState` stand-in
+	// `tests/setup.ts` installs, and the sessions table writes its filter and page to the
+	// URL on every keystroke. The same History API write, restated rather than reached for,
+	// because a test cannot import a mock factory's own helper.
+	replaceState: (url: string | URL, state: App.PageState) =>
+		window.history.replaceState(state, '', url)
+}));
 
 function harness(
 	sessions: Session[] = [session()],

@@ -2,6 +2,22 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — A list's filter and page live in its URL
+
+Every `DataTable` under `/next/` — traces, runs, tasks, reviews, sessions, bees, worktrees, branches, adapters, processes — now keeps its filter and its page in the query as `?q=` and `?page=`. Ten routes gained it from one component, which is the argument for the fix living there rather than in each route: nothing about a route's column config changed, and nothing about the table's behaviour did either.
+
+This is the half of user story #3 a list can keep by itself. A narrowed list is a link an operator can paste to somebody, and **Back** from a trail, run, or task detail now returns to the page of the list they left instead of page one. The other half — the scroll offset of a long page that has no page number, like a run's event log or a session transcript — is per surface and has no URL to live in, so it stays its own entry.
+
+- **`replaceState`, never `pushState`.** A filter is not navigation, and Back must not walk an operator backwards through the letters of a word. It is also why a table never watches the history: nothing it does creates an entry to move between.
+- **The query merges, keeps the hash, and spends nothing on the default view.** A param the table does not own — `?trace=`, the timeline's deep link — survives a keystroke; an anchored note stays anchored; and an unfiltered first page is a clean URL rather than `?q=&page=0`.
+- **The page published is the page on screen, not the page requested.** A bookmark a poll has invalidated is clamped for display, and leaving the stale number in the address bar would make the URL disagree with the table under it. A `?page=` the URL cannot be trusted for is read strictly, because `parseInt('1.5')` is `1` and a number somebody got wrong is not a page to round in their favour.
+- **Traces pages three times, and only the middle layer is a URL.** The server cursor behind **Load older trails** and the filter are not in the query, so a shared link describes the view *inside* the rows you have rather than which fifty you pulled — which is the promise of user story #3, not half of it. `stateKey` namespaces both params (`?runs.q=&runs.page=`) for a route that grows a second table; absent everywhere today, and deliberately not derived from `label`, which is prose written for a human.
+
+Two things fell out of pinning it down. The reset that returns a table to page one on a keystroke moved **out of an effect and into the input handler**, because an effect also runs on mount and would have thrown away the very `?page=` the table was seeded with. And a table in a test renderer needed a `replaceState` that works: `$app/navigation` throws before the router is initialised, so `tests/setup.ts` stands one in against the History API — and resets the query after each test, because a filter one test typed was otherwise seeding the next test's table and emptying it.
+
+18 tests, 9 in the new module, 973 total. svelte-check clean, console rebuilt into
+internal/console/next/dist.
+
 ## 2026-09 — The event feed can be watched while it is being read
 
 `/next/timeline` had no way to move without being asked, which made watching an AFK run a matter of pressing **Refresh** and hoping. The header now carries an **Auto-refresh** selector — **Manual**, **Every 5s**, **Every 10s**, **Every 15s**, **Every 60s** — and it arrives on **Manual**, because most visits to a recorded history are a read, and a feed that moved on its own would be a second reader deciding when this one looks. The four steps are the console's existing cadences plus a minute, written as a ladder of numbers because picking a cadence is comparing them. A cadence does not survive the visit: a feed that remembered its timer would re-arm it for whoever opened the page next.

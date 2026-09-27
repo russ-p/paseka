@@ -54,6 +54,20 @@ The Console process is separate from `paseka run`.
 
 ## Operator tour
 
+Every list under `/next/` — traces, runs, tasks, reviews, sessions, bees,
+worktrees, branches, adapters, processes — keeps its **filter and its page in
+the URL**, as `?q=` and `?page=`. Two things follow. A filtered list is a link
+you can paste to somebody, and **Back** from a trail, run, or task detail
+returns you to the page of the list you left rather than to page one. The filter
+box is where you start; there is nothing to press to share the view. Typing
+narrows the rows, so it also takes you back to the first page, and a `?page=`
+that a poll has since emptied corrects itself in the address bar.
+
+On Traces this is worth spelling out, because that list pages twice. **Load
+older trails** pulls another fifty from the server and keeps them for the visit
+— that loaded window is not in the URL, so a shared link describes the view
+*inside* the rows you have, not which fifty you pulled.
+
 ### Dashboard
 
 Shows runtime health, live bees, recent Flight Trails, failed runs, pending

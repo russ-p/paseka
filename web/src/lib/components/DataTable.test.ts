@@ -23,11 +23,12 @@ const rows = [
 interface TableProps {
 	columns: DataColumn<RunSummary>[];
 	rows: RunSummary[];
-	rowKey: (run: RunSummary) => string;
+	rowKey: (row: RunSummary) => string;
 	label: string;
 	pageSize?: number;
 	loading?: boolean;
 	emptyMessage?: string;
+	stateKey?: string;
 }
 
 /** `render` erases a generic component's type parameter to `unknown`, so bind `T` here. */
@@ -107,6 +108,115 @@ describe('DataTable', () => {
 	it('renders a custom empty message for an empty result', () => {
 		renderTable({ rows: [], emptyMessage: 'No failed runs.' });
 		expect(screen.getByText('No failed runs.')).toBeInTheDocument();
+	});
+});
+
+describe('DataTable list state', () => {
+	/** The deep link an operator arrives on, which is the whole reason state is in the URL. */
+	function arriveAt(query: string): void {
+		window.history.replaceState(null, '', `/next/traces${query}`);
+	}
+
+	function searchBox(): HTMLElement {
+		return screen.getByRole('searchbox', { name: 'Filter' });
+	}
+
+	it('seeds the filter and the page from the query, so a link is the list you meant', () => {
+		arriveAt('?q=guard&page=1');
+		renderTable({ pageSize: 1 });
+
+		expect(searchBox()).toHaveValue('guard');
+		// Page one of a one-row result, which is only reachable if the seed was read.
+		expect(screen.getByText('cancelled')).toBeInTheDocument();
+		expect(screen.queryByText('builder')).not.toBeInTheDocument();
+	});
+
+	it('writes the filter into the query, so a filtered list is a link', async () => {
+		const user = userEvent.setup();
+		renderTable({ pageSize: 1 });
+
+		await user.type(searchBox(), 'guard');
+
+		expect(window.location.search).toBe('?q=guard');
+	});
+
+	it('writes the page, and drops both params once the view is the default again', async () => {
+		const user = userEvent.setup();
+		renderTable({ pageSize: 2 });
+		expect(window.location.search).toBe('');
+
+		await user.click(screen.getByRole('button', { name: 'Next' }));
+		expect(window.location.search).toBe('?page=1');
+
+		await user.click(screen.getByRole('button', { name: 'Previous' }));
+		expect(window.location.search).toBe('');
+	});
+
+	it('resets to the first page when the filter changes, and says so in the query', async () => {
+		const user = userEvent.setup();
+		renderTable({ pageSize: 1 });
+		await user.click(screen.getByRole('button', { name: 'Next' }));
+		expect(window.location.search).toBe('?page=1');
+
+		await user.type(searchBox(), 'guard');
+
+		// One row left, and page one again: the page the operator was on is gone with the
+		// rows that filled it. `page` drops out of the query because page one is the
+		// default, which is what a stale `?page=1` here would otherwise be read back as.
+		expect(window.location.search).toBe('?q=guard');
+		expect(screen.getByText('1–1 of 1')).toBeInTheDocument();
+	});
+
+	it('corrects a bookmarked page the rows cannot fill, rather than leaving it in the URL', () => {
+		arriveAt('?page=9');
+		renderTable({ pageSize: 2 });
+
+		// `currentPage` clamps for display, and the write-back puts the truth in the bar
+		// so the URL and the table under it cannot disagree.
+		expect(screen.getByText('3–3 of 3')).toBeInTheDocument();
+		expect(window.location.search).toBe('?page=1');
+	});
+
+	it('leaves somebody else’s query alone, because a param is not the table’s to claim', async () => {
+		const user = userEvent.setup();
+		arriveAt('?trace=trace-01a0bd6963faa14f');
+		renderTable({ pageSize: 1 });
+
+		await user.type(searchBox(), 'guard');
+
+		expect(window.location.search).toBe('?trace=trace-01a0bd6963faa14f&q=guard');
+	});
+
+	it('namespaces both params under a state key, so a second table cannot fight this one', async () => {
+		const user = userEvent.setup();
+		window.history.replaceState(null, '', '/next/runs?runs.q=guard&runs.page=1&q=ignored');
+		render(Table, {
+			columns,
+			rows,
+			rowKey: (run: RunSummary) => run.agentId,
+			label: 'Failed runs',
+			pageSize: 1,
+			stateKey: 'runs'
+		});
+
+		// Its own key is read and the unprefixed `q` beside it is somebody else's, or would
+		// be if this route ever grew a second table. `runs.page=1` is dropped rather than
+		// left behind, because one filtered row at a page size of one is page one and the
+		// write-back writes the page on screen.
+		expect(searchBox()).toHaveValue('guard');
+		expect(window.location.search).toBe('?runs.q=guard&q=ignored');
+
+		await user.clear(searchBox());
+		// Only the keyed param goes: `q=ignored` was never this table's to write.
+		expect(window.location.search).toBe('?q=ignored');
+		expect(searchBox()).toHaveValue('');
+	});
+
+	it('ignores a page the URL cannot be trusted for', () => {
+		arriveAt('?page=not-a-number');
+		renderTable({ pageSize: 1 });
+
+		expect(screen.getByText('1–1 of 3')).toBeInTheDocument();
 	});
 });
 

@@ -129,4 +129,31 @@ describe('traces route', () => {
 			expect(screen.getByRole('alert')).toHaveTextContent('nats url not configured')
 		);
 	});
+
+	it('keeps the table page in the URL beside the server cursor, which stays in the store', async () => {
+		const user = userEvent.setup();
+		let first = true;
+		const store = createTracesStore({
+			// The server pages at 50, the table at 15, and only the table's page is a URL:
+			// the loaded window is fifty rows an operator pulled in, which is session state.
+			loadTraces: async () => (first ? ((first = false), trails(50)) : trails(50, 50)),
+			pageSize: 50,
+			pollIntervalMs: 0
+		});
+		render(Traces, harness(store));
+		await waitFor(() => expect(screen.getByText('1–15 of 50')).toBeInTheDocument());
+		await user.click(screen.getByRole('button', { name: 'Load older trails' }));
+		await waitFor(() => expect(screen.getByText('1–15 of 100')).toBeInTheDocument());
+
+		await user.click(screen.getByRole('button', { name: 'Next' }));
+
+		expect(screen.getByText('16–30 of 100')).toBeInTheDocument();
+		expect(window.location.search).toBe('?page=1');
+		// A detail link off this page is therefore a link back to this page, which is the
+		// half of user story #3 a list can keep by itself.
+		expect(screen.getByRole('link', { name: 'Trail 15' })).toHaveAttribute(
+			'href',
+			'/next/traces/trace-15'
+		);
+	});
 });

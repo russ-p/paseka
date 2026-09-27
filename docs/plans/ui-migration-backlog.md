@@ -8,15 +8,6 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
 
-#### List state rides in the URL
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
-- **Decision:** `DataTable` reads and writes `?q=&page=` through a `listState(key)` module, with `replaceState` rather than `pushState` — a filter is not navigation, and Back must not walk through the letters of a word. `stateKey` namespaces the query so a second table on a page cannot fight the first. A bookmarked `page` that a poll has invalidated is already clamped by the table's own `currentPage`.
-- **Why in the component and not the routes:** Ten routes use `DataTable` and the fix is one, so each keeps its declarative column config and gains the behaviour for free.
-- **The boundary:** Traces has three layers of pagination — the server cursor behind `Load older trails`, the table's own page, and the filter. The URL carries the view *inside the loaded window*; the loaded window stays session state. Back from a trail returns page three of the first fifty, which is the promise, not half of it.
-- **Revisit when:** A list needs its loaded depth in the URL too, or one route grows two independent query namespaces.
-
 #### Escape returns to the owning list, and `/` reaches the filter
 
 - **Kind:** follow-up
