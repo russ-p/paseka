@@ -2,6 +2,13 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Worktree path and base SHA are copyable on a trail
+
+A trail's worktree block now puts **Path** and **Base SHA** on the clipboard alongside the trail id. The path is the value an operator pastes into a shell, and it was the one long value on the page with no way to take it whole — expanding the hint and retyping it character by character was the only route to a path the console had already fetched. The rule behind it is now written down: a copy button marks a value you paste somewhere else, so a count or a timestamp never gets one, and a worktree with no base SHA offers a single button rather than one that copies an em dash.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces)
+- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md)
+
 ## 2026-09 — Live bees plaque links to where the bees are
 
 The topbar's **Live bees** panel is a link, which closes the last plaque that summarized a page it could not reach. It follows the legacy console's rule, because a bee is not addressable and there is nothing to point at but the surface holding it: an AFK bee opens **Runs**, an interactive-only colony opens **Sessions**, and an idle plaque opens **Runs**, which is where the next bee will appear. A colony running both kinds lands on Runs — the order the legacy panel used, and the order the plaque's own `afk · session` line reads.

@@ -75,12 +75,25 @@
 			: []
 	);
 
+	/** A value an operator pastes elsewhere carries a copy button; a `—` never does. */
 	const worktreeRows: MetaRow[] = $derived(
 		worktree
 			? [
-					{ label: 'Path', value: worktree.path, mono: true, hint: [worktree.path] },
+					{
+						label: 'Path',
+						value: worktree.path,
+						mono: true,
+						hint: [worktree.path],
+						copy: true
+					},
 					{ label: 'Branch', value: worktree.branch || '—', mono: Boolean(worktree.branch) },
-					{ label: 'Base SHA', value: worktree.baseSha || '—', mono: true },
+					{
+						label: 'Base SHA',
+						value: worktree.baseSha || '—',
+						mono: true,
+						hint: worktree.baseSha ? [worktree.baseSha] : undefined,
+						copy: Boolean(worktree.baseSha)
+					},
 					{ label: 'Created', value: formatTimestamp(worktree.createdAt) }
 				]
 			: []

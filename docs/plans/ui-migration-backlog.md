@@ -201,13 +201,13 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** The cap is the *projection*, which embeds at most 20 events, so no number of rendered rows reaches the full feed. The feed itself pages back without limit.
 - **Revisit when:** A trail with more than 20 events makes the preview look broken. The fix is for the trail detail to read a page of `/api/events?traceId=<id>` — the Timeline route already does — instead of the projection's embedded list; it needs no new cursor, because the feed is newest-first and `after` walks backwards.
 
-#### Only the trail id is copyable
+#### The worktree coordinates are copyable
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
-- **Summary:** `MetaRow.copy` renders an icon-only copy button and the trail id is the only row that sets it. On the same page, the worktree **Path** and **Base SHA** are the obvious next candidates — an operator pastes a worktree path into a shell more often than a base SHA.
-- **Why deferred:** The trail id is the one value quoted verbatim in CLI output, bug reports, and `paseka replay`. The others were left alone rather than half-done.
-- **Revisit when:** Anyone pastes a worktree path by hand. It is a one-word change per row.
+- **Summary:** `MetaRow.copy` was set on the trail id and nothing else. The worktree **Path** and **Base SHA** now carry a copy button too, which is the whole of the change — a worktree path is pasted into a shell more often than a base SHA is, and an operator who cannot read a truncated path had to expand a `Hint` and retype forty characters. A `—` value gets no button, so a worktree with no base SHA offers one, not two.
+- **Why deferred:** Nothing is deferred. The fix shipped with the worktree copy pass; the entry is kept because the *rule* is the durable part — a copy button marks a value an operator pastes somewhere else, so it is a judgement about the value rather than the page, and a count or a timestamp must never get one.
+- **Revisit when:** A new pasteable value appears on a migrated route. The Git page's branch rows carry a worktree path too, but a `DataTable` cell still has no per-row action intent, so that one waits on the intent rather than on the copy button.
 
 ## Verification still owed
 

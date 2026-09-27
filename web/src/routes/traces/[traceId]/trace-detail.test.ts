@@ -85,7 +85,10 @@ describe('trace detail', () => {
 		expect(within(block).getByText('2')).toBeInTheDocument();
 	});
 
-	it('offers the trail id on the clipboard and nothing else does', async () => {
+	it('offers the trail id and the worktree coordinates on the clipboard', async () => {
+		// What is copyable is what an operator pastes elsewhere: the trail id into
+		// a CLI, the worktree path and base SHA into a shell. A count has no use
+		// off the page, so the honey reserve carries no copy button.
 		const user = userEvent.setup();
 		const writeText = vi.fn(async () => {});
 		Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
@@ -100,6 +103,38 @@ describe('trace detail', () => {
 		expect(
 			within(await section('trace-honey')).queryByRole('button', { name: /^Copy/ })
 		).not.toBeInTheDocument();
+
+		const worktree = await section('trace-worktree');
+		// Branch and Created are read here and used nowhere else.
+		expect(within(worktree).getAllByRole('button', { name: /^Copy/ })).toHaveLength(2);
+		await user.click(within(worktree).getByRole('button', { name: 'Copy path' }));
+		await user.click(within(worktree).getByRole('button', { name: 'Copy base sha' }));
+
+		expect(writeText).toHaveBeenCalledWith('.paseka/worktrees/trace-01a0bd6963faa14f');
+		expect(writeText).toHaveBeenCalledWith('03cd2afb188522ea31ae662dc9d7300883a7f531');
+		expect(within(worktree).getByRole('button', { name: 'Base SHA copied' })).toBeInTheDocument();
+	});
+
+	it('offers no copy button for a worktree that has no base SHA', async () => {
+		renderDetail({
+			detail: async () =>
+				traceDetail({
+					worktree: {
+						traceId,
+						path: '.paseka/worktrees/trace-01a0bd6963faa14f',
+						baseSha: '',
+						branch: 'paseka/trace-01a0bd6963faa14f',
+						createdAt: '2026-09-25T17:38:00Z'
+					}
+				})
+		});
+		await screen.findByText('8 / 12');
+		await userEvent.setup().click(screen.getByText('Worktree'));
+
+		const worktree = await section('trace-worktree');
+		expect(within(worktree).getByRole('button', { name: 'Copy path' })).toBeInTheDocument();
+		expect(within(worktree).queryByRole('button', { name: 'Copy base sha' })).not.toBeInTheDocument();
+		expect(within(worktree).getAllByRole('button', { name: /^Copy/ })).toHaveLength(1);
 	});
 
 	it('badges the standing flag and speaks up only when the trail has news', async () => {
