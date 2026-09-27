@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Git from './+page.svelte';
 import { createGitStore, type GitStore } from '$lib/stores/git.svelte';
 import { createToastStore } from '$lib/stores/toast.svelte';
-import { gitBranch, gitView, gitWorktree } from '../../tests/fixtures';
+import { gitBranch, gitView } from '../../tests/fixtures';
 import type { GitActionResult, GitView } from '$lib/api/types';
 
 const ok: GitActionResult = { ok: true, message: 'done' };
@@ -51,7 +51,7 @@ describe('git route', () => {
 	it('splits the clone from the origin and leaves the sync numbers inside one word', async () => {
 		const { store, toasts } = harness();
 		render(Git, { store, toasts });
-		await waitFor(() => expect(screen.getByRole('heading', { name: 'Worktrees' })).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Branches' })).toBeInTheDocument());
 
 		const clone = screen.getByLabelText('Colony root');
 		const origin = screen.getByLabelText('Origin');
@@ -122,55 +122,27 @@ describe('git route', () => {
 		).toBeInTheDocument();
 	});
 
-	it('links each worktree to its trail, and leaves an unregistered one as plain text', async () => {
-		const { store, toasts } = harness(
-			gitView({
-				worktrees: [
-					gitWorktree({ traceId: 'trace-01', branch: 'paseka/trace-01' }),
-					gitWorktree({
-						traceId: undefined,
-						branch: 'paseka/orphan',
-						path: '/colony/.paseka/worktrees/orphan'
-					})
-				]
-			})
-		);
+	it('hands the worktree table to the Worktrees route, leaving a count and a link', async () => {
+		const { store, toasts } = harness();
 		render(Git, { store, toasts });
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Worktrees' })).toBeInTheDocument());
 
-		await waitFor(() =>
-			expect(screen.getByRole('link', { name: 'trace-01' })).toHaveAttribute(
-				'href',
-				'/next/traces/trace-01'
-			)
-		);
-		const orphan = screen.getByText('paseka/orphan').closest('tr');
-		const cells = within(orphan as HTMLElement).getAllByRole('cell');
-		expect(within(cells[1] as HTMLElement).queryByRole('link')).not.toBeInTheDocument();
+		expect(screen.getByText(/2 isolated checkouts/)).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Worktrees' })).toHaveAttribute('href', '/next/worktrees');
+		// The table itself, and the destructive verb that goes with it, are the route's now.
+		expect(screen.queryByLabelText('Filter worktrees')).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Prune orphans' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'trace-01a0bd6963faa14f' })).not.toBeInTheDocument();
 	});
 
-	it('badges a worktree dirty or clean and links an open pull request', async () => {
-		const { store, toasts } = harness(
-			gitView({
-				worktrees: [
-					gitWorktree({ traceId: 'trace-01', branch: 'paseka/trace-01', dirty: true }),
-					gitWorktree({
-						traceId: 'trace-02',
-						branch: 'paseka/trace-02',
-						path: '/colony/.paseka/worktrees/trace-02',
-						prUrl: 'https://example.test/7'
-					})
-				]
-			})
-		);
+	it('says nothing about worktrees when the colony has none', async () => {
+		const { store, toasts } = harness(gitView({ worktrees: [] }));
 		render(Git, { store, toasts });
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Branches' })).toBeInTheDocument());
 
-		await waitFor(() => expect(screen.getByText('dirty')).toBeInTheDocument());
-		expect(screen.getByText('clean')).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: 'open' })).toHaveAttribute('href', 'https://example.test/7');
-		// A worktree with no pull request leaves the cell empty rather than a dead `open`.
-		const orphan = screen.getByText('paseka/trace-01').closest('tr');
-		const cells = within(orphan as HTMLElement).getAllByRole('cell');
-		expect(cells[3]).toBeEmptyDOMElement();
+		// A heading over an empty sentence says nothing, and the Dashboard tile is the count's home.
+		expect(screen.queryByRole('heading', { name: 'Worktrees' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'Worktrees' })).not.toBeInTheDocument();
 	});
 
 	it('names one branch state and keeps the rest as quiet flags', async () => {
@@ -245,29 +217,6 @@ describe('git route', () => {
 		render(Git, { store, toasts });
 
 		await waitFor(() => expect(screen.getByRole('button', { name: 'No merged leftovers' })).toBeDisabled());
-	});
-
-	it('confirms the prune and keeps the dialog open with the reason when it fails', async () => {
-		const user = userEvent.setup();
-		const pruneWorktrees = vi
-			.fn<() => Promise<GitActionResult>>()
-			.mockRejectedValue(new Error('worktree prune failed: not a git repository'));
-		const { store, toasts } = harness(gitView(), { pruneWorktrees });
-		render(Git, { store, toasts });
-		await waitFor(() => expect(screen.getByRole('button', { name: 'Prune orphans' })).toBeInTheDocument());
-
-		await user.click(screen.getByRole('button', { name: 'Prune orphans' }));
-		const dialog = await screen.findByRole('dialog', { name: 'Prune orphan worktrees?' });
-		await user.click(within(dialog).getByRole('button', { name: 'Prune orphans' }));
-
-		await waitFor(() =>
-			expect(
-				within(screen.getByRole('dialog')).getByRole('alert')
-			).toHaveTextContent('worktree prune failed: not a git repository')
-		);
-		expect(pruneWorktrees).toHaveBeenCalledTimes(1);
-		// The operator can retry from where they are, and nothing was reported twice.
-		expect(toasts.items).toHaveLength(0);
 	});
 
 	it('cancels a confirmation without touching the clone', async () => {
@@ -357,7 +306,7 @@ describe('git route', () => {
 
 		const clean = harness(gitView({ unpublished: [] }));
 		render(Git, { store: clean.store, toasts: clean.toasts });
-		await waitFor(() => expect(screen.getByRole('heading', { name: 'Worktrees' })).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByRole('heading', { name: 'Branches' })).toBeInTheDocument());
 		expect(screen.queryByRole('heading', { name: /Unpublished commits/ })).not.toBeInTheDocument();
 	});
 

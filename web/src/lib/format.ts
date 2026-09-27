@@ -374,6 +374,17 @@ export function gitWorktreeState(worktree: GitWorktree): { status: string; label
 		: { status: 'clean', label: 'clean' };
 }
 
+/**
+ * What the Worktrees page says it is holding. The empty case is its own sentence
+ * rather than a count: a colony with no worktree has not isolated anything yet, which
+ * is a different thing from having isolated nothing of several.
+ */
+export function worktreesHeadline(count: number): string {
+	if (count === 0) return 'No isolated worktree exists yet.';
+	if (count === 1) return 'One isolated worktree, holding the branch of one trail.';
+	return `${count} isolated worktrees, one per trail.`;
+}
+
 /** The branches the maintenance sweep is allowed to delete. */
 export function gitLeftoverNames(branches: GitBranch[] | undefined): string[] {
 	return (branches ?? []).filter((branch) => branch.leftover).map((branch) => branch.name);

@@ -8,7 +8,7 @@
 	import Section from '$lib/components/Section.svelte';
 	import { createGitStore, type GitStore } from '$lib/stores/git.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
-	import { traceDetailPath } from '$lib/navigation';
+	import { consolePath, traceDetailPath } from '$lib/navigation';
 	import {
 		gitActionLabel,
 		gitActionMessage,
@@ -16,10 +16,9 @@
 		gitBranchState,
 		gitCloneRows,
 		gitOriginRows,
-		gitWorktreeState,
 		type GitAction
 	} from '$lib/format';
-	import type { GitBranch, GitWorktree } from '$lib/api/types';
+	import type { GitBranch } from '$lib/api/types';
 
 	let { store = createGitStore(), toasts = toastStore }: { store?: GitStore; toasts?: ToastStore } = $props();
 
@@ -28,7 +27,7 @@
 		return () => store.stop();
 	});
 
-	/** The two destructive actions confirm first; the three sync ones do not. */
+	/** The one destructive action left here confirms; the three sync ones do not. */
 	let confirming = $state<GitAction | null>(null);
 	let runHooks = $state(false);
 
@@ -43,56 +42,14 @@
 	/** A button has to be worth pressing, so Push carries the primary tone only with work to publish. */
 	const pushIsPrimary = $derived(store.unpublished.length > 0);
 
-	const worktreeColumns: DataColumn<GitWorktree>[] = [
-		{
-			key: 'branch',
-			label: 'Branch',
-			text: (worktree) => worktree.branch || '—',
-			// The path is `<colony root>/.paseka/worktrees/<trace id>`, so it is derivable from the
-			// row itself; searching it beats a column wide enough to crowd out the others.
-			searchText: (worktree) => worktree.path,
-			mono: true,
-			grow: true
-		},
-		{
-			key: 'trace',
-			label: 'Trace',
-			text: (worktree) => worktree.traceId || '—',
-			// An unregistered worktree has no trail to open, so the cell stays plain text.
-			href: (worktree) => (worktree.traceId ? traceDetailPath(base, worktree.traceId) : null)
-		},
-		{
-			key: 'state',
-			label: 'State',
-			text: (worktree) => gitWorktreeState(worktree).label,
-			badge: (worktree) => gitWorktreeState(worktree)
-		},
-		{
-			key: 'pr',
-			label: 'Pull request',
-			text: (worktree) => (worktree.prUrl ? 'open' : ''),
-			href: (worktree) => worktree.prUrl ?? null,
-			// The declared-but-null badge is what keeps a worktree with no PR an empty
-			// cell; without it the link's fallback text would read as a dead `open`.
-			badge: () => null,
-			secondary: true
-		},
-		{
-			key: 'base',
-			label: 'Base SHA',
-			text: (worktree) => worktree.baseSha?.slice(0, 8) || '—',
-			mono: true,
-			secondary: true
-		}
-	];
-
 	const branchColumns: DataColumn<GitBranch>[] = [
 		{
 			key: 'name',
 			label: 'Branch',
 			text: (branch) => branch.name,
 			// The worktree path and the trail behind a branch are searchable, not on screen:
-			// the Worktrees table above already shows the branch that holds the checkout.
+			// the Worktrees route shows the branch that holds each checkout, and the row
+			// behind this one is every local branch, not one worktree.
 			searchText: (branch) => [branch.worktreePath, branch.traceId].filter(Boolean).join(' '),
 			mono: true
 		},
@@ -108,7 +65,7 @@
 		{ key: 'subject', label: 'Subject', text: (branch) => branch.subject || '—', grow: true }
 	];
 
-	/** What the toast says when git printed nothing of its own. */
+	/** What the toast says when git printed nothing of its own; `prune` moved to the Worktrees route. */
 	const doneFallback: Record<GitAction, string> = {
 		fetch: 'Fetch complete',
 		push: 'Push complete',
@@ -116,7 +73,6 @@
 		prune: 'No orphan worktrees',
 		delete: 'Merged leftovers deleted'
 	};
-
 	async function perform(action: GitAction): Promise<void> {
 		const inDialog = confirming === action;
 		const outcome = await store.run(action, runHooks);
@@ -148,8 +104,7 @@
 					No origin remote, so there is nothing to fetch, push, or pull. Set one on the colony
 					clone to enable the sync actions.
 				{:else}
-					Colony clone against origin, the commits it has not published, its worktrees, and its
-					local branches.
+					Colony clone against origin, the commits it has not published, and its local branches.
 				{/if}
 			</p>
 		</div>
@@ -208,32 +163,21 @@
 			</Section>
 		{/if}
 
-		<!-- The DataTable carries its own frame, so these blocks stay plain sections with a heading row. -->
-		<section id="git-worktrees" class="space-y-3">
-			<div class="flex flex-wrap items-center justify-between gap-3">
+		{#if worktrees.length > 0}
+			<!-- The worktree table belongs to its own route; what is left here is the fact that
+			     there is something to look at, and where to look at it. The section is absent
+			     when the colony has none, because a heading over an empty sentence says nothing. -->
+			<section id="git-worktrees" class="space-y-1">
 				<h2 class="text-xl font-semibold">Worktrees</h2>
-				<button
-					id="git-prune"
-					type="button"
-					class="btn btn-sm"
-					disabled={store.busy}
-					onclick={() => (confirming = 'prune')}
-				>
-					{gitActionLabel('prune', store.pending === 'prune')}
-				</button>
-			</div>
-			<DataTable
-				label="Worktrees"
-				columns={worktreeColumns}
-				rows={worktrees}
-				rowKey={(worktree) => worktree.path}
-				emptyMessage="No colony-managed worktrees."
-				filterLabel="Filter worktrees"
-				filterPlaceholder="branch, trace, path"
-				pageSize={10}
-			/>
-		</section>
+				<p class="text-sm text-base-content/70">
+					{worktrees.length} isolated checkout{worktrees.length === 1 ? '' : 's'}, listed on the
+					<a class="link" href={consolePath(base, '/worktrees')}>Worktrees</a> page with the trail
+					behind each one.
+				</p>
+			</section>
+		{/if}
 
+		<!-- The DataTable carries its own frame, so this block stays a plain section with a heading row. -->
 		<section id="git-branches" class="space-y-3">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<h2 class="text-xl font-semibold">Branches</h2>
@@ -262,36 +206,6 @@
 		</section>
 	{/if}
 </div>
-
-<Modal
-	open={confirming === 'prune'}
-	title="Prune orphan worktrees?"
-	description="Drops checkouts under .paseka/worktrees that no trail claims any more, and unregisters the ones whose directory is already gone. Branches are kept."
-	onclose={() => (confirming = null)}
->
-	{#if store.actionError}
-		<p class="text-sm text-error" role="alert">{store.actionError}</p>
-	{/if}
-	{#snippet footer()}
-		<button
-			id="git-prune-cancel"
-			type="button"
-			class="btn btn-ghost btn-sm"
-			onclick={() => (confirming = null)}
-		>
-			Cancel
-		</button>
-		<button
-			id="git-prune-confirm"
-			type="button"
-			class="btn btn-error btn-sm"
-			disabled={store.busy}
-			onclick={() => void perform('prune')}
-		>
-			{gitActionLabel('prune', store.pending === 'prune')}
-		</button>
-	{/snippet}
-</Modal>
 
 <Modal
 	open={confirming === 'delete'}

@@ -80,9 +80,9 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** `PagePlaceholder` on Bees and Worktrees. Settings is partial — theme selection only; the rest of its surface migrates later. Git is migrated, and it deliberately left the read-only worktree list for the `/next/worktrees` route to take.
+- **Summary:** `PagePlaceholder` on Bees. Settings is partial — theme selection only; the rest of its surface migrates later. Worktrees is migrated, and it arrived as a split rather than a port: the Git page's worktree table and its orphan prune moved to `/next/worktrees` together, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped from the inventory.
 - **Why deferred:** Deliberate phase order. The shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system is proven against real colony data before the rest depend on it. Git went next because its page was the one whose actions were hardest to place well, and the review settled the button and confirmation questions every later mutating route will face. System followed because it is the other read-mostly page whose format decisions — a metric that may be absent, a column on a different scale from the tiles above it — every later list will inherit. Timeline closed the Work group and settled the feed-row contract (`SignalCard`) and the folded-filter-panel pattern that Tasks, Reviews, Runs, and Sessions will all reuse. Topology closed Diagnostics beside System and is the first route to carry a third-party imperative component, so it is also where the design system's one styling exception is written down. Runs opened the Colony group and, with it, the first detail route that steps between siblings of one parent; Tasks closed the audit's other full-column form and was the first user of `Drawer`; Reviews landed the audit's `DiffViewer` and `CommentThreads` and is the second user of the shared `ReviewActions`; Sessions made `Drawer` a primitive rather than a task-shaped component, and is the only route with a third-party terminal emulator.
-- **Revisit when:** The next route is picked up; nothing blocks it technically. **Sessions is done**, which closes every legacy surface: the last three — Bees, Worktrees, and Settings — are not ports, because the legacy console has no such tab, so each needs a scope decision rather than a migration and parity cannot be their acceptance criterion.
+- **Revisit when:** The next route is picked up; nothing blocks it technically. **Sessions closed every legacy surface**, and Worktrees shipped after it, so what is left is **Bees and Settings** — neither is a port, because the legacy console has no such tab, so each needs a scope decision rather than a migration and parity cannot be their acceptance criterion.
 
 ## Components the inventory promises
 
@@ -96,13 +96,13 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** Every form that has landed fits `Modal`. `Drawer` is the first component whose only justification is a route that does not exist.
 - **Revisit when:** Sessions is migrated. `Drawer` now exists as `Modal` with `placement="right"`, which is what this asked for; the session launch form should use it as-is rather than reaching for a second focus implementation.
 
-#### `BeeCard` and `WorktreeCard`
+#### `BeeCard`
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** Both are in the component inventory; neither has been written. The audit proposes them for `/next/bees` and for the read-only worktree list split out of the Git route.
-- **Why deferred:** The Traces work showed that `DataTable` covers a list and `DetailRow` covers a short related list. Whether bees and worktrees need a card at all is unproven.
-- **Revisit when:** `/next/bees` or `/next/worktrees` is migrated — and the first question then is whether to build the card or drop it from the inventory and use what exists. The Git migration is evidence for dropping it: the worktree list on `/next/git` is a `DataTable`, and nothing about it wanted a card.
+- **Summary:** In the component inventory; never written. The audit proposes it for `/next/bees`.
+- **Why deferred:** The Traces work showed that `DataTable` covers a list and `DetailRow` covers a short related list. Whether bees need a card at all is unproven.
+- **Revisit when:** `/next/bees` is migrated, and the first question then is whether to build the card or drop it from the inventory and use what exists. **`WorktreeCard` is answered and is out of the inventory**: the worktree list shipped as a `DataTable`, and nothing about that row wanted a card — the Git migration had already carried the same rows as a table with no design pressure.
 
 ## Polish on landed routes
 
@@ -112,7 +112,7 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git migration)
 - **Summary:** `/next/git` deletes only the merged leftovers, in one confirmed sweep. A single branch that is merged but not a leftover — or one a live worktree no longer holds — has no delete path in the console; the operator filters to it and then has nothing to press. The legacy console had a per-row Delete (with no confirmation at all, which was worse).
 - **Why deferred:** `DataTable` cells are declarative by contract — a Svelte snippet cannot be built inside `<script>`, so a button in a cell needs a new intent that no other table has asked for. The sweep is the operation the section exists for, and deleting one branch is `git branch -d` away.
-- **Revisit when:** A second table needs per-row actions (Tasks, Runs, or Reviews are the likely candidates), or an operator reaches for a shell to delete a single branch. The fix is a DataTable action intent, not a Git-page workaround.
+- **Revisit when:** A second table needs per-row actions (Worktrees, Tasks, Runs, or Reviews are the likely candidates), or an operator reaches for a shell to delete a single branch. The fix is a DataTable action intent, not a Git-page workaround. Worktrees is now the first settled candidate: its scope keeps the table read-only with prune in the header, so a per-row drop is the action that would justify the intent.
 
 #### A truncated cell cannot be read in full
 

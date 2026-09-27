@@ -106,7 +106,8 @@ import {
 	runUsageLabel,
 	taskMeta,
 	taskPrimaryLabel,
-	usageRows
+	usageRows,
+	worktreesHeadline
 } from './format';
 import type { MetaRow } from './format';
 
@@ -591,6 +592,12 @@ describe('git route formatting', () => {
 	it('badges a worktree dirty or clean, so neither reads as an empty cell', () => {
 		expect(gitWorktreeState(gitWorktree())).toEqual({ status: 'clean', label: 'clean' });
 		expect(gitWorktreeState(gitWorktree({ dirty: true }))).toEqual({ status: 'dirty', label: 'dirty' });
+	});
+
+	it('says what the Worktrees page holds, and does not pluralise nothing', () => {
+		expect(worktreesHeadline(0)).toBe('No isolated worktree exists yet.');
+		expect(worktreesHeadline(1)).toBe('One isolated worktree, holding the branch of one trail.');
+		expect(worktreesHeadline(2)).toBe('2 isolated worktrees, one per trail.');
 	});
 
 	it('names the branches the maintenance sweep is allowed to delete', () => {

@@ -12,7 +12,7 @@
 		runStateLabel,
 		taskCountEntries
 	} from '$lib/format';
-	import { traceDetailPath } from '$lib/navigation';
+	import { consolePath, traceDetailPath } from '$lib/navigation';
 	import {
 		consoleStatusStore,
 		type ConsoleStatusStore
@@ -96,6 +96,7 @@
 				label="Active worktrees"
 				value={dashboard?.activeWorktrees ?? 0}
 				hint={["Isolated checkouts under .paseka/worktrees."]}
+				href={consolePath(base, '/worktrees')}
 			/>
 			<StatTile
 				id="dashboard-task-counts"

@@ -50,7 +50,7 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Source:** planning (`system.kill` / hard kill); [013-system-kill](../specs/013-system-kill.md)
 - **Summary:** After a hard kill (or late-stage avalanche), good early work may already live in `.paseka/worktrees/<traceId>/`. Need an operator path to start a **new** `traceId` that reuses that worktree (or grafts its branch/diff) instead of discarding progress and redoing from `HEAD`.
 - **Why deferred:** Orthogonal to kill protocol itself (`paseka kill` shipped); needs worktree registry + trace bootstrap design (identity, honey budget, which tasks/events to carry).
-- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path.
+- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path. The console surface is settled — `/next/worktrees` is where the interrupted checkout will be listed, and it will carry a trail link on every row — so the open half is the trace bootstrap, not the place to show it.
 
 #### Energy gate on `paseka bee run` / `bee chat`
 
@@ -100,9 +100,17 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Migrate the remaining `/next` routes (Bees, Worktrees, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists.
+- **Summary:** Migrate the remaining `/next` routes (Bees, Settings) off `PagePlaceholder`, then cut the root over from the legacy bundle. Blocked per route on the components already landed: `Section`/`MetaList`/`DetailRow` for detail pages, `Drawer` for the Sessions launch and Tasks create forms, `DataTable` for the remaining lists. Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/next/git` for `/next/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped.
 - **Why deferred:** Deliberate phase order — the shell and the two highest-traffic surfaces (Dashboard, Traces) land first so the design system is proven on real data before the rest depend on it. Git followed, because its page forced the mutating-action questions (button sizing, what confirms, what a partial success says) that every later route with a button will face.
 - **Revisit when:** The next route is picked up. Nothing blocks it technically; the ordering was a risk choice.
+
+#### A worktree registry state the console can see
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Worktrees scope)
+- **Summary:** The worktree list is built from the home registry, `git worktree list --porcelain`, and the `.paseka/worktrees/` directory, and then every row that is no longer a checkout root is dropped. So the console cannot show registered-but-missing, on-disk-but-unregistered, or a branch that disagrees with the `worktree.branch` insight, and pressing prune is the only way to learn what it would remove. A per-row state (`registered` / `on disk` / `missing` / `orphaned`) plus a preview of what a prune would drop would make `/next/worktrees` the reconciliation surface its scope was argued to be.
+- **Why deferred:** The route ships as a live-checkout inventory and the prune result names what it reconciled, so nothing is lost silently. A row for a checkout that does not exist also changes what the list's empty state means, and the disagreements are rare enough that a state machine is not yet earned.
+- **Revisit when:** An operator presses prune to find out what is lying around, or a stale registry row surfaces as a confusing trace error instead of a cleanup.
 
 #### Per-run proposal diff in Reviews
 

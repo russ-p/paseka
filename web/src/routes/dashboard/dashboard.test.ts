@@ -39,7 +39,14 @@ describe('dashboard route', () => {
 		const activeTraces = screen.getByText('Active traces').closest('.stat');
 		expect(activeTraces).toHaveTextContent('2');
 		expect(screen.getByText('Active sessions').closest('.stat')).toHaveTextContent('4');
-		expect(screen.getByText('Active worktrees').closest('.stat')).toHaveTextContent('3');
+		const worktrees = screen.getByText('Active worktrees').closest('.stat');
+		expect(worktrees).toHaveTextContent('3');
+		// The count is the one place the grid names a route, because the worktrees themselves
+		// are listed on their own page and nothing else on the grid leads anywhere.
+		expect(within(worktrees as HTMLElement).getByRole('link')).toHaveAttribute(
+			'href',
+			'/next/worktrees'
+		);
 	});
 
 	it('leaves NATS to the topbar instead of repeating it in the stat grid', () => {

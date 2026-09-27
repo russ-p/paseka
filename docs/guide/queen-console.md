@@ -35,9 +35,9 @@ The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
 page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
 detail), **Tasks** (board and task detail), **Reviews** (queue, proposal, and
-merge preview), and **Sessions** (list and session detail). Every other route under
-`/next/` renders a "migration pending" card that links back to the legacy console,
-so use `/` for Bees and Worktrees for now.
+merge preview), **Sessions** (list and session detail), and **Worktrees**. Every
+other route under `/next/` renders a "migration pending" card that links back to
+the legacy console, so use `/` for Bees and Settings for now.
 
 ## What requires the Hive Runtime
 
@@ -282,17 +282,39 @@ when `defaults.delivery` is `pull_request`.
 
 On `/next/git` the same three actions sit as one compact group in the page
 header, with **Push** highlighted only while the clone has commits it has not
-published. A worktree row links to the trail that owns it, and a branch row
-carries one word — `current`, `leftover`, or `merged` — so a settled branch does
-not repeat its flags. **Prune orphans** and **Delete N leftovers** remove local
-state, so they ask first and the delete names every branch involved; a refusal
-(say, a branch a live worktree still holds) is reported per branch instead of
-being rounded up to a failure. Without an `origin` remote the three actions are
-disabled and the page says why. The preview re-reads the clone after every
-action and otherwise refreshes on a 15-second timer — slower than the legacy tab
-because each read shells out to `git` several times — and it runs one action at
-a time, so a second click is refused rather than queued behind a push. Nothing
-here needs the Hive Runtime.
+published. **Delete N leftovers** removes local state, so it asks first and names
+every branch involved; a refusal (say, a branch a live worktree still holds) is
+reported per branch instead of being rounded up to a failure. Without an
+`origin` remote the three actions are disabled and the page says why. A branch
+row carries one word — `current`, `leftover`, or `merged` — so a settled branch
+does not repeat its flags. The worktree table and **Prune orphans** moved to the
+**Worktrees** tab; the Git page keeps a count and a link to it. The preview
+re-reads the clone after every action and otherwise refreshes on a 15-second
+timer — slower than the legacy tab because each read shells out to `git` several
+times — and it runs one action at a time, so a second click is refused rather
+than queued behind a push. Nothing here needs the Hive Runtime.
+
+### Worktrees
+
+Lists the colony's isolated worktrees — one per trail that mutates code, each a
+checkout under `.paseka/worktrees/` holding that trail's branch. A row shows the
+branch, the trail it belongs to, whether its working tree is `dirty` or `clean`,
+the pull request it opened, and the base SHA it was cut from; the trail id links
+to the trail, and a worktree with no trail (an unregistered checkout) stays
+plain text rather than becoming a dead link.
+
+**Prune orphans** lives here rather than on the Git tab, because it is the
+cleanup that reconciles this list: it drops checkouts under `.paseka/worktrees`
+that no trail claims any more and unregisters the ones whose directory is
+already gone. **Branches are kept** — a prune is not a branch delete — and the
+dialog says so before anything is removed. The result reports what was
+reconciled by name, so a sweep that found nothing reads as "No orphan
+worktrees" rather than as silence.
+
+The list is rebuilt on every poll, and a row disappears on its own once its
+checkout is gone: the server reports the checkouts that exist now, so a registry
+entry pointing at a deleted directory is not shown as a broken row — press
+**Prune orphans** to reconcile it. Nothing here needs the Hive Runtime.
 
 ## Common operator actions
 
@@ -306,6 +328,7 @@ here needs the Hive Runtime.
 | Work with an interactive bee | Sessions | `paseka bee chat`, `paseka session ...` |
 | Inspect routing | Topology | `paseka colony topology` |
 | Publish repository changes | Git | regular `git` commands |
+| Clean up isolated checkouts | Worktrees | `paseka prune` |
 
 ## Troubleshooting
 
@@ -314,7 +337,8 @@ here needs the Hive Runtime.
 - **NATS is unreachable:** run `paseka doctor` and verify
   `PASEKA_NATS_URL` or machine-local `nats.url`.
 - **A review has no merge diff:** confirm the proposal came from an isolated
-  worktree and that the worktree still exists.
+  worktree and that the worktree still exists — the Worktrees tab lists the
+  checkouts that are still there, and **Prune orphans** reconciles the rest.
 - **A session cannot attach:** check `paseka session list`; cross-process PTY
   attachment depends on the active session registry and terminal setup.
 - **Remote Git state looks stale:** use explicit Fetch. Polling `/api/git`

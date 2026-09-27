@@ -211,11 +211,17 @@ func (a *api) handleGitWorktreesPrune(w http.ResponseWriter, r *http.Request) {
 		writeGitError(w, err)
 		return
 	}
-	msg := res.Message
-	if len(res.Unregistered) > 0 {
-		msg = strings.TrimSpace(msg + " unregistered: " + strings.Join(res.Unregistered, ", "))
+	// `git worktree prune` prints nothing when it had nothing to do, so the message is
+	// assembled from the parts that have something to say. Concatenating them instead
+	// would leave a leading space on the console's toast whenever git stayed quiet.
+	parts := make([]string, 0, 2)
+	if msg := strings.TrimSpace(res.Message); msg != "" {
+		parts = append(parts, msg)
 	}
-	writeJSON(w, GitActionResult{OK: true, Message: msg})
+	if len(res.Unregistered) > 0 {
+		parts = append(parts, "unregistered: "+strings.Join(res.Unregistered, ", "))
+	}
+	writeJSON(w, GitActionResult{OK: true, Message: strings.Join(parts, " ")})
 }
 
 func writeGitError(w http.ResponseWriter, err error) {
