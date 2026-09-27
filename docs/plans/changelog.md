@@ -2,6 +2,19 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — A DataTable row can carry one action, and a branch the sweep skips gets a Delete
+
+`DataTable` cells are declarative — `href` for a link, `badge` for a state — and a cell had no way to hold a control. The stated reason was that a snippet cannot be built inside `<script>`, where the column objects live, and that blocks arbitrary markup rather than a callback. So `action` is the same shape as its neighbours: `(row) => { label, kind?, onselect } | null`, rendering one button beside the cell's own text and nothing at all on a row it returns `null` for.
+
+**The gap it closes is on the Git page.** `leftover` is the sweep's *name* filter, so a `feature/login` branch that is merged, not the default, and not held by a worktree is skipped by the header sweep — and had no verb at all. The operator filtered down to it and found nothing to press, which is `git branch -d` away. Each branch row now offers **Delete** where `gitBranchDeletable` agrees with the server, and the button is offered per row precisely so the table says which branches are deletable: the predicate mirrors the four guards `gitroot.DeleteBranch` holds, and the server still refuses with the reason, so the button only decides whether to offer.
+
+- **The row action and the sweep share one dialog.** Same verb, same guards, so `confirming` is either the sweep or a named branch, the title says which, and a refusal lands in the same place either way. Closing forgets the name, or the next sweep dialog would open already armed for a row the operator is no longer looking at. `gitStore.deleteBranch(name)` and `run('delete')` share one guard and one pending verb, because a push during a delete would race on the same refs.
+- **A cell with no action stays exactly as it was**, which took a real fix. The `{#if}` that renders the button left a whitespace text node in *every* cell, and the `badge: () => null` contract — a cell that renders nothing must render nothing, which two tests assert — started failing. The block now opens against the `{/if}` above it on purpose, and the reason is written where the next person will trip over it.
+- **Worktrees deliberately did not get one.** A worktree holds uncommitted work, so the row is the state and the page's one confirmed sweep is the verb. A second destructive row action is also the point where `action` stops being one control and becomes a list — which is what the entry's own revisit condition named.
+
+11 tests, 1013 total. svelte-check clean, console rebuilt into
+internal/console/next/dist.
+
 ## 2026-09 — Hard rule 7 says a wide table must hide its widest columns
 
 Hard rule 7 said a `DataTable` too wide for 768px scrolls inside its own bordered region, and gave the reason: clipping the last column puts a link somewhere with no way to reveal it. That is a floor, not an answer — two columns are never on screen together, so a sideways pan loses more than a hidden column does, while a hidden column loses only what was hidden, and nothing, because `text` feeds the filter whatever the cell is doing. The rule now says so, and **a table of more than four columns must mark at least one `secondary`**.

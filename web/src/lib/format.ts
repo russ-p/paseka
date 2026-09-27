@@ -396,6 +396,22 @@ export function gitLeftoverNames(branches: GitBranch[] | undefined): string[] {
 }
 
 /**
+ * Whether this one branch could be deleted, which is a question about the branch and not
+ * about the sweep: a merged branch that is not the default, is not HEAD, and is not held
+ * by a live worktree is deletable on its own, and the operator who filters down to it
+ * should not have to reach for a shell. `leftover` is the sweep's *name* filter — a
+ * `feature/` branch is not a leftover — so the two disagree, and a row that the sweep
+ * would skip is exactly the row that needs a button.
+ *
+ * The server holds the same guards and refuses with a reason; this only decides whether
+ * to offer the button, so a branch that passes here and fails there is git's answer, not
+ * the console's.
+ */
+export function gitBranchDeletable(branch: GitBranch): boolean {
+	return branch.merged && !branch.default && !branch.current && !branch.worktreePath;
+}
+
+/**
  * What a git POST actually did. `message` is whatever git printed and is often
  * empty, so each call site passes the word it would have used; a batch delete
  * reports per name instead of a single message.

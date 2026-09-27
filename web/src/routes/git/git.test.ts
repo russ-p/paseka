@@ -233,6 +233,94 @@ describe('git route', () => {
 		expect(deleteBranches).not.toHaveBeenCalled();
 	});
 
+	it('deletes one branch from its own row, the way the sweep would have skipped it', async () => {
+		const user = userEvent.setup();
+		const { store, toasts, deleteBranches } = harness(
+			gitView({
+				branches: [
+					gitBranch({ name: 'main' }),
+					gitBranch({
+						name: 'feature/login',
+						current: false,
+						default: false,
+						merged: true,
+						leftover: false,
+						subject: 'Try the new login form'
+					})
+				]
+			})
+		);
+		render(Git, { store, toasts });
+		await waitFor(() => expect(screen.getByText('feature/login')).toBeInTheDocument());
+
+		// A `feature/` name is not a leftover, so the header sweep had nothing to take and
+		// the operator who filtered down to this row had nothing to press.
+		expect(screen.getByRole('button', { name: 'No merged leftovers' })).toBeDisabled();
+		await user.click(screen.getByRole('button', { name: 'Delete feature/login' }));
+
+		const dialog = await screen.findByRole('dialog', { name: 'Delete feature/login?' });
+		// One verb and one guard set, so the sweep and the row share the dialog; naming
+		// the branch in the title is what tells them apart.
+		expect(within(dialog).getByText('feature/login')).toBeInTheDocument();
+		expect(within(dialog).queryByText('paseka/trace-019f76d17ca323c8')).not.toBeInTheDocument();
+
+		await user.click(within(dialog).getByRole('button', { name: 'Delete leftovers' }));
+
+		await waitFor(() => expect(deleteBranches).toHaveBeenCalledWith(['feature/login']));
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+	});
+
+	it('offers a row delete only where the server would allow it', async () => {
+		const { store, toasts } = harness(
+			gitView({
+				branches: [
+					gitBranch({ name: 'main' }),
+					gitBranch({ name: 'open/wip', current: false, default: false, merged: false }),
+					gitBranch({
+						name: 'paseka/held',
+						current: false,
+						default: false,
+						merged: true,
+						worktreePath: '/colony/.paseka/worktrees/x'
+					})
+				]
+			})
+		);
+		render(Git, { store, toasts });
+
+		await waitFor(() => expect(screen.getByText('open/wip')).toBeInTheDocument());
+		// The default branch, an unmerged branch, and one a live worktree holds. A button
+		// on any of them would be a refusal waiting to happen.
+		expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument();
+	});
+
+	it('names the sweep again after a row delete, so the dialog is not left armed', async () => {
+		const user = userEvent.setup();
+		const view = gitView({
+			branches: [
+				gitBranch({ name: 'main' }),
+				gitBranch({ name: 'feature/login', current: false, default: false, merged: true }),
+				gitBranch({ name: 'paseka/gone', current: false, default: false, merged: true, leftover: true })
+			]
+		});
+		const { store, toasts } = harness(view);
+		render(Git, { store, toasts });
+		await waitFor(() => expect(screen.getByText('feature/login')).toBeInTheDocument());
+
+		await user.click(screen.getByRole('button', { name: 'Delete feature/login' }));
+		await user.click(
+			within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete leftovers' })
+		);
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+		// The row's name has to be forgotten, or the next sweep dialog would open already
+		// armed for a branch the operator is no longer looking at.
+		await user.click(screen.getByRole('button', { name: /Delete 1 leftover/ }));
+		const dialog = await screen.findByRole('dialog');
+		expect(within(dialog).getByText('paseka/gone')).toBeInTheDocument();
+		expect(within(dialog).queryByText('feature/login')).not.toBeInTheDocument();
+	});
+
 	it('warns rather than claims success when only some branches were deleted', async () => {
 		const user = userEvent.setup();
 		const deleteBranches = vi.fn(async () => ({

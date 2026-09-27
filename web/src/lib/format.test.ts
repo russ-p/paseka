@@ -91,6 +91,7 @@ import {
 	gitActionLabel,
 	gitLeftoverNames,
 	gitActionMessage,
+	gitBranchDeletable,
 	gitBranchFlags,
 	gitBranchState,
 	gitCloneRows,
@@ -626,6 +627,40 @@ describe('git route formatting', () => {
 			])
 		).toEqual(['paseka/a', 'paseka/b']);
 		expect(gitLeftoverNames(undefined)).toEqual([]);
+	});
+
+	it('offers a row delete on a merged branch the sweep would skip', () => {
+		// The gap the row action closes: a `feature/` name is not a `leftover`, so the
+		// sweep skips a branch git would happily delete, and the operator who filters down
+		// to it has nothing to press.
+		const notAName = gitBranch({
+			name: 'feature/login',
+			current: false,
+			default: false,
+			merged: true,
+			leftover: false
+		});
+
+		expect(gitBranchDeletable(notAName)).toBe(true);
+		expect(gitLeftoverNames([notAName])).toEqual([]);
+	});
+
+	it('refuses a row delete on anything the server would refuse', () => {
+		// The same four guards `DeleteBranch` holds, mirrored so the table offers a button
+		// only where the answer is yes rather than offering a refusal on every row.
+		const deletable = { current: false, default: false, merged: true, leftover: false };
+		expect(gitBranchDeletable(gitBranch(deletable))).toBe(true);
+		expect(gitBranchDeletable(gitBranch({ ...deletable, default: true }))).toBe(false);
+		expect(gitBranchDeletable(gitBranch({ ...deletable, current: true }))).toBe(false);
+		expect(gitBranchDeletable(gitBranch({ ...deletable, worktreePath: '/colony/.paseka/worktrees/x' }))).toBe(
+			false
+		);
+		expect(gitBranchDeletable(gitBranch({ ...deletable, merged: false }))).toBe(false);
+	});
+
+	it('keeps the default branch out of reach even when it looks deletable', () => {
+		const main = gitBranch({ name: 'main', merged: true, default: true, current: true });
+		expect(gitBranchDeletable(main)).toBe(false);
 	});
 
 	it('reports what a git POST did, preferring git output over the caller word', () => {

@@ -12,6 +12,7 @@
 	import {
 		gitActionLabel,
 		gitActionMessage,
+		gitBranchDeletable,
 		gitBranchFlags,
 		gitBranchState,
 		gitCloneRows,
@@ -27,9 +28,20 @@
 		return () => store.stop();
 	});
 
-	/** The one destructive action left here confirms; the three sync ones do not. */
-	let confirming = $state<GitAction | null>(null);
+	/**
+	 * What the confirmation is for. The sweep and a single row are the same verb and the
+	 * same guard set, so they share one dialog — the operator is deleting local branches
+	 * either way, and a second modal would be a second place for the refusal to appear.
+	 */
+	let confirming = $state<GitAction | 'branch' | null>(null);
+	let confirmingName = $state('');
 	let runHooks = $state(false);
+
+	/** The row's button arms the shared dialog for one name rather than the sweep. */
+	function askBranch(name: string): void {
+		confirmingName = name;
+		confirming = 'branch';
+	}
 
 	const git = $derived(store.git);
 	const cloneRows = $derived(gitCloneRows(git));
@@ -37,6 +49,12 @@
 	const leftovers = $derived(git?.branches.filter((branch) => branch.leftover) ?? []);
 	const worktrees = $derived(git?.worktrees ?? []);
 	const branches = $derived(git?.branches ?? []);
+	/** The one branch a row armed, or empty when the sweep is what is being confirmed. */
+	const confirmingBranch = $derived(confirming === 'branch' ? confirmingName : '');
+
+	const confirmingNames = $derived(
+		confirmingBranch === '' ? store.leftoverNames : [confirmingBranch]
+	);
 	/** The three that move the clone; the other two destroy local state and confirm first. */
 	const syncActions: GitAction[] = ['fetch', 'push', 'pull'];
 	/** A button has to be worth pressing, so Push carries the primary tone only with work to publish. */
@@ -51,7 +69,16 @@
 			// the Worktrees route shows the branch that holds each checkout, and the row
 			// behind this one is every local branch, not one worktree.
 			searchText: (branch) => [branch.worktreePath, branch.traceId].filter(Boolean).join(' '),
-			mono: true
+			mono: true,
+			// A merged branch the sweep would skip — a `feature/` name, a branch that is not
+			// a leftover — had no verb at all: the operator filtered down to it and found
+			// nothing to press. The button is offered per row and only where the server's
+			// own guards would allow it, so the table says which branches are deletable
+			// rather than offering a refusal on every one of them.
+			action: (branch) =>
+				gitBranchDeletable(branch)
+					? { label: 'Delete', kind: 'destructive', onselect: () => askBranch(branch.name) }
+					: null
 		},
 		{
 			key: 'state',
@@ -74,19 +101,29 @@
 		delete: 'Merged leftovers deleted'
 	};
 	async function perform(action: GitAction): Promise<void> {
-		const inDialog = confirming === action;
-		const outcome = await store.run(action, runHooks);
+		const single = action === 'delete' && confirming === 'branch' ? confirmingName : '';
+		const outcome =
+			single === '' ? await store.run(action, runHooks) : await store.deleteBranch(single);
 		// A refused overlap is not an error; the button that was already running owns the report.
 		if (outcome.status === 'busy') return;
 		// A dialog stays open on failure and shows the reason in place; a header action has no
 		// such surface, so its failure goes to a toast.
 		if (outcome.status === 'failed') {
-			if (!inDialog) toasts.push('error', outcome.message);
+			if (confirming === null) toasts.push('error', outcome.message);
 			return;
 		}
-		confirming = null;
+		closeConfirmation();
 		// A batch delete is only as good as its worst name, so a partial success reads as a warning.
-		toasts.push(outcome.result.ok ? 'success' : 'warning', gitActionMessage(outcome.result, doneFallback[action]));
+		toasts.push(
+			outcome.result.ok ? 'success' : 'warning',
+			gitActionMessage(outcome.result, single === '' ? doneFallback[action] : `Deleted ${single}`)
+		);
+	}
+
+	/** Also forgets the name, or the next sweep dialog would open already armed for a row. */
+	function closeConfirmation(): void {
+		confirming = null;
+		confirmingName = '';
 	}
 </script>
 
@@ -208,13 +245,13 @@
 </div>
 
 <Modal
-	open={confirming === 'delete'}
-	title="Delete merged leftover branches?"
+	open={confirming === 'delete' || confirming === 'branch'}
+	title={confirmingBranch === '' ? 'Delete merged leftover branches?' : `Delete ${confirmingBranch}?`}
 	description="Local branches only — nothing is deleted on origin, and a branch a live worktree holds is refused."
-	onclose={() => (confirming = null)}
+	onclose={closeConfirmation}
 >
 	<ul class="max-h-48 space-y-1 overflow-y-auto font-mono text-xs">
-		{#each store.leftoverNames as name (name)}
+		{#each confirmingNames as name (name)}
 			<li>{name}</li>
 		{/each}
 	</ul>
@@ -226,7 +263,7 @@
 			id="git-delete-cancel"
 			type="button"
 			class="btn btn-ghost btn-sm"
-			onclick={() => (confirming = null)}
+			onclick={closeConfirmation}
 		>
 			Cancel
 		</button>

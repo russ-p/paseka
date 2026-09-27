@@ -95,6 +95,46 @@ describe('createGitStore', () => {
 		expect(deleteBranches).toHaveBeenCalledWith(['paseka/gone']);
 	});
 
+	it('deletes one named branch without touching the rest of the sweep', async () => {
+		const { store, deleteBranches } = harness(
+			{},
+			gitView({
+				branches: [
+					gitBranch({ name: 'main' }),
+					gitBranch({ name: 'paseka/gone', merged: true, leftover: true }),
+					gitBranch({ name: 'feature/login', current: false, default: false, merged: true })
+				]
+			})
+		);
+		await store.refresh();
+
+		await store.deleteBranch('feature/login');
+
+		// The row named one branch; the sweep would have taken the leftover as well, so
+		// sending the leftover's name here would delete something nobody picked.
+		expect(deleteBranches).toHaveBeenCalledWith(['feature/login']);
+	});
+
+	it('reports the row delete under the same pending verb as the sweep', async () => {
+		let release: (() => void) | undefined;
+		const gate = new Promise<GitActionResult>((resolve) => {
+			release = () => resolve(ok);
+		});
+		const { store } = harness({ deleteBranches: () => gate });
+		await store.refresh();
+
+		const deleting = store.deleteBranch('feature/login');
+		expect(store.pending).toBe('delete');
+
+		// A push during a delete would race on the same refs, so the overlap is refused
+		// rather than queued, and the row button waits with the header one.
+		expect(await store.run('push')).toEqual({ status: 'busy' });
+
+		release?.();
+		await deleting;
+		expect(store.pending).toBeNull();
+	});
+
 	it('keeps a failure as a reason rather than throwing, and clears it on the next attempt', async () => {
 		const pull = vi
 			.fn<() => Promise<GitActionResult>>()

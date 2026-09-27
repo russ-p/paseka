@@ -83,20 +83,42 @@ export function createGitStore(options: GitStoreOptions = {}) {
 		}
 	}
 
-	async function run(action: GitAction, runHooks = false): Promise<GitRunOutcome> {
+	/**
+	 * One guard for both entry points, because a push during a delete would race on the
+	 * same refs. `action` is what the page reads to name the button that is waiting, so
+	 * there is one pending marker rather than a way per verb to report itself.
+	 */
+	async function execute(
+		action: GitAction,
+		call: () => Promise<GitActionResult>
+	): Promise<GitRunOutcome> {
 		if (pending !== null) return { status: 'busy' };
 		pending = action;
 		actionError = '';
 		try {
-			const result = await mutate(action, runHooks);
+			const result = await call();
 			await refresh();
 			return { status: 'done', result };
-		} catch (cause) {
-			actionError = errorMessage(cause);
+		} catch (error) {
+			actionError = errorMessage(error);
 			return { status: 'failed', message: actionError };
 		} finally {
 			pending = null;
 		}
+	}
+
+	async function run(action: GitAction, runHooks = false): Promise<GitRunOutcome> {
+		return execute(action, () => mutate(action, runHooks));
+	}
+
+	/**
+	 * One branch, not the leftover sweep. The server holds the guards — never the
+	 * default branch, never HEAD, never one a worktree holds, never an unmerged one — so
+	 * this only has to hand over the name the operator picked, and the answer is per-name
+	 * in `result`, the same shape the batch returns.
+	 */
+	async function deleteBranch(name: string): Promise<GitRunOutcome> {
+		return execute('delete', () => deleteBranches([name]));
 	}
 
 	function start(): void {
@@ -149,6 +171,7 @@ export function createGitStore(options: GitStoreOptions = {}) {
 		},
 		refresh,
 		run,
+		deleteBranch,
 		start,
 		stop
 	};

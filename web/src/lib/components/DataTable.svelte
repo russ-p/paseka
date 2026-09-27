@@ -31,6 +31,18 @@
 		grow?: boolean;
 		/** Hidden below 768px; the table must not force horizontal scroll on a phone. */
 		secondary?: boolean;
+		/**
+		 * One control rendered in this cell, beside its text — the same declarative shape
+		 * as `href` and `badge`, and for the same reason: the column objects live in
+		 * `<script>`, where a snippet cannot be built, and what that blocks is arbitrary
+		 * markup rather than a callback.
+		 *
+		 * `null` for a row the action does not apply to, so a button appears on the rows
+		 * that can take it and the table says which those are. The **route** owns the
+		 * confirmation, not the table: a destructive action keeps its dialog beside the
+		 * state that armed it.
+		 */
+		action?: (row: T) => { label: string; kind?: 'destructive'; onselect: () => void } | null;
 	}
 </script>
 
@@ -124,14 +136,18 @@
 	 * Cells never wrap: a table is a scan surface, and a wrapped date or bee
 	 * list doubles the row height. A cell that runs out of room truncates
 	 * instead, and the one `grow` column takes the leftover width so a long
-	 * value can never push the table sideways.
+	 * value can never push the table sideways. A cell carrying an action lays
+	 * out as a row, so the control sits beside the value it acts on rather
+	 * than under it — and only then, so a cell with nothing to press keeps the
+	 * empty markup the badge contract depends on.
 	 */
-	function cellClass(column: DataColumn<T>): string {
+	function cellClass(column: DataColumn<T>, action: boolean): string {
 		return [
 			'whitespace-nowrap',
 			column.align === 'right' ? alignClass.right : alignClass.left,
 			column.grow ? 'w-full max-w-0' : '',
-			column.secondary ? 'hidden md:table-cell' : ''
+			column.secondary ? 'hidden md:table-cell' : '',
+			action ? 'flex items-center gap-2' : ''
 		]
 			.filter(Boolean)
 			.join(' ');
@@ -192,7 +208,7 @@
 			<thead>
 				<tr>
 					{#each columns as column (column.key)}
-						<th class={cellClass(column)} scope="col">
+						<th class={cellClass(column, false)} scope="col">
 							{column.label}
 						</th>
 					{/each}
@@ -203,7 +219,7 @@
 					{#each Array.from({ length: Math.min(pageSize, 3) }) as _, index (index)}
 						<tr>
 							{#each columns as column (column.key)}
-								<td class={cellClass(column)}>
+								<td class={cellClass(column, false)}>
 									<span class="skeleton block h-3 w-full"></span>
 								</td>
 							{/each}
@@ -221,7 +237,8 @@
 								{#each columns as column (column.key)}
 									{@const cellBadge = column.badge?.(row) ?? null}
 									{@const cellHref = column.href?.(row) ?? null}
-									<td class={cellClass(column)}>
+									{@const cellAction = column.action?.(row) ?? null}
+									<td class={cellClass(column, cellAction !== null)}>
 										{#if cellHref}
 											<div class="flex min-w-0 flex-wrap items-center gap-2">
 												<a class="link {column.grow ? 'truncate' : ''} {column.mono ? 'font-mono' : ''}" href={cellHref}
@@ -235,6 +252,21 @@
 											<StatusBadge status={cellBadge.status} label={cellBadge.label} />
 										{:else if !column.badge}
 											<span class={textClass(column)}>{column.text(row)}</span>
+										{/if}{#if cellAction}
+											<!-- `aria-label` names the row, because "Delete" alone in a
+											     table of branches is a control nobody can act on. The block
+											     opens against the `{/if}` above on purpose: a newline
+											     between them would leave a whitespace text node in every
+											     cell, and a cell that renders nothing has to render
+											     nothing. -->
+											<button
+												type="button"
+												class="btn btn-xs {cellAction.kind === 'destructive' ? 'btn-error btn-outline' : 'btn-ghost'}"
+												aria-label={`${cellAction.label} ${rowKey(row)}`}
+												onclick={cellAction.onselect}
+											>
+												{cellAction.label}
+											</button>
 										{/if}
 									</td>
 								{/each}

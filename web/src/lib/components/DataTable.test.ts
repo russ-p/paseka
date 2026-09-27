@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Component } from 'svelte';
 import DataTable from './DataTable.svelte';
 import type { DataColumn } from './DataTable.svelte';
@@ -390,5 +390,73 @@ describe('DataTable conditional cells', () => {
 		const text = container.querySelector('tbody td span');
 		expect(text?.className).toContain('truncate');
 		expect(text?.className).toContain('block');
+	});
+});
+
+describe('DataTable row actions', () => {
+	interface Row {
+		name: string;
+		deletable: boolean;
+	}
+
+	const actionColumns: DataColumn<Row>[] = [
+		{
+			key: 'name',
+			label: 'Branch',
+			text: (row) => row.name,
+			mono: true,
+			action: (row) =>
+				row.deletable
+					? { label: 'Delete', kind: 'destructive', onselect: () => removed.push(row.name) }
+					: null
+		}
+	];
+
+	let removed: string[] = [];
+
+	beforeEach(() => {
+		removed = [];
+	});
+
+	function renderActions() {
+		const rows: Row[] = [
+			{ name: 'feature/one', deletable: true },
+			{ name: 'paseka/trace-01', deletable: false }
+		];
+		return render(Table as unknown as Component<Record<string, unknown>>, {
+			columns: actionColumns,
+			rows,
+			rowKey: (row: Row) => row.name,
+			label: 'Branches'
+		});
+	}
+
+	it('offers the action on the rows it applies to, and nothing on the rows it does not', () => {
+		renderActions();
+
+		// One control beside the value it acts on, named for the row: "Delete" alone in a
+		// table of branches is a button nobody can act on.
+		const button = screen.getByRole('button', { name: 'Delete feature/one' });
+		expect(button.className).toContain('btn-error');
+		expect(screen.getAllByRole('button', { name: /^Delete / })).toHaveLength(1);
+	});
+
+	it('runs the action against the row it sits in', async () => {
+		const user = userEvent.setup();
+		renderActions();
+
+		await user.click(screen.getByRole('button', { name: 'Delete feature/one' }));
+
+		expect(removed).toEqual(['feature/one']);
+	});
+
+	it('keeps a cell with no action as a plain cell', () => {
+		const { container } = renderActions();
+
+		const quiet = screen.getByText('paseka/trace-01').closest('td') as HTMLElement;
+		// `flex` is added only where there is a control, so a cell nothing can act on
+		// keeps the markup the empty-cell contract depends on.
+		expect(quiet.className).not.toContain('flex');
+		expect(container.querySelectorAll('tbody td').length).toBe(2);
 	});
 });

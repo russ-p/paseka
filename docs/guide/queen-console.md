@@ -327,7 +327,12 @@ every branch involved; a refusal (say, a branch a live worktree still holds) is
 reported per branch instead of being rounded up to a failure. Without an
 `origin` remote the three actions are disabled and the page says why. A branch
 row carries one word — `current`, `leftover`, or `merged` — so a settled branch
-does not repeat its flags. The worktree table and **Prune orphans** moved to the
+does not repeat its flags, and a branch that is merged, is not the default, and
+is not held by a worktree also gets a **Delete** in its own row. The sweep only
+takes branches named `paseka/*` or a conventional `feature/`, `hotfix/`, or
+`fix/`; the per-row button is for the ones it skips, so a single settled branch
+does not need a shell. Both open the same confirmation, titled with what they
+are about to delete. The worktree table and **Prune orphans** moved to the
 **Worktrees** tab; the Git page keeps a count and a link to it. The preview
 re-reads the clone after every action and otherwise refreshes on a 15-second
 timer — slower than the legacy tab because each read shells out to `git` several

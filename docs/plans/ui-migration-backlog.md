@@ -16,14 +16,6 @@ Entries below were taken one at a time and settled; the work has not landed, so 
 - **Why not the range read:** The largest comb file this colony has produced is 3381 bytes; the cap is a hundred and fifty-five times that. A range read and a paged modal are a real feature for a case that has not happened. The size is what makes the next decision possible — without it a 600 KiB file and a 600 GiB one look identical and "raise the cap or page it" is a guess. The path is already in the artifact's meta line, so the operator has somewhere to go.
 - **Revisit when:** A comb file passes a few hundred KiB. The size field is already there, so the choice gets made on a number.
 
-#### A DataTable row can carry one action
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git and Traces migrations)
-- **Decision:** `DataColumn.action?: (row: T) => { label: string; kind?: 'destructive'; onselect: () => void } | null`, the same declarative shape as `href` and `badge`. The design system's stated reason for having none — a snippet cannot be built inside `<script>`, where the column objects live — blocks arbitrary markup, not a callback. `DataTable` does not own the confirmation: the route opens the dialog it already has, so a destructive row action keeps its confirm surface beside the state that armed it.
-- **Why one intent closes two entries:** The Git page's branch rows carry a worktree path that is searchable but not on screen and not copyable, and a merged branch that is not a leftover has no delete path at all — the operator filters to it and has nothing to press. Neither was waiting on a copy button; both were waiting on the intent. The durable rule from the copy pass carries over: a copy button marks a value an operator pastes somewhere else, so it is a judgement about the value and never about the page.
-- **Revisit when:** A cell needs more than one control, or a second destructive row action appears — at which point the shape should be a list rather than a single `action`.
-
 ## Dead ends
 
 A link or control that resolves to a page which does not exist yet. Each one is a promise the operator can see and cannot keep.
