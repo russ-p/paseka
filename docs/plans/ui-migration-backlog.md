@@ -98,11 +98,10 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 #### `BeeCard`
 
-- **Kind:** follow-up
+- **Kind:** dropped
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** In the component inventory; never written. The audit proposes it for `/next/bees`.
-- **Why deferred:** The Traces work showed that `DataTable` covers a list and `DetailRow` covers a short related list. Whether bees need a card at all is unproven.
-- **Revisit when:** `/next/bees` is migrated, and the first question then is whether to build the card or drop it from the inventory and use what exists. **`WorktreeCard` is answered and is out of the inventory**: the worktree list shipped as a `DataTable`, and nothing about that row wanted a card — the Git migration had already carried the same rows as a table with no design pressure.
+- **Summary:** Proposed in the component inventory for `/next/bees`; never written, and now answered: the Bees route shipped as a `DataTable` and `BeeCard` is out of the inventory.
+- **Why dropped:** A bee row is one line of facts — a role, an adapter, a vocabulary, a workspace, a last run — which is the shape `DataTable` was built for, and a card per bee would give every row the same seven fields at three times the height. The same call `WorktreeCard` got.
 
 ## Polish on landed routes
 

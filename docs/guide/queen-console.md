@@ -35,9 +35,10 @@ The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
 page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
 detail), **Tasks** (board and task detail), **Reviews** (queue, proposal, and
-merge preview), **Sessions** (list and session detail), and **Worktrees**. Every
-other route under `/next/` renders a "migration pending" card that links back to
-the legacy console, so use `/` for Bees and Settings for now.
+merge preview), **Sessions** (list and session detail), **Worktrees**, and
+**Bees**. The one route still pending is **Settings**; every other route under
+`/next/` renders a "migration pending" card that links back to the legacy
+console, so use `/` for Settings for now.
 
 ## What requires the Hive Runtime
 
@@ -316,6 +317,32 @@ checkout is gone: the server reports the checkouts that exist now, so a registry
 entry pointing at a deleted directory is not shown as a broken row — press
 **Prune orphans** to reconcile it. Nothing here needs the Hive Runtime.
 
+### Bees
+
+Lists **every** bee in the colony, which is the difference from the two dropdowns
+the launch forms use: those offer only bees an interactive session can start, so
+a `script` bee is absent from them and present here. A row shows the role, the
+adapter, the intent vocabulary its prompt templates declare, its `sector`, where
+it works — an isolated `worktree` or the `colony root` — how many adapter
+processes it holds live, and its most recent run with that run's state badged and
+linked to the run's own page.
+
+Two things on this page are worth knowing because they are easy to misread:
+
+- **A blank Last run cell means the bee has never run**, not that the console
+  failed to find one. The server works it out by reading the whole run history
+  rather than the recent-runs page the Runs tab shows, so a bee that last ran
+  weeks ago in a busy colony is still reported correctly. A bee that has run and
+  *failed* says so in red — that is the health signal the page is for.
+- **A live count is momentary.** It is joined from the same status stream the
+  topbar's Live bees panel reads, so the two cannot disagree, and it needs no
+  poll of its own. A **script** bee is counted the same way even though it can
+  never be launched as a session.
+
+The rest of the page is committed configuration, so it is read once and does not
+refresh on a timer; press **Refresh** after a commit adds or changes a bee, or
+after a run lands and you want to see it. Nothing here needs the Hive Runtime.
+
 ## Common operator actions
 
 | Goal | Console | Queen Shell |
@@ -327,6 +354,7 @@ entry pointing at a deleted directory is not shown as a broken row — press
 | Stop AFK work on a trail | Trace/task context | `paseka kill --trace ...` |
 | Work with an interactive bee | Sessions | `paseka bee chat`, `paseka session ...` |
 | Inspect routing | Topology | `paseka colony topology` |
+| See what a colony can do, and what ran last | Bees | `paseka bee run`, `paseka status` |
 | Publish repository changes | Git | regular `git` commands |
 | Clean up isolated checkouts | Worktrees | `paseka prune` |
 
@@ -341,6 +369,9 @@ entry pointing at a deleted directory is not shown as a broken row — press
   checkouts that are still there, and **Prune orphans** reconciles the rest.
 - **A session cannot attach:** check `paseka session list`; cross-process PTY
   attachment depends on the active session registry and terminal setup.
+- **A bee is missing from a launch dropdown:** expected if its adapter is
+  `script` — those cannot be started as an interactive session. The **Bees** tab
+  lists every bee including those, and says so on the row.
 - **Remote Git state looks stale:** use explicit Fetch. Polling `/api/git`
   and the header chrome stream intentionally do not contact the remote.
 - **Header plaques freeze behind a reverse proxy:** disable response buffering

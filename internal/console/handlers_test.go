@@ -68,6 +68,185 @@ func TestBeesAPIReturnsProfiledOpenCodeBees(t *testing.T) {
 	if bees[0].Adapter != "opencode" {
 		t.Fatalf("scout adapter = %q, want opencode", bees[0].Adapter)
 	}
+	if !bees[0].Interactive {
+		t.Fatal("scout interactive = false, want true for an opencode adapter")
+	}
+}
+
+// The default scope is the launch picker, so a script bee — which cannot be
+// started as a session — must not appear there. The colony scope is the roster.
+func TestBeesAPIDefaultScopeIsTheLaunchPicker(t *testing.T) {
+	repo := initConsoleRepo(t)
+	writeBeeYAML(t, repo, "sweeper", "adapter: script\ncommand: ./sweep.sh\n")
+	ctxColony := setupConsoleHome(t, repo)
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	bees := getBees(t, srv, "")
+	if len(bees) != 1 || bees[0].Role != "scout" {
+		t.Fatalf("default scope bees = %+v, want scout alone", beeRoles(bees))
+	}
+	if bees[0].LastRun != nil {
+		t.Fatalf("picker carried a last run: %+v", bees[0].LastRun)
+	}
+
+	explicit := getBees(t, srv, "launchable")
+	if len(explicit) != 1 || explicit[0].Role != "scout" {
+		t.Fatalf("explicit launchable scope = %+v, want scout alone", beeRoles(explicit))
+	}
+
+	colony := getBees(t, srv, "colony")
+	if got := beeRoles(colony); len(got) != 2 || got[0] != "scout" || got[1] != "sweeper" {
+		t.Fatalf("colony scope roles = %v, want [scout sweeper]", got)
+	}
+}
+
+func TestBeesAPIColonyScopeCarriesSectorAndLastRun(t *testing.T) {
+	repo := initConsoleRepo(t)
+	scout := `role: scout
+adapter: cursor
+prompt_template: scout.md
+sector: intake
+worktree: true
+`
+	if err := os.WriteFile(filepath.Join(repo, ".paseka", "bees", "scout.yaml"), []byte(scout), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeBeeYAML(t, repo, "sweeper", "adapter: script\ncommand: ./sweep.sh\n")
+	ctxColony := setupConsoleHome(t, repo)
+
+	older := time.Now().UTC().Add(-2 * time.Hour)
+	newest := time.Now().UTC().Add(-time.Minute)
+	writeBeeRun(t, repo, "trace-old", "scout-1", "scout", protocol.StatusFailed, older)
+	writeBeeRun(t, repo, "trace-mid", "scout-2", "scout", protocol.StatusCompleted, older.Add(time.Minute))
+	writeBeeRun(t, repo, "trace-new", "scout-3", "scout", protocol.StatusCompleted, newest)
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	bees := getBees(t, srv, "colony")
+	if len(bees) != 2 {
+		t.Fatalf("bees = %+v, want two", beeRoles(bees))
+	}
+
+	scoutView := bees[0]
+	if scoutView.Sector != "intake" {
+		t.Fatalf("scout sector = %q, want intake", scoutView.Sector)
+	}
+	if !scoutView.Worktree {
+		t.Fatal("scout worktree = false, want true")
+	}
+	if !scoutView.Interactive {
+		t.Fatal("scout interactive = false, want true for a cursor adapter")
+	}
+	// Three runs, and the newest one is a different trace and agent: a scan cut
+	// at the default recent-run cap would have answered with an older run.
+	if scoutView.LastRun == nil {
+		t.Fatal("scout last run = nil, want trace-new/scout-3")
+	}
+	if scoutView.LastRun.TraceID != "trace-new" || scoutView.LastRun.AgentID != "scout-3" {
+		t.Fatalf("scout last run = %+v, want trace-new/scout-3", scoutView.LastRun)
+	}
+	if scoutView.LastRun.State != string(protocol.StatusCompleted) {
+		t.Fatalf("scout last run state = %q, want completed", scoutView.LastRun.State)
+	}
+	if scoutView.LastRun.FinishedAt == nil {
+		t.Fatal("scout last run finishedAt = nil, want the completed run's own end")
+	}
+
+	sweeper := bees[1]
+	if sweeper.Interactive {
+		t.Fatal("sweeper interactive = true, want false for a script adapter")
+	}
+	if sweeper.LastRun != nil {
+		t.Fatalf("sweeper last run = %+v, want nil for a bee that never ran", sweeper.LastRun)
+	}
+}
+
+func TestBeesAPIRejectsUnknownScope(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/bees?scope=hive", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "scope must be") {
+		t.Fatalf("body = %q, want it to name the two scopes", rec.Body.String())
+	}
+}
+
+func getBees(t *testing.T, srv *console.Server, scope string) []console.BeeView {
+	t.Helper()
+	target := "/api/bees"
+	if scope != "" {
+		target += "?scope=" + url.QueryEscape(scope)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d body=%s", target, rec.Code, rec.Body.String())
+	}
+	var bees []console.BeeView
+	if err := json.NewDecoder(rec.Body).Decode(&bees); err != nil {
+		t.Fatal(err)
+	}
+	return bees
+}
+
+func beeRoles(bees []console.BeeView) []string {
+	out := make([]string, 0, len(bees))
+	for _, bee := range bees {
+		out = append(out, bee.Role)
+	}
+	return out
+}
+
+func writeBeeYAML(t *testing.T, repo, role, body string) {
+	t.Helper()
+	path := filepath.Join(repo, ".paseka", "bees", role+".yaml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeBeeRun lays down one run directory the bee scan can find, carrying the
+// request that names the bee and a status that names the state and the end.
+func writeBeeRun(t *testing.T, repo, traceID, agentID, bee string, state protocol.RunStatus, startedAt time.Time) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		TraceID:    traceID,
+		AgentID:    agentID,
+		Bee:        bee,
+		Adapter:    "cursor",
+		Workspace:  repo,
+		ColonyRoot: repo,
+		Intent:     "general",
+		CreatedAt:  startedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	finished := startedAt.Add(time.Minute)
+	if err := d.WriteStatus(state, 0, startedAt, finished, ""); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRuntimeAPIHandlers(t *testing.T) {

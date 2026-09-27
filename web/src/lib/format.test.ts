@@ -20,6 +20,12 @@ import {
 	agentsDetailFull,
 	agentsMeta,
 	beeIntents,
+	beeIntentsLabel,
+	beeIsInteractive,
+	beeLastRunLabel,
+	beeLiveCount,
+	beeWorkspaceLabel,
+	beesHeadline,
 	sessionDuration,
 	sessionIdentityRows,
 	sessionRelayBlocker,
@@ -1213,5 +1219,79 @@ describe('beeIntents', () => {
 	it('answers for no bee at all, which is the state before one is chosen', () => {
 		expect(beeIntents(null)).toEqual([]);
 		expect(beeIntents(undefined)).toEqual([]);
+	});
+});
+
+describe('bee formatters', () => {
+	const rosterBee = (overrides: Partial<Bee> = {}): Bee => ({
+		role: 'builder',
+		adapter: 'cursor',
+		promptTemplate: 'builder.md',
+		sector: 'api',
+		worktree: true,
+		intents: ['bugfix', 'feature', 'general'],
+		interactive: true,
+		lastRun: { traceId: 'trace-1', agentId: 'builder-1', state: 'completed', startedAt: '2026-09-27T09:12:03Z' },
+		...overrides
+	});
+	const agent = (overrides: Partial<AgentItem> = {}): AgentItem => ({
+		kind: 'afk',
+		bee: 'builder',
+		pid: 4242,
+		traceId: 'trace-1',
+		agentId: 'builder-1',
+		startedAt: '2026-09-27T09:12:03Z',
+		runDir: '/colony/.paseka/runs/trace-1/builder-1',
+		...overrides
+	});
+
+	it('joins a bee\'s intents into one cell, comma-separated as a set of identifiers', () => {
+		expect(beeIntentsLabel(rosterBee({ intents: ['bugfix', 'feature', 'general'] }))).toBe(
+			'bugfix, feature, general'
+		);
+	});
+
+	it('dashes a bee with no vocabulary rather than leaving a cell blank', () => {
+		// A blank cell is what a row still loading looks like, and `traceBees` made
+		// the same choice for a trail that has not picked a worker.
+		expect(beeIntentsLabel(rosterBee({ intents: null }))).toBe('—');
+		expect(beeIntentsLabel(rosterBee({ intents: [] }))).toBe('—');
+		expect(beeIntentsLabel(null)).toBe('—');
+	});
+
+	it('counts a default intent the discovery did not report, because the cell folds it in', () => {
+		expect(beeIntentsLabel(rosterBee({ intents: null, defaultIntent: 'general' }))).toBe('general');
+	});
+
+	it('reads an absent interactive flag as interactive, since the picker omits it', () => {
+		expect(beeIsInteractive(rosterBee({ interactive: undefined }))).toBe(true);
+		expect(beeIsInteractive(rosterBee({ interactive: true }))).toBe(true);
+		expect(beeIsInteractive(rosterBee({ interactive: false }))).toBe(false);
+	});
+
+	it('counts a bee\'s live processes, and answers zero for an absent frame', () => {
+		const items = [agent(), agent({ pid: 4243, agentId: 'builder-2' }), agent({ bee: 'drone' })];
+		expect(beeLiveCount(items, 'builder')).toBe(2);
+		expect(beeLiveCount(items, 'sweeper')).toBe(0);
+		expect(beeLiveCount(undefined, 'builder')).toBe(0);
+		expect(beeLiveCount([], 'builder')).toBe(0);
+	});
+
+	it('names where a bee works, because `worktree: false` writes to the colony root', () => {
+		expect(beeWorkspaceLabel(rosterBee({ worktree: true }))).toBe('worktree');
+		expect(beeWorkspaceLabel(rosterBee({ worktree: false }))).toBe('colony root');
+	});
+
+	it('dashes a bee that has never run, and otherwise prints the run\'s own start time', () => {
+		expect(beeLastRunLabel(rosterBee({ lastRun: undefined }))).toBe('—');
+		expect(beeLastRunLabel(rosterBee())).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+	});
+
+	it('names the colony in a sentence, with the empty case as its own claim', () => {
+		// A colony with no bee has been offered no work at all, which is not the same
+		// statement as a roster of several with none of them live.
+		expect(beesHeadline(0)).toBe('No bee is registered in this colony.');
+		expect(beesHeadline(1)).toBe('One bee, with the adapter and prompt vocabulary it works through.');
+		expect(beesHeadline(4)).toBe('4 bees, each with the adapter and prompt vocabulary it works through.');
 	});
 });

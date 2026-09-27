@@ -571,11 +571,34 @@ export interface RejectTaskResult {
 	message?: string;
 }
 
-/** Mirrors `console.BeeView`, the interactive bees the launch forms offer. */
+/**
+ * The `scope` query `GET /api/bees` understands. `launchable` is the server's
+ * default and the launch picker's shape; `colony` is every bee, script bees
+ * included, and is the only scope that carries a last run.
+ */
+export type BeeScope = 'launchable' | 'colony';
+
+/** Mirrors `console.BeeRunRef`, a bee's most recent headless run. */
+export interface BeeRunRef {
+	traceId: string;
+	agentId: string;
+	intent?: string;
+	state: string;
+	startedAt: string;
+	finishedAt?: string;
+}
+
+/**
+ * Mirrors `console.BeeView`. `GET /api/bees` returns the launchable bees by
+ * default — the forms offer only what can be started — and the whole roster
+ * under `?scope=colony`, which is what the Bees route reads.
+ */
 export interface Bee {
 	role: string;
 	adapter: string;
 	promptTemplate: string;
+	/** From bee YAML; absent when the bee declares no default sector. */
+	sector?: string;
 	worktree: boolean;
 	/**
 	 * `null`, not `[]`, for a bee whose prompt templates yield no intents:
@@ -585,6 +608,17 @@ export interface Bee {
 	 */
 	intents: string[] | null;
 	defaultIntent?: string;
+	/**
+	 * Whether the effective adapter supports an interactive session. Absent from
+	 * the launch picker, where every row is `true` by construction.
+	 */
+	interactive?: boolean;
+	/**
+	 * The newest run this bee ever had, or absent when it has never run one. Only
+	 * the colony scope fills it, and it is server-derived on purpose: a client
+	 * grouping a recent-run page would report a quiet bee as never-run.
+	 */
+	lastRun?: BeeRunRef;
 }
 
 /** Mirrors `hiveview.WorktreeView`. */

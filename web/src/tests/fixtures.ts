@@ -485,7 +485,7 @@ export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
 	};
 }
 
-/** The interactive bees, which is what `GET /api/bees` returns. */
+/** The interactive bees, which is what `GET /api/bees` returns without a scope. */
 export function beeList(overrides: Partial<Bee> = {}): Bee[] {
 	return [
 		{
@@ -504,6 +504,63 @@ export function beeList(overrides: Partial<Bee> = {}): Bee[] {
 			defaultIntent: 'grilling',
 			...overrides
 		}
+	];
+}
+
+/** One colony-scoped bee, which is what `?scope=colony` returns. */
+export function bee(overrides: Partial<Bee> = {}): Bee {
+	return {
+		role: 'builder',
+		adapter: 'cursor',
+		promptTemplate: 'implementation',
+		sector: 'api',
+		worktree: true,
+		intents: ['feature', 'refactor', 'test-fix'],
+		interactive: true,
+		lastRun: {
+			traceId: 'trace-01a0bd6963faa14f',
+			agentId: 'builder-1',
+			intent: 'feature',
+			state: 'completed',
+			startedAt: '2026-09-27T09:12:03Z',
+			finishedAt: '2026-09-27T09:19:41Z'
+		},
+		...overrides
+	};
+}
+
+/**
+ * A roster with one row of each kind the page has to tell apart: a worktree bee
+ * that has run, a colony-root bee whose run failed, and a script bee that cannot
+ * be launched and has never run.
+ */
+export function beeRoster(): Bee[] {
+	return [
+		bee(),
+		bee({
+			role: 'hivewright',
+			adapter: 'claude',
+			promptTemplate: '',
+			sector: undefined,
+			worktree: false,
+			intents: null,
+			lastRun: {
+				traceId: 'trace-02b1ce7074bb25ef',
+				agentId: 'hivewright-1',
+				state: 'failed',
+				startedAt: '2026-09-26T18:02:11Z'
+			}
+		}),
+		bee({
+			role: 'sweeper',
+			adapter: 'script',
+			promptTemplate: '',
+			sector: undefined,
+			worktree: false,
+			intents: null,
+			interactive: false,
+			lastRun: undefined
+		})
 	];
 }
 

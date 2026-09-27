@@ -5,6 +5,7 @@ import type {
 	ArtifactContent,
 	ArtifactView,
 	Bee,
+	BeeScope,
 	CreateSessionRequest,
 	CreateTaskRequest,
 	CreateTaskResult,
@@ -339,9 +340,15 @@ export function getMergeDiff(traceId: string): Promise<MergeDiff> {
  * The interactive bees: role, adapter, and the intents its prompt templates
  * declare. The launch and create forms build their intent list from this, so a
  * bee that adds an intent needs no console change.
+ *
+ * The default scope is the launch picker, which is why a script bee never
+ * appears here: it cannot be started as a session, so offering it would be a
+ * dead end in a form. `colony` is the whole roster, script bees included, and is
+ * what the Bees route reads.
  */
-export function listBees(): Promise<Bee[]> {
-	return request<Bee[]>('/bees');
+export function listBees(scope?: BeeScope): Promise<Bee[]> {
+	if (scope === undefined) return request<Bee[]>('/bees');
+	return request<Bee[]>(`/bees?scope=${encodeURIComponent(scope)}`);
 }
 
 /**

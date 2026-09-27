@@ -418,6 +418,16 @@ describe('task endpoints', () => {
 
 		await listBees();
 
+		// No scope at all, so the launch picker stays the server's default and a form
+		// cannot offer a script bee it could not start.
 		expect(mock).toHaveBeenCalledWith('/api/bees', undefined);
+	});
+
+	it('asks for the colony scope by name when a roster is wanted', async () => {
+		const mock = stubFetch(() => new Response('[]'));
+
+		await listBees('colony');
+
+		expect(mock).toHaveBeenCalledWith('/api/bees?scope=colony', undefined);
 	});
 });

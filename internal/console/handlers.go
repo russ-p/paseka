@@ -94,7 +94,12 @@ func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	bees, err := ListInteractiveBees(a.ctx)
+	scope, err := ParseBeeScope(r.URL.Query().Get("scope"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	bees, err := ListBees(a.ctx, scope)
 	if err != nil {
 		writeError(w, err)
 		return

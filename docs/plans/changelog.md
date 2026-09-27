@@ -2,6 +2,17 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Bees roster in Queen Console
+
+`/next/bees` lists the colony's whole roster: role, adapter, intent vocabulary, sector, whether it works in an isolated worktree or against the colony root, how many adapter processes it holds live, and its most recent run with that run's state badged. The page shows **every** bee, including `script` adapters that run headless and cannot be started as an interactive session — the launch dropdowns in Sessions and Tasks deliberately still offer only the bees a session can start.
+
+- `GET /api/bees` gained `?scope=colony`. **The default is unchanged and still returns the launch picker**, so the two launch forms and the legacy console read exactly what they read before; an unknown scope answers 400. The roster scope adds a per-bee `interactive` flag, the bee's `sector` (documented in bee YAML and previously visible in no console surface), and a **server-derived `lastRun`**. That last one is not cosmetic: the client cannot compute it, because the runs list is capped at the 50 most recent colony-wide and a busy colony would otherwise report a quiet bee as never having run. The picker does not pay for the lookup at all, so opening a launch drawer does not walk every run directory in the colony.
+- The route reads once and does not poll — a bee's identity and configuration come from committed bee YAML — and its live column is joined from the status stream the topbar already keeps, so it cannot disagree with the Live bees plaque. Refresh stays because a run landing is the one thing on the page that changes without a commit.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Bees)
+- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md), [Bee config](../guide/bee-config.md)
+- Deferred from that work: the Live bees plaque is still the one topbar panel that is not a link — see [Backlog](backlog.md).
+
 ## 2026-09 — Age-based prune
 
 `paseka prune` adds an age-aware sibling to `paseka purge`: it removes `.paseka/worktrees/` and `.paseka/runs/` trace directories whose last activity predates a retention period (default **14 days**, `--older-than 14d|2w|336h`) instead of wiping every trace. Filesystem flags mirror purge (`--runs`, `--worktrees`, `--all`, `--yes`, `-C`), and a plan is shown before deleting. Worktrees with uncommitted changes are never auto-removed. With `--bus`, prune also removes task-ledger KV, stream events, and artifacts for correlatable traces, using ledger task activity to protect traces whose files have gone quiet while their tasks were touched recently, and cleaning up stale ledger-only traces.

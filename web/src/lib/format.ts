@@ -1250,3 +1250,75 @@ export function beeIntents(bee: Bee | null | undefined): string[] {
 	}
 	return [...intents, defaultIntent];
 }
+
+/**
+ * A bee's intent vocabulary as one cell: comma-joined, or a dash when it has
+ * none. The comma is the separator this codebase uses for a *set of identifiers*
+ * — a trail's bees, a task's dependencies — and reserves `·` for a phrase built
+ * from parts of one thing.
+ *
+ * One string rather than a badge per intent, because `DataColumn.text` always
+ * feeds the filter box: comma-joined, typing one intent name finds the bee that
+ * declares it, and nothing has to be duplicated into `searchText` by hand. A
+ * list of badges would also want the row to grow, which `whitespace-nowrap`
+ * forbids.
+ *
+ * A bee with no intents is a dash and not an empty cell, matching `traceBees`:
+ * a blank cell is indistinguishable from a row still loading. The default intent
+ * is folded in by `beeIntents` but is not marked — which of a bee's intents a
+ * bare task lands in is the create form's question, and that form preselects it.
+ */
+export function beeIntentsLabel(bee: Bee | null | undefined): string {
+	return beeIntents(bee).join(', ') || '—';
+}
+
+/**
+ * A colony-scoped bee is the whole roster, and a script bee cannot be started as
+ * a session, so the page must be able to say which rows can be launched. The
+ * launch picker does not carry the flag — every row there is interactive by
+ * construction — so an absent flag reads as interactive rather than as unknown.
+ */
+export function beeIsInteractive(bee: Bee): boolean {
+	return bee.interactive !== false;
+}
+
+/**
+ * How many live adapter processes a bee holds, from the agents frame the topbar
+ * already keeps. Joining here rather than reading `/api/agents` again is the
+ * `/next/system` precedent: a read of a store this page does not own, which costs
+ * no request and cannot disagree with the Live bees plaque.
+ */
+export function beeLiveCount(items: AgentItem[] | undefined, role: string): number {
+	let count = 0;
+	for (const item of items ?? []) {
+		if (item.bee === role) count += 1;
+	}
+	return count;
+}
+
+/**
+ * A bee's isolation: a worktree bee works inside `.paseka/worktrees/<traceId>/`,
+ * a root bee writes to the colony root itself. The word is the worktree column's
+ * only flag, and `worktree: false` is a decision worth saying out loud on a page
+ * about what may change the checkout.
+ */
+export function beeWorkspaceLabel(bee: Bee): string {
+	return bee.worktree ? 'worktree' : 'colony root';
+}
+
+/** The `DataTable` cell for a bee's last run: the time, and a state badge beside it. */
+export function beeLastRunLabel(bee: Bee): string {
+	return formatTimestamp(bee.lastRun?.startedAt);
+}
+
+/**
+ * What the Bees page says it is holding. The empty case is its own sentence
+ * rather than a count, for the reason the Worktrees headline is: a colony with no
+ * bee has been offered no work at all, which is a different claim from having a
+ * roster of none that are live.
+ */
+export function beesHeadline(count: number): string {
+	if (count === 0) return 'No bee is registered in this colony.';
+	if (count === 1) return 'One bee, with the adapter and prompt vocabulary it works through.';
+	return `${count} bees, each with the adapter and prompt vocabulary it works through.`;
+}
