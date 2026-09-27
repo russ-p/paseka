@@ -2,7 +2,68 @@
 
 Deferred UI decisions for the Queen Console redesign ([spec 035](../specs/035-queen-console-redesign.md)) — the dead ends, unbuilt transitions, and placeheld sections to return to while `/next/` is still a preview. Product and platform ideas belong in [Backlog](backlog.md); shipped work in [Changelog](changelog.md).
 
-Each item carries a **Kind**, a **Source**, what is pending, why it was set aside, and when to pick it up. Strike an item when the decision lands, not when it is discussed — a stale entry is worse than none.
+Each item carries a **Kind**, a **Source**, what is pending, why it was set aside, and when to pick it up. Strike an item when the decision lands, not when it is discussed — a stale entry is worse than none. An item whose decision has landed but whose work has not goes to **Decided, not yet built**, which trades *what is pending* for the decision and what it was chosen over.
+
+## Decided, not yet built
+
+Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
+
+#### The timeline reads on a timer the operator chooses
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline migration)
+- **Decision:** A `Manual | 5s | 10s | 15s | 60s` selector in the Timeline header beside Refresh, defaulting to `Manual`. A tick is the same reset read as Refresh — the list is replaced, the cursor and `hasMore` recomputed — so nothing is prepended and no scroll position, row identity, or boundary event can be disturbed. Pressing Refresh returns the selector to `Manual`, a tick landing during an `Apply` is dropped by the store's existing in-flight guard, and polling pauses on `visibilitychange` the way the chrome stream already does. The choice is component state and does not survive the visit.
+- **Why this and not a live feed:** The feed is cursor-paginated history, so a background update has to answer whether to prepend or replace, whether to do it under a scrolled reader, and how to dedupe a boundary event that arrives on two pages. Opting into a reset sidesteps all three, and the operator who wants the feed to move presses Refresh — the control they press today. It also costs no server work: `GET /api/events` reads up to fifty trail directories per call, so a poll has to be a choice rather than a default.
+- **Revisit when:** Someone wants a feed that appends while it is being read. That is a different feature with a scroll-position rule and an id-based dedupe in front of it, and a delta on the chrome stream is the transport it would use.
+
+#### List state rides in the URL
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
+- **Decision:** `DataTable` reads and writes `?q=&page=` through a `listState(key)` module, with `replaceState` rather than `pushState` — a filter is not navigation, and Back must not walk through the letters of a word. `stateKey` namespaces the query so a second table on a page cannot fight the first. A bookmarked `page` that a poll has invalidated is already clamped by the table's own `currentPage`.
+- **Why in the component and not the routes:** Ten routes use `DataTable` and the fix is one, so each keeps its declarative column config and gains the behaviour for free.
+- **The boundary:** Traces has three layers of pagination — the server cursor behind `Load older trails`, the table's own page, and the filter. The URL carries the view *inside the loaded window*; the loaded window stays session state. Back from a trail returns page three of the first fifty, which is the promise, not half of it.
+- **Revisit when:** A list needs its loaded depth in the URL too, or one route grows two independent query namespaces.
+
+#### Escape returns to the owning list, and `/` reaches the filter
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #10)
+- **Decision:** Two affordances the chord map cannot express, so they belong in the shell rather than in `navigation.ts`. `Escape` navigates to the list that owns the current path, found by reversing `isRouteActive` — which covers all five detail families, and `/reviews/:traceId/:taskId/preview`, with no per-route wiring, and yields to an open `Modal` or `Drawer` that already owns ESC. `/` focuses the filter, through the registry `stateKey` already gives the list state.
+- **Revisit when:** Either key is claimed by something better. `Escape` will not reach the list on a session detail while the terminal holds focus, because xterm consumes it first.
+
+#### A published cue offers its trail instead of hiding it
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Dashboard)
+- **Decision:** Two parts, and the first is the one that matters. Publishing a cue mints a trace id and publishes a SIGNAL; **nothing is written to disk**, so `GetTrace` answers 404 until a bee picks the signal up. The trail detail therefore reads 404 as "not started yet" and keeps its ten-second poll, saying the trail will appear when a bee takes the cue — which also fixes a deep link opened a moment after the publish. Then `toastStore.push` takes an optional action, and the cue's toast carries `Open trail` on a longer timeout than the four seconds a plain toast gets.
+- **No auto-navigation:** A standing cue continues a trail the operator may already be watching, so the new trail is not necessarily what they want to see. And the fear that started this entry — that a background cue would yank the operator off a page they did not act from — is obsolete: `CueRunModal` is on the Dashboard only, so a publish is always something the operator just did.
+- **Why this was stuck:** The entry read as an undecided transition. It was a server fact — a trail does not exist until a run writes it — and no client-side navigation design could have made the destination real.
+- **Revisit when:** A trail is deep-linked from somewhere that cannot be a fresh cue, where 404 means "no such trail" rather than "not yet".
+
+#### A wide table hides its widest columns below 768px
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- **Decision:** No card layout. `secondary` goes on the tables that never used it — Bees is seven columns with none, Reviews six, Worktrees five, System's process command three — and hard rule 7 gains the obligation it is missing: a table too wide for 768px **must** mark its widest columns `secondary`.
+- **Why:** Hiding a column loses it; a sideways scroll loses more, because two columns are never on screen together. And a card is not expensive in the component — the columns already carry the `label` and `text` it needs — but it puts the table and the cards both in the DOM, and `bees.test.ts` resolves a cell with `screen.getByText(text).closest('tr')`, which throws on two copies. That is a test-churn cost across ten route suites.
+- **Revisit when:** An operator reads these tables on a phone and four columns are still not enough. Then a card layout in `DataTable` is the answer, and `secondary` is shown rather than hidden there — the card has room.
+
+#### An unreadable comb file says how big it is
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
+- **Decision:** Split the constant, then show the size. `MaxInlineExportBytes` bounds an export archive and doubles as the preview cap, so anyone arriving with a preview complaint will raise the export limit, which is the wrong lever; the preview gets its own. `ArtifactView` gains `Bytes`, read from the `os.Stat` that `ItemFromFile` already performs, and both the comb list and the modal's omitted state say how large the file is.
+- **Why not the range read:** The largest comb file this colony has produced is 3381 bytes; the cap is a hundred and fifty-five times that. A range read and a paged modal are a real feature for a case that has not happened. The size is what makes the next decision possible — without it a 600 KiB file and a 600 GiB one look identical and "raise the cap or page it" is a guess. The path is already in the artifact's meta line, so the operator has somewhere to go.
+- **Revisit when:** A comb file passes a few hundred KiB. The size field is already there, so the choice gets made on a number.
+
+#### A DataTable row can carry one action
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git and Traces migrations)
+- **Decision:** `DataColumn.action?: (row: T) => { label: string; kind?: 'destructive'; onselect: () => void } | null`, the same declarative shape as `href` and `badge`. The design system's stated reason for having none — a snippet cannot be built inside `<script>`, where the column objects live — blocks arbitrary markup, not a callback. `DataTable` does not own the confirmation: the route opens the dialog it already has, so a destructive row action keeps its confirm surface beside the state that armed it.
+- **Why one intent closes two entries:** The Git page's branch rows carry a worktree path that is searchable but not on screen and not copyable, and a merged branch that is not a leftover has no delete path at all — the operator filters to it and has nothing to press. Neither was waiting on a copy button; both were waiting on the intent. The durable rule from the copy pass carries over: a copy button marks a value an operator pastes somewhere else, so it is a judgement about the value and never about the page.
+- **Revisit when:** A cell needs more than one control, or a second destructive row action appears — at which point the shape should be a list rather than a single `action`.
 
 ## Dead ends
 
@@ -28,14 +89,6 @@ A link or control that resolves to a page which does not exist yet. Each one is 
 
 Movement between routes that is not designed yet. The shell routes client-side, but nothing about *where an operator lands* is settled.
 
-#### A published cue does not open the trail it started
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Dashboard)
-- **Summary:** `CueRunModal` returns the new `traceId`; the Dashboard toasts `Cue published — trace <id>` and stays put. The trail exists, has no runs yet, and is exactly what the operator wants to watch.
-- **Why deferred:** Navigating away mid-poll loses the Dashboard context, and auto-navigating on a background cue would yank the operator off a page they did not act from. Needs a decision, not a patch.
-- **Revisit when:** The trail detail can show a live "waiting for a run" state. Then either navigate on an explicit publish, or add an "Open" action to the toast — a toast that carries navigation is the smaller change and should be tried first.
-
 #### Cross-route deep links between a trail and its work
 
 - **Kind:** idea
@@ -52,21 +105,21 @@ Movement between routes that is not designed yet. The shell routes client-side, 
 - **Why deferred:** A hard link is never broken, and history is only better in one of the two cases. Breadcrumbs would serve both but add a component and a rule for a route family that has one page so far.
 - **Revisit when:** A second detail route exists, so there is a family to design a shared back affordance for.
 
-#### List state lives in the component, not the URL
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
-- **Summary:** `DataTable` keeps its filter and page in local state, so `/next/traces` → a trail → back loses the filter and the page. User story #3 promises switching contexts "without losing scroll position"; neither scroll restoration nor list restoration is implemented or tested.
-- **Why deferred:** Moving filter and page into the URL (`?q=&page=`) is a real API decision for every table, and premature for the one list that exists.
-- **Revisit when:** A second paginated route lands, or an operator reports losing their place. Server-side trail paging already exists, so the URL can carry a cursor if the decision goes that way.
-
 #### Keyboard chords stop at the route root
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #10)
-- **Summary:** `g t` reaches `/next/traces`. Nothing reaches a trail detail, and there is no `Escape`-to-list from a detail, no chord for "open timeline", and no `/` to focus the filter box.
-- **Why deferred:** The chord map is `navigation.ts` and is cheap to extend, but chords that only make sense on one route are better designed once the route family exists.
-- **Revisit when:** The Sessions route lands and needs its own chords, or the detail-route back affordance is settled — both force a pass over the map.
+- **Summary:** The thirteen root chords are complete and discoverable — `SideMenu` renders `g <letter>` as a `kbd` in every entry. What is missing is a chord for a *destination* that is a function of what is on screen: from a trail, open its timeline or one of its runs. None of that can be a row in `consoleRoutes`, which holds roots only.
+- **Why deferred:** It needs a second, route-aware layer over the map rather than more entries in it, and the value is thin — a trail detail already links to its runs and tasks and carries an `Open timeline` button. The two affordances that were actually stuck, `Escape` and `/`, are not chords at all and are decided above.
+- **Revisit when:** An operator reaches for a route-scoped chord, or a detail route gains an action with no on-screen control. The condition this entry was waiting for has been met — there are five detail families now — so what holds it is the cost of the second layer, not the missing routes.
+
+#### Scroll position does not survive a route change
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
+- **Summary:** User story #3 promises switching contexts "without losing scroll position", and nothing implements it: SvelteKit scrolls to the top on a client-side navigation and nothing puts the reader back. It was folded into the list-state entry, which promises something else — a paginated table's `?page=` *is* its scroll position, but the long pages the story is really about (the topology graph, a run's event log, a session transcript, a merge diff) are not paginated and have no URL to restore from.
+- **Why deferred:** Restoration is per surface, because each long page knows what "the same place" means for it — a scroll offset, a folded section, a selected file in a diff. There is no general answer, and a blanket `history.scrollRestoration = 'manual'` plus a stored offset gets the scroll right and the open blocks wrong.
+- **Revisit when:** A second long page needs it, so the per-surface shape is visible twice — or before the root cutover, where "I lost my place" is a first-impression bug.
 
 #### The last route is never a trail detail
 
@@ -105,14 +158,6 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 ## Polish on landed routes
 
-#### A branch cannot be deleted from its own row
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Git migration)
-- **Summary:** `/next/git` deletes only the merged leftovers, in one confirmed sweep. A single branch that is merged but not a leftover — or one a live worktree no longer holds — has no delete path in the console; the operator filters to it and then has nothing to press. The legacy console had a per-row Delete (with no confirmation at all, which was worse).
-- **Why deferred:** `DataTable` cells are declarative by contract — a Svelte snippet cannot be built inside `<script>`, so a button in a cell needs a new intent that no other table has asked for. The sweep is the operation the section exists for, and deleting one branch is `git branch -d` away.
-- **Revisit when:** A second table needs per-row actions (Worktrees, Tasks, Runs, or Reviews are the likely candidates), or an operator reaches for a shell to delete a single branch. The fix is a DataTable action intent, not a Git-page workaround. Worktrees is now the first settled candidate: its scope keeps the table read-only with prune in the header, so a per-row drop is the action that would justify the intent.
-
 #### A truncated cell cannot be read in full
 
 - **Kind:** follow-up
@@ -120,14 +165,6 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Summary:** A `grow` cell truncates with `…` and offers no way to see the rest. The Branches commit subject is complete on a desktop and clipped at the 768px design target; the System process command line is clipped at *every* width, because the server already truncates it at 200 runes and a real adapter command is longer than that.
 - **Why deferred:** There is no reveal mechanism, and both obvious ones are wrong. Letting the cell wrap is silently defeated by the `grow` column's own truncation — it would have been a trap in the component contract — and it fights the "cells never wrap" rule that keeps row heights uniform. A native `title` would be a second, inconsistent way to show full text next to the `Hint` component that already owns that job.
 - **Revisit when:** A third table needs a prose column, or an operator cannot tell two processes apart on the System page. The fix is one `hint` intent on a `grow` cell feeding the existing `Hint` popover, plus the `lg:` visibility tier the desktop-only columns will want anyway — not a wrap and not a `title`.
-
-#### The event feed does not update itself
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline migration)
-- **Summary:** `/next/timeline` reads on mount, on apply, on load-more, and on an explicit Refresh. Nothing arrives on its own, so watching a trail during an AFK run means pressing Refresh. The audit's "chunked or streamed loading" was deferred with it.
-- **Why deferred:** The feed is cursor-paginated history, so a live update has to answer three questions the current design has no opinion on: whether to prepend or replace, whether to do it while the operator has scrolled away from the top, and how to dedupe a boundary event that arrives on two pages. Guessing wrong is worse than a button — prepending yanks rows out from under a reader, and replacing silently discards their scroll position. The legacy console made the same choice, so nothing regressed.
-- **Revisit when:** An operator actually leaves the page open during a run and misses events, or the chrome stream grows a domain event feed to subscribe to. The design needs a scroll-position rule and an id-based dedupe before it needs an endpoint.
 
 #### Only the `?trace=` scope is shareable
 
@@ -165,9 +202,9 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Runs migration)
-- **Summary:** `DataTable`'s wrapper is `overflow-x-auto`, so a table too wide for the viewport scrolls inside its bordered region. Six columns of monospace identifiers do not reflow into anything readable on a 390px phone, and the previous `overflow-x-hidden` clipped the last column outright — putting a link with no way to reveal it.
-- **Why deferred:** Scrolling is the honest floor, not a good answer. A phone operator still has to pan sideways to compare two trails.
-- **Revisit when:** A route's table is genuinely unusable at phone width, which the Runs list is close to. The fix is a card layout below 768px — the Dashboard's `TraceRow` list is the precedent — rather than another column of `secondary` hiding, which only removes information.
+- **Summary:** `DataTable`'s wrapper is `overflow-x-auto`, so a table too wide for the viewport scrolls inside its bordered region. Hard rule 7 says that is the intended answer and gives the reason — clipping the last column puts a link where nothing can reveal it — so this is a floor, not a bug.
+- **Why deferred:** The card layout is declined rather than pending, and the counts are why. Ten routes use `DataTable`, and Runs — the table this entry blamed — is the best of the bad: six columns, two of them `secondary`. Bees is seven with none, Reviews six with none, Worktrees five with none. The mechanism that answers this already existed and was simply not applied, which is decided above. A card is cheap in the component but puts the table and the cards both in the DOM, and that is a test-churn cost across ten route suites for pages a solo beekeeper may never open on a phone.
+- **Revisit when:** An operator reads these tables on a phone and four columns are still not enough. The fix is a card layout in `DataTable` below 768px, with `secondary` shown rather than hidden there — the card has the room, and a column of `secondary` only removes information.
 
 #### The colony graph is a picture with no text equivalent beside it
 
@@ -185,14 +222,6 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** Solving it properly means either measuring label widths (which needs a laid-out canvas, and so cannot be unit-tested — the reason the layout maths is pure) or dropping labels in favour of hover, both of which are worse at the sizes colonies actually run at. Zoom and drag already work.
 - **Revisit when:** a real colony crosses roughly twenty event kinds. The cheapest fix is a taller container plus a higher `minZoom` floor, so the graph opens cropped and pannable rather than illegible.
 
-#### An oversized comb file is unreadable
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
-- **Summary:** The server refuses to inline a comb body over 512 KiB and the modal shows `file too large for inline preview`. There is no partial body, no paging, and no download link, so a large `checkpoint.json` cannot be read at all.
-- **Why deferred:** The cap is the server's and predates the redesign; the legacy console had the same dead end. Raising the cap trades memory for a rare case.
-- **Revisit when:** An operator hits it in a real trail, or comb files start growing past a few hundred KiB. A range read is the fix; a bigger cap is not.
-
 #### The event preview is a guess at eight
 
 - **Kind:** follow-up
@@ -200,14 +229,6 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Summary:** The trail detail shows the newest 8 of the projection's 20 events and writes "N older on the timeline". Eight was picked because the section is a preview, not because anything measured it.
 - **Why deferred:** The cap is the *projection*, which embeds at most 20 events, so no number of rendered rows reaches the full feed. The feed itself pages back without limit.
 - **Revisit when:** A trail with more than 20 events makes the preview look broken. The fix is for the trail detail to read a page of `/api/events?traceId=<id>` — the Timeline route already does — instead of the projection's embedded list; it needs no new cursor, because the feed is newest-first and `after` walks backwards.
-
-#### The worktree coordinates are copyable
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
-- **Summary:** `MetaRow.copy` was set on the trail id and nothing else. The worktree **Path** and **Base SHA** now carry a copy button too, which is the whole of the change — a worktree path is pasted into a shell more often than a base SHA is, and an operator who cannot read a truncated path had to expand a `Hint` and retype forty characters. A `—` value gets no button, so a worktree with no base SHA offers one, not two.
-- **Why deferred:** Nothing is deferred. The fix shipped with the worktree copy pass; the entry is kept because the *rule* is the durable part — a copy button marks a value an operator pastes somewhere else, so it is a judgement about the value rather than the page, and a count or a timestamp must never get one.
-- **Revisit when:** A new pasteable value appears on a migrated route. The Git page's branch rows carry a worktree path too, but a `DataTable` cell still has no per-row action intent, so that one waits on the intent rather than on the copy button.
 
 ## Verification still owed
 
