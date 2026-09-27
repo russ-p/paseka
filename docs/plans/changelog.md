@@ -2,6 +2,19 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Escape goes back to the list, and `/` reaches the filter
+
+The `g <key>` chord map covers every root and `SideMenu` renders it, but two things an operator reaches for are not destinations and so could never be rows in it. **Escape** now returns to the list the current path belongs to, and **`/`** focuses the list's filter and selects what is in it — so the next keystroke replaces it rather than appending to a term you did not mean to keep.
+
+**Escape** is found by running `isRouteActive` backwards. That is the same test the side menu uses to light a menu entry, run in reverse, so all five detail families and `/reviews/:traceId/:taskId/preview` are covered with no per-route wiring — and a detail route added later is covered without anybody registering it. A path that *is* a list has nowhere to go, so Escape does nothing there rather than reloading the page under the operator.
+
+**It yields twice, and both yields are the point.** A dialog keeps Escape, because `Modal` already closes itself on it and a second, invisible way to dismiss a dialog is how a form loses what was typed. An editable target keeps it too — the same rule that stops a chord firing in the middle of a word — so a half-written review note is never thrown away by a reflex. That rule also settled the case the backlog listed as an open exception: a terminal focuses an off-screen `<textarea>`, so xterm's Escape never reaches the window to be claimed, and no terminal-specific check turned out to be needed.
+
+**A shell affordance finds its target by asking the document.** `dialogOpen()` looks for `[role="dialog"]`, which `Modal` renders inside `{#if open}` and which `Drawer` is; `listFilter()` looks for `[data-list-filter]`, an attribute rather than an id because the element's identity is "the list's filter" and not one particular list's. Each costs a selector, and neither can drift from what is on screen the way a hand-maintained set of open flags can — which also means the first route with two tables needs no change here.
+
+13 tests, 8 of them a new `shell.test.ts` that renders the real layout: Escape to the owning list, Escape inert on a list, both yields, `/` focusing and selecting, `/` inert where there is no list, and the chord map still working. svelte-check clean, console rebuilt
+into internal/console/next/dist.
+
 ## 2026-09 — A list's filter and page live in its URL
 
 Every `DataTable` under `/next/` — traces, runs, tasks, reviews, sessions, bees, worktrees, branches, adapters, processes — now keeps its filter and its page in the query as `?q=` and `?page=`. Ten routes gained it from one component, which is the argument for the fix living there rather than in each route: nothing about a route's column config changed, and nothing about the table's behaviour did either.

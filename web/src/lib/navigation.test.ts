@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
 	consolePath,
 	consoleRoutes,
+	dialogOpen,
 	isRouteActive,
 	landingPath,
 	lastRouteStorageKey,
+	listFilter,
 	liveBeesPath,
 	matchShortcut,
+	owningListPath,
 	rememberRoute,
 	traceDetailPath,
 	traceTimelinePath,
@@ -75,6 +78,75 @@ describe('isRouteActive', () => {
 		expect(isRouteActive('/next/traces', '/next/traces/trace-01a0')).toBe(true);
 		expect(isRouteActive('/next/traces', '/next/tracesomething')).toBe(false);
 		expect(isRouteActive('/next/traces', '/next/timeline')).toBe(false);
+	});
+});
+
+describe('owningListPath', () => {
+	/**
+	 * The five detail families, plus the merge preview that is a grandchild. Each is
+	 * covered by the same reversed `isRouteActive`, so a detail route added later needs
+	 * no registration here or anywhere else.
+	 */
+	const details = [
+		'/next/traces/trace-01a0bd6963faa14f',
+		'/next/runs/trace-01a0bd6963faa14f/run-01',
+		'/next/tasks/trace-01a0bd6963faa14f/task-b2',
+		'/next/reviews/trace-01a0bd6963faa14f/task-b2',
+		'/next/sessions/session-01',
+		'/next/reviews/trace-01a0bd6963faa14f/task-b2/preview'
+	];
+
+	it('returns every detail route to the list the operator came from', () => {
+		expect(owningListPath('/next', details[0])).toBe('/next/traces');
+		expect(owningListPath('/next', details[1])).toBe('/next/runs');
+		expect(owningListPath('/next', details[2])).toBe('/next/tasks');
+		expect(owningListPath('/next', details[3])).toBe('/next/reviews');
+		expect(owningListPath('/next', details[4])).toBe('/next/sessions');
+		// The preview is a child of a child, and the extra segment must not hide the owner.
+		expect(owningListPath('/next', details[5])).toBe('/next/reviews');
+	});
+
+	it('has nowhere to go from a list, because a list is not inside another list', () => {
+		expect(owningListPath('/next', '/next/traces')).toBeNull();
+		expect(owningListPath('/next', '/next/dashboard')).toBeNull();
+	});
+
+	it('has nowhere to go from a route that is not a list of anything', () => {
+		// Topology is one graph, and Settings one form: neither is inside a list an
+		// operator would be escaping from.
+		expect(owningListPath('/next', '/next/topology')).toBeNull();
+		expect(owningListPath('/next', '/next/settings')).toBeNull();
+	});
+
+	it('has nowhere to go from a path it does not know, rather than guessing a parent', () => {
+		expect(owningListPath('/next', '/next/nope')).toBeNull();
+		expect(owningListPath('/next', '/')).toBeNull();
+	});
+});
+
+describe('shell DOM probes', () => {
+	it('reports a dialog only while one is on screen', () => {
+		expect(dialogOpen()).toBe(false);
+		const dialog = document.createElement('div');
+		dialog.setAttribute('role', 'dialog');
+		document.body.append(dialog);
+
+		expect(dialogOpen()).toBe(true);
+
+		dialog.remove();
+		expect(dialogOpen()).toBe(false);
+	});
+
+	it('finds the list filter by what it is, not by which list it belongs to', () => {
+		expect(listFilter()).toBeNull();
+		const input = document.createElement('input');
+		input.setAttribute('data-list-filter', '');
+		document.body.append(input);
+
+		expect(listFilter()).toBe(input);
+
+		input.remove();
+		expect(listFilter()).toBeNull();
 	});
 });
 

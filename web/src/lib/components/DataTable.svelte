@@ -154,6 +154,7 @@
 				class="input input-sm w-full max-w-xs"
 				placeholder={filterPlaceholder}
 				value={filter}
+				data-list-filter
 				oninput={(event) => applyFilter(event.currentTarget.value)}
 			/>
 		</label>

@@ -8,13 +8,6 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
 
-#### Escape returns to the owning list, and `/` reaches the filter
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #10)
-- **Decision:** Two affordances the chord map cannot express, so they belong in the shell rather than in `navigation.ts`. `Escape` navigates to the list that owns the current path, found by reversing `isRouteActive` — which covers all five detail families, and `/reviews/:traceId/:taskId/preview`, with no per-route wiring, and yields to an open `Modal` or `Drawer` that already owns ESC. `/` focuses the filter, through the registry `stateKey` already gives the list state.
-- **Revisit when:** Either key is claimed by something better. `Escape` will not reach the list on a session detail while the terminal holds focus, because xterm consumes it first.
-
 #### A published cue offers its trail instead of hiding it
 
 - **Kind:** follow-up

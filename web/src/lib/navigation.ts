@@ -88,6 +88,45 @@ export function isRouteActive(href: string, currentPath: string): boolean {
 	return currentPath === href || currentPath.startsWith(`${href}/`);
 }
 
+/**
+ * The list that owns a path, which is what `Escape` returns to — found by reversing
+ * `isRouteActive` rather than by a per-route table, so a detail route added later is
+ * covered without being registered anywhere. It is the same test the side menu uses to
+ * light an entry, run backwards: the entry a trail detail, a run, a task, a proposal, a
+ * session, or a merge preview sits under is the list the operator came from, and the
+ * extra `/preview` segment is still a child of `/reviews`.
+ *
+ * `null` when the path is already the list, because there is nowhere for `Escape` to go,
+ * and on a route with no detail child for the same reason — `Topology` is not a list of
+ * anything an operator would want to be returned to.
+ */
+export function owningListPath(base: string, currentPath: string): string | null {
+	const owner = consoleRoutes.find((route) => isRouteActive(consolePath(base, route.path), currentPath));
+	if (!owner) return null;
+	const path = consolePath(base, owner.path);
+	return path === currentPath ? null : path;
+}
+
+/**
+ * A dialog owns `Escape` while it is open, and the DOM is where that truth already is:
+ * `Modal` renders `role="dialog"` inside `{#if open}` and `Drawer` is that component, so
+ * asking the document costs a selector and cannot drift from what is on screen the way a
+ * registry of open flags would.
+ */
+export function dialogOpen(): boolean {
+	return document.querySelector('[role="dialog"]') !== null;
+}
+
+/**
+ * The list filter on the current page, if this page has one. A `data-` hook rather than
+ * an id, because the element's identity is "the list's filter" and not one particular
+ * list's — and because a page that ever grows a second table wants this to find the first
+ * without either table having to be named.
+ */
+export function listFilter(): HTMLInputElement | null {
+	return document.querySelector<HTMLInputElement>('[data-list-filter]');
+}
+
 export function readStoredRoute(storage: RouteStorage | undefined = browserStorage()): string | null {
 	try {
 		return storage?.getItem(lastRouteStorageKey) ?? null;

@@ -68,6 +68,13 @@ older trails** pulls another fifty from the server and keeps them for the visit
 — that loaded window is not in the URL, so a shared link describes the view
 *inside* the rows you have, not which fifty you pulled.
 
+Two keys work on every page and are not in the `g` chord map, because they are
+not destinations: **Escape** goes back to the list a detail belongs to — from a
+trail, a run, a task, a proposal, a session, or the merge preview, to its list —
+and **`/`** jumps to the list's filter and selects what is in it, so the next
+keystroke replaces it. Neither fires while you are typing, and **Escape** leaves
+a dialog alone so it closes rather than navigating out from under you.
+
 ### Dashboard
 
 Shows runtime health, live bees, recent Flight Trails, failed runs, pending
