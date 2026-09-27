@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
+	import { RefreshCw } from 'lucide-svelte';
 	import Section from '$lib/components/Section.svelte';
 	import EventRow from './EventRow.svelte';
 	import { activeFilterCount, eventFilterSummary } from '$lib/format';
 	import { traceDetailPath } from '$lib/navigation';
-	import { createTimelineStore, type TimelineStore } from '$lib/stores/timeline.svelte';
+	import { createTimelineStore, timelinePollIntervals, type TimelinePollSeconds, type TimelineStore } from '$lib/stores/timeline.svelte';
 	import { eventTypes, type EventFilters } from '$lib/api/types';
 
 	let {
@@ -25,7 +26,19 @@
 	let filters = $state<EventFilters>(seed);
 
 	$effect(() => {
-		timeline.start();
+		// Untracked on purpose. This effect's job is mount and unmount, but `start` reads
+		// the cadence to decide whether to arm, so tracking it would re-run the effect on
+		// every choice the operator makes — and each run is a full reset read behind a
+		// click that only meant to set a timer. `setPoll` re-arms instead.
+		untrack(() => timeline.start());
+		document.addEventListener('visibilitychange', handleVisibility);
+		// Asked once as well as on the event: a tab opened in the background never fires
+		// one, and it would otherwise poll a screen nobody is looking at.
+		handleVisibility();
+		return () => {
+			document.removeEventListener('visibilitychange', handleVisibility);
+			timeline.stop();
+		};
 	});
 
 	const active = $derived(timeline.filters);
@@ -33,6 +46,59 @@
 	const summary = $derived(eventFilterSummary(active));
 	/** Scoped to one trail, so the feed rows need not repeat the id they all share. */
 	const scopedToTrace = $derived(Boolean(active.traceId));
+	/** The store holds the cadence; the select only names it. */
+	const pollChoice = $derived(
+		timeline.pollSeconds === null ? 'manual' : String(timeline.pollSeconds)
+	);
+	/**
+	 * A feed read answers in tens of milliseconds, which is one or two frames of a
+	 * spinner — long enough to look like a glitch and too short to be feedback. So the
+	 * indicator is held for a second measured from the moment the read *started*, and a
+	 * read landing inside another's second extends the one already on screen instead of
+	 * restarting it, which is what makes a five-second cadence read as a heartbeat
+	 * rather than as five flickers.
+	 *
+	 * The read is never delayed. This is a floor on what the operator is shown, not on
+	 * what the server is asked, and `disabled` still follows the real read — the button
+	 * is clickable again the moment the feed is current, even while the acknowledgement
+	 * is still on screen.
+	 */
+	const MIN_SPIN_MS = 1000;
+
+	let spinning = $state(false);
+	let spinStartedAt = 0;
+	let spinTimer: ReturnType<typeof setTimeout> | undefined;
+	let settled = false;
+
+	$effect(() => {
+		if (timeline.loading) {
+			spinStartedAt = Date.now();
+			spinning = true;
+			if (spinTimer !== undefined) clearTimeout(spinTimer);
+			return;
+		}
+		// The first settle is the page arriving, not a read anybody asked for: the
+		// skeletons already said so, and a spinning Refresh on a feed nobody armed would
+		// be the icon lying about a cadence that does not exist.
+		if (!settled) {
+			settled = true;
+			spinning = false;
+			return;
+		}
+		spinTimer = setTimeout(() => {
+			spinning = false;
+		}, Math.max(0, MIN_SPIN_MS - (Date.now() - spinStartedAt)));
+		return () => clearTimeout(spinTimer);
+	});
+
+	/**
+	 * The busy state rides the icon, not the label. `Refreshing…` is four characters
+	 * wider than `Refresh`, and in a header row that widens the button on every tick —
+	 * a header that flinches once a second is worse than one that never says it is
+	 * working. The word stays, the motion moves, and `aria-busy` carries it to a reader
+	 * who cannot see the spin.
+	 */
+	const refreshIcon = $derived(`h-4 w-4${spinning ? ' animate-spin' : ''}`);
 
 	async function submit(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
@@ -42,6 +108,26 @@
 	async function clearFilters(): Promise<void> {
 		filters = {};
 		await timeline.clear();
+	}
+
+	function handleVisibility(): void {
+		if (document.hidden) timeline.stop();
+		else timeline.start();
+	}
+
+	/**
+	 * A deliberate read is the operator taking the cadence back, so the selector
+	 * returns to Manual rather than the timer resuming behind the click they were
+	 * told was the way to update the page.
+	 */
+	async function refresh(): Promise<void> {
+		timeline.setPoll(null);
+		await timeline.refresh();
+	}
+
+	function chooseInterval(event: Event & { currentTarget: HTMLSelectElement }): void {
+		const chosen = event.currentTarget.value;
+		timeline.setPoll(chosen === 'manual' ? null : (Number(chosen) as TimelinePollSeconds));
 	}
 </script>
 
@@ -54,20 +140,36 @@
 				announced.
 			</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
+		<div class="flex flex-wrap items-end gap-2">
 			{#if applied > 0}
 				<button id="timeline-clear" type="button" class="btn btn-sm" onclick={() => void clearFilters()}>
 					Clear {applied} filter{applied === 1 ? '' : 's'}
 				</button>
 			{/if}
+			<label class="fieldset">
+				<span class="fieldset-legend text-xs">Auto-refresh</span>
+				<select
+					id="timeline-interval"
+					class="select select-sm"
+					value={pollChoice}
+					onchange={chooseInterval}
+				>
+					<option value="manual">Manual</option>
+					{#each timelinePollIntervals as seconds (seconds)}
+						<option value={String(seconds)}>Every {seconds}s</option>
+					{/each}
+				</select>
+			</label>
 			<button
 				id="timeline-refresh"
 				type="button"
 				class="btn btn-sm"
 				disabled={timeline.busy}
-				onclick={() => void timeline.refresh()}
+				aria-busy={spinning}
+				onclick={() => void refresh()}
 			>
-				{timeline.loading ? 'Refreshing…' : 'Refresh'}
+				<RefreshCw class={refreshIcon} strokeWidth={2.5} />
+				Refresh
 			</button>
 		</div>
 	</header>

@@ -4,6 +4,16 @@ import type { EventFeedItem, EventFilters } from '$lib/api/types';
 /** Only the fields the server actually filters on; anything else is dropped. */
 export type TimelineFilterPatch = EventFilters;
 
+/**
+ * The cadences the operator can pick, in seconds. `null` is Manual and is the
+ * default: watching a trail is a choice an operator makes by arriving at a timer,
+ * and every tick reads up to fifty trail directories, so a feed that moved on its
+ * own would cost more than it is worth to somebody who only came to read it.
+ */
+export const timelinePollIntervals = [5, 10, 15, 60] as const;
+
+export type TimelinePollSeconds = (typeof timelinePollIntervals)[number];
+
 interface TimelineStoreOptions {
 	listEvents?: (filters: EventFilters, after?: string) => Promise<{
 		items: EventFeedItem[];
@@ -28,15 +38,18 @@ function prune(filters: TimelineFilterPatch): EventFilters {
 }
 
 /**
- * The event feed behind `/next/timeline`. It is the one route-scoped store that
- * does **not** poll: the feed is cursor-paginated history, and prepending new
- * events to a list an operator is scrolling or has filtered is worse than a
- * deliberate refresh. It reads on mount, on apply, on load-more, and on an
- * explicit refresh.
+ * The event feed behind `/next/timeline`. It is the one route-scoped store whose
+ * poll is the operator's to arm: the feed is cursor-paginated history, so
+ * prepending new events to a list someone is scrolling or has filtered is worse
+ * than a deliberate refresh. A timer is offered, but its tick is the same reset
+ * read Refresh already performs — the list is replaced, never appended to — so
+ * opting in costs no scroll position and no row identity.
  *
  * One read is in flight at a time. A second Apply while the first is still
  * resolving would append two pages against one cursor and could repeat or skip
- * the boundary event, so an overlapping apply is refused rather than queued.
+ * the boundary event, so an overlapping apply is refused rather than queued. The
+ * same guard drops a tick that lands inside an Apply, which is the overlap that
+ * would matter.
  */
 export function createTimelineStore(options: TimelineStoreOptions = {}) {
 	const readEvents =
@@ -49,7 +62,16 @@ export function createTimelineStore(options: TimelineStoreOptions = {}) {
 	let loading = $state(true);
 	let loadingMore = $state(false);
 	let error = $state('');
-	let inFlight = false;
+	let pollSeconds = $state<TimelinePollSeconds | null>(null);
+	/**
+	 * Reactive because three buttons bind `disabled` to `busy`, and a plain variable
+	 * behind a getter gives the template nothing to re-evaluate on: the binding would be
+	 * computed once at mount and then only ever refresh by accident, whenever something
+	 * else in the same subtree happened to change.
+	 */
+	let inFlight = $state(false);
+	let timer: ReturnType<typeof setInterval> | undefined;
+	let started = false;
 
 	async function read(reset: boolean): Promise<void> {
 		if (inFlight) return;
@@ -98,7 +120,37 @@ export function createTimelineStore(options: TimelineStoreOptions = {}) {
 	}
 
 	function start(): void {
+		if (started) return;
+		started = true;
 		void read(true);
+		armTimer();
+	}
+
+	function stop(): void {
+		started = false;
+		disarmTimer();
+	}
+
+	function disarmTimer(): void {
+		if (timer !== undefined) clearInterval(timer);
+		timer = undefined;
+	}
+
+	/**
+	 * A tick is Refresh, so the arming of it is the same read and the same
+	 * guarantees. Disarming first means switching cadences cannot leave the old
+	 * interval running, and a `started` route keeps its choice across a pause.
+	 */
+	function armTimer(): void {
+		disarmTimer();
+		if (!started || pollSeconds === null) return;
+		timer = setInterval(() => void read(true), pollSeconds * 1000);
+	}
+
+	/** `null` is Manual, which is also how the route's Refresh button says it. */
+	function setPoll(seconds: TimelinePollSeconds | null): void {
+		pollSeconds = seconds;
+		armTimer();
 	}
 
 	function refresh(): Promise<void> {
@@ -130,6 +182,10 @@ export function createTimelineStore(options: TimelineStoreOptions = {}) {
 		get filtered(): boolean {
 			return Object.keys(filters).length > 0;
 		},
+		/** `null` while the feed is Manual, which is where it arrives. */
+		get pollSeconds(): TimelinePollSeconds | null {
+			return pollSeconds;
+		},
 		get busy(): boolean {
 			return inFlight;
 		},
@@ -140,7 +196,9 @@ export function createTimelineStore(options: TimelineStoreOptions = {}) {
 		clear,
 		loadMore,
 		refresh,
-		start
+		setPoll,
+		start,
+		stop
 	};
 }
 

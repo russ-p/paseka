@@ -86,9 +86,13 @@ payload kind, severity) apply on **Apply** rather than as you type, and
 **Clear N filters** in the header returns to the colony-wide feed. **Load more**
 pages strictly older events; if a page fails the button stays, so it is a retry.
 
-The feed does not refresh itself — it is recorded history, and a timer that
-moved rows under you while you were reading one would be worse than useless.
-Press **Refresh** when you want the newest events. Every row's *Raw event*
+The feed does not move on its own — it is recorded history, and a timer that
+moved rows under you while you were reading one would be worse than useless. If
+you are watching a run, the **Auto-refresh** selector in the header offers
+**Every 5s / 10s / 15s / 60s**; a tick re-reads the newest page and replaces the
+list rather than prepending, so nothing shifts under you. Polling pauses while
+the tab is hidden and re-reads once when you come back. **Refresh** always works
+and returns the selector to **Manual**. Every row's *Raw event*
 disclosure shows the underlying `protocol.Event`; it costs no request, because
 the raw envelope already arrives with the row.
 

@@ -8,14 +8,6 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
 
-#### The timeline reads on a timer the operator chooses
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline migration)
-- **Decision:** A `Manual | 5s | 10s | 15s | 60s` selector in the Timeline header beside Refresh, defaulting to `Manual`. A tick is the same reset read as Refresh — the list is replaced, the cursor and `hasMore` recomputed — so nothing is prepended and no scroll position, row identity, or boundary event can be disturbed. Pressing Refresh returns the selector to `Manual`, a tick landing during an `Apply` is dropped by the store's existing in-flight guard, and polling pauses on `visibilitychange` the way the chrome stream already does. The choice is component state and does not survive the visit.
-- **Why this and not a live feed:** The feed is cursor-paginated history, so a background update has to answer whether to prepend or replace, whether to do it under a scrolled reader, and how to dedupe a boundary event that arrives on two pages. Opting into a reset sidesteps all three, and the operator who wants the feed to move presses Refresh — the control they press today. It also costs no server work: `GET /api/events` reads up to fifty trail directories per call, so a poll has to be a choice rather than a default.
-- **Revisit when:** Someone wants a feed that appends while it is being read. That is a different feature with a scroll-position rule and an id-based dedupe in front of it, and a delta on the chrome stream is the transport it would use.
-
 #### List state rides in the URL
 
 - **Kind:** follow-up

@@ -123,7 +123,7 @@ describe('createTimelineStore', () => {
 
 	it('separates a first load from appending a page, which are not the same wait', async () => {
 		const listEvents = vi
-			.fn<(_filters: EventFilters, after?: string) => Promise<Page>>()
+			.fn<() => Promise<Page>>()
 			.mockResolvedValueOnce(eventFeedPage([eventFeedItem()], { hasMore: true, nextCursor: 'cursor-1' }))
 			.mockResolvedValueOnce(eventFeedPage([eventFeedItem({ id: 'second' })]));
 		const store = createTimelineStore({ listEvents });
@@ -135,5 +135,122 @@ describe('createTimelineStore', () => {
 
 		await store.loadMore();
 		expect(store.loadingMore).toBe(false);
+	});
+
+	it('arrives on Manual, because a feed that moved on its own would be a second reader', async () => {
+		vi.useFakeTimers();
+		try {
+			const { store, listEvents } = harness();
+			await store.start();
+
+			expect(store.pollSeconds).toBeNull();
+			await vi.advanceTimersByTimeAsync(60000);
+			expect(listEvents).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('re-reads at the picked cadence, and the tick replaces the feed rather than appending to it', async () => {
+		vi.useFakeTimers();
+		try {
+			const listEvents = vi
+				.fn<() => Promise<Page>>()
+				.mockResolvedValueOnce(
+					eventFeedPage([eventFeedItem({ id: 'first' })], { hasMore: true, nextCursor: 'cursor-1' })
+				)
+				.mockResolvedValueOnce(eventFeedPage([eventFeedItem({ id: 'fresh' })]));
+			const store = createTimelineStore({ listEvents });
+			await store.start();
+
+			store.setPoll(5);
+			await vi.advanceTimersByTimeAsync(5000);
+
+			expect(listEvents).toHaveBeenCalledTimes(2);
+			// The tick is the reset read Refresh already performs, so a page the operator
+			// loaded is replaced rather than pushed out from under them.
+			expect(listEvents).toHaveBeenLastCalledWith({}, undefined);
+			expect(store.items.map((item) => item.id)).toEqual(['fresh']);
+			expect(store.hasMore).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('drops a tick that lands inside an Apply, rather than queueing it behind the cursor', async () => {
+		vi.useFakeTimers();
+		try {
+			let release: () => void = () => {};
+			const gate = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const listEvents = vi
+				.fn<() => Promise<Page>>()
+				.mockResolvedValueOnce(eventFeedPage([eventFeedItem()]))
+				.mockImplementationOnce(async () => {
+					await gate;
+					return eventFeedPage([eventFeedItem({ id: 'applied' })]);
+				});
+			const store = createTimelineStore({ listEvents });
+			await store.start();
+			store.setPoll(5);
+
+			const applying = store.apply({ bee: 'scout' });
+			await vi.advanceTimersByTimeAsync(5000);
+
+			// The tick was not queued behind the Apply, so it cannot append a second
+			// page against the cursor the Apply is about to install.
+			expect(listEvents).toHaveBeenCalledTimes(2);
+			release();
+			await applying;
+
+			expect(listEvents).toHaveBeenCalledTimes(2);
+			expect(store.items.map((item) => item.id)).toEqual(['applied']);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('stops polling when the route leaves, and keeps the choice across a pause', async () => {
+		vi.useFakeTimers();
+		try {
+			const listEvents = vi.fn(async () => eventFeedPage());
+			const store = createTimelineStore({ listEvents });
+			await store.start();
+			store.setPoll(5);
+
+			store.stop();
+			await vi.advanceTimersByTimeAsync(20000);
+			expect(listEvents).toHaveBeenCalledTimes(1);
+
+			// Coming back re-reads at once rather than waiting out the rest of the
+			// interval, and the operator's cadence is still the one in force.
+			store.start();
+			expect(listEvents).toHaveBeenCalledTimes(2);
+			expect(store.pollSeconds).toBe(5);
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(listEvents).toHaveBeenCalledTimes(3);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('runs one timer, because switching cadence must not leave the old interval behind', async () => {
+		vi.useFakeTimers();
+		try {
+			const listEvents = vi.fn(async () => eventFeedPage());
+			const store = createTimelineStore({ listEvents });
+			await store.start();
+
+			store.setPoll(5);
+			store.setPoll(60);
+			await vi.advanceTimersByTimeAsync(10000);
+			expect(listEvents).toHaveBeenCalledTimes(1);
+
+			await vi.advanceTimersByTimeAsync(50000);
+			expect(listEvents).toHaveBeenCalledTimes(2);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
