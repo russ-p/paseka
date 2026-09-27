@@ -51,7 +51,8 @@
 			// reference and the adapter reads the environment at call time, so a
 			// key in this cell would be something the server deliberately never sent.
 			text: (adapter) => adapter.apiKeyEnv.value || '—',
-			mono: true
+			mono: true,
+			secondary: true
 		},
 		{
 			key: 'key',
@@ -72,7 +73,8 @@
 			// Whether the operator has a file to edit at all, which is a different
 			// question from what the loader inferred — and the reason `Binary` can
 			// carry a value nobody wrote.
-			text: (adapter) => (adapter.configured ? 'present' : 'inferred')
+			text: (adapter) => (adapter.configured ? 'present' : 'inferred'),
+			secondary: true
 		}
 	];
 </script>

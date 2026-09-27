@@ -122,6 +122,20 @@ describe('settings route', () => {
 		expect(cellNamed('cursor', 'File')).toHaveTextContent('inferred');
 	});
 
+	it('hides its two widest columns on a phone, because it was the one table that had none', async () => {
+		const { store } = harness();
+		render(Settings, { store });
+
+		await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+		// A variable name and a file disposition are what an operator reads last; the
+		// adapter, its binary and whether the key resolves are what they read first. Both
+		// remain searchable, because `text` feeds the filter whatever the cell is doing.
+		expect(screen.getByRole('columnheader', { name: 'API key env' }).className).toContain('hidden');
+		expect(screen.getByRole('columnheader', { name: 'File' }).className).toContain('hidden');
+		expect(screen.getByRole('columnheader', { name: 'Adapter' }).className).not.toContain('hidden');
+		expect(screen.getByRole('columnheader', { name: 'Key' }).className).not.toContain('hidden');
+	});
+
 	it('reports an adapter with no credential as having none', async () => {
 		const { store } = harness(colonyConfig({ adapters: [configAdapter({ name: 'opencode', apiKeyEnv: { value: '', source: 'unset' } })] }));
 		render(Settings, { store });

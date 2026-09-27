@@ -8,14 +8,6 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
 
-#### A wide table hides its widest columns below 768px
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Decision:** No card layout. `secondary` goes on the tables that never used it — Bees is seven columns with none, Reviews six, Worktrees five, System's process command three — and hard rule 7 gains the obligation it is missing: a table too wide for 768px **must** mark its widest columns `secondary`.
-- **Why:** Hiding a column loses it; a sideways scroll loses more, because two columns are never on screen together. And a card is not expensive in the component — the columns already carry the `label` and `text` it needs — but it puts the table and the cards both in the DOM, and `bees.test.ts` resolves a cell with `screen.getByText(text).closest('tr')`, which throws on two copies. That is a test-churn cost across ten route suites.
-- **Revisit when:** An operator reads these tables on a phone and four columns are still not enough. Then a card layout in `DataTable` is the answer, and `secondary` is shown rather than hidden there — the card has room.
-
 #### An unreadable comb file says how big it is
 
 - **Kind:** follow-up

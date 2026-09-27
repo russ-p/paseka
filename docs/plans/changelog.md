@@ -2,6 +2,18 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Hard rule 7 says a wide table must hide its widest columns
+
+Hard rule 7 said a `DataTable` too wide for 768px scrolls inside its own bordered region, and gave the reason: clipping the last column puts a link somewhere with no way to reveal it. That is a floor, not an answer — two columns are never on screen together, so a sideways pan loses more than a hidden column does, while a hidden column loses only what was hidden, and nothing, because `text` feeds the filter whatever the cell is doing. The rule now says so, and **a table of more than four columns must mark at least one `secondary`**.
+
+**The backlog entry's premise turned out to be stale, and the audit is the useful part of this.** It named Bees, Reviews, Worktrees, and System as the tables that had never used `secondary`. All four already did — each of them had been written after the mechanism landed. The census found the table the entry had not named: **Settings**, whose adapter roster was five columns with no `secondary` at all, so the one thing a phone could not see about an adapter was the variable it reads its key from. `API key env` and `File` are now `secondary`; the adapter, its binary, and whether the key resolves stay.
+
+That is the argument for writing the rule down rather than fixing the table. Nothing in the contract required `secondary`, so a table added without it was a table nobody had checked, and four of the ten being right was luck rather than a rule working. The threshold is stated as a count rather than a per-table list, because a list of ten tables rots the first time one of them grows a column and the rule becomes a thing that was true once.
+
+A card layout stays out of scope, for the reason the entry gave and which the audit confirmed: the columns already carry the `label` and `text` a card needs, so the component work is small, but a card puts the table and the cards both in the DOM, and `bees.test.ts` resolves a cell with `screen.getByText(text).closest('tr')`, which throws on two copies — a test-churn cost across ten route suites for pages a solo beekeeper may never open on a phone.
+
+1 test, 1002 total. svelte-check clean.
+
 ## 2026-09 — A cued trail waits to exist instead of reporting a 404
 
 Publishing a cue mints a trace id and puts a SIGNAL on the bus, and **nothing is written to disk** until a bee picks that signal up. So the trail an operator had just created was a 404 for as long as the colony took to answer, and the page had nothing but "not found" to say about an action it had just taken successfully. That is a server fact wearing a transition's clothes: no client-side navigation design could have made the destination real, which is why the entry sat undecided for as long as it did.
