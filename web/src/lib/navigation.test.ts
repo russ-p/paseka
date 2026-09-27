@@ -5,6 +5,7 @@ import {
 	isRouteActive,
 	landingPath,
 	lastRouteStorageKey,
+	liveBeesPath,
 	matchShortcut,
 	rememberRoute,
 	traceDetailPath,
@@ -74,5 +75,21 @@ describe('isRouteActive', () => {
 		expect(isRouteActive('/next/traces', '/next/traces/trace-01a0')).toBe(true);
 		expect(isRouteActive('/next/traces', '/next/tracesomething')).toBe(false);
 		expect(isRouteActive('/next/traces', '/next/timeline')).toBe(false);
+	});
+});
+
+describe('liveBeesPath', () => {
+	it('sends a mixed colony to Runs, because AFK is checked first', () => {
+		expect(liveBeesPath('/next', { afk: 1, sessions: 1 })).toBe('/next/runs');
+		expect(liveBeesPath('/next', { afk: 1, sessions: 0 })).toBe('/next/runs');
+	});
+
+	it('sends sessions-only bees to Sessions and an idle plaque to Runs', () => {
+		expect(liveBeesPath('/next', { afk: 0, sessions: 2 })).toBe('/next/sessions');
+		expect(liveBeesPath('/next', { afk: 0, sessions: 0 })).toBe('/next/runs');
+	});
+
+	it('falls back to Runs before the first agents frame arrives', () => {
+		expect(liveBeesPath('/next', null)).toBe('/next/runs');
 	});
 });

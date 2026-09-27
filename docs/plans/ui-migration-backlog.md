@@ -185,14 +185,6 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Why deferred:** Solving it properly means either measuring label widths (which needs a laid-out canvas, and so cannot be unit-tested — the reason the layout maths is pure) or dropping labels in favour of hover, both of which are worse at the sizes colonies actually run at. Zoom and drag already work.
 - **Revisit when:** a real colony crosses roughly twenty event kinds. The cheapest fix is a taller container plus a higher `minZoom` floor, so the graph opens cropped and pannable rather than illegible.
 
-#### The topbar plaque is a link, not a click target
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (System migration)
-- **Summary:** The legacy console made the whole Host, Live bees, and Git panel a click target, keyboard-operable with Enter and Space. `/next` makes the Host and Git *labels* links instead, and Live bees is not a link at all until Runs and Sessions land.
-- **Why deferred:** A stretched overlay over the panel (`after:absolute after:inset-0`) would swallow the `Hint` popover that sits inside it, because the pseudo-element paints above the panel's own content and intercepts its pointer events — so the panel would either stop being hoverable or stop being clickable. The label link keeps both, and it is visible, which the legacy's invisible target was not.
-- **Revisit when:** Runs and Sessions exist and Live bees can link somewhere, or an operator reports not noticing the labels. If whole-panel clicking is ever wanted, the fix is to lift the popover out of the hit area rather than to re-add a keydown handler on a `div`.
-
 #### An oversized comb file is unreadable
 
 - **Kind:** follow-up

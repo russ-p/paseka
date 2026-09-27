@@ -66,6 +66,11 @@ open — in the preview, a route's store starts its poll on mount and stops it o
 unmount, so an idle console holds none. Git status never fetches remotes on a
 timer.
 
+The **Host**, **Live bees**, and **Git** labels are links. Host and Git open
+their own pages; **Live bees** opens **Runs**, or **Sessions** when only
+interactive bees are live — a bee is not addressable, so the plaque leads to
+whichever of the two is holding it.
+
 ### Traces and Timeline
 
 **Traces** groups tasks, runs, insights, usage, and artifacts by `traceId`.

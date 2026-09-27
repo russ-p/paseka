@@ -30,6 +30,24 @@ export function consolePath(base: string, path: string): string {
 	return `${base}${path}`;
 }
 
+/**
+ * Where the Live bees plaque points. A bee is not addressable, so the plaque
+ * routes to the surface its bees are on, in the order the legacy console used
+ * and in the order `agentsMeta` lists them: AFK first, then sessions, then
+ * Runs. So a colony running both kinds lands on Runs, an interactive-only
+ * colony lands on Sessions, and an idle one lands on Runs, where the next bee
+ * will appear. Null is the state before the first agents frame arrives.
+ */
+export function liveBeesPath(
+	base: string,
+	agents: { afk: number; sessions: number } | null
+): string {
+	if (agents && agents.afk === 0 && agents.sessions > 0) {
+		return consolePath(base, '/sessions');
+	}
+	return consolePath(base, '/runs');
+}
+
 /** The detail surface for one trail; a child path of the Traces menu entry. */
 export function traceDetailPath(base: string, traceId: string): string {
 	return consolePath(base, `/traces/${encodeURIComponent(traceId)}`);

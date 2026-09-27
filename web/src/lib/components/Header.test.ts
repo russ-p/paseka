@@ -109,8 +109,35 @@ describe('Header', () => {
 
 		expect(screen.getByRole('link', { name: 'Host' })).toHaveAttribute('href', '/next/system');
 		expect(screen.getByRole('link', { name: 'Git' })).toHaveAttribute('href', '/next/git');
-		// Live bees points at Runs and Sessions, which are still placeheld.
-		expect(screen.queryByRole('link', { name: 'Live bees' })).not.toBeInTheDocument();
+	});
+
+	// A bee is not addressable, so the Live bees plaque routes to the surface its
+	// bees are on, in the legacy order: AFK first, then sessions, then Runs. The
+	// harness frame carries one AFK and one session, so it resolves to Runs.
+	it('links the Live bees plaque to Runs while an AFK bee is live', () => {
+		const { store, toasts } = harness();
+		render(Header, { store, toasts });
+
+		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/next/runs');
+	});
+
+	it('links the Live bees plaque to Sessions when only sessions are live', () => {
+		const { store, toasts } = harness(
+			chromeFrame({ agents: { count: 1, afk: 0, sessions: 1 } })
+		);
+		render(Header, { store, toasts });
+
+		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/next/sessions');
+	});
+
+	it('links the Live bees plaque to Runs when no bee is live', () => {
+		// An idle colony has no Sessions to show, and Runs is where the next bee lands.
+		const { store, toasts } = harness(
+			chromeFrame({ agents: { count: 0, afk: 0, sessions: 0 } })
+		);
+		render(Header, { store, toasts });
+
+		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/next/runs');
 	});
 
 	it('keeps the full text of every clipped line in a multi-line hint', () => {

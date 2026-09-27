@@ -2,6 +2,16 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Live bees plaque links to where the bees are
+
+The topbar's **Live bees** panel is a link, which closes the last plaque that summarized a page it could not reach. It follows the legacy console's rule, because a bee is not addressable and there is nothing to point at but the surface holding it: an AFK bee opens **Runs**, an interactive-only colony opens **Sessions**, and an idle plaque opens **Runs**, which is where the next bee will appear. A colony running both kinds lands on Runs — the order the legacy panel used, and the order the plaque's own `afk · session` line reads.
+
+- The three navigable plaques are **Host** → System, **Live bees** → Runs or Sessions, and **Git** → Git. The label is the link, not the whole panel: a stretched overlay would swallow the hover popover inside the panel, so the panel stays hoverable and the visible label is what you click.
+- The destination is a single pure function, `liveBeesPath`, rather than branching in the component, so the topbar cannot drift from the legacy order.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (top panel)
+- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md)
+
 ## 2026-09 — Settings, and what each setting resolves to
 
 `/next/settings` is the last route of the console redesign, and the first one whose subject the legacy console never had at all. It answers what the colony is configured with **and what decided each value** — which is the part that matters, because several settings are decided by something other than the file you would edit. An operator who changes `config.yaml` and watches nothing happen can now see why: the page names `PASEKA_NATS_URL` as the thing actually in force and warns that the file is not consulted. Values nobody wrote are labelled as defaults, a value the code supplied is distinguished from one the file declares, and a colon-separated prefix nobody declared is reported as the bus default rather than named after a file that never mentioned it.
@@ -25,7 +35,6 @@ Shipped features worth calling out. Design records live under `docs/specs/` in t
 
 - Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Bees)
 - Canonical: [Queen Console design system](../architecture/queen-console-design-system.md), [Bee config](../guide/bee-config.md)
-- Deferred from that work: the Live bees plaque is still the one topbar panel that is not a link — see [Backlog](backlog.md).
 
 ## 2026-09 — Age-based prune
 

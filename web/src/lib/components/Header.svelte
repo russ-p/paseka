@@ -4,7 +4,7 @@
 	import Modal from '$lib/components/Modal.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import StatusIcon from '$lib/components/StatusIcon.svelte';
-	import { consolePath } from '$lib/navigation';
+	import { consolePath, liveBeesPath } from '$lib/navigation';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import {
 		agentsDetail,
@@ -156,7 +156,11 @@
 				aria-label="Live bees"
 			>
 				<div class="flex min-h-8 items-center justify-between gap-2">
-					<span class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">Live bees</span>
+					<!-- The href moves with the bees, legacy parity: a live bee is not
+					     addressable, so the plaque routes to Runs or Sessions depending
+					     on which of them is holding work. Runs is the fallback so an
+					     idle colony still lands where the next bee will show up. -->
+					<a class="link text-xs font-semibold tracking-wide text-base-content/60 uppercase" href={liveBeesPath(base, store.agents)}>Live bees</a>
 					<StatusBadge status={store.liveBees > 0 ? 'live' : 'idle'} label={String(store.liveBees)} />
 				</div>
 				<Hint lines={[agentsMeta(store.agents)]}>

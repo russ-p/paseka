@@ -104,14 +104,6 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Why deferred:** The route set is complete, so only the cutover decision remains, and that one is explicitly gated on feature parity being called rather than inferred.
 - **Revisit when:** The cutover is called.
 
-#### The Live bees plaque still does not link
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Bees scope)
-- **Summary:** The topbar's Live bees panel is the one plaque that is not a link. Its original reason was that it had nowhere to go — the legacy panel routed to Runs or Sessions, never to a bee — and the rule was to wait for a route that a bee could actually land on. `/next/bees` now exists, so the label could follow the Host and Git plaques and point at it.
-- **Why deferred:** It is a topbar change rather than a route, and the plaque was left alone deliberately while the routes it would point at were still placeheld. Two of the three destinations it used to route to (Runs, Sessions) landed without it, which suggests the panel is read as a summary rather than as a navigation target.
-- **Revisit when:** The next topbar pass happens, or an operator reports not noticing the Bees entry in the menu.
-
 #### Let the console write colony configuration
 
 - **Kind:** idea
