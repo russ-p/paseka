@@ -7,6 +7,16 @@ import { createToastStore } from '$lib/stores/toast.svelte';
 import { dashboardSummary, insightHighlight, runSummary, traceSummary } from '../../tests/fixtures';
 import type { DashboardSummary } from '$lib/api/types';
 
+const goto = vi.fn(async () => {});
+vi.mock('$app/navigation', () => ({
+	goto: (...args: unknown[]) => goto(...(args as [])),
+	// The Failed runs table writes its filter and page to the URL, so a mock this narrow
+	// has to restate the stand-in `tests/setup.ts` installs rather than rely on the tests
+	// happening not to touch the query.
+	replaceState: (url: string | URL, state: App.PageState) =>
+		window.history.replaceState(state, '', url)
+}));
+
 function harness(summary: DashboardSummary = dashboardSummary()) {
 	const store = createConsoleStatusStore({ pollIntervalMs: 0 });
 	store.applyChromeFrame({ schemaVersion: 1, runtime: { status: 'running', alive: true, slug: 'paseka' } });
@@ -16,6 +26,7 @@ function harness(summary: DashboardSummary = dashboardSummary()) {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.clearAllMocks();
 });
 
 describe('dashboard route', () => {
@@ -176,6 +187,44 @@ describe('dashboard route', () => {
 		await waitFor(() => expect(loadDashboard).toHaveBeenCalledTimes(1));
 		expect(toasts.items).toHaveLength(1);
 		expect(toasts.items[0].message).toBe('Cue published — trace trace-new');
+	});
+
+	it('offers the cued trail in the toast rather than navigating to it', async () => {
+		const user = userEvent.setup();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: RequestInfo | URL) => {
+				const url = String(input);
+				if (url === '/api/cues') {
+					return new Response(JSON.stringify([{ id: 'ship', description: 'Ship it' }]));
+				}
+				if (url === '/api/cues/ship/run') {
+					return new Response(JSON.stringify({ traceId: 'trace-new' }));
+				}
+				return new Response('not found', { status: 404 });
+			})
+		);
+
+		const store = createConsoleStatusStore({ loadDashboard: async () => dashboardSummary(), pollIntervalMs: 0 });
+		store.applyDashboard(dashboardSummary());
+		const toasts = createToastStore(0);
+		render(Dashboard, { store, toasts });
+
+		await user.click(screen.getByRole('button', { name: 'Run cue' }));
+		await user.type(await screen.findByLabelText('Text'), 'Ship the release');
+		await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+		await waitFor(() => expect(toasts.items[0].action?.label).toBe('Open trail'));
+
+		// A standing cue continues a trail the operator may already be watching, so the
+		// console names the new one and lets them decide. Publishing alone navigates
+		// nowhere: the fear that started this was a cue yanking somebody off a page they
+		// never acted from, and a toast with a link has no way to do that by accident.
+		expect(goto).not.toHaveBeenCalled();
+
+		toasts.items[0].action?.onselect();
+
+		expect(goto).toHaveBeenCalledWith('/next/traces/trace-new');
 	});
 
 	it('keeps the recent-trace list on the trace detail route', () => {

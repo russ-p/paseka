@@ -161,6 +161,20 @@
 		<div class="alert alert-error" role="alert"><span>{store.lastError}</span></div>
 	{/if}
 
+	<!-- Not an error and not skeletons: the cue is on the bus and the trail will be here
+	     when a bee takes it. The skeletons are wrong for it — nothing failed, and there is
+	     no payload to stand in for — and so is a 404, which would read as the operator's
+	     own cue having failed. -->
+	{#if store.awaitingTrail}
+		<div class="alert alert-info" role="status">
+			<span>
+				<span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+				This trail has been cued but not picked up yet. It will appear here as soon as a
+				bee starts on it.
+			</span>
+		</div>
+	{/if}
+
 	{#if store.showSkeletons}
 		<div class="space-y-3" aria-busy="true">
 			<span class="skeleton block h-3 w-full"></span>

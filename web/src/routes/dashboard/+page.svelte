@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
 	import CueRunModal from '$lib/components/CueRunModal.svelte';
@@ -38,8 +39,19 @@
 		{ key: 'agent', label: 'Agent', text: (run) => run.agentId, secondary: true }
 	];
 
+	/**
+	 * No navigation. A standing cue continues a trail the operator may already be
+	 * watching, so the new one is not necessarily what they want to look at — and the fear
+	 * that started this was a background cue yanking somebody off a page they never acted
+	 * from, which cannot happen here: `CueRunModal` is on the Dashboard, so a publish is
+	 * always something the operator just did. The toast offers the trail instead of taking
+	 * them there, and a trail that does not exist yet is exactly what the detail page now
+	 * waits for rather than reporting a 404.
+	 */
 	function cueRan(result: RunCueResult): void {
-		toasts.push('success', `Cue published — trace ${result.traceId}`);
+		toasts.push('success', `Cue published — trace ${result.traceId}`, {
+			action: { label: 'Open trail', onselect: () => void goto(traceDetailPath(base, result.traceId)) }
+		});
 		void store.refresh();
 	}
 </script>

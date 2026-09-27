@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import TraceDetail from './TraceDetail.svelte';
 import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 import { createToastStore, type ToastStore } from '$lib/stores/toast.svelte';
+import { ApiError } from '$lib/api/client';
 import { artifactView, eventFeedItem, traceDetail } from '../../../tests/fixtures';
 import type { ArtifactView, EnergyAddResult, TraceDetail as TraceDetailPayload } from '$lib/api/types';
 
@@ -13,12 +14,14 @@ function harness(overrides: {
 	detail?: () => Promise<TraceDetailPayload>;
 	artifacts?: () => Promise<ArtifactView[]>;
 	topUpEnergy?: (traceId: string, amount: number) => Promise<EnergyAddResult>;
+	awaitingTrailMs?: number;
 } = {}) {
 	const store = createTraceStore({
 		loadTrace: overrides.detail ?? (async () => traceDetail()),
 		loadArtifacts: overrides.artifacts ?? (async () => [artifactView()]),
 		topUpEnergy: overrides.topUpEnergy,
-		pollIntervalMs: 0
+		pollIntervalMs: 0,
+		awaitingTrailMs: overrides.awaitingTrailMs
 	});
 	const toasts = createToastStore(0);
 	return { store, toasts };
@@ -232,6 +235,57 @@ describe('trace detail', () => {
 		renderDetail({ artifacts: async () => [] });
 
 		expect(await screen.findByText('No trail artifacts in the comb.')).toBeInTheDocument();
+	});
+
+	it('waits for a cued trail instead of reporting the 404 as a failure', async () => {
+		renderDetail({
+			detail: async () => {
+				throw new ApiError('trace not found', 404);
+			}
+		});
+
+		// The id is already in the address bar, so the page can name what it is waiting
+		// for; and the wording says why, which is the whole point: nothing failed, and the
+		// operator's own cue is on its way.
+		const waiting = await screen.findByRole('status');
+		expect(waiting).toHaveTextContent('cued but not picked up yet');
+		expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(traceId);
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+		// Skeletons stand in for a payload on its way; this is not one.
+		expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+	});
+
+	it('fills the page in when the trail arrives, with the waiting notice gone', async () => {
+		let answered = false;
+		const { store } = renderDetail({
+			detail: async () => {
+				if (!answered) throw new ApiError('trace not found', 404);
+				return traceDetail();
+			}
+		});
+		await screen.findByRole('status');
+
+		answered = true;
+		await store.refresh();
+
+		await waitFor(() =>
+			expect(screen.getByRole('heading', { name: 'Refactor the adapter seam', level: 1 })).toBeInTheDocument()
+		);
+		expect(screen.queryByRole('status')).not.toBeInTheDocument();
+	});
+
+	it('stops waiting, because a wrong id and an unclaimed cue are the same dead end', async () => {
+		const { store } = renderDetail({
+			detail: async () => {
+				throw new ApiError('trace not found', 404);
+			},
+			// Past the deadline on the first read, so this is a failure rather than a wait.
+			awaitingTrailMs: 0
+		});
+
+		expect(await screen.findByRole('alert')).toHaveTextContent('No trail with this id');
+		expect(screen.queryByRole('status')).not.toBeInTheDocument();
+		expect(store.awaitingTrail).toBe(false);
 	});
 
 	it('lists the tasks and runs with their state badges', async () => {

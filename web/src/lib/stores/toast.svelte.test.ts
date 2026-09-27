@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createToastStore, toastClass, type ToastTone } from './toast.svelte';
+import { createToastStore, toastActionTimeoutMs, toastClass, type ToastTone } from './toast.svelte';
 
 describe('toastClass', () => {
 	it('maps each tone to the alert class the design system owns', () => {
@@ -162,5 +162,48 @@ describe('toastStore', () => {
 		// which ones are still live.
 		vi.advanceTimersByTime(4000);
 		expect(store.items).toEqual([]);
+	});
+});
+
+describe('toastStore actions', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('carries the action with the report, and a report without one gets no button', () => {
+		const store = createToastStore(0);
+
+		store.push('success', 'plain', { action: { label: 'Open trail', onselect: () => {} } });
+		store.push('success', 'plain too');
+
+		expect(store.items[0].action?.label).toBe('Open trail');
+		expect(store.items[1].action).toBeUndefined();
+	});
+
+	it('outlives a plain report, because a report with something to press is a question', () => {
+		const store = createToastStore(4000);
+		store.push('success', 'Cue published', {
+			action: { label: 'Open trail', onselect: () => {} }
+		});
+
+		vi.advanceTimersByTime(4000);
+		expect(store.items).toHaveLength(1);
+
+		// The operator has to read the id and decide to press the button; four seconds
+		// is not long enough to do either, and a vanished toast is not a question.
+		vi.advanceTimersByTime(toastActionTimeoutMs - 4000);
+		expect(store.items).toEqual([]);
+	});
+
+	it('lets a caller pin it or set its own time, rather than only offering the default', () => {
+		const store = createToastStore(4000);
+		store.push('info', 'pinned', { action: { label: 'Open', onselect: () => {} }, timeoutMs: 0 });
+
+		vi.advanceTimersByTime(600_000);
+		expect(store.items).toHaveLength(1);
 	});
 });

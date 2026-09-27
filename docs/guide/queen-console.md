@@ -92,6 +92,15 @@ their own pages; **Live bees** opens **Runs**, or **Sessions** when only
 interactive bees are live — a bee is not addressable, so the plaque leads to
 whichever of the two is holding it.
 
+**Run cue** opens the cue dialog. Publishing a cue mints a trail id and puts a
+signal on the bus, but **nothing is written to disk until a bee picks that
+signal up**, so the trail page waits for up to 30 seconds and says so rather
+than reporting a failure. The publish toast carries **Open trail** if you want
+to go and watch it; the console never takes you there by itself, because a
+standing cue continues a trail you may already be watching. If nothing claims
+the cue, the page stops waiting and tells you to check either the id or whether
+a bee is running.
+
 ### Traces and Timeline
 
 **Traces** groups tasks, runs, insights, usage, and artifacts by `traceId`.

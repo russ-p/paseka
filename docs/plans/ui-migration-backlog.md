@@ -8,15 +8,6 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
 
-#### A published cue offers its trail instead of hiding it
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Dashboard)
-- **Decision:** Two parts, and the first is the one that matters. Publishing a cue mints a trace id and publishes a SIGNAL; **nothing is written to disk**, so `GetTrace` answers 404 until a bee picks the signal up. The trail detail therefore reads 404 as "not started yet" and keeps its ten-second poll, saying the trail will appear when a bee takes the cue — which also fixes a deep link opened a moment after the publish. Then `toastStore.push` takes an optional action, and the cue's toast carries `Open trail` on a longer timeout than the four seconds a plain toast gets.
-- **No auto-navigation:** A standing cue continues a trail the operator may already be watching, so the new trail is not necessarily what they want to see. And the fear that started this entry — that a background cue would yank the operator off a page they did not act from — is obsolete: `CueRunModal` is on the Dashboard only, so a publish is always something the operator just did.
-- **Why this was stuck:** The entry read as an undecided transition. It was a server fact — a trail does not exist until a run writes it — and no client-side navigation design could have made the destination real.
-- **Revisit when:** A trail is deep-linked from somewhere that cannot be a fresh cue, where 404 means "no such trail" rather than "not yet".
-
 #### A wide table hides its widest columns below 768px
 
 - **Kind:** follow-up

@@ -2,6 +2,18 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — A cued trail waits to exist instead of reporting a 404
+
+Publishing a cue mints a trace id and puts a SIGNAL on the bus, and **nothing is written to disk** until a bee picks that signal up. So the trail an operator had just created was a 404 for as long as the colony took to answer, and the page had nothing but "not found" to say about an action it had just taken successfully. That is a server fact wearing a transition's clothes: no client-side navigation design could have made the destination real, which is why the entry sat undecided for as long as it did.
+
+- **A 404 on the trail detail now reads as `awaitingTrail`.** The page keeps its ten-second poll and says the trail will appear when a bee takes the cue — which also fixes a deep link opened a moment after the publish. It is **not** skeletons: nothing failed and there is no payload to stand in for, so a `role="status"` notice replaces the body instead.
+- **The wait is bounded at 30 seconds, and that bound was the real work.** A wait with no end is how a mistyped id becomes a spinner that never resolves, and how a cue nobody picked up — an actual problem — hides behind the same silence. The two dead ends converge, so the timeout message names both: the id may be wrong, or no bee took the cue. The clock starts at the first 404 and is reset when the operator switches trails, because a spent clock handed to a second trail would report it dead on arrival. A 404 for a trail already on screen is still a failure, because a deleted trail is gone.
+- **The comb's 404 is settled by the trail's verdict.** Both endpoints fail for the same reason while a cue is in flight and the two reads race, so a queued artifact error would have been on screen the moment the trail landed.
+- **The cue never navigates.** Its toast carries **Open trail** instead. A standing cue continues a trail the operator may already be watching, so the new one is not necessarily what they want to see — and a link somebody presses cannot yank them off a page they never acted from. A toast with something to press is a question rather than a receipt, so it lives 12 seconds against the plain toast's 4, and selecting it dismisses the notice rather than navigating out from under it.
+
+14 tests, 1001 total. svelte-check clean, console rebuilt into
+internal/console/next/dist.
+
 ## 2026-09 — Escape goes back to the list, and `/` reaches the filter
 
 The `g <key>` chord map covers every root and `SideMenu` renders it, but two things an operator reaches for are not destinations and so could never be rows in it. **Escape** now returns to the list the current path belongs to, and **`/`** focuses the list's filter and selects what is in it — so the next keystroke replaces it rather than appending to a term you did not mean to keep.

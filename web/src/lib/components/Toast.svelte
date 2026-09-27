@@ -8,6 +8,19 @@
 	{#each store.items as item (item.id)}
 		<div id={`toast-${item.id}`} class={`alert ${toastClass(item.tone)}`}>
 			<span>{item.message}</span>
+			{#if item.action}
+				<button
+					id={`toast-${item.id}-action`}
+					type="button"
+					class="btn btn-sm"
+					onclick={() => {
+						store.dismiss(item.id);
+						item.action?.onselect();
+					}}
+				>
+					{item.action.label}
+				</button>
+			{/if}
 			<button
 				id={`toast-${item.id}-dismiss`}
 				type="button"
