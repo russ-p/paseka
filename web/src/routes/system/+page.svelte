@@ -9,7 +9,7 @@
 	import {
 		cpuPendingHint,
 		formatPercent,
-		formatProcessBytes,
+		formatSize,
 		liveBeePids,
 		systemAvailableWord,
 		systemCpuPending,
@@ -63,7 +63,7 @@
 		{
 			key: 'rss',
 			label: 'RSS',
-			text: (process) => formatProcessBytes(process.rssBytes) ?? '',
+			text: (process) => formatSize(process.rssBytes) ?? '',
 			align: 'right',
 			secondary: true
 		},

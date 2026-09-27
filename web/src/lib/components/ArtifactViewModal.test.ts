@@ -120,8 +120,35 @@ describe('ArtifactViewModal', () => {
 		expect(screen.queryByText('Empty file.')).not.toBeInTheDocument();
 	});
 
-	it('says so for a genuinely empty file', async () => {
-		stubContent({ ref: 'empty.md' });
+	it('sizes the file it would not show, because the reason alone decides nothing', async () => {
+		stubContent({ ref: 'big.json', omitted: 'file too large for inline preview', bytes: 600 * 1024 });
+		render(ArtifactViewModal, {
+			open: true,
+			traceId: 'trace-1',
+			artifact: artifactView({ ref: 'big.json', title: 'State' }),
+			onclose: vi.fn()
+		});
+
+		// "Too large" leaves a 600 KiB file and a 600 GiB one looking identical, so the
+		// choice between raising the cap, paging it, and looking elsewhere is a guess.
+		expect(await screen.findByText('file too large for inline preview')).toBeInTheDocument();
+		expect(screen.getByText(/600 KiB/)).toBeInTheDocument();
+	});
+
+	it('leaves the size out when the server could not measure the file', async () => {
+		stubContent({ ref: 'report.bin', omitted: 'binary or invalid UTF-8' });
+		render(ArtifactViewModal, {
+			open: true,
+			traceId: 'trace-1',
+			artifact: artifactView({ ref: 'report.bin' }),
+			onclose: vi.fn()
+		});
+
+		expect(await screen.findByText('binary or invalid UTF-8')).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('0 B');
+	});
+
+	it('says so for a genuinely empty file', async () => {		stubContent({ ref: 'empty.md' });
 		render(ArtifactViewModal, {
 			open: true,
 			traceId: 'trace-1',

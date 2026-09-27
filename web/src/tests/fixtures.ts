@@ -96,6 +96,9 @@ export function artifactView(overrides: Partial<ArtifactView> = {}): ArtifactVie
 		producer: 'run-01',
 		announced: true,
 		staged: false,
+		// A real comb file in this colony is a few KiB; the size is what the trail's
+		// artifact list now prints and what makes an omitted body legible.
+		bytes: 3381,
 		...overrides
 	};
 }

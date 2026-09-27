@@ -771,6 +771,8 @@ export interface ArtifactView {
 	producer?: string;
 	announced: boolean;
 	staged: boolean;
+	/** Size on disk. The preview refuses an oversized file, so this makes it legible first. */
+	bytes?: number;
 }
 
 /**
@@ -783,6 +785,8 @@ export interface ArtifactContent {
 	content?: string;
 	contentHtml?: string;
 	omitted?: string;
+	/** Size on disk, so an omitted body can say how large it was rather than only that it was too large. */
+	bytes?: number;
 }
 
 /** Mirrors `hiveview.InsightHighlight`. */

@@ -653,12 +653,22 @@ export function artifactLabel(artifact: Pick<ArtifactView, 'title' | 'artifactKi
 	return artifact.title || artifact.artifactKind || artifact.ref;
 }
 
-/** The artifact's second line: kind, producer, and the canonical comb path. */
-export function artifactMeta(artifact: Pick<ArtifactView, 'artifactKind' | 'producer' | 'ref'>): string {
+/**
+ * The artifact's second line: kind, producer, the size, and the canonical comb path.
+ *
+ * The size sits before the path because it is the one fact that changes a decision: a
+ * file the preview will refuse is legible here, before anybody opens it and finds out.
+ * It is absent for an artifact the server could not stat, which is better than a `—`
+ * that reads as a file of no bytes.
+ */
+export function artifactMeta(
+	artifact: Pick<ArtifactView, 'artifactKind' | 'producer' | 'ref' | 'bytes'>
+): string {
 	const parts = [artifact.artifactKind];
 	if (artifact.producer) parts.push(artifact.producer);
+	if (artifact.bytes) parts.push(formatSize(artifact.bytes) ?? '');
 	parts.push(artifact.ref);
-	return parts.join(' · ');
+	return parts.filter(Boolean).join(' · ');
 }
 
 /** `announced` means the colony was told; `staged` means only the comb has it. */
@@ -667,12 +677,13 @@ export function artifactState(artifact: Pick<ArtifactView, 'announced'>): 'annou
 }
 
 /**
- * Byte counts in a process column are a different scale from machine memory:
- * most processes are MiB, so the GiB formatter the metric tiles use would print
- * `0.00 GiB` down the whole table and make the rows incomparable. The unit
+ * A byte count at the scale of the thing being counted. Machine memory is the one
+ * place an operator thinks in GiB, so the metric tiles use the GiB formatter; most
+ * processes are MiB and a comb file is KiB, and the GiB formatter would print
+ * `0.00 GiB` down the whole column and make the rows incomparable. The unit
  * follows the value here.
  */
-export function formatProcessBytes(value: number | undefined): string | null {
+export function formatSize(value: number | undefined): string | null {
 	if (value === undefined || !Number.isFinite(value)) return null;
 	const mib = value / 1024 ** 2;
 	if (mib >= 10) return `${mib.toFixed(0)} MiB`;

@@ -237,6 +237,15 @@ describe('trace detail', () => {
 		expect(await screen.findByText('No trail artifacts in the comb.')).toBeInTheDocument();
 	});
 
+	it('sizes each comb file in the list, so one the preview will refuse is legible first', async () => {
+		renderDetail();
+
+		const block = await section('trace-artifacts');
+		// The size sits on the meta line the list already prints, so a file above the
+		// preview cap is measurable without opening it and finding out.
+		expect(within(block).getByText(/3 KiB/)).toBeInTheDocument();
+	});
+
 	it('waits for a cued trail instead of reporting the 404 as a failure', async () => {
 		renderDetail({
 			detail: async () => {

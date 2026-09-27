@@ -2,6 +2,18 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — A comb file the preview refuses now says how large it is
+
+A trail's comb refused an oversized body with "file too large for inline preview" and nothing else. That is the whole of what an operator knew, and it decides nothing: a 600 KiB file and a 600 GiB one look identical, so "raise the cap, page it, or look somewhere else" was a guess. The size is now on the trail's artifact list and beside the refusal in the preview, which is what makes the next call makeable on a number rather than on a hunch.
+
+- **The size was already known.** `ItemFromFile` stats every comb file to set its mtime, and `MergeAnnounced` copies items wholesale, so `Bytes` on `Item` and on `hiveview.ArtifactView` costs one field and no extra read. A test pins the merge specifically, because a field added to one side and not the other would be dropped on every announced file — the comb files an operator actually looks at.
+- **The two caps are now separate constants**, equal today and not the same symbol. They answer different questions: what may be read on one screen, and what may be shipped in a trace export. An operator who hits the preview ceiling and raises the one constant they can find has raised the size of every export archive, which is the wrong lever for the symptom. The decision the entry deferred is now one number away.
+- **No range read, and none needed yet.** The largest comb file this colony has produced is 3381 bytes and the cap is a hundred and fifty-five times that, so a paged modal is a real feature for a case that has not happened. The size is what makes the *next* decision possible; it is not itself the fix.
+- **`formatProcessBytes` is now `formatSize`.** It was a byte-count formatter at human scale wearing the name of the one column that happened to use it, and the comb list is the second caller. The GiB formatter the metric tiles use stays separate: machine memory is the one place an operator thinks in GiB, and a process at 1 GiB printing "1.00 GiB" where it printed "1024 MiB" would be a change nobody asked for.
+
+9 tests, 1018 total. golangci-lint clean, svelte-check clean, console rebuilt
+into internal/console/next/dist.
+
 ## 2026-09 — A DataTable row can carry one action, and a branch the sweep skips gets a Delete
 
 `DataTable` cells are declarative — `href` for a link, `badge` for a state — and a cell had no way to hold a control. The stated reason was that a snippet cannot be built inside `<script>`, where the column objects live, and that blocks arbitrary markup rather than a callback. So `action` is the same shape as its neighbours: `(row) => { label, kind?, onselect } | null`, rendering one button beside the cell's own text and nothing at all on a row it returns `null` for.

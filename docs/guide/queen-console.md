@@ -136,7 +136,10 @@ column; a settled trail leaves it empty, so the eye lands on the rows that need
 you. Opening a trail goes to its own page (`/next/traces/<traceId>`), so the URL
 can be shared and the browser back button works. From there: **+1 / +5 / +12**
 top up the honey reserve, **View** on a comb file opens it in a dialog, and
-**Open timeline** jumps to the event feed for that trail.
+**Open timeline** jumps to the event feed for that trail. Each comb file's row
+carries its size on disk, and a file the dialog will not render — too large, or
+not text — says so *and* says how large it is, so you can tell a file worth
+raising a limit for from one that is simply not a page of text.
 
 ### Reviews
 

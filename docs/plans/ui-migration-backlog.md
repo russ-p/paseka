@@ -8,13 +8,10 @@ Each item carries a **Kind**, a **Source**, what is pending, why it was set asid
 
 Entries below were taken one at a time and settled; the work has not landed, so they are recorded here rather than struck. Each states the decision, so the next pass does not re-open it, and what the decision was chosen over. When one ships it moves to [Changelog](changelog.md) like any other work, and the amendment it makes to the [design-system contract](../architecture/queen-console-design-system.md) lands with it.
 
-#### An unreadable comb file says how big it is
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
-- **Decision:** Split the constant, then show the size. `MaxInlineExportBytes` bounds an export archive and doubles as the preview cap, so anyone arriving with a preview complaint will raise the export limit, which is the wrong lever; the preview gets its own. `ArtifactView` gains `Bytes`, read from the `os.Stat` that `ItemFromFile` already performs, and both the comb list and the modal's omitted state say how large the file is.
-- **Why not the range read:** The largest comb file this colony has produced is 3381 bytes; the cap is a hundred and fifty-five times that. A range read and a paged modal are a real feature for a case that has not happened. The size is what makes the next decision possible — without it a 600 KiB file and a 600 GiB one look identical and "raise the cap or page it" is a guess. The path is already in the artifact's meta line, so the operator has somewhere to go.
-- **Revisit when:** A comb file passes a few hundred KiB. The size field is already there, so the choice gets made on a number.
+The section is empty: every entry taken in this pass has shipped and moved to
+[Changelog](changelog.md). What is left of the redesign's unfinished work is in
+[Transitions](#transitions) and [Polish on landed routes](#polish-on-landed-routes)
+below, and anything still only an idea is in [Backlog](backlog.md).
 
 ## Dead ends
 

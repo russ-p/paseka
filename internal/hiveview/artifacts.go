@@ -15,6 +15,9 @@ type ArtifactView struct {
 	Producer     string `json:"producer,omitempty"`
 	Announced    bool   `json:"announced"`
 	Staged       bool   `json:"staged"`
+	// Bytes is the file's size, so a file the preview will refuse is at least legible
+	// before anybody opens it.
+	Bytes int64 `json:"bytes,omitempty"`
 }
 
 // ArtifactContentView is file body for preview.
@@ -23,6 +26,9 @@ type ArtifactContentView struct {
 	Content     string `json:"content,omitempty"`
 	ContentHTML string `json:"contentHtml,omitempty"`
 	Omitted     string `json:"omitted,omitempty"`
+	// Bytes rides with the body so an omitted body can say how big it was, rather than
+	// leaving "too large" as the whole of what the operator knows.
+	Bytes int64 `json:"bytes,omitempty"`
 }
 
 // ListTraceArtifacts returns comb files with announced/staged labels.
@@ -46,6 +52,7 @@ func ListTraceArtifacts(ctx colony.Context, traceID string) ([]ArtifactView, err
 			Producer:     item.Producer,
 			Announced:    item.Announced,
 			Staged:       !item.Announced,
+			Bytes:        item.Bytes,
 		})
 	}
 	return out, nil
@@ -61,12 +68,12 @@ func GetTraceArtifactContent(ctx colony.Context, traceID, ref string) (ArtifactC
 	if err != nil {
 		return ArtifactContentView{}, err
 	}
-	view := ArtifactContentView{Ref: canonical}
+	view := ArtifactContentView{Ref: canonical, Bytes: int64(len(data))}
 	if !artifacts.IsTextContent(data) {
 		view.Omitted = "binary or invalid UTF-8"
 		return view, nil
 	}
-	if len(data) > artifacts.MaxInlineExportBytes {
+	if len(data) > artifacts.MaxInlinePreviewBytes {
 		view.Omitted = "file too large for inline preview"
 		return view, nil
 	}

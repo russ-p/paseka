@@ -66,7 +66,7 @@ import {
 	formatClock,
 	formatFetchAge,
 	formatPercent,
-	formatProcessBytes,
+	formatSize,
 	formatUptime,
 	systemAvailableWord,
 	systemCpuPending,
@@ -489,6 +489,22 @@ describe('trace row and comb formatting', () => {
 		expect(artifactMeta({ ref: 'n.md', artifactKind: 'note' })).toBe('note · n.md');
 	});
 
+	it('puts the size before the path, so a file the preview refuses is legible first', () => {
+		// The size is the one fact on this line that changes a decision — raise the cap,
+		// page it, or look elsewhere — and it is the fact the server had and did not send.
+		expect(
+			artifactMeta({ ref: 'n.md', artifactKind: 'note', bytes: 3381 })
+		).toBe('note · 3 KiB · n.md');
+		expect(
+			artifactMeta({ ref: 'big.json', artifactKind: 'checkpoint', bytes: 600 * 1024 })
+		).toBe('checkpoint · 600 KiB · big.json');
+	});
+
+	it('leaves the size out when the server could not measure it', () => {
+		// A `—` here would read as a file of no bytes, which is worse than a missing fact.
+		expect(artifactMeta({ ref: 'n.md', artifactKind: 'note', bytes: 0 })).toBe('note · n.md');
+	});
+
 	it('separates an announced comb file from a staged one', () => {
 		expect(artifactState({ announced: true })).toBe('announced');
 		expect(artifactState({ announced: false })).toBe('staged');
@@ -700,24 +716,24 @@ describe('git route formatting', () => {
 	});
 });
 
-describe('formatProcessBytes', () => {
+describe('formatSize', () => {
 	it('picks the unit from the value, because most processes are MiB', () => {
 		// The GiB formatter the metric tiles use would print 0.00 GiB down the
 		// whole process column and make the rows incomparable. For the same reason
 		// this never climbs back to GiB: a column that changes unit halfway down
 		// is the thing it exists to prevent.
-		expect(formatProcessBytes(1_073_741_824)).toBe('1024 MiB');
-		expect(formatProcessBytes(214_958_080)).toBe('205 MiB');
-		expect(formatProcessBytes(52_428_800)).toBe('50 MiB');
-		expect(formatProcessBytes(5_242_880)).toBe('5.0 MiB');
-		expect(formatProcessBytes(3_145_728)).toBe('3.0 MiB');
-		expect(formatProcessBytes(65_536)).toBe('64 KiB');
-		expect(formatProcessBytes(512)).toBe('512 B');
+		expect(formatSize(1_073_741_824)).toBe('1024 MiB');
+		expect(formatSize(214_958_080)).toBe('205 MiB');
+		expect(formatSize(52_428_800)).toBe('50 MiB');
+		expect(formatSize(5_242_880)).toBe('5.0 MiB');
+		expect(formatSize(3_145_728)).toBe('3.0 MiB');
+		expect(formatSize(65_536)).toBe('64 KiB');
+		expect(formatSize(512)).toBe('512 B');
 	});
 
 	it('is null when the server could not measure the process', () => {
-		expect(formatProcessBytes(undefined)).toBeNull();
-		expect(formatProcessBytes(Number.NaN)).toBeNull();
+		expect(formatSize(undefined)).toBeNull();
+		expect(formatSize(Number.NaN)).toBeNull();
 	});
 });
 

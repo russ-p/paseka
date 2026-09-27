@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Modal from '$lib/components/Modal.svelte';
 	import { getTraceArtifactContent } from '$lib/api/client';
-	import { artifactLabel } from '$lib/format';
+	import { artifactLabel, formatSize } from '$lib/format';
 	import type { ArtifactContent, ArtifactView } from '$lib/api/types';
 
 	let {
@@ -73,7 +73,14 @@
 	{:else if body === 'error'}
 		<div class="alert alert-error" role="alert"><span>{error}</span></div>
 	{:else if body === 'omitted'}
-		<p class="text-sm text-base-content/60">{content?.omitted}</p>
+		<!-- The reason alone leaves "too large" as the whole of what the operator knows;
+		     the size is what tells them whether to raise the cap, page it, or look elsewhere. -->
+		<p class="text-sm text-base-content/60">
+			{content?.omitted}
+			{#if content?.bytes}
+				<span class="text-base-content/50">· {formatSize(content.bytes)}</span>
+			{/if}
+		</p>
 	{:else if body === 'empty'}
 		<p class="text-sm text-base-content/60">Empty file.</p>
 	{:else if body === 'html'}
