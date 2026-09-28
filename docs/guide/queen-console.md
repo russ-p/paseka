@@ -94,6 +94,18 @@ their own pages; **Live bees** opens **Runs**, or **Sessions** when only
 interactive bees are live — a bee is not addressable, so the plaque leads to
 whichever of the two is holding it.
 
+The **Git** plaque's badge is the colony root against origin — `in sync`, `↑3`,
+`↓2`, `no origin`, or `fetch` when there is nothing to compare — so amber means
+Fetch, Push or Pull on the Git page would do something. The working tree is not
+in it and is not hidden either: a dirty tree reads as the word `dirty` on the
+panel's third line, next to how long ago the remote was last read. That is
+deliberate, because a dirty root is close to this colony's normal state — a bee
+proposing on the root stages its edits and does not commit, and nothing commits
+them for it — so a badge that followed the tree would be lit for most of every
+session and would look like the reviews and invites badges beside it. Check the
+word before starting work; a staged change from a previous run is what a new run
+will pick up.
+
 **Run cue** opens the cue dialog. Publishing a cue mints a trail id and puts a
 signal on the bus, but **nothing is written to disk until a bee picks that
 signal up**, so the trail page waits for up to 30 seconds and says so rather

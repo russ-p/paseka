@@ -275,12 +275,13 @@ describe('topbar formatting', () => {
 		expect(gitSyncLabel(git)).toBe('↑3');
 		expect(gitNeedsAttention(git)).toBe(true);
 		expect(gitMeta(git, '')).toBe('main');
-		expect(gitDetail(git, '')).toContain('ba7b43c');
+		expect(gitDetail(git, '')).toBe('dirty · fetch 5d ago');
 		expect(gitDetail(git, 'fetch failed')).toContain('fetch failed');
 
 		const clean: GitPlaque = { ...git, dirty: false, ahead: 0, behind: 0, lastFetchAgeSeconds: 10 };
 		expect(gitSyncLabel(clean)).toBe('in sync');
 		expect(gitNeedsAttention(clean)).toBe(false);
+		expect(gitDetail(clean, '')).toBe('fetch just now');
 
 		const noOrigin: GitPlaque = { ...clean, originUrl: '' };
 		expect(gitSyncLabel(noOrigin)).toBe('no origin');
@@ -289,6 +290,43 @@ describe('topbar formatting', () => {
 		expect(gitSyncLabel(null)).toBe('—');
 		expect(gitMeta(null, 'git failed')).toBe('git failed');
 		expect(gitDetail(null, '')).toBe('');
+	});
+
+	it('keeps a dirty working tree out of the badge and on the panel instead', () => {
+		// The badge answers "is there something Fetch/Push/Pull would do", so a tree
+		// that differs from origin but is clean and unpushed is the state that reads
+		// in sync, and a tree that is dirty with nothing to publish is not attention.
+		const dirtyButEqual: GitPlaque = {
+			...git,
+			dirty: true,
+			ahead: 0,
+			behind: 0,
+			lastFetchAgeSeconds: undefined
+		};
+		expect(gitSyncLabel(dirtyButEqual)).toBe('in sync');
+		expect(gitNeedsAttention(dirtyButEqual)).toBe(false);
+		expect(gitDetail(dirtyButEqual, '')).toBe('dirty');
+
+		// A clean tree with nothing fetched, no error and nothing to say leaves the
+		// third line absent rather than padded.
+		const quiet: GitPlaque = { ...git, dirty: false, ahead: 0, behind: 0, lastFetchAgeSeconds: undefined };
+		expect(gitDetail(quiet, '')).toBe('');
+
+		// The not-compared case reads as a nudge to fetch, not as the tree's state,
+		// so a dirty tree cannot make a green badge say `dirty`.
+		const notCompared: GitPlaque = { ...git, ahead: undefined, behind: undefined, note: 'no remote-tracking ref' };
+		expect(gitSyncLabel(notCompared)).toBe('fetch');
+		expect(gitNeedsAttention(notCompared)).toBe(false);
+		expect(gitDetail(notCompared, '')).toBe('dirty · fetch 5d ago');
+
+		const notComparedClean: GitPlaque = {
+			...notCompared,
+			dirty: false,
+			note: undefined,
+			lastFetchAgeSeconds: undefined
+		};
+		expect(gitSyncLabel(notComparedClean)).toBe('main');
+		expect(gitDetail(notComparedClean, '')).toBe('');
 	});
 });
 

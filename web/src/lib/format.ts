@@ -245,14 +245,19 @@ export function hostDetail(host: HostStatus | null): string {
 	return parts.join(' · ');
 }
 
+/**
+ * The plaque's one word, and it is about the clone's stand against origin and nothing
+ * else — `in sync`, `↑3`, `↓2`, `no origin`, or `fetch` where the remote-tracking refs
+ * are missing so there is nothing to compare. The working tree is deliberately not in
+ * it: a word that drove the tone could not also stay true while the tree was dirty, and
+ * `dirty` says nothing about the remote. It is a line of the panel instead
+ * (`gitDetail`), the same split the Git page makes between its Sync and Working tree rows.
+ */
 export function gitSyncLabel(git: GitPlaque | null): string {
 	if (!git) return '—';
 	if (!git.originUrl) return 'no origin';
 	if (git.ahead === undefined && git.behind === undefined) {
-		const bits: string[] = [];
-		if (git.note && !git.dirty) bits.push('fetch');
-		if (git.dirty) bits.push('dirty');
-		return bits.join(' ') || git.defaultBranch || 'git';
+		return (git.note ? 'fetch' : '') || git.defaultBranch || 'git';
 	}
 	if ((git.ahead ?? 0) > 0 && (git.behind ?? 0) > 0) return `↑${git.ahead} ↓${git.behind}`;
 	if ((git.ahead ?? 0) > 0) return `↑${git.ahead}`;
@@ -260,9 +265,19 @@ export function gitSyncLabel(git: GitPlaque | null): string {
 	return 'in sync';
 }
 
+/**
+ * Whether the badge leaves its success tone, and it answers the same question the word
+ * does: is there something Fetch/Push/Pull on `/next/git` would do. A dirty tree is not
+ * one of those things, and in this colony it is close to the resting state — a
+ * `worktree: false` bee proposing on the root stages its edits and does not commit, and
+ * a root proposal never merges on approve — so a tone that followed it would be lit for
+ * most of every session. It would also read as the reviews and invites badges two panels
+ * to the left, which are the tones an operator must not learn to ignore. The fact itself
+ * is not hidden: it is a word on the panel, one line below the badge.
+ */
 export function gitNeedsAttention(git: GitPlaque | null): boolean {
 	if (!git) return true;
-	return !git.originUrl || git.dirty || (git.ahead ?? 0) > 0 || (git.behind ?? 0) > 0;
+	return !git.originUrl || (git.ahead ?? 0) > 0 || (git.behind ?? 0) > 0;
 }
 
 /** Hint lines for the git branch line: origin and divergence are not on screen. */
@@ -281,10 +296,21 @@ export function gitMeta(git: GitPlaque | null, error: string): string {
 	return git.defaultBranch || git.branch || '—';
 }
 
+/**
+ * The plaque's third line, which is a fact about the checkout right now: the working
+ * tree first, because it is what changes what the next run will pick up, then how long
+ * ago the remote was last read, then the error. It replaces the short HEAD sha, which
+ * was the one item here that is identity rather than measurement — every sibling panel
+ * spends this line on a fact about the present (`pid · started · heartbeat`,
+ * bee counts, `load 1.25`) — and which the Git page already carries as a copyable row
+ * with the full sha behind a `Hint`. Absent when the tree is clean, nothing has been
+ * fetched and no read failed, which is why the panel omits the line entirely rather
+ * than padding it.
+ */
 export function gitDetail(git: GitPlaque | null, error: string): string {
 	if (!git) return '';
 	const parts: string[] = [];
-	if (git.headShaShort) parts.push(git.headShaShort);
+	if (git.dirty) parts.push('dirty');
 	const age = formatFetchAge(git.lastFetchAgeSeconds);
 	if (age) parts.push(`fetch ${age}`);
 	if (error) parts.push(error);

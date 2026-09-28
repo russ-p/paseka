@@ -2,6 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — The Git plaque says what would change, and a dirty tree says so in words
+
+The Git panel in the topbar reported a working tree twice and contradicted itself once: the badge went amber whenever the tree was dirty, while the word beside it read `in sync` — so a dirty root with nothing to publish rendered as a warning saying everything was fine, and the reason sat in a hover. Both halves are gone, and the panel now says the two facts apart.
+
+**Amber means there is something to fetch, push or pull.** The badge and its word answer one question — the colony root against origin: `in sync`, `↑3`, `↓2`, `no origin`, or `fetch` where the remote-tracking refs are missing — so the tone cannot disagree with the label, and the actions it points at are the three on the Git page.
+
+**A dirty tree is a word on the panel, not a tone.** It leads the third line next to how long ago the remote was last read (`dirty · fetch 12m ago`), so it is visible on every route without a hover. This is the half that argues for itself: a bee proposing on the root **stages its edits and is told not to commit**, and a root proposal never merges on approve, so a dirty root is close to this colony's resting state — a badge that followed it would be amber for most of every working session, and it would wear the same tone as the reviews and invites badges two panels away, which are the ones an operator must not learn to ignore. Staged work from a previous run is exactly what the next run will pick up, so the fact got more prominent, not less.
+
+- **The short HEAD sha left the plaque.** It was the one item there that was identity rather than a measurement — every sibling panel spends its third line on the present (`pid · started · heartbeat`, bee counts, `load 1.25`) — and the Git page already carries `HEAD` as a copyable row with the full sha behind a hover. The line disappears entirely when the tree is clean, nothing has been fetched and no read failed, rather than padding a panel with a dash.
+- **The not-compared case stopped borrowing the tree's word.** With no remote-tracking ref the badge reads `fetch` (or the branch name) and the Git page's own Sync row keeps saying `dirty · not compared`, so no green badge can read `dirty`.
+- **The uncovered state is now covered.** The formatter suite asserted `in sync` only for a clean tree and its fixture was dirty *and* ahead, so the word `dirty` never appeared in a compared branch at all — which is why a yellow `in sync` passed. Four cases are pinned now, and the panel is asserted in the render as well as the formatter: the word is on screen and the badge class beside it.
+
+Web 1029 tests, up three. svelte-check clean, console rebuilt into
+internal/console/next/dist.
+
 ## 2026-09 — Traces pages once, the cursor could always reach the bottom, and the button finally does something
 
 Three things landed on the trail list at once, and one of them is a course correction: the paging went to a cursor, and it should have been there all along.

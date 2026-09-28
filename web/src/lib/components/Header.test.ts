@@ -97,7 +97,35 @@ describe('Header', () => {
 		expect(screen.getByLabelText('Git')).toHaveTextContent('main');
 
 		expect(screen.getByLabelText('Host')).toHaveTextContent('load 1.25');
-		expect(screen.getByLabelText('Git')).toHaveTextContent('ba7b43c');
+		expect(screen.getByLabelText('Git')).toHaveTextContent('fetch 1h ago');
+	});
+
+	// The badge answers the clone's stand against origin, which is the question
+	// Fetch/Push/Pull on /next/git acts on. A dirty tree is neither published nor
+	// behind, so it is a word on the panel — a colony stages root proposals without
+	// committing them, so a tone that followed the tree would be lit most of the time
+	// and would read as the reviews and invites badges further along the row.
+	it('shows a dirty working tree on the panel instead of in the badge tone', () => {
+		const frame = chromeFrame();
+		const { store, toasts } = harness(chromeFrame({ git: { ...frame.git!, dirty: true } }));
+		render(Header, { store, toasts });
+
+		const panel = screen.getByLabelText('Git');
+		expect(panel).toHaveTextContent('in sync');
+		expect(panel).toHaveTextContent('dirty · fetch 1h ago');
+		expect(panel.querySelector('.badge')).toHaveClass('badge-success');
+	});
+
+	it('keeps unpublished commits in the badge tone whatever the tree is', () => {
+		const frame = chromeFrame();
+		const { store, toasts } = harness(
+			chromeFrame({ git: { ...frame.git!, dirty: true, ahead: 2, behind: 0 } })
+		);
+		render(Header, { store, toasts });
+
+		const panel = screen.getByLabelText('Git');
+		expect(panel).toHaveTextContent('↑2');
+		expect(panel.querySelector('.badge')).toHaveClass('badge-warning');
 	});
 
 	it('links the Host and Git plaques to their own routes', () => {
@@ -158,7 +186,7 @@ describe('Header', () => {
 			['thinkpad', 'linux amd64 · 16 cpu', '11.9 / 31.1 GiB', 'load 1.25'],
 			['thinkpad', 'load 1.25'],
 			['main', 'origin git@github.com:example/paseka'],
-			['ba7b43c', 'fetch 1h ago']
+			['fetch 1h ago']
 		]);
 
 		// the tooltip is a visual duplicate, so it stays out of the a11y tree
