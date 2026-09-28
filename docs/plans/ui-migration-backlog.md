@@ -15,7 +15,14 @@ below, and anything still only an idea is in [Backlog](backlog.md).
 
 ## Dead ends
 
-A link or control that resolves to a page which does not exist yet. Each one is a promise the operator can see and cannot keep.
+A link or control that resolves to a page which does not exist yet. Each one is
+a promise the operator can see and cannot keep.
+
+**No live promise is left.** The one entry below is closed and kept only for the
+rule it settles. The `PagePlaceholder` entry that used to sit here is gone with
+the reason: no route renders a placeholder any more, so no link can dead-end on
+one. That component is still in the inventory and referenced by nothing, which is
+a fact for whoever curates the inventory rather than a promise an operator sees.
 
 #### Task and run rows on the trail detail carry no link
 
@@ -25,57 +32,44 @@ A link or control that resolves to a page which does not exist yet. Each one is 
 - **Why deferred:** A row that promises a destination and dead-ends is worse than a row that only shows state. The Dashboard set this precedent, the trail detail followed it, and Runs and Tasks have now landed so neither half of the block is mute.
 - **Revisit when:** Never. Tasks landed and the task rows link, which closes this; the run rows linked a route earlier. The precedent stands for any future list: a row that promises a destination and dead-ends is worse than one that only shows state, so a new column should link from its first commit rather than after a backlog item.
 
-#### `PagePlaceholder` sends the operator to the legacy root
-
-- **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** The only action on a placeholder is "Use legacy console" → `/`, which lands on the legacy Dashboard. An operator who clicked through from a trail loses their place.
-- **Why deferred:** The legacy console has no deep links for most routes, so there is nothing better to point at yet.
-- **Revisit when:** Any legacy route gains a deep-linkable view, or the placeholder can at least name the section it stands in for.
-
 ## Transitions
 
-Movement between routes that is not designed yet. The shell routes client-side, but nothing about *where an operator lands* is settled.
+Movement between routes that is not designed yet. *Where an operator lands* is
+mostly settled now — a list keeps its filter and page in the URL, and `Escape`
+walks a detail back to the list that owns it — so what is left here is the part
+that needs a decision about what "back" and "last" mean rather than a mechanism.
 
-#### Cross-route deep links between a trail and its work
-
-- **Kind:** idea
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Trail → Task, Trail → Run, Task → Run, Review → Trail. Every list and row that could carry a target already accepts one; none of the targets exists.
-- **Why deferred:** Each link is only worth adding once both ends are real, and half of them would be links to placeholders.
-- **Revisit when:** The second of each pair is migrated. The trail detail is the hub, so its rows go first.
-
-#### Back behaviour on the trail detail is a hard link
+#### Back from a detail is a hard link, and it names the bare list
 
 - **Kind:** follow-up
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** `← Traces` is a plain link to `/next/traces`, not `history.back()`. Correct when the trail was deep-linked from a chat or a `paseka replay` hint; wrong when the operator arrived from page 3 of the list and expects to be there.
-- **Why deferred:** A hard link is never broken, and history is only better in one of the two cases. Breadcrumbs would serve both but add a component and a rule for a route family that has one page so far.
-- **Revisit when:** A second detail route exists, so there is a family to design a shared back affordance for.
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
+- **Summary:** All five detail routes render their back link as a plain link to the bare list path — `TraceDetail.svelte:130`, `RunDetail.svelte:47`, `TaskDetail.svelte:123`, `SessionDetail.svelte:154`, `ReviewDetail.svelte:118` — and none of them carries the list's query. `Escape` lands on the same bare path, because `owningListPath` resolves a list *root* and the list's `?q=&page=` is not part of one. So the failure this entry always described is now five routes wide and exactly reproducible: arrive from `/next/traces?page=3`, open a trail, press `←`, and land on page one of an unfiltered list.
+- **Why deferred:** The list's state being in the URL is what made this cheap — reproducing the operator's page is now a string, so the fix needs neither breadcrumbs nor a shared "last list query" module. The decision is still unmade, though, because `history.back()` is better in one case and worse in the other and this entry has always declined to pick. The narrow answer that serves both is to go back only when the previous history entry *is* the owning list and hard-link otherwise, which keeps a trail deep-linked from a chat landing on the list rather than out of the console.
+- **Revisit when:** An operator loses a page to a back link, or the root cutover lands — a back affordance that drops somebody on page one of a list they had narrowed is a first-impression bug, and `/` is still the legacy console.
 
 #### Keyboard chords stop at the route root
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #10)
-- **Summary:** The thirteen root chords are complete and discoverable — `SideMenu` renders `g <letter>` as a `kbd` in every entry. What is missing is a chord for a *destination* that is a function of what is on screen: from a trail, open its timeline or one of its runs. None of that can be a row in `consoleRoutes`, which holds roots only.
-- **Why deferred:** It needs a second, route-aware layer over the map rather than more entries in it, and the value is thin — a trail detail already links to its runs and tasks and carries an `Open timeline` button. The two affordances that were actually stuck, `Escape` and `/`, are not chords at all and are decided above.
-- **Revisit when:** An operator reaches for a route-scoped chord, or a detail route gains an action with no on-screen control. The condition this entry was waiting for has been met — there are five detail families now — so what holds it is the cost of the second layer, not the missing routes.
+- **Summary:** The thirteen root chords are complete and discoverable — `SideMenu` renders `g <letter>` as a `kbd` in every entry. What is missing is a chord for a *destination that is a function of the page*: a trail's runs or its timeline, a task's runs, a session's transcript. `consoleRoutes` holds roots, so none of that can be a row in the map.
+- **Why deferred:** The two affordances that were actually stuck are not chords and have shipped — `Escape` walks a detail back to its list and `/` reaches the filter — which removes the argument that the value was thin and leaves only the cost. Five detail families now each have page-dependent destinations, so a route-scoped layer would have real work to do; that is also why it is no longer a rounding error. It is still a new thing to own: one rule per family is five rules, and each wants a discoverable hint that a chord map has nowhere to put.
+- **Revisit when:** An operator asks for one, or a detail route gains a destination with no on-screen control. That has not happened once, and the count is the number this entry is really tracking.
 
 #### Scroll position does not survive a route change
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
-- **Summary:** User story #3 promises switching contexts "without losing scroll position", and nothing implements it: SvelteKit scrolls to the top on a client-side navigation and nothing puts the reader back. It was folded into the list-state entry, which promises something else — a paginated table's `?page=` *is* its scroll position, but the long pages the story is really about (the topology graph, a run's event log, a session transcript, a merge diff) are not paginated and have no URL to restore from.
-- **Why deferred:** Restoration is per surface, because each long page knows what "the same place" means for it — a scroll offset, a folded section, a selected file in a diff. There is no general answer, and a blanket `history.scrollRestoration = 'manual'` plus a stored offset gets the scroll right and the open blocks wrong.
-- **Revisit when:** A second long page needs it, so the per-surface shape is visible twice — or before the root cutover, where "I lost my place" is a first-impression bug.
+- **Summary:** User story #3 promises switching contexts "without losing scroll position". The half a list can keep by itself has shipped: `?q=&page=` is in the URL, so a table's page *is* its position. The other half has no home — SvelteKit scrolls to the top on a client-side navigation and nothing puts a reader back, and the pages the story is really about (the topology graph, a run's event log, a session transcript, a merge diff) are not paginated and have no URL to restore from.
+- **Why deferred:** Restoration is per surface, because each long page knows what "the same place" means for it: an offset for a transcript, a zoom and centre for the graph, a selected file for a diff. A blanket `history.scrollRestoration = 'manual'` plus a stored offset gets the scroll right and the open blocks wrong, and there is no page anybody has complained about yet.
+- **Revisit when:** The root cutover lands, and not before. `/` still serves the legacy console while `/next` redirects to the last menu root, so "I lost my place" becomes a first-impression bug the moment the preview *is* the console.
 
 #### The last route is never a trail detail
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** `rememberRoute` stores only known menu routes, so a deep-linked or last-viewed trail is never remembered and the landing redirect always goes to a menu root.
-- **Why deferred:** Landing on a stale trail is worse than landing on the Dashboard, and the trail detail is the first route where "restore where I was" and "land somewhere safe" disagree.
-- **Revisit when:** Standing trails exist in a colony — a beekeeper's real "home" is a standing trail, and that is the case this decision exists for.
+- **Summary:** `rememberRoute` stores a path only when it is in `consoleRoutes` (`navigation.ts:143`), and `/next` redirects to it (`+page.ts:7`), so a trail, run, task, proposal, or session detail is never the landing page. A standing trail is the case this exists for, and it has become a path an operator *walks*: the cue toast's **Open trail** and the trail detail's own waiting notice make a cue a deliberate arrival rather than a link somebody pasted.
+- **Why deferred:** Landing on a stale trail is worse than landing on the Dashboard, and a trail that finished while the console was closed is exactly that. This colony has no standing trail to decide with — `feature.yaml` and `hotfix.yaml` declare no `standingTrace`, so `cues.StandingTraceIDs` is empty and every trail's `Standing` flag is false. Deciding the landing rule for a case no operator here has would be a guess.
+- **Revisit when:** A cue in this colony declares `standingTrace`. The badge, the field, and the API all exist; only the decision is missing.
 
 ## Sections still placeheld
 
