@@ -53,7 +53,7 @@ describe('ApiError', () => {
 	});
 
 	it('keeps the status so a caller can still branch on it', async () => {
-		stubFetch(() => new Response('before must start with an RFC3339 timestamp', { status: 400 }));
+		stubFetch(() => new Response('before must look like <rfc3339nano>|<traceId>', { status: 400 }));
 
 		const failure = await listTraces({ before: 'nope' }).catch((error: unknown) => error);
 		expect(failure).toBeInstanceOf(ApiError);
@@ -87,10 +87,8 @@ describe('trace endpoints', () => {
 		);
 	});
 
-	it('builds the cursor the server hands back through the last row', () => {
-		expect(traceCursor(traceSummary())).toBe(
-			'2026-09-25T18:04:22Z|trace-01a0bd6963faa14f'
-		);
+	it('builds the cursor that resumes strictly after a trail', () => {
+		expect(traceCursor(traceSummary())).toBe('2026-09-25T18:04:22Z|trace-01a0bd6963faa14f');
 	});
 
 	it('escapes the trace id on the detail and comb paths', async () => {

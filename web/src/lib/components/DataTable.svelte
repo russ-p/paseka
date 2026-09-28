@@ -71,6 +71,11 @@
 		emptyMessage?: string;
 		filterLabel?: string;
 		filterPlaceholder?: string;
+		/**
+		 * Rows per client page, or 0 for a table that shows everything it holds and
+		 * leaves its depth to whoever loaded the rows. An unpaged table writes no
+		 * `?page=` at all.
+		 */
 		pageSize?: number;
 		loading?: boolean;
 		/**
@@ -104,18 +109,44 @@
 		);
 	});
 
-	const pageCount = $derived(pageSize > 0 ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1);
-	const currentPage = $derived(Math.min(page, pageCount - 1));
-	const visible = $derived(pageSize > 0 ? filtered.slice(currentPage * pageSize, currentPage * pageSize + pageSize) : filtered);
+	/**
+	 * A `pageSize` of zero is the whole of "this table is not paged": every row it holds
+	 * is on screen, and there is no pager, no range label, and no `?page=` to write. That
+	 * is the shape a list whose depth the **server** owns has to take — a client page laid
+	 * over rows the server already paged is a second depth, and the operator would be
+	 * paging through a window they had also paged. The filter stays: narrowing a loaded
+	 * window is local work, whereas how much history is loaded is not.
+	 */
+	const paged = $derived(pageSize > 0);
+	const pageCount = $derived(paged ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1);
+	const currentPage = $derived(paged ? Math.min(page, pageCount - 1) : 0);
+	const visible = $derived(
+		paged ? filtered.slice(currentPage * pageSize, currentPage * pageSize + pageSize) : filtered
+	);
 	const rangeLabel = $derived(
 		filtered.length === 0
 			? '0 of 0'
 			: `${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, filtered.length)} of ${filtered.length}`
 	);
+	/**
+	 * Skeleton rows are a shape, not a page: an unpaged table has no page to take a third
+	 * of, so it stands in as many as a paged one at the same page size would show.
+	 */
+	const skeletonRows = $derived(paged ? Math.min(pageSize, 3) : 3);
 
 	$effect(() => {
-		// The page written is the one on screen, so a bookmark whose page a poll has
-		// invalidated corrects itself in the address bar rather than sitting there lying.
+		/**
+		 * A table with no rows has no page to publish, and the page under the seed is
+		 * derived from nothing — it is 0 whatever was asked for. Publishing that is how
+		 * a shared `?page=3` link used to break: the first pass ran before the rows
+		 * landed, wrote page one over the page the operator arrived on, and reached
+		 * `replaceState` before the router could accept it, which throws and takes the
+		 * effect down with it. Waiting for rows costs nothing, because the pass that
+		 * follows them derives a real page and republishes: the seeded page is honoured
+		 * the moment it is knowable, and a bookmarked page the rows cannot fill is still
+		 * corrected here rather than left in the bar.
+		 */
+		if (rows.length === 0) return;
 		writeListState({ q: filter, page: currentPage }, stateKey);
 	});
 
@@ -174,7 +205,7 @@
 				oninput={(event) => applyFilter(event.currentTarget.value)}
 			/>
 		</label>
-		{#if pageCount > 1}
+		{#if paged && pageCount > 1}
 			<div class="join">
 				<button
 					type="button"
@@ -194,7 +225,7 @@
 					Next
 				</button>
 			</div>
-		{:else}
+		{:else if paged}
 			<span class="text-xs text-base-content/50">{rangeLabel}</span>
 		{/if}
 	</div>
@@ -216,7 +247,7 @@
 			</thead>
 			<tbody>
 				{#if loading}
-					{#each Array.from({ length: Math.min(pageSize, 3) }) as _, index (index)}
+					{#each Array.from({ length: skeletonRows }) as _, index (index)}
 						<tr>
 							{#each columns as column (column.key)}
 								<td class={cellClass(column, false)}>

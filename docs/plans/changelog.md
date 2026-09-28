@@ -2,6 +2,37 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Traces pages once, the cursor could always reach the bottom, and the button finally does something
+
+Three things landed on the trail list at once, and one of them is a course correction: the paging went to a cursor, and it should have been there all along.
+
+**The cursor's ten-page ceiling is gone, and it was never a cost.** A cursor page called `ScanRecentTraces(root, limit*10)` — which truncates to the top *n* — and *then* applied the cursor, so past ten pages the scan held nothing older than the cursor, returned an empty page, and the store read that short page as the end of history. **Load older trails** therefore stopped at 500 trails and told the operator the history ended there. The cap was pure waste: `scanAllTraces` walks every trail on every read whatever the page asks for, so the cursor was being filtered against rows the walk had already read and then thrown away. `ScanTracesAfter` filters over the whole walk instead — one in-memory pass, no ceiling. A Go test now walks thirteen pages of two, which the old cap could not do.
+
+**An offset was tried first and was the wrong answer.** It fixed the ceiling, and it cost more than it bought. A rank is only correct until the colony produces a trail, because a new one pushes everything below it down; so the store had to detect new trails on every poll and move the offset by hand, or the operator would click *Load older* and be served rows already on screen. A cursor names a trail, so a poll that prepends fifty of them changes nothing about where the next page starts. Reverting took the whole correction out of the store: `merge` is back to one line, and the offset bookkeeping is gone rather than merely justified.
+
+**The list had two paging controls for one job.** A 15-row client page sat in the table, *Load older trails* pulled fifty more from the server, and they were stacked: pressing the button appended fifty rows that landed **behind** the pager, so nothing on screen changed and the button read as broken. The `1–15 of 50` label counted the loaded window while reading as the size of the history. The client page and the count are gone, and the server page is the only depth the list has.
+
+- **`pageSize={0}` is the contract, and `DataTable` honours it in full.** Every row is on screen, so there is no pager, no range label, and no `?page=` written — `?q=` is the whole of the route's shareable view. The `pageSize > 0` branches were already half-there for this and wrong in two places: the skeleton row count was `Math.min(pageSize, 3)`, which is **zero** rows for an unpaged loading table, so a cold Traces would have shown an empty body instead of skeletons.
+- **A store that pages asks for one row past its page.** `tracesStore` requests `pageSize + 1` and drops the extra, so `hasMore` is answered by the response instead of inferred from a full page. The inference was wrong exactly once per history: a total that was a whole multiple of the page size ended on a full page, so the button promised a page that returned nothing and then vanished. The probe row is never part of the window and never becomes the next cursor, or the boundary would sit one trail past what the operator can see.
+- **No count, because there is no honest one.** What is loaded is not the history, and a total would mean the full scan the list exists to avoid. The route's `Showing N trails` caption went with the label: same number, same lie.
+
+Web 1026 tests, up five; one Go test replaced by four. golangci-lint clean, svelte-check clean,
+console rebuilt into internal/console/next/dist.
+
+## 2026-09 — A shared `?page=` link no longer breaks on arrival
+
+Opening a list with `?page=2` in the address bar threw `Cannot call replaceState(...) before router is initialized` and stopped responding. It was not a cursor or offset problem, and it had been there since `?q=&page=` shipped — arriving on a page the store had not filled yet was the one case the write-back got wrong, and it is the case every shared list link is.
+
+**The cause is a coincidence, which is why it hid.** `DataTable` publishes its view through an effect that runs on mount, and a cold list route mounts with its store still empty. With no rows there is nothing to page, so `currentPage` derives as 0 and the effect published page one over the page the operator arrived on — reaching `replaceState` before the router could accept it, which throws. That throw is the visible symptom; the quieter half is that an effect which throws is an effect Svelte has to tear down, so the table's own write-back was dead for the rest of the visit. **It only ever fired on a `?page=` link**, because *spends nothing on the default view* — the rule that keeps `?q=&page=` off a clean URL — returned early on exactly the default arrival that would have thrown, and a `?page=2` arrival is the one case whose query differs.
+
+- **A table with no rows has no page to publish**, so the effect waits for the rows and lets the pass that follows them do the writing. The seeded page is honoured the moment it is knowable, and a bookmark the rows cannot fill is still corrected — `?page=9` over three rows still lands on `?page=1`, which a "skip the first pass" guard would have silently stopped doing.
+- **`loading` was the tempting signal and the wrong one.** Only two of the ten `DataTable` call sites pass it, so guarding on it would have left eight routes crashing. The row count is the condition because every table has one, and it keeps the `loading` prop to the job its name says: drawing skeletons.
+- **The regression test is at the component, not the route.** jsdom's SvelteKit `replaceState` does not throw, so a route test passes against the broken code — the first version of this test did exactly that and had to be thrown away. The invariant that actually holds is "no write before there are rows", and that is checkable without a router.
+- **`traces.test.ts` no longer leaks its page into the next test.** One test's `?page=1` was seeding whichever table mounted after it, which is how a URL-state test can pass for the wrong reason.
+
+Web 1021 tests, up two. golangci-lint clean, svelte-check clean, console rebuilt into
+internal/console/next/dist.
+
 ## 2026-09 — A comb file the preview refuses now says how large it is
 
 A trail's comb refused an oversized body with "file too large for inline preview" and nothing else. That is the whole of what an operator knew, and it decides nothing: a 600 KiB file and a 600 GiB one look identical, so "raise the cap, page it, or look somewhere else" was a guess. The size is now on the trail's artifact list and beside the refusal in the preview, which is what makes the next call makeable on a number rather than on a hunch.

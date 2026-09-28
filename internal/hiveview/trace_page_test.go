@@ -32,15 +32,13 @@ func TestParseTracePageQueryClampsLimit(t *testing.T) {
 
 func TestParseTracePageQueryRejectsBadInput(t *testing.T) {
 	for name, values := range map[string]url.Values{
-		"zero limit":     {"limit": []string{"0"}},
-		"negative limit": {"limit": []string{"-3"}},
-		"word limit":     {"limit": []string{"many"}},
-		"cursor no id":   {"before": []string{"2026-09-25T18:04:22Z|"}},
-		"cursor no bar":  {"before": []string{"2026-09-25T18:04:22Z"}},
-		"cursor no time": {"before": []string{"|trace-1"}},
-		"cursor bad time": {"before": []string{
-			"not-a-time|trace-1",
-		}},
+		"zero limit":      {"limit": []string{"0"}},
+		"negative limit":  {"limit": []string{"-3"}},
+		"word limit":      {"limit": []string{"many"}},
+		"cursor no id":    {"before": []string{"2026-09-25T18:04:22Z|"}},
+		"cursor no bar":   {"before": []string{"2026-09-25T18:04:22Z"}},
+		"cursor no time":  {"before": []string{"|trace-1"}},
+		"cursor bad time": {"before": []string{"not-a-time|trace-1"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := ParseTracePageQuery(values); err == nil {
@@ -124,10 +122,10 @@ func TestListTracesPageWalksTheWholeHistory(t *testing.T) {
 			seen[view.TraceID] = true
 			order = append(order, view.TraceID)
 		}
-		if len(page) < 2 {
-			break
-		}
-		cursor = page[len(page)-1].LastActivityAt.UTC().Format(time.RFC3339Nano) + "|" + page[len(page)-1].TraceID
+		cursor = TraceCursorFor(runs.TraceSummary{
+			TraceID:        page[len(page)-1].TraceID,
+			LastActivityAt: page[len(page)-1].LastActivityAt,
+		})
 	}
 	if len(order) != 5 {
 		t.Fatalf("walked %v, want all 5 traces", order)
@@ -164,5 +162,61 @@ func TestListTracesPageBeforeIsExclusive(t *testing.T) {
 		if view.TraceID == first[0].TraceID {
 			t.Fatalf("cursor row repeated: %+v", second)
 		}
+	}
+}
+
+// A cursor past the last trail is an empty page, not an error, and it is where the
+// history genuinely ends rather than where a scan cap made it look like it did.
+func TestListTracesPagePastTheEndIsEmpty(t *testing.T) {
+	repo := t.TempDir()
+	seedTracePage(t, repo, 3)
+	ctx := colony.Context{ColonyRoot: repo, Slug: "test"}
+
+	page, err := ListTracesPage(ctx, TracePageQuery{Limit: 2, Before: "2020-01-01T00:00:00Z|trace-zzz"})
+	if err != nil {
+		t.Fatalf("cursor past the end: %v", err)
+	}
+	if len(page) != 0 {
+		t.Fatalf("cursor past the end = %+v, want empty", page)
+	}
+}
+
+// The cursor has to reach the bottom of a history far deeper than one cursor page's
+// worth of scan. A bounded scan once stopped this walk at ten pages and reported the
+// end there, which was the defect that made the paging scheme worth revisiting at all.
+func TestListTracesPageCursorReachesBeyondASingleScanWindow(t *testing.T) {
+	repo := t.TempDir()
+	// Twenty-five pages of one, so a page size of two has to walk thirteen of them.
+	seedTracePage(t, repo, 25)
+	ctx := colony.Context{ColonyRoot: repo, Slug: "test"}
+
+	seen := map[string]bool{}
+	cursor := ""
+	pages := 0
+	for step := range 40 {
+		page, err := ListTracesPage(ctx, TracePageQuery{Limit: 2, Before: cursor})
+		if err != nil {
+			t.Fatalf("page %d: %v", step, err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		pages++
+		for _, view := range page {
+			if seen[view.TraceID] {
+				t.Fatalf("page %d repeated %s", step, view.TraceID)
+			}
+			seen[view.TraceID] = true
+		}
+		cursor = TraceCursorFor(runs.TraceSummary{
+			TraceID:        page[len(page)-1].TraceID,
+			LastActivityAt: page[len(page)-1].LastActivityAt,
+		})
+	}
+	if pages != 13 {
+		t.Fatalf("walked %d pages, want 13", pages)
+	}
+	if len(seen) != 25 {
+		t.Fatalf("reached %d traces, want all 25", len(seen))
 	}
 }

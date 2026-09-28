@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Component } from 'svelte';
@@ -167,6 +167,23 @@ describe('DataTable list state', () => {
 		expect(screen.getByText('1–1 of 1')).toBeInTheDocument();
 	});
 
+	it('publishes nothing while it has no rows, so a shared page link survives its own arrival', async () => {
+		arriveAt('?page=1');
+		// A list route on a cold load: the rows are on the way, so the page under the
+		// seed is derived from nothing. Publishing that is what reached `replaceState`
+		// before the router could take it — the write is a no-op the router refuses, and
+		// it is the one arrival that asks for it, because a default view spends nothing.
+		const { rerender } = renderTable({ rows: [], pageSize: 2, loading: true });
+
+		expect(window.location.search).toBe('?page=1');
+
+		rerender({ columns, rows, rowKey: (run) => run.agentId, label: 'Runs', pageSize: 2 });
+
+		// The rows make the page knowable, and it is the page the link named.
+		await waitFor(() => expect(screen.getByText('3–3 of 3')).toBeInTheDocument());
+		expect(window.location.search).toBe('?page=1');
+	});
+
 	it('corrects a bookmarked page the rows cannot fill, rather than leaving it in the URL', () => {
 		arriveAt('?page=9');
 		renderTable({ pageSize: 2 });
@@ -175,6 +192,39 @@ describe('DataTable list state', () => {
 		// so the URL and the table under it cannot disagree.
 		expect(screen.getByText('3–3 of 3')).toBeInTheDocument();
 		expect(window.location.search).toBe('?page=1');
+	});
+
+	it('shows every row and no pager when the page size is zero, leaving the depth to the server', () => {
+		renderTable({ pageSize: 0 });
+
+		expect(screen.getAllByRole('row')).toHaveLength(4);
+		expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
+		// No `1–3 of 3` either: the count a table prints is over the rows it holds, which
+		// is not the number of rows the server has.
+		expect(screen.queryByText(/of 3/)).not.toBeInTheDocument();
+	});
+
+	it('filters an unpaged table without paging it, and writes no page', async () => {
+		const user = userEvent.setup();
+		renderTable({ pageSize: 0 });
+
+		await user.type(searchBox(), 'guard');
+
+		expect(screen.getByText('cancelled')).toBeInTheDocument();
+		expect(screen.queryByText('builder')).not.toBeInTheDocument();
+		expect(window.location.search).toBe('?q=guard');
+	});
+
+	it('drops a seeded page it cannot honour, because an unpaged table has no page to land on', () => {
+		arriveAt('?page=3');
+		renderTable({ pageSize: 0 });
+
+		// Three rows, no pages: the whole list is on screen, so the number the link
+		// carried describes nothing this table can show and the bar is cleared of it.
+		expect(screen.getAllByRole('row')).toHaveLength(4);
+		expect(screen.queryByText(/of 3/)).not.toBeInTheDocument();
+		expect(window.location.search).toBe('');
 	});
 
 	it('leaves somebody else’s query alone, because a param is not the table’s to claim', async () => {

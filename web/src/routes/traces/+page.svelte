@@ -73,11 +73,11 @@
 	{/if}
 
 	<section class="space-y-2">
-		{#if !store.showSkeletons && store.traces.length > 0}
-			<p class="text-xs text-base-content/50">
-				Showing {store.traces.length} {store.traces.length === 1 ? 'trail' : 'trails'}, newest activity first.
-			</p>
-		{/if}
+		<!-- `pageSize={0}`: the depth of this list is the store's, so the table shows every
+		     trail it holds and pages nothing of its own. It writes no `?page=`, which leaves
+		     `?q=` as the whole of this route's shareable view. No count either — the loaded
+		     window is not the history, and a number beside these rows reads as a total the
+		     server cannot honestly produce. -->
 		<DataTable
 			label="Traces"
 			{columns}
@@ -86,7 +86,7 @@
 			emptyMessage="No trails yet."
 			filterLabel="Filter traces"
 			filterPlaceholder="title, id, bee"
-			pageSize={15}
+			pageSize={0}
 			loading={store.showSkeletons}
 		/>
 		{#if store.hasMore}

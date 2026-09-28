@@ -2331,16 +2331,21 @@ func TestTracesAPIListPaging(t *testing.T) {
 		t.Fatalf("page 1 order = %+v, want newest first", first)
 	}
 
-	cursor := hiveview.TraceCursorFor(runs.TraceSummary{
+	second := get(t, "/api/traces?limit=2&before="+url.QueryEscape(hiveview.TraceCursorFor(runs.TraceSummary{
 		TraceID:        first[len(first)-1].TraceID,
 		LastActivityAt: first[len(first)-1].LastActivityAt,
-	})
-	second := get(t, "/api/traces?limit=2&before="+url.QueryEscape(cursor))
+	})))
 	if len(second) != 1 || second[0].TraceID != "trace-p1" {
 		t.Fatalf("page 2 = %+v, want only trace-p1", second)
 	}
 
-	for _, bad := range []string{"/api/traces?limit=0", "/api/traces?before=nope", "/api/traces?limit=many"} {
+	// Past the last trail the API answers 200 with an empty list, not 400: the caller
+	// asked what comes next, and there is nothing.
+	if past := get(t, "/api/traces?limit=2&before=2020-01-01T00:00:00Z%7Ctrace-zzz"); len(past) != 0 {
+		t.Fatalf("cursor past the end = %+v, want empty", past)
+	}
+
+	for _, bad := range []string{"/api/traces?limit=0", "/api/traces?before=nope", "/api/traces?limit=many", "/api/traces?before=nope%7Ctrace-1"} {
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, bad, nil))
 		if rec.Code != http.StatusBadRequest {

@@ -23,6 +23,9 @@ function harness(store: TracesStore) {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	// The table publishes `?q=&page=` into the address bar, so one test's page would
+	// otherwise seed the next table that mounts.
+	window.history.replaceState(null, '', '/');
 });
 
 describe('traces route', () => {
@@ -41,7 +44,6 @@ describe('traces route', () => {
 			'href',
 			'/next/traces/trace-01'
 		);
-		expect(screen.getByText('Showing 3 trails, newest activity first.')).toBeInTheDocument();
 	});
 
 	it('badges a standing trail and speaks up only when a trail has news', async () => {
@@ -79,25 +81,66 @@ describe('traces route', () => {
 		expect(screen.queryByRole('link', { name: 'Trail 0' })).not.toBeInTheDocument();
 	});
 
-	it('offers the next page only while the server has more history', async () => {
+	it('appends to the list on one control, and drops it once the server runs dry', async () => {
 		const user = userEvent.setup();
 		const loadTraces = vi
 			.fn<(page: { limit?: number; before?: string }) => Promise<TraceSummary[]>>()
-			.mockResolvedValueOnce(trails(50))
-			.mockResolvedValueOnce(trails(10, 50));
+			.mockResolvedValueOnce(trails(51))
+			.mockResolvedValueOnce(trails(50, 50));
 		const store = createTracesStore({ loadTraces, pageSize: 50, pollIntervalMs: 0 });
 		render(Traces, harness(store));
-		await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByRole('link', { name: 'Trail 49' })).toBeInTheDocument());
 
-		const more = screen.getByRole('button', { name: 'Load older trails' });
-		await user.click(more);
+		// The server is asked for 51 and the table holds 50: the row past the page is the
+		// answer to "is there more", and it is not a row the operator sees.
+		expect(loadTraces).toHaveBeenLastCalledWith({ limit: 51 });
+		expect(screen.queryByRole('link', { name: 'Trail 50' })).not.toBeInTheDocument();
 
-		await waitFor(() =>
-			expect(screen.getByText('Showing 60 trails, newest activity first.')).toBeInTheDocument()
-		);
-		// The table pages at 15, so the second server page lands behind the pager.
-		expect(screen.getByText('1–15 of 60')).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: 'Load older trails' }));
+
+		// The list grew, which is the whole point: a client page under this button put the
+		// new rows behind a pager and left the press looking like nothing had happened.
+		await waitFor(() => expect(screen.getByRole('link', { name: 'Trail 50' })).toBeInTheDocument());
+		expect(screen.getByRole('link', { name: 'Trail 99' })).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: 'Load older trails' })).not.toBeInTheDocument();
+	});
+
+	it('pages nothing itself, and so writes no page and counts nothing', async () => {
+		const store = createTracesStore({
+			loadTraces: async () => trails(50),
+			pageSize: 50,
+			pollIntervalMs: 0
+		});
+		render(Traces, harness(store));
+		await waitFor(() => expect(screen.getByText('Trail 49')).toBeInTheDocument());
+
+		// The depth of this list belongs to the store, so the table shows all of it: no
+		// pager to press, and no "of N" that would read as a total the server cannot
+		// honestly produce for a history this list never counts.
+		expect(screen.getAllByRole('row')).toHaveLength(51);
+		expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
+		expect(screen.queryByText(/of 50/)).not.toBeInTheDocument();
+		expect(window.location.search).toBe('');
+	});
+
+	it('leaves the filter as the whole of this route’s shareable view', async () => {
+		const user = userEvent.setup();
+		const store = createTracesStore({
+			loadTraces: async () => trails(50),
+			pageSize: 50,
+			pollIntervalMs: 0
+		});
+		render(Traces, harness(store));
+		await waitFor(() => expect(screen.getByText('Trail 49')).toBeInTheDocument());
+
+		await user.type(screen.getByLabelText('Filter traces'), 'trace-07');
+
+		// A narrowed list is still a link somebody can be sent, which is what `?q=` was
+		 // for. What is gone is `?page=`: there is no page of an unpaged list to name.
+		expect(window.location.search).toBe('?q=trace-07');
+		expect(screen.getByRole('link', { name: 'Trail 7' })).toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'Trail 8' })).not.toBeInTheDocument();
 	});
 
 	it('renders skeletons before the first payload and an empty message after it', async () => {
@@ -127,33 +170,6 @@ describe('traces route', () => {
 
 		await waitFor(() =>
 			expect(screen.getByRole('alert')).toHaveTextContent('nats url not configured')
-		);
-	});
-
-	it('keeps the table page in the URL beside the server cursor, which stays in the store', async () => {
-		const user = userEvent.setup();
-		let first = true;
-		const store = createTracesStore({
-			// The server pages at 50, the table at 15, and only the table's page is a URL:
-			// the loaded window is fifty rows an operator pulled in, which is session state.
-			loadTraces: async () => (first ? ((first = false), trails(50)) : trails(50, 50)),
-			pageSize: 50,
-			pollIntervalMs: 0
-		});
-		render(Traces, harness(store));
-		await waitFor(() => expect(screen.getByText('1–15 of 50')).toBeInTheDocument());
-		await user.click(screen.getByRole('button', { name: 'Load older trails' }));
-		await waitFor(() => expect(screen.getByText('1–15 of 100')).toBeInTheDocument());
-
-		await user.click(screen.getByRole('button', { name: 'Next' }));
-
-		expect(screen.getByText('16–30 of 100')).toBeInTheDocument();
-		expect(window.location.search).toBe('?page=1');
-		// A detail link off this page is therefore a link back to this page, which is the
-		// half of user story #3 a list can keep by itself.
-		expect(screen.getByRole('link', { name: 'Trail 15' })).toHaveAttribute(
-			'href',
-			'/next/traces/trace-15'
 		);
 	});
 });

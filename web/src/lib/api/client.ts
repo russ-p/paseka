@@ -106,9 +106,11 @@ export function runCue(
 }
 
 /**
- * One page of the trail history, newest first. `before` is the cursor the server
- * hands back through the last row of the previous page, so a page never repeats
- * or skips a trail even when two share an activity instant.
+ * One page of the trail history, newest first. `before` is the cursor the client
+ * reads off the last row of the page it holds, so the answer is anchored to a
+ * trail rather than to a rank — which is what keeps a page stable while the colony
+ * keeps producing new ones. The order is total (activity time, trace id breaking
+ * ties), so a boundary walked twice cannot skip or repeat a trail.
  */
 export function listTraces(page: { limit?: number; before?: string } = {}): Promise<TraceSummary[]> {
 	const query = new URLSearchParams();
