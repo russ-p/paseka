@@ -1,18 +1,27 @@
+/**
+ * A menu glyph is a *name*, never a component, for the reason `runtimeActionGlyph`
+ * returns one: a route table is data, and importing lucide components into it would make
+ * the table a module graph. The name is also what a test can assert, and a route whose
+ * glyph has no icon in `route-icons.ts` is a type error rather than a blank cell.
+ */
 export const consoleRoutes = [
-	{ path: '/dashboard', label: 'Dashboard', shortcut: 'd', group: 'Work' },
-	{ path: '/traces', label: 'Traces', shortcut: 't', group: 'Work' },
-	{ path: '/timeline', label: 'Timeline', shortcut: 'l', group: 'Work' },
-	{ path: '/tasks', label: 'Tasks', shortcut: 'k', group: 'Work' },
-	{ path: '/reviews', label: 'Reviews', shortcut: 'r', group: 'Work' },
-	{ path: '/sessions', label: 'Sessions', shortcut: 'i', group: 'Work' },
-	{ path: '/bees', label: 'Bees', shortcut: 'b', group: 'Colony' },
-	{ path: '/worktrees', label: 'Worktrees', shortcut: 'w', group: 'Colony' },
-	{ path: '/runs', label: 'Runs', shortcut: 'u', group: 'Colony' },
-	{ path: '/git', label: 'Git', shortcut: 'o', group: 'Colony' },
-	{ path: '/topology', label: 'Topology', shortcut: 'p', group: 'Diagnostics' },
-	{ path: '/system', label: 'System', shortcut: 'm', group: 'Diagnostics' },
-	{ path: '/settings', label: 'Settings', shortcut: 's', group: 'Configuration' }
+	{ path: '/dashboard', label: 'Dashboard', shortcut: 'd', group: 'Work', glyph: 'dashboard' },
+	{ path: '/traces', label: 'Traces', shortcut: 't', group: 'Work', glyph: 'route' },
+	{ path: '/timeline', label: 'Timeline', shortcut: 'l', group: 'Work', glyph: 'history' },
+	{ path: '/tasks', label: 'Tasks', shortcut: 'k', group: 'Work', glyph: 'tasks' },
+	{ path: '/reviews', label: 'Reviews', shortcut: 'r', group: 'Work', glyph: 'reviews' },
+	{ path: '/sessions', label: 'Sessions', shortcut: 'i', group: 'Work', glyph: 'terminal' },
+	{ path: '/bees', label: 'Bees', shortcut: 'b', group: 'Colony', glyph: 'bees' },
+	{ path: '/worktrees', label: 'Worktrees', shortcut: 'w', group: 'Colony', glyph: 'worktrees' },
+	{ path: '/runs', label: 'Runs', shortcut: 'u', group: 'Colony', glyph: 'runs' },
+	{ path: '/git', label: 'Git', shortcut: 'o', group: 'Colony', glyph: 'git' },
+	{ path: '/topology', label: 'Topology', shortcut: 'p', group: 'Diagnostics', glyph: 'topology' },
+	{ path: '/system', label: 'System', shortcut: 'm', group: 'Diagnostics', glyph: 'system' },
+	{ path: '/settings', label: 'Settings', shortcut: 's', group: 'Configuration', glyph: 'settings' }
 ] as const;
+
+/** Every glyph name the menu can ask for, derived from the table that asks. */
+export type RouteGlyph = (typeof consoleRoutes)[number]['glyph'];
 
 export const lastRouteStorageKey = 'paseka:console:last-route';
 
@@ -115,6 +124,38 @@ export function owningListPath(base: string, currentPath: string): string | null
  */
 export function dialogOpen(): boolean {
 	return document.querySelector('[role="dialog"]') !== null;
+}
+
+/**
+ * The navigation sheet owns `Escape` while it is open, for the same reason a dialog does:
+ * it stands between the operator and the page, and navigating out from under it would
+ * leave it open over a different route. It is asked of the DOM rather than of the side
+ * menu's state because the two answers can be reached at once and the shell must yield.
+ *
+ * The `narrow` argument is the whole subtlety. The drawer's checkbox carries one flag for
+ * both states — the sheet below 768px, the labels above it — so `checked` alone is true on
+ * a desktop showing its labels, and an `Escape` claimed on that reading would strand a
+ * trail detail with no way back to its list. Only the narrow state is a sheet; the caller
+ * knows which one it is in because the side menu's store reports the breakpoint.
+ */
+export function navigationOpen(narrow: boolean): boolean {
+	if (!narrow) return false;
+	return document.querySelector('[data-navigation-toggle]:checked') !== null;
+}
+
+/**
+ * The control that opens the navigation, so the sheet can hand focus back where it came
+ * from. Asked of the DOM for the same reason as `listFilter()`: the element's identity is
+ * "the navigation trigger", and the two of them — the trigger in the shell, the panel in
+ * the menu — are separate components that must not import each other to agree on a name.
+ */
+export function navigationTrigger(): HTMLElement | null {
+	return document.querySelector<HTMLElement>('[data-navigation-trigger]');
+}
+
+/** The first route link in the panel, which is where an opened sheet puts focus. */
+export function firstNavigationLink(): HTMLElement | null {
+	return document.querySelector<HTMLElement>('[data-navigation-link]');
 }
 
 /**

@@ -2,12 +2,23 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { onDestroy, onMount } from 'svelte';
+	import { Menu } from 'lucide-svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
 	import SideMenu from '$lib/components/SideMenu.svelte';
 	import Toast from '$lib/components/Toast.svelte';
-	import { consolePath, dialogOpen, listFilter, matchShortcut, owningListPath, rememberRoute } from '$lib/navigation';
+	import {
+		consolePath,
+		dialogOpen,
+		firstNavigationLink,
+		listFilter,
+		matchShortcut,
+		navigationOpen,
+		owningListPath,
+		rememberRoute
+	} from '$lib/navigation';
 	import { consoleStatusStore } from '$lib/stores/console-status.svelte';
+	import { sideMenuStore } from '$lib/stores/side-menu.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import type { Snippet } from 'svelte';
 	import '../app.css';
@@ -26,13 +37,15 @@
 	 * `Escape` returns to the list a detail belongs to, which is the way out of a trail,
 	 * a run, a task, a proposal or a session that has no breadcrumb of its own. Two things
 	 * it deliberately does not do: a dialog keeps it, because a dialog closes itself and
-	 * navigating out from under one would be a second, invisible way to dismiss it; and
-	 * an editable target keeps it, which is the same rule that stops a chord from firing
+	 * navigating out from under one would be a second, invisible way to dismiss it; and an
+	 * editable target keeps it, which is the same rule that stops a chord from firing
 	 * mid-word — so the half-written review note is never thrown away by a reflex, and an
-	 * xterm's helper textarea swallows it before the window is even asked.
+	 * xterm's helper textarea swallows it before the window is even asked. The navigation
+	 * sheet is the third holder, for the dialog's reason: it stands between the operator
+	 * and the page, and the menu's own handler closes it.
 	 */
 	function handleEscape(): boolean {
-		if (dialogOpen()) return false;
+		if (dialogOpen() || navigationOpen(sideMenuStore.narrow)) return false;
 		const list = owningListPath(base, page.url.pathname);
 		if (!list) return false;
 		void goto(list);
@@ -51,6 +64,20 @@
 		filter.focus();
 		filter.select();
 		return true;
+	}
+
+	/**
+	 * The trigger opens the sheet and puts focus on the first route, because a panel that
+	 * opens with focus still on the button that opened it sends the next `Tab` into the
+	 * page behind it. Closing is the menu's own business — its `Escape`, the overlay, and
+	 * a link — and the menu hands focus back here.
+	 */
+	async function toggleNavigation(): Promise<void> {
+		const open = !sideMenuStore.expanded;
+		sideMenuStore.set(open);
+		if (!open || !sideMenuStore.narrow) return;
+		await tick();
+		firstNavigationLink()?.focus();
 	}
 
 	function handleKeydown(event: KeyboardEvent): void {
@@ -85,6 +112,7 @@
 
 	onMount(() => {
 		themeStore.hydrate();
+		sideMenuStore.hydrate();
 		consoleStatusStore.start();
 
 		const handleVisibility = () => {
@@ -118,12 +146,40 @@
 	Skip to content
 </a>
 
-<div id="console-shell" class="min-h-screen bg-base-200 text-base-content">
-	<Header />
-	<SideMenu />
-	<main id="main-content" class="mx-auto w-full max-w-7xl px-4 pt-6 pb-16 md:px-6">
-		{@render children()}
-	</main>
+<div id="console-shell" class="drawer min-h-screen bg-base-200 text-base-content md:drawer-open">
+	<input
+		id="side-menu-drawer"
+		type="checkbox"
+		class="drawer-toggle"
+		data-navigation-toggle
+		bind:checked={sideMenuStore.expanded}
+	/>
+	<div class="drawer-content min-w-0">
+		<!-- `z-30` sits above the topbar's `z-20` (it is fixed over it) and below the
+		     sheet's `z-40` (it must vanish under the panel it opened). -->
+		<button
+			id="side-menu-trigger"
+			data-navigation-trigger
+			type="button"
+			class="btn btn-ghost btn-sm btn-square drawer-button fixed top-3 left-3 z-30 md:hidden"
+			aria-label={sideMenuStore.expanded ? 'Close navigation' : 'Open navigation'}
+			aria-expanded={sideMenuStore.expanded}
+			aria-controls="console-navigation"
+			onclick={() => void toggleNavigation()}
+		>
+			<Menu size={18} />
+		</button>
+		<Header />
+		<main id="main-content" class="mx-auto w-full max-w-7xl px-4 pt-6 pb-16 md:px-6">
+			{@render children()}
+		</main>
+	</div>
+	<!-- `z-40` over daisyUI's `z-10` because the topbar here is a sticky panel with a
+	     z-index of its own, and a sheet that slides in under the operator's own status
+	     row is a sheet they cannot read. -->
+	<div class="drawer-side z-40">
+		<SideMenu />
+	</div>
 </div>
 
 	<Toast />

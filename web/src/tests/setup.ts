@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
+import { installMatchMedia, setViewportNarrow } from './viewport';
+
+installMatchMedia();
 
 /**
  * A test renderer has no router, so `$app/navigation`'s `replaceState` throws
@@ -23,8 +26,11 @@ vi.mock('$app/navigation', async (importOriginal) => ({
 /**
  * The query belongs to the route in the app — a table cannot outlive its page to leave
  * `?q=` behind for a different route to read — so in a suite it belongs to the test. One
- * test's filter would otherwise seed the next test's table and empty it.
+ * test's filter would otherwise seed the next test's table and empty it. The viewport is
+ * reset beside it, because a suite that stepped below 768px would otherwise hand the next
+ * one a side menu in its sheet state.
  */
 afterEach(() => {
 	window.history.replaceState(null, '', '/');
+	setViewportNarrow(false);
 });

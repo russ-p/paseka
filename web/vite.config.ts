@@ -32,6 +32,14 @@ export default defineConfig(({ mode }) => {
 					target: env.PASEKA_CONSOLE_API || 'http://127.0.0.1:8787',
 					changeOrigin: true,
 					ws: true
+				},
+				// The app mark is served by the Go console from its own static root, and the
+				// side menu's head reads it from there. Dev proxies it for the same reason it
+				// proxies the API — the asset has one owner, and a dev-only copy of it is the
+				// first step towards two.
+				'/favicon': {
+					target: env.PASEKA_CONSOLE_API || 'http://127.0.0.1:8787',
+					changeOrigin: true
 				}
 			}
 		},

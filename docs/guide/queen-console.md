@@ -77,6 +77,22 @@ and **`/`** jumps to the list's filter and selects what is in it, so the next
 keystroke replaces it. Neither fires while you are typing, and **Escape** leaves
 a dialog alone so it closes rather than navigating out from under you.
 
+### The menu
+
+On a desktop the menu is a column beside the page, always open, in one of two
+states: the full list of routes, or a rail of icons. The button in the menu's
+head swaps the two, and the choice is remembered across reloads along with your
+theme. Each route has its own icon, and in the rail every entry still carries
+its name — hover it to read it — so nothing becomes a guess. The panel is headed
+by the app's own mark and the word *Navigate*, because the topbar already says
+which console you are looking at.
+
+Under 768px the menu is off the page: the button in the top-left corner opens it
+as a panel, choosing a route closes it, and **Escape** closes it and puts the
+cursor back on the button. The two states above the breakpoint are the rail and
+the full list; the state below it is that panel being open, and the panel always
+shows the labels, because a screen of icons is not a menu.
+
 ### Dashboard
 
 Shows runtime health, live bees, recent Flight Trails, failed runs, pending

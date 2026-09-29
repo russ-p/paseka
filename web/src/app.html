@@ -3,6 +3,11 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- The same mark the side menu's head carries, and the one the legacy console
+		     already declares; without them the preview tab falls back to whatever the
+		     browser guesses. Served from the console's own static root, not from `/next`. -->
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="icon" href="/favicon.ico" sizes="any" />
 		<title>Queen Console Next</title>
 		%sveltekit.head%
 	</head>

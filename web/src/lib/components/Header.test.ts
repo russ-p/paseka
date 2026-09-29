@@ -100,6 +100,20 @@ describe('Header', () => {
 		expect(screen.getByLabelText('Git')).toHaveTextContent('fetch 1h ago');
 	});
 
+	// One width for the four panels. The runtime panel was the odd one out at `w-56`,
+	// which read as a mistake rather than as a panel that needs more room — and the row
+	// is `shrink-0` end to end, so its extra 32px came out of the page's width.
+	it('gives the four panels one width, because a row of panels reads as a set', () => {
+		const { store, toasts } = harness();
+		const { container } = render(Header, { store, toasts });
+
+		const widths = Array.from(
+			container.querySelectorAll<HTMLElement>('#topbar-blocks > section')
+		).map((panel) => panel.className.match(/w-\d+/)?.[0]);
+		expect(widths).toHaveLength(4);
+		expect(new Set(widths).size).toBe(1);
+	});
+
 	// The badge answers the clone's stand against origin, which is the question
 	// Fetch/Push/Pull on /next/git acts on. A dirty tree is neither published nor
 	// behind, so it is a word on the panel — a colony stages root proposals without

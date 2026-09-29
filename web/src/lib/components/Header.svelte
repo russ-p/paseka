@@ -74,16 +74,20 @@
 	}
 </script>
 
+<!-- `z-20`, not `z-30`: the topbar is sticky inside the drawer's content column and only
+     has to stay above the page content scrolling under it. The navigation sheet is z-40,
+     so the stack is the topbar, then the shell's trigger above it, then the sheet over
+     both — daisyUI's drawer side is z-10 because its example navbar has no z-index. -->
 <header
 		id="topbar"
-		class="sticky top-0 z-30 border-b border-base-300 bg-base-100"
+		class="sticky top-0 z-20 border-b border-base-300 bg-base-100"
 		aria-label="Colony status"
 	>
 	<div
 		id="topbar-panels"
-		class="flex items-stretch gap-3 overflow-x-auto px-3 py-2 md:px-6"
+		class="flex items-stretch gap-2 overflow-x-auto px-3 py-2 md:px-6"
 	>
-		<div id="topbar-identity" class="flex shrink-0 items-start gap-2 self-center pr-1 pl-20">
+		<div id="topbar-identity" class="flex shrink-0 items-start gap-2 self-center pr-1 pl-14 md:pl-0">
 			<div class="min-w-0">
 				<p class="truncate text-base font-semibold">Queen Console</p>
 				<Hint lines={[store.colony ?? 'Colony unknown']}>
@@ -111,10 +115,18 @@
 				</div>
 			{/if}
 
-			<div id="topbar-blocks" class="ml-auto flex shrink-0 items-stretch gap-3">
+		<!-- Four panels, one width. The runtime panel was `w-56` and was the odd one out
+		     because it is the only panel whose status line is long enough to need it —
+		     `stale · registry entry, start respawns` measures 201px, which `w-48`'s 176px
+		     of content cannot hold. Equal widths beat that: the row is `shrink-0` end to
+		     end, so the extra 32px came straight out of the width the page had left, and
+		     the two explanatory tails that now clip (`degraded`, `stale`) are on the
+		     `Hint` that already carries the same string. `running`, `stopped`, `starting`
+		     and `stopping` still read whole. -->
+		<div id="topbar-blocks" class="ml-auto flex shrink-0 items-stretch gap-3">
 			<section
 				id="panel-runtime"
-				class="w-56 shrink-0 rounded-box border border-base-300 p-2"
+				class="w-48 shrink-0 rounded-box border border-base-300 p-2"
 				aria-label="Hive runtime"
 			>
 				<div class="flex min-h-8 items-center justify-between gap-2">

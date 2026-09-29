@@ -2,6 +2,30 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — The menu is a drawer with icons, two states, and the app's own mark in its head
+
+The side menu was the last hand-rolled piece of shell: a fixed panel, a hand-written `translate-x` transition, a focus trap, and a hand-drawn backdrop, all of which daisyUI already ships as **drawer**. It is now that primitive, which is also what fixed the thing it was worst at — above 768px the menu is a **column in the layout, always on screen**, instead of a panel you had to open and close.
+
+**Two states, one button, and it remembers.** The menu is either the full list or an icon rail (`w-56` / `w-16`), and the button in the panel's head swaps them — it lives inside the panel so it is reachable in both. The choice persists in `localStorage` beside the theme and the last route, and a fresh console shows the labels, because the rail is what an operator opts into. Only a desktop decision is written: closing the sheet on a phone persists nothing, and a stored *expanded* is not restored below 768px, so a phone visit cannot quietly turn the rail off on the operator's laptop.
+
+**Every route now has a glyph** from the set already in the bundle — Dashboard's grid, Traces' route, the terminal for sessions, the comb cell for the bee roster, a zap for a headless run. A rail of icons is only usable if every icon is still *named*, so each entry keeps its `aria-label` and gains a `title` in the rail, which is also where the `g <key>` chord would otherwise disappear. There is no `bee` glyph in lucide, so the roster takes a `Hexagon`.
+
+**The head carries the app's own mark** — the same `favicon.svg` the legacy console declares, served from the console's static root, no build change. It is now also declared for the preview tab, which had been falling back to whatever the browser guessed. Beside the mark the panel is titled **Navigate**, not *Queen Console*: the topbar's identity block already says which console this is, and two headings for one thing read as a mistake.
+
+**The sheet is the only modal state, and the only one that traps focus.** Below 768px the menu is an off-canvas sheet behind a `md:hidden` trigger; above it the panel is a column beside the page, so `Escape` still walks a trail detail back to its list and `Tab` is not trapped. The shell's `Escape` asks the document whether a sheet is open, the same way it asks about a dialog, and a route link closes the sheet without collapsing the column.
+
+- **The column is 224px, and it was sized against the topbar rather than the longest route name.** The topbar row is `shrink-0` end to end, so the menu column eats its budget: at 256px the row stopped fitting below ~1300px of window, which is FHD at 150% scaling. At 224px the threshold is ~1240px, so FHD at 100%, 125% and 150% all fit. The panel is also `h-full` now, so its list scrolls instead of the drawer side, which was reserving a 15px scrollbar gutter beside the menu for a menu that scrolls in all but the worst case.
+- **The four topbar panels are one width now.** *Hive runtime* was `w-56` beside three `w-48` panels, which read as a mistake rather than as a panel needing room — and its 32px came out of the row the page was already tight on. It was `w-56` because it is the only panel carrying a line that needs 201px (`stale · registry entry, start respawns`), which is a reason to keep the text and its hover, not a reason for one panel to be a different shape. At `w-48` the everyday states (`running`, `stopped`, `starting`, `stopping`) still read whole; the two explanatory tails that now clip are on the hover that already carried the same string. Together with the narrower menu this is what cleared the topbar scrollbar.
+- **The sheet had to be lifted over the topbar.** daisyUI's drawer side is `z-10` because its example navbar carries no z-index, and ours is a sticky `z-30` panel — a sheet that slid in *under* the operator's own status row had its own header hidden. The stack is now explicit: topbar `z-20`, the shell's trigger `z-30`, the sheet `z-40`, each with the reason in a comment.
+- **Below 768px the sheet slides from the left, not from the bottom.** The spec and the design contract promised a bottom sheet; the drawer primitive gives an off-canvas side panel, and the promise is amended rather than kept with a hand-rolled transform beside a hand-rolled column. The behaviour user story #16 was for is unchanged — the menu is off the page until the trigger opens it.
+- **The topbar's left padding stopped reserving room for a button it no longer has to clear**, because the trigger is `md:hidden` and the panel is out of its way above 768px.
+
+Web 1056 tests, up twenty-two. svelte-check clean, console rebuilt into
+internal/console/next/dist.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md), [Queen Console guide](../guide/queen-console.md)
+
 ## 2026-09 — The Git plaque says what would change, and a dirty tree says so in words
 
 The Git panel in the topbar reported a working tree twice and contradicted itself once: the badge went amber whenever the tree was dirty, while the word beside it read `in sync` — so a dirty root with nothing to publish rendered as a warning saying everything was fine, and the reason sat in a hover. Both halves are gone, and the panel now says the two facts apart.

@@ -1,8 +1,9 @@
 import { createRawSnippet } from 'svelte';
-import { render } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setShellPath } from '../tests/shell-page.svelte';
+import { setViewportNarrow } from '../tests/viewport';
 import Layout from './+layout.svelte';
 
 const goto = vi.fn(async () => {});
@@ -143,3 +144,76 @@ describe('shell keys', () => {
 		expect(goto).toHaveBeenCalledWith('/next/runs');
 	});
 });
+
+describe('shell navigation drawer', () => {
+	it('mounts the drawer the side menu hangs from, open as a column above 768px', () => {
+		renderShell();
+
+		const shell = document.getElementById('console-shell');
+		expect(shell?.className).toContain('drawer');
+		expect(shell?.className).toContain('md:drawer-open');
+		expect(document.querySelector('.drawer-content > #main-content')).not.toBeNull();
+		expect(document.querySelector('.drawer-side > #console-navigation')).not.toBeNull();
+	});
+
+	it('stacks the sheet above the sticky topbar, which daisyUI does not do for us', () => {
+		renderShell();
+
+		// daisyUI's drawer side is z-10 because its example navbar has no z-index, and a
+		// sheet that slides in under the operator's own status row is a sheet they cannot
+		// read. jsdom resolves no stylesheet, so the pair of classes is the whole fact.
+		const side = document.querySelector('.drawer-side');
+		const top = document.getElementById('topbar');
+		expect(side?.className).toContain('z-40');
+		expect(top?.className).toContain('z-20');
+	});
+
+	it('gives the icon-only trigger a name, the state it reports, and the panel it controls', async () => {
+		// Above 768px the panel is a column and the trigger is `md:hidden`, so its name is
+		// read here, where the trigger is the control that actually exists.
+		setViewportNarrow(true);
+		renderShell();
+
+		const trigger = screen.getByRole('button', { name: 'Open navigation' });
+		expect(trigger).toHaveAttribute('aria-expanded', 'false');
+		expect(trigger).toHaveAttribute('aria-controls', 'console-navigation');
+		expect(document.getElementById('side-menu-drawer')).not.toBeChecked();
+	});
+
+	it('opens the sheet, puts focus in it, and renames the trigger to the action it now offers', async () => {
+		setViewportNarrow(true);
+		renderShell();
+
+		await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+
+		expect(document.getElementById('side-menu-drawer')).toBeChecked();
+		expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveFocus();
+		expect(screen.getByRole('button', { name: 'Close navigation' })).toBeInTheDocument();
+	});
+
+	it('yields Escape to an open sheet, which is what closes it', async () => {
+		at('/next/traces/trace-01a0bd6963faa14f');
+		setViewportNarrow(true);
+		renderShell();
+		await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+
+		await userEvent.keyboard('{Escape}');
+
+		// The sheet stands between the operator and the page, so the key belongs to it
+		// rather than to the list behind it.
+		expect(goto).not.toHaveBeenCalled();
+		expect(document.getElementById('side-menu-drawer')).not.toBeChecked();
+	});
+
+	it('leaves Escape to the list when the same flag only means the labels', async () => {
+		at('/next/traces/trace-01a0bd6963faa14f');
+		renderShell();
+
+		expect(document.getElementById('side-menu-drawer')).toBeChecked();
+
+		await userEvent.keyboard('{Escape}');
+
+		expect(goto).toHaveBeenCalledWith('/next/traces');
+	});
+});
+
