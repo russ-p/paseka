@@ -96,21 +96,29 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Why deferred:** The cap is the server's and predates the redesign; the legacy console had the same dead end. Trail comb files are usually small, and raising the cap trades memory for a case that is rare.
 - **Revisit when:** An operator hits an unreadable comb file in a real trail, or comb files start growing past a few hundred KiB.
 
+#### No mutation queue while NATS is down
+
+- **Kind:** idea
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #12)
+- **Summary:** User story #12 asked the console to queue mutations locally when NATS disconnects. The banner half shipped — the topbar names `reconnecting` and then `unavailable`, and the transport icon reads the same fact — and the queue did not, deliberately: a queued approve or delete that fires minutes later is not the action the operator took, and the console's store contract already answers `busy` rather than queueing a second mutation. The open question is narrower than the story was: a *draft* the operator was typing (a review comment, a task form) is worth keeping across a reconnect, and a *committed* mutation is not.
+- **Why deferred:** The console has no offline story to preserve, so the cost is a lost draft rather than a lost action, and the page already says the stream is down.
+- **Revisit when:** An operator loses real typing to a reconnect, or a hive restart becomes routine enough to matter.
+
+#### No form to create a bee or a worktree
+
+- **Kind:** idea
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #17)
+- **Summary:** User story #17 asked for forms to open in a drawer rather than a column, and named four: new task, new bee, new worktree, settings edits. The task form and the session launch form both shipped and proved the primitive; the new-bee and new-worktree forms never existed. Both write committed colony YAML (`bees/*.yaml`) and the worktree case also creates a git checkout, which is the same class of risk [036-console-config-write](../specs/036-console-config-write.md) refuses for project config — a browser writing a tracked file is a different decision from a browser writing this machine's configuration.
+- **Why deferred:** The routes that display both lists shipped read-only, and a launch session is the supported way to start work today.
+- **Revisit when:** An operator hand-edits `bees/*.yaml` often enough to want a form for it, or the worktrees route needs a create path for work that has no trail yet.
+
 #### Console redesign `/next` parity sweep
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Every `/next` route is migrated and no page resolves to `PagePlaceholder`; what is left is the explicit root cutover from the legacy bundle. Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/next/git` for `/next/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped. Bees shipped as the first route to need a **server** answer rather than only markup: `GET /api/bees` grew a `scope` because the endpoint the launch forms read is a picker that hides every non-interactive bee, and `BeeCard` was dropped for the seventh `DataTable`. Settings shipped as the second, on a new `GET /api/config`, and is the only route that is deliberately incomplete — see the config-write item below.
+- **Summary:** Every `/next` route is migrated and no page resolves to `PagePlaceholder`; what is left is the explicit root cutover from the legacy bundle. Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/next/git` for `/next/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped. Bees shipped as the first route to need a **server** answer rather than only markup: `GET /api/bees` grew a `scope` because the endpoint the launch forms read is a picker that hides every non-interactive bee, and `BeeCard` was dropped for the seventh `DataTable`. Settings shipped as the second, on a new `GET /api/config`, and is the only route that is deliberately incomplete — its write half is [Spec 036](../specs/036-console-config-write.md).
 - **Why deferred:** The route set is complete, so only the cutover decision remains, and that one is explicitly gated on feature parity being called rather than inferred.
 - **Revisit when:** The cutover is called.
-
-#### Let the console write colony configuration
-
-- **Kind:** idea
-- **Source:** planning (console configuration — orthogonal to the `/next` redesign, which shipped the read-only [Settings route](../guide/queen-console.md) and treats writing as out of scope)
-- **Summary:** `/next/settings` reports what every setting resolves to and what decides it, but changes nothing. The write side is a capability the codebase has never had, not a gap in one endpoint: `internal/colonyinit` is the only writer of `colony.yaml` and the home `config.yaml`, it is reachable only from `paseka init`, and it is create-only — `writeFileIfMissing` returns without touching a file that already exists. Making NATS endpoints and notification modes editable from the browser needs a merge-not-clobber write layer: a `yaml.Node` round-trip so hand-added keys and comments survive, temp-plus-rename, and the file's **existing** mode preserved rather than forced (`colonyinit` writes `config.yaml` `0o600`, the test harness writes it `0o644`). Four constraints are already settled and should not be re-litigated when this is picked up. **Project config stays read-only** — `.paseka/colony.yaml` is tracked and the CLI owns it, so a browser writing to it is a different class of risk. **A write is a 409 naming both sources when an env var outranks the file**, because `EffectiveURL` prefers `PASEKA_NATS_URL` and a success there would change nothing while looking like it worked. **Credentials stay references** — adapters store `api_key_env`, a variable name, and the read endpoint already refuses to receive a value, so the form writes a name too. **A write has to be visible to the running process**, which is the widest part: `colony.Context` is a value snapshotted at `paseka console` boot, so applying a change means a mutex-guarded accessor across 63 call sites in five files of `internal/console`.
-- **Why deferred:** Orthogonal to the console redesign, which is a migration and is now feature-complete: the read half answers the question the page exists for, and the write half is a new platform capability rather than one more route. It also needs its own spec — the endpoint shapes and the file-merge semantics are design work, not a leftover to implement from a paragraph.
-- **Revisit when:** Someone asks to change the NATS URL from the browser rather than editing `config.yaml` and restarting, or the root cutover makes the read-only page the last thing standing between the console and its own configuration.
 
 #### A worktree registry state the console can see
 

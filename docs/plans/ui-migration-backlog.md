@@ -181,3 +181,11 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 - **Summary:** The spec commits to Playwright E2E (preview root → dashboard → traces filter → detail → comb modal → theme → reload) and to screenshot comparison on Dashboard, Traces list, and Settings. Playwright is not a dependency and neither suite exists. Coverage today is Vitest component and store tests plus Go route tests.
 - **Why deferred:** Vitest covers behaviour; it cannot catch a layout regression. The gap was accepted while the routes were still moving, and every layout decision since — the shared row, the `grow` column, the collapse defaults — was checked by hand in a browser rather than by a test.
 - **Revisit when:** The route set stops changing, or before the root cutover — a cutover with no visual guard is how a theme silently loses contrast.
+
+#### No generated types from the Go contracts
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #14)
+- **Summary:** The spec asked for TypeScript types generated from the Go event contracts (SIGNAL, INSIGHT, MUTATION, VERIFICATION) and for a contract test that decodes sample payloads through them. Neither exists: `web/src/lib/api/types.ts` is hand-written, so a field renamed in Go and forgotten in TS is caught by nothing — only by a page that renders `undefined`.
+- **Why deferred:** The routes landed and every view type-checks against the hand-written shapes, so the cost never surfaced; the drift cost is paid the first time an endpoint grows a field the console should show.
+- **Revisit when:** A second endpoint is added from the same projection layer, or an API field is renamed and the console breaks.

@@ -2,210 +2,45 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
-## 2026-09 — The menu is a drawer with icons, two states, and the app's own mark in its head
+## 2026-09 — Queen Console redesign, complete under `/next/`
 
-The side menu was the last hand-rolled piece of shell: a fixed panel, a hand-written `translate-x` transition, a focus trap, and a hand-drawn backdrop, all of which daisyUI already ships as **drawer**. It is now that primitive, which is also what fixed the thing it was worst at — above 768px the menu is a **column in the layout, always on screen**, instead of a panel you had to open and close.
+The redesigned console is no longer a preview of a few routes: **every page under `/next/` is real now** — Dashboard, Traces, Git, System, Timeline, Topology, Runs, Tasks, Reviews, Sessions, Worktrees, Bees, Settings — and a "migration pending" card anywhere under it is a bug. The legacy console still serves `/` until the explicit cutover, and both read the same root-relative `/api/*` endpoints.
 
-**Two states, one button, and it remembers.** The menu is either the full list or an icon rail (`w-56` / `w-16`), and the button in the panel's head swaps them — it lives inside the panel so it is reachable in both. The choice persists in `localStorage` beside the theme and the last route, and a fresh console shows the labels, because the rail is what an operator opts into. Only a desktop decision is written: closing the sheet on a phone persists nothing, and a stored *expanded* is not restored below 768px, so a phone visit cannot quietly turn the rail off on the operator's laptop.
+The new UI ships with a contract written for agents in the [Queen Console design system](../architecture/queen-console-design-system.md): layout shell, theming, one component inventory, one `DataTable`, one status→color mapping, and hard rules for what is always true. New console pages are written against that contract rather than against the legacy markup.
 
-**Every route now has a glyph** from the set already in the bundle — Dashboard's grid, Traces' route, the terminal for sessions, the comb cell for the bee roster, a zap for a headless run. A rail of icons is only usable if every icon is still *named*, so each entry keeps its `aria-label` and gains a `title` in the rail, which is also where the `g <key>` chord would otherwise disappear. There is no `bee` glyph in lucide, so the roster takes a `Hexagon`.
+Three surfaces have no legacy equivalent:
 
-**The head carries the app's own mark** — the same `favicon.svg` the legacy console declares, served from the console's static root, no build change. It is now also declared for the preview tab, which had been falling back to whatever the browser guessed. Beside the mark the panel is titled **Navigate**, not *Queen Console*: the topbar's identity block already says which console this is, and two headings for one thing read as a mistake.
-
-**The sheet is the only modal state, and the only one that traps focus.** Below 768px the menu is an off-canvas sheet behind a `md:hidden` trigger; above it the panel is a column beside the page, so `Escape` still walks a trail detail back to its list and `Tab` is not trapped. The shell's `Escape` asks the document whether a sheet is open, the same way it asks about a dialog, and a route link closes the sheet without collapsing the column.
-
-- **The column is 224px, and it was sized against the topbar rather than the longest route name.** The topbar row is `shrink-0` end to end, so the menu column eats its budget: at 256px the row stopped fitting below ~1300px of window, which is FHD at 150% scaling. At 224px the threshold is ~1240px, so FHD at 100%, 125% and 150% all fit. The panel is also `h-full` now, so its list scrolls instead of the drawer side, which was reserving a 15px scrollbar gutter beside the menu for a menu that scrolls in all but the worst case.
-- **The four topbar panels are one width now.** *Hive runtime* was `w-56` beside three `w-48` panels, which read as a mistake rather than as a panel needing room — and its 32px came out of the row the page was already tight on. It was `w-56` because it is the only panel carrying a line that needs 201px (`stale · registry entry, start respawns`), which is a reason to keep the text and its hover, not a reason for one panel to be a different shape. At `w-48` the everyday states (`running`, `stopped`, `starting`, `stopping`) still read whole; the two explanatory tails that now clip are on the hover that already carried the same string. Together with the narrower menu this is what cleared the topbar scrollbar.
-- **The sheet had to be lifted over the topbar.** daisyUI's drawer side is `z-10` because its example navbar carries no z-index, and ours is a sticky `z-30` panel — a sheet that slid in *under* the operator's own status row had its own header hidden. The stack is now explicit: topbar `z-20`, the shell's trigger `z-30`, the sheet `z-40`, each with the reason in a comment.
-- **Below 768px the sheet slides from the left, not from the bottom.** The spec and the design contract promised a bottom sheet; the drawer primitive gives an off-canvas side panel, and the promise is amended rather than kept with a hand-rolled transform beside a hand-rolled column. The behaviour user story #16 was for is unchanged — the menu is off the page until the trigger opens it.
-- **The topbar's left padding stopped reserving room for a button it no longer has to clear**, because the trigger is `md:hidden` and the panel is out of its way above 768px.
-
-Web 1056 tests, up twenty-two. svelte-check clean, console rebuilt into
-internal/console/next/dist.
+- **Worktrees** — every isolated checkout with its branch and its trail, plus the one confirmed sweep for the leftovers the branch sweep skips.
+- **Bees** — the whole roster (role, adapter, sector, intents, worktree or colony root, live processes, last run), including headless `script` bees that no launch form can start. `GET /api/bees` gained `?scope=colony`; the default still returns the launch picker, so the launch forms and the legacy console read exactly what they read before.
+- **Settings** — what the colony is configured with *and what decided each value*: the env var actually in force over the one in `config.yaml`, a code default distinguished from a declared one. Read-only, on the new `GET /api/config`, and no secret crosses it — an adapter reports the *name* of its key variable and whether that resolves.
 
 - Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md), [Queen Console guide](../guide/queen-console.md)
+- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md), [Bee config](../guide/bee-config.md)
 
-## 2026-09 — The Git plaque says what would change, and a dirty tree says so in words
+Deferred from that work: user story #9 also asks for these settings to be editable "without editing files", and the console still writes no configuration — see [Spec 036](../specs/036-console-config-write.md).
 
-The Git panel in the topbar reported a working tree twice and contradicted itself once: the badge went amber whenever the tree was dirty, while the word beside it read `in sync` — so a dirty root with nothing to publish rendered as a warning saying everything was fine, and the reason sat in a hover. Both halves are gone, and the panel now says the two facts apart.
+## 2026-09 — What changed in the console, and the keys it gained
 
-**Amber means there is something to fetch, push or pull.** The badge and its word answer one question — the colony root against origin: `in sync`, `↑3`, `↓2`, `no origin`, or `fetch` where the remote-tracking refs are missing — so the tone cannot disagree with the label, and the actions it points at are the three on the Git page.
+Migrating the pages was also a chance to fix what the legacy console did badly. What an operator can feel:
 
-**A dirty tree is a word on the panel, not a tone.** It leads the third line next to how long ago the remote was last read (`dirty · fetch 12m ago`), so it is visible on every route without a hover. This is the half that argues for itself: a bee proposing on the root **stages its edits and is told not to commit**, and a root proposal never merges on approve, so a dirty root is close to this colony's resting state — a badge that followed it would be amber for most of every working session, and it would wear the same tone as the reviews and invites badges two panels away, which are the ones an operator must not learn to ignore. Staged work from a previous run is exactly what the next run will pick up, so the fact got more prominent, not less.
+- **Every list keeps its filter and its page in the URL** (`?q=`, `?page=`) — a narrowed list is a link you can paste, and **Back** from a trail, run, or task returns to the page of the list you left. Filters write with `replaceState`, so Back never walks you backwards through the letters of a word.
+- **Traces pages by cursor, all the way down.** The old cursor stopped *Load older trails* at 500 trails and announced that history ended there, because the cursor was applied after a scan that had already truncated the rows. There is no ceiling now, and the client pager and its `1–15 of 50` label are gone — the server page is the only depth the list has.
+- **The shell answers the keys an operator reaches for.** **Escape** walks a trail, run, task, or session back to its list — yielding to dialogs and to half-written notes — and **`/`** focuses the list's filter and selects what is in it. The **Live bees**, **Host**, and **Git** plaques are now links to the pages behind them, and a trail's worktree **Path** and **Base SHA** are on the clipboard.
+- **The event feed can be watched while it is being read.** The Timeline header carries an **Auto-refresh** selector — Manual, 5s, 10s, 15s, 60s — arriving on Manual, and a hidden tab is not somebody waiting on a feed.
+- **A published cue waits instead of 404ing.** Nothing reaches disk until a bee picks the signal up, so the trail page says the trail will appear, bounded at 30 seconds and naming both dead ends: a wrong id, or no bee took the cue. The publish toast offers **Open trail** instead of navigating you away.
+- **The Git plaque says the two facts apart.** The badge answers the colony root against origin (`in sync`, `↑3`, `↓2`, `fetch`) and a dirty tree is a word beside it rather than a tone — amber on a dirty root would be amber for most of every working session, wearing the same tone as the review badges two panels away. A branch the sweep's name filter skips offers **Delete**, with the same guards the sweep uses.
+- **A refused artifact says how large it is**, on the trail and beside the refusal in the preview, so "raise the cap, page it, or look elsewhere" is a decision made on a number.
 
-- **The short HEAD sha left the plaque.** It was the one item there that was identity rather than a measurement — every sibling panel spends its third line on the present (`pid · started · heartbeat`, bee counts, `load 1.25`) — and the Git page already carries `HEAD` as a copyable row with the full sha behind a hover. The line disappears entirely when the tree is clean, nothing has been fetched and no read failed, rather than padding a panel with a dash.
-- **The not-compared case stopped borrowing the tree's word.** With no remote-tracking ref the badge reads `fetch` (or the branch name) and the Git page's own Sync row keeps saying `dirty · not compared`, so no green badge can read `dirty`.
-- **The uncovered state is now covered.** The formatter suite asserted `in sync` only for a clean tree and its fixture was dirty *and* ahead, so the word `dirty` never appeared in a compared branch at all — which is why a yellow `in sync` passed. Four cases are pinned now, and the panel is asserted in the render as well as the formatter: the word is on screen and the badge class beside it.
-
-Web 1029 tests, up three. svelte-check clean, console rebuilt into
-internal/console/next/dist.
-
-## 2026-09 — Traces pages once, the cursor could always reach the bottom, and the button finally does something
-
-Three things landed on the trail list at once, and one of them is a course correction: the paging went to a cursor, and it should have been there all along.
-
-**The cursor's ten-page ceiling is gone, and it was never a cost.** A cursor page called `ScanRecentTraces(root, limit*10)` — which truncates to the top *n* — and *then* applied the cursor, so past ten pages the scan held nothing older than the cursor, returned an empty page, and the store read that short page as the end of history. **Load older trails** therefore stopped at 500 trails and told the operator the history ended there. The cap was pure waste: `scanAllTraces` walks every trail on every read whatever the page asks for, so the cursor was being filtered against rows the walk had already read and then thrown away. `ScanTracesAfter` filters over the whole walk instead — one in-memory pass, no ceiling. A Go test now walks thirteen pages of two, which the old cap could not do.
-
-**An offset was tried first and was the wrong answer.** It fixed the ceiling, and it cost more than it bought. A rank is only correct until the colony produces a trail, because a new one pushes everything below it down; so the store had to detect new trails on every poll and move the offset by hand, or the operator would click *Load older* and be served rows already on screen. A cursor names a trail, so a poll that prepends fifty of them changes nothing about where the next page starts. Reverting took the whole correction out of the store: `merge` is back to one line, and the offset bookkeeping is gone rather than merely justified.
-
-**The list had two paging controls for one job.** A 15-row client page sat in the table, *Load older trails* pulled fifty more from the server, and they were stacked: pressing the button appended fifty rows that landed **behind** the pager, so nothing on screen changed and the button read as broken. The `1–15 of 50` label counted the loaded window while reading as the size of the history. The client page and the count are gone, and the server page is the only depth the list has.
-
-- **`pageSize={0}` is the contract, and `DataTable` honours it in full.** Every row is on screen, so there is no pager, no range label, and no `?page=` written — `?q=` is the whole of the route's shareable view. The `pageSize > 0` branches were already half-there for this and wrong in two places: the skeleton row count was `Math.min(pageSize, 3)`, which is **zero** rows for an unpaged loading table, so a cold Traces would have shown an empty body instead of skeletons.
-- **A store that pages asks for one row past its page.** `tracesStore` requests `pageSize + 1` and drops the extra, so `hasMore` is answered by the response instead of inferred from a full page. The inference was wrong exactly once per history: a total that was a whole multiple of the page size ended on a full page, so the button promised a page that returned nothing and then vanished. The probe row is never part of the window and never becomes the next cursor, or the boundary would sit one trail past what the operator can see.
-- **No count, because there is no honest one.** What is loaded is not the history, and a total would mean the full scan the list exists to avoid. The route's `Showing N trails` caption went with the label: same number, same lie.
-
-Web 1026 tests, up five; one Go test replaced by four. golangci-lint clean, svelte-check clean,
-console rebuilt into internal/console/next/dist.
-
-## 2026-09 — A shared `?page=` link no longer breaks on arrival
-
-Opening a list with `?page=2` in the address bar threw `Cannot call replaceState(...) before router is initialized` and stopped responding. It was not a cursor or offset problem, and it had been there since `?q=&page=` shipped — arriving on a page the store had not filled yet was the one case the write-back got wrong, and it is the case every shared list link is.
-
-**The cause is a coincidence, which is why it hid.** `DataTable` publishes its view through an effect that runs on mount, and a cold list route mounts with its store still empty. With no rows there is nothing to page, so `currentPage` derives as 0 and the effect published page one over the page the operator arrived on — reaching `replaceState` before the router could accept it, which throws. That throw is the visible symptom; the quieter half is that an effect which throws is an effect Svelte has to tear down, so the table's own write-back was dead for the rest of the visit. **It only ever fired on a `?page=` link**, because *spends nothing on the default view* — the rule that keeps `?q=&page=` off a clean URL — returned early on exactly the default arrival that would have thrown, and a `?page=2` arrival is the one case whose query differs.
-
-- **A table with no rows has no page to publish**, so the effect waits for the rows and lets the pass that follows them do the writing. The seeded page is honoured the moment it is knowable, and a bookmark the rows cannot fill is still corrected — `?page=9` over three rows still lands on `?page=1`, which a "skip the first pass" guard would have silently stopped doing.
-- **`loading` was the tempting signal and the wrong one.** Only two of the ten `DataTable` call sites pass it, so guarding on it would have left eight routes crashing. The row count is the condition because every table has one, and it keeps the `loading` prop to the job its name says: drawing skeletons.
-- **The regression test is at the component, not the route.** jsdom's SvelteKit `replaceState` does not throw, so a route test passes against the broken code — the first version of this test did exactly that and had to be thrown away. The invariant that actually holds is "no write before there are rows", and that is checkable without a router.
-- **`traces.test.ts` no longer leaks its page into the next test.** One test's `?page=1` was seeding whichever table mounted after it, which is how a URL-state test can pass for the wrong reason.
-
-Web 1021 tests, up two. golangci-lint clean, svelte-check clean, console rebuilt into
-internal/console/next/dist.
-
-## 2026-09 — A comb file the preview refuses now says how large it is
-
-A trail's comb refused an oversized body with "file too large for inline preview" and nothing else. That is the whole of what an operator knew, and it decides nothing: a 600 KiB file and a 600 GiB one look identical, so "raise the cap, page it, or look somewhere else" was a guess. The size is now on the trail's artifact list and beside the refusal in the preview, which is what makes the next call makeable on a number rather than on a hunch.
-
-- **The size was already known.** `ItemFromFile` stats every comb file to set its mtime, and `MergeAnnounced` copies items wholesale, so `Bytes` on `Item` and on `hiveview.ArtifactView` costs one field and no extra read. A test pins the merge specifically, because a field added to one side and not the other would be dropped on every announced file — the comb files an operator actually looks at.
-- **The two caps are now separate constants**, equal today and not the same symbol. They answer different questions: what may be read on one screen, and what may be shipped in a trace export. An operator who hits the preview ceiling and raises the one constant they can find has raised the size of every export archive, which is the wrong lever for the symptom. The decision the entry deferred is now one number away.
-- **No range read, and none needed yet.** The largest comb file this colony has produced is 3381 bytes and the cap is a hundred and fifty-five times that, so a paged modal is a real feature for a case that has not happened. The size is what makes the *next* decision possible; it is not itself the fix.
-- **`formatProcessBytes` is now `formatSize`.** It was a byte-count formatter at human scale wearing the name of the one column that happened to use it, and the comb list is the second caller. The GiB formatter the metric tiles use stays separate: machine memory is the one place an operator thinks in GiB, and a process at 1 GiB printing "1.00 GiB" where it printed "1024 MiB" would be a change nobody asked for.
-
-9 tests, 1018 total. golangci-lint clean, svelte-check clean, console rebuilt
-into internal/console/next/dist.
-
-## 2026-09 — A DataTable row can carry one action, and a branch the sweep skips gets a Delete
-
-`DataTable` cells are declarative — `href` for a link, `badge` for a state — and a cell had no way to hold a control. The stated reason was that a snippet cannot be built inside `<script>`, where the column objects live, and that blocks arbitrary markup rather than a callback. So `action` is the same shape as its neighbours: `(row) => { label, kind?, onselect } | null`, rendering one button beside the cell's own text and nothing at all on a row it returns `null` for.
-
-**The gap it closes is on the Git page.** `leftover` is the sweep's *name* filter, so a `feature/login` branch that is merged, not the default, and not held by a worktree is skipped by the header sweep — and had no verb at all. The operator filtered down to it and found nothing to press, which is `git branch -d` away. Each branch row now offers **Delete** where `gitBranchDeletable` agrees with the server, and the button is offered per row precisely so the table says which branches are deletable: the predicate mirrors the four guards `gitroot.DeleteBranch` holds, and the server still refuses with the reason, so the button only decides whether to offer.
-
-- **The row action and the sweep share one dialog.** Same verb, same guards, so `confirming` is either the sweep or a named branch, the title says which, and a refusal lands in the same place either way. Closing forgets the name, or the next sweep dialog would open already armed for a row the operator is no longer looking at. `gitStore.deleteBranch(name)` and `run('delete')` share one guard and one pending verb, because a push during a delete would race on the same refs.
-- **A cell with no action stays exactly as it was**, which took a real fix. The `{#if}` that renders the button left a whitespace text node in *every* cell, and the `badge: () => null` contract — a cell that renders nothing must render nothing, which two tests assert — started failing. The block now opens against the `{/if}` above it on purpose, and the reason is written where the next person will trip over it.
-- **Worktrees deliberately did not get one.** A worktree holds uncommitted work, so the row is the state and the page's one confirmed sweep is the verb. A second destructive row action is also the point where `action` stops being one control and becomes a list — which is what the entry's own revisit condition named.
-
-11 tests, 1013 total. svelte-check clean, console rebuilt into
-internal/console/next/dist.
-
-## 2026-09 — Hard rule 7 says a wide table must hide its widest columns
-
-Hard rule 7 said a `DataTable` too wide for 768px scrolls inside its own bordered region, and gave the reason: clipping the last column puts a link somewhere with no way to reveal it. That is a floor, not an answer — two columns are never on screen together, so a sideways pan loses more than a hidden column does, while a hidden column loses only what was hidden, and nothing, because `text` feeds the filter whatever the cell is doing. The rule now says so, and **a table of more than four columns must mark at least one `secondary`**.
-
-**The backlog entry's premise turned out to be stale, and the audit is the useful part of this.** It named Bees, Reviews, Worktrees, and System as the tables that had never used `secondary`. All four already did — each of them had been written after the mechanism landed. The census found the table the entry had not named: **Settings**, whose adapter roster was five columns with no `secondary` at all, so the one thing a phone could not see about an adapter was the variable it reads its key from. `API key env` and `File` are now `secondary`; the adapter, its binary, and whether the key resolves stay.
-
-That is the argument for writing the rule down rather than fixing the table. Nothing in the contract required `secondary`, so a table added without it was a table nobody had checked, and four of the ten being right was luck rather than a rule working. The threshold is stated as a count rather than a per-table list, because a list of ten tables rots the first time one of them grows a column and the rule becomes a thing that was true once.
-
-A card layout stays out of scope, for the reason the entry gave and which the audit confirmed: the columns already carry the `label` and `text` a card needs, so the component work is small, but a card puts the table and the cards both in the DOM, and `bees.test.ts` resolves a cell with `screen.getByText(text).closest('tr')`, which throws on two copies — a test-churn cost across ten route suites for pages a solo beekeeper may never open on a phone.
-
-1 test, 1002 total. svelte-check clean.
-
-## 2026-09 — A cued trail waits to exist instead of reporting a 404
-
-Publishing a cue mints a trace id and puts a SIGNAL on the bus, and **nothing is written to disk** until a bee picks that signal up. So the trail an operator had just created was a 404 for as long as the colony took to answer, and the page had nothing but "not found" to say about an action it had just taken successfully. That is a server fact wearing a transition's clothes: no client-side navigation design could have made the destination real, which is why the entry sat undecided for as long as it did.
-
-- **A 404 on the trail detail now reads as `awaitingTrail`.** The page keeps its ten-second poll and says the trail will appear when a bee takes the cue — which also fixes a deep link opened a moment after the publish. It is **not** skeletons: nothing failed and there is no payload to stand in for, so a `role="status"` notice replaces the body instead.
-- **The wait is bounded at 30 seconds, and that bound was the real work.** A wait with no end is how a mistyped id becomes a spinner that never resolves, and how a cue nobody picked up — an actual problem — hides behind the same silence. The two dead ends converge, so the timeout message names both: the id may be wrong, or no bee took the cue. The clock starts at the first 404 and is reset when the operator switches trails, because a spent clock handed to a second trail would report it dead on arrival. A 404 for a trail already on screen is still a failure, because a deleted trail is gone.
-- **The comb's 404 is settled by the trail's verdict.** Both endpoints fail for the same reason while a cue is in flight and the two reads race, so a queued artifact error would have been on screen the moment the trail landed.
-- **The cue never navigates.** Its toast carries **Open trail** instead. A standing cue continues a trail the operator may already be watching, so the new one is not necessarily what they want to see — and a link somebody presses cannot yank them off a page they never acted from. A toast with something to press is a question rather than a receipt, so it lives 12 seconds against the plain toast's 4, and selecting it dismisses the notice rather than navigating out from under it.
-
-14 tests, 1001 total. svelte-check clean, console rebuilt into
-internal/console/next/dist.
-
-## 2026-09 — Escape goes back to the list, and `/` reaches the filter
-
-The `g <key>` chord map covers every root and `SideMenu` renders it, but two things an operator reaches for are not destinations and so could never be rows in it. **Escape** now returns to the list the current path belongs to, and **`/`** focuses the list's filter and selects what is in it — so the next keystroke replaces it rather than appending to a term you did not mean to keep.
-
-**Escape** is found by running `isRouteActive` backwards. That is the same test the side menu uses to light a menu entry, run in reverse, so all five detail families and `/reviews/:traceId/:taskId/preview` are covered with no per-route wiring — and a detail route added later is covered without anybody registering it. A path that *is* a list has nowhere to go, so Escape does nothing there rather than reloading the page under the operator.
-
-**It yields twice, and both yields are the point.** A dialog keeps Escape, because `Modal` already closes itself on it and a second, invisible way to dismiss a dialog is how a form loses what was typed. An editable target keeps it too — the same rule that stops a chord firing in the middle of a word — so a half-written review note is never thrown away by a reflex. That rule also settled the case the backlog listed as an open exception: a terminal focuses an off-screen `<textarea>`, so xterm's Escape never reaches the window to be claimed, and no terminal-specific check turned out to be needed.
-
-**A shell affordance finds its target by asking the document.** `dialogOpen()` looks for `[role="dialog"]`, which `Modal` renders inside `{#if open}` and which `Drawer` is; `listFilter()` looks for `[data-list-filter]`, an attribute rather than an id because the element's identity is "the list's filter" and not one particular list's. Each costs a selector, and neither can drift from what is on screen the way a hand-maintained set of open flags can — which also means the first route with two tables needs no change here.
-
-13 tests, 8 of them a new `shell.test.ts` that renders the real layout: Escape to the owning list, Escape inert on a list, both yields, `/` focusing and selecting, `/` inert where there is no list, and the chord map still working. svelte-check clean, console rebuilt
-into internal/console/next/dist.
-
-## 2026-09 — A list's filter and page live in its URL
-
-Every `DataTable` under `/next/` — traces, runs, tasks, reviews, sessions, bees, worktrees, branches, adapters, processes — now keeps its filter and its page in the query as `?q=` and `?page=`. Ten routes gained it from one component, which is the argument for the fix living there rather than in each route: nothing about a route's column config changed, and nothing about the table's behaviour did either.
-
-This is the half of user story #3 a list can keep by itself. A narrowed list is a link an operator can paste to somebody, and **Back** from a trail, run, or task detail now returns to the page of the list they left instead of page one. The other half — the scroll offset of a long page that has no page number, like a run's event log or a session transcript — is per surface and has no URL to live in, so it stays its own entry.
-
-- **`replaceState`, never `pushState`.** A filter is not navigation, and Back must not walk an operator backwards through the letters of a word. It is also why a table never watches the history: nothing it does creates an entry to move between.
-- **The query merges, keeps the hash, and spends nothing on the default view.** A param the table does not own — `?trace=`, the timeline's deep link — survives a keystroke; an anchored note stays anchored; and an unfiltered first page is a clean URL rather than `?q=&page=0`.
-- **The page published is the page on screen, not the page requested.** A bookmark a poll has invalidated is clamped for display, and leaving the stale number in the address bar would make the URL disagree with the table under it. A `?page=` the URL cannot be trusted for is read strictly, because `parseInt('1.5')` is `1` and a number somebody got wrong is not a page to round in their favour.
-- **Traces pages three times, and only the middle layer is a URL.** The server cursor behind **Load older trails** and the filter are not in the query, so a shared link describes the view *inside* the rows you have rather than which fifty you pulled — which is the promise of user story #3, not half of it. `stateKey` namespaces both params (`?runs.q=&runs.page=`) for a route that grows a second table; absent everywhere today, and deliberately not derived from `label`, which is prose written for a human.
-
-Two things fell out of pinning it down. The reset that returns a table to page one on a keystroke moved **out of an effect and into the input handler**, because an effect also runs on mount and would have thrown away the very `?page=` the table was seeded with. And a table in a test renderer needed a `replaceState` that works: `$app/navigation` throws before the router is initialised, so `tests/setup.ts` stands one in against the History API — and resets the query after each test, because a filter one test typed was otherwise seeding the next test's table and emptying it.
-
-18 tests, 9 in the new module, 973 total. svelte-check clean, console rebuilt into
-internal/console/next/dist.
-
-## 2026-09 — The event feed can be watched while it is being read
-
-`/next/timeline` had no way to move without being asked, which made watching an AFK run a matter of pressing **Refresh** and hoping. The header now carries an **Auto-refresh** selector — **Manual**, **Every 5s**, **Every 10s**, **Every 15s**, **Every 60s** — and it arrives on **Manual**, because most visits to a recorded history are a read, and a feed that moved on its own would be a second reader deciding when this one looks. The four steps are the console's existing cadences plus a minute, written as a ladder of numbers because picking a cadence is comparing them. A cadence does not survive the visit: a feed that remembered its timer would re-arm it for whoever opened the page next.
-
-- **A tick is the reset read Refresh already performs.** The list is replaced, the cursor and `hasMore` recompute, and nothing is prepended — so choosing a cadence costs no scroll position, no row identity, and no boundary event. That is the whole reason a timer can be offered at all: the three questions a live feed has to answer first, whether to prepend or replace, how to behave under a scrolled reader, and how to dedupe an event arriving on two pages, all stop being questions.
-- **The feed's one read-in-flight guard is now a cadence rule too.** A tick landing inside an **Apply** is refused rather than queued, because it is the same overlap that would append two pages against one cursor. No second guard, because there is no second kind of read.
-- **Refresh returns the selector to Manual.** A deliberate read is the operator taking the cadence back, and a timer resuming behind the click would leave them unsure whether the button had done anything. Polling pauses on `visibilitychange` the way the chrome stream does — a hidden tab is not somebody waiting on a feed, and each tick reads up to fifty trail directories — and returning re-reads at once rather than waiting out the rest of the interval. The handler is also called once on mount, because a tab opened in the background never fires the event and is exactly the case the pause exists for.
-- **The Refresh button keeps its label and spins its icon**, the Sessions button's shape. `Refreshing…` is four characters wider than `Refresh`, which in a header row pushes the whole control group — invisible on a click, a flinch every five seconds once a cadence is armed. The word stays, the `RefreshCw` spins, and `aria-busy` carries the state to a reader who cannot see the motion. An **action** button still names its own verb while it waits (`Fetch` → `Fetching…`), because there the operator started it by hand and a verb is information rather than reflow; the contract now says which case is which.
-- **The spin lasts at least a second, counted from when the read started.** A feed read answers in tens of milliseconds, which is one or two frames of motion — long enough to look like a glitch, too short to be feedback. The read itself is never delayed and `disabled` still follows it, so the button is clickable again the moment the feed is current even while the acknowledgement is on screen; a second read landing inside another's second extends the one already there, which is what makes a five-second cadence read as a heartbeat rather than as five flickers. The page's own arrival is exempt, because the skeletons already said so and a spinning Refresh on a feed nobody armed is the icon claiming a cadence that does not exist.
-- **A latent store bug surfaced while pinning that down.** `inFlight` was a plain `let` behind a `busy` getter, so the `disabled` binding on three buttons had no reactive value to re-evaluate on and was computed once at mount — it refreshed only when something else in the same subtree happened to change, which it had been doing by accident while the button's label was still reading `loading`. The tell is a control that stays disabled after its work finished; the fix belongs in the store, and `inFlight` is `$state` now.
-
-The build was a Svelte trap worth recording: the mount effect calls `timeline.start()`, which reads the cadence to decide whether to arm its timer, so tracking it made every choice the operator made re-run the effect — whose cleanup stops the store and whose body starts it again. The control that only meant to set a timer spent a full reset read. The effect is now `untrack`ed, and re-arming belongs to the setter, which owns its timer the way every other store owns its own.
-
-- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline)
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
 - Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md)
 
-## 2026-09 — Worktree path and base SHA are copyable on a trail
+## 2026-09 — The console bundle is a build artifact
 
-A trail's worktree block now puts **Path** and **Base SHA** on the clipboard alongside the trail id. The path is the value an operator pastes into a shell, and it was the one long value on the page with no way to take it whole — expanding the hint and retyping it character by character was the only route to a path the console had already fetched. The rule behind it is now written down: a copy button marks a value you paste somewhere else, so a count or a timestamp never gets one, and a worktree with no base SHA offers a single button rather than one that copies an em dash.
+The console now builds from a frontend bundle that the Go binary embeds at compile time, and that bundle is **not committed** — it is produced at build time. A `go build` without the frontend step still compiles and still serves the legacy console; `/next/` answers with a page saying the preview was not built.
 
-- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces)
-- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md)
+**How you install changes.** Release archives and the container image build the frontend first and therefore carry the redesign; `go install` never does, and says so. Building from the repo is `pnpm --dir web install --frozen-lockfile`, `pnpm --dir web build`, then `go build -o paseka ./cmd/paseka`.
 
-## 2026-09 — Live bees plaque links to where the bees are
-
-The topbar's **Live bees** panel is a link, which closes the last plaque that summarized a page it could not reach. It follows the legacy console's rule, because a bee is not addressable and there is nothing to point at but the surface holding it: an AFK bee opens **Runs**, an interactive-only colony opens **Sessions**, and an idle plaque opens **Runs**, which is where the next bee will appear. A colony running both kinds lands on Runs — the order the legacy panel used, and the order the plaque's own `afk · session` line reads.
-
-- The three navigable plaques are **Host** → System, **Live bees** → Runs or Sessions, and **Git** → Git. The label is the link, not the whole panel: a stretched overlay would swallow the hover popover inside the panel, so the panel stays hoverable and the visible label is what you click.
-- The destination is a single pure function, `liveBeesPath`, rather than branching in the component, so the topbar cannot drift from the legacy order.
-
-- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (top panel)
-- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md)
-
-## 2026-09 — Settings, and what each setting resolves to
-
-`/next/settings` is the last route of the console redesign, and the first one whose subject the legacy console never had at all. It answers what the colony is configured with **and what decided each value** — which is the part that matters, because several settings are decided by something other than the file you would edit. An operator who changes `config.yaml` and watches nothing happen can now see why: the page names `PASEKA_NATS_URL` as the thing actually in force and warns that the file is not consulted. Values nobody wrote are labelled as defaults, a value the code supplied is distinguished from one the file declares, and a colon-separated prefix nobody declared is reported as the bus default rather than named after a file that never mentioned it.
-
-- **Transport, Adapters, Human gateway, Colony, Appearance.** The adapter table shows each adapter's binary, the environment variable it reads its API key from, whether that variable currently resolves, and whether the value came from `adapters/<name>.yaml` or was inferred from a default — a distinction no loaded config can make on its own, because every adapter loader fills in a default for a key the file omits. The gate's seven push categories are listed with their modes, and a gate that is present but switched off is reported as a configuration rather than as a failed read.
-- **The console never receives a secret.** An adapter row carries the *name* of a variable and whether it resolves; the gate reports `botTokenSet`, never the token. That is the model the adapters already follow at runtime, so a key never enters the colony config at all.
-- `GET /api/config` is new, read-only, and reports no liveness — whether NATS is connected is already on the status stream the topbar keeps, and asking twice would be the duplicate poll the console's store contract forbids. The page reads once and waits for **Refresh** rather than polling, because configuration changes when a human edits a file.
-
-**This closes the redesign's route set: no page under `/next/` is placeheld any more.** The legacy console remains at `/` until the explicit root cutover.
-
-- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Settings)
-- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md)
-- Out of scope for that work: user story #9 also asks for these settings to be *editable* "without editing files", and the console still cannot write configuration. That is a platform capability rather than a route — nothing outside `paseka init` writes the colony's YAML, and that writer is create-only — so it is tracked separately — see [Backlog](backlog.md).
-
-## 2026-09 — Bees roster in Queen Console
-
-`/next/bees` lists the colony's whole roster: role, adapter, intent vocabulary, sector, whether it works in an isolated worktree or against the colony root, how many adapter processes it holds live, and its most recent run with that run's state badged. The page shows **every** bee, including `script` adapters that run headless and cannot be started as an interactive session — the launch dropdowns in Sessions and Tasks deliberately still offer only the bees a session can start.
-
-- `GET /api/bees` gained `?scope=colony`. **The default is unchanged and still returns the launch picker**, so the two launch forms and the legacy console read exactly what they read before; an unknown scope answers 400. The roster scope adds a per-bee `interactive` flag, the bee's `sector` (documented in bee YAML and previously visible in no console surface), and a **server-derived `lastRun`**. That last one is not cosmetic: the client cannot compute it, because the runs list is capped at the 50 most recent colony-wide and a busy colony would otherwise report a quiet bee as never having run. The picker does not pay for the lookup at all, so opening a launch drawer does not walk every run directory in the colony.
-- The route reads once and does not poll — a bee's identity and configuration come from committed bee YAML — and its live column is joined from the status stream the topbar already keeps, so it cannot disagree with the Live bees plaque. Refresh stays because a run landing is the one thing on the page that changes without a commit.
-
-- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Bees)
-- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md), [Bee config](../guide/bee-config.md)
+- Canonical: [CLI](../guide/cli.md), [Queen Console](../guide/queen-console.md), [Homelab deployment](../guide/homelab-deployment.md#rebuild-paseka-inside-the-container)
 
 ## 2026-09 — Age-based prune
 
