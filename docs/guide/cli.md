@@ -8,6 +8,21 @@ Build from the repo root:
 go build -o paseka ./cmd/paseka
 ```
 
+This produces the legacy console at `/` only. The redesigned console under
+`/next/` is a separate Svelte bundle that is **not committed**; build it first
+to have it embedded:
+
+```bash
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web build
+go build -o paseka ./cmd/paseka
+```
+
+Without that step the binary still compiles, and `/next/` answers with a page
+explaining that the preview was not built. Release archives and the container
+image already build the frontend first, so `go install` is the only path that
+never carries the redesign.
+
 ---
 
 ## Conventions

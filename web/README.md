@@ -30,7 +30,28 @@ pnpm test
 pnpm build
 ```
 
-The production build is written to `internal/console/next/dist/` and committed for embedding by the Go binary. Rerun `pnpm build` whenever frontend sources change.
+The production build is written to `internal/console/next/dist/`. **It is not
+committed** — it is a build artifact, and the Go binary embeds whatever is in
+that directory when it compiles. A binary built from a fresh clone therefore
+serves `internal/console/next/fallback.html` at `/next/` instead of the preview,
+which is also why `go install` does not carry the redesign: see
+[Building the binary](#building-the-binary).
+
+## Building the binary
+
+Build the frontend first, then Go:
+
+```sh
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web build
+go build -o paseka ./cmd/paseka
+```
+
+Release archives and the container image do exactly this (GoReleaser
+`before.hooks`, and the `web-builder` stage in `docker/dev/Dockerfile`). A
+source-only `go build` still compiles — the embed pattern is satisfied by
+`next/fallback.html` alone — and the console answers `/next/` with that page
+instead of the preview.
 
 ## Third-party runtime dependencies
 

@@ -11,3 +11,8 @@ paseka-export-*.md
 /docs/**/*.visual-check.*
 **/__pycache__/
 docker/dev/.env
+
+# Queen Console Next production bundle (built by `pnpm --dir web build`).
+# Not committed: `next/fallback.html` alone is what a source-only Go build
+# embeds, and release / container builds produce the bundle before compiling Go.
+/internal/console/next/dist/

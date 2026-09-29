@@ -184,14 +184,32 @@ Do not auto-push default on review Approve. After a forge merge, a sidecar pull 
 
 ## Rebuild `paseka` inside the container
 
-The image already contains a binary at `/usr/local/bin/paseka`. To pick up local Go changes from the mounted repo:
+The image already contains a binary at `/usr/local/bin/paseka`, built with the
+Queen Console Next bundle. To pick up local Go changes from the mounted repo:
 
 ```bash
 docker compose run --rm --entrypoint bash paseka-dev -lc \
   'go build -o /home/dev/workspace/paseka ./cmd/paseka && ./paseka console --help'
 ```
 
-Or rebuild the image (`docker compose build`) so `/usr/local/bin/paseka` is refreshed.
+That binary carries the legacy console only: the mounted repo has no built
+preview bundle, since it is a gitignored artifact rather than a committed file.
+To rebuild with `/next/` too, build the frontend on the host first — the
+container has no Node toolchain — then compile Go in the container:
+
+```bash
+# host, in the colony repo (Node + pnpm required)
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web build
+
+# then in the container
+docker compose run --rm --entrypoint bash paseka-dev -lc \
+  'go build -o /home/dev/workspace/paseka ./cmd/paseka'
+```
+
+Or rebuild the image (`docker compose build`) so `/usr/local/bin/paseka` is
+refreshed — its `web-builder` stage always builds the bundle first, so this is
+the simpler path.
 
 ## Related
 

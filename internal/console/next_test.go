@@ -1,6 +1,7 @@
 package console
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,4 +96,85 @@ func TestNextSPAHandlerFallsBackWithoutGeneratedBundle(t *testing.T) {
 	if recorder.Body.String() != "<h1>Preview fallback</h1>" {
 		t.Fatalf("body = %q", recorder.Body.String())
 	}
+}
+
+// A source-only build — a fresh clone, or any `go install` binary — has no
+// generated bundle, and the preview must say how to get one rather than
+// serving a page that looks like a broken console. This runs against the real
+// embedded tree, whose `next/dist` is absent from a fresh clone, so it is the
+// handler's production path and not a fixture of it.
+func TestBuildlessPreviewExplainsTheMissingBundle(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		status   int
+		contains []string
+	}{
+		{
+			name:   "base serves the fallback",
+			path:   "/next/",
+			status: http.StatusOK,
+			contains: []string{
+				"preview bundle not built",
+				"pnpm --dir web build",
+				"go build -o paseka ./cmd/paseka",
+			},
+		},
+		{
+			name:   "deep route serves the same fallback",
+			path:   "/next/bees",
+			status: http.StatusOK,
+			contains: []string{
+				"preview bundle not built",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := nextSPAHandler(buildlessNextTree(t))
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
+
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.status)
+			}
+			for _, want := range test.contains {
+				if !strings.Contains(recorder.Body.String(), want) {
+					t.Fatalf("body does not contain %q", want)
+				}
+			}
+		})
+	}
+
+	t.Run("missing asset still 404s", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		handler := nextSPAHandler(buildlessNextTree(t))
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/next/_app/missing.js", nil))
+
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+		}
+		if strings.Contains(recorder.Body.String(), "preview bundle not built") {
+			t.Fatal("a missing asset was answered with HTML")
+		}
+	})
+}
+
+// buildlessNextTree is the embedded tree as a fresh clone has it: the checked-in
+// fallback and no generated bundle.
+func buildlessNextTree(t *testing.T) fs.FS {
+	t.Helper()
+	return fstest.MapFS{
+		"next/fallback.html": &fstest.MapFile{Data: []byte(fallbackPage(t))},
+	}
+}
+
+func fallbackPage(t *testing.T) string {
+	t.Helper()
+	data, err := fs.ReadFile(nextFiles, "next/fallback.html")
+	if err != nil {
+		t.Fatalf("read next/fallback.html: %v", err)
+	}
+	return string(data)
 }

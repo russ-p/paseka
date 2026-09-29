@@ -2,14 +2,21 @@
 # Minimal apiary-like image: Ubuntu 24.04, Go, git, Cursor Agent CLI, prebuilt paseka.
 # Build from repo root:
 #   docker build -f docker/dev/Dockerfile -t paseka-dev:local .
+#
+# The Queen Console Next bundle is a build artifact, not a committed file, so the
+# web-builder stage below produces it inside the image before Go compiles. Nothing
+# from the host's internal/console/next/dist reaches the Go stage (.dockerignore).
 
 ARG GO_VERSION=1.25.0
 ARG UBUNTU_VERSION=24.04
 
 FROM node:24-bookworm-slim AS web-builder
 
+# pnpm's version comes from web/package.json `packageManager`, so there is one
+# place to bump it.
+RUN corepack enable
+
 WORKDIR /src/web
-RUN npm install --global pnpm@12.5.1
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml web/.npmrc ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY web/ ./
@@ -39,6 +46,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# The only source of the embed tree: the bundle built above. The checked-in
+# fallback is all a build without it would have, so a missing one is a build error
+# rather than a silently legacy-only binary.
 COPY --from=web-builder /src/internal/console/next/dist ./internal/console/next/dist
 RUN go build -o /out/paseka ./cmd/paseka
 

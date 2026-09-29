@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  golangci:
-    name: golangci-lint
+  go:
+    name: go
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +26,12 @@ jobs:
         with:
           version: v2.12
           args: --timeout=5m
+
+      # The console preview bundle is not committed, so this job is also the one
+      # that proves a source-only `go build` compiles and serves next/fallback.html
+      # — the state `go install` ships.
+      - name: Test console routes without a frontend build
+        run: go test ./internal/console/...
 
   frontend:
     name: frontend
@@ -47,4 +53,16 @@ jobs:
       - run: pnpm --dir web check
       - run: pnpm --dir web test
       - run: pnpm --dir web build
-      - run: git diff --exit-code -- internal/console/next/dist
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The bundle the previous step produced is what a release build embeds;
+      # compiling Go here is the check that the two halves still meet.
+      - name: Build binary with the preview bundle
+        run: go build -o "$RUNNER_TEMP/paseka" ./cmd/paseka
+
+      - name: Test console routes with the preview bundle
+        run: go test ./internal/console/...

@@ -31,6 +31,13 @@ The Svelte-based Queen Console redesign is available at
 serve the legacy console until the redesign reaches feature parity and an
 explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
 
+The preview bundle is **not committed** — it is a build artifact the Go binary
+embeds at compile time. A binary built without it answers `/next/` with a
+"preview bundle not built" page and is otherwise identical. See
+[Queen Shell CLI reference](cli.md) for the two-step build, or
+[Rebuild `paseka` inside the container](homelab-deployment.md#rebuild-paseka-inside-the-container)
+for the container.
+
 The preview currently ships the shell (top status panel, side menu, theme
 switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
 page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
@@ -502,6 +509,11 @@ rather than polling. Nothing here needs the Hive Runtime.
   (not `/vendor/...`). Module zips omit any `/vendor/` path, so an older
   binary can embed the SPA without those bundles. Rebuild or reinstall a
   version that ships `static/lib`.
+- **`/next/` says the preview bundle was not built:** the redesigned console is
+  a build artifact and is not committed, and `go install` never carries it. Run
+  `pnpm --dir web build` before `go build`, use a release archive, or use the
+  container image — all three build the frontend first. The legacy console at
+  `/` is unaffected.
 
 The implemented API and UI baseline is recorded in
 [Spec 002](../specs/002-queen-console-mvp.md). Header chrome streaming is

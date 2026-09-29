@@ -53,3 +53,17 @@ go build -o paseka ./cmd/paseka
 ```
 
 Config: [`.golangci.yml`](.golangci.yml) (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`). Fix compilation errors from `go build` and issues reported by `golangci-lint`.
+
+## After frontend changes
+
+The Queen Console Next bundle (`web/`) is a build artifact and is **not committed**: `pnpm --dir web build` writes it to `internal/console/next/dist/`, which the Go binary embeds at compile time. After changing anything under `web/`:
+
+```bash
+pnpm --dir web check
+pnpm --dir web test
+pnpm --dir web build
+go build -o paseka ./cmd/paseka
+```
+
+A source-only `go build` still compiles and serves `internal/console/next/fallback.html` at `/next/`. Release archives (GoReleaser `before.hooks`) and `docker/dev/Dockerfile` (`web-builder` stage) run the frontend build themselves, so CI and the image never need a committed bundle. `go install` therefore does not carry the redesign and is not a supported path for it.
+
