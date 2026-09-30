@@ -45,8 +45,14 @@ func GetDashboard(ctx colony.Context, sup *runtime.Supervisor, mgr *sessions.Man
 		mgr = sessions.NewManager()
 	}
 
+	// Each list starts empty rather than being appended onto nil: they are the
+	// dashboard's `recentTraces`, `failedRuns` and `recentInsights` arrays, and
+	// a quiet colony must read as three empty lists, not three nulls.
 	view := DashboardView{
-		TaskCounts: map[string]int{},
+		TaskCounts:     map[string]int{},
+		RecentTraces:   []hiveview.TraceSummaryView{},
+		FailedRuns:     []hiveview.RunView{},
+		RecentInsights: []hiveview.InsightHighlight{},
 	}
 
 	rt, err := hiveview.GetRuntime(ctx, sup)

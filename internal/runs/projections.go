@@ -213,10 +213,18 @@ func listRunsInTraceDir(colonyRoot, traceID, tracePath string) ([]RunMeta, error
 }
 
 // ReadEventsAfter returns protocol events with index > after and the next cursor.
+//
+// An exhausted cursor yields an empty page, never nil: this slice is serialized
+// straight into the console's events page, whose `entries` field is an array on
+// the wire, and a nil slice marshals to `null` — which the console reads as
+// "no array" and trips over.
 func (d Dir) ReadEventsAfter(after int) ([]protocol.Event, int, error) {
 	events, err := d.readEventsFrom(after)
 	if err != nil {
 		return nil, after, err
+	}
+	if events == nil {
+		events = []protocol.Event{}
 	}
 	next := after + len(events)
 	return events, next, nil

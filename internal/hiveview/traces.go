@@ -300,8 +300,13 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 		}
 	}
 
+	// Tasks and Runs start as empty lists rather than being appended onto nil:
+	// a trace that has neither — or only one of them — reaches the console as a
+	// JSON array, and a nil slice there is `null`, which the page cannot iterate.
 	view := TraceDetailView{
 		TraceSummaryView: TraceSummaryFromRuns(summary),
+		Tasks:            []TaskSummaryView{},
+		Runs:             []RunView{},
 	}
 	EnrichTraceEnergy(ctx, &view.TraceSummaryView)
 	EnrichTraceTitle(ctx, &view.TraceSummaryView)
@@ -460,7 +465,9 @@ func CollectRecentInsights(ctx colony.Context, limit int) ([]InsightHighlight, e
 	if err != nil {
 		return nil, err
 	}
-	var out []InsightHighlight
+	// The highlights land on the dashboard as a `recentInsights` array, so a
+	// colony that has published no INSIGHT yet reads as an empty list.
+	out := []InsightHighlight{}
 	for _, row := range scanned {
 		ev := row.Event
 		if ev.Type != protocol.EventInsight {

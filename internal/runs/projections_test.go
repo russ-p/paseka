@@ -326,6 +326,48 @@ func TestReadEventsAfter(t *testing.T) {
 	}
 }
 
+// A run that recorded nothing has no events file, and an exhausted cursor has
+// nothing after it. Both must read back as an empty page: the console serves
+// this slice as the `entries` array of a run's events, and a nil slice marshals
+// to `null`, which the page then cannot iterate.
+func TestReadEventsAfterEmptyPageIsNotNil(t *testing.T) {
+	root := t.TempDir()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-1", AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+
+	page, next, err := d.ReadEventsAfter(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page == nil {
+		t.Fatal("empty run = nil page, want an empty one")
+	}
+	if len(page) != 0 || next != 0 {
+		t.Fatalf("page = %+v next = %d", page, next)
+	}
+
+	ev, err := protocol.NewEvent("trace-1", "agent-1", 0, protocol.EventLog, map[string]int{"n": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(ev); err != nil {
+		t.Fatal(err)
+	}
+
+	page, next, err = d.ReadEventsAfter(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page == nil {
+		t.Fatal("exhausted cursor = nil page, want an empty one")
+	}
+	if len(page) != 0 || next != 1 {
+		t.Fatalf("page = %+v next = %d", page, next)
+	}
+}
+
 func writeHeadlessRun(t *testing.T, root, traceID, agentID string, started time.Time, state protocol.RunStatus, summary string) {
 	t.Helper()
 	d := runs.Dir{ColonyRoot: root, TraceID: traceID, AgentID: agentID}

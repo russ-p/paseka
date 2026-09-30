@@ -112,7 +112,9 @@ export function createRunStore(options: RunStoreOptions = {}) {
 			// cap, so one read is the whole log. `nextCursor` is an index for a
 			// future capped read, not a promise that more exist, so there is no
 			// paging control here to press.
-			events = page.entries;
+			// `?? []` because a run with no events has no `entries` array to
+			// iterate, and every view here asks for its length.
+			events = page.entries ?? [];
 		} catch (cause) {
 			eventsError = errorMessage(cause);
 		} finally {

@@ -14,6 +14,9 @@ const IntentGeneral = "general"
 // DiscoverIntents returns the intent vocabulary and default for a bee.
 // Explicit bee.Intents wins; otherwise intents are discovered from
 // .paseka/prompts/_partials/<role>-intent-*.md partial files.
+//
+// A bee with no vocabulary gets an empty list, never nil: the console reports
+// these as a bee's `intents` array, and nil would reach it as `null`.
 func DiscoverIntents(colonyRoot string, bee Bee) (intents []string, defaultIntent string, err error) {
 	if len(bee.Intents) > 0 {
 		intents = normalizeIntentList(bee.Intents)
@@ -22,6 +25,9 @@ func DiscoverIntents(colonyRoot string, bee Bee) (intents []string, defaultInten
 		if err != nil {
 			return nil, "", err
 		}
+	}
+	if intents == nil {
+		intents = []string{}
 	}
 	defaultIntent = resolveDefaultIntent(bee.DefaultIntent, intents)
 	return intents, defaultIntent, nil

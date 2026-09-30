@@ -271,7 +271,9 @@ func buildTaskBoard(items []TaskListItem) TaskBoardView {
 		byStatus[status] = append(byStatus[status], item)
 	}
 
-	view := TaskBoardView{TaskCounts: counts}
+	// Groups starts empty for the same reason a trace's tasks do: the board is a
+	// JSON `groups` array to the console, and an empty board must be `[]`.
+	view := TaskBoardView{Groups: []TaskStatusGroup{}, TaskCounts: counts}
 	for _, status := range taskStatusOrder {
 		groupItems := byStatus[status]
 		if len(groupItems) == 0 {

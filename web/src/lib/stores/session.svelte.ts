@@ -152,8 +152,9 @@ export function createSessionStore(options: SessionStoreOptions = {}) {
 	 */
 	function appendPage(sessionId: string, page: { entries: TranscriptEntry[]; nextCursor: number }): boolean {
 		if (sessionId !== selectedId) return false;
-		if (page.entries.length > 0) {
-			lines = [...lines, ...page.entries];
+		const entries = page.entries ?? [];
+		if (entries.length > 0) {
+			lines = [...lines, ...entries];
 			if (lines.length > transcriptWindow) {
 				const keep = lines.slice(-transcriptWindow);
 				// The *lines* given up, not the pages that overflowed: a first page of a

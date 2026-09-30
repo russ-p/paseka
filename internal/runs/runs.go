@@ -356,10 +356,16 @@ func (d Dir) ReadTranscript() ([]TranscriptEntry, error) {
 }
 
 // ReadTranscriptAfter returns transcript entries with index > after and the next cursor.
+//
+// As with ReadEventsAfter, an exhausted cursor is an empty page rather than nil,
+// because the slice reaches the console's transcript page as a JSON array.
 func (d Dir) ReadTranscriptAfter(after int) ([]TranscriptEntry, int, error) {
 	entries, err := d.readTranscriptFrom(after)
 	if err != nil {
 		return nil, after, err
+	}
+	if entries == nil {
+		entries = []TranscriptEntry{}
 	}
 	next := after + len(entries)
 	return entries, next, nil

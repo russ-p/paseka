@@ -37,6 +37,42 @@ func TestReadTranscriptAfter(t *testing.T) {
 	}
 }
 
+// A session with no transcript file, and a cursor past its end, must both read
+// back as an empty page rather than nil — the console serves the slice as the
+// `entries` array, and nil marshals to `null`.
+func TestReadTranscriptAfterEmptyPageIsNotNil(t *testing.T) {
+	root := t.TempDir()
+	d := runs.Dir{ColonyRoot: root, TraceID: "t1", AgentID: "a1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+
+	page, next, err := d.ReadTranscriptAfter(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page == nil {
+		t.Fatal("empty session = nil page, want an empty one")
+	}
+	if len(page) != 0 || next != 0 {
+		t.Fatalf("page = %+v next %d", page, next)
+	}
+
+	if err := d.AppendTranscript(runs.TranscriptEntry{Role: "agent", Content: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	page, next, err = d.ReadTranscriptAfter(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page == nil {
+		t.Fatal("exhausted cursor = nil page, want an empty one")
+	}
+	if len(page) != 0 || next != 1 {
+		t.Fatalf("page = %+v next %d", page, next)
+	}
+}
+
 func TestScanRecentSessions(t *testing.T) {
 	root := t.TempDir()
 	older := time.Now().UTC().Add(-2 * time.Hour)

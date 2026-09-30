@@ -145,6 +145,24 @@ describe('createRunStore', () => {
 		expect(store.eventsError).toBe('events.ndjson: permission denied');
 		expect(store.current?.agentId).toBe('run-01');
 	});
+
+	// A run that recorded nothing answers with no `entries` array at all. The run
+	// page asks its events for a length to label the section, so a store that
+	// passed that through leaves the whole route broken on an empty run.
+	it('treats a run with no events as an empty list, not a missing one', async () => {
+		const store = createRunStore({
+			listRuns: async () => runList(),
+			listRunEvents: async () =>
+				({ entries: null, nextCursor: 0 }) as unknown as { entries: ProtocolEvent[]; nextCursor: number },
+			pollIntervalMs: 0
+		});
+		await store.start();
+
+		await store.select('trace-01a0bd6963faa14f', 'run-01');
+
+		expect(store.events).toEqual([]);
+		expect(store.eventsError).toBe('');
+	});
 });
 
 describe('run position in its trail', () => {

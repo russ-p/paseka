@@ -760,6 +760,19 @@ func TestRunsAPIHandlers(t *testing.T) {
 	if len(page.Entries) != 1 || page.NextCursor != 1 {
 		t.Fatalf("events page = %+v", page)
 	}
+
+	// A cursor past the end is an empty page, and it must reach the wire as an
+	// array: `null` is not iterable, and the run page asks its events for a
+	// length to label the section.
+	emptyReq := httptest.NewRequest(http.MethodGet, "/api/runs/trace-run/agent-run/events?after=1", nil)
+	emptyRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(emptyRec, emptyReq)
+	if emptyRec.Code != http.StatusOK {
+		t.Fatalf("empty events status = %d body=%s", emptyRec.Code, emptyRec.Body.String())
+	}
+	if !strings.Contains(emptyRec.Body.String(), `"entries":[]`) {
+		t.Fatalf("empty events body = %s, want an empty entries array", emptyRec.Body.String())
+	}
 }
 
 func TestDashboardAndTimelineAPIHandlers(t *testing.T) {

@@ -117,7 +117,9 @@ func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
 	}
 	defer session.Close()
 
-	var queue []ReviewQueueItem
+	// Empty, not nil: the queue is the console's `items` array, and a colony
+	// with nothing awaiting review has to answer `[]` rather than `null`.
+	queue := []ReviewQueueItem{}
 	for _, trace := range traceSummaries {
 		snap, _, err := tasks.LoadTrace(ctx, session.Ledger, trace.TraceID)
 		if err != nil {
