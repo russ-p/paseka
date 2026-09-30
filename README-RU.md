@@ -27,8 +27,16 @@ cd paseka
 
 ```
 go mod download
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web build
 go build -o paseka ./cmd/paseka
 ```
+
+Редизайн Queen Console — SvelteKit-приложение в `web/`, которое собирается в
+`internal/console/next/dist/` и встраивается в Go-бинарник. Без этой сборки
+фронтенда бинарник тоже компилируется, но `/next/` отдаёт заглушку вместо нового
+UI — поэтому `go install` не несёт редизайн. Dev-сервер и подробности:
+[`web/README.md`](web/README.md).
 
 3. Инициализировать колонию, авторизовать выбранный адаптер и запустить
    локальные NATS + JetStream:
