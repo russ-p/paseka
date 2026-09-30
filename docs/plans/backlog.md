@@ -2,6 +2,7 @@
 
 Deferred ideas, follow-ups, bugs, and implementation assumptions outside the active change.
 Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-index.md).
+Console redesign navigation debt lives in [UI migration backlog](ui-migration-backlog.md) — dead links, unbuilt transitions, and placeheld sections.
 
 ## Deferred work
 
@@ -49,7 +50,7 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Source:** planning (`system.kill` / hard kill); [013-system-kill](../specs/013-system-kill.md)
 - **Summary:** After a hard kill (or late-stage avalanche), good early work may already live in `.paseka/worktrees/<traceId>/`. Need an operator path to start a **new** `traceId` that reuses that worktree (or grafts its branch/diff) instead of discarding progress and redoing from `HEAD`.
 - **Why deferred:** Orthogonal to kill protocol itself (`paseka kill` shipped); needs worktree registry + trace bootstrap design (identity, honey budget, which tasks/events to carry).
-- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path.
+- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path. The console surface is settled — `/next/worktrees` is where the interrupted checkout will be listed, and it will carry a trail link on every row — so the open half is the trace bootstrap, not the place to show it.
 
 #### Energy gate on `paseka bee run` / `bee chat`
 
@@ -87,6 +88,46 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 
 API fields for energy and merge-diff exist; per-run proposal preview is still thin.
 
+#### Range reads for oversized comb files
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Traces migration)
+- **Summary:** The trace comb modal reports `file too large for inline preview` for anything over 512 KiB, with no way to read the rest. A byte-range or line-range read, or a download link beside the omission, would make a large `checkpoint.json` inspectable without raising the inline cap.
+- **Why deferred:** The cap is the server's and predates the redesign; the legacy console had the same dead end. Trail comb files are usually small, and raising the cap trades memory for a case that is rare.
+- **Revisit when:** An operator hits an unreadable comb file in a real trail, or comb files start growing past a few hundred KiB.
+
+#### No mutation queue while NATS is down
+
+- **Kind:** idea
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #12)
+- **Summary:** User story #12 asked the console to queue mutations locally when NATS disconnects. The banner half shipped — the topbar names `reconnecting` and then `unavailable`, and the transport icon reads the same fact — and the queue did not, deliberately: a queued approve or delete that fires minutes later is not the action the operator took, and the console's store contract already answers `busy` rather than queueing a second mutation. The open question is narrower than the story was: a *draft* the operator was typing (a review comment, a task form) is worth keeping across a reconnect, and a *committed* mutation is not.
+- **Why deferred:** The console has no offline story to preserve, so the cost is a lost draft rather than a lost action, and the page already says the stream is down.
+- **Revisit when:** An operator loses real typing to a reconnect, or a hive restart becomes routine enough to matter.
+
+#### No form to create a bee or a worktree
+
+- **Kind:** idea
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #17)
+- **Summary:** User story #17 asked for forms to open in a drawer rather than a column, and named four: new task, new bee, new worktree, settings edits. The task form and the session launch form both shipped and proved the primitive; the new-bee and new-worktree forms never existed. Both write committed colony YAML (`bees/*.yaml`) and the worktree case also creates a git checkout, which is the same class of risk [036-console-config-write](../specs/036-console-config-write.md) refuses for project config — a browser writing a tracked file is a different decision from a browser writing this machine's configuration.
+- **Why deferred:** The routes that display both lists shipped read-only, and a launch session is the supported way to start work today.
+- **Revisit when:** An operator hand-edits `bees/*.yaml` often enough to want a form for it, or the worktrees route needs a create path for work that has no trail yet.
+
+#### Console redesign `/next` parity sweep
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- **Summary:** Every `/next` route is migrated and no page resolves to `PagePlaceholder`; what is left is the explicit root cutover from the legacy bundle. Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/next/git` for `/next/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped. Bees shipped as the first route to need a **server** answer rather than only markup: `GET /api/bees` grew a `scope` because the endpoint the launch forms read is a picker that hides every non-interactive bee, and `BeeCard` was dropped for the seventh `DataTable`. Settings shipped as the second, on a new `GET /api/config`, and is the only route that is deliberately incomplete — its write half is [Spec 036](../specs/036-console-config-write.md).
+- **Why deferred:** The route set is complete, so only the cutover decision remains, and that one is explicitly gated on feature parity being called rather than inferred.
+- **Revisit when:** The cutover is called.
+
+#### A worktree registry state the console can see
+
+- **Kind:** follow-up
+- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Worktrees scope)
+- **Summary:** The worktree list is built from the home registry, `git worktree list --porcelain`, and the `.paseka/worktrees/` directory, and then every row that is no longer a checkout root is dropped. So the console cannot show registered-but-missing, on-disk-but-unregistered, or a branch that disagrees with the `worktree.branch` insight, and pressing prune is the only way to learn what it would remove. A per-row state (`registered` / `on disk` / `missing` / `orphaned`) plus a preview of what a prune would drop would make `/next/worktrees` the reconciliation surface its scope was argued to be.
+- **Why deferred:** The route ships as a live-checkout inventory and the prune result names what it reconciled, so nothing is lost silently. A row for a checkout that does not exist also changes what the list's empty state means, and the disagreements are rare enough that a state machine is not yet earned.
+- **Revisit when:** An operator presses prune to find out what is lying around, or a stale registry row surfaces as a confusing trace error instead of a cleanup.
+
 #### Per-run proposal diff in Reviews
 
 - **Kind:** follow-up
@@ -94,6 +135,14 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Summary:** Side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks. Final merge gate preview (`GET /api/traces/:traceId/merge-diff`) already ships.
 - **Why deferred:** Final merge gate was enough for MVP; per-run preview is extra UI surface.
 - **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate.
+
+#### An index over trail summaries, so a page costs a page
+
+- **Kind:** follow-up
+- **Source:** planning (Traces pagination — the removed `cursorPageScanLimit`)
+- **Summary:** `runs.ScanRecentTraces` is the whole story of every trail list in the product, and it is a full walk: `os.ReadDir` over `.paseka/runs`, then `loadTraceSummary` per trace — a second `ReadDir` of that directory, a `LoadRunMeta` file read per agent directory, and `ListTraceTaskIDs` when there are tasks — then a sort of everything, and only then a slice to `limit`. **The limit bounds the result, not the work**, so a 15-row page costs exactly what a 200-row page costs, and both cost what the colony's whole history costs. `ScanTracesAfter` shares that walk and filters a cursor over it in memory, so the trail page pays it once per read like everything else. Eight call sites pay it, and several ask for a wide window on purpose: `console/dashboard.go` reads `dashboardTraceLimit*3`, `hiveview.GetTrace` reads `maxEventScanTraces*4` (200) just to find one trail it could have read directly, and the task board and snapshot each read `TaskBoardTraceLimit`. The fix is a small manifest beside `.paseka/runs` — trace id, last activity, run and task counts, bee list, the failure and active flags — written when a run finishes and consulted instead of the walk, with the walk kept as the fallback that rebuilds it when the manifest is absent or stale. That turns a list read into O(page) and makes `GetTrace` a single read.
+- **Why deferred:** Nothing is slow yet — this colony keeps 61 trail directories and a page assembles in single-digit milliseconds — and the walk is also what makes the projection honest, since a summary is derived from files a bee may still be writing. It is orthogonal to cursor-versus-rank and was **not** a reason to prefer either: a rank buys the same walk, and the cursor's old `limit * 10` cap bought nothing at all, which is why the cap went and the cursor stayed. Writing a manifest is a new on-disk artifact that a `paseka init`, a worktree move, or a hand-deleted trail directory can desynchronize, and that class of bug is worse than a slow page.
+- **Revisit when:** Trail directories reach the low hundreds — the `getTrace` fallback and `defaultTraceScanLimit` are the two places that start guessing, and the daily standing-tick habit in "Compact standing-trail task history" is what will get there — or when a Console read is measurably slow, which is the only signal that distinguishes this from every other scan in the codebase.
 
 ### Pull-request delivery
 
@@ -164,7 +213,7 @@ Leftovers from [023-console-git](../specs/023-console-git.md). The Git tab MVP c
 - **Kind:** follow-up
 - **Source:** [023-console-git](../specs/023-console-git.md)
 - **Summary:** Disable Push and branch-delete (not Fetch) while Live bees or a merge is in progress. Pull already refuses colony-root bees and in-progress merge in 023.
-- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API.
+- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API. The `/next/git` store serialises its own mutations so two clicks cannot race, but that is a UI guard against one page, not this lock — it sees nothing about live bees.
 - **Revisit when:** A Push or branch delete races an in-flight adapter in practice, or operators ask for a hard lock.
 
 #### Gitea (or origin host) commit links

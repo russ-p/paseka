@@ -2,6 +2,46 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-09 — Queen Console redesign, complete under `/next/`
+
+The redesigned console is no longer a preview of a few routes: **every page under `/next/` is real now** — Dashboard, Traces, Git, System, Timeline, Topology, Runs, Tasks, Reviews, Sessions, Worktrees, Bees, Settings — and a "migration pending" card anywhere under it is a bug. The legacy console still serves `/` until the explicit cutover, and both read the same root-relative `/api/*` endpoints.
+
+The new UI ships with a contract written for agents in the [Queen Console design system](../architecture/queen-console-design-system.md): layout shell, theming, one component inventory, one `DataTable`, one status→color mapping, and hard rules for what is always true. New console pages are written against that contract rather than against the legacy markup.
+
+Three surfaces have no legacy equivalent:
+
+- **Worktrees** — every isolated checkout with its branch and its trail, plus the one confirmed sweep for the leftovers the branch sweep skips.
+- **Bees** — the whole roster (role, adapter, sector, intents, worktree or colony root, live processes, last run), including headless `script` bees that no launch form can start. `GET /api/bees` gained `?scope=colony`; the default still returns the launch picker, so the launch forms and the legacy console read exactly what they read before.
+- **Settings** — what the colony is configured with *and what decided each value*: the env var actually in force over the one in `config.yaml`, a code default distinguished from a declared one. Read-only, on the new `GET /api/config`, and no secret crosses it — an adapter reports the *name* of its key variable and whether that resolves.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md), [Bee config](../guide/bee-config.md)
+
+Deferred from that work: user story #9 also asks for these settings to be editable "without editing files", and the console still writes no configuration — see [Spec 036](../specs/036-console-config-write.md).
+
+## 2026-09 — What changed in the console, and the keys it gained
+
+Migrating the pages was also a chance to fix what the legacy console did badly. What an operator can feel:
+
+- **Every list keeps its filter and its page in the URL** (`?q=`, `?page=`) — a narrowed list is a link you can paste, and **Back** from a trail, run, or task returns to the page of the list you left. Filters write with `replaceState`, so Back never walks you backwards through the letters of a word.
+- **Traces pages by cursor, all the way down.** The old cursor stopped *Load older trails* at 500 trails and announced that history ended there, because the cursor was applied after a scan that had already truncated the rows. There is no ceiling now, and the client pager and its `1–15 of 50` label are gone — the server page is the only depth the list has.
+- **The shell answers the keys an operator reaches for.** **Escape** walks a trail, run, task, or session back to its list — yielding to dialogs and to half-written notes — and **`/`** focuses the list's filter and selects what is in it. The **Live bees**, **Host**, and **Git** plaques are now links to the pages behind them, and a trail's worktree **Path** and **Base SHA** are on the clipboard.
+- **The event feed can be watched while it is being read.** The Timeline header carries an **Auto-refresh** selector — Manual, 5s, 10s, 15s, 60s — arriving on Manual, and a hidden tab is not somebody waiting on a feed.
+- **A published cue waits instead of 404ing.** Nothing reaches disk until a bee picks the signal up, so the trail page says the trail will appear, bounded at 30 seconds and naming both dead ends: a wrong id, or no bee took the cue. The publish toast offers **Open trail** instead of navigating you away.
+- **The Git plaque says the two facts apart.** The badge answers the colony root against origin (`in sync`, `↑3`, `↓2`, `fetch`) and a dirty tree is a word beside it rather than a tone — amber on a dirty root would be amber for most of every working session, wearing the same tone as the review badges two panels away. A branch the sweep's name filter skips offers **Delete**, with the same guards the sweep uses.
+- **A refused artifact says how large it is**, on the trail and beside the refusal in the preview, so "raise the cap, page it, or look elsewhere" is a decision made on a number.
+
+- Spec: [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
+- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md)
+
+## 2026-09 — The console bundle is a build artifact
+
+The console now builds from a frontend bundle that the Go binary embeds at compile time, and that bundle is **not committed** — it is produced at build time. A `go build` without the frontend step still compiles and still serves the legacy console; `/next/` answers with a page saying the preview was not built.
+
+**How you install changes.** Release archives and the container image build the frontend first and therefore carry the redesign; `go install` never does, and says so. Building from the repo is `pnpm --dir web install --frozen-lockfile`, `pnpm --dir web build`, then `go build -o paseka ./cmd/paseka`.
+
+- Canonical: [CLI](../guide/cli.md), [Queen Console](../guide/queen-console.md), [Homelab deployment](../guide/homelab-deployment.md#rebuild-paseka-inside-the-container)
+
 ## 2026-09 — Age-based prune
 
 `paseka prune` adds an age-aware sibling to `paseka purge`: it removes `.paseka/worktrees/` and `.paseka/runs/` trace directories whose last activity predates a retention period (default **14 days**, `--older-than 14d|2w|336h`) instead of wiping every trace. Filesystem flags mirror purge (`--runs`, `--worktrees`, `--all`, `--yes`, `-C`), and a plan is shown before deleting. Worktrees with uncommitted changes are never auto-removed. With `--bus`, prune also removes task-ledger KV, stream events, and artifacts for correlatable traces, using ledger task activity to protect traces whose files have gone quiet while their tasks were touched recently, and cleaning up stale ledger-only traces.

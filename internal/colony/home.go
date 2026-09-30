@@ -10,7 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const envNATSURL = "PASEKA_NATS_URL"
+// EnvNATSURL overrides HomeConfig.NATS.URL when set.
+const EnvNATSURL = "PASEKA_NATS_URL"
 
 // HomeConfig is machine-local colony state under ~/.config/paseka/<slug>/.
 type HomeConfig struct {
@@ -35,7 +36,7 @@ type NATSConfig struct {
 
 // EffectiveURL returns the NATS server URL, preferring PASEKA_NATS_URL over config.
 func (c NATSConfig) EffectiveURL() string {
-	if v := strings.TrimSpace(os.Getenv(envNATSURL)); v != "" {
+	if v := strings.TrimSpace(os.Getenv(EnvNATSURL)); v != "" {
 		return v
 	}
 	return strings.TrimSpace(c.URL)
@@ -335,6 +336,35 @@ func LoadOpenCodeAdapter(slug string) (OpenCodeAdapterConfig, error) {
 		cfg.Binary = "opencode"
 	}
 	return cfg, nil
+}
+
+// AdapterConfigDeclared reports whether ~/.config/paseka/<slug>/adapters/<name>.yaml
+// exists and which top-level keys it actually sets.
+//
+// Every adapter loader fills a default for an absent key, so a loaded struct
+// cannot say where a value came from. A view that needs to attribute one — to
+// tell an operator that the api_key_env they see is the loader's default rather
+// than something they wrote — has to ask the file. A file that exists but does
+// not parse is reported as absent: the loader will have failed loudly on its
+// own, and this must not become a second, quieter error.
+func AdapterConfigDeclared(slug, name string) (exists bool, keys map[string]bool) {
+	keys = map[string]bool{}
+	homeDir, err := HomeDir(slug)
+	if err != nil {
+		return false, keys
+	}
+	data, err := os.ReadFile(filepath.Join(homeDir, "adapters", name+".yaml"))
+	if err != nil {
+		return false, keys
+	}
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return false, keys
+	}
+	for key := range raw {
+		keys[key] = true
+	}
+	return true, keys
 }
 
 // TerminalConfig is ~/.config/paseka/<slug>/terminal.yaml.

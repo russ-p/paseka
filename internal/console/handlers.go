@@ -94,12 +94,30 @@ func (a *api) handleBees(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	bees, err := ListInteractiveBees(a.ctx)
+	scope, err := ParseBeeScope(r.URL.Query().Get("scope"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	bees, err := ListBees(a.ctx, scope)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, bees)
+}
+
+func (a *api) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	view, err := GetConfig(a.ctx)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, view)
 }
 
 func (a *api) handleColonyTopology(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +254,12 @@ func (a *api) handleTraces(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := hiveview.ListTraces(a.ctx, 20)
+	query, err := hiveview.ParseTracePageQuery(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	list, err := hiveview.ListTracesPage(a.ctx, query)
 	if err != nil {
 		writeError(w, err)
 		return

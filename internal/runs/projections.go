@@ -123,6 +123,24 @@ func ScanRecentRuns(colonyRoot string, limit int) ([]RunMeta, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
+	metas, err := ScanRuns(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(metas) > limit {
+		metas = metas[:limit]
+	}
+	return metas, nil
+}
+
+// ScanRuns walks .paseka/runs and returns every run directory carrying a
+// request.json, newest first by StartedAt.
+//
+// The walk is unbounded and the truncation is ScanRecentRuns' job, because a
+// caller that needs one run per bee cannot reach it through a recent-page cap:
+// a colony with more runs than the cap holds simply never sees its quiet bees.
+// The read it costs is the same one ScanRecentRuns already pays.
+func ScanRuns(colonyRoot string) ([]RunMeta, error) {
 	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs")
 	traceDirs, err := os.ReadDir(runsRoot)
 	if err != nil {
@@ -146,9 +164,6 @@ func ScanRecentRuns(colonyRoot string, limit int) ([]RunMeta, error) {
 	}
 
 	sortRunsByStartedAt(metas)
-	if len(metas) > limit {
-		metas = metas[:limit]
-	}
 	return metas, nil
 }
 

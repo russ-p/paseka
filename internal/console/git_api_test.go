@@ -14,6 +14,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/console"
 	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/homestate"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/sessions"
@@ -332,5 +333,42 @@ func writeLiveAFKRunWorkspace(t *testing.T, root, workspace, traceID, agentID, b
 	}
 	if err := d.WriteStatusSnapshot(snap); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGitAPIWorktreePruneNamesWhatItUnregistered(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+	// A registry row whose checkout is gone is exactly what a prune reconciles, and
+	// `git worktree prune` prints nothing while doing it. This message is the only
+	// evidence the operator gets, and the console toasts it verbatim, so it must not
+	// open with the space a plain concatenation would leave.
+	if err := homestate.RegisterWorktree(ctxColony.Slug, homestate.WorktreeEntry{
+		TraceID: "trace-gone",
+		Path:    filepath.Join(repo, ".paseka", "worktrees", "trace-gone"),
+		Branch:  "paseka/trace-gone",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+	rec := gitPOST(t, srv, "/api/git/worktrees/prune", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prune = %d %s", rec.Code, rec.Body.String())
+	}
+	var res console.GitActionResult
+	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Message != "unregistered: trace-gone" {
+		t.Fatalf("message = %q", res.Message)
+	}
+	if st, err := homestate.LoadState(ctxColony.Slug); err != nil {
+		t.Fatal(err)
+	} else if len(st.Worktrees) != 0 {
+		t.Fatalf("worktrees = %+v", st.Worktrees)
 	}
 }

@@ -1,7 +1,9 @@
 package console
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -24,14 +26,39 @@ var interactiveAdapters = map[string]bool{
 	"opencode": true,
 }
 
-// BeeView is a launchable interactive bee.
+// BeeScope selects which bees a listing returns.
+type BeeScope string
+
+const (
+	// BeeScopeLaunchable is the launch picker: bees whose effective adapter
+	// supports an interactive session. It is the default, and both launch
+	// drawers depend on it — a script bee offered there cannot be started.
+	BeeScopeLaunchable BeeScope = "launchable"
+	// BeeScopeColony is the whole roster, script bees included.
+	BeeScopeColony BeeScope = "colony"
+)
+
+// BeeRunRef identifies a bee's most recent headless run.
+type BeeRunRef struct {
+	TraceID    string     `json:"traceId"`
+	AgentID    string     `json:"agentId"`
+	Intent     string     `json:"intent,omitempty"`
+	State      string     `json:"state"`
+	StartedAt  time.Time  `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+}
+
+// BeeView is one colony bee, resolved against the active process profile.
 type BeeView struct {
-	Role           string   `json:"role"`
-	Adapter        string   `json:"adapter"`
-	PromptTemplate string   `json:"promptTemplate"`
-	Worktree       bool     `json:"worktree"`
-	Intents        []string `json:"intents"`
-	DefaultIntent  string   `json:"defaultIntent,omitempty"`
+	Role           string     `json:"role"`
+	Adapter        string     `json:"adapter"`
+	PromptTemplate string     `json:"promptTemplate"`
+	Sector         string     `json:"sector,omitempty"`
+	Worktree       bool       `json:"worktree"`
+	Intents        []string   `json:"intents"`
+	DefaultIntent  string     `json:"defaultIntent,omitempty"`
+	Interactive    bool       `json:"interactive"`
+	LastRun        *BeeRunRef `json:"lastRun,omitempty"`
 }
 
 // SessionView is a console projection of one interactive session.
@@ -66,16 +93,46 @@ type EventsPage struct {
 	NextCursor int              `json:"nextCursor"`
 }
 
-// ListInteractiveBees returns bees whose (effective) adapters support interactive sessions.
-func ListInteractiveBees(ctx colony.Context) ([]BeeView, error) {
+// ParseBeeScope reads the `scope` query value. An absent scope is the launch
+// picker, so a client that never learns the parameter cannot start a session
+// against a script bee.
+func ParseBeeScope(raw string) (BeeScope, error) {
+	switch strings.TrimSpace(raw) {
+	case "", string(BeeScopeLaunchable):
+		return BeeScopeLaunchable, nil
+	case string(BeeScopeColony):
+		return BeeScopeColony, nil
+	default:
+		return "", fmt.Errorf("scope must be %q or %q", BeeScopeLaunchable, BeeScopeColony)
+	}
+}
+
+// ListBees returns the colony's bees under the requested scope, sorted by role.
+func ListBees(ctx colony.Context, scope BeeScope) ([]BeeView, error) {
 	bees, err := ctx.LoadAllBees()
 	if err != nil {
 		return nil, err
 	}
-	var out []BeeView
+
+	// The picker does not report last runs, so it does not pay for the walk:
+	// opening a launch drawer would otherwise read every run directory in the
+	// colony to fill a field nothing there renders.
+	var lastRuns map[string]*BeeRunRef
+	if scope != BeeScopeLaunchable {
+		lastRuns, err = lastRunByBee(ctx.ColonyRoot)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	out := make([]BeeView, 0, len(bees))
 	for _, bee := range bees {
 		adapterName, err := bee.ResolveAdapter()
-		if err != nil || !interactiveAdapters[adapterName] {
+		if err != nil {
+			continue
+		}
+		interactive := interactiveAdapters[adapterName]
+		if scope == BeeScopeLaunchable && !interactive {
 			continue
 		}
 		intents, defaultIntent, err := prompts.DiscoverIntents(ctx.ColonyRoot, bee)
@@ -86,12 +143,47 @@ func ListInteractiveBees(ctx colony.Context) ([]BeeView, error) {
 			Role:           bee.Role,
 			Adapter:        adapterName,
 			PromptTemplate: bee.PromptTemplate,
+			Sector:         bee.Sector,
 			Worktree:       bee.Worktree,
 			Intents:        intents,
 			DefaultIntent:  defaultIntent,
+			Interactive:    interactive,
+			LastRun:        lastRuns[bee.Role],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Role < out[j].Role })
+	return out, nil
+}
+
+// lastRunByBee returns each bee's most recent headless run, or nil for a bee
+// that has never run one. The scan is newest-first, so the first run per role
+// wins and no comparison is needed.
+func lastRunByBee(colonyRoot string) (map[string]*BeeRunRef, error) {
+	metas, err := runs.ScanRuns(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*BeeRunRef, len(metas))
+	for _, meta := range metas {
+		if meta.Bee == "" {
+			continue
+		}
+		if _, seen := out[meta.Bee]; seen {
+			continue
+		}
+		ref := &BeeRunRef{
+			TraceID:   meta.TraceID,
+			AgentID:   meta.AgentID,
+			Intent:    meta.Intent,
+			State:     meta.State,
+			StartedAt: meta.StartedAt,
+		}
+		if !meta.FinishedAt.IsZero() {
+			finished := meta.FinishedAt
+			ref.FinishedAt = &finished
+		}
+		out[meta.Bee] = ref
+	}
 	return out, nil
 }
 

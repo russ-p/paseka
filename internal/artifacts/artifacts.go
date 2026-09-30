@@ -16,8 +16,16 @@ import (
 const (
 	// BaselineFileName is persisted under the producing run directory.
 	BaselineFileName = "artifacts-baseline.json"
-	// MaxInlineExportBytes caps comb file bodies inlined in trace export.
+	// MaxInlineExportBytes caps comb file bodies inlined in a trace export archive.
 	MaxInlineExportBytes = 512 * 1024
+	// MaxInlinePreviewBytes caps a comb body the Console will render on one screen.
+	//
+	// Equal to the export cap today and separate on purpose. The two answer different
+	// questions — what may be shipped, and what may be read on a phone-sized page — and an
+	// operator who hits "file too large for inline preview" and raises the one constant
+	// they can find has raised the size of every export archive, which is the wrong lever
+	// for the symptom. Splitting them is what makes either movable on its own.
+	MaxInlinePreviewBytes = 512 * 1024
 )
 
 // Item describes one comb file for announcements, Console, or export.
@@ -30,6 +38,10 @@ type Item struct {
 	Announced    bool   `json:"announced,omitempty"`
 	Content      string `json:"content,omitempty"`
 	Omitted      string `json:"omitted,omitempty"` // reason when content skipped (export)
+	// Bytes is the file's size on disk, from the stat ItemFromFile already performs.
+	// Without it a 600 KiB file and a 600 GiB one look identical to an operator, and
+	// "raise the cap or page it" is a guess rather than a decision.
+	Bytes int64 `json:"bytes,omitempty"`
 }
 
 // Root returns the absolute trail comb directory.
@@ -251,6 +263,7 @@ func ItemFromFile(colonyRoot, traceID, combRel string) (Item, error) {
 		Ref:          canonical,
 		ArtifactKind: ArtifactKindFromRef(canonical),
 		Updated:      info.ModTime().UTC().Unix(),
+		Bytes:        info.Size(),
 	}
 	if strings.HasSuffix(strings.ToLower(abs), ".md") {
 		data, err := os.ReadFile(abs)

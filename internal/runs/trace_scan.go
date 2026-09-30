@@ -44,6 +44,59 @@ func ScanRecentTraces(colonyRoot string, limit int) ([]TraceSummary, error) {
 	if limit <= 0 {
 		limit = defaultTraceScanLimit
 	}
+	summaries, err := scanAllTraces(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(summaries) > limit {
+		summaries = summaries[:limit]
+	}
+	return summaries, nil
+}
+
+// ScanTracesAfter returns the `limit` summaries that sort strictly after `after`,
+// in the same newest-first order — the page an operator gets by asking for what
+// comes after the last row they hold. An empty `after.TraceID` means the newest
+// page. Past the last trace the page is empty rather than an error, which is the
+// honest answer to "what is after the end".
+//
+// The cursor beats an offset here because the list grows while it is being read:
+// a rank is only stable until a new trail pushes everything below it, whereas a
+// cursor names a trail and so survives anything arriving above it. It used to carry
+// a ceiling of `limit * 10` traces, which was never a cost — the walk below is a
+// full scan either way, because there is no index over `.paseka/runs` — and so was
+// just a filter applied to rows the walk had already read and then thrown away.
+// Reading them costs nothing more, and it is why the walk has no depth limit.
+func ScanTracesAfter(colonyRoot string, after TraceSummary, limit int) ([]TraceSummary, error) {
+	if limit <= 0 {
+		limit = defaultTraceScanLimit
+	}
+	summaries, err := scanAllTraces(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	page := summaries
+	if after.TraceID != "" {
+		page = summaries[:0]
+		for _, s := range summaries {
+			// Strictly after the cursor, so a page never repeats the row it was
+			// built from — and the tie-break in TraceOrderBefore is what makes
+			// that exact for trails sharing an activity instant.
+			if TraceOrderBefore(after, s) {
+				page = append(page, s)
+			}
+		}
+	}
+	if len(page) > limit {
+		page = page[:limit]
+	}
+	return page, nil
+}
+
+// scanAllTraces materializes every trace summary in newest-first order. Both
+// scan entry points share it, so a page and a plain read cannot disagree about
+// which trail sorts where.
+func scanAllTraces(colonyRoot string) ([]TraceSummary, error) {
 	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs")
 	traceDirs, err := os.ReadDir(runsRoot)
 	if err != nil {
@@ -70,12 +123,21 @@ func ScanRecentTraces(colonyRoot string, limit int) ([]TraceSummary, error) {
 	}
 
 	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].LastActivityAt.After(summaries[j].LastActivityAt)
+		return TraceOrderBefore(summaries[i], summaries[j])
 	})
-	if len(summaries) > limit {
-		summaries = summaries[:limit]
-	}
 	return summaries, nil
+}
+
+// TraceOrderBefore reports whether a sorts ahead of b: newest activity first,
+// with the trace id breaking ties so the order is total. The tie-break is what
+// makes a paging cursor exact — two trails sharing an activity instant must
+// still order deterministically, or the boundary between two pages could name
+// the same row twice or skip one.
+func TraceOrderBefore(a, b TraceSummary) bool {
+	if !a.LastActivityAt.Equal(b.LastActivityAt) {
+		return a.LastActivityAt.After(b.LastActivityAt)
+	}
+	return a.TraceID < b.TraceID
 }
 
 // ScanRecentEvents loads events from recent traces and returns them newest-first.

@@ -11,6 +11,11 @@ docs
 .idea
 .vscode
 **/node_modules
+**/.svelte-kit
+web/build
+# Queen Console Next bundle: built by the Dockerfile's web-builder stage, so a
+# stale local one must not reach the Go stage.
+internal/console/next/dist
 *.exe
 .env
 docker/dev/.env

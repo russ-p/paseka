@@ -11,7 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const envProfile = "PASEKA_PROFILE"
+// EnvProfile overrides the home config's sticky profile selection when set.
+const EnvProfile = "PASEKA_PROFILE"
 
 var (
 	processProfileMu sync.Mutex
@@ -121,7 +122,7 @@ func selectedProfileName(sel ProfileSelection, sticky string) (string, error) {
 		}
 		return strings.TrimSpace(sel.Name), nil
 	}
-	if env := strings.TrimSpace(os.Getenv(envProfile)); env != "" {
+	if env := strings.TrimSpace(os.Getenv(EnvProfile)); env != "" {
 		if err := ValidateProfileName(env); err != nil {
 			return "", err
 		}

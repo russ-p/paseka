@@ -1,6 +1,7 @@
 package runs_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,6 +32,48 @@ func TestScanRecentRuns(t *testing.T) {
 	}
 	if list[0].State != string(protocol.StatusRunning) {
 		t.Fatalf("state = %q", list[0].State)
+	}
+}
+
+func TestScanRunsIsUncappedWhereRecentIsNot(t *testing.T) {
+	root := t.TempDir()
+	oldest := time.Now().UTC().Add(-4 * time.Hour)
+	for i := range 5 {
+		at := oldest.Add(time.Duration(i) * time.Minute)
+		writeHeadlessRun(t, root, fmt.Sprintf("trace-%d", i), fmt.Sprintf("agent-%d", i), at, protocol.StatusCompleted, "")
+	}
+
+	all, err := runs.ScanRuns(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 5 {
+		t.Fatalf("ScanRuns returned %d, want all 5", len(all))
+	}
+
+	capped, err := runs.ScanRecentRuns(root, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(capped) != 2 {
+		t.Fatalf("ScanRecentRuns returned %d, want 2", len(capped))
+	}
+	if capped[0].AgentID != "agent-4" {
+		t.Fatalf("capped head = %q, want the newest", capped[0].AgentID)
+	}
+
+	if empty, err := runs.ScanRecentRuns(root, 0); err != nil || empty != nil {
+		t.Fatalf("ScanRecentRuns(0) = %+v, %v; want nil, nil", empty, err)
+	}
+}
+
+func TestScanRunsMissingRoot(t *testing.T) {
+	list, err := runs.ScanRuns(filepath.Join(t.TempDir(), "no-colony"))
+	if err != nil {
+		t.Fatalf("a colony with no runs must not be an error: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("runs = %+v, want none", list)
 	}
 }
 

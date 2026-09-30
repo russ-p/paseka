@@ -66,6 +66,42 @@ func (m NotifyMode) Silent() bool {
 }
 
 // Mode returns the effective notify mode for a category (defaults when unset).
+// OrderedNotifyCategories lists every category in the order NotifyConfig
+// declares them, so a view renders the same list the config file does.
+var OrderedNotifyCategories = []NotifyCategory{
+	NotifyCategoryInvites,
+	NotifyCategoryBlocked,
+	NotifyCategoryFailed,
+	NotifyCategoryReviewRequired,
+	NotifyCategoryReviewFinal,
+	NotifyCategoryCommitGate,
+	NotifyCategoryCompleted,
+}
+
+// CategoryKey returns the telegram.yaml key a category is configured under. It
+// is the contract a view names a setting by, and it is deliberately not the
+// legacy waiting_review, which is mapped onto two categories on read.
+func CategoryKey(cat NotifyCategory) string {
+	switch cat {
+	case NotifyCategoryInvites:
+		return "invites"
+	case NotifyCategoryBlocked:
+		return "blocked"
+	case NotifyCategoryFailed:
+		return "failed"
+	case NotifyCategoryReviewRequired:
+		return "review_required"
+	case NotifyCategoryReviewFinal:
+		return "review_final"
+	case NotifyCategoryCommitGate:
+		return "commit_gate"
+	case NotifyCategoryCompleted:
+		return "completed"
+	default:
+		return ""
+	}
+}
+
 func (n NotifyConfig) Mode(cat NotifyCategory) NotifyMode {
 	switch cat {
 	case NotifyCategoryInvites:

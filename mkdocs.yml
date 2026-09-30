@@ -94,8 +94,10 @@ nav:
       - Task ledger: reference/task-ledger.md
   - Architecture:
       - Overview: architecture/overview.md
+      - Queen Console design system: architecture/queen-console-design-system.md
       - Hive Runtime map: architecture/paseka-runtime.html
   - Plans:
       - Changelog: plans/changelog.md
       - Specs index: plans/specs-index.md
       - Backlog: plans/backlog.md
+      - UI migration backlog: plans/ui-migration-backlog.md
