@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import CodeBlock from '$lib/components/CodeBlock.svelte';
 	import MetaList from '$lib/components/MetaList.svelte';
 	import Section from '$lib/components/Section.svelte';
 	import SignalCard from '$lib/components/SignalCard.svelte';
@@ -188,7 +189,11 @@
 									<summary class="cursor-pointer text-xs text-base-content/40 hover:text-base-content/60">
 										Raw event #{event.seq}
 									</summary>
-									<pre class="mt-1 max-h-80 overflow-auto rounded-box bg-base-200/50 p-2 text-xs whitespace-pre-wrap">{JSON.stringify(event, null, 2)}</pre>
+									<CodeBlock
+										code={JSON.stringify(event, null, 2)}
+										label="Raw event #{event.seq} JSON"
+										class="mt-1 max-h-80"
+									/>
 								</details>
 							{/snippet}
 						</SignalCard>

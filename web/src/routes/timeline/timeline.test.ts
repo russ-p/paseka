@@ -161,7 +161,11 @@ describe('timeline route', () => {
 		await userEvent.click(screen.getAllByText('Raw event')[0]);
 
 		expect(row).toHaveAttribute('open');
-		expect(screen.getByText(/"protocolVersion": "1"/)).toBeInTheDocument();
+		// The block is read by its accessible name and its text together: the raw view
+		// tokenizes its JSON, so the envelope is no longer one unbroken text node.
+		const block = within(row).getByLabelText('Raw event JSON');
+		expect(block.tagName).toBe('PRE');
+		expect(block.textContent).toContain('"protocolVersion": "1"');
 		expect(listEvents).toHaveBeenCalledTimes(1);
 	});
 

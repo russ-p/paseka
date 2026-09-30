@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CodeBlock from '$lib/components/CodeBlock.svelte';
 	import SignalCard from '$lib/components/SignalCard.svelte';
 	import type { EventFeedItem } from '$lib/api/types';
 
@@ -28,7 +29,7 @@
 			<summary class="cursor-pointer text-xs text-base-content/40 hover:text-base-content/60">
 				Raw event
 			</summary>
-			<pre class="mt-1 max-h-80 overflow-auto rounded-box bg-base-200/50 p-2 text-xs whitespace-pre-wrap">{rawJson}</pre>
+			<CodeBlock code={rawJson} label="Raw event JSON" class="mt-1 max-h-80" />
 		</details>
 	{/snippet}
 </SignalCard>

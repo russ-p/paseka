@@ -185,7 +185,11 @@ describe('formatted run events', () => {
 
 		await userEvent.click(screen.getByText('Raw event #1'));
 
-		expect(screen.getByText(/"protocolVersion": "1"/)).toBeInTheDocument();
+		// The raw view tokenizes its JSON, so the envelope is spread over spans and the
+		// block is named rather than found by the text it happens to contain.
+		const block = screen.getByLabelText('Raw event #1 JSON');
+		expect(block.tagName).toBe('PRE');
+		expect(block.textContent).toContain('"protocolVersion": "1"');
 		expect(h.listRunEvents).toHaveBeenCalledTimes(1);
 	});
 
