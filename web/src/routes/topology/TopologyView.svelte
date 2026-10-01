@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Check, Copy, RefreshCw, RotateCcw } from 'lucide-svelte';
 	import Section from '$lib/components/Section.svelte';
 	import StatTile from '$lib/components/StatTile.svelte';
 	import { copyText } from '$lib/clipboard';
@@ -31,8 +32,14 @@
 </script>
 
 <div class="space-y-6">
+	<!-- Reading the projection again and throwing the operator's dragged shape away are
+	     page-level acts, so they take the header's action slot on the right, as on the Git
+	     route; copying the Mermaid acts on the block, so it rides that block's header. The
+	     `flex-1` on the title column is what keeps them on the title's row: a flex item's
+	     base size is its max-content, so a description longer than the free space wraps them
+	     onto a line of their own, where `justify-between` has nothing to push apart. -->
 	<header class="flex flex-wrap items-start justify-between gap-3">
-		<div class="min-w-0 space-y-1">
+		<div class="min-w-0 flex-1 space-y-1">
 			<h1 class="text-3xl font-bold">Topology</h1>
 			<p class="text-base-content/70">
 				What can happen in this colony, read from the committed bee YAML and the colony's
@@ -42,30 +49,24 @@
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
-				id="topology-copy"
-				type="button"
-				class="btn btn-sm"
-				disabled={!mermaid}
-				onclick={() => void copyMermaid()}
-			>
-				{copied ? 'Copied' : 'Copy Mermaid'}
-			</button>
-			<button
 				id="topology-refresh"
 				type="button"
 				class="btn btn-sm"
 				disabled={store.loading}
+				aria-busy={store.loading}
 				onclick={() => void store.refresh()}
 			>
-				{store.loading ? 'Refreshing…' : 'Refresh'}
+				<RefreshCw class="h-4 w-4 {store.loading ? 'animate-spin' : ''}" strokeWidth={2.5} />
+				Refresh
 			</button>
 			<button
 				id="topology-reset"
 				type="button"
-				class="btn btn-sm"
+				class="btn btn-error btn-sm btn-outline"
 				disabled={!topology || store.isEmpty}
 				onclick={() => graph?.resetLayout()}
 			>
+				<RotateCcw class="h-4 w-4" strokeWidth={2.5} />
 				Reset layout
 			</button>
 		</div>
@@ -115,8 +116,34 @@
 		</section>
 
 		<!-- The Mermaid is the same graph the CLI prints, and it is the text path to
-		     this data: a canvas cannot be read by a screen reader or pasted into a PR. -->
-		<Section id="topology-mermaid" title="Mermaid" note="same as paseka colony topology" collapsible>
+		     this data: a canvas cannot be read by a screen reader or pasted into a PR. It
+		     starts folded, since the graph above is the reason to be here and this is its
+		     text shadow; copy rides the block header rather than the page header, so the
+		     control that acts on it is the one attached to it. -->
+		<Section
+			id="topology-mermaid"
+			title="Mermaid"
+			note="same as paseka colony topology"
+			collapsible
+			open={false}
+		>
+			{#snippet actions()}
+				<button
+					id="topology-copy"
+					type="button"
+					class="btn btn-ghost btn-xs"
+					disabled={!mermaid}
+					aria-label={copied ? 'Copied' : 'Copy'}
+					title={copied ? 'Copied' : 'Copy'}
+					onclick={() => void copyMermaid()}
+				>
+					{#if copied}
+						<Check class="h-3.5 w-3.5 text-success" strokeWidth={2.5} />
+					{:else}
+						<Copy class="h-3.5 w-3.5" strokeWidth={2} />
+					{/if}
+				</button>
+			{/snippet}
 			{#if mermaid}
 				<pre class="max-h-96 overflow-auto rounded-box bg-base-200/50 p-3 font-mono text-xs">{mermaid}</pre>
 			{:else}

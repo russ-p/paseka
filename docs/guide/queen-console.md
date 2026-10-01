@@ -324,9 +324,10 @@ theme, so the graph follows a theme switch instead of staying dark. Drag a node
 to rearrange; the shape is remembered per colony, and **Reset layout** puts it
 back. The page re-reads only when you press **Refresh**, because the projection
 comes from committed config and changes when a commit lands rather than on a
-clock. **Copy Mermaid** and the Mermaid block below the graph are the same data
-as text — the graph is a picture, so this is the form you can paste into a pull
-request or read aloud.
+clock. The Mermaid block below the graph is the same data as text — the graph is
+a picture, so this is the form you can paste into a pull request or read aloud.
+It starts folded, since the graph is the reason to be on the page, and its copy
+button sits in the block's own header.
 
 ### System
 

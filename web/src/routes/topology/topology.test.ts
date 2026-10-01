@@ -77,9 +77,19 @@ describe('topology route', () => {
 		render(TopologyView, { store, status: statusStore() });
 		await waitFor(() => expect(screen.getByText('Bees')).toBeInTheDocument());
 
-		expect(screen.getByRole('button', { name: 'Copy Mermaid' })).toBeEnabled();
+		expect(screen.getByRole('button', { name: 'Copy' })).toBeEnabled();
 		expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
 		expect(screen.getByRole('button', { name: 'Reset layout' })).toBeEnabled();
+	});
+
+	it('folds the Mermaid, since the graph above is the reason to be on the page', async () => {
+		const { store } = harness();
+		render(TopologyView, { store, status: statusStore() });
+		await waitFor(() => expect(screen.getByText('Bees')).toBeInTheDocument());
+
+		const block = document.getElementById('topology-mermaid');
+		expect(block?.tagName).toBe('DETAILS');
+		expect(block).not.toHaveAttribute('open');
 	});
 
 	it('offers the Mermaid as the text form of the same graph', async () => {
@@ -97,7 +107,7 @@ describe('topology route', () => {
 		render(TopologyView, { store, status: statusStore() });
 		await waitFor(() => expect(screen.getByText('Bees')).toBeInTheDocument());
 
-		expect(screen.getByRole('button', { name: 'Copy Mermaid' })).toBeDisabled();
+		expect(screen.getByRole('button', { name: 'Copy' })).toBeDisabled();
 	});
 
 	it('refreshes on demand, because the projection only changes on a commit', async () => {
