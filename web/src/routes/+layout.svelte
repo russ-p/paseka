@@ -20,6 +20,7 @@
 	import { consoleStatusStore } from '$lib/stores/console-status.svelte';
 	import { sideMenuStore } from '$lib/stores/side-menu.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
+	import { versionStore } from '$lib/stores/version.svelte';
 	import type { Snippet } from 'svelte';
 	import '../app.css';
 
@@ -114,6 +115,11 @@
 		themeStore.hydrate();
 		sideMenuStore.hydrate();
 		consoleStatusStore.start();
+		// The build stamp is a constant for the life of the page, so it is read once
+		// here rather than polled: the side menu's footer and the System route's build
+		// block both read this one store, and neither can then describe a different
+		// build than the other.
+		versionStore.start();
 
 		const handleVisibility = () => {
 			if (document.hidden) consoleStatusStore.stop();

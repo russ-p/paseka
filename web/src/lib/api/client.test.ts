@@ -13,6 +13,7 @@ import {
 	getConfig,
 	getGit,
 	getSystem,
+	getVersion,
 	getRun,
 	getTopology,
 	listRunEvents,
@@ -184,6 +185,18 @@ describe('system endpoints', () => {
 		await getSystem();
 
 		expect(mock).toHaveBeenCalledWith('/api/system', undefined);
+	});
+});
+
+describe('version endpoint', () => {
+	it('reads the build stamp with a bodiless GET and no query', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await getVersion();
+
+		// Root-relative like every endpoint, and parameterless: it describes the
+		// binary, not the colony, so there is nothing to filter it by.
+		expect(mock).toHaveBeenCalledWith('/api/version', undefined);
 	});
 });
 

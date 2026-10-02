@@ -2,6 +2,7 @@ import type {
 	AgentItem,
 	ArtifactView,
 	Bee,
+	BuildView,
 	ColonyConfig,
 	ConfigAdapter,
 	ConfigNATS,
@@ -1478,3 +1479,40 @@ export function configProfileLabel(config: ColonyConfig | null | undefined): str
 	if (!selected?.value) return 'No profile selected';
 	return selected.value;
 }
+
+/**
+ * The build stamp as the side menu's footer shows it. The server already composes
+ * `display`, so this only decides how much of it fits: the full line when the
+ * menu is labelled, and the commit alone in the rail, where a version and a sha
+ * together would overflow 16 characters of width.
+ *
+ * A stamp that has not arrived is an empty string, not a dash — the footer is
+ * where an operator looks to confirm which build they are reading, and a dash
+ * there would read as an answer.
+ */
+export function versionStamp(build: BuildView | null, labelled: boolean): string {
+	if (!build) return '';
+	if (labelled) return build.display;
+	return build.shortCommit ?? '';
+}
+
+/**
+ * The full text behind the footer's stamp: what was built, from which commit, and
+ * whether that commit was clean. An operator reading a bug report types this, so
+ * it carries the unabbreviated sha rather than the seven characters on screen.
+ */
+export function versionTooltip(build: BuildView | null): string {
+	if (!build) return '';
+	const lines = [build.display];
+	if (build.commit && build.commit !== build.shortCommit) lines.push(build.commit);
+	if (build.date) lines.push(`built from commit ${build.date}`);
+	if (build.goVersion) lines.push(build.goVersion);
+	if (!build.released) {
+		lines.push('not a tagged release — this build may be ahead of or behind any release');
+	}
+	if (build.dirty) {
+		lines.push('built from a dirty tree, so the commit is a starting point rather than a claim');
+	}
+	return lines.join('\n');
+}
+

@@ -2,6 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — Paseka can now name itself
+
+Every binary reports which build it is, and the console shows it. An operator running a release, a build from `main`, and a `go install` at the same time could not tell three consoles apart from a screenshot, and a bug report had nowhere to put the one thing that made it actionable.
+
+- **`paseka version`** prints the version, the full commit, the commit date, whether the build is a tagged release, and the Go toolchain — and answers outside a colony, so it still works when the checkout is the thing that is broken. `paseka version --json` is the machine contract; `paseka --version` prints the same one line.
+- **A build from `main` names its commit.** Release builds are stamped at link time, and everything else falls back to the VCS data the Go toolchain already embeds — so a plain `go build` in a worktree reports `dev+67730c4` with no flags at all. A dirty tree says so, because a sha with uncommitted work behind it is a starting point rather than a claim.
+- **`GET /api/version`**, shown in the side menu's foot on every page. The stamp is read once and kept — no timer, because a build cannot change under an open page — and it is absent rather than dashed when the console cannot read its own build.
+- **The build is on the console's startup banner.** `paseka console` prints `Build: dev+67730c4.dirty (development build)` under the listening URL, because the process about to hold a port is the one you will want to name in a bug report an hour later, and scrollback is the last place anybody looks.
+- **The version in the side menu is the link.** Clicking `0.6.0+67730c4` opens this build's commit on GitHub, or the repository when the build has no commit to show — a sha with nowhere to go is half an answer. The URL comes from the server, not the bundle, so a console built from a fork opens that fork rather than upstream.
+- **The container image takes the stamp as build args.** Its context excludes `.git`, so the toolchain has no commit to read; `PASEKA_BUILD_COMMIT` and friends in `docker/dev/.env` name the build instead of leaving it a bare `dev`.
+
+A module pseudo-version (`go install …@main`) contributes a commit but deliberately **no** version: its base is the version the *next* release would carry, and reporting it would put an unreleased build on the same line as a shipped tag.
+
+- Canonical: [CLI](../guide/cli.md), [Queen Console](../guide/queen-console.md), [Homelab deployment](../guide/homelab-deployment.md), [architecture overview](../architecture/overview.md), [Queen Console design system](../architecture/queen-console-design-system.md)
+
 ## 2026-09 — Queen Console redesign, complete under `/next/`
 
 The redesigned console is no longer a preview of a few routes: **every page under `/next/` is real now** — Dashboard, Traces, Git, System, Timeline, Topology, Runs, Tasks, Reviews, Sessions, Worktrees, Bees, Settings — and a "migration pending" card anywhere under it is a bug. The legacy console still serves `/` until the explicit cutover, and both read the same root-relative `/api/*` endpoints.

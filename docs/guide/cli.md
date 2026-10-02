@@ -132,7 +132,8 @@ paseka
 │   └── telegram
 ├── export
 ├── purge
-└── prune
+├── prune
+└── version
 ```
 
 ---
@@ -1008,6 +1009,51 @@ paseka purge --bus --trace my-trace --reseed-energy --yes
 # Eval case reset (filesystem + bus for one fixed trace)
 paseka purge --runs --worktrees --state --bus --trace eval-01-add-function --yes
 ```
+
+---
+
+## `paseka version`
+
+Print the build stamp of the running binary: which release it is, which commit it was built from, whether that commit was a clean tree, and which Go toolchain compiled it. Answers outside a colony, so it works when the checkout is the thing that is broken.
+
+```bash
+paseka version
+paseka version --json
+```
+
+```text
+paseka 0.6.0+67730c4
+  commit:  67730c4da70fbd912a575fe614e5e248c402fdf0
+  built:   2026-10-01T05:43:51Z (commit date)
+  channel: release
+  go:      go1.25.1
+```
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--json` | | Emit the stamp as JSON on stdout (machine contract) |
+
+**What the fields mean:**
+
+- `version` — the release tag without its `v`, or **`dev`** for any build no tag names. A build from `main`, a `goreleaser --snapshot`, and a `go install …@main` all report `dev`; the commit behind it is what identifies them.
+- `commit` — full sha, printed unabbreviated because an abbreviated one does not paste into `git show`.
+- `built` — the **commit** date, not the moment of the build, so two builds of one commit compare equal.
+- `channel` — `release` only for a build off a version tag; anything else reads `development build (not a tagged release)`.
+- `.dirty` in the version line — the tree carried uncommitted work, so the commit is a starting point rather than a claim about what shipped.
+
+`paseka --version` prints the same one line as cobra's built-in flag.
+
+**Where the stamp comes from:** a release build gets it from `-ldflags -X` ([architecture overview](../architecture/overview.md) § Build stamp); every other build reads it from the VCS data the Go toolchain embeds on its own, so `go build` in a worktree still names its commit with no flags at all. A binary built outside a module — a Docker context without `.git` — reports a bare `dev`, which is the honest answer for a build that cannot know.
+
+Queen Console serves the same stamp at `GET /api/version` and shows it in the side menu's foot, where the version itself links to this build's commit on GitHub. `paseka console` also prints it in its startup banner, under the listening URL:
+
+```text
+Queen Console 🐝 listening at http://127.0.0.1:8787
+  Build: dev+67730c4.dirty (development build)
+  Redesign preview: http://127.0.0.1:8787/next/
+```
+
+The channel is spelled out because that is the question a banner answers: `dev+67730c4.dirty` reads as a name until the words beside it say it is not a release.
 
 ---
 

@@ -1,6 +1,7 @@
 import type {
 	ArtifactView,
 	Bee,
+	BuildView,
 	ColonyConfig,
 	ConfigAdapter,
 	DashboardSummary,
@@ -306,6 +307,31 @@ export function systemView(overrides: Partial<SystemView> = {}): SystemView {
 		],
 		...overrides
 	};
+}
+
+export function buildView(overrides: Partial<BuildView> = {}): BuildView {
+	return {
+		version: '0.5.0',
+		commit: '67730c4da70fbd912a575fe614e5e248c402fdf0',
+		shortCommit: '67730c4',
+		date: '2026-10-01T05:43:51Z',
+		released: true,
+		display: '0.5.0+67730c4',
+		repository: 'https://github.com/russ-p/paseka',
+		commitUrl: 'https://github.com/russ-p/paseka/commit/67730c4da70fbd912a575fe614e5e248c402fdf0',
+		goVersion: 'go1.25.1',
+		...overrides
+	};
+}
+
+/** The common case in development: no tag, but the commit the toolchain stamped. */
+export function buildViewDev(overrides: Partial<BuildView> = {}): BuildView {
+	return buildView({
+		version: 'dev',
+		released: false,
+		display: 'dev+67730c4',
+		...overrides
+	});
 }
 
 export function topology(overrides: Partial<Topology> = {}): Topology {

@@ -73,6 +73,32 @@ export interface SystemView extends HostStatus {
 	processes?: SystemProcess[];
 }
 
+/**
+ * Mirrors `console.BuildView`, the build stamp behind `GET /api/version`.
+ *
+ * `version` is `dev` for a build nothing stamped, which is every build from a
+ * plain `go build` on a toolchain old enough not to embed one — the console says
+ * so rather than inventing a version. `commit` is absent when unknown, and
+ * `released` is what separates a tagged build from a snapshot or a development
+ * one, so an operator comparing two consoles can tell whether either is a release
+ * at all.
+ */
+export interface BuildView {
+	version: string;
+	commit?: string;
+	shortCommit?: string;
+	date?: string;
+	dirty?: boolean;
+	released: boolean;
+	/** The one line to show: version, commit, and dirty state. */
+	display: string;
+	/** Where this build's source lives, so a stamp can be a link and not a bare sha. */
+	repository: string;
+	/** That repository's page for this commit; absent when there is no commit. */
+	commitUrl?: string;
+	goVersion: string;
+}
+
 export interface GitPlaque {
 	branch: string;
 	headSha: string;

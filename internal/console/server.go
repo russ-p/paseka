@@ -61,6 +61,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
 	mux.HandleFunc("/api/agents", apiHandler.handleAgents)
 	mux.HandleFunc("/api/system", apiHandler.handleSystem)
+	mux.HandleFunc("/api/version", apiHandler.handleVersion)
 	mux.HandleFunc("/api/git", apiHandler.handleGit)
 	mux.HandleFunc("/api/git/fetch", apiHandler.handleGitFetch)
 	mux.HandleFunc("/api/git/push", apiHandler.handleGitPush)
@@ -114,8 +115,9 @@ func (s *Server) Run(ctx context.Context) error {
 	if strings.HasPrefix(host, ":") {
 		host = "127.0.0.1" + host
 	}
-	fmt.Printf("%s listening at http://%s\n", boldYellow("Queen Console 🐝"), host)
-	fmt.Printf("  Redesign preview: http://%s/next/\n", host)
+	for _, line := range startupBanner(host) {
+		fmt.Println(line)
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -145,6 +147,19 @@ func boldYellow(s string) string {
 		return s
 	}
 	return "\033[1;33m" + s + "\033[0m"
+}
+
+// startupBanner is what a `paseka console` says when it takes the port: where to
+// open it, which build is answering, and that the redesigned console lives under
+// a second URL. The build sits in the banner rather than only in the UI because
+// the process about to hold a port is the one an operator will want to name in a
+// bug report an hour later, and a scrollback scroll is the last place they look.
+func startupBanner(host string) []string {
+	return []string{
+		fmt.Sprintf("%s listening at http://%s", boldYellow("Queen Console 🐝"), host),
+		fmt.Sprintf("  %s", buildLine()),
+		fmt.Sprintf("  Redesign preview: http://%s/next/", host),
+	}
 }
 
 const nextConsoleBasePath = "/next/"

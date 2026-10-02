@@ -531,6 +531,7 @@ internal/
   runtime/                  # reactor + dispatch: colony → prompts → adapter (AFK); PR reconcile ticker
   review/                   # HITL approve/reject + local merge or PR publish
   invites/                  # Human Gateway invite lifecycle
+  version/                  # build stamp: -ldflags values + debug.ReadBuildInfo fallback
 ```
 
 **Layering:** `hiveview` holds transport-agnostic projections consumed by Queen Console, Telegram Gate, and HTML export. `console` is HTTP/SPA wiring and mutations; it must not be imported by other UIs.
@@ -557,6 +558,20 @@ internal/
 | Slug in colony.yaml | written at `paseka init`, reused on every run |
 | Interactive sessions | separate `SessionAdapter`; PTY in `internal/sessions/`; see [interactive sessions](../guide/interactive-sessions.md) |
 | Terminal UI for HITL | `~/.config/paseka/<slug>/terminal.yaml` — `default` or `ghostty` |
+| Build stamp | `internal/version` — `-ldflags -X` by full import path, `debug.ReadBuildInfo` as fallback; surfaced by `paseka version` and `GET /api/version` |
+
+### Build stamp
+
+`internal/version` answers "which Paseka is this" from two sources, and the linker wins field by field:
+
+- **Release builds** stamp `-X github.com/russ-p/paseka/internal/version.{version,commit,date,dirty}` (GoReleaser; the Dockerfile takes the same four as build args). The full import path is required — `-X main.version` reaches only `package main`, and the console API lives in `internal/console`.
+- **Everything else** falls back to the VCS data the Go toolchain embeds in every binary built inside a checkout, so a plain `go build` from main already knows its commit. `go install …@main` builds from the module cache and has no checkout, so its commit is read out of the module pseudo-version.
+
+A module pseudo-version contributes **no version**: `v0.5.1-0.20261001054351-67730c4` is 53 commits past `v0.5.0`, and its base names the *next* release. Such a build reports `dev` plus its commit, which is the honest answer and keeps it off the same line as a shipped tag. `released` is what tells the two apart in the API and the UI.
+
+Builds from outside the module (a Docker context without `.git`, `-buildvcs=false`) answer `dev` with no commit rather than failing: an endpoint that cannot name its build is worse than one that admits it has none.
+
+`version.Repository` is a stamped constant rather than something derived from the module path: the module path is not the repository URL, and a fork shipping its own binary must not have its console offer a link into upstream. `BuildView` carries `repository` and a per-build `commitUrl`, which is what the console links instead of guessing.
 
 ### `.paseka/.gitignore` (created by `paseka init`)
 

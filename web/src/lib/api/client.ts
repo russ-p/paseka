@@ -6,6 +6,7 @@ import type {
 	ArtifactView,
 	Bee,
 	BeeScope,
+	BuildView,
 	CreateSessionRequest,
 	CreateTaskRequest,
 	CreateTaskResult,
@@ -194,11 +195,20 @@ export function gitPruneWorktrees(): Promise<GitActionResult> {
 }
 
 /**
+ * Which Paseka is answering. It is a build fact rather than a colony one, so it
+ * changes only when the binary does — the console fetches it once and reads the
+ * store, and a report that has to name a build takes it from here.
+ */
+export function getVersion(): Promise<BuildView> {
+	return request<BuildView>('/version');
+}
+
+/**
  * The observe-only host snapshot behind `GET /api/system`: the same identity
  * and metrics the topbar's Host plaque carries, plus the capped process list
  * the plaque leaves out. The server answers 200 with an `error` string when
- * part of the snapshot failed, so the page shows what it got and says what
- * it did not get.
+ * part of the snapshot failed, so the page shows what it got and says what it
+ * did not get.
  */
 export function getSystem(): Promise<SystemView> {
 	return request<SystemView>('/system');

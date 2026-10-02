@@ -100,6 +100,20 @@ cursor back on the button. The two states above the breakpoint are the rail and
 the full list; the state below it is that panel being open, and the panel always
 shows the labels, because a screen of icons is not a menu.
 
+The panel's foot carries the **build stamp**, and it is the link: `0.6.0+67730c4`
+in the full list, the bare commit in the rail, where that is all the width holds.
+Clicking it opens this build's commit on GitHub — the repository itself when the
+build has no commit to show. The href comes from the server rather than the
+bundle, so a console built from a fork opens that fork rather than upstream.
+
+Hover it for the unabbreviated sha, the commit date, and whether the build is a
+tagged release or a dirty development build; those are the values a bug report
+needs. A stamp that has not arrived draws nothing at all — not a dash, and not a
+link built from a guess.
+
+`paseka console` prints the same stamp in its startup banner, so a build is named
+before the browser ever opens.
+
 ### Dashboard
 
 Shows runtime health, live bees, recent Flight Trails, failed runs, pending
@@ -353,6 +367,10 @@ broken table. CPU percent also needs two samples, so it shows a dash with the
 reason on the very first poll after a restart. Nothing here needs the Hive
 runtime, and the page keeps working when it is stopped.
 
+This page is about the **box**: which OS, which kernel, which pids. Which
+**build** sits on it is one question, and the side menu's foot answers it from
+every page — `paseka version` answers the same thing from the shell.
+
 ### Git
 
 Shows colony root status relative to `origin`, managed worktrees, and leftover
@@ -510,6 +528,10 @@ rather than polling. Nothing here needs the Hive Runtime.
   (not `/vendor/...`). Module zips omit any `/vendor/` path, so an older
   binary can embed the SPA without those bundles. Rebuild or reinstall a
   version that ships `static/lib`.
+- **The version reads `dev` with no commit:** the binary was built outside a git
+  checkout, so nothing stamped it. The Docker image is the usual case — its build
+  context excludes `.git` — and takes the stamp as build args instead; see
+  [homelab deployment](homelab-deployment.md) and `docker/dev/.env.example`.
 - **`/next/` says the preview bundle was not built:** the redesigned console is
   a build artifact and is not committed, and `go install` never carries it. Run
   `pnpm --dir web build` before `go build`, use a release archive, or use the

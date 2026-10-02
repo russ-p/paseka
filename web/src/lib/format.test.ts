@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentItem, Bee, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
 import {
+	buildView,
+	buildViewDev,
 	colonyConfig,
 	configAdapter,
 	dashboardSummary,
@@ -74,6 +76,8 @@ import {
 	systemIdentityRows,
 	systemLoadWord,
 	systemMemoryWord,
+	versionStamp,
+	versionTooltip,
 	liveBeePids,
 	eventKindLine,
 	activeFilterCount,
@@ -1499,5 +1503,39 @@ describe('bee formatters', () => {
 			configProfileLabel(colonyConfig({ profile: { ...colonyConfig().profile, selected: { value: 'homelab', source: 'config.yaml' } } }))
 		).toBe('homelab');
 		expect(configProfileLabel(null)).toBe('No profile selected');
+	});
+});
+
+describe('build stamp', () => {
+	it('shows the whole line when the menu is labelled and the commit alone in the rail', () => {
+		// The rail is 16 characters wide: a version and a sha together would overflow
+		// it, and a truncated version is worse than a commit the operator recognises.
+		expect(versionStamp(buildView(), true)).toBe('0.5.0+67730c4');
+		expect(versionStamp(buildView(), false)).toBe('67730c4');
+	});
+
+	it('says nothing before the stamp arrives, because a dash would read as an answer', () => {
+		expect(versionStamp(null, true)).toBe('');
+		expect(versionStamp(null, false)).toBe('');
+		// An unstamped build has no commit to abbreviate either.
+		expect(versionStamp(buildView({ commit: undefined, shortCommit: undefined, display: 'dev' }), false)).toBe('');
+	});
+
+	it('carries the unabbreviated commit in the tooltip, because that is what gets pasted', () => {
+		const tooltip = versionTooltip(buildView());
+		expect(tooltip).toContain('0.5.0+67730c4');
+		expect(tooltip).toContain('67730c4da70fbd912a575fe614e5e248c402fdf0');
+		expect(tooltip).toContain('go1.25.1');
+		// A release needs no warning, so it gets none.
+		expect(tooltip).not.toContain('not a tagged release');
+	});
+
+	it('says which kind of build it is, and warns about a dirty one', () => {
+		// Both notes are the reason the stamp exists: a report against a development
+		// build is only actionable if the reader knows that before reading the log.
+		const tooltip = versionTooltip(buildViewDev({ dirty: true }));
+		expect(tooltip).toContain('not a tagged release');
+		expect(tooltip).toContain('dirty tree');
+		expect(versionTooltip(null)).toBe('');
 	});
 });

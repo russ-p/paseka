@@ -14,6 +14,18 @@ builds:
     binary: paseka
     env:
       - CGO_ENABLED=0
+    # GoReleaser's own default writes to `main.version`, which this repository has
+    # never declared: the stamp lives in internal/version so the console API can
+    # read it too, and `-X` only reaches a symbol by its full import path.
+    ldflags:
+      - -s -w
+        - -X github.com/russ-p/paseka/internal/version.version={{.Version}}
+        - -X github.com/russ-p/paseka/internal/version.commit={{.FullCommit}}
+        - -X github.com/russ-p/paseka/internal/version.date={{.CommitDate}}
+        - -X github.com/russ-p/paseka/internal/version.dirty={{.IsGitDirty}}
+    # The commit date rather than the wall clock, so two builds of one commit
+    # produce the same binary.
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos:
       - linux
       - darwin

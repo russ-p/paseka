@@ -15,6 +15,17 @@ services:
       args:
         DEV_UID: ${DEV_UID:-1000}
         DEV_GID: ${DEV_GID:-1000}
+        # The build stamp. `.dockerignore` keeps `.git` out of the context, so the
+        # toolchain cannot read a commit from the tree and `paseka version` in the
+        # container would answer a bare `dev`. Fill these from your checkout to
+        # make the image name itself:
+        #   PASEKA_BUILD_COMMIT=$(git rev-parse HEAD)
+        #   PASEKA_BUILD_DATE=$(git show -s --format=%cI HEAD)
+        # Left empty they are omitted from the link and the binary reports `dev`.
+        VERSION: ${PASEKA_BUILD_VERSION:-}
+        COMMIT: ${PASEKA_BUILD_COMMIT:-}
+        COMMIT_DATE: ${PASEKA_BUILD_DATE:-}
+        TREE_STATE: ${PASEKA_BUILD_TREE_STATE:-}
     image: paseka-dev:local
     working_dir: /home/dev/workspace
     environment:

@@ -28,6 +28,21 @@ FROM ubuntu:${UBUNTU_VERSION} AS builder
 ARG GO_VERSION
 ARG TARGETARCH
 
+# The build stamp. `.dockerignore` keeps `.git` out of the context, so the
+# toolchain has no checkout to read a commit from and `paseka version` inside the
+# image would answer `dev` with nothing behind it. These carry it instead:
+#
+#   docker build -f docker/dev/Dockerfile \
+#     --build-arg VERSION=0.6.0 --build-arg COMMIT="$(git rev-parse HEAD)" \
+#     --build-arg COMMIT_DATE="$(git show -s --format=%cI HEAD)" .
+#
+# Left empty they are omitted from the link, and the binary falls back to whatever
+# build info the toolchain embedded — which is `dev`, honestly reported.
+ARG VERSION=""
+ARG COMMIT=""
+ARG COMMIT_DATE=""
+ARG TREE_STATE=""
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git \
@@ -50,7 +65,17 @@ COPY . .
 # fallback is all a build without it would have, so a missing one is a build error
 # rather than a silently legacy-only binary.
 COPY --from=web-builder /src/internal/console/next/dist ./internal/console/next/dist
-RUN go build -o /out/paseka ./cmd/paseka
+# An empty stamp is left off the link rather than written as an empty string, so
+# the binary reads as unstamped instead of as a build with a blank version.
+RUN set -eu; \
+    ldflags="-s -w"; \
+    for pair in "version=${VERSION}" "commit=${COMMIT}" "date=${COMMIT_DATE}" "dirty=${TREE_STATE}"; do \
+      name="${pair%%=*}"; value="${pair#*=}"; \
+      if [ -n "${value}" ]; then \
+        ldflags="${ldflags} -X github.com/russ-p/paseka/internal/version.${name}=${value}"; \
+      fi; \
+    done; \
+    go build -ldflags "${ldflags}" -o /out/paseka ./cmd/paseka
 
 # ── runtime = host-like minimal toolbelt ──────────────────────────────────────
 FROM ubuntu:${UBUNTU_VERSION}

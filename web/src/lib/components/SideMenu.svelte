@@ -10,12 +10,15 @@
 	} from '$lib/navigation';
 	import { routeGlyphs } from '$lib/route-icons';
 	import { sideMenuStore, type SideMenuStore } from '$lib/stores/side-menu.svelte';
+	import { versionStamp, versionTooltip } from '$lib/format';
+	import { versionStore, type VersionStore } from '$lib/stores/version.svelte';
 	import { tick } from 'svelte';
 
 	let {
 		store = sideMenuStore,
-		currentPath = page.url.pathname
-	}: { store?: SideMenuStore; currentPath?: string } = $props();
+		currentPath = page.url.pathname,
+		version = versionStore
+	}: { store?: SideMenuStore; currentPath?: string; version?: VersionStore } = $props();
 
 	let panel = $state<HTMLElement | null>(null);
 
@@ -100,6 +103,13 @@
 	function onNavigate(): void {
 		if (store.narrow) store.set(false);
 	}
+
+	const stamp = $derived(versionStamp(version.build, labelled));
+	const tooltip = $derived(versionTooltip(version.build));
+	// The commit when the build knows one, the repository when it does not: an
+	// unstamped build has no commit to show, and the repository is still the better
+	// answer than a link nowhere.
+	const stampHref = $derived(version.build?.commitUrl ?? version.build?.repository ?? '');
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -187,6 +197,32 @@
 	</ul>
 
 	<div class="border-t border-base-300 p-2">
+		<!--
+			Which build this console is, as a link to it. The stamp sits in the panel's
+			foot because it is the one fact an operator needs without navigating
+			anywhere: the same version a bug report has to name. Making the stamp itself
+			the link is the point — a sha with nowhere to go is half an answer, and a
+			second button beside it would claim a row of the one part of the panel that
+			scrolls, hiding a route to save a control.
+
+			The href comes from the server rather than the bundle: a console built from a
+			fork must offer that fork, not upstream. It is the commit when there is one
+			and the repository root when there is not, because an unstamped build has no
+			commit to show and the repository is still the better answer.
+		-->
+		{#if stamp}
+			<a
+				id="side-menu-version"
+				class="block truncate px-2 pb-1 text-left font-mono text-[10px] leading-tight text-base-content/50 hover:text-base-content"
+				href={stampHref}
+				target="_blank"
+				rel="noopener noreferrer"
+				aria-label={`${stamp} — open on GitHub`}
+				title={tooltip}
+			>
+				{stamp}
+			</a>
+		{/if}
 		<a
 			id="side-menu-legacy"
 			class="btn btn-ghost btn-sm w-full"

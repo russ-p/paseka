@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 import SideMenu from './SideMenu.svelte';
 import { consoleRoutes } from '$lib/navigation';
 import { createSideMenuStore, type SideMenuStorage, type SideMenuViewport } from '$lib/stores/side-menu.svelte';
+import { createVersionStore } from '$lib/stores/version.svelte';
+import { buildView, buildViewDev } from '../../tests/fixtures';
+import type { BuildView } from '$lib/api/types';
 
 function memoryStorage(initial: Record<string, string> = {}): SideMenuStorage & {
 	values: Record<string, string>;
@@ -34,13 +37,25 @@ function fixedViewport(narrow: boolean): SideMenuViewport & { emit: (narrow: boo
 
 function menuAt(
 	currentPath: string,
-	options: { stored?: Record<string, string>; narrow?: boolean } = {}
+	options: {
+		stored?: Record<string, string>;
+		narrow?: boolean;
+		build?: BuildView | null;
+	} = {}
 ) {
 	const storage = memoryStorage(options.stored ?? {});
 	const viewport = fixedViewport(options.narrow ?? false);
 	const store = createSideMenuStore(storage, viewport);
-	const view = render(SideMenu, { store, currentPath });
-	return { storage, viewport, store, ...view };
+	// `null` means the stamp never arrived, which is what a console that has not
+	// finished its first read looks like — the default rather than a real release.
+	const version = createVersionStore({
+		loadVersion: async () => {
+			if (options.build === null) throw new Error('connection refused');
+			return options.build ?? buildView();
+		}
+	});
+	const view = render(SideMenu, { store, currentPath, version });
+	return { storage, viewport, store, version, ...view };
 }
 
 /** The trigger lives in the shell, so the menu hands focus back to it by asking the DOM. */
@@ -123,6 +138,132 @@ describe('SideMenu', () => {
 		await waitFor(() => expect(screen.queryByText('g d')).toBeNull());
 		expect(container.querySelector('#console-navigation')?.className).toContain('w-16');
 		expect(container.querySelector('#console-navigation')?.getAttribute('data-state')).toBe('mini');
+	});
+});
+describe('SideMenu build stamp', () => {
+	/** The layout owns the read, so a test asks for it the way the layout does. */
+	async function stampedAt(
+		currentPath: string,
+		options: {
+			build?: BuildView | null;
+			stored?: Record<string, string>;
+			narrow?: boolean;
+		} = {}
+	) {
+		const made = menuAt(currentPath, options);
+		await made.version.refresh();
+		return made;
+	}
+
+	it('names the build in the foot, because that is the one fact a report needs', async () => {
+		await stampedAt('/next/dashboard');
+
+		const stamp = screen.getByText('0.5.0+67730c4');
+		expect(stamp).toBeInTheDocument();
+		// The tooltip carries what the label cannot: the sha to paste, and whether
+		// this build is one anybody else is running.
+		expect(stamp.getAttribute('title')).toContain('67730c4da70fbd912a575fe614e5e248c402fdf0');
+	});
+
+	it('shows the commit alone in the rail, which is all 16 characters hold', async () => {
+		const { store } = await stampedAt('/next/dashboard');
+
+		store.set(false);
+		await waitFor(() => expect(screen.queryByText('0.5.0+67730c4')).toBeNull());
+
+		expect(screen.getByText('67730c4')).toBeInTheDocument();
+	});
+
+	it('shows a development build as itself, dirty state included', async () => {
+		// `dev` with a commit is a build from main, not a broken install, and an
+		// operator has to be able to tell those two apart at a glance.
+		await stampedAt('/next/dashboard', { build: buildViewDev({ dirty: true, display: 'dev+67730c4.dirty' }) });
+
+		const stamp = screen.getByText('dev+67730c4.dirty');
+		expect(stamp.getAttribute('title')).toContain('not a tagged release');
+		expect(stamp.getAttribute('title')).toContain('dirty tree');
+	});
+
+	it('draws nothing at all when the stamp never arrives', async () => {
+		await stampedAt('/next/dashboard', { build: null });
+
+		// Silence rather than a dash: the footer is where an operator confirms which
+		// build they are reading, and a placeholder there reads as an answer.
+		expect(document.querySelector('#side-menu-version')).toBeNull();
+	});
+
+	it('makes the version itself the link, because a sha with nowhere to go is half an answer', async () => {
+		await stampedAt('/next/dashboard');
+
+		// One link, on the version, rather than a button beside it: the route list is
+		// the one part of the panel that scrolls, and a row the foot claims is a route
+		// it hides.
+		const stamp = screen.getByRole('link', { name: '0.5.0+67730c4 — open on GitHub' });
+		expect(stamp).toHaveAttribute(
+			'href',
+			'https://github.com/russ-p/paseka/commit/67730c4da70fbd912a575fe614e5e248c402fdf0'
+		);
+		// `noopener noreferrer` on an external link: the opened tab gets no handle on
+		// this one.
+		expect(stamp).toHaveAttribute('target', '_blank');
+		expect(stamp).toHaveAttribute('rel', 'noopener noreferrer');
+		expect(document.querySelector('#side-menu-repository')).toBeNull();
+	});
+
+	it('falls back to the repository when the build has no commit to show', async () => {
+		// An unstamped binary names no commit, so there is no commit page to open; the
+		// repository is still the better answer than a link nowhere.
+		await stampedAt('/next/dashboard', {
+			build: buildViewDev({ commit: undefined, shortCommit: undefined, commitUrl: undefined, display: 'dev' })
+		});
+
+		expect(screen.getByRole('link', { name: 'dev — open on GitHub' })).toHaveAttribute(
+			'href',
+			'https://github.com/russ-p/paseka'
+		);
+	});
+
+	it('keeps the rail version clickable under a name that still carries it', async () => {
+		const { store } = await stampedAt('/next/dashboard');
+
+		store.set(false);
+		await waitFor(() => expect(screen.queryByText('0.5.0+67730c4')).toBeNull());
+
+		// The accessible name carries the visible text in both states, so the rail's
+		// bare sha is never the only thing naming the link.
+		expect(screen.getByRole('link', { name: '67730c4 — open on GitHub' })).toBeInTheDocument();
+	});
+
+	it('draws no link at all when the console could not read its own build', async () => {
+		await stampedAt('/next/dashboard', { build: null });
+
+		// A link built from a guess would send an operator into a repository this
+		// console was not built from, so an absent stamp leaves the footer empty.
+		expect(document.querySelector('#side-menu-version')).toBeNull();
+		expect(screen.queryByRole('link', { name: /GitHub/ })).not.toBeInTheDocument();
+	});
+
+	it('keeps the legacy console link last in the sheet, so the trap wraps on real ends', async () => {
+		const user = userEvent.setup();
+		const { store } = await stampedAt('/next/dashboard', { narrow: true });
+		store.set(true);
+		await tick();
+
+		const close = screen.getByRole('button', { name: 'Close menu' });
+		const version = screen.getByRole('link', { name: /open on GitHub/ });
+		const legacy = screen.getByRole('link', { name: 'Open legacy console' });
+		legacy.focus();
+
+		await user.tab();
+		expect(close).toHaveFocus();
+
+		await user.tab({ shift: true });
+		expect(legacy).toHaveFocus();
+
+		// The version link sits between the two ends of the trap, not outside them.
+		version.focus();
+		await user.tab();
+		expect(legacy).toHaveFocus();
 	});
 });
 describe('SideMenu active route', () => {

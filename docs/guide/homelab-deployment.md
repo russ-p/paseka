@@ -67,6 +67,7 @@ Edit `.env`:
 | `PASEKA_NATS_URL` | NATS URL (overrides `nats.url` in home `config.yaml`) |
 | `PASEKA_CONSOLE_PORT` | Host port published to Queen Console (default `8787`) |
 | `DEV_UID` / `DEV_GID` | Match the user that owns the bind mounts |
+| `PASEKA_BUILD_*` | Build stamp for the image — see [Name the build](#name-the-build) |
 
 ```bash
 docker compose up --build
@@ -79,6 +80,32 @@ paseka console --addr 0.0.0.0:8787
 ```
 
 Open `http://<server>:8787` only on a trusted network (localhost, Tailscale IP, or an SSH tunnel). Do not expose Queen Console to the public internet without an auth front door you trust.
+
+### Name the build
+
+`paseka version` inside the image answers which build it is, and Queen Console
+shows the same stamp in its side menu and on the System route. Left alone it says
+`dev` and nothing more, because `.dockerignore` keeps `.git` out of the build
+context: the toolchain has no checkout to read a commit from, and a version it
+invented would be worse than one it admits it does not have.
+
+Fill the stamp from your checkout to fix that:
+
+```bash
+cd docker/dev
+cat >> .env <<EOF
+PASEKA_BUILD_COMMIT=$(git -C ../.. rev-parse HEAD)
+PASEKA_BUILD_DATE=$(git -C ../.. show -s --format=%cI HEAD)
+PASEKA_BUILD_TREE_STATE=$(git -C ../.. diff --quiet && echo clean || echo dirty)
+EOF
+
+docker compose up --build
+docker compose run --rm --entrypoint paseka-dev paseka version
+```
+
+`PASEKA_BUILD_VERSION` takes a release tag when you are deploying one. Empty
+values are left off the link rather than written as empty strings, so an
+unstamped image still reports `dev` instead of a blank version.
 
 ### Environment override for NATS
 

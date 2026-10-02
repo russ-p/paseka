@@ -8,6 +8,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/colonyinit"
 	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -25,8 +26,9 @@ func newRoot() *cobra.Command {
 	var noProfile bool
 
 	root := &cobra.Command{
-		Use:   "paseka",
-		Short: "Queen Shell — manage your hive",
+		Use:     "paseka",
+		Short:   "Queen Shell — manage your hive",
+		Version: version.Get().String(),
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			level, err := logging.ParseLevel(logLevel)
 			if err != nil {
@@ -79,6 +81,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newExportCmd())
 	root.AddCommand(newColonyCmd())
 	root.AddCommand(newNucCmd())
+	root.AddCommand(newVersionCmd())
 	return root
 }
 
