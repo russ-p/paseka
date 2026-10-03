@@ -1,8 +1,11 @@
 package adapters
 
 import (
+	"context"
 	"io"
 	"time"
+
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // SessionState is the lifecycle state of an interactive agent session.
@@ -69,7 +72,7 @@ type SessionCommand struct {
 
 // SessionHandle identifies a running or recently finished session.
 type SessionHandle struct {
-	SessionID         string // equals AgentID for MVP
+	SessionID         string
 	TraceID           string
 	AgentID           string
 	RunDir            string
@@ -77,6 +80,7 @@ type SessionHandle struct {
 	ColonyRoot        string
 	Bee               string
 	Adapter           string
+	Binary            string // resolved agent binary, so post-run hooks can reuse it
 	PID               int
 	State             SessionState
 	StartedAt         time.Time
@@ -117,6 +121,14 @@ type UserMessage struct {
 type SessionAdapter interface {
 	Name() string
 	SessionCommand(req SessionRequest) (SessionCommand, error)
+}
+
+// SessionUsageResolver is an optional SessionAdapter capability the runtime calls
+// after an interactive process exits, because a TUI reports nothing on stdout.
+// Adapters implement it by reading provider-side accounting that outlives the
+// process; adapters that cannot return nil and leave usage absent.
+type SessionUsageResolver interface {
+	SessionUsage(ctx context.Context, handle SessionHandle) *protocol.Usage
 }
 
 // PTYSession is an active PTY-backed session owned by the runtime.

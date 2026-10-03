@@ -84,6 +84,14 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		meta.Summary = summary
 	}
 
+	// Interactive sessions write no result.json; their provider accounting lands
+	// in session.json instead.
+	if meta.Usage == nil {
+		if sess, err := d.ReadSession(); err == nil && sess.Usage != nil {
+			meta.Usage = sess.Usage
+		}
+	}
+
 	if meta.State == "" {
 		meta.State = string(protocol.StatusQueued)
 	}

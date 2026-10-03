@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
@@ -51,7 +52,7 @@ func parseJSONL(stdout string) parsedRun {
 		}
 		if typ == "step_finish" || jsonString(part["type"]) == "step-finish" {
 			if u := usageFromPart(part); u != nil {
-				usage = addUsage(usage, u)
+				usage = adapters.AddUsage(usage, u)
 			}
 		}
 	}
@@ -67,26 +68,14 @@ func firstSessionID(raw map[string]json.RawMessage) string {
 	return jsonString(raw["sessionId"])
 }
 
-func addUsage(sum, next *protocol.Usage) *protocol.Usage {
-	if next == nil {
-		return sum
-	}
-	if sum == nil {
-		cp := *next
-		return &cp
-	}
-	sum.InputTokens += next.InputTokens
-	sum.OutputTokens += next.OutputTokens
-	sum.CacheReadTokens += next.CacheReadTokens
-	sum.CacheWriteTokens += next.CacheWriteTokens
-	if sum.Source == "" {
-		sum.Source = next.Source
-	}
-	return sum
+func usageFromPart(part map[string]json.RawMessage) *protocol.Usage {
+	return usageFromTokens(jsonObject(part["tokens"]), protocol.UsageSourceOpenCodeRunJSON)
 }
 
-func usageFromPart(part map[string]json.RawMessage) *protocol.Usage {
-	tokens := jsonObject(part["tokens"])
+// usageFromTokens maps OpenCode's token object {input, output, cache:{read,
+// write}} onto protocol.Usage. An all-zero total is dropped so a step that spent
+// nothing never becomes a usage record.
+func usageFromTokens(tokens map[string]json.RawMessage, source string) *protocol.Usage {
 	if len(tokens) == 0 {
 		return nil
 	}
@@ -96,7 +85,7 @@ func usageFromPart(part map[string]json.RawMessage) *protocol.Usage {
 		OutputTokens:     jsonInt(tokens["output"]),
 		CacheReadTokens:  jsonInt(cache["read"]),
 		CacheWriteTokens: jsonInt(cache["write"]),
-		Source:           protocol.UsageSourceOpenCodeRunJSON,
+		Source:           source,
 	}
 	if u.InputTokens == 0 && u.OutputTokens == 0 && u.CacheReadTokens == 0 && u.CacheWriteTokens == 0 {
 		return nil

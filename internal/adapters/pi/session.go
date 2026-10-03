@@ -1,6 +1,7 @@
 package pi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 )
 
@@ -72,6 +74,16 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		Dir:               req.Workspace,
 		ProviderSessionID: providerSessionID,
 	}, nil
+}
+
+// SessionUsage sums the TUI's session file after exit. The TUI writes no
+// machine-readable stdout, but it appends to the same run-scoped session dir the
+// AFK path reads, so token totals are recoverable for both.
+func (a *SessionAdapter) SessionUsage(_ context.Context, handle adapters.SessionHandle) *protocol.Usage {
+	if handle.ColonyRoot == "" || handle.TraceID == "" || handle.AgentID == "" {
+		return nil
+	}
+	return usageFromSessionDir(sessionDirFor(handle.ColonyRoot, handle.TraceID, handle.AgentID))
 }
 
 func buildInteractiveArgs(req adapters.SessionRequest, sessionDir, prompt, systemFile string) []string {

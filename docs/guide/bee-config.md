@@ -173,9 +173,9 @@ publishes:
 | Adapter | Notes |
 | ------- | ----- |
 | `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead; OpenCode also merges into one message. |
-| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. |
+| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
-| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `thinking` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. |
+| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `thinking` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
 
 Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.

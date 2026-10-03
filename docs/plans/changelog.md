@@ -2,6 +2,19 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — Token counts for Pi and OpenCode sessions
+
+Bee runs now say what they cost in tokens, not just that they finished. `paseka inspect`, trace totals, and the console read the same numbers for headless and interactive sessions.
+
+- **Pi reports usage on every path.** In `--mode json` the adapter sums each assistant turn's final usage from the event stream, skipping the streaming deltas that repeat the same totals and the tool results that carry tool-level rather than model tokens. When stdout has nothing to count (`text`, `rpc`), it reads the run-scoped session file instead — so a bee switched to plain text output does not silently lose its token totals.
+- **Interactive Pi and OpenCode sessions report usage too.** A TUI prints nothing machine-readable and its control server dies with the process, so after exit the runtime asks the adapter what the session spent: Pi from its session file, OpenCode by starting a throwaway `opencode serve` and asking for the session's totals. The answer lands on `session.json` as `usage`, which is where trace totals now look when a run has no `result.json`.
+- **Adapters that cannot answer leave the field absent**, and a provider that is slow or unreachable costs nothing but a skipped number — session teardown never waits on it and never fails because of it.
+- **Honey does not move.** Honey stays dispatch-count based; tokens are observability, not billing, until someone writes that design down.
+
+Deferred from that work: Cursor interactive sessions still have no token count — see [Backlog](backlog.md).
+
+- Canonical: [architecture overview](../architecture/overview.md), [interactive sessions](../guide/interactive-sessions.md), [bee config](../guide/bee-config.md)
+
 ## 2026-10 — Paseka can now name itself
 
 Every binary reports which build it is, and the console shows it. An operator running a release, a build from `main`, and a `go install` at the same time could not tell three consoles apart from a screenshot, and a bug report had nowhere to put the one thing that made it actionable.

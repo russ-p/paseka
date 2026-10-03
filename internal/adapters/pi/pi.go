@@ -64,12 +64,18 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		systemFile = runDir.SystemPath()
 	}
 
+	// A run-scoped session dir is only ours to read when we built argv ourselves;
+	// a custom command may point Pi's session storage anywhere.
+	sessionDir := ""
+	if len(req.Command) == 0 {
+		sessionDir = sessionDirFor(req.ColonyRoot, req.TraceID, req.AgentID)
+	}
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
 		b := req.Params.Binary
 		if b == "" {
 			b = defaultBinary
 		}
-		return b, buildArgs(req, prompt, systemFile, sessionDirFor(req.ColonyRoot, req.TraceID, req.AgentID))
+		return b, buildArgs(req, prompt, systemFile, sessionDir)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return nil, fmt.Errorf("pi: %q not found in PATH (install Pi CLI)", binary)
@@ -139,6 +145,11 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	stdoutStr := stdout.String()
 	stderrStr := stderr.String()
 
+	usage := usageFromStdout(stdoutStr)
+	if usage == nil {
+		usage = usageFromSessionDir(sessionDir)
+	}
+
 	fileSummary, _ := runDir.ReadResult()
 	fileSummary = strings.TrimSpace(fileSummary)
 	summary := adapters.PickSummary(fileSummary, extractSummary(stdoutStr, mode))
@@ -193,6 +204,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			Error:    statusErr,
 			Stderr:   stderrStr,
 		},
+		Usage:             usage,
 		ProviderSessionID: providerSessionID,
 		FinishedAt:        finishedAt,
 	}
@@ -207,6 +219,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		Summary:           summary,
 		Output:            adapters.PickOutput(summary, stdoutStr),
 		Artifacts:         artifacts,
+		Usage:             usage,
 		ProviderSessionID: providerSessionID,
 		ExitCode:          exitCode,
 	}

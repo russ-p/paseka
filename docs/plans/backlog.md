@@ -76,13 +76,13 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Orthogonal to anti-loop honey; mixing billing models needs an explicit decision.
 - **Revisit when:** Product wants cost visibility tied to model usage, with a written design.
 
-#### Interactive session usage
+#### Interactive session usage (Cursor)
 
 - **Kind:** follow-up
 - **Source:** planning (energyToken / SessionAdapter)
-- **Summary:** Surface Cursor stream-json `usage` from `bee chat` / SessionAdapter (AFK may already persist optional usage on `result.json`).
-- **Why deferred:** Out of energy MVP scope; interactive path differs from AFK file IPC.
-- **Revisit when:** Console/CLI need session token usage, or billing/observability work starts.
+- **Summary:** Surface Cursor token `usage` from `bee chat`. Pi and OpenCode already report interactive usage through the `SessionUsageResolver` seam on `session.json`; Cursor has no equivalent read — its stream-json usage only exists on the AFK path.
+- **Why deferred:** Cursor's TUI keeps no provider-side token store to read after exit, so it needs its own capture approach rather than the post-exit accounting the other adapters use.
+- **Revisit when:** Console/CLI need Cursor session token usage, or billing/observability work starts.
 
 ### Queen Console
 

@@ -91,10 +91,12 @@ Interactive sessions reuse `.paseka/runs/<traceId>/<agentId>/` under the **colon
 
 | File | Purpose |
 | ---- | ------- |
-| `session.json` | `sessionId`, `traceId`, `pid`, `state` (`active` → `completed` / `failed` / `cancelled`), optional `providerSessionId` |
+| `session.json` | `sessionId`, `traceId`, `pid`, `state` (`active` → `completed` / `failed` / `cancelled`), optional `providerSessionId`, optional `usage` |
 | `transcript.ndjson` | Audit trail for dialogue (`role`: `user` \| `agent` \| `system`) |
 
 `sessionId` equals `agentId` in the MVP.
+
+**Token usage:** a TUI reports nothing machine-readable on stdout, so after the process exits the runtime asks the adapter for the session's spend through the optional `SessionUsageResolver` seam and stores it as `usage` on `session.json` (`paseka inspect` and trace totals read it from there, since an interactive run has no `result.json`). Pi sums its run-scoped session file (source `pi.session-jsonl`); OpenCode asks a throwaway `opencode serve` for the session's cumulative tokens (source `opencode.server-json`). Adapters that cannot report usage leave the field absent, and an unreachable provider never fails teardown.
 
 ---
 

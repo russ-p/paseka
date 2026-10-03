@@ -30,6 +30,10 @@ import (
 	"golang.org/x/term"
 )
 
+// sessionUsageTimeout bounds the post-exit provider accounting lookup so a slow
+// or unreachable provider cannot stall session teardown.
+const sessionUsageTimeout = 30 * time.Second
+
 // RunRequest is input for an interactive session.
 type RunRequest struct {
 	StartDir     string
@@ -433,6 +437,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ColonyRoot:        ctxColony.ColonyRoot,
 		Bee:               bee.Role,
 		Adapter:           adapterName,
+		Binary:            cmd.Binary,
 		PID:               proc.PID(),
 		State:             adapters.SessionActive,
 		StartedAt:         startedAt,
@@ -530,6 +535,22 @@ func (m *Manager) waitSession(ctx context.Context, sessionID string) {
 	m.finishSession(sessionID, state, waitErr)
 }
 
+// resolveSessionUsage asks the adapter for what an interactive session spent.
+// A TUI keeps no machine-readable stdout, so this is best-effort and must never
+// delay or fail session teardown.
+func (m *Manager) resolveSessionUsage(handle adapters.SessionHandle) *protocol.Usage {
+	m.mu.RLock()
+	adapter := m.adapters[handle.Adapter]
+	m.mu.RUnlock()
+	resolver, ok := adapter.(adapters.SessionUsageResolver)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sessionUsageTimeout)
+	defer cancel()
+	return resolver.SessionUsage(ctx, handle)
+}
+
 func (m *Manager) finishSession(sessionID string, state adapters.SessionState, waitErr error) {
 	m.mu.Lock()
 	active, ok := m.sessions[sessionID]
@@ -553,7 +574,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		}
 	}
 
-	_ = entry.RunDir.WriteSession(runs.SessionMeta{
+	sessionMeta := runs.SessionMeta{
 		SessionID:         sessionID,
 		TraceID:           entry.Handle.TraceID,
 		AgentID:           entry.Handle.AgentID,
@@ -567,7 +588,15 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		Profile:           entry.Handle.Profile,
 		StartedAt:         entry.Handle.StartedAt,
 		FinishedAt:        finishedAt,
-	})
+	}
+	_ = entry.RunDir.WriteSession(sessionMeta)
+
+	// Provider accounting can mean starting a short-lived provider server, so it
+	// follows the state transition instead of delaying it.
+	if usage := m.resolveSessionUsage(entry.Handle); usage != nil {
+		sessionMeta.Usage = usage
+		_ = entry.RunDir.WriteSession(sessionMeta)
+	}
 
 	exitCode := 0
 	statusErr := ""

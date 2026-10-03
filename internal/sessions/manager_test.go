@@ -14,6 +14,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/sessions"
 )
@@ -137,6 +138,82 @@ func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 	// session should be unregistered after completion
 	if len(st.Sessions) != 0 {
 		t.Fatalf("expected no active sessions after exit, got %+v", st.Sessions)
+	}
+}
+
+type usageSessionAdapter struct {
+	usage *protocol.Usage
+}
+
+func (u *usageSessionAdapter) Name() string { return "cursor" }
+
+func (u *usageSessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.SessionCommand, error) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		return adapters.SessionCommand{}, err
+	}
+	return adapters.SessionCommand{
+		Binary: shell,
+		Args:   []string{"-c", "exit 0"},
+		Env:    os.Environ(),
+		Dir:    req.Workspace,
+	}, nil
+}
+
+func (u *usageSessionAdapter) SessionUsage(_ context.Context, handle adapters.SessionHandle) *protocol.Usage {
+	if handle.Binary == "" {
+		return nil
+	}
+	return u.usage
+}
+
+func TestManagerPersistsSessionUsage(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+
+	adapter := &usageSessionAdapter{usage: &protocol.Usage{
+		InputTokens:     900,
+		OutputTokens:    120,
+		CacheReadTokens: 40,
+		Source:          protocol.UsageSourceCursorStreamJSON,
+	}}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", adapter)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res, err := mgr.StartDetached(ctx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		Task:     "hello usage",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d := runs.Dir{ColonyRoot: repo, TraceID: res.TraceID, AgentID: res.AgentID}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && len(mgr.ListActive()) > 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	sess, err := d.ReadSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.Usage == nil {
+		t.Fatalf("session.json missing usage: %+v", sess)
+	}
+	if sess.Usage.InputTokens != 900 || sess.Usage.CacheReadTokens != 40 {
+		t.Fatalf("session usage = %+v", sess.Usage)
+	}
+
+	meta, err := runs.LoadRunMeta(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Usage == nil || meta.Usage.OutputTokens != 120 {
+		t.Fatalf("run projection usage = %+v", meta.Usage)
 	}
 }
 

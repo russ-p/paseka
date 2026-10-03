@@ -78,6 +78,9 @@ type Diagnostics struct {
 const (
 	UsageSourceCursorStreamJSON = "cursor.stream-json"
 	UsageSourceOpenCodeRunJSON  = "opencode.run-json"
+	UsageSourceOpenCodeServer   = "opencode.server-json"
+	UsageSourcePiPrintJSON      = "pi.print-json"
+	UsageSourcePiSessionJSONL   = "pi.session-jsonl"
 	UsageSourceUnavailable      = "unavailable"
 )
 

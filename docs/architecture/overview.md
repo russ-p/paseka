@@ -180,7 +180,8 @@ pi -p --mode json \
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `pi` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root).
 5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `summary.md` only. A native session id is resolved from the JSON session header (`{"type":"session","id":…}`) when present, otherwise from `--session-id` on the argv, and persisted as **`providerSessionId`** on `result.json` and `meta.json`. `command:` overrides do not inject session flags; association then depends on stdout or flags already in the custom argv. Export Agent log uses the same optional `SessionLogResolver` seam as Cursor (Pi is stubbed until session-dir readers land).
-6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
+6. **Token usage** — optional `usage` on `result.json`. In `--mode json` the adapter sums each assistant turn's `message_end` usage (`message_update` deltas repeat the same running totals, so they are not counted; tool results carry tool-level usage and are skipped) — source `pi.print-json`. When stdout carries no usage (`text`, `rpc`, or a JSON stream without events) the adapter falls back to the run-scoped session file(s) under `--session-dir`, counting assistant messages plus standalone spend (`usage` cache-warm entries) and compaction summaries — source `pi.session-jsonl`. Both are cumulative for the session file, so a resumed session includes earlier turns. `command:` overrides skip the fallback because the session dir is then not ours.
+7. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 **Event publishing boundary:** Pi stdout/JSON is **not** parsed into domain bus events (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`). Agents must publish domain events explicitly via `paseka event emit --stdin` — same contract as Cursor.
 
@@ -279,7 +280,8 @@ opencode run --format json --dir "$WORKSPACE" --auto --title "$AGENT_ID" \
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `opencode` exits, capture a **baseline-attributed** tracked diff in the **workspace**.
 5. **Stdout** — raw stdout is preserved as an artifact. In JSON format the adapter tolerantly reads `sessionID`, last `text` part for `summary.md`, and last `step_finish` `part.tokens` as optional `usage` (source `opencode.run-json`). The native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. HITL pre-creates the id (`opencode serve` + `POST /session`) and launches the TUI with `--session`, delivering the kickoff through the TUI's own loopback control server (`/session/<id>/prompt_async`) because the TUI ignores `--prompt` with `--session`. Export Agent log is unsupported in this slice (omit quietly).
-6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
+6. **Token usage (HITL)** — a TUI has no machine-readable stdout and its control server dies with the process, so after the session exits the adapter starts a throwaway `opencode serve` and reads the session's cumulative `tokens` from `GET /session/<id>` — source `opencode.server-json`, persisted as `usage` on `session.json`. Totals are cumulative for that provider session, so a resumed session includes earlier turns. An answer that reports nothing means no usage, never a failure.
+7. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 **Event publishing boundary:** OpenCode JSON is **not** parsed into domain bus events. Agents must publish via `paseka event emit --stdin`.
 
