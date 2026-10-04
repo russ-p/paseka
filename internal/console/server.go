@@ -22,6 +22,10 @@ type Options struct {
 	Colony   colony.Context
 	Sessions *sessions.Manager
 	Runtime  *runtime.Supervisor
+	// BeeRun dispatches one headless bee run for POST /api/bees/:role/run. Nil
+	// builds a fresh dispatcher per run, which is what `paseka bee run` uses, so
+	// the console launches the adapter itself rather than asking a runtime for it.
+	BeeRun BeeRunFunc
 }
 
 // Server serves the Queen Console sessions UI and JSON API.
@@ -56,6 +60,12 @@ func NewServer(opts Options) *Server {
 	mux := http.NewServeMux()
 	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup, sampler: newCPUSampler()}
 	apiHandler.chrome = newChromeHub(apiHandler)
+	apiHandler.beeRun = opts.BeeRun
+	if apiHandler.beeRun == nil {
+		apiHandler.beeRun = func(ctx context.Context, req runtime.BeeRunRequest) (*runtime.BeeRunResult, error) {
+			return runtime.NewDispatcher().BeeRun(ctx, req)
+		}
+	}
 	mux.HandleFunc("/api/runtime", apiHandler.handleRuntime)
 	mux.HandleFunc("/api/runtime/start", apiHandler.handleRuntimeStart)
 	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
@@ -78,6 +88,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/traces/", apiHandler.handleTraceByID)
 	mux.HandleFunc("/api/events", apiHandler.handleEvents)
 	mux.HandleFunc("/api/bees", apiHandler.handleBees)
+	mux.HandleFunc("/api/bees/", apiHandler.handleBeeByID)
 	mux.HandleFunc("/api/config", apiHandler.handleConfig)
 	mux.HandleFunc("/api/colony/topology", apiHandler.handleColonyTopology)
 	mux.HandleFunc("/api/sessions", apiHandler.handleSessions)

@@ -855,6 +855,28 @@ export interface RunCueResult {
 	kind?: string;
 }
 
+/** Mirrors `console.RunBeeRequest` for POST /api/bees/:role/run. */
+export interface RunBeeRequest {
+	/** The task, templated by the intent. Ignored when `inlinePrompt` is set. */
+	body?: string;
+	/** Omitted rather than sent blank: the server generates one. */
+	traceId?: string;
+	intent?: string;
+	/** Exactly what the agent is launched with, skipping the template. */
+	inlinePrompt?: string;
+}
+
+/**
+ * Mirrors `console.RunBeeResponse`. There is no agent id and no output here: the
+ * console answers as soon as the run is under way, so `traceId` is the trail the
+ * run joins and the run itself is found under Runs.
+ */
+export interface RunBeeResult {
+	traceId: string;
+	bee: string;
+	message?: string;
+}
+
 /** Mirrors `console.EnergyAddResponse` from POST /api/traces/:id/energy/add. */
 export interface EnergyAddResult {
 	traceId: string;

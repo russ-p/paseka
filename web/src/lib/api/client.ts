@@ -24,6 +24,8 @@ import type {
 	RejectTaskResult,
 	RetryTaskResult,
 	ReviewQueue,
+	RunBeeRequest,
+	RunBeeResult,
 	RunCueResult,
 	RunEventsPage,
 	RunSummary,
@@ -380,6 +382,18 @@ export function getMergeDiff(traceId: string): Promise<MergeDiff> {
 export function listBees(scope?: BeeScope): Promise<Bee[]> {
 	if (scope === undefined) return request<Bee[]>('/bees');
 	return request<Bee[]>(`/bees?scope=${encodeURIComponent(scope)}`);
+}
+
+/**
+ * One headless run of one bee, the way `paseka bee run` does it: the console
+ * dispatches the adapter itself rather than publishing a signal for a runtime
+ * that may not be running. The answer is the trail the run joins, not its output
+ * — a run lasts as long as the agent takes, and the Runs list is where it is
+ * watched. Only the fields the form filled are sent, because a present-but-empty
+ * trace id is not the same as an absent one, where absent means "generate one".
+ */
+export function runBee(role: string, body: RunBeeRequest): Promise<RunBeeResult> {
+	return post<RunBeeResult>(`/bees/${encodeURIComponent(role)}/run`, body);
 }
 
 /**

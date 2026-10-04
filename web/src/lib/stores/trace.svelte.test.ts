@@ -203,7 +203,7 @@ describe('createTraceStore', () => {
 			expect(store.awaitingTrail).toBe(false);
 			expect(store.lastError).toContain('No trail with this id');
 			expect(store.lastError).toContain('none appeared in the last 30 seconds');
-			expect(store.lastError).toContain('whether a bee picked up the cue');
+			expect(store.lastError).toContain('whether anything picked it up');
 		} finally {
 			vi.useRealTimers();
 		}

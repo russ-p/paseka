@@ -92,7 +92,7 @@ export function createTraceStore(options: TraceStoreOptions = {}) {
 				pendingTrail = now - awaitingSince < awaitingTrailMs;
 				error = pendingTrail
 					? ''
-					: `No trail with this id, and none appeared in the last ${Math.round(awaitingTrailMs / 1000)} seconds. Check the id, or whether a bee picked up the cue.`;
+					: `No trail with this id, and none appeared in the last ${Math.round(awaitingTrailMs / 1000)} seconds. Check the id, or whether anything picked it up.`;
 				loading = false;
 				return;
 			}

@@ -1342,6 +1342,21 @@ export function beeIsInteractive(bee: Bee): boolean {
 }
 
 /**
+ * Whether a headless run of this bee has to be given something to do. The server
+ * asks the adapter rather than the console: `script` runs its own command and
+ * needs no prompt, while every conversational adapter reads one.
+ *
+ * Not the same test as `beeIsInteractive`, which is about sessions rather than
+ * runs — a `script` bee is the one row that is neither launchable nor in need of a
+ * task. An adapter this console does not know counts as needing a task, because
+ * an empty run the server refuses is a form the operator can fix and a dispatch
+ * that dies after the answer is not.
+ */
+export function beeNeedsTask(bee: Bee | null | undefined): boolean {
+	return (bee?.adapter ?? '') !== 'script';
+}
+
+/**
  * How many live adapter processes a bee holds, from the agents frame the topbar
  * already keeps. Joining here rather than reading `/api/agents` again is the
  * `/next/system` precedent: a read of a store this page does not own, which costs

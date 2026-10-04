@@ -56,7 +56,7 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 
 - **Kind:** follow-up
 - **Source:** planning (energyToken)
-- **Summary:** One-shot `bee run` and `bee chat` bypass the reactor today; only paths through `paseka run` consume honey. Gate standalone invocations the same way.
+- **Summary:** One-shot `bee run` and `bee chat` bypass the reactor today; only paths through `paseka run` consume honey. Gate standalone invocations the same way. The console's **Run bee** (`POST /api/bees/:role/run`) is the same dispatch and carries the same gap — it says so in its own copy rather than pretending otherwise.
 - **Why deferred:** Requires adapter-layer changes without a running reactor.
 - **Revisit when:** Operators need honey accounting for one-shot/interactive launches, or eval/product rules demand it.
 
@@ -109,7 +109,7 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Kind:** idea
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #17)
 - **Summary:** User story #17 asked for forms to open in a drawer rather than a column, and named four: new task, new bee, new worktree, settings edits. The task form and the session launch form both shipped and proved the primitive; the new-bee and new-worktree forms never existed. Both write committed colony YAML (`bees/*.yaml`) and the worktree case also creates a git checkout, which is the same class of risk [036-console-config-write](../specs/036-console-config-write.md) refuses for project config — a browser writing a tracked file is a different decision from a browser writing this machine's configuration.
-- **Why deferred:** The routes that display both lists shipped read-only, and a launch session is the supported way to start work today.
+- **Why deferred:** The routes that display both lists shipped read-only, and starting work has two supported paths today: a launch session, and **Run bee** on `/next/bees` for a headless run.
 - **Revisit when:** An operator hand-edits `bees/*.yaml` often enough to want a form for it, or the worktrees route needs a create path for work that has no trail yet.
 
 #### Console redesign `/next` parity sweep

@@ -2,6 +2,19 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A bee can be run from the console
+
+The **Bees** page now has a **Run bee** button beside **Refresh** — a headless run of a bee you pick, the browser equivalent of `paseka bee run <role> --body "…"`. Until now the console could only *watch* bees work: starting one meant an interactive session, and the session picker cannot offer a `script` bee at all, so a colony of scripts had no way in from the browser.
+
+- **The launch is a header button, shaped like the session one.** `Run bee` stands where `Launch session` stands on Sessions, and the roster keeps no per-row control: which bee to run is the form's question, not the table's. The form takes the roster from the page when the page has one and reads the colony roster itself when it does not — **every** bee, `script` rows included, because this is the only launch those rows have — and the bee it lands on rebuilds the intent list.
+- **It does not need `paseka run`.** The console dispatches the adapter itself, exactly as the CLI does, so the button works with the Hive Runtime stopped. That is why it is deliberately neither **Run cue** nor **New task**: both publish an event for the runtime to pick up, and neither does anything while it is down. Honey is not spent on a run started this way, the same as `paseka bee run` — only work that goes through the runtime is metered.
+- **The form is the colony's, not the launcher's.** Intent, task, and an optional trail id, plus **Advanced: write the prompt myself** for a prompt sent verbatim, with no request of its own: the roster the operator is reading is the one the picker offers. For a `script` bee the task is optional, because the adapter runs the command from its own YAML.
+- **A trail can start work too.** The trail page carries **Run bee** beside *Open timeline*, opening the same drawer with the trail prefilled — so continuing a trail's work is one click and no typed id. The toast there has no **Open trail**: the operator is already standing on the page that action would navigate to. The form is one component in `lib/components`, used by both routes, because two forms for one verb is how they drift.
+- **The answer arrives before the agent does, so it is a trail and a toast.** `POST /api/bees/:role/run` returns the trace id and nothing else — no agent id, no output — because a run lasts as long as its agent and a browser does not. **Open trail** is offered rather than taken, and the roster is deliberately not refreshed: a refresh in the same second would report a Last run that has not been written yet. The run is watched under **Runs**.
+- **What can be refused is refused in the form.** An unknown bee, a bee that reads a prompt with no task, and a bee with nothing configured to render that task through are all answered before the run starts. Past those checks a failure — a missing adapter binary, a deleted template file — can only reach the terminal running `paseka console`, and the guide says so rather than implying the page would show it.
+
+- Canonical: [Queen Console](../guide/queen-console.md), [Queen Console design system](../architecture/queen-console-design-system.md), [CLI](../guide/cli.md)
+
 ## 2026-10 — Token counts for Pi and OpenCode sessions
 
 Bee runs now say what they cost in tokens, not just that they finished. `paseka inspect`, trace totals, and the console read the same numbers for headless and interactive sessions.

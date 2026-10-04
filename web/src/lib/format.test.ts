@@ -28,6 +28,7 @@ import {
 	beeIsInteractive,
 	beeLastRunLabel,
 	beeLiveCount,
+	beeNeedsTask,
 	beeWorkspaceLabel,
 	beesHeadline,
 	configApiKeyLabel,
@@ -1371,6 +1372,18 @@ describe('bee formatters', () => {
 		expect(beeIsInteractive(rosterBee({ interactive: undefined }))).toBe(true);
 		expect(beeIsInteractive(rosterBee({ interactive: true }))).toBe(true);
 		expect(beeIsInteractive(rosterBee({ interactive: false }))).toBe(false);
+	});
+
+	it('asks a headless run for a task unless the bee is a script', () => {
+		// A script bee runs the command in its own YAML, so an empty run is a run.
+		expect(beeNeedsTask(rosterBee({ adapter: 'script' }))).toBe(false);
+		expect(beeNeedsTask(rosterBee({ adapter: 'cursor' }))).toBe(true);
+		// Not the same test as `beeIsInteractive`: a session is a different launch.
+		expect(beeIsInteractive(rosterBee({ adapter: 'script', interactive: false }))).toBe(false);
+		// An adapter this console has never heard of cannot be asked, so it is given
+		// the task it would need — a refused form beats a run that dies in dispatch.
+		expect(beeNeedsTask(rosterBee({ adapter: 'mystery' }))).toBe(true);
+		expect(beeNeedsTask(null)).toBe(true);
 	});
 
 	it('counts a bee\'s live processes, and answers zero for an absent frame', () => {
