@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { Zap } from 'lucide-svelte';
 	import ArtifactViewModal from '$lib/components/ArtifactViewModal.svelte';
+	import BeeRunDrawer from '$lib/components/BeeRunDrawer.svelte';
 	import DetailRow from '$lib/components/DetailRow.svelte';
 	import EnergyMeter from '$lib/components/EnergyMeter.svelte';
 	import MetaList from '$lib/components/MetaList.svelte';
@@ -27,7 +29,7 @@
 		usageRows
 	} from '$lib/format';
 	import type { MetaRow } from '$lib/format';
-	import type { ArtifactView } from '$lib/api/types';
+	import type { ArtifactView, RunBeeResult } from '$lib/api/types';
 
 	let {
 		traceId,
@@ -42,6 +44,19 @@
 	});
 
 	let viewing = $state<ArtifactView | null>(null);
+	let running = $state(false);
+
+	/**
+	 * A run started from inside a trail joins that trail, so the toast names the bee
+	 * rather than offering `Open trail` — the operator is already standing on the page
+	 * it would navigate to. The run itself is watched under Runs.
+	 *
+	 * No `refresh()` here: a read in the same second would report a run that has not
+	 * been written yet, and this page already polls, so the poll is what brings it in.
+	 */
+	function beeRan(result: RunBeeResult): void {
+		toasts.push('success', `Run started on ${result.bee} — trail ${result.traceId}`);
+	}
 
 	const detail = $derived(store.detail);
 	const tasks = $derived(detail?.tasks ?? []);
@@ -148,9 +163,20 @@
 					</div>
 				{/if}
 			</div>
-			{#if detail}
-				<a class="btn btn-sm" href={traceTimelinePath(base, traceId)}>Open timeline</a>
-			{/if}
+			<div class="flex items-center gap-2">
+				{#if detail}
+					<a class="btn btn-sm" href={traceTimelinePath(base, traceId)}>Open timeline</a>
+				{/if}
+				<button
+					id="trace-run-bee"
+					type="button"
+					class="btn btn-primary btn-sm"
+					onclick={() => (running = true)}
+				>
+					<Zap class="h-4 w-4" strokeWidth={2.5} />
+					Run bee
+				</button>
+			</div>
 		</div>
 		{#if detail?.summary}
 			<p class="max-w-3xl text-base-content/70">{detail.summary}</p>
@@ -314,4 +340,11 @@
 	{traceId}
 	artifact={viewing}
 	onclose={() => (viewing = null)}
+/>
+
+<BeeRunDrawer
+	open={running}
+	{traceId}
+	onclose={() => (running = false)}
+	onran={beeRan}
 />

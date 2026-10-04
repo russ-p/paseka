@@ -5,7 +5,7 @@ import TraceDetail from './TraceDetail.svelte';
 import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 import { createToastStore, type ToastStore } from '$lib/stores/toast.svelte';
 import { ApiError } from '$lib/api/client';
-import { artifactView, eventFeedItem, traceDetail } from '../../../tests/fixtures';
+import { artifactView, bee, eventFeedItem, traceDetail } from '../../../tests/fixtures';
 import type { ArtifactView, EnergyAddResult, TraceDetail as TraceDetailPayload } from '$lib/api/types';
 
 const traceId = 'trace-01a0bd6963faa14f';
@@ -394,5 +394,60 @@ describe('trace detail', () => {
 		const pending = render(TraceDetail, { traceId, ...harness({ detail: () => gate }) });
 		await waitFor(() => expect(pending.container.querySelectorAll('.skeleton').length).toBeGreaterThan(0));
 		release?.(traceDetail());
+	});
+
+	it('runs a bee on this trail, and says so without offering the trail back', async () => {
+		const user = userEvent.setup();
+		let reads = 0;
+		const { toasts } = renderDetail({
+			detail: async () => {
+				reads += 1;
+				return traceDetail();
+			}
+		});
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+
+		const runs: string[] = [];
+		const bodies: unknown[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+				const url = String(input);
+				if (url === '/api/bees?scope=colony') {
+					return new Response(JSON.stringify([bee(), bee({ role: 'sweeper', adapter: 'script', intents: null, interactive: false })]), {
+						status: 200,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				runs.push(url);
+				if (init?.body) bodies.push(JSON.parse(String(init.body)));
+				return new Response(JSON.stringify({ traceId, bee: 'sweeper' }), {
+					status: 201,
+					headers: { 'Content-Type': 'application/json' }
+				});
+			})
+		);
+
+		const before = reads;
+		await user.click(screen.getByRole('button', { name: 'Run bee' }));
+		await user.selectOptions(await screen.findByLabelText('Bee'), 'sweeper');
+		// A run started from inside a trail joins that trail: the field arrives
+		// prefilled, so the operator does not retype an id the page is already named by.
+		expect(screen.getByLabelText('Trail ID')).toHaveValue(traceId);
+		await user.click(screen.getByRole('button', { name: 'Run' }));
+
+		await waitFor(() => expect(runs).toEqual([`/api/bees/sweeper/run`]));
+		expect(bodies[0]).toEqual({ body: '', traceId });
+
+		const toast = toasts.items[0];
+		expect(toast?.tone).toBe('success');
+		expect(toast?.message).toBe(`Run started on sweeper — trail ${traceId}`);
+		// The operator is already standing on the trail an `Open trail` action would
+		// navigate to, so the toast names the run instead of offering the way back.
+		expect(toast?.action).toBeUndefined();
+		// Launching reads nothing. This page polls, so the poll is what brings the new
+		// run in — a read in the same second would only report a run the server has
+		// not written yet.
+		expect(reads).toBe(before);
 	});
 });

@@ -186,8 +186,11 @@ something to say — running now, or carrying failures — is badged in the Stat
 column; a settled trail leaves it empty, so the eye lands on the rows that need
 you. Opening a trail goes to its own page (`/next/traces/<traceId>`), so the URL
 can be shared and the browser back button works. From there: **+1 / +5 / +12**
-top up the honey reserve, **View** on a comb file opens it in a dialog, and
-**Open timeline** jumps to the event feed for that trail. Each comb file's row
+top up the honey reserve, **View** on a comb file opens it in a dialog,
+**Open timeline** jumps to the event feed for that trail, and **Run bee** starts
+a headless run *on this trail* — the same form as the one on the **Bees** page,
+with the trail filled in, so continuing a trail's work needs no id typed by
+hand. Clear the field for a fresh trail instead. Each comb file's row
 carries its size on disk, and a file the dialog will not render — too large, or
 not text — says so *and* says how large it is, so you can tell a file worth
 raising a limit for from one that is simply not a page of text.
@@ -442,9 +445,40 @@ Two things on this page are worth knowing because they are easy to misread:
   poll of its own. A **script** bee is counted the same way even though it can
   never be launched as a session.
 
+The header carries **Run bee**, next to **Refresh**: one headless run of a bee
+you pick, the browser equivalent of
+`paseka bee run <role> --body "…"`. The form asks which bee — every one in the
+roster, including the **script** rows no session can start — and then offers that
+bee's intent, the task, and an optional trail id, plus **Advanced: write the
+prompt myself** for a prompt sent verbatim, skipping the template. For a **script**
+bee the task is optional, because it runs the command from its own YAML and a
+task is only the prompt it is handed.
+
+Three things about it are worth knowing:
+
+- **It does not need `paseka run`.** The console dispatches the adapter itself,
+  so a run starts with the Hive Runtime stopped. This is why it is not a cue or a
+  task: `Run cue` and `New task` both publish an event for the runtime to pick
+  up, and neither does anything while it is down. Honey is not spent on a run
+  started this way — the same as `paseka bee run`; only work dispatched through
+  the runtime is metered.
+- **The toast names the trail, because the answer arrives before the agent
+  does.** The console replies as soon as the run is under way, with no agent id
+  and no output: the run lasts as long as the agent takes. **Open trail** takes
+  you to the trail it joins, where the page waits for it to appear, and the run
+  itself is watched under **Runs**. The roster is not refreshed for you — press
+  **Refresh** once the run has landed and you want to see it in Last run.
+- **A refusal is a refusal, not a run that quietly dies.** Naming a bee that does
+  not exist, pressing Run with no task for a bee that reads a prompt, and running
+  a bee with nothing configured to render the task through are all answered in
+  the form. A failure *after* that — an adapter binary missing from `PATH`, a
+  deleted template file — can only reach the terminal running
+  `paseka console`.
+
 The rest of the page is committed configuration, so it is read once and does not
 refresh on a timer; press **Refresh** after a commit adds or changes a bee, or
-after a run lands and you want to see it. Nothing here needs the Hive Runtime.
+after a run lands and you want to see it. Nothing else here needs the Hive
+Runtime.
 
 ### Settings
 
@@ -500,7 +534,8 @@ rather than polling. Nothing here needs the Hive Runtime.
 | Stop AFK work on a trail | Trace/task context | `paseka kill --trace ...` |
 | Work with an interactive bee | Sessions | `paseka bee chat`, `paseka session ...` |
 | Inspect routing | Topology | `paseka colony topology` |
-| See what a colony can do, and what ran last | Bees | `paseka bee run`, `paseka status` |
+| See what a colony can do, and what ran last | Bees | `paseka status` |
+| Run one bee headlessly, runtime up or not | Bees (row **Run**) | `paseka bee run <role> --body ...` |
 | Publish repository changes | Git | regular `git` commands |
 | Clean up isolated checkouts | Worktrees | `paseka prune` |
 | See what a setting resolves to, and why | Settings | `paseka doctor` |
@@ -518,7 +553,12 @@ rather than polling. Nothing here needs the Hive Runtime.
   attachment depends on the active session registry and terminal setup.
 - **A bee is missing from a launch dropdown:** expected if its adapter is
   `script` — those cannot be started as an interactive session. The **Bees** tab
-  lists every bee including those, and says so on the row.
+  lists every bee including those, says so on the row, and **Run bee** there is
+  the only launch a `script` bee has.
+- **Run bee says it started and nothing appears:** the console answers before the
+  agent does. Watch the **Runs** list, and check the terminal running
+  `paseka console` — a failure past the form's own checks (a missing adapter
+  binary, a deleted template) is only logged there.
 - **Remote Git state looks stale:** use explicit Fetch. Polling `/api/git`
   and the header chrome stream intentionally do not contact the remote.
 - **Header plaques freeze behind a reverse proxy:** disable response buffering

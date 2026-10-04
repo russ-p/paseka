@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { RefreshCw, Zap } from 'lucide-svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
 	import {
@@ -10,19 +12,25 @@
 		beesHeadline,
 		beeWorkspaceLabel
 	} from '$lib/format';
-	import { runDetailPath } from '$lib/navigation';
+	import { runDetailPath, traceDetailPath } from '$lib/navigation';
 	import { createBeesStore, type BeesStore } from '$lib/stores/bees.svelte';
 	import { consoleStatusStore, type ConsoleStatusStore } from '$lib/stores/console-status.svelte';
-	import type { Bee } from '$lib/api/types';
+	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
+	import BeeRunDrawer from '$lib/components/BeeRunDrawer.svelte';
+	import type { Bee, RunBeeResult } from '$lib/api/types';
 
 	let {
 		store = createBeesStore(),
-		status = consoleStatusStore
-	}: { store?: BeesStore; status?: ConsoleStatusStore } = $props();
+		status = consoleStatusStore,
+		toasts = toastStore
+	}: { store?: BeesStore; status?: ConsoleStatusStore; toasts?: ToastStore } = $props();
 
 	$effect(() => {
 		store.start();
 	});
+
+	/** Whether the run drawer is open; the bee is chosen inside it. */
+	let running = $state(false);
 
 	const bees = $derived(store.bees ?? []);
 
@@ -33,6 +41,19 @@
 	 */
 	function liveCount(bee: Bee): number {
 		return beeLiveCount(status.agents?.items, bee.role);
+	}
+
+	/**
+	 * A run is launched, not finished: the answer carries the trail the run joins and
+	 * nothing else, so the toast offers that trail rather than taking the operator
+	 * off a roster they may still be reading. No navigation, and no refresh — the
+	 * run's own page is where it is watched, and a refresh this second would report
+	 * a Last run that has not been written yet.
+	 */
+	function beeRan(result: RunBeeResult): void {
+		toasts.push('success', `Run started — trail ${result.traceId}`, {
+			action: { label: 'Open trail', onselect: () => void goto(traceDetailPath(base, result.traceId)) }
+		});
 	}
 
 	const beeColumns: DataColumn<Bee>[] = [
@@ -118,20 +139,33 @@
 			<p class="text-xs text-base-content/50">
 				Every bee in <span class="font-mono">.paseka/bees</span>, including the ones an adapter
 				runs headless — a <span class="font-mono">script</span> bee cannot be started as a
-				interactive session, so it is listed without the intents a launch would offer. A bee
-				marked <span class="font-mono">worktree</span> mutates code inside
+				interactive session, so it is listed without the intents a launch would offer, and
+				<span class="font-mono">Run bee</span> is how it is given work instead. A bee marked
+				<span class="font-mono">worktree</span> mutates code inside
 				<span class="font-mono">.paseka/worktrees</span>; the rest work against the colony root.
 			</p>
 		</div>
-		<button
-			id="bees-refresh"
-			type="button"
-			class="btn btn-sm"
-			disabled={store.loading}
-			onclick={() => void store.refresh()}
-		>
-			Refresh
-		</button>
+		<div class="flex items-center gap-2">
+			<button
+				id="bees-refresh"
+				type="button"
+				class="btn btn-ghost btn-sm"
+				disabled={store.loading}
+				onclick={() => void store.refresh()}
+			>
+				<RefreshCw class="h-4 w-4" strokeWidth={2.5} />
+				Refresh
+			</button>
+			<button
+				id="bees-run"
+				type="button"
+				class="btn btn-primary btn-sm"
+				onclick={() => (running = true)}
+			>
+				<Zap class="h-4 w-4" strokeWidth={2.5} />
+				Run bee
+			</button>
+		</div>
 	</header>
 
 	{#if store.lastError}
@@ -156,3 +190,10 @@
 		/>
 	{/if}
 </div>
+
+<BeeRunDrawer
+	open={running}
+	{bees}
+	onclose={() => (running = false)}
+	onran={beeRan}
+/>
