@@ -126,6 +126,7 @@ The rules that make it safe are the same rules that make it honest:
 - A free-form YAML editor, a generic configuration API beyond the fields the page shows, and any field the read half does not already report.
 - Coordination beyond the concurrent-edit refusal: no file locks, no per-field revision history, no multi-operator merge UI.
 - Per-bee or per-cue editing, which would make the console a second editor of the repository rather than of this machine.
+- The bee **local** overlay `.paseka/bees/<role>.local.yaml`. It is gitignored and prompt-only, so it passes this spec's own "what is this machine's" rule, but it lives in the repository directory and nothing in the console reads it — the read half of the ask (a per-bee `{value, source}` pair) and the write half are both tracked in [backlog: Bee local overlay is invisible and unwritable in Console](../plans/backlog.md#bee-local-overlay-is-invisible-and-unwritable-in-console).
 
 ## Further Notes
 

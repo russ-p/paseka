@@ -112,6 +112,14 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Why deferred:** The routes that display both lists shipped read-only, and starting work has two supported paths today: a launch session, and **Run bee** on `/next/bees` for a headless run.
 - **Revisit when:** An operator hand-edits `bees/*.yaml` often enough to want a form for it, or the worktrees route needs a create path for work that has no trail yet.
 
+#### Bee local overlay is invisible and unwritable in Console
+
+- **Kind:** idea
+- **Source:** [036-console-config-write](../specs/036-console-config-write.md) (Out of Scope — per-bee editing)
+- **Summary:** `.paseka/bees/<role>.local.yaml` is the machine-local overlay (`prompt_template` and `system_template` only, prompt-only by design) that wins over the committed `<role>.yaml` at resolve time, and the console neither reads nor writes it. `BeeView` has no overlay field, so a bee whose prompt is overridden on this machine renders the committed value with no hint that an override exists — the same missing-`source` half that `/next/settings` reports for configuration values. Reporting it is a per-bee `{value, source}` pair on `GET /api/bees`; writing it is the 036 writer (merge one key, temp+rename, preserve mode) pointed at a two-key gitignored file, which is a smaller surface than a full bee form.
+- **Why deferred:** 036 puts per-bee editing out of scope on the rule that the console writes what is this machine's and nothing the repository shares, and it never names `*.local.yaml` — so the overlay was left undecided rather than refused. It sits in the repository directory, only its `.gitignore` entry makes it machine-local, so making it writable needs that distinction argued rather than assumed. Until then the overlay is invisible in the product: `LoadAllBees` skips it, and export `--include bees` and Nuc omit it.
+- **Revisit when:** Per-bee or per-cue editing is reconsidered, or an operator is surprised by a prompt that is not the one `/next/bees` shows.
+
 #### Console redesign `/next` parity sweep
 
 - **Kind:** follow-up
