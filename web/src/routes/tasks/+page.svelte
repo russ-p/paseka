@@ -59,7 +59,9 @@
 
 <div class="space-y-6">
 	<header class="flex flex-wrap items-start justify-between gap-3">
-		<div class="min-w-0 space-y-1">
+		<!-- The measure is capped so the page action stays on the header row instead of being
+		     pushed under a paragraph three screens wide. -->
+		<div class="min-w-0 max-w-3xl space-y-1">
 			<h1 class="text-3xl font-bold">Tasks</h1>
 			<p class="text-base-content/70">
 				Every task the colony's ledger knows, one column per lifecycle status — a task moves
