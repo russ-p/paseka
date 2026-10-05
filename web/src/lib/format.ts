@@ -1,4 +1,5 @@
 import type {
+	AdapterCLI,
 	AgentItem,
 	ArtifactView,
 	Bee,
@@ -36,6 +37,7 @@ import type {
 	Usage,
 	UsageAggregate
 } from '$lib/api/types';
+import { agentCLIAdapterNames } from '$lib/api/types';
 import type { StatusIconGlyph } from '$lib/components/StatusIcon.svelte';
 
 /** One label/value line of a `MetaList`; the shape stays plain so it is unit-testable. */
@@ -802,6 +804,27 @@ export function systemIdentityRows(host: HostStatus | null): MetaRow[] {
  */
 export function liveBeePids(items: AgentItem[] | undefined): Set<number> {
 	return new Set((items ?? []).map((item) => item.pid));
+}
+
+/**
+ * The Agent CLIs summary note.
+ *
+ * Before a probe has run it is a caveat plus the block's own size —
+ * `not probed, 4 adapters` — because the roster is a fact about the colony
+ * (`agentCLIAdapterNames`) and never about this box: what is installed is only
+ * in the payload. After a probe the note is the count — `2 of 4 found` — which is
+ * the one thing that tells an operator whether the probe was worth asking for.
+ */
+export function adapterCLIsNote(adapters: AdapterCLI[], probed: boolean): string {
+	if (!probed) return `not probed, ${agentCLIAdapterNames.length} adapters`;
+	return `${adapters.filter((adapter) => adapter.found).length} of ${adapters.length} found`;
+}
+
+/** The badge on a presence row, so the tone table owns the colour and not the page. */
+export function adapterPresenceBadge(adapter: AdapterCLI): { status: string; label: string } {
+	return adapter.found
+		? { status: 'connected', label: 'found' }
+		: { status: 'unknown', label: 'not found' };
 }
 
 /**

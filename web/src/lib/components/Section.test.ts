@@ -59,6 +59,25 @@ describe('Section', () => {
 	});
 });
 
+describe('Section lazy body', () => {
+	it('reports opening and closing, so a block can read its body only when looked at', async () => {
+		const user = userEvent.setup();
+		const states: boolean[] = [];
+		render(SectionHarness, { collapsible: true, open: false, ontoggle: (open) => states.push(open) });
+
+		await user.click(screen.getByText('Trail artifacts'));
+		await user.click(screen.getByText('Trail artifacts'));
+
+		expect(states).toEqual([true, false]);
+	});
+
+	it('reports nothing for a plain section, which cannot be folded', () => {
+		const states: boolean[] = [];
+		render(SectionHarness, { ontoggle: (open) => states.push(open) });
+		expect(states).toEqual([]);
+	});
+});
+
 describe('Section grid span', () => {
 	it('applies an extra class to a plain block', () => {
 		const { container } = render(SectionHarness, { class: 'lg:col-span-2' });

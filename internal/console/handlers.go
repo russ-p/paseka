@@ -35,6 +35,7 @@ type api struct {
 	sampler  *cpuSampler
 	chrome   *chromeHub
 	beeRun   BeeRunFunc
+	probe    *adapterProber
 }
 
 func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {

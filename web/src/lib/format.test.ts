@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentItem, Bee, GitPlaque, HostStatus, RuntimeStatus } from '$lib/api/types';
 import {
+	adapterCLI,
 	buildView,
 	buildViewDev,
 	colonyConfig,
@@ -20,6 +21,8 @@ import {
 	traceSummary
 } from '../tests/fixtures';
 import {
+	adapterCLIsNote,
+	adapterPresenceBadge,
 	agentsDetail,
 	agentsDetailFull,
 	agentsMeta,
@@ -879,6 +882,45 @@ describe('liveBeePids', () => {
 	it('is an empty set when no bee is live, which is not an error', () => {
 		expect(liveBeePids(undefined).size).toBe(0);
 		expect(liveBeePids([]).size).toBe(0);
+	});
+});
+
+describe('adapterCLIsNote', () => {
+	it('says what the block holds before a probe, because the roster is not a guess', () => {
+		// The roster is a fact about the colony, so the note can carry the count
+		// before the probe — but it claims nothing about this box, which is what
+		// `not probed` says.
+		expect(adapterCLIsNote([], false)).toBe('not probed, 4 adapters');
+		expect(adapterCLIsNote([adapterCLI(), adapterCLI()], false)).toBe('not probed, 4 adapters');
+	});
+
+	it('counts what was found once a probe has answered', () => {
+		expect(
+			adapterCLIsNote(
+				[
+					adapterCLI(),
+					adapterCLI({ name: 'pi', found: false }),
+					adapterCLI({ name: 'claude', found: false }),
+					adapterCLI({ name: 'opencode', found: false })
+				],
+				true
+			)
+		).toBe('1 of 4 found');
+	});
+
+	it('is a count or a caveat, never a sentence', () => {
+		expect(adapterCLIsNote([], true)).toBe('0 of 0 found');
+		expect(adapterCLIsNote([adapterCLI()], true)).toBe('1 of 1 found');
+	});
+});
+
+describe('adapterPresenceBadge', () => {
+	it('tones the two verdicts the tone table owns rather than the page', () => {
+		expect(adapterPresenceBadge(adapterCLI())).toEqual({ status: 'connected', label: 'found' });
+		expect(adapterPresenceBadge(adapterCLI({ found: false }))).toEqual({
+			status: 'unknown',
+			label: 'not found'
+		});
 	});
 });
 
