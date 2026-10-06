@@ -1,6 +1,7 @@
 import type {
-	ApproveTaskRequest,
 	AcceptInviteResult,
+	AdapterCLIs,
+	ApproveTaskRequest,
 	ApproveTaskResult,
 	ArtifactContent,
 	ArtifactView,
@@ -214,6 +215,19 @@ export function getVersion(): Promise<BuildView> {
  */
 export function getSystem(): Promise<SystemView> {
 	return request<SystemView>('/system');
+}
+
+/**
+ * The Agent CLIs block: whether each CLI adapter's binary is on this box, where
+ * it resolved, and what version it reports.
+ *
+ * The server caches the probe and re-runs it only when asked, so the ordinary
+ * read costs nothing after the first one — which is why the block's accordion
+ * can fetch it lazily and a Refresh has to be explicit. `refresh` drops that
+ * cache, so a CLI installed since the first read is picked up.
+ */
+export function getAdapterCLIs(refresh = false): Promise<AdapterCLIs> {
+	return request<AdapterCLIs>(`/system/adapters${refresh ? '?refresh=1' : ''}`);
 }
 
 /** One page of the event feed. The server defaults to 50 rows and caps at 200. */

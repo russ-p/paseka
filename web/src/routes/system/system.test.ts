@@ -3,9 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import System from './+page.svelte';
 import { createSystemStore, type SystemStore } from '$lib/stores/system.svelte';
+import { createAdapterCLIsStore } from '$lib/stores/adapters.svelte';
 import { createConsoleStatusStore } from '$lib/stores/console-status.svelte';
-import { systemProcess, systemView } from '../../tests/fixtures';
-import type { AgentItem, ChromeFrame, SystemView } from '$lib/api/types';
+import { adapterCLIs, systemProcess, systemView } from '../../tests/fixtures';
+import type { AgentItem, AdapterCLIs, ChromeFrame, SystemView } from '$lib/api/types';
 
 function agentItem(overrides: Partial<AgentItem> = {}): AgentItem {
 	return {
@@ -35,9 +36,17 @@ function statusStore(items: AgentItem[] = []) {
 function harness(
 	view: SystemView = systemView(),
 	overrides: Partial<Parameters<typeof createSystemStore>[0]> = {}
-): { store: SystemStore; status: ReturnType<typeof statusStore> } {
+): {
+	store: SystemStore;
+	status: ReturnType<typeof statusStore>;
+	loadAdapters: ReturnType<typeof vi.fn>;
+	adapters: ReturnType<typeof createAdapterCLIsStore>;
+} {
 	const store = createSystemStore({ loadSystem: async () => view, pollIntervalMs: 0, ...overrides });
-	return { store, status: statusStore() };
+	// The default answer is 2 of 4 found; a test that cares says otherwise.
+	const loadAdapters = vi.fn(async (_refresh: boolean) => adapterCLIs());
+	const adapters = createAdapterCLIsStore({ loadAdapters });
+	return { store, status: statusStore(), loadAdapters, adapters };
 }
 
 /** The metric tile with this id, so a tile label is not confused with a table column. */
@@ -53,6 +62,25 @@ async function openProcesses(): Promise<HTMLElement> {
 	if (!toggle) throw new Error('process section summary not found');
 	await userEvent.click(toggle);
 	return within(toggle.parentElement as HTMLElement).getByLabelText('Processes');
+}
+
+/** The Agent CLIs block summary, which is both the fold control and the trigger. */
+function agentCLIsToggle(): HTMLElement {
+	const toggle = screen.getByText('Agent CLIs', { selector: 'span' }).closest('summary');
+	if (!toggle) throw new Error('agent CLIs section summary not found');
+	return toggle;
+}
+
+/** Open the folded Agent CLIs block and return its table region. */
+async function openAgentCLIs(): Promise<HTMLElement> {
+	const toggle = agentCLIsToggle();
+	await userEvent.click(toggle);
+	return within(toggle.parentElement as HTMLElement).getByLabelText('Agent CLIs');
+}
+
+/** Fold an open block again, which is the only way a lazy block is read twice. */
+async function foldAgentCLIs(): Promise<void> {
+	await userEvent.click(agentCLIsToggle());
 }
 
 describe('system route', () => {
@@ -208,5 +236,176 @@ describe('system route', () => {
 		// No kill, nice, or signal affordance anywhere on the page.
 		expect(screen.queryByRole('button', { name: /kill|signal|nice/i })).not.toBeInTheDocument();
 		expect(screen.getByText(/Observe-only/)).toBeInTheDocument();
+	});
+});
+
+describe('agent CLIs block', () => {
+	it('probes nothing on arrival and reads once when the block is opened', async () => {
+		// The probe execs four external binaries and the server caches the answer,
+		// so an operator who opens System should not pay for it until the block is
+		// opened — and should not pay again for opening it twice.
+		const { store, status, loadAdapters, adapters } = harness();
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+
+		expect(loadAdapters).not.toHaveBeenCalled();
+		expect(document.getElementById('system-agent-clis')).not.toHaveAttribute('open');
+
+		await openAgentCLIs();
+		await waitFor(() => expect(loadAdapters).toHaveBeenCalledTimes(1));
+
+		// Fold and re-open: the payload is already here, so the request is not
+		// repeated, which is what "one read per block" has to mean.
+		await foldAgentCLIs();
+		await openAgentCLIs();
+		expect(loadAdapters).toHaveBeenCalledTimes(1);
+	});
+
+	it('says what it holds before a probe and how many it found after', async () => {
+		const { store, status, adapters } = harness();
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+
+		// The note is the only thing an operator has before clicking, so it states
+		// the block's size and admits it knows nothing about this box yet.
+		expect(screen.getByText('not probed, 4 adapters')).toBeInTheDocument();
+
+		await openAgentCLIs();
+
+		await waitFor(() => expect(screen.getByText('2 of 4 found')).toBeInTheDocument());
+	});
+
+	it('shows the three facts a row is about, and a missing CLI as a state', async () => {
+		const { store, status, adapters } = harness();
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+		const table = await openAgentCLIs();
+
+		const found = within(table).getByText('cursor').closest('tr') as HTMLElement;
+		expect(within(found).getByText('found')).toBeInTheDocument();
+		expect(within(found).getByText('/usr/local/bin/agent')).toBeInTheDocument();
+		expect(within(found).getByText('0.48.4')).toBeInTheDocument();
+
+		// Not installed is a verdict with a badge, an empty path, and an empty
+		// version — not a failed row.
+		const missing = within(table).getByText('claude').closest('tr') as HTMLElement;
+		expect(within(missing).getByText('not found')).toBeInTheDocument();
+		expect(within(missing).queryByText('/usr/local/bin/claude')).not.toBeInTheDocument();
+	});
+
+	it('hides the path below 768px rather than scrolling the table sideways', async () => {
+		const { store, status, adapters } = harness();
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+		const table = await openAgentCLIs();
+
+		// Five columns, so one is `secondary`: the path is the reference behind the
+		// identity and the first thing to go.
+		const path = within(table).getByRole('columnheader', { name: 'Path' });
+		expect(path.className).toContain('hidden');
+		expect(within(table).getByRole('columnheader', { name: 'Adapter' }).className).not.toContain(
+			'hidden'
+		);
+	});
+
+	it('re-probes on Refresh and shows the new run', async () => {
+		const { store, status, loadAdapters, adapters } = harness();
+		loadAdapters.mockImplementation(
+			async (refresh: boolean) =>
+				refresh
+					? adapterCLIs({
+							adapters: [
+								{
+									name: 'cursor',
+									binary: 'agent',
+									found: true,
+									path: '/opt/agent',
+									version: '0.49.0'
+								}
+							]
+						})
+					: adapterCLIs()
+		);
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+		const table = await openAgentCLIs();
+		await waitFor(() => expect(within(table).getByText('0.48.4')).toBeInTheDocument());
+
+		await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+		// The refresh is what tells the server to drop its cache, so the request
+		// carries that intent rather than being another plain read.
+		await waitFor(() => expect(loadAdapters).toHaveBeenLastCalledWith(true));
+		expect(await within(table).findByText('0.49.0')).toBeInTheDocument();
+		expect(screen.getByText('1 of 1 found')).toBeInTheDocument();
+	});
+
+	it('says so when the probe answered with nothing', async () => {
+		const { store, status } = harness();
+		const adapters = createAdapterCLIsStore({
+			loadAdapters: async () => adapterCLIs({ adapters: [] })
+		});
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+		const table = await openAgentCLIs();
+
+		expect(within(table).getByText(/the server probed none/)).toBeInTheDocument();
+		expect(screen.getByText('0 of 0 found')).toBeInTheDocument();
+	});
+
+	it('keeps its filter out of the process table query', async () => {
+		// Two tables on one route means two URL namespaces: without one, typing here
+		// would overwrite the process filter an operator narrowed and shared.
+		window.history.replaceState(null, '', '/next/system');
+		const { store, status, adapters } = harness();
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+		await openAgentCLIs();
+
+		await userEvent.type(screen.getByLabelText('Filter agent CLIs'), 'opencode');
+
+		await waitFor(() => expect(window.location.search).toBe('?agent-clis.q=opencode'));
+	});
+
+	it('skeletons the rows while the first probe is in flight', async () => {
+		const { store, status } = harness();
+		let release: (view: AdapterCLIs) => void = () => {};
+		const adapters = createAdapterCLIsStore({
+			loadAdapters: () =>
+				new Promise<AdapterCLIs>((resolve) => {
+					release = resolve;
+				})
+		});
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+		const table = await openAgentCLIs();
+
+		expect(table.querySelector('.skeleton')).not.toBeNull();
+		expect(within(table).queryByText('0.48.4')).not.toBeInTheDocument();
+
+		release(adapterCLIs());
+		await waitFor(() => expect(within(table).getByText('0.48.4')).toBeInTheDocument());
+	});
+});
+
+describe('agent CLIs failures', () => {
+	it('reports a failed read and retries on the next open', async () => {
+		const { store, status } = harness();
+		const loadAdapters = vi
+			.fn<() => Promise<AdapterCLIs>>()
+			.mockRejectedValueOnce(new Error('connection refused'))
+			.mockResolvedValueOnce(adapterCLIs());
+		const adapters = createAdapterCLIsStore({ loadAdapters });
+		render(System, { store, status, adapters });
+		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());
+
+		await openAgentCLIs();
+		await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('connection refused'));
+
+		// Folded and re-opened, the block retries rather than staying a dead alert.
+		await foldAgentCLIs();
+		await openAgentCLIs();
+		await waitFor(() => expect(loadAdapters).toHaveBeenCalledTimes(2));
+		expect(await within(screen.getByLabelText('Agent CLIs')).findByText('0.48.4')).toBeInTheDocument();
 	});
 });

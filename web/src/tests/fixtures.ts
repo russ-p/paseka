@@ -1,4 +1,6 @@
 import type {
+	AdapterCLI,
+	AdapterCLIs,
 	ArtifactView,
 	Bee,
 	BuildView,
@@ -303,6 +305,37 @@ export function systemView(overrides: Partial<SystemView> = {}): SystemView {
 				rssBytes: 3_145_728,
 				comm: 'paseka',
 				cmd: 'paseka console --addr :8787'
+			})
+		],
+		...overrides
+	};
+}
+
+export function adapterCLI(overrides: Partial<AdapterCLI> = {}): AdapterCLI {
+	return {
+		name: 'cursor',
+		binary: 'agent',
+		found: true,
+		path: '/usr/local/bin/agent',
+		version: '0.48.4',
+		...overrides
+	};
+}
+
+/** Two of the four found: the shape an operator most often sees. */
+export function adapterCLIs(overrides: Partial<AdapterCLIs> = {}): AdapterCLIs {
+	return {
+		probedAt: '2026-10-05T09:41:07Z',
+		adapters: [
+			adapterCLI(),
+			adapterCLI({ name: 'pi', binary: 'pi', path: '/usr/local/bin/pi', version: '1.0.0' }),
+			adapterCLI({ name: 'claude', binary: 'claude', found: false, path: undefined, version: undefined }),
+			adapterCLI({
+				name: 'opencode',
+				binary: 'opencode',
+				found: false,
+				path: undefined,
+				version: undefined
 			})
 		],
 		...overrides

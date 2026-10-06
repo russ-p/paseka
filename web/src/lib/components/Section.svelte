@@ -9,6 +9,7 @@
 		class: extra = '',
 		collapsible = false,
 		open = true,
+		ontoggle,
 		children
 	}: {
 		/** Test and deep-link hook, as on the topbar panels. */
@@ -23,6 +24,13 @@
 		/** A collapsible section starts closed unless `open` says otherwise. */
 		collapsible?: boolean;
 		open?: boolean;
+		/**
+		 * Called with the block's new open state, on the `<details>` toggle event
+		 * rather than on the summary click. A block whose body is worth fetching
+		 * only once somebody opens it uses this to read it lazily; `false` when it
+		 * closes is what lets the caller drop the payload.
+		 */
+		ontoggle?: (open: boolean) => void;
 		children: Snippet;
 	} = $props();
 </script>
@@ -46,7 +54,12 @@
 {/snippet}
 
 {#if collapsible}
-	<details {id} class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100 {extra}" {open}>
+	<details
+		{id}
+		class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100 {extra}"
+		{open}
+		ontoggle={(event) => ontoggle?.(event.currentTarget.open)}
+	>
 		<summary class="collapse-title min-h-0 px-3 py-2">
 			<span class="flex flex-wrap items-center justify-between gap-2 pr-4">
 				{@render heading()}

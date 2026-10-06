@@ -74,6 +74,49 @@ export interface SystemView extends HostStatus {
 }
 
 /**
+ * Mirrors `console.AdapterCLIView`, one row of the Agent CLIs table. `binary` is
+ * what the colony resolved for the adapter, so a `binary:` in the machine-local
+ * adapter config is the name the row reports rather than the loader default.
+ */
+export interface AdapterCLI {
+	name: string;
+	binary: string;
+	/**
+	 * Whether the binary was detected. A false is a state, not a failure: the
+	 * row still renders, with no path and no version.
+	 */
+	found: boolean;
+	/** The resolved path, present only when `found`. */
+	path?: string;
+	/** What `<binary> --version` printed, first line, present only when it answered. */
+	version?: string;
+	/** Why the version could not be read. Never a credential. */
+	error?: string;
+}
+
+/**
+ * Mirrors `console.AdapterCLIsView`, the probe behind `GET /api/system/adapters`.
+ * The server caches the answer until `?refresh=1`, so `probedAt` is when it was
+ * measured rather than when it was asked for.
+ */
+export interface AdapterCLIs {
+	adapters: AdapterCLI[];
+	probedAt: string;
+}
+
+/**
+ * The CLI adapters `/api/system/adapters` probes, mirroring `adapterCLINames` in
+ * `internal/console/adapters.go`. `script` is absent on both sides: its binary is
+ * whatever each bee's `command:` names, so there is no single entry to look for.
+ *
+ * The block is lazy and reads nothing until it is opened, so this roster is what
+ * lets the folded note say what the block holds before a probe has answered. The
+ * count is a fact about the colony, not about this box — only the `found` flag
+ * in a payload is that.
+ */
+export const agentCLIAdapterNames = ['cursor', 'pi', 'claude', 'opencode'] as const;
+
+/**
  * Mirrors `console.BuildView`, the build stamp behind `GET /api/version`.
  *
  * `version` is `dev` for a build nothing stamped, which is every build from a

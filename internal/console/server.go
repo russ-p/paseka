@@ -26,6 +26,14 @@ type Options struct {
 	// builds a fresh dispatcher per run, which is what `paseka bee run` uses, so
 	// the console launches the adapter itself rather than asking a runtime for it.
 	BeeRun BeeRunFunc
+	// ProbeAdapters overrides how the Agent CLIs block detects binaries. Nil
+	// resolves each adapter with exec.LookPath and asks it for `--version`;
+	// a caller can inject a probe so the cached and refresh paths are exercised
+	// without a real CLI on the machine.
+	ProbeAdapters AdapterProbeFunc
+	// AdapterProbeTimeout bounds one `--version`. Zero uses the default; a test
+	// shortens it so a hanging binary is a row rather than a slow suite.
+	AdapterProbeTimeout time.Duration
 }
 
 // Server serves the Queen Console sessions UI and JSON API.
@@ -60,6 +68,7 @@ func NewServer(opts Options) *Server {
 	mux := http.NewServeMux()
 	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup, sampler: newCPUSampler()}
 	apiHandler.chrome = newChromeHub(apiHandler)
+	apiHandler.probe = newAdapterProber(opts.Colony, opts.ProbeAdapters, opts.AdapterProbeTimeout)
 	apiHandler.beeRun = opts.BeeRun
 	if apiHandler.beeRun == nil {
 		apiHandler.beeRun = func(ctx context.Context, req runtime.BeeRunRequest) (*runtime.BeeRunResult, error) {
@@ -71,6 +80,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runtime/stop", apiHandler.handleRuntimeStop)
 	mux.HandleFunc("/api/agents", apiHandler.handleAgents)
 	mux.HandleFunc("/api/system", apiHandler.handleSystem)
+	mux.HandleFunc("/api/system/adapters", apiHandler.handleSystemAdapters)
 	mux.HandleFunc("/api/version", apiHandler.handleVersion)
 	mux.HandleFunc("/api/git", apiHandler.handleGit)
 	mux.HandleFunc("/api/git/fetch", apiHandler.handleGitFetch)

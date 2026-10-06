@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { RefreshCw } from 'lucide-svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
 	import MetaList from '$lib/components/MetaList.svelte';
 	import Section from '$lib/components/Section.svelte';
 	import StatTile from '$lib/components/StatTile.svelte';
-	import type { SystemProcess } from '$lib/api/types';
+	import type { AdapterCLI, SystemProcess } from '$lib/api/types';
 	import {
+		adapterCLIsNote,
+		adapterPresenceBadge,
 		cpuPendingHint,
 		formatPercent,
 		formatSize,
@@ -18,6 +21,10 @@
 		systemLoadWord,
 		systemMemoryWord
 	} from '$lib/format';
+	import {
+		createAdapterCLIsStore,
+		type AdapterCLIsStore
+	} from '$lib/stores/adapters.svelte';
 	import { createSystemStore, type SystemStore } from '$lib/stores/system.svelte';
 	import {
 		consoleStatusStore,
@@ -26,8 +33,9 @@
 
 	let {
 		store = createSystemStore(),
-		status = consoleStatusStore
-	}: { store?: SystemStore; status?: ConsoleStatusStore } = $props();
+		status = consoleStatusStore,
+		adapters = createAdapterCLIsStore()
+	}: { store?: SystemStore; status?: ConsoleStatusStore; adapters?: AdapterCLIsStore } = $props();
 
 	$effect(() => {
 		store.start();
@@ -81,6 +89,38 @@
 		// leftover width; the server truncates it at 200 runes for the same reason.
 		{ key: 'cmd', label: 'Command', text: (process) => process.cmd || '—', mono: true, grow: true }
 	];
+
+	/**
+	 * The Agent CLIs block's rows. Identity, state, then the two facts an operator
+	 * checks a CLI by — and the path behind them, which is what makes two rows with
+	 * the same name and version explainable. The path is `secondary` because it is
+	 * the reference behind the identity, so it is the first thing to go on a phone
+	 * and the last thing an operator misses; `found` keeps its cell empty for the
+	 * three facts rather than dashing them, the way the Live bees badge does.
+	 */
+	const adapterColumns: DataColumn<AdapterCLI>[] = [
+		{ key: 'name', label: 'Adapter', text: (adapter) => adapter.name, mono: true },
+		{
+			key: 'found',
+			label: 'Found',
+			text: (adapter) => (adapter.found ? 'found' : 'not found'),
+			badge: (adapter) => adapterPresenceBadge(adapter)
+		},
+		{
+			key: 'path',
+			label: 'Path',
+			text: (adapter) => adapter.path || '',
+			mono: true,
+			grow: true,
+			secondary: true
+		},
+		{ key: 'version', label: 'Version', text: (adapter) => adapter.version || '', mono: true },
+		// The reason a probe that found a binary still has no version, which is the
+		// one row state the other columns cannot express.
+		{ key: 'probe', label: 'Probe', text: (adapter) => adapter.error || '' }
+	];
+
+	const adapterNote = $derived(adapterCLIsNote(adapters.adapters, adapters.probed));
 </script>
 
 <svelte:head>
@@ -198,6 +238,68 @@
 				CPU per process is measured against one core, so a busy row reads above 100% on a
 				multi-core box; the CPU tile above is the whole machine. Kernel threads are omitted, and
 				the server sends the 25 busiest processes rather than every pid on the box.
+			</p>
+		</Section>
+
+		<!-- Which agent CLIs this box can actually run. It stays folded and unfetched: the probe
+		     execs four external binaries, the server caches what it found, and an operator who never
+		     opens this block should not pay for it. Opening it is the request — once, since the
+		     answer is cached server-side until Refresh. -->
+		<Section
+			id="system-agent-clis"
+			title="Agent CLIs"
+			note={adapterNote}
+			collapsible
+			open={false}
+			ontoggle={(open) => open && void adapters.load()}
+		>
+			{#snippet actions()}
+				<button
+					id="system-agent-clis-refresh"
+					type="button"
+					class="btn btn-ghost btn-sm"
+					disabled={adapters.loading}
+					aria-busy={adapters.loading}
+					onclick={() => void adapters.refresh()}
+				>
+					<RefreshCw class="h-4 w-4 {adapters.loading ? 'animate-spin' : ''}" strokeWidth={2.5} />
+					Refresh
+				</button>
+			{/snippet}
+
+			{#if adapters.lastError}
+				<div class="alert alert-error mb-3" role="alert"><span>{adapters.lastError}</span></div>
+			{/if}
+
+			<DataTable
+				label="Agent CLIs"
+				columns={adapterColumns}
+				rows={adapters.adapters}
+				rowKey={(adapter) => adapter.name}
+				emptyMessage="No agent CLI reported — the server probed none."
+				filterLabel="Filter agent CLIs"
+				filterPlaceholder="name, binary, version"
+				pageSize={0}
+				// The processes table above keeps the default `?q=&page=`, so this one
+				// takes a namespace rather than letting two tables on one route fight
+				// over the same params — and rather than changing the links to
+				// `/next/system` an operator has already shared.
+				stateKey="agent-clis"
+				loading={adapters.loading && !adapters.probed}
+			/>
+			<p class="mt-3 text-xs text-base-content/50">
+				Which agent CLIs this box can launch, probed against the binary the colony resolved for
+				each adapter — so a <span class="font-mono">binary:</span> in
+				<span class="font-mono">~/.config/paseka/&lt;slug&gt;/adapters/&lt;name&gt;.yaml</span>
+				is what the row reports, not the loader's default. A row reading
+				<span class="font-mono">not found</span> is the adapter's state, not a fault: the colony
+				can still declare bees for it, and the console says nothing about credentials — the
+				version probe runs without them.
+			</p>
+			<p class="mt-1 text-xs text-base-content/50">
+				<span class="font-mono">script</span> is absent on purpose: its binary is whatever each
+				bee's <span class="font-mono">command:</span> says, so there is no single entry here to
+				look for. Refresh re-runs the probe; the server caches the answer until you do.
 			</p>
 		</Section>
 	{/if}

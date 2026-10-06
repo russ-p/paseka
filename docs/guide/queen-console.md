@@ -124,7 +124,9 @@ badges stay current over one Server-Sent Event stream (`GET /api/chrome/stream`)
 The System and Git tabs still poll their full JSON APIs while those tabs are
 open — in the preview, a route's store starts its poll on mount and stops it on
 unmount, so an idle console holds none. Git status never fetches remotes on a
-timer.
+timer. The System tab's **Agent CLIs** block is deliberately outside that poll:
+it execs external binaries, so it reads once when you open the folded block and
+then only when you press Refresh.
 
 The **Host**, **Live bees**, and **Git** labels are links. Host and Git open
 their own pages; **Live bees** opens **Runs**, or **Sessions** when only
@@ -369,6 +371,20 @@ core, so a busy process reads 172%. That is the server's arithmetic, not a
 broken table. CPU percent also needs two samples, so it shows a dash with the
 reason on the very first poll after a restart. Nothing here needs the Hive
 runtime, and the page keeps working when it is stopped.
+
+Below the processes, the **Agent CLIs** block says which `cursor`, `pi`,
+`claude`, and `opencode` binaries this box can actually launch. It starts folded
+and probes nothing until you open it — the probe runs those four binaries, so
+you should only pay for it when you want the answer. The summary line reads
+`not probed, 4 adapters` until then, and `2 of 4 found` afterwards. Each row reports the
+binary the colony resolved for that adapter, so a `binary:` set in your
+machine-local adapter file is what you see, not the loader's default. A CLI that
+is not installed reads `not found` with no version and no error, which is a
+state rather than a fault: the colony can still declare bees for it. The probe
+runs without your adapter credentials, and the server caches the answer until
+you press **Refresh** in the block's header — install a CLI, press it, and the
+count follows. `script` is not listed, because its binary is whatever each bee's
+`command:` names, so there is no single entry to look for.
 
 This page is about the **box**: which OS, which kernel, which pids. Which
 **build** sits on it is one question, and the side menu's foot answers it from
