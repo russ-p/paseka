@@ -6,6 +6,60 @@ Console redesign navigation debt lives in [UI migration backlog](ui-migration-ba
 
 ## Deferred work
 
+### Trail export and replay
+
+Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross-checked against `paseka replay`). The process worked; what a trail leaves behind to be read afterwards did not.
+
+#### Trail surfaces show a third of the trail's events
+
+- **Kind:** bug
+- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
+- **Summary:** `runs.ReadTraceEvents` merges only `.paseka/runs/<traceId>/<agentId>/events.ndjson`, which `bus.ProcessEventInput` appends for events a bee published through the CLI. Everything the runtime synthesizes goes straight to the bus and lands only in JetStream. That 28-event trail read as 11 events on every surface: missing were `SIGNAL/feature.requested` (the operator's own request), **both `MUTATION/code.proposal.isolated`** — the events guard actually subscribes to — `SIGNAL/task.ready`, all six `SIGNAL/energy.consume`, three `SIGNAL/task.status`, two auto-generated `INSIGHT/trace.summary`, and the runtime and console `task.plan` / `task.completed`. Affects `paseka export` (`internal/export/export.go:67`) and the Console Timeline (`hiveview.ListEventFeed`) alike — they share the reader.
+- **Why deferred:** Needs a decision about what a trail is authoritative from: run directories (durable, agent-authored, survives `purge --bus`) or JetStream (complete, but gone with `--bus`). Appending runtime events to the emitting run directory is the smallest fix; reading the bus on export is the honest one and needs an offline path for a stopped broker.
+- **Revisit when:** An operator or agent audits a trail and cannot answer "what was asked" or "what was proposed" from the export, or a review contract is replayed and the triggering `MUTATION` is absent.
+
+#### A reviewed diff does not outlive the review
+
+- **Kind:** bug
+- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
+- **Summary:** `mutationFromRun` inlines the diff in the `MUTATION` payload and stores an artifact only above 64 KiB (`internal/runtime/publish.go:120`), `paseka replay` prints kinds and agent ids without payloads, and the worktree is removed at merge. So once a trail is merged the exact bytes a guard approved cannot be recovered — that trail's export says "No trail artifacts in the comb", and the reviewed diff of an 18-file, +1433/−14 change is gone.
+- **Why deferred:** The artifact size policy is a disk-versus-inspectability trade-off, and lowering the 64 KiB threshold stores a full diff per builder run including the throwaway ones from a reject cycle.
+- **Revisit when:** A `verification.success` needs re-audit after its worktree is gone, or an operator asks what a specific run actually proposed.
+
+#### `Honey reserve` in the export Overview reads backwards
+
+- **Kind:** bug
+- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
+- **Summary:** The Overview card renders `taskledger.FormatHoneyPrimary`, which is `remaining / allocated` (`internal/taskledger/energy.go:44`), under the label `Honey reserve`. That trail's `6 / 12` meant six left of twelve and reads as six spent, while `paseka status` prints the same pair as `6/12 remaining` — so the two surfaces disagree on what the numbers mean.
+- **Why deferred:** Cosmetic, and no logic consumes the string.
+- **Revisit when:** Someone reads the export Overview for spend rather than for remaining balance.
+
+#### Two `trace.summary` events for one trail step
+
+- **Kind:** bug
+- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
+- **Summary:** JetStream held bus sequence 10 and 11 as consecutive `INSIGHT/trace.summary` with the same synthetic agent id `agent-<traceId>`, between `task.ready` and `task.status` — a summary that looks hand-published twice, since no Go code in the tree mints that agent id. Payloads cannot be compared from the CLI (see above), so this is unconfirmed.
+- **Why deferred:** Unverified and harmless on its own: `runs.ResolveTraceSummary` takes the last non-empty summary, so a duplicate changes nothing downstream.
+- **Revisit when:** Raw bus payloads become readable, or a trail shows a summary that disagrees with what actually happened.
+
+#### `paseka export` rejects the trace id as a positional argument
+
+- **Kind:** idea
+- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
+- **Summary:** The natural invocation `paseka export trace-01a1…` fails with `required flag(s) "trace" not set`; only `--trace` works. Accept the id positionally, as `paseka replay <traceId>` already does, and keep `--trace` as the alternative.
+- **Why deferred:** The flag works; this is ergonomics, and export is not a hot path.
+- **Revisit when:** Export gets a wrapper script or lands in a documented quickstart.
+
+### Adapter catalog
+
+#### The Agent CLI roster is duplicated across the Go/TS boundary
+
+- **Kind:** follow-up
+- **Source:** guard review note, deferred from the adapter-probe trail (`trace-01a10d602db8d6f6`)
+- **Summary:** `adapterCLINames` (`internal/console/adapters.go:84`) and `agentCLIAdapterNames` (`web/src/lib/api/types.ts:117`) list the same four adapters in the same order with no cross-language guard. Both sides are pinned by tests (`adapters_api_test.go:119` asserts the literal order, `format.test.ts` asserts the literal `not probed, 4 adapters`), so drift fails loudly rather than silently. Serving the roster from `GET /api/system/adapters` without probing would delete the second list.
+- **Why deferred:** The block is lazy by contract — arriving on `/next/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
+- **Revisit when:** A fifth adapter is added, or the roster stops being a fixed set.
+
 ### Task ledger
 
 #### `autorun` flag on `task.plan`
@@ -283,6 +337,11 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 - **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
 
 ## Assumptions and gotchas
+
+### Trail export and replay
+
+- **A trail export is not the trail's event log** — it merges only what bees published through the CLI, so the intake request, the `MUTATION` that triggers a review, honey consumption, and task status transitions are all absent. `paseka replay <traceId>` lists the runtime half (order, kinds, agent ids) but no payloads. See "Trail surfaces show a third of the trail's events".
+- **A plan's recommendation can be lost when it becomes a task** — the adapter-probe plan asked for a cache "until forced refresh, with a long backstop TTL" and the task body said "no TTL"; both reviews accepted it. When a plan carries a safety margin, the task body has to carry it too.
 
 ### Config profiles
 
