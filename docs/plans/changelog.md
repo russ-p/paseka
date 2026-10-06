@@ -2,6 +2,12 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A gated task links to its own review
+
+A task stopped at a review gate could be **approved** or **rejected** from its own page, but not **read**: the diff lives on the review route, and the only way onto it from there was to open the review queue and find this trail's row among the others by eye — so approving a change meant approving it unread. The Review section now carries **Open review** beside the buttons it belongs with, under the same gate that renders them, and it lands on the proposal rather than the full-screen preview below it — that is where a missing branch or an empty diff is explained, and where the way back to the task is. The label and its chevron name the destination; what is behind it — the diff and the notes on a final gate, the proposal on a mid-trail one that merges nothing — is said in the hint beside it.
+
+- Canonical: [Queen Console design system](../architecture/queen-console-design-system.md), [Queen Console](../guide/queen-console.md)
+
 ## 2026-10 — A bee can be run from the console
 
 The **Bees** page now has a **Run bee** button beside **Refresh** — a headless run of a bee you pick, the browser equivalent of `paseka bee run <role> --body "…"`. Until now the console could only *watch* bees work: starting one meant an interactive session, and the session picker cannot offer a `script` bee at all, so a colony of scripts had no way in from the browser.

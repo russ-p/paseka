@@ -545,6 +545,109 @@ describe('task detail', () => {
 		await openTask();
 
 		expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+		// The way to the diff belongs to the same gate, so a task nobody waits on
+		// does not offer it either.
+		expect(screen.queryByRole('link', { name: /review/i })).not.toBeInTheDocument();
+	});
+
+	it('links a gated task straight to its own review, so the diff needs no trip through the queue', async () => {
+		// The patch lives on the review route, and the queue is the only other way
+		// onto it — where this trail is one row among the others, found by eye. The
+		// task page is where the operator reads the task, so the link belongs here.
+		const h = harness(
+			taskBoard({
+				groups: [
+					{
+						status: 'waiting_review',
+						tasks: [
+							taskListItem({
+								taskId: 'task-06',
+								status: 'waiting_review',
+								review: 'final',
+								isFinal: true,
+								canStart: false,
+								canApprove: true,
+								canReject: true
+							})
+						]
+					}
+				],
+				taskCounts: { waiting_review: 1 }
+			}),
+			[
+				taskDetail({
+					taskId: 'task-06',
+					status: 'waiting_review',
+					review: 'final',
+					isFinal: true,
+					canApprove: true,
+					canReject: true
+				})
+			]
+		);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-06',
+			toasts: h.toasts
+		});
+
+		expect(
+			await screen.findByRole('link', { name: /open review/i })
+		).toHaveAttribute('href', '/next/reviews/trace-01a0bd6963faa14f/task-06');
+		// The diff is behind the door, not on this page: the label names the
+		// destination and says so in the same words, rather than wearing a diff glyph
+		// that promises a patch an operator will only find one page later.
+		expect(screen.getByText(/the diff this gate merges/)).toBeInTheDocument();
+	});
+
+	it('does not promise a diff on a mid-trail gate, which merges nothing', async () => {
+		// A final gate has a patch behind it. A review that is not the trail's last
+		// merges nothing, so its route carries no Changes section at all.
+		const h = harness(
+			taskBoard({
+				groups: [
+					{
+						status: 'waiting_review',
+						tasks: [
+							taskListItem({
+								taskId: 'task-05',
+								status: 'waiting_review',
+								review: 'required',
+								isFinal: false,
+								canStart: false,
+								canApprove: true,
+								canReject: true
+							})
+						]
+					}
+				],
+				taskCounts: { waiting_review: 1 }
+			}),
+			[
+				taskDetail({
+					taskId: 'task-05',
+					status: 'waiting_review',
+					review: 'required',
+					isFinal: false,
+					canApprove: true,
+					canReject: true
+				})
+			]
+		);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-05',
+			toasts: h.toasts
+		});
+
+		expect(await screen.findByRole('link', { name: /open review/i })).toHaveAttribute(
+			'href',
+			'/next/reviews/trace-01a0bd6963faa14f/task-05'
+		);
+		expect(screen.getByText(/nothing merges here/)).toBeInTheDocument();
+		expect(screen.queryByText(/the diff this gate merges/)).not.toBeInTheDocument();
 	});
 
 	it('offers the decision on a deep link, from the task detail rather than no board row', async () => {

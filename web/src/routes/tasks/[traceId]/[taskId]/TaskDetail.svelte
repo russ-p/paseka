@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { Play, RotateCcw } from 'lucide-svelte';
+	import { ChevronRight, Play, RotateCcw } from 'lucide-svelte';
 	import MetaList from '$lib/components/MetaList.svelte';
 	import Section from '$lib/components/Section.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -13,7 +13,13 @@
 		taskStatusLabel,
 		taskTitle
 	} from '$lib/format';
-	import { consolePath, runDetailPath, taskDetailPath, traceDetailPath } from '$lib/navigation';
+	import {
+		consolePath,
+		reviewDetailPath,
+		runDetailPath,
+		taskDetailPath,
+		traceDetailPath
+	} from '$lib/navigation';
 	import { createTaskStore, type TaskStore } from '$lib/stores/task.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import ReviewActions from '$lib/components/ReviewActions.svelte';
@@ -84,6 +90,35 @@
 	const reviewable = $derived(
 		(row?.canApprove ?? task?.canApprove ?? false) &&
 			(row?.canReject ?? task?.canReject ?? false)
+	);
+
+	/**
+	 * Where the diff is read. The patch lives on the review route, and without this
+	 * link the only way onto it from a gated task is to open the review queue and
+	 * find this trail among the others by eye — which is the whole reason an
+	 * operator reads a task here and then has to go looking for the change.
+	 *
+	 * The link lands on the **proposal**, not on the merge preview below it: the
+	 * proposal is where the operator can tell that there is no branch on this
+	 * machine, or nothing to merge, and its own header offers the way back here.
+	 * Skipping a level for the shortcut would leave a task page one step from a
+	 * preview whose only exits are `Back to review` and `All reviews`.
+	 */
+	const reviewHref = $derived(
+		task ? reviewDetailPath(base, task.traceId, task.taskId) : ''
+	);
+	/**
+	 * What the link is about — a destination — and what is behind it, which is not
+	 * the same thing and changes with the gate. A final gate has a patch to read and
+	 * notes to leave on it; a mid-trail review merges nothing, so it offers only the
+	 * proposal. Promising a diff in the label would be a promise the second one
+	 * cannot keep, and the diff `ReviewActions` shows for the PR title is a form
+	 * field rather than a patch.
+	 */
+	const reviewLinkNote = $derived(
+		task?.isFinal
+			? 'the diff this gate merges, and the notes you can leave on it'
+			: 'the proposal this gate is waiting on — nothing merges here'
 	);
 
 	async function act(action: 'start' | 'retry'): Promise<void> {
@@ -275,9 +310,19 @@
 		<!-- Approve and reject live here rather than only on the review queue: this is
 		     where a task is read, and a gated task that could not be answered from the
 		     page it is read on would be a step backwards from the legacy console. The
-		     PR fields are collapsed under Approve, and Reject stays one box. -->
+		     PR fields are collapsed under Approve, and Reject stays one box.
+		     Reading is the other half of the decision and it lives on the review
+		     route, so the way there sits with the buttons rather than being left to a
+		     trip through the queue. -->
 		{#if reviewable}
 			<Section id="task-review" title="Review" note="this task is waiting on you">
+				<div class="mb-3 flex flex-wrap items-center gap-2">
+					<a class="btn btn-sm" href={reviewHref}>
+						Open review
+						<ChevronRight class="h-4 w-4" strokeWidth={2.5} />
+					</a>
+					<span class="text-xs text-base-content/50">{reviewLinkNote}</span>
+				</div>
 				<ReviewActions {task} onsettled={settled} />
 			</Section>
 		{/if}
