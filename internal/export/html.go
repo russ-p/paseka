@@ -42,9 +42,8 @@ type htmlPageData struct {
 	TaskCount          int
 	Bees               string
 	EnergyBudget       int
-	EnergyRemaining    int
 	EnergyAdded        int
-	EnergyAllocated    int
+	HoneyPrimary       string
 	HoneySecondary     string
 	LowEnergy          bool
 	HasEnergy          bool
@@ -108,12 +107,9 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 	if data.Trace.EnergyBudget > 0 {
 		page.HasEnergy = true
 		page.EnergyBudget = data.Trace.EnergyBudget
-		page.EnergyRemaining = data.Trace.EnergyRemaining
 		page.EnergyAdded = data.Trace.EnergyAdded
-		page.EnergyAllocated = data.Trace.EnergyAllocated
-		if page.EnergyAllocated <= 0 {
-			page.EnergyAllocated = data.Trace.EnergyBudget
-		}
+		page.HoneyPrimary = taskledger.FormatHoneyRemaining(
+			data.Trace.EnergyRemaining, data.Trace.EnergyBudget, data.Trace.EnergyAdded)
 		page.HoneySecondary = taskledger.FormatHoneySecondary(data.Trace.EnergyBudget, data.Trace.EnergyAdded)
 		page.LowEnergy = data.Trace.LowEnergy
 	}
@@ -446,7 +442,7 @@ code { font-family: var(--mono); font-size: 0.85em; }
       {{ if .HasEnergy }}
       <div class="stat-card">
         <span class="stat-label">Honey reserve</span>
-        <span class="stat-value">{{ .EnergyRemaining }} / {{ .EnergyAllocated }}</span>
+        <span class="stat-value">{{ .HoneyPrimary }}</span>
         {{ if .HoneySecondary }}<span class="stat-sub">{{ .HoneySecondary }}</span>{{ end }}
       </div>
       {{ end }}

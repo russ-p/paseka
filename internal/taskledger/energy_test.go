@@ -266,6 +266,15 @@ func TestFormatHoney(t *testing.T) {
 	if got := taskledger.FormatHoneyCompact(5, 0, 0); got != "5" {
 		t.Fatalf("unseeded compact = %q", got)
 	}
+	if got := taskledger.FormatHoneyRemaining(5, 12, 8); got != "5/20 remaining" {
+		t.Fatalf("remaining primary = %q", got)
+	}
+	if got := taskledger.FormatHoneyRemaining(5, 12, 0); got != "5/12 remaining" {
+		t.Fatalf("remaining primary without top-up = %q", got)
+	}
+	if got := taskledger.FormatHoneyRemaining(5, 0, 0); got != "5" {
+		t.Fatalf("unseeded remaining primary = %q, want remaining only", got)
+	}
 	if got := taskledger.FormatHoneySecondary(12, 8); got != "seed 12 · topped 8" {
 		t.Fatalf("secondary = %q", got)
 	}

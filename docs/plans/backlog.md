@@ -26,14 +26,6 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** The artifact size policy is a disk-versus-inspectability trade-off, and lowering the 64 KiB threshold stores a full diff per builder run including the throwaway ones from a reject cycle.
 - **Revisit when:** A `verification.success` needs re-audit after its worktree is gone, or an operator asks what a specific run actually proposed.
 
-#### `Honey reserve` in the export Overview reads backwards
-
-- **Kind:** bug
-- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
-- **Summary:** The Overview card renders `taskledger.FormatHoneyPrimary`, which is `remaining / allocated` (`internal/taskledger/energy.go:44`), under the label `Honey reserve`. That trail's `6 / 12` meant six left of twelve and reads as six spent, while `paseka status` prints the same pair as `6/12 remaining` — so the two surfaces disagree on what the numbers mean.
-- **Why deferred:** Cosmetic, and no logic consumes the string.
-- **Revisit when:** Someone reads the export Overview for spend rather than for remaining balance.
-
 #### Two `trace.summary` events for one trail step
 
 - **Kind:** bug
