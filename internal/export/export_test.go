@@ -185,6 +185,79 @@ func TestRenderHTMLContainsTraceData(t *testing.T) {
 	}
 }
 
+func honeyOverviewData(budget, remaining, added int) TraceExportData {
+	return TraceExportData{
+		Slug:       "demo-hive",
+		ColonyRoot: "/tmp/colony",
+		ExportedAt: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC),
+		Trace: hiveview.TraceDetailView{
+			TraceSummaryView: hiveview.TraceSummaryView{
+				TraceID:         "trace-honey",
+				LastActivityAt:  time.Date(2026, 7, 10, 11, 0, 0, 0, time.UTC),
+				EnergyBudget:    budget,
+				EnergyRemaining: remaining,
+				EnergyAdded:     added,
+			},
+		},
+	}
+}
+
+func renderHoneyOverviews(t *testing.T, data TraceExportData) (string, string) {
+	t.Helper()
+	md, err := RenderMarkdown(data)
+	if err != nil {
+		t.Fatalf("RenderMarkdown: %v", err)
+	}
+	htmlDoc, err := RenderHTML(data)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	return string(md), string(htmlDoc)
+}
+
+func TestHoneyReserveOverviewSeededWithTopUp(t *testing.T) {
+	md, htmlDoc := renderHoneyOverviews(t, honeyOverviewData(12, 6, 8))
+	for _, want := range []string{"- **Honey reserve:** 6/20 remaining", "- seed 12 · topped 8"} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("markdown missing %q in:\n%s", want, md)
+		}
+	}
+	for _, want := range []string{"6/20 remaining", "seed 12 · topped 8"} {
+		if !strings.Contains(htmlDoc, want) {
+			t.Fatalf("HTML missing %q in:\n%s", want, htmlDoc)
+		}
+	}
+	for _, body := range []string{md, htmlDoc} {
+		if strings.Contains(body, "6 / 20") {
+			t.Fatalf("primary should read 6/20 remaining, not spaced arithmetic:\n%s", body)
+		}
+	}
+}
+
+func TestHoneyReserveOverviewSeededWithoutTopUp(t *testing.T) {
+	md, htmlDoc := renderHoneyOverviews(t, honeyOverviewData(12, 6, 0))
+	for _, body := range []string{md, htmlDoc} {
+		if !strings.Contains(body, "6/12 remaining") {
+			t.Fatalf("missing 6/12 remaining in:\n%s", body)
+		}
+		if strings.Contains(body, "seed 12 · topped") {
+			t.Fatalf("no top-up provenance expected in:\n%s", body)
+		}
+	}
+}
+
+func TestHoneyReserveOverviewUnseededOmitsReserve(t *testing.T) {
+	md, htmlDoc := renderHoneyOverviews(t, honeyOverviewData(0, 4, 0))
+	for _, body := range []string{md, htmlDoc} {
+		if strings.Contains(body, "Honey reserve") {
+			t.Fatalf("unseeded trail should not render a reserve in:\n%s", body)
+		}
+		if strings.Contains(body, "/ 0") || strings.Contains(body, "/0") {
+			t.Fatalf("unseeded trail should never show a zero denominator in:\n%s", body)
+		}
+	}
+}
+
 func TestExportTraceWritesFile(t *testing.T) {
 	ctx, repo := setupExportColony(t)
 	traceID := "trace-export"

@@ -53,6 +53,15 @@ func FormatHoneyCompact(remaining, budget, added int) string {
 	return fmt.Sprintf("%d/%d", remaining, den)
 }
 
+// FormatHoneyRemaining is "n/m remaining" after seed — the reading `paseka status` prints —
+// and bare remaining when unseeded (never "n/0").
+func FormatHoneyRemaining(remaining, budget, added int) string {
+	if Allocated(budget, added) <= 0 {
+		return strconv.Itoa(remaining)
+	}
+	return FormatHoneyCompact(remaining, budget, added) + " remaining"
+}
+
 // FormatHoneySecondary is omitted when there are no post-seed top-ups.
 func FormatHoneySecondary(budget, added int) string {
 	if added <= 0 {

@@ -32,7 +32,7 @@ func writeMarkdownOverview(buf *bytes.Buffer, data TraceExportData) {
 	fmt.Fprintf(buf, "- **Runs:** %d\n", data.Trace.RunCount)
 	fmt.Fprintf(buf, "- **Tasks:** %d\n", data.Trace.TaskCount)
 	if data.Trace.EnergyBudget > 0 {
-		fmt.Fprintf(buf, "- **Honey reserve:** %s\n", taskledger.FormatHoneyPrimary(
+		fmt.Fprintf(buf, "- **Honey reserve:** %s\n", taskledger.FormatHoneyRemaining(
 			data.Trace.EnergyRemaining, data.Trace.EnergyBudget, data.Trace.EnergyAdded))
 		if extra := taskledger.FormatHoneySecondary(data.Trace.EnergyBudget, data.Trace.EnergyAdded); extra != "" {
 			fmt.Fprintf(buf, "- %s\n", extra)
