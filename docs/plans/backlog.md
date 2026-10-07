@@ -14,9 +14,9 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 
 - **Kind:** bug
 - **Source:** trail analysis (`trace-01a10d602db8d6f6`)
-- **Summary:** `runs.ReadTraceEvents` merges only `.paseka/runs/<traceId>/<agentId>/events.ndjson`, which `bus.ProcessEventInput` appends for events a bee published through the CLI. Everything the runtime synthesizes goes straight to the bus and lands only in JetStream. That 28-event trail read as 11 events on every surface: missing were `SIGNAL/feature.requested` (the operator's own request), **both `MUTATION/code.proposal.isolated`** — the events guard actually subscribes to — `SIGNAL/task.ready`, all six `SIGNAL/energy.consume`, three `SIGNAL/task.status`, two auto-generated `INSIGHT/trace.summary`, and the runtime and console `task.plan` / `task.completed`. Affects `paseka export` (`internal/export/export.go:67`) and the Console Timeline (`hiveview.ListEventFeed`) alike — they share the reader.
+- **Summary:** `runs.ReadTraceEvents` merges only `.paseka/runs/<traceId>/<agentId>/events.ndjson`, which `bus.ProcessEventInput` appends for events a bee published through the CLI. Everything the runtime synthesizes goes straight to the bus and lands only in JetStream. That 28-event trail read as 11 events on every surface: missing were `SIGNAL/feature.requested` (the operator's own request), **both `MUTATION/code.proposal.isolated`** — the events guard actually subscribes to — `SIGNAL/task.ready`, all six `SIGNAL/energy.consume`, three `SIGNAL/task.status`, two auto-generated `INSIGHT/trace.summary`, and the runtime and console `task.plan` / `task.completed`. Affects `paseka export` (`internal/export/export.go:67`) and the Console Timeline (`hiveview.ListEventFeed`) alike — they share the reader. This is not cosmetic: **"did this flight change anything at all" is the core question of any trail audit, and it is unanswerable offline** — on that trail all six runs, both builders included, show no `MUTATION` in `events.ndjson`, because the mutation carries a non-empty diff and was published anyway. The fix already exists one function away: `syncRunSummary` already appends its synthesized event to the run dir (`internal/runtime/summary.go:68`), while `publishRunOutcome` does not (`internal/runtime/publish.go:46`).
 - **Why deferred:** Needs a decision about what a trail is authoritative from: run directories (durable, agent-authored, survives `purge --bus`) or JetStream (complete, but gone with `--bus`). Appending runtime events to the emitting run directory is the smallest fix; reading the bus on export is the honest one and needs an offline path for a stopped broker.
-- **Revisit when:** An operator or agent audits a trail and cannot answer "what was asked" or "what was proposed" from the export, or a review contract is replayed and the triggering `MUTATION` is absent.
+- **Revisit when:** Any trail tooling needs the triggering `MUTATION`, the intake request, or honey accounting — the "Colony roles" archivist bee's `chronicle` intent is already blocked on it — or an operator audits a trail and cannot answer "what was asked" or "what was proposed" from the export.
 
 #### A reviewed diff does not outlive the review
 
@@ -59,6 +59,24 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Summary:** `adapterCLINames` (`internal/console/adapters.go:84`) and `agentCLIAdapterNames` (`web/src/lib/api/types.ts:117`) list the same four adapters in the same order with no cross-language guard. Both sides are pinned by tests (`adapters_api_test.go:119` asserts the literal order, `format.test.ts` asserts the literal `not probed, 4 adapters`), so drift fails loudly rather than silently. Serving the roster from `GET /api/system/adapters` without probing would delete the second list.
 - **Why deferred:** The block is lazy by contract — arriving on `/next/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
 - **Revisit when:** A fifth adapter is added, or the roster stops being a fixed set.
+
+### Colony roles
+
+#### `archivist` bee — audit a finished trail
+
+- **Kind:** idea
+- **Source:** planning (trail audit of `trace-01a10d602db8d6f6`)
+- **Summary:** A read-only bee that audits a trail the agents have already finished and writes down what should be remembered. Named from the glossary's **Archivist Bee / Knowledge Agent** (`docs/idea/glossary.md:46`), next to Honeycomb and Wax Storage — it builds nothing and repairs nothing, it curates what survives into the archive. Kept distinct from `scout` by direction: scout looks forward at what to build, archivist looks back at what happened and what is owed. Settled shape — `worktree: false` (reads `.paseka/runs/` at colony root, and with no `code.proposal*` in `publishes` the runtime skips auto-mutation, so it cannot trigger a guard in response to itself), **no `subscribes`** (manual launch only, which is also the safety property), `params.model: medium`, publishes exactly one `INSIGHT/context.note` under a `completion_contract` so a silent no-op run fails loudly instead of reading as a clean audit. Two intents: **`task`** — per task, catch work that was deferred and draft it into the backlog; **`chronicle`** — per trail, find Return Flights and Bees Flying in Circles and propose skills. Writes its backlog entries to `{{.ArtifactsDir}}/backlog-draft.md`, never to `docs/plans/backlog.md` itself — an LLM rewriting a hand-maintained file unsupervised can drop existing items and will violate the backlog field rules, and `hivewright` is already the only root-editing bee and is scoped to `.paseka/`.
+- **Why deferred:** No spec — this adds colony config and prompts, not platform code. `chronicle` ships offline first, with "not measurable without NATS" stated plainly in its report rather than papered over; the NATS-backed version (`paseka replay`, `energy show`) is a later pass. Offline, the collector reads `meta.json` (bee, adapter, profile, startedAt), `status.json` (finishedAt, state), `result.json` (`usage.*`, `summary`) and `request.json` (taskId) — no NATS, no git.
+- **Revisit when:** Someone runs the bee by hand and the draft is good enough to paste, or the offline report's blind spots stop being acceptable.
+
+#### `receiver.md` calls `rtk`, a machine-local binary
+
+- **Kind:** bug
+- **Source:** trail audit of `trace-01a10d602db8d6f6`
+- **Summary:** `.paseka/prompts/receiver.md:11` instructs every Receiver Bee to read the staged diff with `rtk git diff --staged`, while line 13 tells it to commit with plain `git commit`. `rtk` is not a Paseka dependency: it appears nowhere in `docs/`, `bee-config.md`, `cli.md`, or any bee YAML, and on this machine it is `~/.local/bin/rtk`, a third-party LLM-output proxy. On any machine without it the Receiver cannot read what it is about to commit — and it is the bee that writes the merge commit.
+- **Why deferred:** Fixing it is a one-word prompt edit, but it belongs with whoever next touches the receiver prompt; nothing about the trail audit depends on it.
+- **Revisit when:** The receiver prompt is edited for any other reason.
 
 ### Task ledger
 
@@ -337,6 +355,15 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 - **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
 
 ## Assumptions and gotchas
+
+### Reading trail data from the filesystem
+
+Trail audit tooling has exactly one reliable join and three traps. Verified against `trace-01a10d602db8d6f6`; see "Colony roles" for the collector that uses it.
+
+- **A run's `taskId` lives only in `request.json`** — it has no `taskId` key in `meta.json`, `status.json`, or `result.json`. Do not grep `prompt.txt` for it: rendered templates embed literal JSON examples, and the first `"taskId":"…"` match in a scout's prompt is a sample task from a partial, not the trail's.
+- **`tasks/<taskId>/runs.ndjson` is not a complete task→run join** — on that trail it held only the first builder run. Rework dispatches (`dispatch: direct`, i.e. `verification.failed` fix-ups), guard inspections, and the receiver's commit run are absent from it. Join on `request.json.taskId`, not on this file.
+- **Task frontmatter has no `createdAt`** — only `updatedAt`, which moves on every status write. "How long has this task been waiting?" is therefore not answerable offline, which is why merge lag can only be measured against `updatedAt` plus the git commit time.
+- **Synthesized `MUTATION` events never reach `events.ndjson`** — a run's own event log proves what the bee published, never what the runtime did on its behalf. See "Trail surfaces show a third of the trail's events".
 
 ### Trail export and replay
 
