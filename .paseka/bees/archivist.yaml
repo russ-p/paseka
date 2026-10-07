@@ -1,0 +1,19 @@
+role: archivist
+adapter: cursor
+prompt_template: archivist.md
+default_intent: task
+params:
+  model: medium
+  output_format: stream-json
+  trust: true
+  force: true
+worktree: false
+publishes:
+  - type: INSIGHT
+    kind: context.note
+completion_contract:
+  required:
+    - type: INSIGHT
+      kind_one_of:
+        - context.note
+      count: 1

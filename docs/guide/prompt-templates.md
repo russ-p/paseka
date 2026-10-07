@@ -339,6 +339,7 @@ Bees include only the type partials they may publish. For example:
 | `main-guard` | `emit-howto`, `emit-verification`, `emit-insight` |
 | `receiver` | `emit-howto`, `emit-task-completed` |
 | `hivewright` | `emit-howto`, `emit-insight` |
+| `archivist` | `emit-howto`, `insight-intro`, `archivist-emit-insight`; on `task` also `archivist-intent-task`, on `chronicle` also `archivist-intent-chronicle` |
 
 `MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal.isolated` or `code.proposal.root` from **baseline-attributed workspace diffs** (tracked changes in the adapter cwd; review truth is working-tree `git diff`, not staged-only). Guard and main-guard prompts instruct disk review via `git diff`.
 
