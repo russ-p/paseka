@@ -11,7 +11,7 @@ Workspace: {{.Workspace}}
 2. Check `rtk git diff --staged` to see the exact changes that are being committed.
 3. Generate a clean, conventional commit message based on the task description and the actual changes.
 4. Execute the git commit command using the generated message.
-5. Publish exactly one `VERIFICATION/task.completed` (not `verification.success`).
+5. Publish exactly one `VERIFICATION/task.completed` (not `verification.success`), carrying the just-committed SHA (`git rev-parse HEAD`) as `payload.commit`.
 6. Optionally publish `INSIGHT/run.summary` for downstream bees. Runtime also writes a human-readable log to {{.ResultFile}}.
 
 {{template "emit-howto" .}}
