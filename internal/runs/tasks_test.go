@@ -55,6 +55,40 @@ func TestTaskMarkdownRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTaskMarkdownRoundTripCreatedAt(t *testing.T) {
+	fm := runs.TaskFrontmatter{
+		TraceID:   "trace-1",
+		TaskID:    "task-1",
+		Title:     "Add endpoint",
+		Status:    protocol.TaskStatusPlanned,
+		CreatedAt: "2026-07-07T05:30:00Z",
+		UpdatedAt: "2026-07-07T06:00:00Z",
+	}
+
+	gotFM, _, err := runs.ParseTaskMarkdown(runs.MarshalTaskMarkdown(fm, "body"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotFM.CreatedAt != "2026-07-07T05:30:00Z" {
+		t.Fatalf("createdAt = %q", gotFM.CreatedAt)
+	}
+}
+
+func TestTaskMarkdownWithoutCreatedAtStillParses(t *testing.T) {
+	legacy := "---\ntraceId: trace-1\ntaskId: task-1\nstatus: completed\nupdatedAt: \"2026-07-07T06:00:00Z\"\n---\n\nold body\n"
+
+	fm, body, err := runs.ParseTaskMarkdown(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fm.CreatedAt != "" {
+		t.Fatalf("createdAt = %q", fm.CreatedAt)
+	}
+	if fm.UpdatedAt != "2026-07-07T06:00:00Z" || body != "old body" {
+		t.Fatalf("fm = %+v body = %q", fm, body)
+	}
+}
+
 func TestWriteTaskSnapshotAndRuns(t *testing.T) {
 	root := t.TempDir()
 	traceID := "trace-1"
@@ -136,6 +170,36 @@ func TestSyncTraceTasksAndLoadFromFS(t *testing.T) {
 	}
 	if got.Tasks["task-1"].Sector != "frontend" {
 		t.Fatalf("sector = %q", got.Tasks["task-1"].Sector)
+	}
+}
+
+func TestSyncTraceTasksPreservesCreatedAt(t *testing.T) {
+	root := t.TempDir()
+	created := time.Date(2026, 7, 7, 5, 30, 0, 0, time.UTC)
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID:    "task-1",
+				Title:     "first",
+				Status:    protocol.TaskStatusCompleted,
+				CreatedAt: created,
+				UpdatedAt: created.Add(30 * time.Minute),
+			},
+		},
+	}
+	if err := runs.SyncTraceTasks(root, trace); err != nil {
+		t.Fatal(err)
+	}
+	got, err := runs.LoadTraceTasksFromFS(root, "trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Tasks["task-1"].CreatedAt.Equal(created) {
+		t.Fatalf("createdAt = %v", got.Tasks["task-1"].CreatedAt)
+	}
+	if !got.Tasks["task-1"].UpdatedAt.Equal(created.Add(30 * time.Minute)) {
+		t.Fatalf("updatedAt = %v", got.Tasks["task-1"].UpdatedAt)
 	}
 }
 

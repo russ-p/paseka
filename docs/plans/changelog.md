@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A task says when it was created
+
+`task.md` frontmatter now carries **`createdAt`** next to `updatedAt`, so "how long has this task been sitting here?" is a subtraction instead of an inference. Until now only `updatedAt` was on disk, and it moves on every status write — so an offline read of a trail could not tell a task that waited a day from one that ran straight through, which is exactly the question a trail audit asks.
+
+- **The stamp is written once and never moves.** The ledger sets it the first time it sees the task — normally on `task.plan`, and on `task.status`, `task.completed`, or a code proposal for a task that arrives before its plan — and every later transition leaves it alone.
+- **Older trails still read.** The field is omitted when unknown rather than written as a zero time, so a `task.md` written before it existed parses as before, and a blank `createdAt` means unknown rather than "created at the epoch".
+
+- Canonical: [task ledger](../reference/task-ledger.md)
+
 ## 2026-10 — A gated task links to its own review
 
 A task stopped at a review gate could be **approved** or **rejected** from its own page, but not **read**: the diff lives on the review route, and the only way onto it from there was to open the review queue and find this trail's row among the others by eye — so approving a change meant approving it unread. The Review section now carries **Open review** beside the buttons it belongs with, under the same gate that renders them, and it lands on the proposal rather than the full-screen preview below it — that is where a missing branch or an empty diff is explained, and where the way back to the task is. The label and its chevron name the destination; what is behind it — the diff and the notes on a final gate, the proposal on a mid-trail one that merges nothing — is said in the hint beside it.

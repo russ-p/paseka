@@ -206,6 +206,85 @@ func TestApplyEventTaskReady(t *testing.T) {
 	}
 }
 
+func TestApplyEventTaskCreatedAtStability(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
+
+	ev, err := protocol.NewEvent("trace-1", "scout", 1, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Build", Bee: "builder"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdAt := res.Trace.Tasks["task-1"].CreatedAt
+	if createdAt.IsZero() {
+		t.Fatal("createdAt should be set")
+	}
+
+	statusEv, err := protocol.NewEvent("trace-1", "builder", 2, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:    protocol.TaskEventStatus,
+		TaskID:  "task-1",
+		Status:  protocol.TaskStatusRunning,
+		Summary: "working",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res2, err := taskledger.ApplyEvent(res.Trace, statusEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res2.Trace.Tasks["task-1"].CreatedAt.Equal(createdAt) {
+		t.Fatalf("createdAt changed: %v vs %v", res2.Trace.Tasks["task-1"].CreatedAt, createdAt)
+	}
+}
+
+func TestApplyEventCreatedAtBackfilledWhenTaskFirstSeenOnStatus(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1"}
+
+	statusEv, err := protocol.NewEvent("trace-1", "builder", 1, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:   protocol.TaskEventStatus,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := taskledger.ApplyEvent(trace, statusEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdAt := res.Trace.Tasks["task-1"].CreatedAt
+	if createdAt.IsZero() {
+		t.Fatal("createdAt should be backfilled for a task first seen on task.status")
+	}
+
+	planEv, err := protocol.NewEvent("trace-1", "scout", 2, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind:  protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{TaskID: "task-1", Title: "Build", Bee: "builder"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res2, err := taskledger.ApplyEvent(res.Trace, planEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res2.Trace.Tasks["task-1"].CreatedAt.Equal(createdAt) {
+		t.Fatalf("createdAt moved: %v vs %v", res2.Trace.Tasks["task-1"].CreatedAt, createdAt)
+	}
+}
+
 func TestApplyEventTaskReadyFromFailed(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

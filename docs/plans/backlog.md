@@ -354,7 +354,7 @@ Trail audit tooling has exactly one reliable join and three traps. Verified agai
 
 - **A run's `taskId` lives only in `request.json`** — it has no `taskId` key in `meta.json`, `status.json`, or `result.json`. Do not grep `prompt.txt` for it: rendered templates embed literal JSON examples, and the first `"taskId":"…"` match in a scout's prompt is a sample task from a partial, not the trail's.
 - **`tasks/<taskId>/runs.ndjson` is not a complete task→run join** — on that trail it held only the first builder run. Rework dispatches (`dispatch: direct`, i.e. `verification.failed` fix-ups), guard inspections, and the receiver's commit run are absent from it. Join on `request.json.taskId`, not on this file.
-- **Task frontmatter has no `createdAt`** — only `updatedAt`, which moves on every status write. "How long has this task been waiting?" is therefore not answerable offline, which is why merge lag can only be measured against `updatedAt` plus the git commit time.
+- **`createdAt` in task frontmatter is absent on trails planned before it shipped** — the ledger now stamps it once per task, so wait time is `updatedAt - createdAt` read offline, but a trail written earlier carries only `updatedAt`, which moves on every status write. Read a missing `createdAt` as unknown, never as zero. See [task ledger](../reference/task-ledger.md) § Filesystem task projection.
 - **Synthesized `MUTATION` events never reach `events.ndjson`** — a run's own event log proves what the bee published, never what the runtime did on its behalf. See "Trail surfaces show a third of the trail's events".
 
 ### Trail export and replay

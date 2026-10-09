@@ -39,12 +39,12 @@ done | jq -s -r '(["agent","bee","adapter","profile","task","state","dur_s","in"
   (sort_by(.start)[]|[.agent,.bee,.adapter,.profile,.task,.state,(.dur//0|tostring),
    (.tin|tostring),(.tout|tostring),(.tcache|tostring),.mutation]|@tsv)'
 
-echo; echo "## TASKS   task status review updatedAt commit"
+echo; echo "## TASKS   task status review createdAt updatedAt commit"
 for td in "$R"/tasks/*/; do
   [ -f "$td/task.md" ] || continue
   f=$(sed -n '2,/^---$/p' "$td/task.md")
   g() { printf '%s' "$f" | sed -n "s/^$1: *//p" | head -1 | tr -d '"'; }
-  printf 'task\t%s\t%s\t%s\t%s\t%s\n' "$(basename "$td")" "$(g status)" "$(g review)" "$(g updatedAt)" "$(g commit)"
+  printf 'task\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(basename "$td")" "$(g status)" "$(g review)" "$(g createdAt)" "$(g updatedAt)" "$(g commit)"
 done
 
 echo; echo "## VERDICTS   n kind taskId"
@@ -83,7 +83,7 @@ for f in "{{.ColonyRoot}}/.paseka/runs/{{.TraceID}}"/*/summary.md; do echo "=== 
 - **`mutation` is `-` for every run, and that is a blind spot, not a finding.** The runtime publishes `MUTATION/code.proposal.isolated` to the bus but never writes it to `events.ndjson`, so "did this flight change anything" is **unanswerable offline**. State this in your report. Do not infer from `mutation == -` that a run was wasted.
 - `TASKS.commit` is empty for tasks that were never merged through a `_review` task. A `completed` task with no commit and a large `lag_merge_after_completed_s` means the work sat unmerged while the board read clean.
 - `lag_merge_after_completed_s` is measured from the last `task.completed` event to the `paseka: merge trace` commit. It is the single most load-bearing number here.
-- Task frontmatter has **no `createdAt`** — only `updatedAt`, which moves on every status write. Never claim how long a task waited; only that it finished before it was merged.
+- `TASKS.createdAt` is stamped **once** per task and never moves, so `updatedAt - createdAt` is how long that task sat in one state. A blank `createdAt` means the trail predates the field: read it as unknown, never as zero, and fall back to the completion-to-merge lag alone.
 - A run's `taskId` exists **only** in `request.json`. `tasks/<id>/runs.ndjson` is not a complete join — rework and inspection runs are missing from it.
 
 ## Task

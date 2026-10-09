@@ -33,6 +33,7 @@ type TaskFrontmatter struct {
 	DependsOn []string                  `yaml:"dependsOn,omitempty"`
 	Summary   string                    `yaml:"summary,omitempty"`
 	Commit    string                    `yaml:"commit,omitempty"`
+	CreatedAt string                    `yaml:"createdAt,omitempty"`
 	UpdatedAt string                    `yaml:"updatedAt,omitempty"`
 }
 
@@ -97,6 +98,9 @@ func WriteTaskSnapshot(colonyRoot string, traceID string, task taskledger.TaskSn
 		DependsOn: append([]string(nil), task.DependsOn...),
 		Summary:   task.Summary,
 		Commit:    task.Commit,
+	}
+	if !task.CreatedAt.IsZero() {
+		fm.CreatedAt = task.CreatedAt.UTC().Format(time.RFC3339)
 	}
 	if !task.UpdatedAt.IsZero() {
 		fm.UpdatedAt = task.UpdatedAt.UTC().Format(time.RFC3339)
@@ -273,6 +277,11 @@ func LoadTraceTasksFromFS(colonyRoot, traceID string) (taskledger.TraceSnapshot,
 			DependsOn: append([]string(nil), fm.DependsOn...),
 			Summary:   fm.Summary,
 			Commit:    fm.Commit,
+		}
+		if fm.CreatedAt != "" {
+			if ts, err := time.Parse(time.RFC3339, fm.CreatedAt); err == nil {
+				task.CreatedAt = ts
+			}
 		}
 		if fm.UpdatedAt != "" {
 			if ts, err := time.Parse(time.RFC3339, fm.UpdatedAt); err == nil {

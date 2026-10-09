@@ -299,7 +299,9 @@ The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/
       runs.ndjson    # agent run history for this task
 ```
 
-`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `updatedAt`). The markdown body stores the human-readable task description (`body`).
+`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `createdAt`, `updatedAt`). The markdown body stores the human-readable task description (`body`).
+
+`createdAt` is stamped **once**, when the ledger first sees the task (normally on `task.plan`; a task first seen through `task.status`, `task.completed`, or `code.proposal` gets the same stamp at that point) and never moves afterwards, while `updatedAt` moves on every status write. Wait time is therefore `updatedAt - createdAt` read straight from the file, with no bus. `createdAt` is omitted when unknown, so trails written before it existed still parse — treat a missing `createdAt` as unknown rather than zero.
 
 `runs.ndjson` links task executions to existing agent run directories (`agentId`, `bee`, `runDir`, `startedAt`, `finishedAt`, `runStatus`).
 

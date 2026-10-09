@@ -20,7 +20,18 @@ type TaskSnapshot struct {
 	Summary           string                     `json:"summary,omitempty"`
 	Commit            string                     `json:"commit,omitempty"`
 	ProposalWorkspace protocol.ProposalWorkspace `json:"proposalWorkspace,omitempty"`
+	CreatedAt         time.Time                  `json:"createdAt,omitempty"`
 	UpdatedAt         time.Time                  `json:"updatedAt,omitempty"`
+}
+
+// withCreatedAt stamps the task origin once, so a task first seen through
+// task.status, task.completed, or code.proposal still carries a creation time.
+// Never moves an existing stamp.
+func withCreatedAt(task TaskSnapshot, now time.Time) TaskSnapshot {
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	return task
 }
 
 // TraceSnapshot is the aggregated task ledger for one trace.

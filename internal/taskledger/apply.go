@@ -56,6 +56,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 				Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
 				Status:    protocol.TaskStatusPlanned,
 				DependsOn: append([]string(nil), spec.DependsOn...),
+				CreatedAt: now,
 				UpdatedAt: now,
 			}
 			changed = true
@@ -157,6 +158,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 					if !ok {
 						task = TaskSnapshot{TaskID: payload.TaskID}
 					}
+					task = withCreatedAt(task, now)
 					task.Status = payload.Status
 					// Always assign summary (including "") so unblock/clear transitions
 					// can drop stale reasons like "Honey reserve exhausted".
@@ -235,6 +237,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		if !ok {
 			task = TaskSnapshot{TaskID: payload.TaskID}
 		}
+		task = withCreatedAt(task, now)
 		status := payload.Status
 		if status == "" {
 			status = protocol.TaskStatusCompleted
@@ -282,6 +285,7 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		if !ok {
 			task = TaskSnapshot{TaskID: payload.TaskID}
 		}
+		task = withCreatedAt(task, now)
 		switch protocol.NormalizeCodeProposalKind(payload.Kind) {
 		case protocol.MutationCodeProposalIsolated:
 			task.ProposalWorkspace = protocol.ProposalWorkspaceIsolated
