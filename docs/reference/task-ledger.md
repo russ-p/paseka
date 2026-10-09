@@ -110,6 +110,10 @@ When a `task.ready` dispatch returns a non-completed adapter result or a dispatc
 
 Retry transitions `failed` or `running` → `ready` via `task.ready`, then the reactor dispatches again when `paseka run` is active. Queen Console exposes the same flow as `POST /api/traces/:traceId/tasks/:taskId/retry`.
 
+### Task order
+
+When more than one planned task is eligible in the same tick, the **oldest `createdAt` runs first**; the task id breaks ties ([spec 031](../specs/031-task-scheduler.md)). A task with no `createdAt` — a trail planned before the ledger stamped one — sorts **last**, so an unstamped task never displaces one whose wait is actually measured. Ordering is by plan time, not by id: `task-10` planned before `task-2` runs first.
+
 ### `task.status` — SIGNAL
 
 Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`, `failed`). The `summary` field on `task.status` replaces the previous task summary (omit or empty clears it — used when unblocking honey-exhausted tasks or clearing a failure reason on retry).

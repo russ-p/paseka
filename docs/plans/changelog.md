@@ -7,6 +7,7 @@ Shipped features worth calling out. Design records live under `docs/specs/` in t
 `task.md` frontmatter now carries **`createdAt`** next to `updatedAt`, so "how long has this task been sitting here?" is a subtraction instead of an inference. Until now only `updatedAt` was on disk, and it moves on every status write — so an offline read of a trail could not tell a task that waited a day from one that ran straight through, which is exactly the question a trail audit asks.
 
 - **The stamp is written once and never moves.** The ledger sets it the first time it sees the task — normally on `task.plan`, and on `task.status`, `task.completed`, or a code proposal for a task that arrives before its plan — and every later transition leaves it alone.
+- **Tasks now start in the order they were planned**, as [spec 031](../specs/031-task-scheduler.md) has always said: when several tasks are eligible in the same tick, the oldest goes first, with the task id breaking ties. Until now the order was lexicographic, so `task-10` ran before `task-2`. A task with no `createdAt` — a trail planned before the ledger stamped one — sorts last rather than pretending to be the oldest.
 - **Older trails still read.** The field is omitted when unknown rather than written as a zero time, so a `task.md` written before it existed parses as before, and a blank `createdAt` means unknown rather than "created at the epoch".
 
 - Canonical: [task ledger](../reference/task-ledger.md)

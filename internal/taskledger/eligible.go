@@ -1,11 +1,33 @@
 package taskledger
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
 )
+
+// comparePlanned orders tasks oldest-planned first (FIFO, spec 031), with the
+// task id breaking ties. A task with no createdAt — a trail planned before the
+// ledger stamped one — sorts last, so a legacy task never jumps ahead of one
+// whose wait is actually measured.
+func comparePlanned(a, b TaskSnapshot) int {
+	aStamped := !a.CreatedAt.IsZero()
+	bStamped := !b.CreatedAt.IsZero()
+	if aStamped != bStamped {
+		if aStamped {
+			return -1
+		}
+		return 1
+	}
+	if aStamped {
+		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(a.TaskID, b.TaskID)
+}
 
 // EligiblePlanned returns planned tasks whose dependencies are all completed.
 func EligiblePlanned(trace TraceSnapshot) []TaskSnapshot {
@@ -23,14 +45,12 @@ func EligiblePlanned(trace TraceSnapshot) []TaskSnapshot {
 		}
 		out = append(out, task)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].TaskID < out[j].TaskID
-	})
+	slices.SortFunc(out, comparePlanned)
 	return out
 }
 
-// FirstEligiblePlanned returns the lexicographically first planned task whose
-// dependencies are all completed, or false when none exist.
+// FirstEligiblePlanned returns the oldest planned task whose dependencies are
+// all completed, or false when none exist.
 func FirstEligiblePlanned(trace TraceSnapshot) (TaskSnapshot, bool) {
 	eligible := EligiblePlanned(trace)
 	if len(eligible) == 0 {
