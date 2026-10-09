@@ -309,6 +309,10 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		a.handleTraceArtifacts(w, r, traceID)
 		return
 	}
+	if suffix == "export" {
+		a.handleTraceExport(w, r, traceID)
+		return
+	}
 	if len(parts) >= 3 && parts[1] == "energy" && parts[2] == "add" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

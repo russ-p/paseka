@@ -931,6 +931,44 @@ export interface EnergyAddResult {
 	lowEnergy: boolean;
 }
 
+/** The export renderers, mirroring `export.Format`. `md` is the CLI's accepted alias for the Markdown renderer. */
+export type TraceExportFormat = 'md' | 'html';
+
+/**
+ * One optional report slice, mirroring `export.IncludeKind`. The export dialog's
+ * checkbox list and the query builder both read from this list, so the console
+ * presents exactly what `internal/export` can render.
+ */
+export type TraceExportInclude =
+	| 'usage'
+	| 'durations'
+	| 'bees'
+	| 'colony'
+	| 'cues'
+	| 'artifacts'
+	| 'agent-logs';
+
+export interface TraceExportIncludeOption {
+	value: TraceExportInclude;
+	label: string;
+	description: string;
+}
+
+export const traceExportFormats: { value: TraceExportFormat; label: string }[] = [
+	{ value: 'html', label: 'HTML' },
+	{ value: 'md', label: 'Markdown' }
+];
+
+export const traceExportIncludes: TraceExportIncludeOption[] = [
+	{ value: 'usage', label: 'LLM usage', description: 'Per-run token counts and their source' },
+	{ value: 'durations', label: 'Run durations', description: 'How long each run took' },
+	{ value: 'bees', label: 'Bee configs', description: 'The bee role YAML' },
+	{ value: 'colony', label: 'Colony config', description: 'The colony.yaml manifest' },
+	{ value: 'cues', label: 'Cue definitions', description: 'The signal cues' },
+	{ value: 'artifacts', label: 'Trail artifacts', description: 'The reported artifact files' },
+	{ value: 'agent-logs', label: 'Agent logs', description: 'The raw event log for each run' }
+];
+
 /**
  * One setting's effective value and the source that decides it, mirroring
  * `console.ConfigValue`.

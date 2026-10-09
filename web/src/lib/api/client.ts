@@ -39,6 +39,8 @@ import type {
 	TaskDetail,
 	Topology,
 	TraceDetail,
+	TraceExportFormat,
+	TraceExportInclude,
 	TraceSummary,
 	TranscriptPage
 } from '$lib/api/types';
@@ -149,6 +151,49 @@ export function addTraceEnergy(traceId: string, amount: number): Promise<EnergyA
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ amount })
 	});
+}
+
+/** The report bytes and the name the server gave them. */
+export interface TraceExportDownload {
+	blob: Blob;
+	filename: string;
+}
+
+/**
+ * The export endpoint answers with a file, not JSON, so it does not go through
+ * `request`. The include list is appended one value at a time — the server parses
+ * the repeated form the CLI's `--include` flag also offers — and the name comes
+ * from the response's `Content-Disposition`, which is the same
+ * `paseka-export-<slug>-<traceId>.<ext>` `paseka export` writes.
+ */
+export async function exportTrace(
+	traceId: string,
+	options: { format: TraceExportFormat; include?: TraceExportInclude[] }
+): Promise<TraceExportDownload> {
+	const query = new URLSearchParams({ format: options.format });
+	for (const include of options.include ?? []) query.append('include', include);
+	const response = await fetch(
+		`${apiRoot}/traces/${encodeURIComponent(traceId)}/export?${query.toString()}`
+	);
+	if (!response.ok) throw new ApiError(await failureMessage(response, response.status), response.status);
+	return {
+		blob: await response.blob(),
+		filename: attachmentFilename(
+			response.headers.get('Content-Disposition'),
+			`paseka-export-${traceId}.${options.format}`
+		)
+	};
+}
+
+/**
+ * Reads `filename="…"` out of a `Content-Disposition`. The server quotes the
+ * name, so a plain RFC 5987 `filename*=UTF-8''…` is not expected here; when the
+ * header is absent or shapeless the caller's fallback stands.
+ */
+export function attachmentFilename(disposition: string | null, fallback: string): string {
+	if (!disposition) return fallback;
+	const match = /filename="([^"]+)"/.exec(disposition);
+	return match?.[1] ?? fallback;
 }
 
 /**
