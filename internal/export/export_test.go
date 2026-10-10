@@ -405,6 +405,44 @@ func TestExportTraceIncludeUsageAndDurations(t *testing.T) {
 	}
 }
 
+func TestExportTraceIncludeUsageCompactTokens(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-usage-compact"
+	writeCompletedRun(t, repo, traceID, time.Now().UTC().Add(-2*time.Minute), &protocol.Usage{
+		InputTokens:     874823,
+		OutputTokens:    85988,
+		CacheReadTokens: 12300544,
+	})
+
+	include, err := ParseInclude([]string{"usage"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outDir := t.TempDir()
+	path, err := ExportTrace(ctx, Options{
+		TraceID:   traceID,
+		OutputDir: outDir,
+		Format:    FormatMarkdown,
+		Include:   include,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, want := range []string{
+		"**Usage:** in 880k / out 86k (874823 / 85988, cache read 12300544), 1 runs with usage",
+		"**Usage:** in 880k / out 86k (874823 / 85988, cache read 12300544)\n",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("export missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestExportTraceIncludeBeesOmitsLocalOverlay(t *testing.T) {
 	ctx, repo := setupExportColony(t)
 	traceID := "trace-bees"

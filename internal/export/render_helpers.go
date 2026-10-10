@@ -15,15 +15,9 @@ func formatUsageAggregate(u *runs.UsageAggregate) string {
 		return ""
 	}
 	parts := []string{
-		fmt.Sprintf("in %d / out %d", u.InputTokens, u.OutputTokens),
+		formatUsageHead(u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheWriteTokens),
+		fmt.Sprintf("%d runs with usage", u.RunCountWithUsage),
 	}
-	if u.CacheReadTokens > 0 {
-		parts = append(parts, fmt.Sprintf("cache read %d", u.CacheReadTokens))
-	}
-	if u.CacheWriteTokens > 0 {
-		parts = append(parts, fmt.Sprintf("cache write %d", u.CacheWriteTokens))
-	}
-	parts = append(parts, fmt.Sprintf("%d runs with usage", u.RunCountWithUsage))
 	return strings.Join(parts, ", ")
 }
 
@@ -35,18 +29,38 @@ func formatUsageTokens(u *protocol.Usage) string {
 		return ""
 	}
 	parts := []string{
-		fmt.Sprintf("in %d / out %d", u.InputTokens, u.OutputTokens),
-	}
-	if u.CacheReadTokens > 0 {
-		parts = append(parts, fmt.Sprintf("cache read %d", u.CacheReadTokens))
-	}
-	if u.CacheWriteTokens > 0 {
-		parts = append(parts, fmt.Sprintf("cache write %d", u.CacheWriteTokens))
+		formatUsageHead(u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheWriteTokens),
 	}
 	if u.DurationMs > 0 {
 		parts = append(parts, fmt.Sprintf("adapter %s", formatDuration(time.Duration(u.DurationMs)*time.Millisecond)))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func formatUsageHead(in, out, cacheRead, cacheWrite int64) string {
+	segments := []string{fmt.Sprintf("%d / %d", in, out)}
+	if cacheRead > 0 {
+		segments = append(segments, fmt.Sprintf("cache read %d", cacheRead))
+	}
+	if cacheWrite > 0 {
+		segments = append(segments, fmt.Sprintf("cache write %d", cacheWrite))
+	}
+	if in < 1000 && out < 1000 {
+		segments[0] = fmt.Sprintf("in %d / out %d", in, out)
+		return strings.Join(segments, ", ")
+	}
+	return fmt.Sprintf("in %s / out %s (%s)", compactTokenCount(in), compactTokenCount(out), strings.Join(segments, ", "))
+}
+
+func compactTokenCount(n int64) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	k := (n + 500) / 1000
+	if k >= 100 {
+		k = ((k + 5) / 10) * 10
+	}
+	return fmt.Sprintf("%dk", k)
 }
 
 func formatWallDuration(run hiveview.RunView) string {
