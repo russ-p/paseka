@@ -21,6 +21,11 @@ func TestCompactTokenCount(t *testing.T) {
 		{in: 1500, want: "2k"},
 		{in: 85988, want: "86k"},
 		{in: 874823, want: "880k"},
+		{in: 994999, want: "1M"},
+		{in: 995000, want: "1M"},
+		{in: 1_000_000, want: "1M"},
+		{in: 1_049_000, want: "1.05M"},
+		{in: 2_500_000, want: "2.5M"},
 	}
 	for _, tt := range tests {
 		if got := compactTokenCount(tt.in); got != tt.want {
