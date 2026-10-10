@@ -60,6 +60,17 @@ func compactTokenCount(n int64) string {
 	if k >= 100 {
 		k = ((k + 5) / 10) * 10
 	}
+	if k >= 1000 {
+		m := k / 1000
+		rem := k % 1000
+		if rem == 0 {
+			return fmt.Sprintf("%dM", m)
+		}
+		if rem%100 == 0 {
+			return fmt.Sprintf("%d.%dM", m, rem/100)
+		}
+		return fmt.Sprintf("%d.%02dM", m, rem/10)
+	}
 	return fmt.Sprintf("%dk", k)
 }
 
