@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { Zap } from 'lucide-svelte';
+	import { Download, Zap } from 'lucide-svelte';
 	import ArtifactViewModal from '$lib/components/ArtifactViewModal.svelte';
 	import BeeRunDrawer from '$lib/components/BeeRunDrawer.svelte';
 	import DetailRow from '$lib/components/DetailRow.svelte';
 	import EnergyMeter from '$lib/components/EnergyMeter.svelte';
+	import ExportTraceModal from '$lib/components/ExportTraceModal.svelte';
 	import MetaList from '$lib/components/MetaList.svelte';
 	import Section from '$lib/components/Section.svelte';
 	import SignalCard from '$lib/components/SignalCard.svelte';
@@ -45,6 +46,15 @@
 
 	let viewing = $state<ArtifactView | null>(null);
 	let running = $state(false);
+	let exporting = $state(false);
+
+	/**
+	 * The file is already saved when the export closes — the success toast is a
+	 * receipt, and the trail page is where the download leaves the operator.
+	 */
+	function reportExported(filename: string): void {
+		toasts.push('success', `Exported ${filename}`);
+	}
 
 	/**
 	 * A run started from inside a trail joins that trail, so the toast names the bee
@@ -167,6 +177,15 @@
 				{#if detail}
 					<a class="btn btn-sm" href={traceTimelinePath(base, traceId)}>Open timeline</a>
 				{/if}
+				<button
+					id="trace-export"
+					type="button"
+					class="btn btn-sm"
+					onclick={() => (exporting = true)}
+				>
+					<Download class="h-4 w-4" strokeWidth={2.5} />
+					Export
+				</button>
 				<button
 					id="trace-run-bee"
 					type="button"
@@ -347,4 +366,11 @@
 	{traceId}
 	onclose={() => (running = false)}
 	onran={beeRan}
+/>
+
+<ExportTraceModal
+	open={exporting}
+	{traceId}
+	onclose={() => (exporting = false)}
+	onexported={reportExported}
 />

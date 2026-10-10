@@ -450,4 +450,74 @@ describe('trace detail', () => {
 		// not written yet.
 		expect(reads).toBe(before);
 	});
+
+	it('exports the trail from the header and toasts the receipt', async () => {
+		const user = userEvent.setup();
+		const createObjectURL = vi.fn(() => 'blob:mock/paseka');
+		const revokeObjectURL = vi.fn();
+		vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: RequestInfo | URL) => {
+				const url = String(input);
+				if (url.includes('/export')) {
+					const markdown = url.includes('format=md');
+					return new Response(new TextEncoder().encode('report'), {
+						status: 200,
+						headers: {
+							'Content-Disposition': `attachment; filename="paseka-export-demo-trail.${
+								markdown ? 'md' : 'html'
+							}"`
+						}
+					});
+				}
+				return new Response('not found', { status: 404 });
+			})
+		);
+		const props = harness({});
+		const toasts = props.toasts;
+		render(TraceDetail, { traceId, ...props });
+
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		await user.click(screen.getByRole('button', { name: 'Export' }));
+
+		const dialog = await screen.findByRole('dialog');
+		expect(dialog).toHaveTextContent('Export trail');
+		await user.click(within(dialog).getByRole('radio', { name: 'Markdown' }));
+		await user.click(within(dialog).getByRole('checkbox', { name: /Colony config/ }));
+		await user.click(within(dialog).getByRole('button', { name: 'Export' }));
+
+		await waitFor(() => expect(toasts.items).toHaveLength(1));
+		expect(toasts.items[0]).toMatchObject({
+			tone: 'success',
+			message: 'Exported paseka-export-demo-trail.md'
+		});
+		// The download really started: the bytes were handed to a blob URL that was
+		// then revoked, and the dialog closed itself after the save began.
+		expect(createObjectURL).toHaveBeenCalledTimes(1);
+		expect(click).toHaveBeenCalledTimes(1);
+		expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock/paseka');
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+	});
+
+	it('reports a failed export as an error toast', async () => {
+		const user = userEvent.setup();
+		vi.stubGlobal('fetch', vi.fn(async () => new Response('trace not found', { status: 404 })));
+		const props = harness({});
+		const toasts = props.toasts;
+		render(TraceDetail, { traceId, ...props });
+
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		await user.click(screen.getByRole('button', { name: 'Export' }));
+
+		const dialog = await screen.findByRole('dialog');
+		await user.click(within(dialog).getByRole('button', { name: 'Export' }));
+
+		// The modal's own alert carries the reason, so the page never hides it in a
+		// toast; there is nothing to toast because nothing was exported.
+		expect(await within(dialog).findByRole('alert')).toHaveTextContent('trace not found');
+		expect(toasts.items).toHaveLength(0);
+		expect(screen.getByRole('dialog')).toBeInTheDocument();
+	});
 });

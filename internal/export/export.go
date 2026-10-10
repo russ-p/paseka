@@ -49,6 +49,52 @@ type ArtifactExport struct {
 	IsMarkdown   bool
 }
 
+// RenderTrace builds a self-contained trace report for one flight trail and
+// returns its bytes. It is the render half of ExportTrace, split out so a caller
+// that answers an HTTP request can stream the report without a temp file.
+func RenderTrace(ctx colony.Context, opts Options) ([]byte, error) {
+	traceID := strings.TrimSpace(opts.TraceID)
+	if traceID == "" {
+		return nil, fmt.Errorf("trace id is required")
+	}
+
+	detail, ok, err := hiveview.GetTrace(ctx, traceID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("trace %q not found", traceID)
+	}
+
+	events, err := runs.ReadTraceEvents(ctx.ColonyRoot, traceID)
+	if err != nil {
+		return nil, err
+	}
+	feedItems := hiveview.BuildEventFeedItems(ctx.ColonyRoot, traceID, events)
+
+	runsView := append([]hiveview.RunView(nil), detail.Runs...)
+	hiveview.SortRunsAsc(runsView)
+
+	format := opts.Format
+	if format == "" {
+		format = FormatHTML
+	}
+
+	data, err := buildTraceExportData(ctx, detail, runsView, feedItems, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	switch format {
+	case FormatHTML:
+		return RenderHTML(data)
+	case FormatMarkdown:
+		return RenderMarkdown(data)
+	default:
+		return nil, fmt.Errorf("unsupported export format %q", format)
+	}
+}
+
 // ExportTrace writes a self-contained trace report for one flight trail.
 func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 	traceID := strings.TrimSpace(opts.TraceID)
@@ -56,22 +102,15 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 		return "", fmt.Errorf("trace id is required")
 	}
 
-	detail, ok, err := hiveview.GetTrace(ctx, traceID)
+	format := opts.Format
+	if format == "" {
+		format = FormatHTML
+	}
+
+	content, err := RenderTrace(ctx, opts)
 	if err != nil {
 		return "", err
 	}
-	if !ok {
-		return "", fmt.Errorf("trace %q not found", traceID)
-	}
-
-	events, err := runs.ReadTraceEvents(ctx.ColonyRoot, traceID)
-	if err != nil {
-		return "", err
-	}
-	feedItems := hiveview.BuildEventFeedItems(ctx.ColonyRoot, traceID, events)
-
-	runsView := append([]hiveview.RunView(nil), detail.Runs...)
-	hiveview.SortRunsAsc(runsView)
 
 	outDir := opts.OutputDir
 	if outDir == "" {
@@ -82,31 +121,8 @@ func ExportTrace(ctx colony.Context, opts Options) (string, error) {
 		outDir = wd
 	}
 
-	format := opts.Format
-	if format == "" {
-		format = FormatHTML
-	}
-
 	filename := OutputFilename(ctx.Slug, traceID, format)
 	outPath := filepath.Join(outDir, filename)
-
-	data, err := buildTraceExportData(ctx, detail, runsView, feedItems, opts)
-	if err != nil {
-		return "", err
-	}
-
-	var content []byte
-	switch format {
-	case FormatHTML:
-		content, err = RenderHTML(data)
-	case FormatMarkdown:
-		content, err = RenderMarkdown(data)
-	default:
-		return "", fmt.Errorf("unsupported export format %q", format)
-	}
-	if err != nil {
-		return "", err
-	}
 
 	if err := os.WriteFile(outPath, content, 0o644); err != nil {
 		return "", err

@@ -3,7 +3,9 @@ import {
 	ApiError,
 	addTraceEnergy,
 	approveTask,
+	attachmentFilename,
 	createTask,
+	exportTrace,
 	getTask,
 	listBees,
 	listTasks,
@@ -453,5 +455,60 @@ describe('task endpoints', () => {
 		await listBees('colony');
 
 		expect(mock).toHaveBeenCalledWith('/api/bees?scope=colony', undefined);
+	});
+});
+
+describe('trace export', () => {
+	const report = new TextEncoder().encode('<!doctype html><p>report</p>');
+
+	it('requests the renderer and repeats each include value', async () => {
+		const mock = stubFetch(
+			() =>
+				new Response(report, {
+					status: 200,
+					headers: {
+						'Content-Disposition': 'attachment; filename="paseka-export-demo-export-trace.html"'
+					}
+				})
+		);
+
+		const { blob, filename } = await exportTrace('trace-export', {
+			format: 'html',
+			include: ['usage', 'bees', 'usage']
+		});
+
+		expect(mock).toHaveBeenCalledWith(
+			'/api/traces/trace-export/export?format=html&include=usage&include=bees&include=usage'
+		);
+		expect(filename).toBe('paseka-export-demo-export-trace.html');
+		expect(await blob.text()).toBe('<!doctype html><p>report</p>');
+	});
+
+	it('omits the include query entirely when none are chosen', async () => {
+		const mock = stubFetch(() => new Response(report, { status: 200 }));
+
+		await exportTrace('trace-export', { format: 'md' });
+
+		expect(mock).toHaveBeenCalledWith('/api/traces/trace-export/export?format=md');
+	});
+
+	it('prefers the server filename; the fallback stands for a shapeless header', () => {
+		expect(attachmentFilename('attachment; filename="a.md"', 'b.md')).toBe('a.md');
+		expect(attachmentFilename(null, 'b.md')).toBe('b.md');
+		expect(attachmentFilename('attachment', 'b.md')).toBe('b.md');
+	});
+
+	it('throws the server reason for a failed export', async () => {
+		stubFetch(() => new Response('trace not found', { status: 404 }));
+
+		await expect(exportTrace('nope', { format: 'html' })).rejects.toThrow('trace not found');
+	});
+
+	it('escapes a hostile trail id before it reaches the export path', async () => {
+		const mock = stubFetch(() => new Response(report, { status: 200 }));
+
+		await exportTrace('trace/../evil', { format: 'html' });
+
+		expect(mock).toHaveBeenCalledWith('/api/traces/trace%2F..%2Fevil/export?format=html');
 	});
 });
