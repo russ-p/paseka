@@ -2,6 +2,16 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A review can be closed without merging
+
+A review-gated task now has a third outcome beside approve and reject: **discard**. It is the deliberate "not doing this" close — the terminal, non-completed end of the queue that approve (merge or publish) and reject (feedback, and rework on a final gate) both left uncovered. A task waiting on a human could be accepted or sent back, but there was no way to simply stop, so work nobody wanted kept the queue occupied.
+
+- **Discard does nothing but close the task.** No worktree merge, no pull-request publish, no `human.feedback`, and no rework task: the task lands `cancelled` with an optional reason as its summary. The worktree is kept, not pruned, so a discarded result can still be revived.
+- **One verb, three surfaces.** `paseka proposal discard --trace --task [--reason]` mirrors the existing approve/reject subcommands; `POST /api/traces/:traceId/tasks/:taskId/discard` carries `CanDiscard` to the console review queue; and the review action panel grows a Discard button with a short confirmation. Unknown or non-`waiting_review` targets fail with the same errors as approve and reject.
+- **It reuses the shared review gate.** `internal/review.Discard` runs the same `waiting_review` + `IsReviewGate` validation and writes a `task.status` event with `cancelled` — not `task.completed`, so it does not promote the next planned task or open a merge gate.
+
+- Canonical: [CLI](../guide/cli.md), [Queen Console spec](../specs/002-queen-console-mvp.md)
+
 ## 2026-10 — A task says when it was created
 
 `task.md` frontmatter now carries **`createdAt`** next to `updatedAt`, so "how long has this task been sitting here?" is a subtraction instead of an inference. Until now only `updatedAt` was on disk, and it moves on every status write — so an offline read of a trail could not tell a task that waited a day from one that ran straight through, which is exactly the question a trail audit asks.

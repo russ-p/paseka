@@ -142,6 +142,17 @@ type RejectInput struct {
 
 // EnsureRejectable reports whether the task can receive human.feedback (waiting review gate).
 func EnsureRejectable(ledger taskledger.Ledger, traceID, taskID string) error {
+	return ensureWaitingReviewGate(ledger, traceID, taskID)
+}
+
+// EnsureDiscardable reports whether the task can be discarded (waiting review gate).
+func EnsureDiscardable(ledger taskledger.Ledger, traceID, taskID string) error {
+	return ensureWaitingReviewGate(ledger, traceID, taskID)
+}
+
+// ensureWaitingReviewGate is the shared guard for approve, reject, and discard:
+// the task must exist and be a review gate stopped at waiting_review.
+func ensureWaitingReviewGate(ledger taskledger.Ledger, traceID, taskID string) error {
 	if traceID == "" || taskID == "" {
 		return fmt.Errorf("trace and task id are required")
 	}

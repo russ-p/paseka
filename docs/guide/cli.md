@@ -112,7 +112,8 @@ paseka
 ├── signal
 ├── proposal
 │   ├── approve
-│   └── reject
+│   ├── reject
+│   └── discard
 ├── energy
 │   ├── show
 │   └── add
@@ -923,6 +924,21 @@ paseka proposal approve --trace trace-1 --task task-cfg-1 --summary "Config chan
 paseka proposal reject --trace trace-1 --task task-1 --feedback "Use the existing auth middleware"
 # Attach a pre-written review packet (line comments authored offline or exported elsewhere)
 paseka proposal reject --trace trace-1 --task task-1 --comments-file ./my-review.md --feedback "See line notes in comb"
+```
+
+### `paseka proposal discard`
+
+Close a review-gated task without merging and without asking for rework — the deliberate "not doing this" outcome, analogous to closing a pull request. The task leaves the review queue in a terminal `cancelled` state: no worktree merge, no pull-request publish, no `human.feedback`, and no rework task. The worktree is left in place, so a discarded result can still be revived.
+
+| Flag | Short | Required | Default | Description |
+| ---- | ----- | -------- | ------- | ----------- |
+| `--trace` | | yes | | Flight trail id |
+| `--task` | | yes | | Task id |
+| `--reason` | | | `discarded by human` | Why the result is being discarded (recorded as the task summary) |
+| `--path` | `-C` | | | Colony resolution start directory |
+
+```bash
+paseka proposal discard --trace trace-1 --task _review --reason "Superseded by the rewrite"
 ```
 
 ---

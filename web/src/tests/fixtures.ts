@@ -472,6 +472,7 @@ export function taskListItem(overrides: Partial<TaskListItem> = {}): TaskListIte
 		canRetry: false,
 		canApprove: false,
 		canReject: false,
+		canDiscard: false,
 		isFinal: false,
 		proposalWorkspace: 'isolated',
 		updatedAt: '2026-09-25T18:00:00Z',
@@ -502,6 +503,7 @@ export function taskBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
 						canStart: false,
 						canApprove: true,
 						canReject: true,
+						canDiscard: true,
 						runCount: 2,
 						updatedAt: '2026-09-25T18:04:00Z'
 					})
@@ -643,6 +645,7 @@ export function reviewQueueItem(overrides: Partial<ReviewQueueItem> = {}): Revie
 		isFinal: false,
 		canApprove: true,
 		canReject: true,
+		canDiscard: true,
 		...overrides
 	};
 }

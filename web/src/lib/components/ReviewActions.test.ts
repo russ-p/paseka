@@ -41,11 +41,12 @@ afterEach(() => {
 
 describe('ReviewActions', () => {
 	describe('the collapsed state', () => {
-		it('offers two verbs and no form, because six fields above the fold compete with the diff', () => {
+		it('offers three verbs and no form, because six fields above the fold compete with the diff', () => {
 			mount();
 
 			expect(screen.getByRole('button', { name: 'Approve…' })).toHaveAttribute('aria-expanded', 'false');
 			expect(screen.getByRole('button', { name: 'Reject…' })).toHaveAttribute('aria-expanded', 'false');
+			expect(screen.getByRole('button', { name: 'Discard…' })).toHaveAttribute('aria-expanded', 'false');
 			expect(screen.queryByLabelText('Approval summary')).not.toBeInTheDocument();
 			expect(screen.queryByLabelText('Feedback')).not.toBeInTheDocument();
 		});
@@ -298,6 +299,84 @@ describe('ReviewActions', () => {
 
 			expect(screen.queryByLabelText('Commit message')).not.toBeInTheDocument();
 			expect(screen.queryByLabelText('PR title')).not.toBeInTheDocument();
+		});
+	});
+
+	describe('discarding', () => {
+		it('is a third terminal outcome beside approve and reject', () => {
+			mount();
+
+			expect(screen.getByRole('button', { name: 'Discard…' })).toHaveAttribute('aria-expanded', 'false');
+		});
+
+		it('asks for confirmation and says what is left behind', async () => {
+			mount();
+
+			await userEvent.click(screen.getByRole('button', { name: 'Discard…' }));
+
+			expect(screen.getByText(/without merging and without rework/)).toBeInTheDocument();
+			expect(screen.getByLabelText('Reason (optional)')).toBeInTheDocument();
+			// The confirmation is the click, so Discard is live with no field filled in.
+			expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled();
+		});
+
+		it('sends only the reason when one was written', async () => {
+			const { sent } = stubActions();
+			mount();
+
+			await userEvent.click(screen.getByRole('button', { name: 'Discard…' }));
+			await userEvent.type(screen.getByLabelText('Reason (optional)'), 'Superseded.');
+			await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+			await waitFor(() => expect(sent).toHaveLength(1));
+			expect(sent[0].url).toBe('/api/traces/trace-01a0bd6963faa14f/tasks/_review/discard');
+			expect(sent[0].body).toEqual({ reason: 'Superseded.' });
+		});
+
+		it('sends no reason at all when the box is left empty', async () => {
+			const { sent } = stubActions();
+			mount();
+
+			await userEvent.click(screen.getByRole('button', { name: 'Discard…' }));
+			await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+			await waitFor(() => expect(sent).toHaveLength(1));
+			// An absent reason lets the server record its own default.
+			expect(sent[0].body).toEqual({});
+		});
+
+		it('reports the server\'s own message when it sent one', async () => {
+			stubActions(() => json({ traceId: 't', taskId: '_review', message: 'Discarded — closed.' }));
+			const { onsettled } = mount();
+
+			await userEvent.click(screen.getByRole('button', { name: 'Discard…' }));
+			await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+			await waitFor(() => expect(onsettled).toHaveBeenCalled());
+			expect(onsettled).toHaveBeenCalledWith({ tone: 'warning', message: 'Discarded — closed.' });
+		});
+
+		it('names the discard it made when the server said nothing', async () => {
+			stubActions();
+			const { onsettled } = mount();
+
+			await userEvent.click(screen.getByRole('button', { name: 'Discard…' }));
+			await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+			await waitFor(() => expect(onsettled).toHaveBeenCalled());
+			expect(onsettled).toHaveBeenCalledWith({ tone: 'warning', message: 'Discarded _review' });
+		});
+
+		it('keeps the confirmation open with the reason when the discard does not land', async () => {
+			stubActions(() => new Response('task is not waiting on a human', { status: 409 }));
+			mount();
+
+			await userEvent.click(screen.getByRole('button', { name: 'Discard…' }));
+			await userEvent.type(screen.getByLabelText('Reason (optional)'), 'Superseded.');
+			await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+			expect(await screen.findByRole('alert')).toHaveTextContent('task is not waiting on a human');
+			expect(screen.getByLabelText('Reason (optional)')).toHaveValue('Superseded.');
 		});
 	});
 

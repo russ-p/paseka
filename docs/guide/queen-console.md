@@ -210,8 +210,12 @@ with per-file diffs and line-anchored comments.
 - **Request changes** writes `review-comments.md` to the trail comb, publishes
   `INSIGHT/human.feedback`, and plans rework on the same trail.
 - Plain reject records feedback without merging.
+- **Discard** closes the task terminally — "not doing this" — with an optional
+  reason. It merges nothing, publishes nothing, sends no feedback, and plans no
+  rework; the worktree is left in place so the result can be revived later.
 
-CLI equivalents are `paseka proposal approve` and `paseka proposal reject`.
+CLI equivalents are `paseka proposal approve`, `paseka proposal reject`, and
+`paseka proposal discard`.
 Review approval does not push the default branch to its remote. The Git tab
 never pushes the worktree head; PR publish does.
 
@@ -240,12 +244,13 @@ changes** sends the notes with your overall summary and starts a rework task; it
 is disabled while a rework from an earlier rejection is still in flight.
 
 If the bee pushes while you are reviewing, the panel says so, names both commits,
-and holds the send until you confirm you have re-read the diff — your notes are
+and holds the send until you have confirmed you have re-read the diff — your notes are
 kept rather than dropped, because their line numbers may no longer mean the same
 thing but the thinking behind them is still yours. On the proposal page, **Approve** (or **Open PR** / **Update PR**)
 asks for an approval summary and, for a final gate, an optional commit message;
 plain **Reject** publishes your feedback without starting a rework, which is the
-difference the two buttons make.
+difference the two buttons make — and **Discard** is the third way out, a terminal
+close with an optional reason that merges nothing and plans no rework.
 
 
 ### Tasks
@@ -270,10 +275,12 @@ Open a task for its metadata, the body it was handed (folded — reading a task 
 about what it did, not what it was given), the bee's own summary, and its linked
 runs, each linking on to the run's own page. **Start** and **Retry** appear only
 when the server says the task is eligible, and report the ledger's refusal in its
-own words when it says no. A task waiting on you carries **Approve** and
-**Request changes** here rather than only on the review queue: the pull-request
-fields sit under Approve and appear only for a task delivered as a pull request,
-and Request changes is one box — your feedback becomes the rework task's body.
+own words when it says no. A task waiting on you carries **Approve**, **Request
+changes**, and **Discard** here rather than only on the review queue: the
+pull-request fields sit under Approve and appear only for a task delivered as a
+pull request, Request changes is one box — your feedback becomes the rework
+task's body — and Discard is one question with an optional reason, closing the
+task without feedback or rework.
 Creating a task from the CLI is `paseka task create`; the other task CLI
 equivalents are `paseka task list`, `paseka task show`, `paseka task start`, and
 `paseka task retry`.
@@ -545,7 +552,7 @@ rather than polling. Nothing here needs the Hive Runtime.
 | ---- | ------- | ----------- |
 | Check colony health | Dashboard | `paseka status` |
 | Diagnose NATS or wiring | Runtime notices | `paseka doctor` |
-| Review a proposal | Reviews | `paseka proposal approve\|reject` |
+| Review a proposal | Reviews | `paseka proposal approve\|reject\|discard` |
 | Add honey | Trace detail | `paseka energy add --trace ...` |
 | Stop AFK work on a trail | Trace/task context | `paseka kill --trace ...` |
 | Work with an interactive bee | Sessions | `paseka bee chat`, `paseka session ...` |

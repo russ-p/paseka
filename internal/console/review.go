@@ -47,6 +47,7 @@ type ReviewQueueItem struct {
 	PullRequest       *PullRequestView `json:"pullRequest,omitempty"`
 	CanApprove        bool             `json:"canApprove"`
 	CanReject         bool             `json:"canReject"`
+	CanDiscard        bool             `json:"canDiscard"`
 	CanRequestChanges bool             `json:"canRequestChanges,omitempty"`
 	ReworkTaskID      string           `json:"reworkTaskId,omitempty"`
 	ReworkStatus      string           `json:"reworkStatus,omitempty"`
@@ -102,6 +103,18 @@ type RejectTaskResponse struct {
 	TaskID       string `json:"taskId"`
 	ReworkTaskID string `json:"reworkTaskId,omitempty"`
 	Message      string `json:"message,omitempty"`
+}
+
+// DiscardTaskRequest is the JSON body for POST .../discard.
+type DiscardTaskRequest struct {
+	Reason string `json:"reason"`
+}
+
+// DiscardTaskResponse is returned after discarding a review-gated task.
+type DiscardTaskResponse struct {
+	TraceID string `json:"traceId"`
+	TaskID  string `json:"taskId"`
+	Message string `json:"message,omitempty"`
 }
 
 // ListReviewQueue returns tasks awaiting human review across recent traces.
@@ -253,6 +266,37 @@ func RejectTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID s
 	}, nil
 }
 
+// DiscardTask closes a review-gated task without merging or requesting rework.
+func DiscardTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID string, req DiscardTaskRequest) (DiscardTaskResponse, error) {
+	session, err := tasks.OpenLedger(colonyCtx)
+	if err != nil {
+		return DiscardTaskResponse{}, err
+	}
+	defer session.Close()
+
+	if _, err := validateReviewTaskTarget(colonyCtx, session, traceID, taskID); err != nil {
+		return DiscardTaskResponse{}, err
+	}
+	if session.Publisher == nil || session.Ledger == nil {
+		return DiscardTaskResponse{}, fmt.Errorf("nats url not configured")
+	}
+
+	if err := review.Discard(ctx, session.Publisher, session.Ledger, review.DiscardInput{
+		TraceID: traceID,
+		TaskID:  taskID,
+		Reason:  req.Reason,
+		AgentID: "console",
+	}); err != nil {
+		return DiscardTaskResponse{}, err
+	}
+
+	return DiscardTaskResponse{
+		TraceID: traceID,
+		TaskID:  taskID,
+		Message: review.DiscardResponseMessage(),
+	}, nil
+}
+
 func reviewCommentsFromInput(in []ReviewCommentInput) []review.ReviewComment {
 	out := make([]review.ReviewComment, 0, len(in))
 	for _, c := range in {
@@ -282,6 +326,7 @@ func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
 		ProposalWorkspace: item.ProposalWorkspace,
 		CanApprove:        item.CanApprove,
 		CanReject:         item.CanReject,
+		CanDiscard:        item.CanDiscard,
 		CanRequestChanges: item.CanRequestChanges,
 		ReworkTaskID:      item.ReworkTaskID,
 		ReworkStatus:      item.ReworkStatus,
