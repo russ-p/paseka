@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { approveTask, rejectTask } from '$lib/api/client';
+	import { approveTask, discardTask, rejectTask } from '$lib/api/client';
 	import type { PullRequest, ReviewQueueItem, TaskDetail } from '$lib/api/types';
 
 	let {
@@ -15,7 +15,7 @@
 	 * Both forms are collapsed until asked. The common action is approve-or-read, and
 	 * a form of six fields above the fold competes with reading the diff.
 	 */
-	let open = $state<'approve' | 'reject' | null>(null);
+	let open = $state<'approve' | 'reject' | 'discard' | null>(null);
 	let summary = $state('');
 	let mergeMessage = $state('');
 	let prTitle = $state('');
@@ -23,7 +23,8 @@
 	let draft = $state(false);
 	let runHooks = $state(false);
 	let feedback = $state('');
-	let submitting = $state<'approve' | 'reject' | null>(null);
+	let discardReason = $state('');
+	let submitting = $state<'approve' | 'reject' | 'discard' | null>(null);
 	let error = $state('');
 
 	/**
@@ -56,6 +57,8 @@
 		submitting === null && summary.trim() !== '' && (showPrFields === false || prTitle.trim() !== '')
 	);
 	const rejectReady = $derived(submitting === null && feedback.trim() !== '');
+	/** Discard needs no field: the confirmation is the click, the reason is optional. */
+	const discardReady = $derived(submitting === null);
 
 	/** What approving will actually do, said before the operator commits to it. */
 	const approveNote = $derived(
@@ -114,6 +117,26 @@
 		}
 	}
 
+	async function discard(): Promise<void> {
+		if (!discardReady) return;
+		submitting = 'discard';
+		error = '';
+		try {
+			const result = await discardTask(task.traceId, task.taskId, {
+				...(discardReason.trim() === '' ? {} : { reason: discardReason.trim() })
+			});
+			onsettled?.({
+				tone: 'warning',
+				message: result.message ?? `Discarded ${task.taskId}`
+			});
+			reset();
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			submitting = null;
+		}
+	}
+
 	function reset(): void {
 		open = null;
 		summary = '';
@@ -123,6 +146,7 @@
 		draft = false;
 		runHooks = false;
 		feedback = '';
+		discardReason = '';
 	}
 </script>
 
@@ -153,6 +177,20 @@
 	>
 		Reject…
 	</button>
+	{#if task.canDiscard === true}
+		<button
+			id="task-discard"
+			type="button"
+			class="btn btn-warning btn-sm btn-outline"
+			aria-expanded={open === 'discard'}
+			onclick={() => {
+				open = open === 'discard' ? null : 'discard';
+				error = '';
+			}}
+		>
+			Discard…
+		</button>
+	{/if}
 </div>
 
 {#if open === 'approve'}
@@ -268,6 +306,45 @@
 		<div class="flex items-center gap-2">
 			<button type="submit" class="btn btn-error btn-sm" disabled={!rejectReady}>
 				{submitting === 'reject' ? 'Rejecting…' : 'Reject'}
+			</button>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={reset}>Cancel</button>
+		</div>
+	</form>
+{:else if open === 'discard'}
+	<!-- Discard is the terminal "not doing this" close, so it reads as a
+	     confirmation rather than a form: one optional line of why, and a button
+	     that says plainly what is left behind. -->
+	<form
+		id="task-discard-form"
+		class="mt-3 space-y-3 rounded-box border border-base-300 bg-base-200/40 p-3"
+		onsubmit={(event) => {
+			event.preventDefault();
+			void discard();
+		}}
+	>
+		{#if error}
+			<div class="alert alert-error" role="alert"><span>{error}</span></div>
+		{/if}
+
+		<p class="text-sm">
+			Close this result without merging and without rework. The worktree is kept, so it can be
+			revived later.
+		</p>
+
+		<div class="fieldset">
+			<label class="fieldset-legend" for="task-discard-reason">Reason (optional)</label>
+			<textarea
+				id="task-discard-reason"
+				class="textarea textarea-bordered min-h-16 w-full"
+				placeholder="Why this result is not needed"
+				bind:value={discardReason}
+			></textarea>
+			<span class="fieldset-label">Recorded against the task. No feedback is sent to the bee.</span>
+		</div>
+
+		<div class="flex items-center gap-2">
+			<button type="submit" class="btn btn-warning btn-sm" disabled={!discardReady}>
+				{submitting === 'discard' ? 'Discarding…' : 'Discard'}
 			</button>
 			<button type="button" class="btn btn-ghost btn-sm" onclick={reset}>Cancel</button>
 		</div>

@@ -243,6 +243,7 @@ func newProposalCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newProposalApproveCmd())
 	cmd.AddCommand(newProposalRejectCmd())
+	cmd.AddCommand(newProposalDiscardCmd())
 	return cmd
 }
 
@@ -389,5 +390,46 @@ func newProposalRejectCmd() *cobra.Command {
 	cmd.Flags().StringVar(&taskID, "task", "", "task id")
 	cmd.Flags().StringVar(&feedback, "feedback", "", "human feedback for the bee (short summary when using --comments-file)")
 	cmd.Flags().StringVar(&commentsFile, "comments-file", "", "path to a Markdown file to copy into the trail comb as review-comments.md before publishing feedback")
+	return cmd
+}
+
+func newProposalDiscardCmd() *cobra.Command {
+	var (
+		startDir string
+		traceID  string
+		taskID   string
+		reason   string
+	)
+	cmd := &cobra.Command{
+		Use:   "discard",
+		Short: "Discard a review-gated task (terminal close; no merge, no rework)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if traceID == "" || taskID == "" {
+				return fmt.Errorf("--trace and --task are required")
+			}
+			session, err := openTaskSession(startDir)
+			if err != nil {
+				return err
+			}
+			defer session.Close()
+			if session.Publisher == nil || session.Ledger == nil {
+				return fmt.Errorf("nats url not configured")
+			}
+			if err := review.Discard(cmd.Context(), session.Publisher, session.Ledger, review.DiscardInput{
+				TraceID: traceID,
+				TaskID:  taskID,
+				Reason:  reason,
+			}); err != nil {
+				return err
+			}
+			fmt.Printf("Discarded task %s on trace %s\n", taskID, traceID)
+			fmt.Printf("  %s\n", review.DiscardResponseMessage())
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
+	cmd.Flags().StringVar(&taskID, "task", "", "task id")
+	cmd.Flags().StringVar(&reason, "reason", "", "why the result is being discarded (default: discarded by human)")
 	return cmd
 }

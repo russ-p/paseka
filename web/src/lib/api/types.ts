@@ -346,6 +346,7 @@ export interface TaskListItem {
 	canRetry: boolean;
 	canApprove: boolean;
 	canReject: boolean;
+	canDiscard: boolean;
 	canRequestChanges?: boolean;
 	reworkTaskId?: string;
 	reworkStatus?: string;
@@ -550,6 +551,7 @@ export interface ReviewQueueItem {
 	pullRequest?: PullRequest;
 	canApprove: boolean;
 	canReject: boolean;
+	canDiscard: boolean;
 	/** False while a rework task from an earlier rejection is still in flight. */
 	canRequestChanges?: boolean;
 	reworkTaskId?: string;
@@ -637,6 +639,21 @@ export interface RejectTaskResult {
 	traceId: string;
 	taskId: string;
 	reworkTaskId?: string;
+	message?: string;
+}
+
+/** Mirrors `console.DiscardTaskRequest`. */
+export interface DiscardTaskRequest {
+	reason?: string;
+}
+
+/**
+ * Mirrors `console.DiscardTaskResponse`. A discard is terminal: nothing merges,
+ * no pull request is published, and no rework task is created.
+ */
+export interface DiscardTaskResult {
+	traceId: string;
+	taskId: string;
 	message?: string;
 }
 

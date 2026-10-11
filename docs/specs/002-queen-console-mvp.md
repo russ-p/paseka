@@ -78,8 +78,8 @@ Implemented UI surfaces:
 
 - **Dashboard**: runtime status, NATS diagnostics, active sessions, active worktrees, task counts, recent traces, failed runs, and recent narrative insights.
 - **Timeline**: filterable event feed with trace, task, bee, event type, payload kind, severity, cursor pagination, and optional raw JSON display.
-- **Tasks**: grouped task board, task creation with optional `review` policy, optional autorun, task detail, linked runs, timeline navigation, start controls for eligible tasks, and inline approve/reject for `waiting_review` review-gated tasks.
-- **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, final-merge worktree diff preview (`GET /api/traces/:traceId/merge-diff`), approve/reject actions wired to the same domain flow as `paseka proposal approve|reject`.
+- **Tasks**: grouped task board, task creation with optional `review` policy, optional autorun, task detail, linked runs, timeline navigation, start controls for eligible tasks, and inline approve/reject/discard for `waiting_review` review-gated tasks.
+- **Reviews**: review queue for `waiting_review` tasks with `review: required` or `review: final`, proposal detail, final-merge worktree diff preview (`GET /api/traces/:traceId/merge-diff`), approve/reject/discard actions wired to the same domain flow as `paseka proposal approve|reject|discard`.
 - **Sessions**: launch detached sessions for interactive-capable bees, list active and recent sessions, inspect metadata, attach an in-browser xterm.js terminal over WebSocket for active sessions (with optional full-page Widen layout), poll transcript updates for completed sessions, and stop active sessions.
 - **Runs**: list recent headless adapter invocations, inspect run metadata and summaries, and poll `events.ndjson` for a selected run.
 - **Topology**: config-derived colony EDA graph from bee `subscribes`/`publishes` and `auto_invites`; interactive Cytoscape render from structured JSON; copy Mermaid source; works when runtime/NATS are stopped ([007](./007-colony-eda-topology.md)).
@@ -113,7 +113,7 @@ The MVP should let a solo developer:
 - Start and stop the local hive runtime from the browser.
 - Launch a detached bee session from the browser, attach an interactive terminal, and read the transcript after completion.
 - Inspect recent adapter runs and their emitted events without manually opening run directories.
-- Approve or reject review-gated tasks from the browser when NATS and the task ledger are available.
+- Approve, reject, or discard review-gated tasks from the browser when NATS and the task ledger are available.
 - Inspect the accumulated worktree diff before approving a final merge gate.
 
 ## Decisions
@@ -127,14 +127,14 @@ The current baseline prioritizes:
 - dashboard visibility
 - timeline and event-feed inspection
 - task board visibility and basic task actions
-- review queue visibility and approve/reject actions
+- review queue visibility and approve/reject/discard actions
 - run inspection
 - session launch, browser terminal attach, and session observation
 - local runtime start/stop control
 
 Browser terminal attach is implemented for sessions owned by the current `paseka console` process.
 
-Task creation, start, approve, and reject actions require NATS and the task ledger KV because they publish domain events instead of writing local files directly.
+Task creation, start, approve, reject, and discard actions require NATS and the task ledger KV because they publish domain events instead of writing local files directly.
 
 ### Backend Shape
 
@@ -171,7 +171,7 @@ This allows the UI to remain useful even when:
 
 Future live subscriptions may add JetStream data as the freshest source for event updates, but the current UI is intentionally useful from local projections alone.
 
-Approve and reject actions follow the same rule: they call `internal/review.Approve` / `internal/review.Reject` and require NATS.
+Approve, reject, and discard actions follow the same rule: they call `internal/review.Approve` / `internal/review.Reject` / `internal/review.Discard` and require NATS.
 
 ### MVP Screens
 
@@ -244,7 +244,7 @@ Current implementation supports:
 - task creation with title, body, bee (select from interactive bees), optional trace id, sector, per-bee intent, optional `review` policy (`none`, `required`, `final`), dependencies, and autorun
 - task detail with status, review policy, source, body, summary, commit, dependencies, and linked runs
 - start action for eligible tasks
-- approve/reject actions for review-gated tasks in `waiting_review`
+- approve/reject/discard actions for review-gated tasks in `waiting_review`
 - linked run navigation
 - task-scoped timeline navigation
 
@@ -279,10 +279,11 @@ The Reviews tab exposes the human-in-the-loop review queue:
 - **Format** control on the preview page switches unified (line-by-line) vs side-by-side
 - approve action (optional summary; optional merge commit message for `review: final`)
 - reject action with human feedback (final gate: abandon-style; no rework)
+- discard action with an optional reason: terminal close, no merge, no publish, no rework
 - **Request changes** on the merge preview (final gate): comb comments + new rework task; merge gate stays `waiting_review`
 - links to timeline and linked runs for inspection context
 
-Approve/reject reuse the same domain flows as `paseka proposal approve|reject`. For `review: required`, reject publishes `human.feedback` and the runtime may return the task to `ready`. For `review: final`, plain reject only publishes feedback; annotated Request changes plans rework without merging; approve may merge the trace worktree.
+Approve/reject/discard reuse the same domain flows as `paseka proposal approve|reject|discard`. For `review: required`, reject publishes `human.feedback` and the runtime may return the task to `ready`. For `review: final`, plain reject only publishes feedback; annotated Request changes plans rework without merging; approve may merge the trace worktree; discard cancels the task without merging, publishing, or planning rework.
 
 Current implementation polls `GET /api/review-queue` every 5 seconds while the Reviews tab is active. While the same final merge gate stays selected, the poll refreshes queue metadata and actions without re-rendering an unchanged merge diff (preserving file-list selection and scroll). When the worktree `headSha` (or patch) changes after rework, the preview refreshes quietly.
 
@@ -382,7 +383,7 @@ The tab loads on demand (no background poll). Mermaid source can be copied for d
 
 ### Review Queue
 
-Implemented in the Reviews tab. The queue lists review-gated tasks in `waiting_review` and supports browser approve/reject through the shared `internal/review` domain layer.
+Implemented in the Reviews tab. The queue lists review-gated tasks in `waiting_review` and supports browser approve/reject/discard through the shared `internal/review` domain layer.
 
 At minimum, the UI shows:
 
@@ -391,11 +392,11 @@ At minimum, the UI shows:
 - summary
 - review policy (`required` vs `final`)
 - for final merge gates: branch metadata, `--stat` summary on Reviews detail; **Open merge preview** for full-page file-oriented viewer (sticky file list, per-file hunks, path filter, keyboard navigation) via vendored diff2html
-- approve/reject chrome stays on Reviews detail (not on the preview page); format control is on the preview page only
+- approve/reject/discard chrome stays on Reviews detail (not on the preview page); format control is on the preview page only
 - Request changes on the preview page for final gates (line comments + rework); disabled while rework is in flight
 - links to timeline and linked runs for inspection context
 
-Approve/reject actions reuse the same domain flows as `paseka proposal approve|reject`.
+Approve/reject/discard actions reuse the same domain flows as `paseka proposal approve|reject|discard`. Discard closes the task terminally without merging, publishing, or planning rework.
 
 ### Worktree Visibility
 
@@ -451,6 +452,7 @@ Implemented HTTP endpoints:
 - `GET /api/review-queue`
 - `POST /api/traces/:traceId/tasks/:taskId/approve`
 - `POST /api/traces/:traceId/tasks/:taskId/reject`
+- `POST /api/traces/:traceId/tasks/:taskId/discard`
 - `GET /api/runs`
 - `GET /api/runs/:traceId/:agentId`
 - `GET /api/runs/:traceId/:agentId/events`
@@ -653,6 +655,7 @@ Includes:
 - proposal detail
 - approve proposal
 - reject proposal with human feedback
+- discard proposal (terminal close; no merge, no rework)
 - task board/detail review policy visibility
 
 ### 8. Live Streaming Improvements (Deferred)

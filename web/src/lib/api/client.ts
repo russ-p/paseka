@@ -14,6 +14,8 @@ import type {
 	Cue,
 	ColonyConfig,
 	DashboardSummary,
+	DiscardTaskRequest,
+	DiscardTaskResult,
 	EnergyAddResult,
 	EventFeedPage,
 	EventFilters,
@@ -407,6 +409,21 @@ export function rejectTask(
 ): Promise<RejectTaskResult> {
 	return post<RejectTaskResult>(
 		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/reject`,
+		review
+	);
+}
+
+/**
+ * Close a review-gated task without merging and without requesting rework —
+ * the terminal, "not doing this" outcome. The worktree is left in place.
+ */
+export function discardTask(
+	traceId: string,
+	taskId: string,
+	review: DiscardTaskRequest
+): Promise<DiscardTaskResult> {
+	return post<DiscardTaskResult>(
+		`/traces/${encodeURIComponent(traceId)}/tasks/${encodeURIComponent(taskId)}/discard`,
 		review
 	);
 }

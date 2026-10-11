@@ -2063,6 +2063,9 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 	if requiredQueueItem.TraceSummary != "" {
 		t.Fatalf("required queue traceSummary = %q, want omitted", requiredQueueItem.TraceSummary)
 	}
+	if !requiredQueueItem.CanDiscard {
+		t.Fatalf("required queue item CanDiscard = false, want true: %+v", requiredQueueItem)
+	}
 
 	approveReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+requiredID+"/approve", bytes.NewBufferString(`{"summary":"looks good"}`))
 	approveRec := httptest.NewRecorder()
@@ -2083,6 +2086,20 @@ func TestReviewQueueAPIHandlers(t *testing.T) {
 	srv.Handler().ServeHTTP(rejectRec, rejectReq)
 	if rejectRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("reject without nats status = %d body=%s", rejectRec.Code, rejectRec.Body.String())
+	}
+
+	discardPlannedReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+plannedID+"/discard", bytes.NewBufferString(`{"reason":"not doing this"}`))
+	discardPlannedRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(discardPlannedRec, discardPlannedReq)
+	if discardPlannedRec.Code != http.StatusBadRequest {
+		t.Fatalf("discard planned task status = %d body=%s", discardPlannedRec.Code, discardPlannedRec.Body.String())
+	}
+
+	discardReq := httptest.NewRequest(http.MethodPost, "/api/traces/"+traceID+"/tasks/"+requiredID+"/discard", bytes.NewBufferString(`{"reason":"not doing this"}`))
+	discardRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(discardRec, discardReq)
+	if discardRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("discard without nats status = %d body=%s", discardRec.Code, discardRec.Body.String())
 	}
 
 	methodReq := httptest.NewRequest(http.MethodGet, "/api/review-queue", nil)

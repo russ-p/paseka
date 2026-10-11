@@ -938,6 +938,15 @@ func (a *api) handleTraceTasks(w http.ResponseWriter, r *http.Request, traceID s
 		return
 	}
 
+	if len(parts) == 3 && parts[2] == "discard" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		a.discardTask(w, r, traceID, taskID)
+		return
+	}
+
 	http.NotFound(w, r)
 }
 
@@ -966,6 +975,22 @@ func (a *api) rejectTask(w http.ResponseWriter, r *http.Request, traceID, taskID
 		}
 	}
 	res, err := RejectTask(r.Context(), a.ctx, traceID, taskID, req)
+	if err != nil {
+		writeReviewError(w, err)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func (a *api) discardTask(w http.ResponseWriter, r *http.Request, traceID, taskID string) {
+	var req DiscardTaskRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+	}
+	res, err := DiscardTask(r.Context(), a.ctx, traceID, taskID, req)
 	if err != nil {
 		writeReviewError(w, err)
 		return
