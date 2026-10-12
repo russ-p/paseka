@@ -11,9 +11,73 @@ import (
 // ApplyEvent is a pure reducer: given a trace snapshot and one bus event,
 // returns the updated snapshot and any tasks that became ready.
 // No persistence — suitable for tests and future Ledger implementations.
+//
+// Payloads the ledger does not own are skipped, not applied, and leave the trace
+// untouched. system.kill is sticky: once a trace is killed, a late task.status,
+// task.ready, or task.completed no longer mutates it.
 func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) {
+	trace, err := traceForEvent(trace, event)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+
+	step, err := reduceEvent(trace, event, eventStamp(event))
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	if step.skipped {
+		return ApplyResult{Trace: step.trace}, nil
+	}
+
+	trace, dropped := dropStalePendingReady(step.trace)
+	if dropped {
+		step.changed = true
+	}
+	return ApplyResult{
+		Trace:   trace,
+		Ready:   step.ready,
+		Changed: step.changed,
+	}, nil
+}
+
+// reduceEvent routes one bus event to the reducer that owns its payload kind.
+func reduceEvent(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	switch event.Type {
+	case protocol.EventInsight:
+		return reduceInsight(trace, event, now)
+	case protocol.EventSignal:
+		return reduceSignal(trace, event, now)
+	case protocol.EventVerification:
+		return reduceVerification(trace, event, now)
+	case protocol.EventMutation:
+		return reduceMutation(trace, event, now)
+	default:
+		return reduceStep{trace: trace}, nil
+	}
+}
+
+// reduceStep carries one event's reduction in flight: the working trace, the
+// tasks that became ready, and whether the trace changed.
+type reduceStep struct {
+	trace   TraceSnapshot
+	ready   []TaskSnapshot
+	changed bool
+
+	// skipped marks a payload this ledger does not own: the trace is returned as
+	// it was and the trailing housekeeping is bypassed.
+	skipped bool
+}
+
+// skipStep ends a reduction for a payload kind this ledger does not own.
+func skipStep(trace TraceSnapshot) reduceStep {
+	return reduceStep{trace: trace, skipped: true}
+}
+
+// traceForEvent checks the event against the snapshot and returns the working
+// copy every reducer mutates.
+func traceForEvent(trace TraceSnapshot, event protocol.Event) (TraceSnapshot, error) {
 	if event.TraceID != "" && trace.TraceID != "" && event.TraceID != trace.TraceID {
-		return ApplyResult{}, fmt.Errorf("taskledger: trace mismatch: event %q vs snapshot %q", event.TraceID, trace.TraceID)
+		return TraceSnapshot{}, fmt.Errorf("taskledger: trace mismatch: event %q vs snapshot %q", event.TraceID, trace.TraceID)
 	}
 	if trace.TraceID == "" && event.TraceID != "" {
 		trace.TraceID = event.TraceID
@@ -21,296 +85,331 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 	if trace.Tasks == nil {
 		trace.Tasks = make(map[string]TaskSnapshot)
 	}
+	return trace, nil
+}
 
-	now := event.CreatedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
+// eventStamp is the event time, or now when the publisher omitted createdAt.
+func eventStamp(event protocol.Event) time.Time {
+	if event.CreatedAt.IsZero() {
+		return time.Now().UTC()
+	}
+	return event.CreatedAt
+}
+
+// decodePayload decodes the raw payload an event carries into T for the reducer
+// named label, so a malformed payload reports which kind failed to parse.
+func decodePayload[T any](event protocol.Event, label string) (T, error) {
+	var payload T
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return payload, fmt.Errorf("taskledger: parse %s: %w", label, err)
+	}
+	return payload, nil
+}
+
+// signalKind reads payload.kind from a SIGNAL event, exactly as published.
+func signalKind(event protocol.Event) string {
+	if len(event.Payload) == 0 {
+		return ""
+	}
+	var meta struct {
+		Kind string `json:"kind"`
+	}
+	_ = json.Unmarshal(event.Payload, &meta)
+	return meta.Kind
+}
+
+// taskOrNew returns the ledger task for taskID, or a bare snapshot when the id
+// first shows up on an event other than task.plan.
+func taskOrNew(trace TraceSnapshot, taskID string) TaskSnapshot {
+	if task, ok := trace.Tasks[taskID]; ok {
+		return task
+	}
+	return TaskSnapshot{TaskID: taskID}
+}
+
+// killBlocks reports whether system.kill has frozen this trace. The kill is
+// sticky: a late task.status, task.ready, or task.completed must not rewrite a
+// cancelled trace.
+func killBlocks(trace TraceSnapshot) bool {
+	return trace.Killed
+}
+
+func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	payload, err := decodePayload[protocol.TaskPlanPayload](event, "task.plan")
+	if err != nil {
+		return reduceStep{}, err
+	}
+	if payload.Kind != protocol.TaskEventPlan {
+		return skipStep(trace), nil
 	}
 
-	var ready []TaskSnapshot
-	changed := false
-
-	switch event.Type {
-	case protocol.EventInsight:
-		var payload protocol.TaskPlanPayload
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			return ApplyResult{}, fmt.Errorf("taskledger: parse task.plan: %w", err)
+	step := reduceStep{trace: trace}
+	for _, spec := range payload.Tasks {
+		if spec.TaskID == "" {
+			continue
 		}
-		if payload.Kind != protocol.TaskEventPlan {
-			return ApplyResult{Trace: trace}, nil
+		if existing, exists := step.trace.Tasks[spec.TaskID]; exists && existing.Status != "" {
+			continue
 		}
-		for _, spec := range payload.Tasks {
-			if spec.TaskID == "" {
-				continue
-			}
-			if existing, exists := trace.Tasks[spec.TaskID]; exists && existing.Status != "" {
-				continue
-			}
-			trace.Tasks[spec.TaskID] = TaskSnapshot{
-				TaskID:    spec.TaskID,
-				Title:     spec.Title,
-				Body:      spec.Body,
-				Bee:       spec.Bee,
-				Sector:    spec.Sector,
-				Intent:    spec.Intent,
-				Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
-				Status:    protocol.TaskStatusPlanned,
-				DependsOn: append([]string(nil), spec.DependsOn...),
-				CreatedAt: now,
-				UpdatedAt: now,
-			}
-			changed = true
+		step.trace.Tasks[spec.TaskID] = TaskSnapshot{
+			TaskID:    spec.TaskID,
+			Title:     spec.Title,
+			Body:      spec.Body,
+			Bee:       spec.Bee,
+			Sector:    spec.Sector,
+			Intent:    spec.Intent,
+			Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
+			Status:    protocol.TaskStatusPlanned,
+			DependsOn: append([]string(nil), spec.DependsOn...),
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
-		var promoted []TaskSnapshot
-		var promotedChanged bool
-		trace, promoted, promotedChanged = tryPromotePendingReady(trace, now)
-		if promotedChanged {
-			ready = append(ready, promoted...)
-			changed = true
-		}
-
-	case protocol.EventSignal:
-		var kind string
-		if len(event.Payload) > 0 {
-			var meta struct {
-				Kind string `json:"kind"`
-			}
-			_ = json.Unmarshal(event.Payload, &meta)
-			kind = meta.Kind
-		}
-
-		if kind == string(protocol.SignalSystemKill) {
-			var payload protocol.SystemKillPayload
-			if err := json.Unmarshal(event.Payload, &payload); err != nil {
-				return ApplyResult{}, fmt.Errorf("taskledger: parse system.kill: %w", err)
-			}
-			if payload.Kind != protocol.SignalSystemKill {
-				return ApplyResult{Trace: trace}, nil
-			}
-			beforeKilled := trace.Killed
-			trace = applySystemKill(trace, payload.Reason, now)
-			if !beforeKilled {
-				changed = true
-			}
-		} else {
-			switch protocol.EnergyEventKind(kind) {
-			case protocol.SignalEnergyAdd:
-				var payload protocol.EnergyAddPayload
-				if err := json.Unmarshal(event.Payload, &payload); err != nil {
-					return ApplyResult{}, fmt.Errorf("taskledger: parse energy.add: %w", err)
-				}
-				if payload.Amount <= 0 {
-					return ApplyResult{}, fmt.Errorf("taskledger: energy.add amount must be positive")
-				}
-				trace.EnergyRemaining += payload.Amount
-				// Leave EnergyBudget untouched when still 0 so SeedEnergy can apply
-				// colony defaults.energy_budget (not a hardcoded DefaultEnergyBudget).
-				if trace.EnergyBudget > 0 {
-					trace.EnergyAdded += payload.Amount
-				}
-				changed = true
-
-			case protocol.SignalEnergyConsume:
-				var payload protocol.EnergyConsumePayload
-				if err := json.Unmarshal(event.Payload, &payload); err != nil {
-					return ApplyResult{}, fmt.Errorf("taskledger: parse energy.consume: %w", err)
-				}
-				if payload.Amount <= 0 {
-					return ApplyResult{}, fmt.Errorf("taskledger: energy.consume amount must be positive")
-				}
-				if trace.EnergyRemaining < payload.Amount {
-					return ApplyResult{}, fmt.Errorf("taskledger: insufficient honey reserve")
-				}
-				trace.EnergyRemaining -= payload.Amount
-				changed = true
-
-			case protocol.SignalEnergyStipend:
-				var payload protocol.EnergyStipendPayload
-				if err := json.Unmarshal(event.Payload, &payload); err != nil {
-					return ApplyResult{}, fmt.Errorf("taskledger: parse energy.stipend: %w", err)
-				}
-				if payload.Amount <= 0 {
-					return ApplyResult{}, fmt.Errorf("taskledger: energy.stipend amount must be positive")
-				}
-				trace.EnergyRemaining = payload.Amount
-				changed = true
-
-			default:
-				if kind == string(protocol.TaskEventStatus) {
-					var payload protocol.TaskStatusPayload
-					if err := json.Unmarshal(event.Payload, &payload); err != nil {
-						return ApplyResult{}, fmt.Errorf("taskledger: parse task.status: %w", err)
-					}
-					if payload.Kind != protocol.TaskEventStatus {
-						return ApplyResult{Trace: trace}, nil
-					}
-					if payload.TaskID == "" {
-						return ApplyResult{}, fmt.Errorf("taskledger: task.status missing taskId")
-					}
-					if payload.Status == "" {
-						return ApplyResult{}, fmt.Errorf("taskledger: task.status missing status")
-					}
-					// system.kill is sticky: late runtime task.status must not change the trace.
-					if trace.Killed {
-						return ApplyResult{Trace: trace}, nil
-					}
-					task, ok := trace.Tasks[payload.TaskID]
-					if !ok {
-						task = TaskSnapshot{TaskID: payload.TaskID}
-					}
-					task = withCreatedAt(task, now)
-					task.Status = payload.Status
-					// Always assign summary (including "") so unblock/clear transitions
-					// can drop stale reasons like "Honey reserve exhausted".
-					task.Summary = payload.Summary
-					task.UpdatedAt = now
-					trace.Tasks[payload.TaskID] = task
-					changed = true
-					break
-				}
-
-				var payload protocol.TaskReadyPayload
-				if err := json.Unmarshal(event.Payload, &payload); err != nil {
-					return ApplyResult{}, fmt.Errorf("taskledger: parse task.ready: %w", err)
-				}
-				if payload.Kind != protocol.TaskEventReady {
-					return ApplyResult{Trace: trace}, nil
-				}
-				if trace.Killed {
-					return ApplyResult{Trace: trace}, nil
-				}
-				if payload.TaskID == "" {
-					return ApplyResult{}, fmt.Errorf("taskledger: task.ready missing taskId")
-				}
-				task, ok := trace.Tasks[payload.TaskID]
-				if !ok || task.Status == "" {
-					trace.PendingReady = pendingReadyFromPayload(payload)
-					if ok {
-						delete(trace.Tasks, payload.TaskID)
-					}
-					changed = true
-					break
-				}
-				task = applyReadyOverlays(task, payload)
-				if task.Status == protocol.TaskStatusReady {
-					task.UpdatedAt = now
-					trace.Tasks[payload.TaskID] = task
-					break
-				}
-				if task.Status == protocol.TaskStatusFailed || task.Status == protocol.TaskStatusRunning {
-					task.Status = protocol.TaskStatusReady
-					task.Summary = ""
-					ready = append(ready, task)
-					changed = true
-					task.UpdatedAt = now
-					trace.Tasks[payload.TaskID] = task
-					break
-				}
-				if !HasReadyTask(trace) {
-					if first, eligible := FirstEligiblePlanned(trace); eligible && first.TaskID == payload.TaskID {
-						task.Status = protocol.TaskStatusReady
-						ready = append(ready, task)
-						changed = true
-					}
-				}
-				task.UpdatedAt = now
-				trace.Tasks[payload.TaskID] = task
-			}
-		}
-
-	case protocol.EventVerification:
-		var payload protocol.TaskCompletedPayload
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			return ApplyResult{}, fmt.Errorf("taskledger: parse task.completed: %w", err)
-		}
-		if payload.Kind != protocol.TaskEventCompleted {
-			return ApplyResult{Trace: trace}, nil
-		}
-		if payload.TaskID == "" {
-			return ApplyResult{}, fmt.Errorf("taskledger: task.completed missing taskId")
-		}
-		// system.kill is sticky: late task.completed must not change the trace.
-		if trace.Killed {
-			return ApplyResult{Trace: trace}, nil
-		}
-		task, ok := trace.Tasks[payload.TaskID]
-		if !ok {
-			task = TaskSnapshot{TaskID: payload.TaskID}
-		}
-		task = withCreatedAt(task, now)
-		status := payload.Status
-		if status == "" {
-			status = protocol.TaskStatusCompleted
-		}
-		task.Status = status
-		if payload.Summary != "" {
-			task.Summary = payload.Summary
-		}
-		if payload.Commit != "" {
-			task.Commit = payload.Commit
-		}
-		task.UpdatedAt = now
-		if !payload.CompletedAt.IsZero() {
-			task.UpdatedAt = payload.CompletedAt
-		}
-		trace.Tasks[payload.TaskID] = task
-		changed = true
-
-		var pendingReady []TaskSnapshot
-		var pendingPromoted bool
-		trace, pendingReady, pendingPromoted = tryPromotePendingReady(trace, now)
-		if pendingPromoted {
-			ready = append(ready, pendingReady...)
-			changed = true
-		}
-
-		// Promote at most one eligible planned task to ready.
-		var candidate TaskSnapshot
-		var promoted bool
-		trace, candidate, promoted = PromoteFirstEligible(trace, now)
-		if promoted {
-			ready = append(ready, candidate)
-			changed = true
-		}
-
-	case protocol.EventMutation:
-		var payload protocol.MutationPayload
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			return ApplyResult{}, fmt.Errorf("taskledger: parse mutation: %w", err)
-		}
-		if !protocol.IsCodeProposalKind(string(payload.Kind)) || payload.TaskID == "" {
-			return ApplyResult{Trace: trace}, nil
-		}
-		task, ok := trace.Tasks[payload.TaskID]
-		if !ok {
-			task = TaskSnapshot{TaskID: payload.TaskID}
-		}
-		task = withCreatedAt(task, now)
-		switch protocol.NormalizeCodeProposalKind(payload.Kind) {
-		case protocol.MutationCodeProposalIsolated:
-			task.ProposalWorkspace = protocol.ProposalWorkspaceIsolated
-		case protocol.MutationCodeProposalRoot:
-			task.ProposalWorkspace = protocol.ProposalWorkspaceRoot
-		}
-		if payload.Workspace != "" {
-			task.ProposalWorkspace = payload.Workspace
-		}
-		task.UpdatedAt = now
-		trace.Tasks[payload.TaskID] = task
-		changed = true
+		step.changed = true
 	}
 
-	var dropped bool
-	trace, dropped = dropStalePendingReady(trace)
-	if dropped {
-		changed = true
+	var promoted []TaskSnapshot
+	var promotedChanged bool
+	step.trace, promoted, promotedChanged = tryPromotePendingReady(step.trace, now)
+	if promotedChanged {
+		step.ready = append(step.ready, promoted...)
+		step.changed = true
+	}
+	return step, nil
+}
+
+func reduceSignal(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	kind := signalKind(event)
+	switch kind {
+	case string(protocol.SignalSystemKill):
+		return reduceSystemKill(trace, event, now)
+	case string(protocol.TaskEventStatus):
+		return reduceTaskStatus(trace, event, now)
+	case string(protocol.TaskEventReady):
+		return reduceTaskReady(trace, event, now)
+	default:
+		return reduceEnergy(trace, event, kind)
+	}
+}
+
+func reduceSystemKill(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	payload, err := decodePayload[protocol.SystemKillPayload](event, "system.kill")
+	if err != nil {
+		return reduceStep{}, err
+	}
+	if payload.Kind != protocol.SignalSystemKill {
+		return skipStep(trace), nil
+	}
+	killed := trace.Killed
+	trace = applySystemKill(trace, payload.Reason, now)
+	return reduceStep{trace: trace, changed: !killed}, nil
+}
+
+func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string) (reduceStep, error) {
+	switch protocol.EnergyEventKind(kind) {
+	case protocol.SignalEnergyAdd:
+		payload, err := decodePayload[protocol.EnergyAddPayload](event, "energy.add")
+		if err != nil {
+			return reduceStep{}, err
+		}
+		if payload.Amount <= 0 {
+			return reduceStep{}, fmt.Errorf("taskledger: energy.add amount must be positive")
+		}
+		trace.EnergyRemaining += payload.Amount
+		// Leave EnergyBudget untouched when still 0 so SeedEnergy can apply
+		// colony defaults.energy_budget (not a hardcoded DefaultEnergyBudget).
+		if trace.EnergyBudget > 0 {
+			trace.EnergyAdded += payload.Amount
+		}
+		return reduceStep{trace: trace, changed: true}, nil
+
+	case protocol.SignalEnergyConsume:
+		payload, err := decodePayload[protocol.EnergyConsumePayload](event, "energy.consume")
+		if err != nil {
+			return reduceStep{}, err
+		}
+		if payload.Amount <= 0 {
+			return reduceStep{}, fmt.Errorf("taskledger: energy.consume amount must be positive")
+		}
+		if trace.EnergyRemaining < payload.Amount {
+			return reduceStep{}, fmt.Errorf("taskledger: insufficient honey reserve")
+		}
+		trace.EnergyRemaining -= payload.Amount
+		return reduceStep{trace: trace, changed: true}, nil
+
+	case protocol.SignalEnergyStipend:
+		payload, err := decodePayload[protocol.EnergyStipendPayload](event, "energy.stipend")
+		if err != nil {
+			return reduceStep{}, err
+		}
+		if payload.Amount <= 0 {
+			return reduceStep{}, fmt.Errorf("taskledger: energy.stipend amount must be positive")
+		}
+		trace.EnergyRemaining = payload.Amount
+		return reduceStep{trace: trace, changed: true}, nil
+
+	default:
+		// A SIGNAL kind this ledger does not own is skipped, but a payload that
+		// is not valid JSON still fails to parse.
+		if _, err := decodePayload[protocol.TaskReadyPayload](event, "task.ready"); err != nil {
+			return reduceStep{}, err
+		}
+		return skipStep(trace), nil
+	}
+}
+
+func reduceVerification(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	payload, err := decodePayload[protocol.TaskCompletedPayload](event, "task.completed")
+	if err != nil {
+		return reduceStep{}, err
+	}
+	if payload.Kind != protocol.TaskEventCompleted {
+		return skipStep(trace), nil
+	}
+	if payload.TaskID == "" {
+		return reduceStep{}, fmt.Errorf("taskledger: task.completed missing taskId")
+	}
+	if killBlocks(trace) {
+		return skipStep(trace), nil
 	}
 
-	return ApplyResult{
-		Trace:   trace,
-		Ready:   ready,
-		Changed: changed,
-	}, nil
+	task := taskOrNew(trace, payload.TaskID)
+	task = withCreatedAt(task, now)
+	status := payload.Status
+	if status == "" {
+		status = protocol.TaskStatusCompleted
+	}
+	task.Status = status
+	if payload.Summary != "" {
+		task.Summary = payload.Summary
+	}
+	if payload.Commit != "" {
+		task.Commit = payload.Commit
+	}
+	task.UpdatedAt = now
+	if !payload.CompletedAt.IsZero() {
+		task.UpdatedAt = payload.CompletedAt
+	}
+	trace.Tasks[payload.TaskID] = task
+	step := reduceStep{trace: trace, changed: true}
+
+	var promoted []TaskSnapshot
+	var promotedChanged bool
+	step.trace, promoted, promotedChanged = tryPromotePendingReady(step.trace, now)
+	if promotedChanged {
+		step.ready = append(step.ready, promoted...)
+		step.changed = true
+	}
+
+	// Promote at most one eligible planned task to ready.
+	var candidate TaskSnapshot
+	var promotedOK bool
+	step.trace, candidate, promotedOK = PromoteFirstEligible(step.trace, now)
+	if promotedOK {
+		step.ready = append(step.ready, candidate)
+		step.changed = true
+	}
+	return step, nil
+}
+
+func reduceMutation(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	payload, err := decodePayload[protocol.MutationPayload](event, "mutation")
+	if err != nil {
+		return reduceStep{}, err
+	}
+	if !protocol.IsCodeProposalKind(string(payload.Kind)) || payload.TaskID == "" {
+		return skipStep(trace), nil
+	}
+
+	task := taskOrNew(trace, payload.TaskID)
+	task = withCreatedAt(task, now)
+	switch protocol.NormalizeCodeProposalKind(payload.Kind) {
+	case protocol.MutationCodeProposalIsolated:
+		task.ProposalWorkspace = protocol.ProposalWorkspaceIsolated
+	case protocol.MutationCodeProposalRoot:
+		task.ProposalWorkspace = protocol.ProposalWorkspaceRoot
+	}
+	if payload.Workspace != "" {
+		task.ProposalWorkspace = payload.Workspace
+	}
+	task.UpdatedAt = now
+	trace.Tasks[payload.TaskID] = task
+	return reduceStep{trace: trace, changed: true}, nil
+}
+
+func reduceTaskStatus(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	payload, err := decodePayload[protocol.TaskStatusPayload](event, "task.status")
+	if err != nil {
+		return reduceStep{}, err
+	}
+	if payload.Kind != protocol.TaskEventStatus {
+		return skipStep(trace), nil
+	}
+	if payload.TaskID == "" {
+		return reduceStep{}, fmt.Errorf("taskledger: task.status missing taskId")
+	}
+	if payload.Status == "" {
+		return reduceStep{}, fmt.Errorf("taskledger: task.status missing status")
+	}
+	if killBlocks(trace) {
+		return skipStep(trace), nil
+	}
+
+	task := taskOrNew(trace, payload.TaskID)
+	task = withCreatedAt(task, now)
+	task.Status = payload.Status
+	// Always assign summary (including "") so unblock/clear transitions
+	// can drop stale reasons like "Honey reserve exhausted".
+	task.Summary = payload.Summary
+	task.UpdatedAt = now
+	trace.Tasks[payload.TaskID] = task
+	return reduceStep{trace: trace, changed: true}, nil
+}
+
+func reduceTaskReady(trace TraceSnapshot, event protocol.Event, now time.Time) (reduceStep, error) {
+	payload, err := decodePayload[protocol.TaskReadyPayload](event, "task.ready")
+	if err != nil {
+		return reduceStep{}, err
+	}
+	if payload.Kind != protocol.TaskEventReady {
+		return skipStep(trace), nil
+	}
+	if killBlocks(trace) {
+		return skipStep(trace), nil
+	}
+	if payload.TaskID == "" {
+		return reduceStep{}, fmt.Errorf("taskledger: task.ready missing taskId")
+	}
+
+	task, known := trace.Tasks[payload.TaskID]
+	if !known || task.Status == "" {
+		// No plan yet: park the kick until task.plan registers the id.
+		trace.PendingReady = pendingReadyFromPayload(payload)
+		if known {
+			delete(trace.Tasks, payload.TaskID)
+		}
+		return reduceStep{trace: trace, changed: true}, nil
+	}
+
+	step := reduceStep{trace: trace}
+	task = applyReadyOverlays(task, payload)
+	switch {
+	case task.Status == protocol.TaskStatusReady:
+		// Already ready: keep the status, only refresh the kick's overlays.
+	case task.Status == protocol.TaskStatusFailed || task.Status == protocol.TaskStatusRunning:
+		task.Status = protocol.TaskStatusReady
+		task.Summary = ""
+		step.ready = append(step.ready, task)
+		step.changed = true
+	case !HasReadyTask(trace):
+		if first, eligible := FirstEligiblePlanned(trace); eligible && first.TaskID == payload.TaskID {
+			task.Status = protocol.TaskStatusReady
+			step.ready = append(step.ready, task)
+			step.changed = true
+		}
+	}
+	task.UpdatedAt = now
+	step.trace.Tasks[payload.TaskID] = task
+	return step, nil
 }
 
 func allDepsCompleted(trace TraceSnapshot, deps []string) bool {
