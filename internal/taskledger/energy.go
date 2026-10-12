@@ -35,31 +35,30 @@ func Allocated(budget, added int) int {
 	return budget + added
 }
 
-// FormatHoneyPrimary is "remaining / allocated" after seed; remaining only when unseeded (never "N / 0").
-func FormatHoneyPrimary(remaining, budget, added int) string {
+// formatHoneyFraction is the shared core for the fraction formatters:
+// "remaining<sep>allocated<suffix>" once seeded; bare remaining before seed (never "N/0").
+func formatHoneyFraction(remaining, budget, added int, sep, suffix string) string {
 	den := Allocated(budget, added)
 	if den <= 0 {
 		return strconv.Itoa(remaining)
 	}
-	return fmt.Sprintf("%d / %d", remaining, den)
+	return fmt.Sprintf("%d%s%d%s", remaining, sep, den, suffix)
+}
+
+// FormatHoneyPrimary is "remaining / allocated" after seed; remaining only when unseeded (never "N / 0").
+func FormatHoneyPrimary(remaining, budget, added int) string {
+	return formatHoneyFraction(remaining, budget, added, " / ", "")
 }
 
 // FormatHoneyCompact is remaining/allocated without spaces, or remaining alone when unseeded.
 func FormatHoneyCompact(remaining, budget, added int) string {
-	den := Allocated(budget, added)
-	if den <= 0 {
-		return strconv.Itoa(remaining)
-	}
-	return fmt.Sprintf("%d/%d", remaining, den)
+	return formatHoneyFraction(remaining, budget, added, "/", "")
 }
 
 // FormatHoneyRemaining is "n/m remaining" after seed — the reading `paseka status` prints —
 // and bare remaining when unseeded (never "n/0").
 func FormatHoneyRemaining(remaining, budget, added int) string {
-	if Allocated(budget, added) <= 0 {
-		return strconv.Itoa(remaining)
-	}
-	return FormatHoneyCompact(remaining, budget, added) + " remaining"
+	return formatHoneyFraction(remaining, budget, added, "/", " remaining")
 }
 
 // FormatHoneySecondary is omitted when there are no post-seed top-ups.
@@ -78,11 +77,11 @@ func FormatHoneyReport(remaining, budget, added int) []string {
 	}
 	if added > 0 {
 		lines = append(lines, fmt.Sprintf("added:     %d", added))
-	}
-	if Allocated(budget, added) > 0 && added > 0 {
-		lines = append(lines, FormatHoneyPrimary(remaining, budget, added))
-		if extra := FormatHoneySecondary(budget, added); extra != "" {
-			lines = append(lines, extra)
+		if Allocated(budget, added) > 0 {
+			lines = append(lines, FormatHoneyPrimary(remaining, budget, added))
+			if extra := FormatHoneySecondary(budget, added); extra != "" {
+				lines = append(lines, extra)
+			}
 		}
 	}
 	return lines
