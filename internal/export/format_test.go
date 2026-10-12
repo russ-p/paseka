@@ -27,6 +27,19 @@ func TestFormatMarkdownRendersBasicMarkdown(t *testing.T) {
 	}
 }
 
+func TestFormatContentType(t *testing.T) {
+	wants := map[Format]string{
+		FormatHTML:     "text/html; charset=utf-8",
+		FormatMarkdown: "text/markdown; charset=utf-8",
+	}
+	for format, want := range wants {
+		got := format.ContentType()
+		if got != want {
+			t.Fatalf("ContentType(%s) = %q, want %q", format, got, want)
+		}
+	}
+}
+
 func TestRenderHTMLFormatsRunSummary(t *testing.T) {
 	data := TraceExportData{
 		Slug:       "demo",

@@ -13,6 +13,16 @@ const (
 	FormatMarkdown Format = "md"
 )
 
+// ContentType returns the media type for a rendered report in this format.
+func (f Format) ContentType() string {
+	switch f {
+	case FormatMarkdown:
+		return "text/markdown; charset=utf-8"
+	default:
+		return "text/html; charset=utf-8"
+	}
+}
+
 // ParseFormat normalizes a CLI --format value.
 func ParseFormat(s string) (Format, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {

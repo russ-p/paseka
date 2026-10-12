@@ -40,12 +40,8 @@ func (a *api) handleTraceExport(w http.ResponseWriter, r *http.Request, traceID 
 		return
 	}
 
-	contentType := "text/html; charset=utf-8"
-	if format == export.FormatMarkdown {
-		contentType = "text/markdown; charset=utf-8"
-	}
 	filename := export.OutputFilename(a.ctx.Slug, traceID, format)
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Type", format.ContentType())
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 	w.WriteHeader(http.StatusOK)
