@@ -42,5 +42,6 @@ After a spec ships, prefer a [Changelog](changelog.md) entry plus updates to gui
 | [034-swarm-mode](../specs/034-swarm-mode.md) | Draft | Best-of-N swarm: N variant adapter runs per task (own worktrees), `swarm.ready` + judge `swarm.winner`, shadow mode, `paseka swarm stats` |
 | [035-queen-console-redesign](../specs/035-queen-console-redesign.md) | Implemented | Svelte 5 + Tailwind v4 + DaisyUI rewrite; every `/next/` route migrated, legacy Console still at `/` until the cutover is called |
 | [036-console-config-write](../specs/036-console-config-write.md) | Draft | Write half of Settings user story #9: merge edits into machine-local `config.yaml` / adapter / gateway files; 409 when an env var outranks the write; project config stays read-only |
+| [037-opencode-v2-proxy](../specs/037-opencode-v2-proxy.md) | Approved | Today's adapter becomes `opencodev1`, new `opencodev2` drives OpenCode 2 (`/api/session`, Paseka-owned session id, `--prompt` + `--session`, `--server`), `adapter: opencode` becomes a cached fail-closed version-detecting proxy; cross-major Resume refused |
 
 Deferred ideas (not specs): [Backlog](backlog.md).
