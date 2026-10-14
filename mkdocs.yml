@@ -92,6 +92,7 @@ nav:
       - Event contracts: reference/event-contracts.md
       - Insight kinds: reference/insight-kinds.md
       - Task ledger: reference/task-ledger.md
+      - Adapter launch resolution: reference/adapter-launch-resolution.md
   - Architecture:
       - Overview: architecture/overview.md
       - Queen Console design system: architecture/queen-console-design-system.md

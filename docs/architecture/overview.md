@@ -40,6 +40,8 @@ type RunResult struct {
 
 Adapters live under `internal/adapters/<name>/`. Registration is declarative via `adapter` field in bee config.
 
+How a bee becomes a binary, argv, and env — config layer precedence (repo, profile, machine-local), `params` vs `command`, credentials, and the proposed single-resolver model: **[Adapter launch resolution](../reference/adapter-launch-resolution.md)**.
+
 ### 1.1 File-based agent IPC (`runs/`)
 
 Each spawned agent gets an isolated directory under the **colony root** (not inside a worktree), so results survive worktree cleanup and multiple agents can share one `traceId`.

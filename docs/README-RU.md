@@ -43,6 +43,7 @@
 | [Event contracts](reference/event-contracts.md) | Виды `SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION` и правила авторинга |
 | [Insight kinds](reference/insight-kinds.md) | Таксономия `INSIGHT` и `{{.Insights}}` |
 | [Task ledger](reference/task-ledger.md) | `traceId` → `taskId` → `agentId`, жизненный цикл |
+| [Adapter launch resolution](reference/adapter-launch-resolution.md) | Пчела → OS-процесс: слои конфига, params, command, env — as-is vs proposed |
 
 ## Архитектура
 
