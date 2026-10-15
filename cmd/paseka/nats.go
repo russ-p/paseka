@@ -15,6 +15,7 @@ import (
 
 func newDoctorCmd() *cobra.Command {
 	var startDir string
+	var explainBee string
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check NATS connectivity and JetStream resources",
@@ -22,6 +23,12 @@ func newDoctorCmd() *cobra.Command {
 			ctxColony, err := colony.ResolveContext(startDir)
 			if err != nil {
 				return err
+			}
+			// `--explain` is a pure config read: it resolves one bee's launch
+			// plan and needs no bus, so it answers before the NATS probe and
+			// does not report an unconfigured url as a failure.
+			if strings.TrimSpace(explainBee) != "" {
+				return explainLaunchPlan(cmd.OutOrStdout(), ctxColony, strings.TrimSpace(explainBee))
 			}
 			report, err := bus.Diagnose(ctxColony)
 			if err != nil {
@@ -56,6 +63,7 @@ func newDoctorCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&explainBee, "explain", "", "print the resolved launch plan for a bee with per-field layer attribution")
 	return cmd
 }
 

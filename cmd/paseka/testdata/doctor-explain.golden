@@ -1,0 +1,18 @@
+Launch plan for bee builder
+  adapter: cursor
+  mode:    afk
+  form:    params
+
+  binary:     /repo/agent     [bee]
+  model:      openai/gpt-5.5  [alias]
+  yolo:       true            [default]
+  plan:       false           [default]
+  reasoning:  high            [bee]
+  provider:   -               [default]
+  env:        -               [default]
+  env_mode:   inherit         [default]
+  timeout:    unbounded       [default]
+  api_key:    unset           [machine]
+
+Warnings:
+  - reasoning "high" is unmapped on adapter cursor (no flag emitted)

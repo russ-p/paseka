@@ -157,6 +157,7 @@ func TestDiagnoseBeeParams(t *testing.T) {
 	bees := map[string]colony.Bee{
 		"builder": {Role: "builder", Adapter: "cursor", Params: map[string]any{"trust": true, "force": true}},
 		"planner": {Role: "planner", Adapter: "cursor", Params: map[string]any{"reasoning": "high"}},
+		"thinker": {Role: "thinker", Adapter: "cursor", Params: map[string]any{"thinking": "high"}},
 		"scout":   {Role: "scout", Adapter: "pi", Params: map[string]any{"yolo": true}},
 		"clean":   {Role: "clean", Adapter: "pi", Params: map[string]any{"plan": false}},
 	}
@@ -166,6 +167,10 @@ func TestDiagnoseBeeParams(t *testing.T) {
 		`bee "builder": params.trust is deprecated; use params.yolo`,
 		`bee "builder": params.force is deprecated; use params.yolo`,
 		`bee "planner": params.reasoning has no mapping on adapter cursor`,
+		// The deprecated spelling is not silently ignored: it warns both that it
+		// is deprecated and that cursor has no flag for it.
+		`bee "thinker": params.thinking is deprecated; use params.reasoning`,
+		`bee "thinker": params.reasoning has no mapping on adapter cursor`,
 		`bee "scout": adapter pi has no yolo equivalent`,
 	} {
 		if !strings.Contains(joined, want) {

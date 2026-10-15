@@ -29,6 +29,28 @@ var adapterReasoningSupport = map[string]bool{
 	"opencode": true,
 }
 
+// AdapterMapsReasoning reports whether the adapter translates params.reasoning
+// into a CLI flag. It is the one source `doctor` and `doctor --explain` share,
+// so a value cursor/claude would drop is named rather than silently ignored.
+func AdapterMapsReasoning(adapter string) bool {
+	return adapterReasoningSupport[adapter]
+}
+
+// AdapterMapsYolo reports whether the adapter translates params.yolo into a CLI
+// flag; pi has no equivalent.
+func AdapterMapsYolo(adapter string) bool {
+	return adapterYoloSupport[adapter]
+}
+
+// reasoningValue returns the declared reasoning, following the one-release
+// `thinking` deprecation alias, and whether any was declared.
+func reasoningValue(params map[string]any) (string, bool) {
+	if v, ok := stringParam(params, "reasoning"); ok {
+		return v, true
+	}
+	return stringParam(params, "thinking")
+}
+
 // DiagnoseBeeParams returns operator-facing warnings for bee params that are
 // deprecated or that the bee's adapter does not map to a flag. Roles are
 // visited in sorted order and keys within a bee are sorted so doctor output is
@@ -56,11 +78,11 @@ func DiagnoseBeeParams(bees map[string]Bee) []string {
 			warnings = append(warnings, fmt.Sprintf(
 				"bee %q: params.provider is deprecated; put the vendor in params.model (e.g. model: <vendor>/<model>)", name))
 		}
-		if _, ok := bee.Params["reasoning"]; ok && !adapterReasoningSupport[adapter] {
+		if _, ok := reasoningValue(bee.Params); ok && !AdapterMapsReasoning(adapter) {
 			warnings = append(warnings, fmt.Sprintf(
 				"bee %q: params.reasoning has no mapping on adapter %s (ignored)", name, adapter))
 		}
-		if _, ok := bee.Params["yolo"]; ok && !adapterYoloSupport[adapter] {
+		if _, ok := bee.Params["yolo"]; ok && !AdapterMapsYolo(adapter) {
 			warnings = append(warnings, fmt.Sprintf(
 				"bee %q: adapter %s has no yolo equivalent (params.yolo ignored)", name, adapter))
 		}

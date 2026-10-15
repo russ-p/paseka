@@ -112,6 +112,11 @@ type LaunchPlan struct {
 	// Warnings are operator-facing notices raised during resolution, such as a
 	// deprecated params.provider that was mapped into the model id.
 	Warnings []string
+
+	// attribution records which layer set each field, so `doctor --explain` and
+	// the Console can describe a launch without reading Go. Use Attribution()
+	// for the display-ready, ordered view.
+	attribution map[string]Layer
 }
 
 // ResolveLaunch merges every launch layer into one plan.
@@ -126,7 +131,12 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 	spec := defaultSpec(req.Adapter)
 
 	// The one params merge. Everything downstream reads plan.Params.
-	params := colony.MergeRunParamsLayers(colony.LayerFromBee(req.Bee), req.Extra)
+	beeLayer := colony.LayerFromBee(req.Bee)
+	params := colony.MergeRunParamsLayers(beeLayer, req.Extra)
+	// Record whether an alias decided the model before it is substituted, so the
+	// attribution can name the alias layer rather than the layer that declared
+	// the alias key.
+	_, aliasApplied := colony.ResolveModel(params.Model, req.Aliases)
 	colony.ApplyModelAliases(&params, req.Aliases)
 
 	// The one model-id mapping: fold a deprecated provider into the model, then
@@ -151,6 +161,7 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 		Raw:           req.Raw,
 		Dir:           resolveDir(req),
 		Binary:        params.Binary,
+		attribution:   attributeFields(beeLayer, req.Extra, aliasApplied),
 	}
 	if mapping.Warning != "" {
 		plan.Warnings = append(plan.Warnings, mapping.Warning)

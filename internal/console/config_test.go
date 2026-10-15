@@ -164,6 +164,65 @@ func TestConfigAPISeparatesADeclaredAdapterValueFromALoaderDefault(t *testing.T)
 	}
 }
 
+// TestConfigAPIAttributionShowsDeclaredVersusDefault pins AC2: the adapter panel
+// is fed by the same launch attribution `paseka doctor --explain` prints, so a
+// declared setting names the machine layer while an untouched one falls to the
+// default instead of borrowing the file's authority.
+func TestConfigAPIAttributionShowsDeclaredVersusDefault(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+	// setupConsoleHome writes cursor.yaml holding only `binary`; pi gets a file
+	// that declares a binary too, so the assertion is about the declaration, not
+	// about a file existing.
+	piPath := configHomeFile(t, ctxColony.Slug, filepath.Join("adapters", "pi.yaml"))
+	if err := os.WriteFile(piPath, []byte("binary: pi-alt\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := getConfigView(t, newConfigServer(t, resolved))
+
+	cursor := adapterByName(t, view, "cursor")
+	if got := attributionLayerFor(t, cursor, "binary"); got != "machine" {
+		t.Fatalf("cursor binary layer = %q, want machine for the declared binary", got)
+	}
+	if cursor.Binary.Source != "config.yaml" {
+		t.Fatalf("cursor binary source = %q, want config.yaml", cursor.Binary.Source)
+	}
+	// A field no layer declared must report `default`, never `machine`: the panel
+	// must not imply an operator wrote a value they did not.
+	if got := attributionLayerFor(t, cursor, "model"); got != "default" {
+		t.Fatalf("cursor model layer = %q, want default", got)
+	}
+
+	pi := adapterByName(t, view, "pi")
+	if got := attributionLayerFor(t, pi, "binary"); got != "machine" {
+		t.Fatalf("pi binary layer = %q, want machine for the declared binary", got)
+	}
+
+	// Every adapter carries the full, ordered attribution so a client can always
+	// name a source rather than special-casing a missing one.
+	for _, adapter := range view.Adapters {
+		if len(adapter.Attribution) == 0 {
+			t.Fatalf("adapter %q carried no attribution", adapter.Name)
+		}
+	}
+}
+
+func attributionLayerFor(t *testing.T, adapter console.ConfigAdapterView, field string) string {
+	t.Helper()
+	for _, entry := range adapter.Attribution {
+		if entry.Field == field {
+			return entry.Layer
+		}
+	}
+	t.Fatalf("field %q missing from %s attribution: %+v", field, adapter.Name, adapter.Attribution)
+	return ""
+}
+
 func TestConfigAPINeverSendsACredential(t *testing.T) {
 	repo := initConsoleRepo(t)
 	ctxColony := setupConsoleHome(t, repo)
