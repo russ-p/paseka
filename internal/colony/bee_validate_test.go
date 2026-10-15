@@ -43,6 +43,79 @@ run_summary: disabled
 	}
 }
 
+func TestLoadBeeCommandWithNonDefaultParamsFails(t *testing.T) {
+	root := t.TempDir()
+	beesDir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(beesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yamlBody := `role: builder
+adapter: cursor
+command: agent -p $PROMPT
+prompt_template: builder.md
+params:
+  model: small
+`
+	if err := os.WriteFile(filepath.Join(beesDir, "builder.yaml"), []byte(yamlBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := colony.LoadBee(root, "builder")
+	if err == nil {
+		t.Fatal("expected error for command + non-default params")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(err.Error(), "model") {
+		t.Fatalf("err should name the offending key: %v", err)
+	}
+}
+
+func TestLoadBeeCommandWithDefaultParamsLoads(t *testing.T) {
+	root := t.TempDir()
+	beesDir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(beesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yamlBody := `role: builder
+adapter: cursor
+command: agent -p $PROMPT
+prompt_template: builder.md
+params:
+  yolo: true
+`
+	if err := os.WriteFile(filepath.Join(beesDir, "builder.yaml"), []byte(yamlBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bee, _, err := colony.LoadBee(root, "builder")
+	if err != nil {
+		t.Fatalf("default params should be compatible with command: %v", err)
+	}
+	if !bee.Command.IsSet() {
+		t.Fatal("expected command to be set")
+	}
+}
+
+func TestLoadBeeCommandWithBooleanOffFails(t *testing.T) {
+	root := t.TempDir()
+	beesDir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(beesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yamlBody := `role: builder
+adapter: cursor
+command: agent -p $PROMPT
+params:
+  yolo: false
+`
+	if err := os.WriteFile(filepath.Join(beesDir, "builder.yaml"), []byte(yamlBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := colony.LoadBee(root, "builder"); err == nil {
+		t.Fatal("expected error for command + yolo: false")
+	}
+}
+
 func TestRequiresPrompt(t *testing.T) {
 	scriptBee := colony.Bee{Adapter: "script", Command: mustCommand(t, "echo ok")}
 	if scriptBee.RequiresPrompt() {

@@ -74,6 +74,9 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 			return nil, err
 		}
 	}
+	if err := bee.ValidateAdapterRequirements(); err != nil {
+		return nil, err
+	}
 
 	workspace := req.Workspace
 	if workspace == "" {
@@ -196,13 +199,6 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	})
 	if err != nil {
 		return nil, err
-	}
-	if bee.Command.IsSet() && bee.HasParams() {
-		runtimeLog.Warn("bee command overrides params",
-			logging.F("bee", bee.Role),
-			logging.F("trace", req.TraceID),
-			logging.F("agent", agentID),
-		)
 	}
 	for _, warning := range plan.Warnings {
 		runtimeLog.Warn("launch warning",

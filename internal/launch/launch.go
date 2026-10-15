@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/adapters/claude"
@@ -149,14 +150,17 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 		plan.Binary = spec.DefaultBinary
 	}
 
-	command, form, err := resolveCommand(req, commandPrompt)
+	// Resolve env before the command so a command template can reference the
+	// same plan env the child receives, not only the fixed CommandVars.
+	plan.Env = resolveEnv(req, params, spec)
+
+	command, form, err := resolveCommand(req, plan)
 	if err != nil {
 		return LaunchPlan{}, err
 	}
 	plan.Command = command
 	plan.Form = form
 
-	plan.Env = resolveEnv(req, params, spec)
 	return plan, nil
 }
 
@@ -170,9 +174,9 @@ func resolveDir(req Request) string {
 	return req.Workspace
 }
 
-func resolveCommand(req Request, commandPrompt string) ([]string, Form, error) {
+func resolveCommand(req Request, plan LaunchPlan) ([]string, Form, error) {
 	if req.Bee.Command.IsSet() && !req.Resume {
-		command, err := req.Bee.Command.RenderCommand(commandVars(req, commandPrompt))
+		command, err := req.Bee.Command.RenderCommand(commandVars(req, plan))
 		if err != nil {
 			return nil, "", fmt.Errorf("launch: render command: %w", err)
 		}
@@ -187,13 +191,15 @@ func resolveCommand(req Request, commandPrompt string) ([]string, Form, error) {
 	return nil, FormParams, nil
 }
 
-func commandVars(req Request, commandPrompt string) colony.CommandVars {
+// commandVars derives the command-template substitution values from the plan,
+// so command mode and params mode share the same paths and env conventions.
+func commandVars(req Request, plan LaunchPlan) colony.CommandVars {
 	resultFile := req.RunDir.ResultPath()
 	if abs, err := filepath.Abs(resultFile); err == nil {
 		resultFile = abs
 	}
 	return colony.CommandVars{
-		Prompt:       commandPrompt,
+		Prompt:       plan.CommandPrompt,
 		SystemPrompt: req.SystemPrompt,
 		SystemFile:   req.RunDir.SystemPath(),
 		Workspace:    req.Workspace,
@@ -203,7 +209,21 @@ func commandVars(req Request, commandPrompt string) colony.CommandVars {
 		ColonyRoot:   req.RunDir.ColonyRoot,
 		ResultFile:   resultFile,
 		RunDir:       req.RunDir.Root(),
+		Env:          envMap(plan.Env),
 	}
+}
+
+func envMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env))
+	for _, entry := range env {
+		if i := strings.IndexByte(entry, '='); i >= 0 {
+			out[entry[:i]] = entry[i+1:]
+		}
+	}
+	return out
 }
 
 // resolveEnv builds the complete child environment: the inherited base, the

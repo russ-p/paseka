@@ -8,6 +8,50 @@ import (
 	"github.com/russ-p/paseka/internal/adapters"
 )
 
+// defaultRunParams is the adapter-neutral param set a bee gets when it declares
+// no params. A command-mode bee may only carry params that leave these values
+// untouched: a custom command ignores params entirely, so any deviation is a
+// contradiction rather than a flag that quietly did not apply.
+var defaultRunParams = adapters.RunParams{Trust: true, Force: true}
+
+// ParamsAreDefault reports whether the bee's params resolve to the adapter
+// defaults, which makes them a no-op and therefore compatible with a custom
+// `command:`.
+func (b Bee) ParamsAreDefault() bool {
+	return LayerFromBee(b).Params == defaultRunParams
+}
+
+// NonDefaultParamKeys returns the declared params whose value differs from the
+// adapter default, sorted. It names the offending keys in the load-time
+// exclusivity error so the operator knows what to remove or reset.
+func (b Bee) NonDefaultParamKeys() []string {
+	if len(b.Params) == 0 {
+		return nil
+	}
+	var keys []string
+	for key, value := range b.Params {
+		if !isDefaultParamValue(key, value) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func isDefaultParamValue(key string, value any) bool {
+	switch key {
+	case "trust", "force", "yolo":
+		b, ok := value.(bool)
+		return ok && b
+	case "plan":
+		b, ok := value.(bool)
+		return ok && !b
+	default:
+		s, ok := value.(string)
+		return ok && s == ""
+	}
+}
+
 // RunParamKeys is the closed set of keys a bee or profile `params` block may
 // declare. A key outside this set is treated as a typo rather than a silently
 // ignored extra: it fails at load so the operator sees the mistake instead of a

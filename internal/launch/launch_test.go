@@ -1,6 +1,7 @@
 package launch_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -194,6 +195,48 @@ func TestResolveRendersCommandTemplate(t *testing.T) {
 	want := []string{"echo", "trace-1", "agent-1", "task-1", "You are a bee.\ndo work"}
 	if !reflect.DeepEqual(plan.Command, want) {
 		t.Fatalf("command = %v, want %v", plan.Command, want)
+	}
+}
+
+// TestResolveCommandTemplateReceivesPlanValues pins that a command-mode bee
+// renders its argv from the plan's values — the same result-file path and plan
+// env that params mode uses — so custom argv and mapped argv share conventions.
+func TestResolveCommandTemplateReceivesPlanValues(t *testing.T) {
+	req := baseRequest(t, "script", launch.AFK)
+	req.Bee.Command = parseCommand(t, "- /bin/run\n- ${RESULT_FILE}\n- ${PASEKA_RESULT_FILE}\n- ${PASEKA_TRACE_ID}\n")
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Form != launch.FormScript {
+		t.Fatalf("form = %q, want script", plan.Form)
+	}
+	wantResult := req.RunDir.ResultPath()
+	if !filepath.IsAbs(wantResult) {
+		t.Fatalf("test result path not absolute: %q", wantResult)
+	}
+	want := []string{"/bin/run", wantResult, wantResult, "trace-1"}
+	if !reflect.DeepEqual(plan.Command, want) {
+		t.Fatalf("command = %v, want %v", plan.Command, want)
+	}
+}
+
+// TestResolveCommandModeKeepsPlanEnv pins that assembling the plan env is not
+// skipped in command mode: the injected credential still reaches the child.
+func TestResolveCommandModeKeepsPlanEnv(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.Bee.Command = parseCommand(t, "- agent\n- -p\n- $PROMPT\n")
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Form != launch.FormCommand {
+		t.Fatalf("form = %q, want command", plan.Form)
+	}
+	if env := envMap(plan.Env); env["CURSOR_API_KEY"] != "secret" {
+		t.Fatalf("credential missing from command-mode plan env: %v", plan.Env)
 	}
 }
 

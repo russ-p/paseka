@@ -256,6 +256,9 @@ func applyBeesProfile(ctx Context, bees map[string]Bee) (map[string]Bee, error) 
 		if err != nil {
 			return nil, err
 		}
+		if err := applied.ValidateAdapterRequirements(); err != nil {
+			return nil, err
+		}
 		out[role] = applied
 	}
 	return out, nil
@@ -269,6 +272,9 @@ func (c Context) LoadBee(role string) (Bee, BeeLocalOverlay, error) {
 	}
 	bee, _, err = c.ApplyBeeProfile(bee)
 	if err != nil {
+		return Bee{}, BeeLocalOverlay{}, err
+	}
+	if err := bee.ValidateAdapterRequirements(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
 	return bee, overlay, nil

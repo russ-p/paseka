@@ -72,7 +72,7 @@ type Bee struct {
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
 | `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
 | `default_intent` | no | Default intent when the caller omits `--intent` or passes an unknown value. When omitted, `general` is used if present in the vocabulary; otherwise the first discovered intent. |
-| `params` | no | Adapter flag map (`model`, `yolo`, `plan`, `reasoning`, …). Ignored when `command` is set (runtime warns if both are present). |
+| `params` | no | Adapter flag map (`model`, `yolo`, `plan`, `reasoning`, …). Mutually exclusive with `command`: a bee that sets `command` may only carry params that equal the adapter defaults; any non-default param fails load. |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |
 | `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [bee routing](../reference/bee-routing.md). |
@@ -216,7 +216,7 @@ Adapter output format is **runtime-owned**, not a bee param. The runtime always 
 
 Deprecated aliases (accepted for one release; `paseka doctor` warns): `trust` and `force` collapse into `yolo`, `thinking` aliases `reasoning`, and `provider` folds into the model id as `X/Y`.
 
-When `command` is set, these params are **not** turned into CLI flags; runtime logs a warning if both `command` and `params` are present. `adapter` still selects result parsing, session PTY, and home-config credential injection.
+When `command` is set, these params are **not** turned into CLI flags. `command` and non-default `params` are mutually exclusive and fail at load (`paseka bee run`/`bee chat`/`init`); params that equal the adapter defaults (e.g. `yolo: true`) are accepted as a no-op. `adapter` still selects result parsing, session PTY, and home-config credential injection.
 
 **Model aliases:** bees may set `params.model` to a key from `colony.yaml` `model_aliases` (e.g. `high`) or to a full id (e.g. `anthropic/claude-sonnet-4`, or a bare `composer-2.5`). Alias values carry the vendor so switching a profile's `model_aliases` switches vendor for every bee on that alias. Runtime resolves aliases once at dispatch/session start, then maps the id per adapter (cursor/claude and opencode pass it through; pi splits the vendor into `--provider`/`--model`). Home `config.yaml` `model_aliases` overlays colony keys on this machine. Unknown names pass through unchanged. Per-bee exceptions stay in that bee's YAML; `*.local.yaml` does not override `params`. See [colony layout](colony-layout.md) and [spec 019](../specs/019-model-aliases.md).
 
@@ -257,6 +257,7 @@ Supports `$NAME` and `${NAME}`:
 | `$RESULT_FILE` / `${RESULT_FILE}` | dispatch + post_exec | path to `summary.md` |
 | `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
 | `$META` / `${META}` | post_exec only | path to `meta.json` |
+| `${<NAME>}` | command dispatch | any name in the launch plan's assembled environment, so custom argv shares the child's conventions (e.g. `PASEKA_RESULT_FILE`, `PASEKA_RUN_DIR` for `script`, the injected credential for LLM adapters). A fixed variable of the same name above wins. |
 
 ---
 

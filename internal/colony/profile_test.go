@@ -136,6 +136,26 @@ bees:
 	}
 }
 
+func TestProfileParamsOnCommandBeeFailLoad(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	writeColonyProfile(t, repo, "conflict", `adapter: cursor
+bees:
+  custom:
+    params:
+      model: special
+`)
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "conflict", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = ctx.LoadBee("custom")
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("err = %v, want command/params exclusivity failure", err)
+	}
+}
+
 func TestColonyProfileBooleanFalseBeatsBeeDefault(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	mustWriteProfile(t, filepath.Join(repo, ".paseka", "bees", "scout.yaml"),
