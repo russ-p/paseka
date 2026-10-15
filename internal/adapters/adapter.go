@@ -50,7 +50,7 @@ type RunParams struct {
 	Binary       string // adapter binary override
 	APIKey       string // optional; from machine-local api_key_env when set
 	Provider     string
-	Thinking     string
+	Reasoning    string // low | medium | high | passthrough
 }
 
 // RunParamsLayer is a RunParams together with the set of keys its source

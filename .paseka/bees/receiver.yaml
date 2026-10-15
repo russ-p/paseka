@@ -3,9 +3,7 @@ adapter: cursor
 prompt_template: receiver.md
 params:
   model: small
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: true
 subscribes:
   - type: VERIFICATION

@@ -67,13 +67,13 @@ func TestBuildArgs(t *testing.T) {
 			Trust:        true,
 			Force:        true,
 			Plan:         true,
-			Thinking:     "high",
+			Reasoning:    "high",
 		},
 	}
 	args := buildArgs(req, "implement feature")
+	// plan wins over yolo: --auto is suppressed while --agent plan is set.
 	want := []string{
 		"run", "--format", "json", "--dir", "/colony/worktree",
-		"--auto",
 		"--title", "agent-1",
 		"--agent", "plan",
 		"--model", "anthropic/claude-sonnet-4",
@@ -81,6 +81,27 @@ func TestBuildArgs(t *testing.T) {
 		"--", "implement feature",
 	}
 	assertArgs(t, args, want)
+}
+
+func TestBuildArgsYoloWithoutPlan(t *testing.T) {
+	req := adapters.RunRequest{
+		Workspace: "/ws",
+		AgentID:   "a1",
+		Params:    adapters.RunParams{Trust: true, Force: true},
+	}
+	args := buildArgs(req, "task")
+	var sawAuto bool
+	for _, arg := range args {
+		if arg == "--auto" {
+			sawAuto = true
+		}
+		if arg == "--agent" {
+			t.Fatalf("did not expect --agent without plan: %v", args)
+		}
+	}
+	if !sawAuto {
+		t.Fatalf("expected --auto with yolo and no plan: %v", args)
+	}
 }
 
 func TestBuildArgsNoAutoWhenUntrusted(t *testing.T) {

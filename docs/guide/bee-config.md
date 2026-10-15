@@ -72,7 +72,7 @@ type Bee struct {
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
 | `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
 | `default_intent` | no | Default intent when the caller omits `--intent` or passes an unknown value. When omitted, `general` is used if present in the vocabulary; otherwise the first discovered intent. |
-| `params` | no | Adapter flag map (`model`, `trust`, …). Ignored when `command` is set (runtime warns if both are present). |
+| `params` | no | Adapter flag map (`model`, `yolo`, `plan`, `reasoning`, …). Ignored when `command` is set (runtime warns if both are present). |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |
 | `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [bee routing](../reference/bee-routing.md). |
@@ -91,9 +91,7 @@ adapter: cursor
 sector: frontend
 params:
   model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 # Optional: override adapter flag mapping (docker-compose style).
 # command: agent -p --yolo --workspace $WORKSPACE $PROMPT
 prompt_template: builder.md   # relative to .paseka/prompts/
@@ -116,9 +114,7 @@ adapter: cursor
 prompt_template: guard.md
 params:
   model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: true
 subscribes:
   - type: MUTATION
@@ -173,9 +169,9 @@ publishes:
 | Adapter | Notes |
 | ------- | ----- |
 | `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead; OpenCode also merges into one message. |
-| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
+| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `reasoning`, `output_format`, `plan`, `binary` (no `yolo` equivalent; `paseka doctor` warns when set). Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
-| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `thinking` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
+| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `yolo` → `--auto`, `reasoning` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
 
 Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
@@ -205,18 +201,19 @@ Script process env (in addition to `command` variable substitution): `PASEKA_TRA
 
 ## 5. `params`
 
-Mapped by `RunParamsFromBee` (`internal/colony/params.go`). Defaults: `trust: true`, `force: true`.
+Mapped by `LayerFromBee` (`internal/colony/params.go`). Defaults: `yolo: true`.
 
 | Key | Type | Used by |
 | --- | ---- | ------- |
 | `model` | string | cursor, pi, claude, opencode — alias key from `colony.yaml` `model_aliases` or raw vendor id (OpenCode prefers `provider/model`) |
-| `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode`; opencode AFK maps `json` → `--format json`, `text` → `--format default` |
-| `trust` | bool | cursor; opencode AFK (`--auto`) |
-| `force` | bool | cursor; opencode AFK (`--auto`) |
-| `plan` | bool | cursor (`--plan`); pi (`--plan`); opencode (`--agent plan`) |
+| `yolo` | bool | cursor (`--trust --force`); claude (`bypassPermissions`); opencode AFK (`--auto`); pi has no equivalent (doctor warns) |
+| `plan` | bool | cursor (`--plan`); pi (`--plan`); claude (`plan`); opencode (`--agent plan`). Wins over `yolo`: the read-only plan mode drops trust/force. |
 | `binary` | string | override CLI binary name |
 | `provider` | string | pi; opencode (prefix for `--model` when model has no `/`) |
-| `thinking` | string | pi; opencode (`--variant`) |
+| `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant`); cursor and claude have no mapping (doctor warns) |
+| `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode`; opencode AFK maps `json` → `--format json`, `text` → `--format default` |
+
+Deprecated aliases (accepted for one release; `paseka doctor` warns): `trust` and `force` collapse into `yolo`, and `thinking` aliases `reasoning`.
 
 When `command` is set, these params are **not** turned into CLI flags; runtime logs a warning if both `command` and `params` are present. `adapter` still selects result parsing, session PTY, and home-config credential injection.
 

@@ -22,7 +22,7 @@ func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {
 			Binary:       fakePi,
 			Model:        "gpt-4",
 			Provider:     "gemini",
-			Thinking:     "high",
+			Reasoning:    "high",
 			Plan:         true,
 			APIKey:       "secret",
 			OutputFormat: "json",
@@ -83,12 +83,12 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 		InitialPrompt: "implement feature",
 		Detached:      true,
 		Params: adapters.RunParams{
-			Binary:   fakePi,
-			Model:    "gpt-4",
-			Provider: "gemini",
-			Thinking: "high",
-			Plan:     true,
-			APIKey:   "secret",
+			Binary:    fakePi,
+			Model:     "gpt-4",
+			Provider:  "gemini",
+			Reasoning: "high",
+			Plan:      true,
+			APIKey:    "secret",
 		},
 	})
 	if err != nil {

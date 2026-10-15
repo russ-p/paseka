@@ -4,9 +4,7 @@ prompt_template: scout.md
 default_intent: intake
 params:
   model: low
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
   plan: false
 worktree: false
 subscribes:

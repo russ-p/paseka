@@ -63,6 +63,32 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
+func TestBuildArgsPlanWinsOverYolo(t *testing.T) {
+	req := adapters.RunRequest{
+		Workspace: "/ws",
+		Params: adapters.RunParams{
+			Trust: true,
+			Force: true,
+			Plan:  true,
+		},
+	}
+	args := buildArgs(req, "plan it")
+	want := []string{
+		"-p", "--workspace", "/ws",
+		"--output-format", "stream-json",
+		"--plan",
+		"plan it",
+	}
+	if len(args) != len(want) {
+		t.Fatalf("got %d args, want %d: %v", len(args), len(want), args)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, args[i], want[i], args)
+		}
+	}
+}
+
 func TestAdapterRunPersistsProviderSessionID(t *testing.T) {
 	repo := initCursorRepo(t)
 	stdout := `{"type":"system","subtype":"init","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}

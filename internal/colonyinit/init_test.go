@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/colonyinit"
 )
 
@@ -145,8 +146,11 @@ func TestInitScaffoldWithPiAdapter(t *testing.T) {
 	if !strings.Contains(string(scout), "adapter: pi") {
 		t.Fatalf("scout bee should use pi adapter:\n%s", scout)
 	}
-	if !strings.Contains(string(scout), "output_format: json") {
-		t.Fatalf("scout bee should use json output:\n%s", scout)
+	if !strings.Contains(string(scout), "plan: false") {
+		t.Fatalf("scout bee should keep the plan decision:\n%s", scout)
+	}
+	if strings.Contains(string(scout), "output_format") || strings.Contains(string(scout), "trust:") || strings.Contains(string(scout), "force:") {
+		t.Fatalf("scout bee should not carry boilerplate keys:\n%s", scout)
 	}
 
 	builder, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", "builder.yaml"))
@@ -199,8 +203,11 @@ func TestInitScaffoldWithOpenCodeAdapter(t *testing.T) {
 	if !strings.Contains(string(scout), "adapter: opencode") {
 		t.Fatalf("scout bee should use opencode adapter:\n%s", scout)
 	}
-	if !strings.Contains(string(scout), "output_format: json") {
-		t.Fatalf("scout bee should use json output:\n%s", scout)
+	if !strings.Contains(string(scout), "yolo: true") {
+		t.Fatalf("scout bee should carry the yolo decision:\n%s", scout)
+	}
+	if strings.Contains(string(scout), "output_format") || strings.Contains(string(scout), "trust:") || strings.Contains(string(scout), "force:") {
+		t.Fatalf("scout bee should not carry boilerplate keys:\n%s", scout)
 	}
 
 	builder, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", "builder.yaml"))
@@ -260,6 +267,22 @@ func TestInitUnsupportedAdapterFallsBackToCursor(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "pi.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("pi.yaml should not be scaffolded for cursor init: %v", err)
+	}
+}
+
+func TestInitScaffoldBeeYAMLParses(t *testing.T) {
+	for _, adapter := range []string{"cursor", "pi", "opencode"} {
+		t.Run(adapter, func(t *testing.T) {
+			repo := initTestRepo(t)
+			if _, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo, Adapter: adapter}); err != nil {
+				t.Fatal(err)
+			}
+			for _, role := range []string{"scout", "builder", "hivewright"} {
+				if _, _, err := colony.LoadBee(repo, role); err != nil {
+					t.Fatalf("scaffolded %s bee does not load for adapter %s: %v", role, adapter, err)
+				}
+			}
+		})
 	}
 }
 

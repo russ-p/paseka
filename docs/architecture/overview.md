@@ -106,10 +106,9 @@ Agents build one JSON object per event, pass it on stdin, and receive machine-re
 | `Workspace` | `--workspace <path>` (repo root or `.paseka/worktrees/<traceId>/`) |
 | `Prompt` | positional prompt argument (`system_template` + task, newline-separated, when system is set) |
 | `params.model` | `--model <id>` (resolved vendor id after `model_aliases` lookup) |
-| `params.trust` (default true) | `--trust` |
-| `params.force` (default true) | `--force` |
+| `params.yolo` (default true) | `--trust --force` (suppressed when `params.plan`) |
 | `params.output_format` (default `stream-json`) | `--output-format stream-json` |
-| `params.mode: plan` | `--plan` |
+| `params.plan` | `--plan` |
 | API key | `CURSOR_API_KEY` env or `--api-key` from home config |
 
 Default non-interactive invocation (same spirit as fizman script):
@@ -147,7 +146,7 @@ Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.pase
 | `agentId` | `--session-id <agentId>` (AFK and interactive) |
 | `params.model` | `--model <pattern>` |
 | `params.provider` | `--provider <name>` |
-| `params.thinking` | `--thinking <level>` |
+| `params.reasoning` | `--thinking <level>` |
 | `params.output_format` | `--mode <mode>` (AFK only; see below) |
 | `params.plan` | `--plan` |
 | `params.binary` | CLI binary name (default `pi`) |
@@ -173,7 +172,7 @@ pi -p --mode json \
   "$PROMPT"
 ```
 
-**Ignored params:** Pi does not map Paseka `trust` or `force` (no equivalent flags).
+**Ignored params:** Pi has no `yolo` equivalent (no `--trust`/`--force` flag); `paseka doctor` warns when `params.yolo` is set.
 
 **Result collection:**
 
@@ -205,7 +204,7 @@ adapter: pi
 params:
   model: gemini-2.5-pro
   provider: google
-  thinking: high
+  reasoning: high
   output_format: json
 prompt_template: scout.md
 ```
@@ -227,7 +226,7 @@ Claude TUI through the shared PTY session layer.
 | `params.model` | `--model <id>` |
 | `params.output_format` | `--output-format` (`stream-json` default; adds `--verbose`) |
 | `params.plan` | `--permission-mode plan` |
-| `params.trust` or `params.force` | `--permission-mode bypassPermissions` |
+| `params.yolo` (unless `params.plan`) | `--permission-mode bypassPermissions` |
 | default permissions | `--permission-mode acceptEdits` |
 | API key | `ANTHROPIC_API_KEY` from machine-local adapter config |
 
@@ -258,10 +257,10 @@ Go implementation: `internal/adapters/claude/`.
 | `Workspace` | `--dir <path>` (AFK `run`) and process cwd (AFK and HITL) |
 | Prompt + `system_template` | joined into one message (OpenCode has no append-system flag) |
 | `params.model` | `--model <id>`; if the id has no `/` and `params.provider` is set, `provider/model` |
-| `params.trust` / `params.force` (AFK) | `--auto` |
+| `params.yolo` (AFK, unless `params.plan`) | `--auto` |
 | `params.plan` | `--agent plan` (built-in read-only Plan primary; not Paseka `agentId`) |
 | `params.output_format` | AFK `--format json` (default) or `--format default` when `text` |
-| `params.thinking` | `--variant` (reasoning effort) |
+| `params.reasoning` | `--variant` (reasoning effort) |
 | `params.binary` | CLI binary name (default `opencode`) |
 | Auth | `opencode auth login`, provider env, or project `.env` (no `--api-key`) |
 | `agentId` (AFK) | `--title <agentId>` for later list correlation |

@@ -249,8 +249,8 @@ func buildArgs(req adapters.RunRequest, prompt, systemFile, sessionDir string) [
 	if p.Provider != "" {
 		args = append(args, "--provider", p.Provider)
 	}
-	if p.Thinking != "" {
-		args = append(args, "--thinking", p.Thinking)
+	if p.Reasoning != "" {
+		args = append(args, "--thinking", p.Reasoning)
 	}
 	if p.Plan {
 		args = append(args, "--plan")

@@ -4,9 +4,7 @@ prompt_template: archivist.md
 default_intent: task
 params:
   model: medium
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: false
 publishes:
   - type: INSIGHT

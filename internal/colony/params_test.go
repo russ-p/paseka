@@ -69,7 +69,7 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 			"plan":          true,
 			"binary":        "/usr/bin/pi",
 			"provider":      "gemini",
-			"thinking":      "high",
+			"reasoning":     "high",
 			"trust":         false,
 			"force":         false,
 		},
@@ -90,8 +90,8 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 	if p.Provider != "gemini" {
 		t.Fatalf("provider = %q", p.Provider)
 	}
-	if p.Thinking != "high" {
-		t.Fatalf("thinking = %q", p.Thinking)
+	if p.Reasoning != "high" {
+		t.Fatalf("reasoning = %q", p.Reasoning)
 	}
 	if p.Trust {
 		t.Fatal("trust = true, want false")
@@ -101,24 +101,82 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 	}
 }
 
-func TestMergeRunParamsProviderThinking(t *testing.T) {
+func TestMergeRunParamsProviderReasoning(t *testing.T) {
 	base := adapters.RunParamsLayer{
 		Params:   adapters.RunParams{Model: "base"},
 		Declared: map[string]bool{"model": true},
 	}
 	over := adapters.RunParamsLayer{
-		Params:   adapters.RunParams{Provider: "openai", Thinking: "low"},
-		Declared: map[string]bool{"provider": true, "thinking": true},
+		Params:   adapters.RunParams{Provider: "openai", Reasoning: "low"},
+		Declared: map[string]bool{"provider": true, "reasoning": true},
 	}
 	got := colony.MergeRunParamsLayers(base, over)
 	if got.Provider != "openai" {
 		t.Fatalf("provider = %q", got.Provider)
 	}
-	if got.Thinking != "low" {
-		t.Fatalf("thinking = %q", got.Thinking)
+	if got.Reasoning != "low" {
+		t.Fatalf("reasoning = %q", got.Reasoning)
 	}
 	if got.Model != "base" {
 		t.Fatalf("model = %q", got.Model)
+	}
+}
+
+func TestRunParamsReasoningLegacyAlias(t *testing.T) {
+	// thinking is a one-release deprecation alias for reasoning.
+	legacy := colony.LayerFromBee(colony.Bee{
+		Role:   "builder",
+		Params: map[string]any{"thinking": "low"},
+	})
+	if legacy.Params.Reasoning != "low" {
+		t.Fatalf("thinking alias = %q, want low", legacy.Params.Reasoning)
+	}
+	if !legacy.Declares("reasoning") {
+		t.Fatalf("thinking should declare reasoning: %+v", legacy.Declared)
+	}
+
+	// reasoning wins when both keys are present.
+	both := colony.LayerFromBee(colony.Bee{
+		Role:   "builder",
+		Params: map[string]any{"reasoning": "high", "thinking": "low"},
+	})
+	if both.Params.Reasoning != "high" {
+		t.Fatalf("reasoning = %q, want high (new key wins)", both.Params.Reasoning)
+	}
+}
+
+func TestYoloMatchesLegacyTrustForce(t *testing.T) {
+	yolo := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"yolo": true}})
+	legacy := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"trust": true, "force": true}})
+	if yolo.Params.Trust != legacy.Params.Trust || yolo.Params.Force != legacy.Params.Force {
+		t.Fatalf("yolo %+v != trust+force %+v", yolo.Params, legacy.Params)
+	}
+	if !yolo.Params.Trust || !yolo.Params.Force {
+		t.Fatalf("yolo should enable trust and force: %+v", yolo.Params)
+	}
+}
+
+func TestDiagnoseBeeParams(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"builder": {Role: "builder", Adapter: "cursor", Params: map[string]any{"trust": true, "force": true}},
+		"planner": {Role: "planner", Adapter: "cursor", Params: map[string]any{"reasoning": "high"}},
+		"scout":   {Role: "scout", Adapter: "pi", Params: map[string]any{"yolo": true}},
+		"clean":   {Role: "clean", Adapter: "pi", Params: map[string]any{"plan": false}},
+	}
+	warnings := colony.DiagnoseBeeParams(bees)
+	joined := strings.Join(warnings, "\n")
+	for _, want := range []string{
+		`bee "builder": params.trust is deprecated; use params.yolo`,
+		`bee "builder": params.force is deprecated; use params.yolo`,
+		`bee "planner": params.reasoning has no mapping on adapter cursor`,
+		`bee "scout": adapter pi has no yolo equivalent`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing warning %q in:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, `bee "clean"`) {
+		t.Fatalf("clean bee should produce no warnings:\n%s", joined)
 	}
 }
 

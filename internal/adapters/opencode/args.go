@@ -41,7 +41,8 @@ func runFormat(outputFormat string) string {
 func buildArgs(req adapters.RunRequest, prompt string) []string {
 	p := req.Params
 	args := []string{"run", "--format", runFormat(p.OutputFormat), "--dir", req.Workspace}
-	if p.Trust || p.Force {
+	// plan wins over yolo: --auto would conflict with the read-only plan agent.
+	if (p.Trust || p.Force) && !p.Plan {
 		args = append(args, "--auto")
 	}
 	if req.AgentID != "" {
@@ -53,8 +54,8 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	if model := resolveModel(p); model != "" {
 		args = append(args, "--model", model)
 	}
-	if p.Thinking != "" {
-		args = append(args, "--variant", p.Thinking)
+	if p.Reasoning != "" {
+		args = append(args, "--variant", p.Reasoning)
 	}
 	if prompt != "" {
 		args = append(args, "--", prompt)
@@ -71,8 +72,8 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt, resumeID string) 
 	if model := resolveModel(p); model != "" {
 		args = append(args, "--model", model)
 	}
-	if p.Thinking != "" {
-		args = append(args, "--variant", p.Thinking)
+	if p.Reasoning != "" {
+		args = append(args, "--variant", p.Reasoning)
 	}
 	if resumeID != "" {
 		args = append(args, "--session", resumeID)

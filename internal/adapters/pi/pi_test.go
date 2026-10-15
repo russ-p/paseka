@@ -42,7 +42,7 @@ func TestBuildArgs(t *testing.T) {
 			Model:        "gpt-4",
 			OutputFormat: "json",
 			Provider:     "gemini",
-			Thinking:     "high",
+			Reasoning:    "high",
 			Plan:         true,
 			APIKey:       "secret",
 			Trust:        true,

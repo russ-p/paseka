@@ -98,7 +98,8 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt, resumeID string) 
 	}
 
 	// --trust is headless-only (-p); interactive sessions prompt in the TUI instead.
-	if p.Force {
+	// plan wins over yolo: --force is dropped when a plan is set.
+	if p.Force && !p.Plan {
 		args = append(args, "--force")
 	}
 	if p.Plan {

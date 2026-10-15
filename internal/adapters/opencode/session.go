@@ -138,7 +138,7 @@ func buildPromptDelivery(req adapters.SessionRequest, providerSessionID, prompt 
 		Password:      password,
 		Text:          prompt,
 		Agent:         agent,
-		Variant:       strings.TrimSpace(req.Params.Thinking),
+		Variant:       strings.TrimSpace(req.Params.Reasoning),
 		ModelProvider: provider,
 		ModelID:       modelID,
 	}

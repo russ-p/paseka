@@ -243,10 +243,12 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	}
 	args = append(args, "--output-format", outputFormat)
 
-	if p.Trust {
+	// plan wins over yolo: with a plan we are already non-interactive but
+	// read-only, so trust/force must not be added.
+	if p.Trust && !p.Plan {
 		args = append(args, "--trust")
 	}
-	if p.Force {
+	if p.Force && !p.Plan {
 		args = append(args, "--force")
 	}
 	if p.Plan {

@@ -20,7 +20,7 @@ func TestSessionCommandInteractive(t *testing.T) {
 			Binary:       fake,
 			Model:        "claude-sonnet-4",
 			Provider:     "anthropic",
-			Thinking:     "high",
+			Reasoning:    "high",
 			Plan:         true,
 			Trust:        true,
 			Force:        true,

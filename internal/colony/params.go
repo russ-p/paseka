@@ -19,6 +19,7 @@ var RunParamKeys = []string{
 	"output_format",
 	"plan",
 	"provider",
+	"reasoning",
 	"thinking",
 	"trust",
 	"yolo",
@@ -118,9 +119,17 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Provider = v
 		declared["provider"] = true
 	}
+	// reasoning is the semantic key; thinking is a one-release deprecation
+	// alias for it. reasoning wins when both appear.
+	if v, ok := stringParam(b.Params, "reasoning"); ok {
+		p.Reasoning = v
+		declared["reasoning"] = true
+	}
 	if v, ok := stringParam(b.Params, "thinking"); ok {
-		p.Thinking = v
-		declared["thinking"] = true
+		if !declared["reasoning"] {
+			p.Reasoning = v
+			declared["reasoning"] = true
+		}
 	}
 	layer.Params = p
 	return layer
@@ -148,8 +157,8 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 	if declared["provider"] {
 		out.Provider = over.Params.Provider
 	}
-	if declared["thinking"] {
-		out.Thinking = over.Params.Thinking
+	if declared["reasoning"] {
+		out.Reasoning = over.Params.Reasoning
 	}
 	if declared["trust"] {
 		out.Trust = over.Params.Trust
