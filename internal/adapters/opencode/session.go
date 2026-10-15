@@ -3,7 +3,6 @@ package opencode
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -44,10 +43,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 
 	commandOverride := len(req.Command) > 0
 
-	binary := req.Params.Binary
-	if binary == "" {
-		binary = defaultBinary
-	}
+	binary := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 	var args []string
 	if commandOverride {
 		binary = req.Command[0]
@@ -66,7 +62,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	case commandOverride:
 		providerSessionID = firstFlagValue(args, "--session", "-s")
 	default:
-		id, err := createSessionFunc(binary, req.Workspace, os.Environ())
+		id, err := createSessionFunc(binary, req.Workspace, req.Env)
 		if err != nil {
 			logging.Component("adapter").Warn("opencode create-session failed",
 				logging.F("adapter", adapterName),
@@ -80,7 +76,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		}
 	}
 
-	env := os.Environ()
+	env := req.Env
 	var controlArgs []string
 	delivery := (*adapters.SessionPromptDelivery)(nil)
 	promptArg := prompt
@@ -113,7 +109,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		Binary:            binary,
 		Args:              args,
 		Env:               env,
-		Dir:               req.Workspace,
+		Dir:               adapters.ResolveDir(req.Dir, req.Workspace),
 		ProviderSessionID: providerSessionID,
 		Prompt:            delivery,
 	}, nil

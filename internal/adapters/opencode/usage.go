@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -27,7 +26,7 @@ func (a *SessionAdapter) SessionUsage(ctx context.Context, handle adapters.Sessi
 	}
 
 	var usage *protocol.Usage
-	err := withServer(binary, handle.Workspace, os.Environ(), func(ctx context.Context, port int, password string) error {
+	err := withServer(binary, handle.Workspace, handle.Env, func(ctx context.Context, port int, password string) error {
 		fetched, err := getSessionUsage(ctx, port, password, sessionID)
 		if err != nil {
 			return err

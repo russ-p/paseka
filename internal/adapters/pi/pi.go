@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -31,6 +30,11 @@ func New() *Adapter {
 
 func (a *Adapter) Name() string {
 	return adapterName
+}
+
+// LaunchSpec reports the adapter's built-in binary (Pi takes no credential env).
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{DefaultBinary: defaultBinary}
 }
 
 // ResolveSessionLog is a stub until Pi session-dir readers land (spec 021).
@@ -71,10 +75,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		sessionDir = sessionDirFor(req.ColonyRoot, req.TraceID, req.AgentID)
 	}
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildArgs(req, prompt, systemFile, sessionDir)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -119,8 +120,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = req.Workspace
-	cmd.Env = os.Environ()
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	cmd.Env = req.Env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

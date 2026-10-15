@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -50,10 +49,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildInteractiveArgs(req, sessionDir, prompt, systemFile)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -70,8 +66,8 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	return adapters.SessionCommand{
 		Binary:            binary,
 		Args:              args,
-		Env:               os.Environ(),
-		Dir:               req.Workspace,
+		Env:               req.Env,
+		Dir:               adapters.ResolveDir(req.Dir, req.Workspace),
 		ProviderSessionID: providerSessionID,
 	}, nil
 }

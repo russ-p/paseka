@@ -27,6 +27,11 @@ func (a *Adapter) Name() string {
 	return adapterName
 }
 
+// LaunchSpec reports no default binary: a script bee always supplies a command.
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{}
+}
+
 // Run executes the configured command argv in the bee workspace.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {
@@ -74,8 +79,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, req.Command)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = req.Workspace
-	cmd.Env = adapters.ScriptEnv(req, runDir)
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	if req.Env != nil {
+		cmd.Env = req.Env
+	} else {
+		cmd.Env = adapters.ScriptEnv(nil, req, runDir)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

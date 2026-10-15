@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -29,6 +28,11 @@ func New() *Adapter {
 
 func (a *Adapter) Name() string {
 	return adapterName
+}
+
+// LaunchSpec reports the adapter's built-in binary and credential env var.
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{DefaultBinary: defaultBinary, CredentialEnv: "ANTHROPIC_API_KEY"}
 }
 
 // Run invokes `claude -p` in headless mode inside the workspace.
@@ -58,10 +62,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildArgs(req, prompt, systemFile)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -97,11 +98,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	cmd := exec.CommandContext(ctx, binary, args...)
 	// Claude Code operates on the current working directory; there is no
 	// --workspace flag, so the process is launched inside the workspace.
-	cmd.Dir = req.Workspace
-	cmd.Env = os.Environ()
-	if req.Params.APIKey != "" {
-		cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+req.Params.APIKey)
-	}
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	cmd.Env = req.Env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

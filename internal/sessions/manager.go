@@ -22,6 +22,7 @@ import (
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/launch"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
@@ -294,32 +295,28 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, fmt.Errorf("sessions: adapter %q does not support interactive sessions", adapterName)
 	}
 
-	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), colony.AdapterExtraLayer(ctxColony, adapterName))
-	colony.ApplyModelAliases(&params, ctxColony.ModelAliases)
-
-	commandPrompt := rendered
-	if !resuming && (adapterName == "cursor" || adapterName == "opencode") {
-		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
+	plan, err := launch.ResolveLaunch(launch.Request{
+		Mode:         launch.Interactive,
+		Adapter:      adapterName,
+		Bee:          bee,
+		Extra:        colony.AdapterExtraLayer(ctxColony, adapterName),
+		Aliases:      ctxColony.ModelAliases,
+		Workspace:    workspace,
+		TaskID:       req.TaskID,
+		Prompt:       rendered,
+		SystemPrompt: renderedSystem,
+		Resume:       resuming,
+		RunDir:       runDir,
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	var command []string
-	if !resuming && bee.Command.IsSet() {
-		if bee.HasParams() {
-			logging.Component("sessions").Warn("bee command overrides params",
-				logging.F("bee", bee.Role),
-				logging.F("trace", traceID),
-				logging.F("agent", agentID),
-			)
-		}
-		command, err = bee.Command.RenderCommand(colony.CommandVars{
-			Prompt:       commandPrompt,
-			SystemPrompt: renderedSystem,
-			SystemFile:   runDir.SystemPath(),
-			Workspace:    workspace,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("sessions: render command: %w", err)
-		}
+	if !resuming && bee.Command.IsSet() && bee.HasParams() {
+		logging.Component("sessions").Warn("bee command overrides params",
+			logging.F("bee", bee.Role),
+			logging.F("trace", traceID),
+			logging.F("agent", agentID),
+		)
 	}
 
 	startedAt := time.Now().UTC()
@@ -387,8 +384,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		SystemPrompt:    renderedSystem,
 		ColonyRoot:      ctxColony.ColonyRoot,
 		Workspace:       workspace,
-		Params:          params,
-		Command:         command,
+		Params:          plan.Params,
+		Command:         plan.Command,
+		Binary:          plan.Binary,
+		Env:             plan.Env,
+		Dir:             plan.Dir,
 		TraceID:         traceID,
 		AgentID:         agentID,
 		TaskID:          req.TaskID,
@@ -438,6 +438,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Bee:               bee.Role,
 		Adapter:           adapterName,
 		Binary:            cmd.Binary,
+		Env:               plan.Env,
 		PID:               proc.PID(),
 		State:             adapters.SessionActive,
 		StartedAt:         startedAt,

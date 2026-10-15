@@ -1,14 +1,15 @@
 package adapters
 
 import (
-	"os"
-
 	"github.com/russ-p/paseka/internal/runs"
 )
 
-// ScriptEnv returns process environment for script adapter runs.
-func ScriptEnv(req RunRequest, runDir runs.Dir) []string {
-	env := os.Environ()
+// ScriptEnv returns process environment for script adapter runs, layering the
+// PASEKA_* contract onto base. The launch resolver passes the inherited
+// environment as base; a direct adapter call may pass nil for a self-contained
+// PASEKA_*-only environment.
+func ScriptEnv(base []string, req RunRequest, runDir runs.Dir) []string {
+	env := append([]string(nil), base...)
 	set := func(key, val string) {
 		if val == "" {
 			return

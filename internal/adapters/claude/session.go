@@ -3,7 +3,6 @@ package claude
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -46,26 +45,20 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildInteractiveArgs(req, prompt, systemFile)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
 		return adapters.SessionCommand{}, fmt.Errorf("claude: %q not found in PATH (install Claude Code CLI)", binary)
 	}
 
-	env := os.Environ()
-	if req.Params.APIKey != "" {
-		env = append(env, "ANTHROPIC_API_KEY="+req.Params.APIKey)
-	}
+	env := req.Env
 
 	return adapters.SessionCommand{
 		Binary: binary,
 		Args:   args,
 		Env:    env,
-		Dir:    req.Workspace,
+		Dir:    adapters.ResolveDir(req.Dir, req.Workspace),
 	}, nil
 }
 

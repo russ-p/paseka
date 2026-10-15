@@ -1,0 +1,257 @@
+package launch_test
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/launch"
+	"github.com/russ-p/paseka/internal/runs"
+	"gopkg.in/yaml.v3"
+)
+
+func parseCommand(t *testing.T, doc string) colony.Command {
+	t.Helper()
+	var c colony.Command
+	if err := yaml.Unmarshal([]byte(doc), &c); err != nil {
+		t.Fatalf("parse command %q: %v", doc, err)
+	}
+	return c
+}
+
+func testRunDir() runs.Dir {
+	return runs.Dir{ColonyRoot: "/colony", TraceID: "trace-1", AgentID: "agent-1"}
+}
+
+func testBee(adapter string) colony.Bee {
+	return colony.Bee{
+		Role:    adapter,
+		Adapter: adapter,
+		Params:  map[string]any{"model": "m1", "output_format": "stream-json"},
+	}
+}
+
+func testExtra() adapters.RunParamsLayer {
+	return adapters.RunParamsLayer{
+		Params:   adapters.RunParams{Binary: "/opt/agent", APIKey: "secret"},
+		Declared: map[string]bool{"binary": true, "api_key": true},
+	}
+}
+
+func baseRequest(t *testing.T, adapter string, mode launch.Mode) launch.Request {
+	t.Helper()
+	bee := testBee(adapter)
+	if adapter == "script" {
+		bee.Command = parseCommand(t, "[/bin/true]")
+	}
+	return launch.Request{
+		Mode:         mode,
+		Adapter:      adapter,
+		Bee:          bee,
+		Extra:        testExtra(),
+		Aliases:      nil,
+		Workspace:    "/ws",
+		TaskID:       "task-1",
+		Prompt:       "do work",
+		SystemPrompt: "You are a bee.",
+		RunDir:       testRunDir(),
+		EnvBase:      []string{"PATH=/bin"},
+	}
+}
+
+// TestResolveAFKInteractiveParity asserts both launch shapes resolve identical
+// binary, params, form, prompt, and environment, so AFK dispatch and interactive
+// sessions cannot drift. The only sanctioned difference is cursor's AFK cwd
+// inheritance.
+func TestResolveAFKInteractiveParity(t *testing.T) {
+	for _, adapter := range []string{"cursor", "pi", "claude", "opencode", "script"} {
+		adapter := adapter
+		t.Run(adapter, func(t *testing.T) {
+			afk, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.AFK))
+			if err != nil {
+				t.Fatalf("afk resolve: %v", err)
+			}
+			interactive, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.Interactive))
+			if err != nil {
+				t.Fatalf("interactive resolve: %v", err)
+			}
+
+			if afk.Adapter != interactive.Adapter {
+				t.Fatalf("adapter differs: %q vs %q", afk.Adapter, interactive.Adapter)
+			}
+			if afk.Binary != interactive.Binary {
+				t.Fatalf("binary differs: %q vs %q", afk.Binary, interactive.Binary)
+			}
+			if afk.Binary != "/opt/agent" {
+				t.Fatalf("binary = %q, want merged /opt/agent", afk.Binary)
+			}
+			if !reflect.DeepEqual(afk.Params, interactive.Params) {
+				t.Fatalf("params differ: %+v vs %+v", afk.Params, interactive.Params)
+			}
+			if afk.Form != interactive.Form {
+				t.Fatalf("form differs: %q vs %q", afk.Form, interactive.Form)
+			}
+			if afk.CommandPrompt != interactive.CommandPrompt {
+				t.Fatalf("command prompt differs: %q vs %q", afk.CommandPrompt, interactive.CommandPrompt)
+			}
+			if !reflect.DeepEqual(afk.Env, interactive.Env) {
+				t.Fatalf("env differs:\n afk=%v\n int=%v", afk.Env, interactive.Env)
+			}
+
+			wantInteractiveDir := "/ws"
+			if interactive.Dir != wantInteractiveDir {
+				t.Fatalf("interactive dir = %q, want %q", interactive.Dir, wantInteractiveDir)
+			}
+			wantAFKDir := "/ws"
+			if adapter == "cursor" {
+				wantAFKDir = ""
+			}
+			if afk.Dir != wantAFKDir {
+				t.Fatalf("afk dir = %q, want %q", afk.Dir, wantAFKDir)
+			}
+		})
+	}
+}
+
+func TestResolveJoinsProviderPrompt(t *testing.T) {
+	for _, adapter := range []string{"cursor", "opencode"} {
+		plan, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.AFK))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if plan.CommandPrompt != "You are a bee.\ndo work" {
+			t.Fatalf("%s command prompt = %q", adapter, plan.CommandPrompt)
+		}
+	}
+	for _, adapter := range []string{"pi", "claude", "script"} {
+		plan, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.AFK))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if plan.CommandPrompt != "do work" {
+			t.Fatalf("%s command prompt = %q, want task only", adapter, plan.CommandPrompt)
+		}
+	}
+}
+
+func TestResolveResumeSuppressesJoinAndCommand(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.Interactive)
+	req.Resume = true
+	req.Prompt = "keep going"
+	req.Bee.Command = parseCommand(t, "[agent, --resume, x]")
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.CommandPrompt != "keep going" {
+		t.Fatalf("resume command prompt = %q", plan.CommandPrompt)
+	}
+	if plan.Form != launch.FormParams {
+		t.Fatalf("resume form = %q, want params", plan.Form)
+	}
+	if plan.Command != nil {
+		t.Fatalf("resume command = %v, want nil", plan.Command)
+	}
+}
+
+func TestResolveRendersCommandTemplate(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.Bee.Role = "builder"
+	req.Bee.Command = parseCommand(t, "- echo\n- ${TRACE_ID}\n- ${AGENT_ID}\n- ${TASK_ID}\n- ${PROMPT}\n")
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Form != launch.FormCommand {
+		t.Fatalf("form = %q, want command", plan.Form)
+	}
+	want := []string{"echo", "trace-1", "agent-1", "task-1", "You are a bee.\ndo work"}
+	if !reflect.DeepEqual(plan.Command, want) {
+		t.Fatalf("command = %v, want %v", plan.Command, want)
+	}
+}
+
+func TestResolveScriptRequiresCommand(t *testing.T) {
+	req := baseRequest(t, "script", launch.AFK)
+	req.Bee.Command = colony.Command{}
+	if _, err := launch.ResolveLaunch(req); err == nil {
+		t.Fatal("script without command should error")
+	}
+}
+
+func TestResolveScriptEnvLayersPasekaContract(t *testing.T) {
+	req := baseRequest(t, "script", launch.AFK)
+	req.Bee.Command = parseCommand(t, "[/bin/true]")
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Form != launch.FormScript {
+		t.Fatalf("form = %q, want script", plan.Form)
+	}
+	env := envMap(plan.Env)
+	if env["PATH"] != "/bin" {
+		t.Fatalf("inherited PATH lost: %v", plan.Env)
+	}
+	want := map[string]string{
+		"PASEKA_TRACE_ID":  "trace-1",
+		"PASEKA_AGENT_ID":  "agent-1",
+		"PASEKA_BEE":       "script",
+		"PASEKA_WORKSPACE": "/ws",
+	}
+	for k, v := range want {
+		if env[k] != v {
+			t.Fatalf("env %s = %q, want %q", k, env[k], v)
+		}
+	}
+}
+
+func TestResolveCredentialEnvPerAdapter(t *testing.T) {
+	cases := map[string]string{
+		"cursor":   "CURSOR_API_KEY",
+		"claude":   "ANTHROPIC_API_KEY",
+		"pi":       "",
+		"opencode": "",
+	}
+	for adapter, key := range cases {
+		plan, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.AFK))
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := envMap(plan.Env)
+		if key == "" {
+			for k, v := range env {
+				if v == "secret" {
+					t.Fatalf("%s leaked credential into %s", adapter, k)
+				}
+			}
+			continue
+		}
+		if env[key] != "secret" {
+			t.Fatalf("%s env %s = %q, want secret", adapter, key, env[key])
+		}
+	}
+}
+
+func envMap(env []string) map[string]string {
+	m := make(map[string]string, len(env))
+	for _, e := range env {
+		if k, v, ok := splitEnv(e); ok {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+func splitEnv(e string) (string, string, bool) {
+	for i := 0; i < len(e); i++ {
+		if e[i] == '=' {
+			return e[:i], e[i+1:], true
+		}
+	}
+	return "", "", false
+}

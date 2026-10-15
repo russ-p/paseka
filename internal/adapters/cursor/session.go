@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -48,10 +47,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		seedResume := ""
 		if resumeID != "" {
 			seedResume = resumeID
@@ -62,10 +58,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		return adapters.SessionCommand{}, fmt.Errorf("cursor: %q not found in PATH (install Cursor CLI)", binary)
 	}
 
-	env := os.Environ()
-	if req.Params.APIKey != "" {
-		env = append(env, "CURSOR_API_KEY="+req.Params.APIKey)
-	}
+	env := req.Env
 
 	providerSessionID := ""
 	switch {
@@ -93,7 +86,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		Binary:            binary,
 		Args:              args,
 		Env:               env,
-		Dir:               req.Workspace,
+		Dir:               adapters.ResolveDir(req.Dir, req.Workspace),
 		ProviderSessionID: providerSessionID,
 	}, nil
 }

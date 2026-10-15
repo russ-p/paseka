@@ -31,6 +31,13 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	Profile      string
+	// Binary, Env, and Dir are resolved by the launch resolver. When set they
+	// are authoritative: the adapter must not re-read machine config or the
+	// parent environment. An empty Dir means "inherit the parent cwd" and a nil
+	// Env means "inherit the parent environment".
+	Binary string
+	Env    []string
+	Dir    string
 }
 
 // RunParams holds adapter CLI flags and shared bee params.

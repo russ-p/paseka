@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
-	"github.com/russ-p/paseka/internal/adapters/cursor"
 	"github.com/russ-p/paseka/internal/artifacts"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/launch"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
@@ -29,8 +29,7 @@ type preparedDispatch struct {
 	adapterName    string
 	rendered       string
 	renderedSystem string
-	params         adapters.RunParams
-	command        []string
+	plan           launch.LaunchPlan
 	runDir         runs.Dir
 	baseline       adapters.WorkspaceBaseline
 	insights       []string
@@ -177,46 +176,32 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, fmt.Errorf("runtime: adapter %q not registered", adapterName)
 	}
 
-	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), req.AdapterExtra)
 	aliases := req.ModelAliases
 	if len(aliases) == 0 {
 		aliases = manifest.ModelAliases
 	}
-	colony.ApplyModelAliases(&params, aliases)
 
-	runDirPath := runDir.Root()
-	commandPrompt := rendered
-	if adapterName == "cursor" || adapterName == "opencode" {
-		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
-	}
-	cmdVars := colony.CommandVars{
-		Prompt:       commandPrompt,
-		SystemPrompt: renderedSystem,
-		SystemFile:   runDir.SystemPath(),
+	plan, err := launch.ResolveLaunch(launch.Request{
+		Mode:         launch.AFK,
+		Adapter:      adapterName,
+		Bee:          bee,
+		Extra:        req.AdapterExtra,
+		Aliases:      aliases,
 		Workspace:    workspace,
-		TraceID:      req.TraceID,
-		AgentID:      agentID,
 		TaskID:       req.TaskID,
-		ColonyRoot:   colonyRoot,
-		ResultFile:   resultFile,
-		RunDir:       runDirPath,
+		Prompt:       rendered,
+		SystemPrompt: renderedSystem,
+		RunDir:       runDir,
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	var command []string
-	if bee.Command.IsSet() {
-		if bee.HasParams() {
-			runtimeLog.Warn("bee command overrides params",
-				logging.F("bee", bee.Role),
-				logging.F("trace", req.TraceID),
-				logging.F("agent", agentID),
-			)
-		}
-		command, err = bee.Command.RenderCommand(cmdVars)
-		if err != nil {
-			return nil, fmt.Errorf("runtime: render command: %w", err)
-		}
-	} else if adapterName == "script" {
-		return nil, fmt.Errorf("runtime: bee %q: adapter script requires command", bee.Role)
+	if bee.Command.IsSet() && bee.HasParams() {
+		runtimeLog.Warn("bee command overrides params",
+			logging.F("bee", bee.Role),
+			logging.F("trace", req.TraceID),
+			logging.F("agent", agentID),
+		)
 	}
 
 	if err := runDir.Prepare(); err != nil {
@@ -261,7 +246,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		logging.F("trace", req.TraceID),
 		logging.F("agent", agentID),
 		logging.F("workspace", workspace),
-		logging.F("run_dir", RelRunDir(colonyRoot, runDirPath)),
+		logging.F("run_dir", RelRunDir(colonyRoot, runDir.Root())),
 	)
 
 	baseline, baselineErr := adapters.CaptureWorkspaceBaseline(ctx, workspace)
@@ -285,8 +270,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		adapterName:    adapterName,
 		rendered:       rendered,
 		renderedSystem: renderedSystem,
-		params:         params,
-		command:        command,
+		plan:           plan,
 		runDir:         runDir,
 		baseline:       baseline,
 		insights:       insights,
@@ -303,8 +287,11 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Workspace:    p.workspace,
 		Sector:       p.req.Sector,
 		SectorPath:   p.req.SectorPath,
-		Params:       p.params,
-		Command:      p.command,
+		Params:       p.plan.Params,
+		Command:      p.plan.Command,
+		Binary:       p.plan.Binary,
+		Env:          p.plan.Env,
+		Dir:          p.plan.Dir,
 		TraceID:      p.req.TraceID,
 		AgentID:      p.agentID,
 		TaskID:       p.req.TaskID,
