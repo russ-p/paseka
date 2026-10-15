@@ -46,6 +46,22 @@ type RunParams struct {
 	Thinking     string
 }
 
+// RunParamsLayer is a RunParams together with the set of keys its source
+// actually declared. RunParams uses plain strings and bools, so a zero value
+// cannot say whether it was set: "trust unset" and "trust: false" both read as
+// Trust == false. Recording the declared keys restores that distinction so the
+// layered merge can be presence-aware and tri-state (an explicit false beats a
+// lower layer's true). The keys are the bee params names plus api_key.
+type RunParamsLayer struct {
+	Params   RunParams
+	Declared map[string]bool
+}
+
+// Declares reports whether the source set the given params key.
+func (l RunParamsLayer) Declares(key string) bool {
+	return l.Declared[key]
+}
+
 // RunResult is the normalized adapter output.
 type RunResult struct {
 	Status            string // completed | failed | cancelled

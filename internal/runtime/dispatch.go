@@ -27,7 +27,7 @@ type DispatchRequest struct {
 	Insights       []string
 	InlinePrompt   string
 	Workspace      string
-	AdapterExtra   adapters.RunParams
+	AdapterExtra   adapters.RunParamsLayer
 	ModelAliases   map[string]string
 	IsLastWorkTask bool // set by AFK ledger task dispatch only
 	Profile        string

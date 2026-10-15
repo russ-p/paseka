@@ -294,7 +294,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, fmt.Errorf("sessions: adapter %q does not support interactive sessions", adapterName)
 	}
 
-	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), colony.AdapterExtra(ctxColony, adapterName))
+	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), colony.AdapterExtraLayer(ctxColony, adapterName))
 	colony.ApplyModelAliases(&params, ctxColony.ModelAliases)
 
 	commandPrompt := rendered

@@ -177,7 +177,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, fmt.Errorf("runtime: adapter %q not registered", adapterName)
 	}
 
-	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
+	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), req.AdapterExtra)
 	aliases := req.ModelAliases
 	if len(aliases) == 0 {
 		aliases = manifest.ModelAliases

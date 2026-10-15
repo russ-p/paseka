@@ -117,6 +117,7 @@ func overlayCursorAdapter(base CursorAdapterConfig, path string) (CursorAdapterC
 	}
 	if strings.TrimSpace(over.Binary) != "" {
 		base.Binary = over.Binary
+		base.binaryDeclared = true
 	}
 	if strings.TrimSpace(over.APIKeyEnv) != "" {
 		base.APIKeyEnv = over.APIKeyEnv
@@ -131,6 +132,7 @@ func overlayPiAdapter(base PiAdapterConfig, path string) (PiAdapterConfig, error
 	}
 	if strings.TrimSpace(over.Binary) != "" {
 		base.Binary = over.Binary
+		base.binaryDeclared = true
 	}
 	if strings.TrimSpace(over.APIKeyEnv) != "" {
 		base.APIKeyEnv = over.APIKeyEnv
@@ -145,6 +147,7 @@ func overlayClaudeAdapter(base ClaudeAdapterConfig, path string) (ClaudeAdapterC
 	}
 	if strings.TrimSpace(over.Binary) != "" {
 		base.Binary = over.Binary
+		base.binaryDeclared = true
 	}
 	if strings.TrimSpace(over.APIKeyEnv) != "" {
 		base.APIKeyEnv = over.APIKeyEnv
@@ -159,6 +162,7 @@ func overlayOpenCodeAdapter(base OpenCodeAdapterConfig, path string) (OpenCodeAd
 	}
 	if strings.TrimSpace(over.Binary) != "" {
 		base.Binary = over.Binary
+		base.binaryDeclared = true
 	}
 	return base, nil
 }

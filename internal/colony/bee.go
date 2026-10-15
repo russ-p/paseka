@@ -183,6 +183,9 @@ func loadBee(colonyRoot, role string, validateProposal bool) (Bee, BeeLocalOverl
 	if bee.Role == "" {
 		bee.Role = role
 	}
+	if err := ValidateRunParamKeys(bee.Params); err != nil {
+		return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: bee %q: %w", role, err)
+	}
 	if err := bee.ValidateEventRules(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}

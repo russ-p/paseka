@@ -88,7 +88,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if err != nil {
 		return nil, err
 	}
-	adapterExtra := colony.AdapterExtra(ctxColony, adapterName)
+	adapterExtra := colony.AdapterExtraLayer(ctxColony, adapterName)
 	aliases := ctxColony.ModelAliases
 	if len(aliases) == 0 {
 		aliases = manifest.ModelAliases

@@ -136,6 +136,66 @@ bees:
 	}
 }
 
+func TestColonyProfileBooleanFalseBeatsBeeDefault(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	mustWriteProfile(t, filepath.Join(repo, ".paseka", "bees", "scout.yaml"),
+		"role: scout\nadapter: cursor\nparams:\n  trust: true\n  force: true\n")
+	writeColonyProfile(t, repo, "off", "adapter: cursor\nparams:\n  trust: false\n")
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "off", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bee, _, err := ctx.LoadBee("scout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), colony.AdapterExtraLayer(ctx, "cursor"))
+	if params.Trust {
+		t.Fatal("trust = true, want the profile's explicit false to win")
+	}
+	if !params.Force {
+		t.Fatal("force = false, want the bee default true preserved")
+	}
+}
+
+func TestDoctorProfileViewReportsGlobalAdapterSkips(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	writeColonyProfile(t, repo, "pi", "adapter: pi\n")
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "pi", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := ctx.DoctorProfileView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !equalStrings(view.Remapped, []string{"builder", "scout"}) {
+		t.Fatalf("remapped = %v, want scout and builder", view.Remapped)
+	}
+	if !equalStrings(view.SkippedScript, []string{"oracle-guard"}) {
+		t.Fatalf("skipped script = %v, want oracle-guard", view.SkippedScript)
+	}
+	if !equalStrings(view.SkippedCommand, []string{"custom"}) {
+		t.Fatalf("skipped command = %v, want custom", view.SkippedCommand)
+	}
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestProfileRejectsForbiddenKeysAndScript(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	writeColonyProfile(t, repo, "bad", "command: echo\n")

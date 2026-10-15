@@ -46,24 +46,47 @@ func (c NATSConfig) EffectiveURL() string {
 type CursorAdapterConfig struct {
 	Binary    string `yaml:"binary"`
 	APIKeyEnv string `yaml:"api_key_env"`
+
+	binaryDeclared bool
 }
+
+// BinaryDeclared reports whether the effective config set `binary`, as opposed
+// to inheriting the loader default. It keeps a default from masquerading as a
+// declaration: the merge treats a declared machine binary as a fallback and an
+// undeclared one as absent, leaving the adapter's own default in place.
+func (c CursorAdapterConfig) BinaryDeclared() bool { return c.binaryDeclared }
 
 // PiAdapterConfig is ~/.config/paseka/<slug>/adapters/pi.yaml.
 type PiAdapterConfig struct {
 	Binary    string `yaml:"binary"`
 	APIKeyEnv string `yaml:"api_key_env"`
+
+	binaryDeclared bool
 }
+
+// BinaryDeclared reports whether the effective config set `binary`.
+func (c PiAdapterConfig) BinaryDeclared() bool { return c.binaryDeclared }
 
 // ClaudeAdapterConfig is ~/.config/paseka/<slug>/adapters/claude.yaml.
 type ClaudeAdapterConfig struct {
 	Binary    string `yaml:"binary"`
 	APIKeyEnv string `yaml:"api_key_env"`
+
+	binaryDeclared bool
 }
+
+// BinaryDeclared reports whether the effective config set `binary`.
+func (c ClaudeAdapterConfig) BinaryDeclared() bool { return c.binaryDeclared }
 
 // OpenCodeAdapterConfig is ~/.config/paseka/<slug>/adapters/opencode.yaml.
 type OpenCodeAdapterConfig struct {
 	Binary string `yaml:"binary"`
+
+	binaryDeclared bool
 }
+
+// BinaryDeclared reports whether the effective config set `binary`.
+func (c OpenCodeAdapterConfig) BinaryDeclared() bool { return c.binaryDeclared }
 
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
@@ -231,6 +254,7 @@ func LoadCursorAdapter(slug string) (CursorAdapterConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return CursorAdapterConfig{}, fmt.Errorf("parse cursor adapter config: %w", err)
 	}
+	cfg.binaryDeclared = strings.TrimSpace(cfg.Binary) != ""
 	if cfg.Binary == "" {
 		cfg.Binary = "agent"
 	}
@@ -263,6 +287,7 @@ func LoadPiAdapter(slug string) (PiAdapterConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return PiAdapterConfig{}, fmt.Errorf("parse pi adapter config: %w", err)
 	}
+	cfg.binaryDeclared = strings.TrimSpace(cfg.Binary) != ""
 	if cfg.Binary == "" {
 		cfg.Binary = "pi"
 	}
@@ -295,6 +320,7 @@ func LoadClaudeAdapter(slug string) (ClaudeAdapterConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return ClaudeAdapterConfig{}, fmt.Errorf("parse claude adapter config: %w", err)
 	}
+	cfg.binaryDeclared = strings.TrimSpace(cfg.Binary) != ""
 	if cfg.Binary == "" {
 		cfg.Binary = "claude"
 	}
@@ -332,6 +358,7 @@ func LoadOpenCodeAdapter(slug string) (OpenCodeAdapterConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return OpenCodeAdapterConfig{}, fmt.Errorf("parse opencode adapter config: %w", err)
 	}
+	cfg.binaryDeclared = strings.TrimSpace(cfg.Binary) != ""
 	if cfg.Binary == "" {
 		cfg.Binary = "opencode"
 	}
