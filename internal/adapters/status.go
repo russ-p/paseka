@@ -8,18 +8,27 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
-// ResolveStatus maps process and context errors to a run status and diagnostic message.
-func ResolveStatus(ctxErr, runErr error) (protocol.RunStatus, string) {
+// ResolveStatus maps process and context errors to a run status, a machine
+// reason, and a diagnostic message. A deadline-exceeded context is reported as
+// cancelled with reason "timeout": the run was stopped by params.timeout rather
+// than by a human, which status.json records so a post-mortem can tell a slow
+// run from a stuck one. A plain context cancellation stays cancelled without a
+// reason.
+func ResolveStatus(ctxErr, runErr error) (protocol.RunStatus, string, string) {
 	if ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return protocol.StatusCancelled, ctxErr.Error()
+		switch {
+		case errors.Is(ctxErr, context.DeadlineExceeded):
+			return protocol.StatusCancelled, protocol.ReasonTimeout, "run exceeded params.timeout"
+		case errors.Is(ctxErr, context.Canceled):
+			return protocol.StatusCancelled, "", ctxErr.Error()
+		default:
+			return protocol.StatusFailed, "", ctxErr.Error()
 		}
-		return protocol.StatusFailed, ctxErr.Error()
 	}
 	if runErr != nil {
-		return protocol.StatusFailed, runErr.Error()
+		return protocol.StatusFailed, "", runErr.Error()
 	}
-	return protocol.StatusCompleted, ""
+	return protocol.StatusCompleted, "", ""
 }
 
 // BuildRunError formats a failed adapter run error. failurePrefix is the label before

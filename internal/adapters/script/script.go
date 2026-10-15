@@ -127,7 +127,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
+	status, reason, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -156,7 +156,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("script: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
+	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:    string(status),

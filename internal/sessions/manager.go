@@ -652,7 +652,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		statusErr = joinStatusNotes(statusErr, warn)
 	}
 
-	_ = entry.RunDir.WriteStatus(protoState, exitCode, entry.Handle.StartedAt, finishedAt, statusErr)
+	_ = entry.RunDir.WriteStatus(protoState, "", exitCode, entry.Handle.StartedAt, finishedAt, statusErr)
 	_ = entry.RunDir.AppendTranscript(runs.TranscriptEntry{
 		At:      finishedAt,
 		Role:    "system",

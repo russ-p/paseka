@@ -134,10 +134,12 @@ func (d Dir) WriteStatusSnapshot(snap protocol.StatusSnapshot) error {
 }
 
 // WriteStatus is a convenience wrapper for the final completed/failed snapshot.
-func (d Dir) WriteStatus(state protocol.RunStatus, exitCode int, startedAt, finishedAt time.Time, errMsg string) error {
+// reason is a machine-readable classifier for a terminal state (empty unless set).
+func (d Dir) WriteStatus(state protocol.RunStatus, reason string, exitCode int, startedAt, finishedAt time.Time, errMsg string) error {
 	return d.WriteStatusSnapshot(protocol.StatusSnapshot{
 		ProtocolVersion: protocol.Version,
 		State:           state,
+		Reason:          reason,
 		ExitCode:        exitCode,
 		StartedAt:       startedAt,
 		FinishedAt:      finishedAt,

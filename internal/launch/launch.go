@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/adapters/claude"
@@ -104,6 +105,10 @@ type LaunchPlan struct {
 	Resume bool
 	// Raw reports whether this launch opted out of structured output.
 	Raw bool
+	// Timeout bounds an AFK run (params.timeout), measured from launch. Zero
+	// means unbounded. Interactive plans always carry zero: the human is the
+	// timeout.
+	Timeout time.Duration
 	// Warnings are operator-facing notices raised during resolution, such as a
 	// deprecated params.provider that was mapped into the model id.
 	Warnings []string
@@ -152,6 +157,11 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 	}
 	if plan.Binary == "" {
 		plan.Binary = spec.DefaultBinary
+	}
+	// params.timeout bounds AFK runs only. Interactive sessions keep the human
+	// as the timeout, so the plan never carries one for them.
+	if req.Mode == AFK {
+		plan.Timeout = params.Timeout
 	}
 
 	// Resolve env before the command so a command template can reference the

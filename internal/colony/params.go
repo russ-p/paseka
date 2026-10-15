@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 )
@@ -20,12 +21,18 @@ func (b Bee) ParamsAreDefault() bool {
 // NonDefaultParamKeys returns the declared params whose value differs from the
 // adapter default, sorted. It names the offending keys in the load-time
 // exclusivity error so the operator knows what to remove or reset.
+//
+// `timeout` is process control applied by the runtime, not an adapter flag, so
+// it is exempt: a command-mode bee may still bound its run.
 func (b Bee) NonDefaultParamKeys() []string {
 	if len(b.Params) == 0 {
 		return nil
 	}
 	var keys []string
 	for key, value := range b.Params {
+		if key == "timeout" {
+			continue
+		}
 		if !isDefaultParamValue(key, value) {
 			keys = append(keys, key)
 		}
@@ -73,6 +80,7 @@ var RunParamKeys = []string{
 	"provider",
 	"reasoning",
 	"thinking",
+	"timeout",
 	"trust",
 	"yolo",
 }
@@ -98,6 +106,19 @@ func ValidateRunParams(params map[string]any) error {
 	if v, ok := params["env"]; ok && v != nil {
 		if _, ok := v.(map[string]any); !ok {
 			return fmt.Errorf("params.env must be a map of name: value")
+		}
+	}
+	if v, ok := params["timeout"]; ok && v != nil {
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("params.timeout must be a duration string (e.g. 90s, 5m)")
+		}
+		d, err := time.ParseDuration(strings.TrimSpace(s))
+		if err != nil {
+			return fmt.Errorf("params.timeout: %w", err)
+		}
+		if d <= 0 {
+			return fmt.Errorf("params.timeout must be a positive duration (got %q)", s)
 		}
 	}
 	return nil
@@ -213,6 +234,10 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.EnvMode = strings.TrimSpace(v)
 		declared["env_mode"] = true
 	}
+	if v, ok := durationParam(b.Params, "timeout"); ok {
+		p.Timeout = v
+		declared["timeout"] = true
+	}
 	layer.Params = p
 	return layer
 }
@@ -263,6 +288,9 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 	}
 	if declared["env_mode"] {
 		out.EnvMode = over.Params.EnvMode
+	}
+	if declared["timeout"] {
+		out.Timeout = over.Params.Timeout
 	}
 	if declared["binary"] && out.Binary == "" {
 		out.Binary = over.Params.Binary
@@ -361,6 +389,21 @@ func boolParam(m map[string]any, key string) (bool, bool) {
 	}
 	b, ok := v.(bool)
 	return b, ok
+}
+
+// durationParam parses a params key as a Go duration string. An absent key, a
+// non-string value, or an unparseable duration yields ok=false; strict load-time
+// validation reports those, so the mapping stays permissive and total.
+func durationParam(m map[string]any, key string) (time.Duration, bool) {
+	s, ok := stringParam(m, key)
+	if !ok {
+		return 0, false
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(s))
+	if err != nil {
+		return 0, false
+	}
+	return d, true
 }
 
 // ResolveAdapter returns the adapter name, defaulting to cursor.

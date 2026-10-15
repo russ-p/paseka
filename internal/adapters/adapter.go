@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
 )
@@ -67,6 +68,9 @@ type RunParams struct {
 	// the parent environment (undeclared keys keep flowing); EnvModeStrict strips
 	// every undeclared key.
 	EnvMode string
+	// Timeout bounds an AFK run, measured from launch. Zero means unbounded,
+	// which is the default and the only value interactive sessions use.
+	Timeout time.Duration
 }
 
 // EnvModeStrict is the opt-in params.env_mode value: the child receives only the

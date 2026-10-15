@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
@@ -422,4 +423,41 @@ func splitEnv(e string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+// TestResolveTimeoutAFKOnly pins params.timeout as an AFK-only process bound: an
+// AFK plan carries the duration, and an interactive plan stays unbounded because
+// the human is the timeout.
+func TestResolveTimeoutAFKOnly(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.Bee.Params = map[string]any{"model": "m1", "timeout": "2m30s"}
+
+	afk, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afk.Timeout != 150*time.Second {
+		t.Fatalf("afk timeout = %v, want 2m30s", afk.Timeout)
+	}
+
+	req.Mode = launch.Interactive
+	interactive, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interactive.Timeout != 0 {
+		t.Fatalf("interactive timeout = %v, want unbounded", interactive.Timeout)
+	}
+}
+
+// TestResolveTimeoutDefaultUnbounded pins that an undeclared timeout leaves the
+// AFK run unbounded, preserving today's behavior.
+func TestResolveTimeoutDefaultUnbounded(t *testing.T) {
+	plan, err := launch.ResolveLaunch(baseRequest(t, "cursor", launch.AFK))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Timeout != 0 {
+		t.Fatalf("default timeout = %v, want unbounded", plan.Timeout)
+	}
 }

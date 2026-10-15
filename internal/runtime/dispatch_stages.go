@@ -298,6 +298,14 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 }
 
 func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*adapters.RunResult, error) {
+	// params.timeout is measured from launch: bound the run context so the
+	// adapter process is brought down (SIGTERM, then SIGKILL after the grace)
+	// and reports cancelled/timeout instead of holding a worker slot forever.
+	if p.plan.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.plan.Timeout)
+		defer cancel()
+	}
 	return p.adapter.Run(ctx, adapters.RunRequest{
 		Bee:          p.bee.Role,
 		Prompt:       p.rendered,

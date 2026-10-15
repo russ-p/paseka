@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
@@ -544,5 +545,83 @@ func TestDiagnoseAdapterCredentialsWarnsUnknownTarget(t *testing.T) {
 	t.Setenv("PASEKA_TEST_MISSING_KEY", "present")
 	if warnings := colony.DiagnoseAdapterCredentials(ctx); len(warnings) != 0 {
 		t.Fatalf("set api_key_env should not warn: %v", warnings)
+	}
+}
+
+// TestValidateRunParamsTimeout pins the opt-in params.timeout: a positive Go
+// duration string is accepted, and a missing, non-positive, or unparseable
+// value fails at load instead of silently leaving the run unbounded.
+func TestValidateRunParamsTimeout(t *testing.T) {
+	if err := colony.ValidateRunParams(map[string]any{"timeout": "90s"}); err != nil {
+		t.Fatalf("90s should validate: %v", err)
+	}
+	if err := colony.ValidateRunParams(map[string]any{"timeout": "5m"}); err != nil {
+		t.Fatalf("5m should validate: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{"non-string", 30, "duration string"},
+		{"unparseable", "soon", "params.timeout"},
+		{"zero", "0s", "positive"},
+		{"negative", "-1s", "positive"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := colony.ValidateRunParams(map[string]any{"timeout": tc.value})
+			if err == nil {
+				t.Fatalf("timeout %v should be rejected", tc.value)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestLayerFromBeeTimeout pins that params.timeout becomes a try-state declared
+// layer key: an absent timeout stays unbounded, a declared one carries both the
+// parsed duration and the declared marker used by the layered merge.
+func TestLayerFromBeeTimeout(t *testing.T) {
+	absent := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"model": "m"}})
+	if absent.Params.Timeout != 0 || absent.Declares("timeout") {
+		t.Fatalf("absent timeout = %v declared=%v, want unbounded/undeclared", absent.Params.Timeout, absent.Declares("timeout"))
+	}
+
+	layer := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"timeout": "45s"}})
+	if layer.Params.Timeout != 45*time.Second {
+		t.Fatalf("timeout = %v, want 45s", layer.Params.Timeout)
+	}
+	if !layer.Declares("timeout") {
+		t.Fatal("timeout should be recorded as declared")
+	}
+
+	merged := colony.MergeRunParamsLayers(absent, layer)
+	if merged.Timeout != 45*time.Second {
+		t.Fatalf("merged timeout = %v, want 45s", merged.Timeout)
+	}
+}
+
+// TestCommandBeeMayCarryTimeout pins that timeout is process control, not an
+// adapter flag: a command-mode bee may bound its run without tripping the
+// command/params exclusivity check.
+func TestCommandBeeMayCarryTimeout(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "role: builder\nadapter: script\ncommand: sleep 30\nrun_summary: disabled\nparams:\n  timeout: 2s\n"
+	if err := os.WriteFile(filepath.Join(dir, "builder.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bee, _, err := colony.LoadBee(root, "builder")
+	if err != nil {
+		t.Fatalf("command + timeout should load: %v", err)
+	}
+	if !bee.Command.IsSet() {
+		t.Fatal("expected command to be set")
 	}
 }
