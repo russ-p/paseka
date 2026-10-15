@@ -35,34 +35,12 @@ func TestJoinPrompt(t *testing.T) {
 	}
 }
 
-func TestResolveModel(t *testing.T) {
-	tests := []struct {
-		name string
-		p    adapters.RunParams
-		want string
-	}{
-		{name: "provider slash model", p: adapters.RunParams{Model: "anthropic/claude-sonnet-4"}, want: "anthropic/claude-sonnet-4"},
-		{name: "join provider", p: adapters.RunParams{Model: "claude-sonnet-4", Provider: "anthropic"}, want: "anthropic/claude-sonnet-4"},
-		{name: "model only", p: adapters.RunParams{Model: "claude-sonnet-4"}, want: "claude-sonnet-4"},
-		{name: "slash wins over provider", p: adapters.RunParams{Model: "opencode/gpt-5", Provider: "anthropic"}, want: "opencode/gpt-5"},
-		{name: "empty", p: adapters.RunParams{}, want: ""},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveModel(tc.p); got != tc.want {
-				t.Fatalf("resolveModel = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/colony/worktree",
 		AgentID:   "agent-1",
 		Params: adapters.RunParams{
-			Model:     "claude-sonnet-4",
-			Provider:  "anthropic",
+			Model:     "anthropic/claude-sonnet-4",
 			Trust:     true,
 			Force:     true,
 			Plan:      true,

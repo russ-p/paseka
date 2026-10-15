@@ -120,3 +120,79 @@ func TestApplyModelAliasesSkipsEmpty(t *testing.T) {
 		t.Fatalf("model = %q, want empty", params.Model)
 	}
 }
+
+func TestValidateModelIDAcceptsVendorAndBareIDs(t *testing.T) {
+	tests := []string{
+		"anthropic/claude-sonnet-4",
+		"openrouter/deepseek/deepseek-r1:free",
+		"composer-2.5",
+		"gpt-4o:extended",
+	}
+	for _, id := range tests {
+		if err := colony.ValidateModelID(id); err != nil {
+			t.Fatalf("ValidateModelID(%q) = %v, want nil", id, err)
+		}
+	}
+	if err := colony.ValidateModelID(""); err == nil {
+		t.Fatal("empty id should be rejected")
+	}
+	if err := colony.ValidateModelID("/model"); err == nil {
+		t.Fatal("empty vendor should be rejected")
+	}
+	if err := colony.ValidateModelID("vendor/"); err == nil {
+		t.Fatal("empty model should be rejected")
+	}
+}
+
+func TestValidateModelAliasesAcceptsVendorIDs(t *testing.T) {
+	err := colony.ValidateModelAliases(map[string]string{
+		"high":   "anthropic/claude-sonnet-4",
+		"small":  "openai/gpt-5.5",
+		"legacy": "composer-2.5",
+	})
+	if err != nil {
+		t.Fatalf("ValidateModelAliases = %v, want nil", err)
+	}
+}
+
+func TestValidateModelAliasesRejectsMalformedID(t *testing.T) {
+	err := colony.ValidateModelAliases(map[string]string{"high": "/claude-sonnet-4"})
+	if err == nil || !strings.Contains(err.Error(), "empty vendor") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestProfileAliasOverlaySwitchesVendorForEveryBee(t *testing.T) {
+	repo, slug := setupProfileColony(t)
+	if err := os.WriteFile(filepath.Join(repo, ".paseka", "colony.yaml"),
+		[]byte("slug: "+slug+"\nmodel_aliases:\n  high: anthropic/claude-sonnet-4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteProfile(t, filepath.Join(repo, ".paseka", "bees", "scout.yaml"),
+		"role: scout\nadapter: cursor\nparams:\n  model: high\n")
+	mustWriteProfile(t, filepath.Join(repo, ".paseka", "bees", "builder.yaml"),
+		"role: builder\nadapter: cursor\nparams:\n  model: high\n")
+
+	writeColonyProfile(t, repo, "ollama", "model_aliases:\n  high: ollama/qwen3\n")
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "ollama", FlagSet: true})
+
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.ModelAliases["high"] != "ollama/qwen3" {
+		t.Fatalf("merged aliases = %+v", ctx.ModelAliases)
+	}
+	bees, err := ctx.LoadAllBees()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"builder", "scout"} {
+		params := colony.RunParamsFromBee(bees[role])
+		colony.ApplyModelAliases(&params, ctx.ModelAliases)
+		if params.Model != "ollama/qwen3" {
+			t.Fatalf("%s resolved model = %q, want ollama/qwen3", role, params.Model)
+		}
+	}
+}

@@ -99,6 +99,9 @@ type LaunchPlan struct {
 	Resume bool
 	// Raw reports whether this launch opted out of structured output.
 	Raw bool
+	// Warnings are operator-facing notices raised during resolution, such as a
+	// deprecated params.provider that was mapped into the model id.
+	Warnings []string
 }
 
 // ResolveLaunch merges every launch layer into one plan.
@@ -116,6 +119,12 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 	params := colony.MergeRunParamsLayers(colony.LayerFromBee(req.Bee), req.Extra)
 	colony.ApplyModelAliases(&params, req.Aliases)
 
+	// The one model-id mapping: fold a deprecated provider into the model, then
+	// split the vendor off for the adapters that need it.
+	mapping := MapModel(req.Adapter, params.Model, params.Provider)
+	params.Model = mapping.Model
+	params.Provider = mapping.Provider
+
 	// The one provider prompt join. Cursor and OpenCode take a single positional
 	// prompt built from system + task; a resume passes the continue line alone.
 	commandPrompt := req.Prompt
@@ -132,6 +141,9 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 		Raw:           req.Raw,
 		Dir:           resolveDir(req),
 		Binary:        params.Binary,
+	}
+	if mapping.Warning != "" {
+		plan.Warnings = append(plan.Warnings, mapping.Warning)
 	}
 	if plan.Binary == "" {
 		plan.Binary = spec.DefaultBinary

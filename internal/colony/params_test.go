@@ -176,6 +176,17 @@ func TestDiagnoseBeeParams(t *testing.T) {
 	}
 }
 
+func TestDiagnoseBeeParamsWarnsProviderDeprecation(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"builder": {Role: "builder", Adapter: "pi", Params: map[string]any{"model": "gpt-4", "provider": "gemini"}},
+	}
+	warnings := colony.DiagnoseBeeParams(bees)
+	joined := strings.Join(warnings, "\n")
+	if !strings.Contains(joined, `bee "builder": params.provider is deprecated`) {
+		t.Fatalf("missing provider deprecation warning:\n%s", joined)
+	}
+}
+
 func TestRunParamsLayerDeclaresExplicitFalse(t *testing.T) {
 	bee := colony.Bee{
 		Role: "builder",

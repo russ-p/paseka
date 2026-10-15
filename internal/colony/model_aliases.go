@@ -19,6 +19,27 @@ func MergedModelAliases(colonyMap, homeMap map[string]string) map[string]string 
 	return out
 }
 
+// ValidateModelID accepts a vendor-qualified id (`vendor/model[:suffix]`) or a
+// bare id without a vendor. It rejects only structurally empty forms, so a typo
+// like a leading slash fails at load rather than becoming a silent no-op.
+func ValidateModelID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("empty model id")
+	}
+	vendor, rest, hasSlash := strings.Cut(id, "/")
+	if !hasSlash {
+		return nil
+	}
+	if vendor == "" {
+		return fmt.Errorf("model id %q: empty vendor before %q", id, "/")
+	}
+	if rest == "" {
+		return fmt.Errorf("model id %q: empty model after %q", id, "/")
+	}
+	return nil
+}
+
 // ValidateModelAliases rejects empty keys/values and alias values that match another key.
 func ValidateModelAliases(aliases map[string]string) error {
 	if len(aliases) == 0 {
@@ -33,6 +54,9 @@ func ValidateModelAliases(aliases map[string]string) error {
 		}
 		if val == "" {
 			return fmt.Errorf("colony: model_aliases: empty value for alias %q", key)
+		}
+		if err := ValidateModelID(val); err != nil {
+			return fmt.Errorf("colony: model_aliases: alias %q: %w", key, err)
 		}
 		normalized[key] = val
 	}

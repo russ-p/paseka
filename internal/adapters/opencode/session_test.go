@@ -18,8 +18,7 @@ func TestSessionCommandInteractive(t *testing.T) {
 		InitialPrompt: "discuss feature",
 		Params: adapters.RunParams{
 			Binary:    fake,
-			Model:     "claude-sonnet-4",
-			Provider:  "anthropic",
+			Model:     "anthropic/claude-sonnet-4",
 			Reasoning: "high",
 			Plan:      true,
 			Trust:     true,

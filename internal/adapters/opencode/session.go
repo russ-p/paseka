@@ -126,7 +126,7 @@ func buildPromptDelivery(req adapters.SessionRequest, providerSessionID, prompt 
 	if err != nil {
 		return nil, nil, err
 	}
-	provider, modelID := splitModel(resolveModel(req.Params))
+	provider, modelID := splitModel(strings.TrimSpace(req.Params.Model))
 	agent := ""
 	if req.Params.Plan {
 		agent = "plan"

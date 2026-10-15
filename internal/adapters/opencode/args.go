@@ -1,8 +1,6 @@
 package opencode
 
 import (
-	"strings"
-
 	"github.com/russ-p/paseka/internal/adapters"
 )
 
@@ -15,20 +13,6 @@ func joinPrompt(system, prompt string) string {
 	default:
 		return system + "\n" + prompt
 	}
-}
-
-func resolveModel(p adapters.RunParams) string {
-	model := strings.TrimSpace(p.Model)
-	if model == "" {
-		return ""
-	}
-	if strings.Contains(model, "/") {
-		return model
-	}
-	if provider := strings.TrimSpace(p.Provider); provider != "" {
-		return provider + "/" + model
-	}
-	return model
 }
 
 // runFormat returns OpenCode's runtime-owned output format: json by default,
@@ -53,8 +37,10 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	if p.Plan {
 		args = append(args, "--agent", "plan")
 	}
-	if model := resolveModel(p); model != "" {
-		args = append(args, "--model", model)
+	// The launch resolver already folded any provider into params.model, so
+	// OpenCode receives the vendor-qualified id natively.
+	if p.Model != "" {
+		args = append(args, "--model", p.Model)
 	}
 	if p.Reasoning != "" {
 		args = append(args, "--variant", p.Reasoning)
@@ -71,8 +57,8 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt, resumeID string) 
 	if p.Plan {
 		args = append(args, "--agent", "plan")
 	}
-	if model := resolveModel(p); model != "" {
-		args = append(args, "--model", model)
+	if p.Model != "" {
+		args = append(args, "--model", p.Model)
 	}
 	if p.Reasoning != "" {
 		args = append(args, "--variant", p.Reasoning)

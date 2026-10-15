@@ -318,6 +318,14 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			logging.F("agent", agentID),
 		)
 	}
+	for _, warning := range plan.Warnings {
+		logging.Component("sessions").Warn("launch warning",
+			logging.F("bee", bee.Role),
+			logging.F("trace", traceID),
+			logging.F("agent", agentID),
+			logging.F("warning", warning),
+		)
+	}
 
 	startedAt := time.Now().UTC()
 	if rendered != "" {

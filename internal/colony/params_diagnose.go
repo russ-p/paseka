@@ -50,6 +50,10 @@ func DiagnoseBeeParams(bees map[string]Bee) []string {
 			continue
 		}
 		warnings = append(warnings, deprecatedParamWarnings(name, bee.Params)...)
+		if _, ok := bee.Params["provider"]; ok {
+			warnings = append(warnings, fmt.Sprintf(
+				"bee %q: params.provider is deprecated; put the vendor in params.model (e.g. model: <vendor>/<model>)", name))
+		}
 		if _, ok := bee.Params["reasoning"]; ok && !adapterReasoningSupport[adapter] {
 			warnings = append(warnings, fmt.Sprintf(
 				"bee %q: params.reasoning has no mapping on adapter %s (ignored)", name, adapter))

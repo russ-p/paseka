@@ -204,6 +204,14 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 			logging.F("agent", agentID),
 		)
 	}
+	for _, warning := range plan.Warnings {
+		runtimeLog.Warn("launch warning",
+			logging.F("bee", bee.Role),
+			logging.F("trace", req.TraceID),
+			logging.F("agent", agentID),
+			logging.F("warning", warning),
+		)
+	}
 
 	if err := runDir.Prepare(); err != nil {
 		return nil, fmt.Errorf("runtime: prepare run dir: %w", err)
