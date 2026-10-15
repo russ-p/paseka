@@ -211,8 +211,12 @@ Mapped by `LayerFromBee` (`internal/colony/params.go`). Defaults: `yolo: true`.
 | `binary` | string | override CLI binary name |
 | `provider` | string | **deprecated** (one release); fold the vendor into `model` instead (`model: vendor/model`). A separate key still maps `provider` + `model` → `X/Y` and warns via `paseka doctor`. |
 | `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant`); cursor and claude have no mapping (doctor warns) |
+| `env` | map | declared pass-through environment for the child and its `post_exec` hook. Values are literals or host references (`GITHUB_TOKEN: $HOST_GITHUB_TOKEN`). The declared keys are redacted in adapter logs. |
+| `env_mode` | string | `strict` opts into denying undeclared environment: the child keeps only process essentials (`PATH`, `HOME`, locale, `PASEKA_*`), declared `env`, and the injected credential. Default inherits the whole parent environment. |
 
 Adapter output format is **runtime-owned**, not a bee param. The runtime always requests each adapter's structured mode (cursor `--output-format stream-json`, pi `--mode json`, claude `--output-format stream-json --verbose`, opencode `run --format json`) so it can parse usage, session ids, and summaries. `paseka bee run --raw` is a per-invocation debugging escape hatch that falls back to plain text and logs the runtime features it degrades (usage, session tracking, summary normalization); it is never committed to a bee file.
+
+The launch plan assembles the child environment explicitly: the inherited environment, the adapter's resolved `api_key_env` credential (recorded on the plan so logs redact it), and `params.env`. `post_exec` receives that same plan environment, so a credential handed to a bee also reaches its post-run hook. `paseka doctor` warns when a machine-local adapter declares an `api_key_env` whose host variable is unset, so a credential that resolves empty is visible rather than mistaken for valid auth.
 
 Deprecated aliases (accepted for one release; `paseka doctor` warns): `trust` and `force` collapse into `yolo`, `thinking` aliases `reasoning`, and `provider` folds into the model id as `X/Y`.
 

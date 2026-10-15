@@ -673,8 +673,9 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 			ResultFile: entry.RunDir.ResultPath(),
 			Meta:       entry.RunDir.MetaPath(),
 			RunDir:     entry.RunDir.Root(),
+			Env:        adapters.EnvMap(entry.Handle.Env),
 		}
-		if err := colony.RunPostExec(context.Background(), bee.PostExec, vars, entry.Handle.Workspace); err != nil {
+		if err := colony.RunPostExec(context.Background(), bee.PostExec, vars, entry.Handle.Workspace, entry.Handle.Env); err != nil {
 			logging.Component("sessions").Warn("post_exec failed",
 				logging.F("bee", entry.Handle.Bee),
 				logging.F("trace", entry.Handle.TraceID),

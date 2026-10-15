@@ -312,6 +312,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Env:          p.plan.Env,
 		Dir:          p.plan.Dir,
 		Raw:          p.plan.Raw,
+		RedactedEnv:  p.plan.RedactedEnv,
 		TraceID:      p.req.TraceID,
 		AgentID:      p.agentID,
 		TaskID:       p.req.TaskID,
@@ -371,7 +372,7 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 		d.enforceCompletionContract(p.bee, runEvents, result)
 	}
 
-	d.runPostExec(ctx, p.bee, p.rendered, p.workspace, p.runDir, p.req.TaskID, result)
+	d.runPostExec(ctx, p.bee, p.rendered, p.workspace, p.runDir, p.req.TaskID, result, p.plan.Env)
 
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
 		ColonyRoot: p.colonyRoot,

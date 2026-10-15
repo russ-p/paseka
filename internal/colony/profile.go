@@ -287,7 +287,7 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 		ModelAliases: NormalizeModelAliases(raw.ModelAliases),
 		Bees:         map[string]BeeProfileOverlay{},
 	}
-	if err := ValidateRunParamKeys(out.Params); err != nil {
+	if err := ValidateRunParams(out.Params); err != nil {
 		return ColonyProfile{}, fmt.Errorf("colony: profile %s: %w", path, err)
 	}
 	if err := ValidateModelAliases(out.ModelAliases); err != nil {
@@ -319,7 +319,7 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 			if !ok {
 				return ColonyProfile{}, fmt.Errorf("colony: profile %s: bees.%s.params must be a map", path, role)
 			}
-			if err := ValidateRunParamKeys(params); err != nil {
+			if err := ValidateRunParams(params); err != nil {
 				return ColonyProfile{}, fmt.Errorf("colony: profile %s: bees.%s: %w", path, role, err)
 			}
 			overlay.Params = params

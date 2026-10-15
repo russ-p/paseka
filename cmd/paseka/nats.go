@@ -35,6 +35,7 @@ func newDoctorCmd() *cobra.Command {
 			standing := cues.DiagnoseStanding(ctxColony.ColonyRoot, bees)
 			report.Warnings = append(report.Warnings, standing.Warnings...)
 			report.Warnings = append(report.Warnings, colony.DiagnoseBeeParams(bees)...)
+			report.Warnings = append(report.Warnings, colony.DiagnoseAdapterCredentials(ctxColony)...)
 			profileView, profileErr := ctxColony.DoctorProfileView()
 			if profileErr != nil {
 				report.Errors = append(report.Errors, profileErr.Error())

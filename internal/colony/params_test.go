@@ -446,3 +446,103 @@ func TestResolvedBinaryPrecedence(t *testing.T) {
 		t.Fatalf("effective binary = %q, want the agent default", got)
 	}
 }
+
+func TestLayerFromBeeParsesEnvAndMode(t *testing.T) {
+	bee := colony.Bee{
+		Role: "builder",
+		Params: map[string]any{
+			"env":      map[string]any{"GITHUB_TOKEN": "$HOST_GITHUB_TOKEN", "PLAIN": "value"},
+			"env_mode": "strict",
+		},
+	}
+	layer := colony.LayerFromBee(bee)
+	if !layer.Declares("env") || !layer.Declares("env_mode") {
+		t.Fatalf("declared = %+v, want env and env_mode", layer.Declared)
+	}
+	if layer.Params.Env["GITHUB_TOKEN"] != "$HOST_GITHUB_TOKEN" {
+		t.Fatalf("env not parsed: %+v", layer.Params.Env)
+	}
+	if layer.Params.EnvMode != "strict" {
+		t.Fatalf("env_mode = %q, want strict", layer.Params.EnvMode)
+	}
+}
+
+func TestMergeRunParamsLayersEnvOverlays(t *testing.T) {
+	base := adapters.RunParamsLayer{
+		Params:   adapters.RunParams{Env: map[string]string{"A": "1", "B": "keep"}},
+		Declared: map[string]bool{"env": true},
+	}
+	over := adapters.RunParamsLayer{
+		Params:   adapters.RunParams{Env: map[string]string{"A": "2", "C": "3"}, EnvMode: "strict"},
+		Declared: map[string]bool{"env": true, "env_mode": true},
+	}
+	got := colony.MergeRunParamsLayers(base, over)
+	want := map[string]string{"A": "2", "B": "keep", "C": "3"}
+	if strings.Join([]string{got.Env["A"], got.Env["B"], got.Env["C"]}, ",") != "2,keep,3" {
+		t.Fatalf("env = %v, want %v", got.Env, want)
+	}
+	if got.EnvMode != "strict" {
+		t.Fatalf("env_mode = %q, want strict", got.EnvMode)
+	}
+	if base.Params.Env["A"] != "1" {
+		t.Fatalf("merge mutated the base layer: %v", base.Params.Env)
+	}
+}
+
+func TestMergeRunParamsLayersEnvPreservedWhenUndeclared(t *testing.T) {
+	base := adapters.RunParamsLayer{
+		Params:   adapters.RunParams{Env: map[string]string{"A": "1"}},
+		Declared: map[string]bool{"env": true},
+	}
+	over := adapters.RunParamsLayer{Declared: map[string]bool{"model": true}}
+	got := colony.MergeRunParamsLayers(base, over)
+	if got.Env["A"] != "1" {
+		t.Fatalf("undeclared env should keep base: %v", got.Env)
+	}
+}
+
+func TestValidateRunParamsRejectsBadEnvMode(t *testing.T) {
+	err := colony.ValidateRunParams(map[string]any{"env_mode": "deny"})
+	if err == nil || !strings.Contains(err.Error(), "params.env_mode must be") {
+		t.Fatalf("err = %v, want env_mode rejection", err)
+	}
+	if err := colony.ValidateRunParams(map[string]any{"env_mode": "strict"}); err != nil {
+		t.Fatalf("strict env_mode should validate, got %v", err)
+	}
+	if err := colony.ValidateRunParams(map[string]any{"env": map[string]any{"A": "1"}}); err != nil {
+		t.Fatalf("env map should validate, got %v", err)
+	}
+	if err := colony.ValidateRunParams(map[string]any{"env": "not-a-map"}); err == nil {
+		t.Fatal("env as a scalar should be rejected")
+	}
+}
+
+func TestDiagnoseAdapterCredentialsWarnsUnknownTarget(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	slug := "demo"
+	adapterDir := filepath.Join(xdg, "paseka", slug, "adapters")
+	if err := os.MkdirAll(adapterDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "binary: agent\napi_key_env: PASEKA_TEST_MISSING_KEY\n"
+	if err := os.WriteFile(filepath.Join(adapterDir, "cursor.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Unsetenv("PASEKA_TEST_MISSING_KEY")
+
+	ctx := colony.Context{
+		Slug:   slug,
+		Cursor: colony.CursorAdapterConfig{APIKeyEnv: "PASEKA_TEST_MISSING_KEY"},
+	}
+	warnings := colony.DiagnoseAdapterCredentials(ctx)
+	joined := strings.Join(warnings, "\n")
+	if !strings.Contains(joined, `api_key_env "PASEKA_TEST_MISSING_KEY" is not set`) {
+		t.Fatalf("missing unset api_key_env warning:\n%s", joined)
+	}
+
+	t.Setenv("PASEKA_TEST_MISSING_KEY", "present")
+	if warnings := colony.DiagnoseAdapterCredentials(ctx); len(warnings) != 0 {
+		t.Fatalf("set api_key_env should not warn: %v", warnings)
+	}
+}

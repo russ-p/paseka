@@ -8,17 +8,13 @@ import (
 	"github.com/russ-p/paseka/internal/adapters"
 )
 
-// defaultRunParams is the adapter-neutral param set a bee gets when it declares
-// no params. A command-mode bee may only carry params that leave these values
-// untouched: a custom command ignores params entirely, so any deviation is a
-// contradiction rather than a flag that quietly did not apply.
-var defaultRunParams = adapters.RunParams{Trust: true, Force: true}
-
 // ParamsAreDefault reports whether the bee's params resolve to the adapter
 // defaults, which makes them a no-op and therefore compatible with a custom
-// `command:`.
+// `command:`. A command-mode bee may only carry params that leave these values
+// untouched: a custom command ignores params entirely, so any deviation is a
+// contradiction rather than a flag that quietly did not apply.
 func (b Bee) ParamsAreDefault() bool {
-	return LayerFromBee(b).Params == defaultRunParams
+	return len(b.NonDefaultParamKeys()) == 0
 }
 
 // NonDefaultParamKeys returns the declared params whose value differs from the
@@ -46,6 +42,17 @@ func isDefaultParamValue(key string, value any) bool {
 	case "plan":
 		b, ok := value.(bool)
 		return ok && !b
+	case "env":
+		switch v := value.(type) {
+		case nil:
+			return true
+		case map[string]any:
+			return len(v) == 0
+		case map[string]string:
+			return len(v) == 0
+		default:
+			return false
+		}
 	default:
 		s, ok := value.(string)
 		return ok && s == ""
@@ -58,6 +65,8 @@ func isDefaultParamValue(key string, value any) bool {
 // run whose flags quietly did not change.
 var RunParamKeys = []string{
 	"binary",
+	"env",
+	"env_mode",
 	"force",
 	"model",
 	"plan",
@@ -66,6 +75,32 @@ var RunParamKeys = []string{
 	"thinking",
 	"trust",
 	"yolo",
+}
+
+// ValidateRunParams rejects unknown keys and invalid values. Unknown keys fail
+// with the valid-key list; env must be a name/value map and env_mode, when set,
+// must be the strict opt-in.
+func ValidateRunParams(params map[string]any) error {
+	if err := ValidateRunParamKeys(params); err != nil {
+		return err
+	}
+	if v, ok := params["env_mode"]; ok && v != nil {
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("params.env_mode must be a string")
+		}
+		switch strings.TrimSpace(s) {
+		case "", adapters.EnvModeStrict:
+		default:
+			return fmt.Errorf("params.env_mode must be %q (got %q)", adapters.EnvModeStrict, s)
+		}
+	}
+	if v, ok := params["env"]; ok && v != nil {
+		if _, ok := v.(map[string]any); !ok {
+			return fmt.Errorf("params.env must be a map of name: value")
+		}
+	}
+	return nil
 }
 
 // ValidateRunParamKeys rejects any key outside RunParamKeys and names the valid
@@ -170,6 +205,14 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 			declared["reasoning"] = true
 		}
 	}
+	if v, ok := envParam(b.Params, "env"); ok {
+		p.Env = v
+		declared["env"] = true
+	}
+	if v, ok := stringParam(b.Params, "env_mode"); ok {
+		p.EnvMode = strings.TrimSpace(v)
+		declared["env_mode"] = true
+	}
 	layer.Params = p
 	return layer
 }
@@ -207,6 +250,19 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 	}
 	if declared["api_key"] {
 		out.APIKey = over.Params.APIKey
+	}
+	if declared["env"] {
+		merged := make(map[string]string, len(out.Env)+len(over.Params.Env))
+		for k, v := range out.Env {
+			merged[k] = v
+		}
+		for k, v := range over.Params.Env {
+			merged[k] = v
+		}
+		out.Env = merged
+	}
+	if declared["env_mode"] {
+		out.EnvMode = over.Params.EnvMode
 	}
 	if declared["binary"] && out.Binary == "" {
 		out.Binary = over.Params.Binary
@@ -271,6 +327,22 @@ func AdapterExtraLayer(ctx Context, adapterName string) adapters.RunParamsLayer 
 		}
 	}
 	return layer
+}
+
+func envParam(m map[string]any, key string) (map[string]string, bool) {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil, false
+	}
+	raw, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]string, len(raw))
+	for name, value := range raw {
+		out[name] = fmt.Sprint(value)
+	}
+	return out, true
 }
 
 func stringParam(m map[string]any, key string) (string, bool) {

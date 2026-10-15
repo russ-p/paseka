@@ -42,6 +42,9 @@ type RunRequest struct {
 	Binary string
 	Env    []string
 	Dir    string
+	// RedactedEnv names plan env keys whose values must never appear in logs:
+	// the injected credential and the declared pass-through keys.
+	RedactedEnv []string
 }
 
 // RunParams holds adapter CLI flags and shared bee params. Output format is
@@ -56,7 +59,20 @@ type RunParams struct {
 	APIKey    string // optional; from machine-local api_key_env when set
 	Provider  string
 	Reasoning string // low | medium | high | passthrough
+	// Env is the declared pass-through environment from params.env. Values are
+	// literals or `$HOST_VAR` references resolved against the inherited
+	// environment at launch.
+	Env map[string]string
+	// EnvMode selects the child environment policy. The empty string inherits
+	// the parent environment (undeclared keys keep flowing); EnvModeStrict strips
+	// every undeclared key.
+	EnvMode string
 }
+
+// EnvModeStrict is the opt-in params.env_mode value: the child receives only the
+// declared pass-through, the injected credential, and a small allow-list of
+// non-secret process essentials (PATH, HOME, locale, and PASEKA_*).
+const EnvModeStrict = "strict"
 
 // RunParamsLayer is a RunParams together with the set of keys its source
 // actually declared. RunParams uses plain strings and bools, so a zero value

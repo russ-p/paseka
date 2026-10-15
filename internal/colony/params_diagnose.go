@@ -2,7 +2,9 @@ package colony
 
 import (
 	"fmt"
+	"os"
 	"sort"
+	"strings"
 )
 
 // ParamDeprecations maps each deprecated bee `params` key to the semantic key
@@ -78,6 +80,39 @@ func deprecatedParamWarnings(name string, params map[string]any) []string {
 	for _, key := range keys {
 		warnings = append(warnings, fmt.Sprintf(
 			"bee %q: params.%s is deprecated; use params.%s", name, key, ParamDeprecations[key]))
+	}
+	return warnings
+}
+
+// DiagnoseAdapterCredentials warns when a machine-local adapter file explicitly
+// declares `api_key_env` but the named host variable is unset. A credential that
+// resolves to empty is then visible in doctor instead of being mistaken for
+// valid auth.
+func DiagnoseAdapterCredentials(ctx Context) []string {
+	type check struct {
+		name   string
+		keyEnv string
+	}
+	checks := []check{
+		{"cursor", ctx.Cursor.APIKeyEnv},
+		{"pi", ctx.Pi.APIKeyEnv},
+		{"claude", ctx.Claude.APIKeyEnv},
+	}
+	var warnings []string
+	for _, c := range checks {
+		keyEnv := strings.TrimSpace(c.keyEnv)
+		if keyEnv == "" {
+			continue
+		}
+		exists, keys := AdapterConfigDeclared(ctx.Slug, c.name)
+		if !exists || !keys["api_key_env"] {
+			continue
+		}
+		if strings.TrimSpace(os.Getenv(keyEnv)) == "" {
+			warnings = append(warnings, fmt.Sprintf(
+				"adapter %s: api_key_env %q is not set in the environment (credential resolves empty)",
+				c.name, keyEnv))
+		}
 	}
 	return warnings
 }

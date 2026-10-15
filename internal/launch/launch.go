@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -94,6 +95,9 @@ type LaunchPlan struct {
 	CommandPrompt string
 	// Env is the complete child environment, or nil to inherit.
 	Env []string
+	// RedactedEnv names the plan env keys whose values must not appear in logs:
+	// the injected credential and the declared params.env pass-through keys.
+	RedactedEnv []string
 	// Dir is the resolved working directory; empty means inherit the parent cwd.
 	Dir string
 	// Resume reports whether the plan continues an existing provider session.
@@ -152,7 +156,7 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 
 	// Resolve env before the command so a command template can reference the
 	// same plan env the child receives, not only the fixed CommandVars.
-	plan.Env = resolveEnv(req, params, spec)
+	plan.Env, plan.RedactedEnv = resolveEnv(req, params, spec)
 
 	command, form, err := resolveCommand(req, plan)
 	if err != nil {
@@ -209,33 +213,43 @@ func commandVars(req Request, plan LaunchPlan) colony.CommandVars {
 		ColonyRoot:   req.RunDir.ColonyRoot,
 		ResultFile:   resultFile,
 		RunDir:       req.RunDir.Root(),
-		Env:          envMap(plan.Env),
+		Env:          adapters.EnvMap(plan.Env),
 	}
 }
 
-func envMap(env []string) map[string]string {
-	if len(env) == 0 {
-		return nil
+// resolveEnv builds the complete child environment and records the plan env keys
+// whose values must be redacted in logs.
+//
+// By default the inherited environment is kept whole (undeclared vendor keys
+// keep flowing) and declared params.env pass-through plus the adapter's resolved
+// credential are layered on top. In EnvModeStrict the inherited environment is
+// reduced to non-secret process essentials, so an undeclared secret no longer
+// reaches the child.
+func resolveEnv(req Request, params adapters.RunParams, spec adapters.LaunchSpec) ([]string, []string) {
+	base := req.EnvBase
+	if base == nil {
+		base = os.Environ()
 	}
-	out := make(map[string]string, len(env))
-	for _, entry := range env {
-		if i := strings.IndexByte(entry, '='); i >= 0 {
-			out[entry[:i]] = entry[i+1:]
-		}
-	}
-	return out
-}
 
-// resolveEnv builds the complete child environment: the inherited base, the
-// adapter's resolved credential (when it carries one in the environment), and
-// the PASEKA_* contract for script bees.
-func resolveEnv(req Request, params adapters.RunParams, spec adapters.LaunchSpec) []string {
-	env := req.EnvBase
-	if env == nil {
-		env = os.Environ()
+	// Expand `$HOST_VAR` references against the inherited environment before any
+	// strict filtering, so a declared reference still resolves.
+	declared := expandDeclaredEnv(params.Env, base)
+
+	env := base
+	if params.EnvMode == adapters.EnvModeStrict {
+		env = filterStrictEnv(base)
+	}
+	for _, name := range sortedEnvKeys(declared) {
+		env = setEnv(env, name, declared[name])
+	}
+
+	redacted := make([]string, 0, len(declared)+1)
+	for name := range declared {
+		redacted = append(redacted, name)
 	}
 	if spec.CredentialEnv != "" && params.APIKey != "" {
-		env = append(env, spec.CredentialEnv+"="+params.APIKey)
+		env = setEnv(env, spec.CredentialEnv, params.APIKey)
+		redacted = append(redacted, spec.CredentialEnv)
 	}
 	if req.Adapter == "script" {
 		env = adapters.ScriptEnv(env, adapters.RunRequest{
@@ -247,7 +261,101 @@ func resolveEnv(req Request, params adapters.RunParams, spec adapters.LaunchSpec
 			TaskID:     req.TaskID,
 		}, req.RunDir)
 	}
-	return env
+	sort.Strings(redacted)
+	return env, dedupeStrings(redacted)
+}
+
+// expandDeclaredEnv resolves each declared params.env value: a `$HOST_VAR` or
+// `${HOST_VAR}` reference reads the inherited environment, anything else is a
+// literal.
+func expandDeclaredEnv(declared map[string]string, host []string) map[string]string {
+	if len(declared) == 0 {
+		return nil
+	}
+	hostVals := adapters.EnvMap(host)
+	out := make(map[string]string, len(declared))
+	for name, val := range declared {
+		out[name] = expandHostRef(val, hostVals)
+	}
+	return out
+}
+
+func expandHostRef(val string, host map[string]string) string {
+	v := strings.TrimSpace(val)
+	if !strings.HasPrefix(v, "$") {
+		return val
+	}
+	ref := strings.TrimPrefix(v, "$")
+	if strings.HasPrefix(ref, "{") && strings.HasSuffix(ref, "}") {
+		ref = ref[1 : len(ref)-1]
+	}
+	if ref == "" {
+		return val
+	}
+	return host[ref]
+}
+
+// strictEnvAllow is the small set of non-secret process essentials a strict
+// launch keeps from the inherited environment. Everything else must be declared
+// through params.env or injected as the resolved credential.
+var strictEnvAllow = map[string]bool{
+	"PATH":    true,
+	"HOME":    true,
+	"USER":    true,
+	"LOGNAME": true,
+	"SHELL":   true,
+	"TERM":    true,
+	"TMPDIR":  true,
+	"TZ":      true,
+	"LANG":    true,
+	"PWD":     true,
+}
+
+func filterStrictEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if strictEnvAllow[key] || strings.HasPrefix(key, "LC_") || strings.HasPrefix(key, "PASEKA_") {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func setEnv(env []string, key, val string) []string {
+	prefix := key + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = prefix + val
+			return env
+		}
+	}
+	return append(env, prefix+val)
+}
+
+func sortedEnvKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func dedupeStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := in[:1]
+	for _, s := range in[1:] {
+		if s != out[len(out)-1] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // defaultSpec reports the built-in launch defaults for an adapter name. It

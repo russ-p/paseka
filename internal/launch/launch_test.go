@@ -3,6 +3,7 @@ package launch_test
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/russ-p/paseka/internal/adapters"
@@ -300,6 +301,107 @@ func TestResolveCredentialEnvPerAdapter(t *testing.T) {
 		if env[key] != "secret" {
 			t.Fatalf("%s env %s = %q, want secret", adapter, key, env[key])
 		}
+	}
+}
+
+// TestResolveRecordsCredentialForRedaction pins that the injected credential key
+// is recorded on the plan so logs can redact it, and that pi (which carries its
+// key on argv) records none.
+func TestResolveRecordsCredentialForRedaction(t *testing.T) {
+	plan, err := launch.ResolveLaunch(baseRequest(t, "cursor", launch.AFK))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.RedactedEnv) == 0 || plan.RedactedEnv[0] != "CURSOR_API_KEY" {
+		t.Fatalf("cursor RedactedEnv = %v, want [CURSOR_API_KEY]", plan.RedactedEnv)
+	}
+
+	pi, err := launch.ResolveLaunch(baseRequest(t, "pi", launch.AFK))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range pi.RedactedEnv {
+		if key == "API_KEY" {
+			t.Fatalf("pi must not record an env credential: %v", pi.RedactedEnv)
+		}
+	}
+}
+
+// TestResolveDeclaredEnvPassThrough pins that params.env reaches the child
+// environment, both as a literal and as a `$HOST_VAR` reference, and that the
+// declared keys are recorded for plan-aware redaction.
+func TestResolveDeclaredEnvPassThrough(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.EnvBase = []string{"PATH=/bin", "HOST_TOKEN=host-secret"}
+	req.Bee.Params = map[string]any{
+		"model": "m1",
+		"env": map[string]any{
+			"LITERAL_ONE": "literal-value",
+			"INHERITED":   "$HOST_TOKEN",
+		},
+	}
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := envMap(plan.Env)
+	if env["LITERAL_ONE"] != "literal-value" {
+		t.Fatalf("literal declared env missing: %v", plan.Env)
+	}
+	if env["INHERITED"] != "host-secret" {
+		t.Fatalf("host reference not expanded: %q", env["INHERITED"])
+	}
+	redacted := strings.Join(plan.RedactedEnv, ",")
+	for _, key := range []string{"LITERAL_ONE", "INHERITED", "CURSOR_API_KEY"} {
+		if !strings.Contains(redacted, key) {
+			t.Fatalf("redacted keys %v missing %s", plan.RedactedEnv, key)
+		}
+	}
+}
+
+// TestResolveStrictEnvStripsUndeclared pins the opt-in env_mode: strict. The
+// default keeps undeclared secrets flowing; strict drops them but keeps process
+// essentials, declared pass-through, and the injected credential.
+func TestResolveStrictEnvStripsUndeclared(t *testing.T) {
+	mk := func(mode string) launch.Request {
+		req := baseRequest(t, "cursor", launch.AFK)
+		req.EnvBase = []string{"PATH=/bin", "HOME=/home/bee", "UNDECLARED_SECRET=s3cr3t"}
+		params := map[string]any{
+			"model": "m1",
+			"env":   map[string]any{"DECLARED": "kept"},
+		}
+		if mode != "" {
+			params["env_mode"] = mode
+		}
+		req.Bee.Params = params
+		return req
+	}
+
+	def, err := launch.ResolveLaunch(mk(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envMap(def.Env)["UNDECLARED_SECRET"] != "s3cr3t" {
+		t.Fatalf("default mode must keep undeclared env: %v", def.Env)
+	}
+
+	strict, err := launch.ResolveLaunch(mk("strict"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := envMap(strict.Env)
+	if _, ok := env["UNDECLARED_SECRET"]; ok {
+		t.Fatalf("strict mode must strip undeclared secret: %v", strict.Env)
+	}
+	if env["PATH"] != "/bin" || env["HOME"] != "/home/bee" {
+		t.Fatalf("strict mode dropped process essentials: %v", strict.Env)
+	}
+	if env["DECLARED"] != "kept" {
+		t.Fatalf("strict mode dropped declared pass-through: %v", strict.Env)
+	}
+	if env["CURSOR_API_KEY"] != "secret" {
+		t.Fatalf("strict mode dropped injected credential: %v", strict.Env)
 	}
 }
 
