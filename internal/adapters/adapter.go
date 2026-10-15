@@ -31,6 +31,10 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	Profile      string
+	// Raw is the runtime-owned `--raw` escape hatch: the adapter requests plain
+	// text instead of its structured mode, so usage and providerSessionId
+	// accounting degrade for this invocation only.
+	Raw bool
 	// Binary, Env, and Dir are resolved by the launch resolver. When set they
 	// are authoritative: the adapter must not re-read machine config or the
 	// parent environment. An empty Dir means "inherit the parent cwd" and a nil
@@ -40,17 +44,18 @@ type RunRequest struct {
 	Dir    string
 }
 
-// RunParams holds adapter CLI flags and shared bee params.
+// RunParams holds adapter CLI flags and shared bee params. Output format is
+// intentionally absent: the runtime always requests the adapter's structured
+// mode (see RunRequest.Raw for the plain-text escape hatch).
 type RunParams struct {
-	Model        string
-	OutputFormat string // text | json | stream-json | rpc
-	Trust        bool
-	Force        bool
-	Plan         bool
-	Binary       string // adapter binary override
-	APIKey       string // optional; from machine-local api_key_env when set
-	Provider     string
-	Reasoning    string // low | medium | high | passthrough
+	Model     string
+	Trust     bool
+	Force     bool
+	Plan      bool
+	Binary    string // adapter binary override
+	APIKey    string // optional; from machine-local api_key_env when set
+	Provider  string
+	Reasoning string // low | medium | high | passthrough
 }
 
 // RunParamsLayer is a RunParams together with the set of keys its source

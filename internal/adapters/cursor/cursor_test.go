@@ -38,10 +38,9 @@ func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/colony/worktree",
 		Params: adapters.RunParams{
-			Model:        "composer-2.5",
-			OutputFormat: "stream-json",
-			Trust:        true,
-			Force:        true,
+			Model: "composer-2.5",
+			Trust: true,
+			Force: true,
 		},
 	}
 	args := buildArgs(req, "implement feature")
@@ -103,8 +102,7 @@ func TestAdapterRunPersistsProviderSessionID(t *testing.T) {
 		TraceID:    "trace-1",
 		AgentID:    "agent-1",
 		Params: adapters.RunParams{
-			Binary:       fake,
-			OutputFormat: "stream-json",
+			Binary: fake,
 		},
 	})
 	if err != nil {
@@ -146,9 +144,9 @@ func TestAdapterRunOmitsProviderSessionIDOnText(t *testing.T) {
 		Workspace:  repo,
 		TraceID:    "trace-1",
 		AgentID:    "agent-1",
+		Raw:        true,
 		Params: adapters.RunParams{
-			Binary:       fake,
-			OutputFormat: "text",
+			Binary: fake,
 		},
 	})
 	if err != nil {
@@ -178,16 +176,33 @@ func TestAdapterRunOmitsProviderSessionIDWhenTextContainsJSON(t *testing.T) {
 		Workspace:  repo,
 		TraceID:    "trace-1",
 		AgentID:    "agent-1",
+		Raw:        true,
 		Params: adapters.RunParams{
-			Binary:       fake,
-			OutputFormat: "text",
+			Binary: fake,
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.ProviderSessionID != "" {
-		t.Fatalf("text format must not store session id, got %q", result.ProviderSessionID)
+		t.Fatalf("raw output must not store session id, got %q", result.ProviderSessionID)
+	}
+}
+
+func TestBuildArgsRawEmitsText(t *testing.T) {
+	req := adapters.RunRequest{
+		Workspace: "/ws",
+		Raw:       true,
+	}
+	args := buildArgs(req, "debug it")
+	want := []string{"-p", "--workspace", "/ws", "--output-format", "text", "debug it"}
+	if len(args) != len(want) {
+		t.Fatalf("got %d args, want %d: %v", len(args), len(want), args)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, args[i], want[i], args)
+		}
 	}
 }
 

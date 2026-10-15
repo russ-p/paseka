@@ -31,8 +31,10 @@ func resolveModel(p adapters.RunParams) string {
 	return model
 }
 
-func runFormat(outputFormat string) string {
-	if outputFormat == "text" {
+// runFormat returns OpenCode's runtime-owned output format: json by default,
+// default (human text) only for a --raw invocation.
+func runFormat(raw bool) string {
+	if raw {
 		return "default"
 	}
 	return "json"
@@ -40,7 +42,7 @@ func runFormat(outputFormat string) string {
 
 func buildArgs(req adapters.RunRequest, prompt string) []string {
 	p := req.Params
-	args := []string{"run", "--format", runFormat(p.OutputFormat), "--dir", req.Workspace}
+	args := []string{"run", "--format", runFormat(req.Raw), "--dir", req.Workspace}
 	// plan wins over yolo: --auto would conflict with the read-only plan agent.
 	if (p.Trust || p.Force) && !p.Plan {
 		args = append(args, "--auto")

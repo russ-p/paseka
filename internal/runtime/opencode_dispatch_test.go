@@ -28,8 +28,6 @@ func TestDispatchOpenCodeAFKEndToEnd(t *testing.T) {
 adapter: opencode
 prompt_template: worker.md
 worktree: false
-params:
-  output_format: json
 `
 	if err := os.WriteFile(filepath.Join(repo, ".paseka", "bees", "oc-worker.yaml"), []byte(bee), 0o644); err != nil {
 		t.Fatal(err)

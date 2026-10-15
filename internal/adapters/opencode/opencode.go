@@ -91,7 +91,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("opencode: write meta: %w", err)
 	}
 
-	format := runFormat(req.Params.OutputFormat)
+	// Output format is runtime-owned: json by default, default (text) for a
+	// --raw invocation. A custom command may still set its own --format.
+	format := runFormat(req.Raw)
 	if len(req.Command) > 0 {
 		if v := adapters.FlagValue(args, "--format"); v != "" {
 			format = v

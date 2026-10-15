@@ -61,13 +61,12 @@ func TestBuildArgs(t *testing.T) {
 		Workspace: "/colony/worktree",
 		AgentID:   "agent-1",
 		Params: adapters.RunParams{
-			Model:        "claude-sonnet-4",
-			Provider:     "anthropic",
-			OutputFormat: "json",
-			Trust:        true,
-			Force:        true,
-			Plan:         true,
-			Reasoning:    "high",
+			Model:     "claude-sonnet-4",
+			Provider:  "anthropic",
+			Trust:     true,
+			Force:     true,
+			Plan:      true,
+			Reasoning: "high",
 		},
 	}
 	args := buildArgs(req, "implement feature")
@@ -108,7 +107,8 @@ func TestBuildArgsNoAutoWhenUntrusted(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/ws",
 		AgentID:   "a1",
-		Params:    adapters.RunParams{Trust: false, Force: false, OutputFormat: "text"},
+		Raw:       true,
+		Params:    adapters.RunParams{Trust: false, Force: false},
 	}
 	args := buildArgs(req, "task")
 	for _, arg := range args {
@@ -172,11 +172,10 @@ func TestAdapterRunEndToEnd(t *testing.T) {
 		TraceID:      "trace-oc-1",
 		AgentID:      "agent-oc-1",
 		Params: adapters.RunParams{
-			Binary:       fake,
-			OutputFormat: "json",
-			Trust:        true,
-			Force:        true,
-			Model:        "anthropic/claude-sonnet-4",
+			Binary: fake,
+			Trust:  true,
+			Force:  true,
+			Model:  "anthropic/claude-sonnet-4",
 		},
 	})
 	if err != nil {

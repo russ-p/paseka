@@ -16,7 +16,6 @@ var RunParamKeys = []string{
 	"binary",
 	"force",
 	"model",
-	"output_format",
 	"plan",
 	"provider",
 	"reasoning",
@@ -87,10 +86,6 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Model = v
 		declared["model"] = true
 	}
-	if v, ok := stringParam(b.Params, "output_format"); ok {
-		p.OutputFormat = v
-		declared["output_format"] = true
-	}
 	if v, ok := boolParam(b.Params, "trust"); ok {
 		p.Trust = v
 		declared["trust"] = true
@@ -150,9 +145,6 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 	declared := over.Declared
 	if declared["model"] {
 		out.Model = over.Params.Model
-	}
-	if declared["output_format"] {
-		out.OutputFormat = over.Params.OutputFormat
 	}
 	if declared["provider"] {
 		out.Provider = over.Params.Provider

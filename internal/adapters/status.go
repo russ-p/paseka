@@ -59,3 +59,23 @@ func IsStreamFormat(format string) bool {
 	}
 	return format == "stream-json"
 }
+
+// RawOutputDegradedFeatures lists the runtime features an adapter loses when a
+// `paseka bee run --raw` invocation switches it from structured stdout to plain
+// text. The runtime logs the list so an operator sees what accounting a debug
+// run gives up. An empty result means the adapter has no structured mode to lose
+// (script).
+func RawOutputDegradedFeatures(adapter string) []string {
+	switch adapter {
+	case "cursor":
+		return []string{"stream events", "usage", "providerSessionId", "summary normalization"}
+	case "claude":
+		return []string{"stream events", "summary normalization"}
+	case "pi":
+		return []string{"usage", "providerSessionId", "summary normalization"}
+	case "opencode":
+		return []string{"usage", "providerSessionId", "summary normalization"}
+	default:
+		return nil
+	}
+}

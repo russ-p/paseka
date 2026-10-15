@@ -32,6 +32,8 @@ type DispatchRequest struct {
 	IsLastWorkTask bool // set by AFK ledger task dispatch only
 	Profile        string
 	ProfileApply   func(colony.Bee) (colony.Bee, error)
+	// Raw requests plain-text adapter output for this run only (CLI --raw).
+	Raw bool
 }
 
 // Dispatcher renders prompts and runs adapters.

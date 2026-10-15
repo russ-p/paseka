@@ -39,14 +39,13 @@ func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		AgentID: "agent-1",
 		Params: adapters.RunParams{
-			Model:        "gpt-4",
-			OutputFormat: "json",
-			Provider:     "gemini",
-			Reasoning:    "high",
-			Plan:         true,
-			APIKey:       "secret",
-			Trust:        true,
-			Force:        true,
+			Model:     "gpt-4",
+			Provider:  "gemini",
+			Reasoning: "high",
+			Plan:      true,
+			APIKey:    "secret",
+			Trust:     true,
+			Force:     true,
 		},
 	}
 	args := buildArgs(req, "implement feature", "", "/colony/.paseka/runs/t/a/pi-sessions")
@@ -134,10 +133,9 @@ func TestAdapterRunEndToEnd(t *testing.T) {
 		TraceID:    "trace-pi-1",
 		AgentID:    "agent-pi-1",
 		Params: adapters.RunParams{
-			Binary:       fakePi,
-			OutputFormat: "json",
-			Model:        "test-model",
-			Provider:     "gemini",
+			Binary:   fakePi,
+			Model:    "test-model",
+			Provider: "gemini",
 		},
 	})
 	if err != nil {
@@ -356,39 +354,35 @@ func TestAdapterRunDefaultModeJSON(t *testing.T) {
 	}
 }
 
-func TestAdapterRunExplicitModes(t *testing.T) {
-	modes := []string{"text", "json", "rpc"}
-	for _, mode := range modes {
-		t.Run(mode, func(t *testing.T) {
-			traceID := "trace-pi-" + mode
-			agentID := "agent-pi-" + mode
-			repo := initPiRepo(t)
-			fakePi := writeFakePiWithTrace(t, traceID, agentID, "mode output")
+// TestAdapterRunRawMode pins that --raw switches Pi to plain text mode and that
+// the unstructured stdout is preserved as the run summary.
+func TestAdapterRunRawMode(t *testing.T) {
+	repo := initPiRepo(t)
+	fakePi := writeFakePiWithTrace(t, "trace-pi-raw", "agent-pi-raw", "plain output")
 
-			_, err := New().Run(context.Background(), adapters.RunRequest{
-				Prompt:     "mode test",
-				ColonyRoot: repo,
-				Workspace:  repo,
-				TraceID:    traceID,
-				AgentID:    agentID,
-				Params: adapters.RunParams{
-					Binary:       fakePi,
-					OutputFormat: mode,
-				},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Prompt:     "raw mode",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-pi-raw",
+		AgentID:    "agent-pi-raw",
+		Raw:        true,
+		Params:     adapters.RunParams{Binary: fakePi},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Summary != "plain output" {
+		t.Fatalf("summary = %q, want plain output", result.Summary)
+	}
 
-			logPath := filepath.Join(repo, ".paseka", "runs", traceID, agentID, "pi-invocation.log")
-			log, err := os.ReadFile(logPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(string(log), "--mode "+mode) {
-				t.Fatalf("expected --mode %s in invocation: %q", mode, log)
-			}
-		})
+	logPath := filepath.Join(repo, ".paseka", "runs", "trace-pi-raw", "agent-pi-raw", "pi-invocation.log")
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(log), "--mode text") {
+		t.Fatalf("expected --mode text in invocation: %q", log)
 	}
 }
 
@@ -404,8 +398,7 @@ func TestAdapterRunUnrecognizedJSONPreservesStdout(t *testing.T) {
 		TraceID:    "trace-pi-fallback",
 		AgentID:    "agent-pi-fallback",
 		Params: adapters.RunParams{
-			Binary:       fakePi,
-			OutputFormat: "json",
+			Binary: fakePi,
 		},
 	})
 	if err != nil {
@@ -497,7 +490,7 @@ func TestAdapterRunPrefersJSONSessionID(t *testing.T) {
 		Workspace:  repo,
 		TraceID:    "trace-pi-1",
 		AgentID:    "agent-pi-1",
-		Params:     adapters.RunParams{Binary: fakePi, OutputFormat: "json"},
+		Params:     adapters.RunParams{Binary: fakePi},
 	})
 	if err != nil {
 		t.Fatal(err)

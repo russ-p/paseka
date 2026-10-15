@@ -111,7 +111,7 @@ func TestAdapterRunReportsUsageFromStdout(t *testing.T) {
 		Workspace:  repo,
 		TraceID:    "trace-pi-1",
 		AgentID:    "agent-pi-1",
-		Params:     adapters.RunParams{Binary: fakePi, OutputFormat: "json"},
+		Params:     adapters.RunParams{Binary: fakePi},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -144,7 +144,8 @@ func TestAdapterRunFallsBackToSessionFileInTextMode(t *testing.T) {
 		Workspace:  repo,
 		TraceID:    "trace-pi-1",
 		AgentID:    "agent-pi-1",
-		Params:     adapters.RunParams{Binary: fakePi, OutputFormat: "text"},
+		Raw:        true,
+		Params:     adapters.RunParams{Binary: fakePi},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -64,22 +64,18 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 	bee := colony.Bee{
 		Role: "builder",
 		Params: map[string]any{
-			"model":         "gpt-4",
-			"output_format": "json",
-			"plan":          true,
-			"binary":        "/usr/bin/pi",
-			"provider":      "gemini",
-			"reasoning":     "high",
-			"trust":         false,
-			"force":         false,
+			"model":     "gpt-4",
+			"plan":      true,
+			"binary":    "/usr/bin/pi",
+			"provider":  "gemini",
+			"reasoning": "high",
+			"trust":     false,
+			"force":     false,
 		},
 	}
 	p := colony.RunParamsFromBee(bee)
 	if p.Model != "gpt-4" {
 		t.Fatalf("model = %q", p.Model)
-	}
-	if p.OutputFormat != "json" {
-		t.Fatalf("output_format = %q", p.OutputFormat)
 	}
 	if !p.Plan {
 		t.Fatal("plan = false, want true")
@@ -308,6 +304,46 @@ func TestValidateRunParamKeysRejectsUnknown(t *testing.T) {
 
 	if err := colony.ValidateRunParamKeys(map[string]any{"model": "x", "plan": true}); err != nil {
 		t.Fatalf("known keys should validate, got %v", err)
+	}
+}
+
+// TestValidateRunParamKeysRejectsRemovedOutputFormat pins that output_format is
+// no longer a bee-visible key: the runtime owns structured output, so a leftover
+// key fails at load instead of silently degrading parsing.
+func TestValidateRunParamKeysRejectsRemovedOutputFormat(t *testing.T) {
+	err := colony.ValidateRunParamKeys(map[string]any{"output_format": "json"})
+	if err == nil {
+		t.Fatal("expected output_format to be rejected as a removed key")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `unknown params key "output_format"`) {
+		t.Fatalf("err = %v, want output_format named as unknown", err)
+	}
+	_, valid, ok := strings.Cut(msg, "valid keys:")
+	if !ok {
+		t.Fatalf("err = %v, want the valid-key list", err)
+	}
+	if strings.Contains(valid, "output_format") {
+		t.Fatalf("output_format must not be advertised as valid: %v", err)
+	}
+}
+
+func TestLoadBeeRejectsRemovedOutputFormat(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "role: scout\nadapter: cursor\nparams:\n  output_format: json\n"
+	if err := os.WriteFile(filepath.Join(dir, "scout.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := colony.LoadBee(root, "scout")
+	if err == nil {
+		t.Fatal("expected load to fail on the removed output_format key")
+	}
+	if !strings.Contains(err.Error(), `unknown params key "output_format"`) {
+		t.Fatalf("err = %v", err)
 	}
 }
 

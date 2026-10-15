@@ -192,6 +192,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		Prompt:       rendered,
 		SystemPrompt: renderedSystem,
 		RunDir:       runDir,
+		Raw:          req.Raw,
 	})
 	if err != nil {
 		return nil, err
@@ -238,6 +239,20 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		StartedAt:       createdAt,
 	}); err != nil {
 		return nil, fmt.Errorf("runtime: write status: %w", err)
+	}
+
+	if req.Raw {
+		if degraded := adapters.RawOutputDegradedFeatures(adapterName); len(degraded) > 0 {
+			note := "raw output: degraded " + strings.Join(degraded, ", ")
+			runtimeLog.Warn("raw output: structured parsing disabled for this run",
+				logging.F("adapter", adapterName),
+				logging.F("bee", bee.Role),
+				logging.F("trace", req.TraceID),
+				logging.F("agent", agentID),
+				logging.F("degraded", strings.Join(degraded, ", ")),
+			)
+			_ = runDir.AppendStatusNote(note)
+		}
 	}
 
 	runtimeLog.Info("adapter run",
@@ -292,6 +307,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Binary:       p.plan.Binary,
 		Env:          p.plan.Env,
 		Dir:          p.plan.Dir,
+		Raw:          p.plan.Raw,
 		TraceID:      p.req.TraceID,
 		AgentID:      p.agentID,
 		TaskID:       p.req.TaskID,

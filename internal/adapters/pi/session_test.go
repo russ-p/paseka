@@ -19,15 +19,14 @@ func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {
 		AgentID:       "agent-1",
 		InitialPrompt: "discuss feature",
 		Params: adapters.RunParams{
-			Binary:       fakePi,
-			Model:        "gpt-4",
-			Provider:     "gemini",
-			Reasoning:    "high",
-			Plan:         true,
-			APIKey:       "secret",
-			OutputFormat: "json",
-			Trust:        true,
-			Force:        true,
+			Binary:    fakePi,
+			Model:     "gpt-4",
+			Provider:  "gemini",
+			Reasoning: "high",
+			Plan:      true,
+			APIKey:    "secret",
+			Trust:     true,
+			Force:     true,
 		},
 	})
 	if err != nil {

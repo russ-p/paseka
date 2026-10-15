@@ -147,9 +147,9 @@ func writeFakeAgent(t *testing.T) string {
 	return path
 }
 
-func launchBeeYAML(role, adapter, format string) string {
-	return fmt.Sprintf("role: %s\nadapter: %s\nprompt_template: prompt.md\nworktree: false\nparams:\n  model: %s\n  output_format: %s\n",
-		role, adapter, launchModel, format)
+func launchBeeYAML(role, adapter string) string {
+	return fmt.Sprintf("role: %s\nadapter: %s\nprompt_template: prompt.md\nworktree: false\nparams:\n  model: %s\n",
+		role, adapter, launchModel)
 }
 
 // newLaunchFixture provisions a colony repo plus a machine-local home whose
@@ -162,10 +162,10 @@ func newLaunchFixture(t *testing.T) launchFixture {
 
 	colonyFiles := map[string]string{
 		".paseka/colony.yaml":        "slug: " + launchSlug + "\ndefaults:\n  prompt_template: default.md\n",
-		".paseka/bees/cursor.yaml":   launchBeeYAML("cursor", "cursor", "stream-json"),
-		".paseka/bees/pi.yaml":       launchBeeYAML("pi", "pi", "json"),
-		".paseka/bees/claude.yaml":   launchBeeYAML("claude", "claude", "stream-json"),
-		".paseka/bees/opencode.yaml": launchBeeYAML("opencode", "opencode", "json"),
+		".paseka/bees/cursor.yaml":   launchBeeYAML("cursor", "cursor"),
+		".paseka/bees/pi.yaml":       launchBeeYAML("pi", "pi"),
+		".paseka/bees/claude.yaml":   launchBeeYAML("claude", "claude"),
+		".paseka/bees/opencode.yaml": launchBeeYAML("opencode", "opencode"),
 		".paseka/bees/script.yaml":   "role: script\nadapter: script\ncommand: " + fake + " script-arg-1 script-arg-2\nrun_summary: disabled\n",
 		".paseka/prompts/prompt.md":  "{{.Bee}}: {{.Task}}",
 		".paseka/prompts/default.md": "{{.Task}}",
@@ -417,6 +417,65 @@ func TestAdapterLaunchCharacterization(t *testing.T) {
 				assertLaunchContract(t, mode.name, ac, f, pc, marker)
 			})
 		}
+	}
+}
+
+// TestAdapterLaunchRawCharacterization pins the runtime-owned `--raw` argv: the
+// same launch path must switch every adapter off its structured format and, for
+// claude, drop the `--verbose` that only stream-json requires.
+func TestAdapterLaunchRawCharacterization(t *testing.T) {
+	rawArgs := map[string]func(f launchFixture) []string{
+		"cursor": func(f launchFixture) []string {
+			return []string{"-p", "--workspace", f.ws, "--output-format", "text",
+				"--trust", "--force", "--model", f.model, "--api-key", "cursor-key", f.promptFor("cursor")}
+		},
+		"pi": func(f launchFixture) []string {
+			return []string{"-p", "--mode", "text", "--session-dir", launchAnyArg, "--session-id", launchAnyArg,
+				"--model", f.model, "--api-key", "pi-key", "--", f.promptFor("pi")}
+		},
+		"claude": func(f launchFixture) []string {
+			return []string{"-p", "--output-format", "text",
+				"--permission-mode", "bypassPermissions", "--model", f.model, f.promptFor("claude")}
+		},
+		"opencode": func(f launchFixture) []string {
+			return []string{"run", "--format", "default", "--dir", f.ws, "--auto", "--title", launchAnyArg,
+				"--model", f.model, "--", f.promptFor("opencode")}
+		},
+	}
+
+	for _, ac := range launchAdapterCases() {
+		expect, ok := rawArgs[ac.name]
+		if !ok {
+			continue
+		}
+		ac := ac
+		t.Run("raw/"+ac.name, func(t *testing.T) {
+			f := newLaunchFixture(t)
+			marker := "raw-" + ac.name
+			capPath := filepath.Join(t.TempDir(), "capture.txt")
+			t.Setenv("PASEKA_CAPTURE_FILE", capPath)
+			t.Setenv("PASEKA_LAUNCH_MARKER", marker)
+
+			d := runtime.NewDispatcher()
+			if _, err := d.BeeRun(context.Background(), runtime.BeeRunRequest{
+				StartDir: f.repo, Bee: ac.bee, TraceID: f.trace, Task: f.task, NoBus: true, Raw: true,
+			}); err != nil {
+				t.Fatalf("BeeRun(raw): %v", err)
+			}
+			pc := waitForCapture(t, capPath)
+
+			if pc.Bin != f.fake {
+				t.Fatalf("[raw/%s] binary = %q, want resolved %q", ac.name, pc.Bin, f.fake)
+			}
+			assertArgvSubsequence(t, "raw", ac.name, pc.Args, expect(f))
+			if ac.name == "claude" {
+				for _, arg := range pc.Args {
+					if arg == "--verbose" {
+						t.Fatalf("[raw/claude] text mode must not add --verbose: %v", pc.Args)
+					}
+				}
+			}
+		})
 	}
 }
 

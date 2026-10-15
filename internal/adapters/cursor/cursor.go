@@ -122,7 +122,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	var events []protocol.Event
 	var streamSummary string
 	var streamUsage *protocol.Usage
-	outputFormat := req.Params.OutputFormat
+	// Output format is runtime-owned: structured by default, plain text only for
+	// a --raw invocation. A custom command may still set its own format.
+	outputFormat := structuredOutputFormat(req.Raw)
 	if len(req.Command) > 0 {
 		if v := adapters.FlagValue(args, "--output-format"); v != "" {
 			outputFormat = v
@@ -218,6 +220,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	return result, nil
 }
 
+// structuredOutputFormat returns Cursor's structured output mode, or the plain
+// text fallback for a --raw invocation.
+func structuredOutputFormat(raw bool) string {
+	if raw {
+		return "text"
+	}
+	return "stream-json"
+}
+
 // JoinPrompt merges system_template and task prompt for Cursor CLI positional args.
 func JoinPrompt(system, prompt string) string {
 	switch {
@@ -237,11 +248,7 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 		"--workspace", req.Workspace,
 	}
 
-	outputFormat := p.OutputFormat
-	if outputFormat == "" {
-		outputFormat = "stream-json"
-	}
-	args = append(args, "--output-format", outputFormat)
+	args = append(args, "--output-format", structuredOutputFormat(req.Raw))
 
 	// plan wins over yolo: with a plan we are already non-interactive but
 	// read-only, so trust/force must not be added.

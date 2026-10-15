@@ -28,7 +28,7 @@ func testBee(adapter string) colony.Bee {
 	return colony.Bee{
 		Role:    adapter,
 		Adapter: adapter,
-		Params:  map[string]any{"model": "m1", "output_format": "stream-json"},
+		Params:  map[string]any{"model": "m1"},
 	}
 }
 
@@ -111,6 +111,29 @@ func TestResolveAFKInteractiveParity(t *testing.T) {
 				t.Fatalf("afk dir = %q, want %q", afk.Dir, wantAFKDir)
 			}
 		})
+	}
+}
+
+// TestResolveCarriesRawOnlyForAFK pins that the runtime-owned --raw flag is
+// carried into the plan for the AFK shape and stays off otherwise.
+func TestResolveCarriesRaw(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.Raw = true
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Raw {
+		t.Fatal("plan.Raw = false, want true")
+	}
+
+	req.Raw = false
+	plan, err = launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Raw {
+		t.Fatal("plan.Raw = true, want false by default")
 	}
 }
 

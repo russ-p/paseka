@@ -21,6 +21,8 @@ type BeeRunRequest struct {
 	InlinePrompt string
 	NoBus        bool
 	BusRequired  bool
+	// Raw requests plain-text adapter output for this run only (CLI --raw).
+	Raw bool
 }
 
 // BeeRunResult summarizes a completed bee run.
@@ -85,5 +87,6 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		Intent:       req.Intent,
 		Insights:     req.Insights,
 		InlinePrompt: req.InlinePrompt,
+		Raw:          req.Raw,
 	}, DispatchModeCLI)
 }

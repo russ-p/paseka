@@ -126,9 +126,13 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	var events []protocol.Event
 	var streamSummary string
-	outputFormat := req.Params.OutputFormat
+	// Output format is runtime-owned: structured by default, plain text only for
+	// a --raw invocation. A custom command may still set its own format.
+	outputFormat := structuredOutputFormat(req.Raw)
 	if len(req.Command) > 0 {
-		outputFormat = adapters.FlagValue(args, "--output-format")
+		if v := adapters.FlagValue(args, "--output-format"); v != "" {
+			outputFormat = v
+		}
 	}
 	if adapters.IsStreamFormat(outputFormat) {
 		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
@@ -205,6 +209,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	return result, nil
 }
 
+// structuredOutputFormat returns Claude's structured output mode, or the plain
+// text fallback for a --raw invocation.
+func structuredOutputFormat(raw bool) string {
+	if raw {
+		return "text"
+	}
+	return "stream-json"
+}
+
 // buildArgs assembles the `claude -p` headless invocation.
 //
 // Claude Code has no --workspace flag (it runs in cwd), and requires
@@ -214,10 +227,7 @@ func buildArgs(req adapters.RunRequest, prompt, systemFile string) []string {
 	p := req.Params
 	args := []string{"-p"}
 
-	outputFormat := p.OutputFormat
-	if outputFormat == "" {
-		outputFormat = "stream-json"
-	}
+	outputFormat := structuredOutputFormat(req.Raw)
 	args = append(args, "--output-format", outputFormat)
 	if outputFormat == "stream-json" {
 		// stream-json in print mode is only valid alongside --verbose.

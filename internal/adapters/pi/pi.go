@@ -111,11 +111,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("pi: write meta: %w", err)
 	}
 
-	mode := piMode(req.Params.OutputFormat)
+	// Output format is runtime-owned: json by default, text for a --raw
+	// invocation. A custom command may still set its own --mode.
+	mode := runMode(req.Raw)
 	if len(req.Command) > 0 {
-		mode = adapters.FlagValue(args, "--mode")
-		if mode == "" {
-			mode = piMode("")
+		if v := adapters.FlagValue(args, "--mode"); v != "" {
+			mode = piMode(v)
 		}
 	}
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
@@ -232,10 +233,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 func buildArgs(req adapters.RunRequest, prompt, systemFile, sessionDir string) []string {
 	p := req.Params
-	mode := piMode(req.Params.OutputFormat)
 	args := []string{
 		"-p",
-		"--mode", mode,
+		"--mode", runMode(req.Raw),
 	}
 	if sessionDir != "" && req.AgentID != "" {
 		args = append(args, "--session-dir", sessionDir, "--session-id", req.AgentID)

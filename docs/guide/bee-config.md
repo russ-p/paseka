@@ -169,9 +169,9 @@ publishes:
 | Adapter | Notes |
 | ------- | ----- |
 | `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead; OpenCode also merges into one message. |
-| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `reasoning`, `output_format`, `plan`, `binary` (no `yolo` equivalent; `paseka doctor` warns when set). Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
+| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `reasoning`, `plan`, `binary` (no `yolo` equivalent; `paseka doctor` warns when set). Output mode is runtime-owned (`--mode json`; `text` only under `bee run --raw`). Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
-| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `yolo` → `--auto`, `reasoning` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
+| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `yolo` → `--auto`, `reasoning` → `--variant`, `plan` → `--agent plan`, `binary`. Output format is runtime-owned (`--format json`; `default` only under `bee run --raw`). Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
 
 Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
@@ -211,7 +211,8 @@ Mapped by `LayerFromBee` (`internal/colony/params.go`). Defaults: `yolo: true`.
 | `binary` | string | override CLI binary name |
 | `provider` | string | pi; opencode (prefix for `--model` when model has no `/`) |
 | `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant`); cursor and claude have no mapping (doctor warns) |
-| `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode`; opencode AFK maps `json` → `--format json`, `text` → `--format default` |
+
+Adapter output format is **runtime-owned**, not a bee param. The runtime always requests each adapter's structured mode (cursor `--output-format stream-json`, pi `--mode json`, claude `--output-format stream-json --verbose`, opencode `run --format json`) so it can parse usage, session ids, and summaries. `paseka bee run --raw` is a per-invocation debugging escape hatch that falls back to plain text and logs the runtime features it degrades (usage, session tracking, summary normalization); it is never committed to a bee file.
 
 Deprecated aliases (accepted for one release; `paseka doctor` warns): `trust` and `force` collapse into `yolo`, and `thinking` aliases `reasoning`.
 

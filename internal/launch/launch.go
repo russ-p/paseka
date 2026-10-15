@@ -67,6 +67,10 @@ type Request struct {
 	// Resume suppresses the provider prompt join and the command template
 	// override, matching interactive resume semantics.
 	Resume bool
+	// Raw is the runtime-owned `--raw` escape hatch: structured output parsing is
+	// given up for plain text on this invocation only. Interactive sessions never
+	// set it.
+	Raw bool
 
 	RunDir runs.Dir
 	// EnvBase overrides the inherited environment. Nil means os.Environ().
@@ -93,6 +97,8 @@ type LaunchPlan struct {
 	Dir string
 	// Resume reports whether the plan continues an existing provider session.
 	Resume bool
+	// Raw reports whether this launch opted out of structured output.
+	Raw bool
 }
 
 // ResolveLaunch merges every launch layer into one plan.
@@ -123,6 +129,7 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 		Params:        params,
 		CommandPrompt: commandPrompt,
 		Resume:        req.Resume,
+		Raw:           req.Raw,
 		Dir:           resolveDir(req),
 		Binary:        params.Binary,
 	}
