@@ -1,0 +1,23 @@
+role: probe
+adapter: cursor
+prompt_template: probe.md
+intents:
+  - probe
+default_intent: probe
+params:
+  model: small
+  timeout: 3m
+worktree: false
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+publishes:
+  - type: INSIGHT
+    kind: context.note
+completion_contract:
+  required:
+    - type: INSIGHT
+      kind_one_of:
+        - context.note
+      count: 1

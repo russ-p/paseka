@@ -1,0 +1,11 @@
+description: Adapter smoke test — one tiny probe tick on a standing trail
+emit: task
+bee: probe
+intent: probe
+review: none
+autorun: true
+standing:
+  trace: trail-adapter-probe
+  stipend: 2
+title: "{{.Title}}"
+body: "{{.Body}}"
