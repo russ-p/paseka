@@ -71,6 +71,7 @@ type SessionView struct {
 	Workspace         string     `json:"workspace"`
 	RunDir            string     `json:"runDir"`
 	ColonyRoot        string     `json:"colonyRoot,omitempty"`
+	Model             string     `json:"model,omitempty"`
 	State             string     `json:"state"`
 	PID               int        `json:"pid,omitempty"`
 	ProviderSessionID string     `json:"providerSessionId,omitempty"`
@@ -277,6 +278,7 @@ func sessionViewFromHandle(h adapters.SessionHandle, runDir string) SessionView 
 		Workspace:         h.Workspace,
 		RunDir:            runDir,
 		ColonyRoot:        h.ColonyRoot,
+		Model:             h.Model,
 		State:             state,
 		PID:               h.PID,
 		ProviderSessionID: h.ProviderSessionID,
@@ -330,6 +332,9 @@ func overlaySessionArtifacts(view SessionView, colonyRoot string) SessionView {
 	if view.Profile == "" {
 		view.Profile = meta.Profile
 	}
+	if view.Model == "" {
+		view.Model = meta.Model
+	}
 	return view
 }
 
@@ -343,6 +348,7 @@ func sessionViewFromMeta(meta runs.SessionMeta) SessionView {
 		Workspace:         meta.Workspace,
 		RunDir:            runs.Dir{ColonyRoot: meta.ColonyRoot, TraceID: meta.TraceID, AgentID: meta.AgentID}.Root(),
 		ColonyRoot:        meta.ColonyRoot,
+		Model:             meta.Model,
 		State:             meta.State,
 		PID:               meta.PID,
 		ProviderSessionID: meta.ProviderSessionID,

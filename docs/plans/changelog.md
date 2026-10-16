@@ -2,6 +2,18 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A run records the model it answered on
+
+Which model produced a run used to be recoverable only by re-deriving it from a bee's `params`, the machine-local adapter layer, the selected profile, and the alias table — all live config, so the answer described the colony as it is now rather than as it was when the run flew. Every run now records the model it actually launched with, at the moment that model was resolved.
+
+- **The launch is recorded once, where it is resolved.** `request.json` carries `model` (the id after alias substitution, before the per-adapter argv split), `modelAlias`, `profile`, and `launchForm`. The runtime writes it, so no adapter changed and the record cannot drift from what was launched.
+- **The Console states it.** The Runs list stays five columns and takes the model as a filter term beside the adapter; the run page leads with `{bee} on {adapter} · {model}` and adds `Model` and `Profile` identity rows.
+- **An export carries it.** Markdown and HTML run blocks name the model and profile, because neither the bee's config nor the alias table travels with an archive.
+- **An empty model means something specific.** A `command` or `script` bee takes its argv from the bee and named no model; `launchForm` distinguishes that from a fallback to the adapter's default.
+- **What is deliberately absent.** `modelAlias` is recorded but not projected, and nothing reports what a provider *actually* answered on — only what the launch resolved to.
+
+- Canonical: [Architecture overview](../architecture/overview.md), [bee config](../guide/bee-config.md), [Queen Console design system](../architecture/queen-console-design-system.md)
+
 ## 2026-10 — Launch params describe the work, not the vendor
 
 A bee's `params` block now carries only colony-level decisions, and one resolver turns them into a process. Before, four code paths merged the same layered config and each adapter re-assembled its own argv and environment, so a committed `params.binary` never took effect, a profile could not turn a colony boolean off, and a param typo was a silent no-op. Resolution now happens once, in a `LaunchPlan` shared by AFK runs and interactive sessions alike.

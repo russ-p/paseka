@@ -64,6 +64,10 @@ type Request struct {
 	Task            string    `json:"task,omitempty"`
 	Intent          string    `json:"intent,omitempty"`
 	Insights        []string  `json:"insights,omitempty"`
+	Model           string    `json:"model,omitempty"`
+	ModelAlias      string    `json:"modelAlias,omitempty"`
+	Profile         string    `json:"profile,omitempty"`
+	LaunchForm      string    `json:"launchForm,omitempty"`
 	ResultPath      string    `json:"resultPath"`
 	EventLogPath    string    `json:"eventLogPath"`
 	CreatedAt       time.Time `json:"createdAt"`

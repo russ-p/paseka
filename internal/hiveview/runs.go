@@ -22,6 +22,8 @@ type RunView struct {
 	TaskID            string          `json:"taskId,omitempty"`
 	Body              string          `json:"body,omitempty"`
 	Intent            string          `json:"intent,omitempty"`
+	Model             string          `json:"model,omitempty"`
+	Profile           string          `json:"profile,omitempty"`
 	State             string          `json:"state"`
 	Summary           string          `json:"summary,omitempty"`
 	Usage             *protocol.Usage `json:"usage,omitempty"`
@@ -77,6 +79,8 @@ func runViewFromMeta(meta runs.RunMeta) RunView {
 		TaskID:            meta.TaskID,
 		Body:              meta.Task,
 		Intent:            meta.Intent,
+		Model:             meta.Model,
+		Profile:           meta.Profile,
 		State:             meta.State,
 		Summary:           meta.Summary,
 		Usage:             meta.Usage,

@@ -84,6 +84,22 @@ describe('runs list', () => {
 		expect(within(table).queryByText('run-02')).not.toBeInTheDocument();
 	});
 
+	it('filters on a hidden model, which is what an operator reaches for by name', async () => {
+		const { store } = harness();
+		render(Runs, { store });
+		await waitFor(() => expect(screen.getByLabelText('Runs')).toBeInTheDocument());
+
+		// The model is searchable rather than a column, like the adapter beside it:
+		// "which model answered" is asked far more often than a table can afford a
+		// sixth identifier column for.
+		await userEvent.type(screen.getByLabelText('Filter runs'), 'sonnet');
+
+		const table = screen.getByLabelText('Runs');
+		expect(within(table).getByText('run-01')).toBeInTheDocument();
+		expect(within(table).queryByText('run-02')).not.toBeInTheDocument();
+		expect(within(table).queryByText('run-03')).not.toBeInTheDocument();
+	});
+
 	it('says no runs rather than showing an empty table', async () => {
 		const { store } = harness([]);
 		render(Runs, { store });
@@ -113,6 +129,39 @@ describe('run detail', () => {
 		expect(within(identity).getByText('builder')).toBeInTheDocument();
 		expect(within(identity).getByText('claude-code')).toBeInTheDocument();
 		expect(within(identity).getByText('debugging')).toBeInTheDocument();
+	});
+
+	it('states the model the run launched with, in the headline and the identity rows', async () => {
+		await openRun('trace-01a0bd6963faa14f', 'run-02');
+
+		// Two places on purpose: the headline answers "what answered this" without a
+		// click, and the identity rows carry it as a copyable, truncating value.
+		const headline = screen.getByRole('heading', { name: 'run-02' }).closest('div.min-w-0');
+		expect(headline).toHaveTextContent('opencode/space-bunny-free');
+		const identity = screen.getByLabelText('Run identity');
+		expect(identity).toHaveTextContent('opencode/space-bunny-free');
+		expect(within(identity).getByText('Model')).toBeInTheDocument();
+	});
+
+	it('leaves the model out of both places for a run that recorded none', async () => {
+		// A colony whose runs recorded no model at all — a `script` bee's, say. Both
+		// reads say so, so the page cannot answer from one of them by accident.
+		const modelless = () => runList().map((run) => ({ ...run, model: undefined, profile: undefined }));
+		const store = createRunStore({
+			listRuns: async () => modelless(),
+			listRunEvents: async () => ({ entries: [], nextCursor: 0 }),
+			getRun: async (traceId, agentId) =>
+				({ ...runSummary({ traceId, agentId }), model: undefined, profile: undefined }) as RunSummary,
+			pollIntervalMs: 0
+		});
+		render(RunDetail, { store, traceId: 'trace-01a0bd6963faa14f', agentId: 'run-03' });
+		await waitFor(() => expect(store.position.total).toBeGreaterThan(0));
+
+		// A `script` or `command` bee has no launch model, so neither the headline
+		// nor the identity rows may claim the adapter's default.
+		expect(screen.queryByText('Model')).not.toBeInTheDocument();
+		expect(screen.queryByText('Profile')).not.toBeInTheDocument();
+		expect(screen.queryByText('opencode/space-bunny-free')).not.toBeInTheDocument();
 	});
 
 	it('links the run back to its trail', async () => {

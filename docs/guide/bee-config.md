@@ -224,6 +224,8 @@ When `command` is set, these params are **not** turned into CLI flags. `command`
 
 **Model aliases:** bees may set `params.model` to a key from `colony.yaml` `model_aliases` (e.g. `high`) or to a full id (e.g. `anthropic/claude-sonnet-4`, or a bare `composer-2.5`). Alias values carry the vendor so switching a profile's `model_aliases` switches vendor for every bee on that alias. Runtime resolves aliases once at dispatch/session start, then maps the id per adapter (cursor/claude and opencode pass it through; pi splits the vendor into `--provider`/`--model`). Home `config.yaml` `model_aliases` overlays colony keys on this machine. Unknown names pass through unchanged. Per-bee exceptions stay in that bee's YAML; `*.local.yaml` does not override `params`. See [colony layout](colony-layout.md) and [spec 019](../specs/019-model-aliases.md).
 
+The resolved id is recorded per run on `request.json` as `model` (plus `modelAlias` for the alias key the bee declared), so a run's model stays readable after `model_aliases`, `params`, or the active profile change. The Console shows it on the run page and an export carries it in the run's block.
+
 ---
 
 ## 6. `command` and `post_exec`

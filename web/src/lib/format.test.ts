@@ -1094,6 +1094,30 @@ describe('runIdentityRows', () => {
 		expect(rows.find((row) => row.label === 'Run dir')?.copy).toBe(true);
 	});
 
+	it('states the model the run launched with, and the profile that shaped it', () => {
+		const rows = runIdentityRows(runSummary());
+
+		// A model id is pasted into a CLI, so it copies; it can also be long enough
+		// to truncate at the run detail's two-column width.
+		expect(rows.find((row) => row.label === 'Model')).toMatchObject({
+			value: 'opencode/space-bunny-free',
+			mono: true,
+			copy: true,
+			hint: ['opencode/space-bunny-free']
+		});
+		expect(rows.find((row) => row.label === 'Profile')?.value).toBe('opencode');
+	});
+
+	it('omits the model row for a run that never reported one', () => {
+		// A `script` or `command` bee takes its argv from the bee, so there is no
+		// launch model — and the row must be absent rather than naming a default.
+		const rows = runIdentityRows(runSummary({ model: undefined, profile: undefined }));
+		const labels = rows.map((row) => row.label);
+
+		expect(labels).not.toContain('Model');
+		expect(labels).not.toContain('Profile');
+	});
+
 	it('leaves the trail unlinked when no builder is given', () => {
 		const rows = runIdentityRows(runSummary());
 

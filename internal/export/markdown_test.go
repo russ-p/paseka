@@ -137,3 +137,50 @@ func TestRenderMarkdownPreservesRunSummaryVerbatim(t *testing.T) {
 		t.Fatalf("run summary not preserved verbatim: %s", body)
 	}
 }
+
+// The model travels with the run because it is the one fact an archive cannot
+// reconstruct: the bee's config and the alias table are not in the export, and
+// both change after the run.
+func TestRenderMarkdownStatesRunModelAndProfile(t *testing.T) {
+	data := TraceExportData{
+		Trace: hiveview.TraceDetailView{
+			TraceSummaryView: hiveview.TraceSummaryView{TraceID: "trace-1"},
+		},
+		Runs: []hiveview.RunView{{
+			AgentID: "agent-1",
+			Bee:     "drone",
+			State:   "completed",
+			Model:   "deepseek/deepseek-v4-flash",
+			Profile: "pi",
+		}},
+	}
+	md, err := RenderMarkdown(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(md)
+	if !strings.Contains(body, "**Model:** `deepseek/deepseek-v4-flash`") {
+		t.Fatalf("model line missing: %s", body)
+	}
+	if !strings.Contains(body, "**Profile:** `pi`") {
+		t.Fatalf("profile line missing: %s", body)
+	}
+}
+
+// A command or script bee has no launch model, so the export stays quiet rather
+// than reporting an empty one.
+func TestRenderMarkdownOmitsModelWhenAbsent(t *testing.T) {
+	data := TraceExportData{
+		Trace: hiveview.TraceDetailView{
+			TraceSummaryView: hiveview.TraceSummaryView{TraceID: "trace-1"},
+		},
+		Runs: []hiveview.RunView{{AgentID: "agent-1", Bee: "hook", State: "completed"}},
+	}
+	md, err := RenderMarkdown(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(md), "**Model:**") {
+		t.Fatalf("empty model reported: %s", md)
+	}
+}

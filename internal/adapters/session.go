@@ -89,6 +89,7 @@ type SessionHandle struct {
 	Adapter           string
 	Binary            string   // resolved agent binary, so post-run hooks can reuse it
 	Env               []string // resolved child environment, reused by post-run provider probes
+	Model             string   // resolved model id, recorded on the session so a finished one still says what ran it
 	PID               int
 	State             SessionState
 	StartedAt         time.Time

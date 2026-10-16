@@ -973,6 +973,11 @@ export function runIdentityRows(
 	rows.push({ label: 'Agent', value: run.agentId, mono: true, copy: true, hint: [run.agentId] });
 	rows.push({ label: 'Bee', value: run.bee, mono: true });
 	rows.push({ label: 'Adapter', value: run.adapter, mono: true });
+	// The model a run actually launched with, recorded at resolution time. A `script`
+	// or `command` bee has none — its argv came from the bee, not from a launch param —
+	// so the row is absent rather than claiming the adapter's default.
+	if (run.model) rows.push({ label: 'Model', value: run.model, mono: true, copy: true, hint: [run.model] });
+	if (run.profile) rows.push({ label: 'Profile', value: run.profile, mono: true });
 	if (run.taskId) rows.push({ label: 'Task', value: run.taskId, mono: true });
 	if (run.intent) rows.push({ label: 'Intent', value: run.intent, mono: true });
 	rows.push({

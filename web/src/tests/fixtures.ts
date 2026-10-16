@@ -53,6 +53,8 @@ export function runSummary(overrides: Partial<RunSummary> = {}): RunSummary {
 		agentId: 'run-01',
 		bee: 'builder',
 		adapter: 'opencode',
+		model: 'opencode/space-bunny-free',
+		profile: 'opencode',
 		workspace: '.paseka/worktrees/trace-01a0bd6963faa14f',
 		taskId: 'task-01',
 		state: 'failed',
@@ -440,6 +442,10 @@ export function runList(): RunSummary[] {
 		runSummary({
 			agentId: 'run-01',
 			adapter: 'claude-code',
+			// A different model from its siblings, so a filter that claims to search
+			// models has something to actually separate.
+			model: 'anthropic/claude-sonnet-4.5',
+			profile: 'claude',
 			intent: 'debugging',
 			state: 'failed',
 			startedAt: '2026-09-25T18:00:00Z',

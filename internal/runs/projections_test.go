@@ -406,3 +406,70 @@ func writeHeadlessRun(t *testing.T, root, traceID, agentID string, started time.
 		}
 	}
 }
+
+// The model a run launched with is read from request.json, which the runtime
+// wrote at resolution time — a bee's params and the alias table are not the
+// record, because both can change after the fact.
+func TestLoadRunMetaCarriesResolvedModelAndProfile(t *testing.T) {
+	root := t.TempDir()
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-1", AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-1",
+		AgentID:         "agent-1",
+		Bee:             "builder",
+		Adapter:         "pi",
+		Workspace:       root,
+		ColonyRoot:      root,
+		Model:           "deepseek/deepseek-v4-flash",
+		ModelAlias:      "high",
+		Profile:         "pi",
+		LaunchForm:      "params",
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	meta, err := runs.LoadRunMeta(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Model != "deepseek/deepseek-v4-flash" {
+		t.Fatalf("model = %q", meta.Model)
+	}
+	if meta.Profile != "pi" {
+		t.Fatalf("profile = %q", meta.Profile)
+	}
+}
+
+// An interactive session records the model on session.json, and its request may
+// predate the field — the run projection still answers with the model.
+func TestLoadRunMetaFallsBackToSessionModel(t *testing.T) {
+	root := t.TempDir()
+	started := time.Now().UTC()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-1", AgentID: "agent-1"}
+	writeHeadlessRun(t, root, "trace-1", "agent-1", started, protocol.StatusCompleted, "ok")
+	if err := d.WriteSession(runs.SessionMeta{
+		SessionID: "agent-1",
+		TraceID:   "trace-1",
+		AgentID:   "agent-1",
+		Model:     "gpt-5.5-medium",
+		Profile:   "opencode",
+		State:     string(adapters.SessionCompleted),
+		StartedAt: started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	meta, err := runs.LoadRunMeta(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Model != "gpt-5.5-medium" {
+		t.Fatalf("model = %q, want the session's", meta.Model)
+	}
+}

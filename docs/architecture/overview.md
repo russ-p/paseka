@@ -51,7 +51,8 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 ├── prompt.txt         # runtime → agent: rendered prompt_template (audit / replay)
 ├── system.txt         # optional — rendered system_template (adapter injection)
 ├── summary.md         # runtime log: human-readable summary (not a success contract)
-├── meta.json          # runtime → observers: bee, adapter, workspace, profile, startedAt
+├── request.json       # runtime → observers: the resolved launch — adapter, model, profile, launchForm
+├── meta.json          # adapter → observers: bee, adapter, workspace, profile, startedAt, providerSessionId
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
 ├── session.json       # interactive only: pid, state, session metadata
 └── transcript.ndjson  # interactive only: dialogue audit log
@@ -79,6 +80,8 @@ Bees receive `{{.ArtifactsDir}}` (absolute path to the comb). Runtime announces 
 | -- | ----- | ------------ |
 | `traceId` | Whole flight trail — one bloom/nectar chain | runtime (`colony.NewTraceID`: `trace-` + 16 hex, time-ordered) |
 | `agentId` | Single adapter invocation (one `agent` process) | runtime (random hex) |
+
+**`request.json` is the resolved launch, written once at resolution time.** The runtime fills it from the single `launch.ResolveLaunch` call that assembles every layer, so it carries `model` — the model id after `model_aliases` substitution, with any deprecated `params.provider` folded in and before the per-adapter argv split — plus `modelAlias` (the alias key the bee declared, when it was one), `profile`, and `launchForm`. This is the only place a run's model is recorded, and it is the reason one can be recovered: the bee's `params`, the machine-local adapter layer, the selected profile, and the alias table are all live config that changes after the fact, so re-deriving the model from them answers a different question. An empty `model` on a `command` or `script` bee means the argv came from the bee and named no model — not that the adapter fell back to a default; `launchForm` says which case it is. `modelAlias` is recorded for the same forensic reason but is not yet projected into the console or an export.
 
 **Why colony root, not worktree:** code edits happen in `.paseka/worktrees/<traceId>/`, but agent I/O and audit trail live in `.paseka/runs/<traceId>/<agentId>/`. Prompt uses an **absolute path** to `summary.md` so Cursor CLI writing from a worktree cwd still lands in the colony runs dir.
 

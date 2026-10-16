@@ -52,14 +52,20 @@
 					<StatusBadge status={run.state} label={runStateLabel(run.state)} />
 				{/if}
 			</div>
-			{#if run}
-				<p class="text-base-content/70">
-					{run.bee} on {run.adapter}
-					{#if run.taskId}
-						for task <span class="font-mono">{run.taskId}</span>
-					{/if}
-				</p>
-			{/if}
+{#if run}
+			<p class="text-base-content/70">
+				{run.bee} on {run.adapter}
+				<!-- The model belongs in the headline rather than only in the identity
+				     rows: "which model answered" is the first question about a run that
+				     the bee's own config cannot answer after the fact. -->
+				{#if run.model}
+					· <span class="font-mono">{run.model}</span>
+				{/if}
+				{#if run.taskId}
+					for task <span class="font-mono">{run.taskId}</span>
+				{/if}
+			</p>
+		{/if}
 		</div>
 
 		<!-- Stepping through a trail's runs in order is how an operator reads what a

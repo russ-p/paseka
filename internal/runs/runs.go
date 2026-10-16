@@ -297,6 +297,7 @@ type SessionMeta struct {
 	Adapter           string          `json:"adapter"`
 	Workspace         string          `json:"workspace"`
 	ColonyRoot        string          `json:"colonyRoot"`
+	Model             string          `json:"model,omitempty"`
 	PID               int             `json:"pid,omitempty"`
 	State             string          `json:"state"`
 	Usage             *protocol.Usage `json:"usage,omitempty"`

@@ -26,6 +26,7 @@ type htmlEventView struct {
 
 type htmlRunView struct {
 	Run             hiveview.RunView
+	ModelLine       string
 	DurationLine    string
 	UsageLine       string
 	IncludeAgentLog bool
@@ -92,6 +93,12 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 	}
 	for _, run := range data.Runs {
 		view := htmlRunView{Run: run}
+		if run.Model != "" {
+			view.ModelLine = run.Model
+			if run.Profile != "" {
+				view.ModelLine += " · " + run.Profile
+			}
+		}
 		if data.Include.Has(IncludeDurations) {
 			view.DurationLine = formatWallDuration(run)
 		}
@@ -504,6 +511,7 @@ code { font-family: var(--mono); font-size: 0.85em; }
           <span class="badge {{ badgeClass .Run.State }}">{{ .Run.State }}</span>
         </div>
         <div class="id">{{ .Run.AgentID }}{{ if .Run.TaskID }} · {{ .Run.TaskID }}{{ end }}</div>
+        {{ if .ModelLine }}<div class="id">{{ .ModelLine }}</div>{{ end }}
         <div class="muted" style="font-size:0.78rem;margin-top:0.2rem">{{ formatTime .Run.StartedAt }}{{ if .Run.FinishedAt }} → {{ formatTime .Run.FinishedAt }}{{ end }}</div>
         {{ if .DurationLine }}<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">Duration: {{ .DurationLine }}</div>{{ end }}
         {{ if .UsageLine }}<div class="muted" style="font-size:0.78rem;margin-top:0.15rem">Usage: {{ .UsageLine }}</div>{{ end }}

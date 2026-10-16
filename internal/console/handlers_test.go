@@ -665,6 +665,10 @@ func TestRunsAPIHandlers(t *testing.T) {
 		TaskID:          "task-1",
 		Task:            "headless task",
 		Intent:          "feature",
+		Model:           "cursor-grok-4.6-high-fast",
+		ModelAlias:      "high",
+		Profile:         "pi",
+		LaunchForm:      "params",
 		CreatedAt:       started,
 	}); err != nil {
 		t.Fatal(err)
@@ -745,6 +749,9 @@ func TestRunsAPIHandlers(t *testing.T) {
 	}
 	if detail.ProviderSessionID != "cursor-uuid" {
 		t.Fatalf("detail.ProviderSessionID = %q", detail.ProviderSessionID)
+	}
+	if detail.Model != "cursor-grok-4.6-high-fast" || detail.Profile != "pi" {
+		t.Fatalf("detail model/profile = %q/%q", detail.Model, detail.Profile)
 	}
 
 	eventsReq := httptest.NewRequest(http.MethodGet, "/api/runs/trace-run/agent-run/events?after=0", nil)

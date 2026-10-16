@@ -23,7 +23,17 @@
 			text: (run) => formatTimestamp(run.startedAt) ?? '—',
 			searchText: (run) => run.startedAt
 		},
-		{ key: 'bee', label: 'Bee', text: (run) => run.bee, mono: true, searchText: (run) => run.adapter },
+		// The adapter and the model are searchable rather than shown: which agent
+		// answered and what it answered on are real questions, but a sixth column of
+		// identifiers is what pushed the run's own link off the right edge. The detail
+		// page states both.
+		{
+			key: 'bee',
+			label: 'Bee',
+			text: (run) => run.bee,
+			mono: true,
+			searchText: (run) => `${run.adapter} ${run.model ?? ''} ${run.profile ?? ''}`
+		},
 		{
 			key: 'state',
 			label: 'State',
@@ -63,7 +73,7 @@
 		<h1 class="text-3xl font-bold">Runs</h1>
 		<p class="text-base-content/70">
 			Every headless adapter run the colony recorded, newest first — what each bee was asked, which
-			adapter ran it, and what it spent. Open one for its events.
+			adapter and model ran it, and what it spent. Open one for its events.
 		</p>
 	</header>
 
@@ -84,7 +94,7 @@
 			rowKey={(run) => `${run.traceId}/${run.agentId}`}
 			emptyMessage="No runs recorded yet."
 			filterLabel="Filter runs"
-			filterPlaceholder="bee, adapter, trail, task, run"
+			filterPlaceholder="bee, adapter, model, profile, trail, task, run"
 			pageSize={20}
 		/>
 		<p class="text-xs text-base-content/50">

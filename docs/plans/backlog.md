@@ -62,6 +62,14 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** Release-gated by design — the aliases must survive one full release before removal, or an operator goes straight from "these keys work" to "the colony fails to load" with no released warning.
 - **Revisit when:** A release has shipped with the deprecated aliases and the following release is being cut.
 
+#### Project the recorded model alias into the console and exports
+
+- **Kind:** follow-up
+- **Source:** run model record (2026-10)
+- **Summary:** `request.json` records `modelAlias` — the alias key the bee declared, when `params.model` was one — next to the resolved `model`, and the run/session projections drop it. Carrying it into `runs.RunMeta`, `hiveview.RunView`, and the export run blocks would let a reader see both halves: that a bee asked for `high`, and that `high` meant `cursor-grok-4.6-high-fast` at the time. Today only `request.json` answers the alias half.
+- **Why deferred:** The resolved id is what an operator acts on; a second, near-duplicate model value on every run row and export is noise until the alias tables change often enough that "which key was it" becomes a real question.
+- **Revisit when:** An alias's target has been edited at least once and a run has been read after that edit, i.e. the resolution genuinely cannot be explained by the current config.
+
 ### Colony roles
 
 #### `archivist` bee — audit a finished trail

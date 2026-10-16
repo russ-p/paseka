@@ -20,6 +20,8 @@ type RunMeta struct {
 	TaskID            string          `json:"taskId,omitempty"`
 	Task              string          `json:"task,omitempty"`
 	Intent            string          `json:"intent,omitempty"`
+	Model             string          `json:"model,omitempty"`
+	Profile           string          `json:"profile,omitempty"`
 	State             string          `json:"state"`
 	Summary           string          `json:"summary,omitempty"`
 	Usage             *protocol.Usage `json:"usage,omitempty"`
@@ -48,6 +50,8 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		TaskID:     req.TaskID,
 		Task:       req.Task,
 		Intent:     req.Intent,
+		Model:      req.Model,
+		Profile:    req.Profile,
 		RunDir:     d.Root(),
 		StartedAt:  req.CreatedAt,
 	}
@@ -89,6 +93,12 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 	if meta.Usage == nil {
 		if sess, err := d.ReadSession(); err == nil && sess.Usage != nil {
 			meta.Usage = sess.Usage
+		}
+	}
+
+	if meta.Model == "" {
+		if sess, err := d.ReadSession(); err == nil {
+			meta.Model = sess.Model
 		}
 	}
 

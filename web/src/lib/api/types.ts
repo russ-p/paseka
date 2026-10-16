@@ -286,6 +286,10 @@ export interface RunSummary {
 	body?: string;
 	/** Prompt vocabulary the run was launched under. */
 	intent?: string;
+	/** The model id the launch resolved to, after model_aliases substitution. */
+	model?: string;
+	/** The config profile that shaped the launch, when one applied. */
+	profile?: string;
 	state: string;
 	summary?: string;
 	usage?: Usage;

@@ -182,3 +182,56 @@ func TestResolveLaunchSplitsPiAliasVendor(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", plan.Warnings)
 	}
 }
+
+// ModelID is what a run record keeps, so it must survive the argv mapping: pi
+// receives the vendor on its own flag and the bare id on another, and neither
+// half reconstructs the id the colony resolved on its own.
+func TestResolveLaunchKeepsWholeModelIDForTheRunRecord(t *testing.T) {
+	req := baseRequest(t, "pi", launch.AFK)
+	req.Bee.Params = map[string]any{"model": "high"}
+	req.Aliases = map[string]string{"high": "openrouter/deepseek/deepseek-r1:free"}
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ModelID != "openrouter/deepseek/deepseek-r1:free" {
+		t.Fatalf("modelId = %q, want the whole resolved id", plan.ModelID)
+	}
+	if plan.ModelAlias != "high" {
+		t.Fatalf("modelAlias = %q, want the declared alias key", plan.ModelAlias)
+	}
+}
+
+// A bee that names a model id outright declares no alias, and an empty alias is
+// what tells a reader the id came from the bee rather than the alias table.
+func TestResolveLaunchModelAliasOnlyWhenDeclared(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.Bee.Params = map[string]any{"model": "composer-2.5"}
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ModelID != "composer-2.5" {
+		t.Fatalf("modelId = %q", plan.ModelID)
+	}
+	if plan.ModelAlias != "" {
+		t.Fatalf("modelAlias = %q, want empty", plan.ModelAlias)
+	}
+}
+
+// The deprecated provider key folds into the id the record keeps, so a run
+// launched through it is still attributable.
+func TestResolveLaunchFoldsDeprecatedProviderIntoModelID(t *testing.T) {
+	req := baseRequest(t, "cursor", launch.AFK)
+	req.Bee.Params = map[string]any{"model": "gpt-4", "provider": "openai"}
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ModelID != "openai/gpt-4" {
+		t.Fatalf("modelId = %q, want openai/gpt-4", plan.ModelID)
+	}
+}

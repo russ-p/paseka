@@ -95,6 +95,12 @@ func writeMarkdownRuns(buf *bytes.Buffer, data TraceExportData) {
 		}
 		fmt.Fprintf(buf, "### %s — %s\n\n", label, run.State)
 		fmt.Fprintf(buf, "- **Agent:** `%s`\n", run.AgentID)
+		if run.Model != "" {
+			fmt.Fprintf(buf, "- **Model:** `%s`\n", run.Model)
+		}
+		if run.Profile != "" {
+			fmt.Fprintf(buf, "- **Profile:** `%s`\n", run.Profile)
+		}
 		if run.TaskID != "" {
 			fmt.Fprintf(buf, "- **Task:** `%s`\n", run.TaskID)
 		}

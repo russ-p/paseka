@@ -90,6 +90,16 @@ type LaunchPlan struct {
 	Binary string
 	// Params are the fully merged run params (bee + machine-local layers, aliases applied).
 	Params adapters.RunParams
+	// ModelID is the model this launch resolved to, as the colony names it: the id
+	// after alias substitution, with any deprecated provider folded in, but before
+	// MapModel splits a vendor off for the adapters that take one on a separate
+	// flag. Params.Model is the argv half, and a run record wants this one — it is
+	// what an operator reads, and the argv halves do not reconstruct it.
+	ModelID string
+	// ModelAlias is the alias key params.model declared, when it was one. Empty
+	// when the bee named a model id outright or declared none, which is what tells
+	// a reader whether ModelID came from the bee or from the alias table.
+	ModelAlias string
 	// Command is the rendered bee command argv, set for FormCommand/FormScript.
 	Command []string
 	// CommandPrompt is the joined prompt used in command-template substitution.
@@ -135,12 +145,15 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 	params := colony.MergeRunParamsLayers(beeLayer, req.Extra)
 	// Record whether an alias decided the model before it is substituted, so the
 	// attribution can name the alias layer rather than the layer that declared
-	// the alias key.
+	// the alias key. The declared value is kept for the same reason: a run record
+	// says which alias key resolved, not just what it resolved to.
+	declaredModel := params.Model
 	_, aliasApplied := colony.ResolveModel(params.Model, req.Aliases)
 	colony.ApplyModelAliases(&params, req.Aliases)
 
 	// The one model-id mapping: fold a deprecated provider into the model, then
-	// split the vendor off for the adapters that need it.
+	// split the vendor off for the adapters that need it. The mapping reports the
+	// whole id too, because that is the half a run record keeps.
 	mapping := MapModel(req.Adapter, params.Model, params.Provider)
 	params.Model = mapping.Model
 	params.Provider = mapping.Provider
@@ -156,12 +169,16 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 		Adapter:       req.Adapter,
 		Mode:          req.Mode,
 		Params:        params,
+		ModelID:       mapping.ModelID,
 		CommandPrompt: commandPrompt,
 		Resume:        req.Resume,
 		Raw:           req.Raw,
 		Dir:           resolveDir(req),
 		Binary:        params.Binary,
 		attribution:   attributeFields(beeLayer, req.Extra, aliasApplied),
+	}
+	if aliasApplied {
+		plan.ModelAlias = declaredModel
 	}
 	if mapping.Warning != "" {
 		plan.Warnings = append(plan.Warnings, mapping.Warning)

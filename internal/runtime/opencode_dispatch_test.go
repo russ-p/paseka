@@ -24,10 +24,23 @@ func TestDispatchOpenCodeAFKEndToEnd(t *testing.T) {
 	}
 	setupOpenCodeDispatchHome(t, repo, fake)
 
+	// `model: fast` is an alias key, so the record has to hold the resolved id and
+	// the key that resolved it — not the key alone, which is all the bee config says.
+	if err := os.WriteFile(filepath.Join(repo, ".paseka", "colony.yaml"), []byte(`slug: test-colony
+defaults:
+  prompt_template: default.md
+model_aliases:
+  fast: opencode/space-bunny-free
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	bee := `role: oc-worker
 adapter: opencode
 prompt_template: worker.md
 worktree: false
+params:
+  model: fast
 `
 	if err := os.WriteFile(filepath.Join(repo, ".paseka", "bees", "oc-worker.yaml"), []byte(bee), 0o644); err != nil {
 		t.Fatal(err)
@@ -83,6 +96,25 @@ worktree: false
 	}
 	if !strings.Contains(req.Task, "run opencode adapter") {
 		t.Fatalf("request task = %q", req.Task)
+	}
+	if req.Model != "opencode/space-bunny-free" {
+		t.Fatalf("request model = %q, want the resolved id", req.Model)
+	}
+	if req.ModelAlias != "fast" {
+		t.Fatalf("request modelAlias = %q, want the declared key", req.ModelAlias)
+	}
+	if req.LaunchForm != "params" {
+		t.Fatalf("request launchForm = %q", req.LaunchForm)
+	}
+
+	// The run projection reads the model back off disk, which is the whole point:
+	// no bee config or alias table is consulted to answer it.
+	meta, err := runs.LoadRunMeta(runDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Model != "opencode/space-bunny-free" {
+		t.Fatalf("run meta model = %q", meta.Model)
 	}
 }
 
