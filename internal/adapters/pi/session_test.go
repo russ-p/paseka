@@ -19,15 +19,14 @@ func TestSessionCommandInteractiveNoPrintOrModeFlags(t *testing.T) {
 		AgentID:       "agent-1",
 		InitialPrompt: "discuss feature",
 		Params: adapters.RunParams{
-			Binary:       fakePi,
-			Model:        "gpt-4",
-			Provider:     "gemini",
-			Thinking:     "high",
-			Plan:         true,
-			APIKey:       "secret",
-			OutputFormat: "json",
-			Trust:        true,
-			Force:        true,
+			Binary:    fakePi,
+			Model:     "gpt-4",
+			Provider:  "gemini",
+			Reasoning: "high",
+			Plan:      true,
+			APIKey:    "secret",
+			Trust:     true,
+			Force:     true,
 		},
 	})
 	if err != nil {
@@ -83,12 +82,12 @@ func TestSessionCommandDetachedStillInteractive(t *testing.T) {
 		InitialPrompt: "implement feature",
 		Detached:      true,
 		Params: adapters.RunParams{
-			Binary:   fakePi,
-			Model:    "gpt-4",
-			Provider: "gemini",
-			Thinking: "high",
-			Plan:     true,
-			APIKey:   "secret",
+			Binary:    fakePi,
+			Model:     "gpt-4",
+			Provider:  "gemini",
+			Reasoning: "high",
+			Plan:      true,
+			APIKey:    "secret",
 		},
 	})
 	if err != nil {

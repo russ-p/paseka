@@ -7,6 +7,15 @@ import (
 	"github.com/russ-p/paseka/internal/adapters"
 )
 
+// runMode returns Pi's runtime-owned print mode: structured json by default,
+// text only for a --raw invocation.
+func runMode(raw bool) string {
+	if raw {
+		return "text"
+	}
+	return "json"
+}
+
 func piMode(format string) string {
 	switch format {
 	case "text", "json", "rpc":

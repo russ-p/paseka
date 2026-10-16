@@ -265,9 +265,7 @@ adapter: cursor
 prompt_template: scout.md
 default_intent: intake
 params:
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
   plan: false
 worktree: false
 subscribes:
@@ -289,9 +287,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: true
 subscribes:
   - type: SIGNAL
@@ -312,9 +308,7 @@ system_template: hivewright-system.md
 prompt_template: hivewright-task.md
 params:
   model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: false
 publishes:
   - type: MUTATION
@@ -809,7 +803,6 @@ adapter: pi
 prompt_template: scout.md
 default_intent: intake
 params:
-  output_format: json
   plan: false
 worktree: false
 subscribes:
@@ -829,8 +822,6 @@ publishes:
 	builderBeePiYAML = `role: builder
 adapter: pi
 prompt_template: builder.md
-params:
-  output_format: json
 worktree: true
 subscribes:
   - type: SIGNAL
@@ -849,8 +840,6 @@ publishes:
 adapter: pi
 system_template: hivewright-system.md
 prompt_template: hivewright-task.md
-params:
-  output_format: json
 worktree: false
 publishes:
   - type: MUTATION
@@ -872,7 +861,7 @@ adapter: opencode
 prompt_template: scout.md
 default_intent: intake
 params:
-  output_format: json
+  yolo: true
   plan: false
 worktree: false
 subscribes:
@@ -893,7 +882,7 @@ publishes:
 adapter: opencode
 prompt_template: builder.md
 params:
-  output_format: json
+  yolo: true
 worktree: true
 subscribes:
   - type: SIGNAL
@@ -913,7 +902,7 @@ adapter: opencode
 system_template: hivewright-system.md
 prompt_template: hivewright-task.md
 params:
-  output_format: json
+  yolo: true
 worktree: false
 publishes:
   - type: MUTATION

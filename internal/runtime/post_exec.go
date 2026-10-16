@@ -10,7 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 )
 
-func postExecVars(prompt, workspace, resultText string, runDir runs.Dir, traceID, agentID, taskID, colonyRoot string) colony.CommandVars {
+func postExecVars(prompt, workspace, resultText string, runDir runs.Dir, traceID, agentID, taskID, colonyRoot string, env []string) colony.CommandVars {
 	return colony.CommandVars{
 		Prompt:     prompt,
 		Workspace:  workspace,
@@ -22,6 +22,7 @@ func postExecVars(prompt, workspace, resultText string, runDir runs.Dir, traceID
 		ResultFile: runDir.ResultPath(),
 		Meta:       runDir.MetaPath(),
 		RunDir:     runDir.Root(),
+		Env:        adapters.EnvMap(env),
 	}
 }
 
@@ -42,12 +43,13 @@ func (d *Dispatcher) runPostExec(
 	runDir runs.Dir,
 	taskID string,
 	result *adapters.RunResult,
+	env []string,
 ) {
 	if !bee.PostExec.IsSet() {
 		return
 	}
-	vars := postExecVars(prompt, workspace, resultText(result), runDir, runDir.TraceID, runDir.AgentID, taskID, runDir.ColonyRoot)
-	if err := colony.RunPostExec(ctx, bee.PostExec, vars, workspace); err != nil {
+	vars := postExecVars(prompt, workspace, resultText(result), runDir, runDir.TraceID, runDir.AgentID, taskID, runDir.ColonyRoot, env)
+	if err := colony.RunPostExec(ctx, bee.PostExec, vars, workspace, env); err != nil {
 		runtimeLog.Warn("post_exec failed",
 			logging.F("bee", bee.Role),
 			logging.F("trace", runDir.TraceID),

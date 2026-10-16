@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -31,6 +30,11 @@ func (a *Adapter) Name() string {
 	return adapterName
 }
 
+// LaunchSpec reports the adapter's built-in binary (OpenCode takes no credential env).
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{DefaultBinary: defaultBinary}
+}
+
 // Run invokes `opencode run` in headless mode inside the workspace.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {
@@ -54,10 +58,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildArgs(req, prompt)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -90,7 +91,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("opencode: write meta: %w", err)
 	}
 
-	format := runFormat(req.Params.OutputFormat)
+	// Output format is runtime-owned: json by default, default (text) for a
+	// --raw invocation. A custom command may still set its own --format.
+	format := runFormat(req.Raw)
 	if len(req.Command) > 0 {
 		if v := adapters.FlagValue(args, "--format"); v != "" {
 			format = v
@@ -99,8 +102,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = req.Workspace
-	cmd.Env = os.Environ()
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	cmd.Env = req.Env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -154,7 +157,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
+	status, reason, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -185,7 +188,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("opencode: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
+	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:            string(status),

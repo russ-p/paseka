@@ -72,7 +72,7 @@ type Bee struct {
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
 | `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
 | `default_intent` | no | Default intent when the caller omits `--intent` or passes an unknown value. When omitted, `general` is used if present in the vocabulary; otherwise the first discovered intent. |
-| `params` | no | Adapter flag map (`model`, `trust`, …). Ignored when `command` is set (runtime warns if both are present). |
+| `params` | no | Adapter flag map (`model`, `yolo`, `plan`, `reasoning`, …). Mutually exclusive with `command`: a bee that sets `command` may only carry params that equal the adapter defaults; any non-default param fails load. |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |
 | `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [bee routing](../reference/bee-routing.md). |
@@ -91,9 +91,7 @@ adapter: cursor
 sector: frontend
 params:
   model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 # Optional: override adapter flag mapping (docker-compose style).
 # command: agent -p --yolo --workspace $WORKSPACE $PROMPT
 prompt_template: builder.md   # relative to .paseka/prompts/
@@ -116,9 +114,7 @@ adapter: cursor
 prompt_template: guard.md
 params:
   model: composer-2.5
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: true
 subscribes:
   - type: MUTATION
@@ -173,9 +169,9 @@ publishes:
 | Adapter | Notes |
 | ------- | ----- |
 | `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead; OpenCode also merges into one message. |
-| `pi` | Pi CLI (`pi`). Params: `model`, `provider`, `thinking`, `output_format`, `plan`, `binary`. Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
+| `pi` | Pi CLI (`pi`). Params: `model`, `reasoning`, `plan`, `binary` (no `yolo` equivalent; `paseka doctor` warns when set). A `vendor/model[:suffix]` model is split at the first `/` into `--provider <vendor> --model <rest>`; the rest keeps inner slashes and colon suffixes. Output mode is runtime-owned (`--mode json`; `text` only under `bee run --raw`). Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
-| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model`, `provider` (joined into `--model` when needed), `thinking` → `--variant`, `output_format`, `plan` → `--agent plan`, `binary`. Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
+| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model` (native `provider/model`), `yolo` → `--auto`, `reasoning` → `--variant`, `plan` → `--agent plan`, `binary`. Output format is runtime-owned (`--format json`; `default` only under `bee run --raw`). Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
 
 Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
@@ -205,22 +201,28 @@ Script process env (in addition to `command` variable substitution): `PASEKA_TRA
 
 ## 5. `params`
 
-Mapped by `RunParamsFromBee` (`internal/colony/params.go`). Defaults: `trust: true`, `force: true`.
+Mapped by `LayerFromBee` (`internal/colony/params.go`). Defaults: `yolo: true`.
 
 | Key | Type | Used by |
 | --- | ---- | ------- |
-| `model` | string | cursor, pi, claude, opencode — alias key from `colony.yaml` `model_aliases` or raw vendor id (OpenCode prefers `provider/model`) |
-| `output_format` | string | cursor (`stream-json`, …); pi maps to `--mode`; opencode AFK maps `json` → `--format json`, `text` → `--format default` |
-| `trust` | bool | cursor; opencode AFK (`--auto`) |
-| `force` | bool | cursor; opencode AFK (`--auto`) |
-| `plan` | bool | cursor (`--plan`); pi (`--plan`); opencode (`--agent plan`) |
+| `model` | string | cursor, pi, claude, opencode — alias key from `colony.yaml` `model_aliases` or a full id: `vendor/model[:suffix]`, or a bare id with no vendor |
+| `yolo` | bool | cursor (`--trust --force`); claude (`bypassPermissions`); opencode AFK (`--auto`); pi has no equivalent (doctor warns) |
+| `plan` | bool | cursor (`--plan`); pi (`--plan`); claude (`plan`); opencode (`--agent plan`). Wins over `yolo`: the read-only plan mode drops trust/force. |
 | `binary` | string | override CLI binary name |
-| `provider` | string | pi; opencode (prefix for `--model` when model has no `/`) |
-| `thinking` | string | pi; opencode (`--variant`) |
+| `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant`); cursor and claude have no mapping (doctor warns) |
+| `env` | map | declared pass-through environment for the child and its `post_exec` hook. Values are literals or host references (`GITHUB_TOKEN: $HOST_GITHUB_TOKEN`). The declared keys are redacted in adapter logs. |
+| `env_mode` | string | `strict` opts into denying undeclared environment: the child keeps only process essentials (`PATH`, `HOME`, locale, `PASEKA_*`), declared `env`, and the injected credential. Default inherits the whole parent environment. |
+| `timeout` | duration | **AFK only**, opt-in. Bounds the run (e.g. `90s`, `5m`), measured from launch: a timeout is enforced as SIGTERM, then SIGKILL after a short grace, and the run reports `cancelled` with reason `timeout` on `status.json` so a post-mortem can tell slow from stuck. Absent means unbounded (the default). Compatible with `command`: it is process control, not an adapter flag. Interactive `bee chat` sessions ignore it — the human is the timeout. |
 
-When `command` is set, these params are **not** turned into CLI flags; runtime logs a warning if both `command` and `params` are present. `adapter` still selects result parsing, session PTY, and home-config credential injection.
+Adapter output format is **runtime-owned**, not a bee param. The runtime always requests each adapter's structured mode (cursor `--output-format stream-json`, pi `--mode json`, claude `--output-format stream-json --verbose`, opencode `run --format json`) so it can parse usage, session ids, and summaries. `paseka bee run --raw` is a per-invocation debugging escape hatch that falls back to plain text and logs the runtime features it degrades (usage, session tracking, summary normalization); it is never committed to a bee file.
 
-**Model aliases:** bees may set `params.model` to a key from `colony.yaml` `model_aliases` (e.g. `high`) or to a raw vendor id (e.g. `composer-2.5`). Runtime resolves aliases once at dispatch/session start; home `config.yaml` `model_aliases` overlays colony keys on this machine. Unknown names pass through unchanged. Per-bee exceptions stay in that bee's YAML; `*.local.yaml` does not override `params`. See [colony layout](colony-layout.md) and [spec 019](../specs/019-model-aliases.md).
+The launch plan assembles the child environment explicitly: the inherited environment, the adapter's resolved `api_key_env` credential (recorded on the plan so logs redact it), and `params.env`. `post_exec` receives that same plan environment, so a credential handed to a bee also reaches its post-run hook. `paseka doctor` warns when a machine-local adapter declares an `api_key_env` whose host variable is unset, so a credential that resolves empty is visible rather than mistaken for valid auth.
+
+The legacy aliases `trust`, `force`, `thinking`, `provider`, and `output_format` are **deprecated, not removed**: they still load for one release, and `paseka doctor` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). Removal is deferred to the next release; see the [backlog](../plans/backlog.md#remove-the-legacy-params-aliases-after-a-release-ships-with-them-deprecated).
+
+When `command` is set, these params are **not** turned into CLI flags. `command` and non-default `params` are mutually exclusive and fail at load (`paseka bee run`/`bee chat`/`init`); params that equal the adapter defaults (e.g. `yolo: true`) are accepted as a no-op. `adapter` still selects result parsing, session PTY, and home-config credential injection.
+
+**Model aliases:** bees may set `params.model` to a key from `colony.yaml` `model_aliases` (e.g. `high`) or to a full id (e.g. `anthropic/claude-sonnet-4`, or a bare `composer-2.5`). Alias values carry the vendor so switching a profile's `model_aliases` switches vendor for every bee on that alias. Runtime resolves aliases once at dispatch/session start, then maps the id per adapter (cursor/claude and opencode pass it through; pi splits the vendor into `--provider`/`--model`). Home `config.yaml` `model_aliases` overlays colony keys on this machine. Unknown names pass through unchanged. Per-bee exceptions stay in that bee's YAML; `*.local.yaml` does not override `params`. See [colony layout](colony-layout.md) and [spec 019](../specs/019-model-aliases.md).
 
 ---
 
@@ -259,6 +261,7 @@ Supports `$NAME` and `${NAME}`:
 | `$RESULT_FILE` / `${RESULT_FILE}` | dispatch + post_exec | path to `summary.md` |
 | `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
 | `$META` / `${META}` | post_exec only | path to `meta.json` |
+| `${<NAME>}` | command dispatch | any name in the launch plan's assembled environment, so custom argv shares the child's conventions (e.g. `PASEKA_RESULT_FILE`, `PASEKA_RUN_DIR` for `script`, the injected credential for LLM adapters). A fixed variable of the same name above wins. |
 
 ---
 

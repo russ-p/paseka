@@ -28,8 +28,6 @@ func TestDispatchPiAFKEndToEnd(t *testing.T) {
 adapter: pi
 prompt_template: worker.md
 worktree: false
-params:
-  output_format: json
 `
 	if err := os.WriteFile(filepath.Join(repo, ".paseka", "bees", "pi-worker.yaml"), []byte(piBee), 0o644); err != nil {
 		t.Fatal(err)

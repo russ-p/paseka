@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -31,6 +30,11 @@ func (a *Adapter) Name() string {
 	return adapterName
 }
 
+// LaunchSpec reports the adapter's built-in binary and credential env var.
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{DefaultBinary: defaultBinary, CredentialEnv: "CURSOR_API_KEY"}
+}
+
 // Run invokes `agent` in non-interactive mode.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {
@@ -54,10 +58,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildArgs(req, agentPrompt)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -92,10 +93,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Env = os.Environ()
-	if req.Params.APIKey != "" {
-		cmd.Env = append(cmd.Env, "CURSOR_API_KEY="+req.Params.APIKey)
-	}
+	cmd.Dir = req.Dir
+	cmd.Env = req.Env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -123,7 +122,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	var events []protocol.Event
 	var streamSummary string
 	var streamUsage *protocol.Usage
-	outputFormat := req.Params.OutputFormat
+	// Output format is runtime-owned: structured by default, plain text only for
+	// a --raw invocation. A custom command may still set its own format.
+	outputFormat := structuredOutputFormat(req.Raw)
 	if len(req.Command) > 0 {
 		if v := adapters.FlagValue(args, "--output-format"); v != "" {
 			outputFormat = v
@@ -170,7 +171,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
+	status, reason, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -201,7 +202,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("cursor: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
+	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:            string(status),
@@ -217,6 +218,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		result.Err = adapters.BuildRunError("cursor: agent run failed", exitCode, runErr, stderrStr, statusErr)
 	}
 	return result, nil
+}
+
+// structuredOutputFormat returns Cursor's structured output mode, or the plain
+// text fallback for a --raw invocation.
+func structuredOutputFormat(raw bool) string {
+	if raw {
+		return "text"
+	}
+	return "stream-json"
 }
 
 // JoinPrompt merges system_template and task prompt for Cursor CLI positional args.
@@ -238,16 +248,14 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 		"--workspace", req.Workspace,
 	}
 
-	outputFormat := p.OutputFormat
-	if outputFormat == "" {
-		outputFormat = "stream-json"
-	}
-	args = append(args, "--output-format", outputFormat)
+	args = append(args, "--output-format", structuredOutputFormat(req.Raw))
 
-	if p.Trust {
+	// plan wins over yolo: with a plan we are already non-interactive but
+	// read-only, so trust/force must not be added.
+	if p.Trust && !p.Plan {
 		args = append(args, "--trust")
 	}
-	if p.Force {
+	if p.Force && !p.Plan {
 		args = append(args, "--force")
 	}
 	if p.Plan {

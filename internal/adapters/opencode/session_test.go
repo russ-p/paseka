@@ -17,14 +17,12 @@ func TestSessionCommandInteractive(t *testing.T) {
 		Workspace:     "/tmp/ws",
 		InitialPrompt: "discuss feature",
 		Params: adapters.RunParams{
-			Binary:       fake,
-			Model:        "claude-sonnet-4",
-			Provider:     "anthropic",
-			Thinking:     "high",
-			Plan:         true,
-			Trust:        true,
-			Force:        true,
-			OutputFormat: "json",
+			Binary:    fake,
+			Model:     "anthropic/claude-sonnet-4",
+			Reasoning: "high",
+			Plan:      true,
+			Trust:     true,
+			Force:     true,
 		},
 	})
 	if err != nil {

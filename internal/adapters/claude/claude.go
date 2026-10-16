@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -29,6 +28,11 @@ func New() *Adapter {
 
 func (a *Adapter) Name() string {
 	return adapterName
+}
+
+// LaunchSpec reports the adapter's built-in binary and credential env var.
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{DefaultBinary: defaultBinary, CredentialEnv: "ANTHROPIC_API_KEY"}
 }
 
 // Run invokes `claude -p` in headless mode inside the workspace.
@@ -58,10 +62,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	}
 
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildArgs(req, prompt, systemFile)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -97,11 +98,8 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	cmd := exec.CommandContext(ctx, binary, args...)
 	// Claude Code operates on the current working directory; there is no
 	// --workspace flag, so the process is launched inside the workspace.
-	cmd.Dir = req.Workspace
-	cmd.Env = os.Environ()
-	if req.Params.APIKey != "" {
-		cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+req.Params.APIKey)
-	}
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	cmd.Env = req.Env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -128,9 +126,13 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	var events []protocol.Event
 	var streamSummary string
-	outputFormat := req.Params.OutputFormat
+	// Output format is runtime-owned: structured by default, plain text only for
+	// a --raw invocation. A custom command may still set its own format.
+	outputFormat := structuredOutputFormat(req.Raw)
 	if len(req.Command) > 0 {
-		outputFormat = adapters.FlagValue(args, "--output-format")
+		if v := adapters.FlagValue(args, "--output-format"); v != "" {
+			outputFormat = v
+		}
 	}
 	if adapters.IsStreamFormat(outputFormat) {
 		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
@@ -162,7 +164,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
+	status, reason, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -191,7 +193,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("claude: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
+	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:    string(status),
@@ -207,6 +209,15 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 	return result, nil
 }
 
+// structuredOutputFormat returns Claude's structured output mode, or the plain
+// text fallback for a --raw invocation.
+func structuredOutputFormat(raw bool) string {
+	if raw {
+		return "text"
+	}
+	return "stream-json"
+}
+
 // buildArgs assembles the `claude -p` headless invocation.
 //
 // Claude Code has no --workspace flag (it runs in cwd), and requires
@@ -216,10 +227,7 @@ func buildArgs(req adapters.RunRequest, prompt, systemFile string) []string {
 	p := req.Params
 	args := []string{"-p"}
 
-	outputFormat := p.OutputFormat
-	if outputFormat == "" {
-		outputFormat = "stream-json"
-	}
+	outputFormat := structuredOutputFormat(req.Raw)
 	args = append(args, "--output-format", outputFormat)
 	if outputFormat == "stream-json" {
 		// stream-json in print mode is only valid alongside --verbose.

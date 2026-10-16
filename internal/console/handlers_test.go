@@ -244,7 +244,7 @@ func writeBeeRun(t *testing.T, repo, traceID, agentID, bee string, state protoco
 		t.Fatal(err)
 	}
 	finished := startedAt.Add(time.Minute)
-	if err := d.WriteStatus(state, 0, startedAt, finished, ""); err != nil {
+	if err := d.WriteStatus(state, "", 0, startedAt, finished, ""); err != nil {
 		t.Fatal(err)
 	}
 }

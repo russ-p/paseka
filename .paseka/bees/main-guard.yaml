@@ -3,9 +3,7 @@ adapter: cursor
 prompt_template: main-guard.md
 params:
   model: medium-gpt
-  output_format: stream-json
-  trust: true
-  force: true
+  yolo: true
 worktree: false
 subscribes:
   - type: MUTATION

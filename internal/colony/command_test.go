@@ -163,6 +163,53 @@ func TestSplitCommandLineQuotes(t *testing.T) {
 	}
 }
 
+func TestCommandRenderPlanEnvVars(t *testing.T) {
+	var cmd colony.Command
+	if err := yaml.Unmarshal([]byte(`agent -p --result $PASEKA_RESULT_FILE --run ${PASEKA_RUN_DIR} $RESULT_FILE`), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	argv, err := cmd.RenderCommand(colony.CommandVars{
+		ResultFile: "/colony/.paseka/runs/trace-1/agent-1/summary.md",
+		Env: map[string]string{
+			"PASEKA_RESULT_FILE": "/colony/.paseka/runs/trace-1/agent-1/summary.md",
+			"PASEKA_RUN_DIR":     "/colony/.paseka/runs/trace-1/agent-1",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"agent", "-p", "--result", "/colony/.paseka/runs/trace-1/agent-1/summary.md",
+		"--run", "/colony/.paseka/runs/trace-1/agent-1",
+		"/colony/.paseka/runs/trace-1/agent-1/summary.md",
+	}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q", i, argv[i], want[i])
+		}
+	}
+}
+
+func TestCommandRenderFixedVarsBeatPlanEnv(t *testing.T) {
+	var cmd colony.Command
+	if err := yaml.Unmarshal([]byte(`agent $PROMPT`), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	argv, err := cmd.RenderCommand(colony.CommandVars{
+		Prompt: "the fixed prompt",
+		Env:    map[string]string{"PROMPT": "env prompt"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if argv[len(argv)-1] != "the fixed prompt" {
+		t.Fatalf("last arg = %q, want fixed prompt", argv[len(argv)-1])
+	}
+}
+
 func TestCommandRenderPostExecVars(t *testing.T) {
 	var cmd colony.Command
 	if err := yaml.Unmarshal([]byte(`notify.sh --result $RESULT --meta $META --dir $RUN_DIR`), &cmd); err != nil {

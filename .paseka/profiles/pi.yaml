@@ -5,5 +5,3 @@ model_aliases:
   medium: deepseek/deepseek-v4-flash
   high: deepseek/deepseek-v4-flash
   medium-gpt: inception/mercury-2.5
-params:
-  output_format: json

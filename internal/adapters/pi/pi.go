@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -31,6 +30,11 @@ func New() *Adapter {
 
 func (a *Adapter) Name() string {
 	return adapterName
+}
+
+// LaunchSpec reports the adapter's built-in binary (Pi takes no credential env).
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{DefaultBinary: defaultBinary}
 }
 
 // ResolveSessionLog is a stub until Pi session-dir readers land (spec 021).
@@ -71,10 +75,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		sessionDir = sessionDirFor(req.ColonyRoot, req.TraceID, req.AgentID)
 	}
 	binary, args := adapters.ResolveExec(req.Command, func() (string, []string) {
-		b := req.Params.Binary
-		if b == "" {
-			b = defaultBinary
-		}
+		b := adapters.ResolveBinary(req.Binary, req.Params.Binary, defaultBinary)
 		return b, buildArgs(req, prompt, systemFile, sessionDir)
 	})
 	if _, err := exec.LookPath(binary); err != nil {
@@ -110,17 +111,18 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("pi: write meta: %w", err)
 	}
 
-	mode := piMode(req.Params.OutputFormat)
+	// Output format is runtime-owned: json by default, text for a --raw
+	// invocation. A custom command may still set its own --mode.
+	mode := runMode(req.Raw)
 	if len(req.Command) > 0 {
-		mode = adapters.FlagValue(args, "--mode")
-		if mode == "" {
-			mode = piMode("")
+		if v := adapters.FlagValue(args, "--mode"); v != "" {
+			mode = piMode(v)
 		}
 	}
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, args)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = req.Workspace
-	cmd.Env = os.Environ()
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	cmd.Env = req.Env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -181,7 +183,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
+	status, reason, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -212,7 +214,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("pi: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
+	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:            string(status),
@@ -231,10 +233,9 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 func buildArgs(req adapters.RunRequest, prompt, systemFile, sessionDir string) []string {
 	p := req.Params
-	mode := piMode(req.Params.OutputFormat)
 	args := []string{
 		"-p",
-		"--mode", mode,
+		"--mode", runMode(req.Raw),
 	}
 	if sessionDir != "" && req.AgentID != "" {
 		args = append(args, "--session-dir", sessionDir, "--session-id", req.AgentID)
@@ -248,8 +249,8 @@ func buildArgs(req adapters.RunRequest, prompt, systemFile, sessionDir string) [
 	if p.Provider != "" {
 		args = append(args, "--provider", p.Provider)
 	}
-	if p.Thinking != "" {
-		args = append(args, "--thinking", p.Thinking)
+	if p.Reasoning != "" {
+		args = append(args, "--thinking", p.Reasoning)
 	}
 	if p.Plan {
 		args = append(args, "--plan")

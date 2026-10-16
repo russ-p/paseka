@@ -54,13 +54,13 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 
 ### Adapter launch resolution
 
-#### One resolver instead of four launch sites
+#### Remove the legacy params aliases after a release ships with them deprecated
 
 - **Kind:** follow-up
-- **Source:** launch-resolution audit (whole-tree read of the dispatch chain)
-- **Summary:** The bee → process chain resolves layered config in four duplicated bodies — `dispatch_stages.go:180/189/214` (AFK) and `manager.go:297/301/314` (interactive) — and every adapter re-assembles env/argv on its own. Three distortions follow: machine-local `adapters/<name>.yaml` always wins over bee `params.binary` because loaders fill defaults and `MergeRunParams` lets any non-zero overlay win (`params.go:11`); booleans can only merge to true, so no layer can turn a colony default off (`params.go:23-31`); unknown param keys are silently ignored (`params.go:42-75`). The bee-visible params surface also carries vendor flags as colony decisions — `output_format` is runtime-owned (usage/`providerSessionId` parsing), `trust` + `force` collapse into `yolo`, `thinking` renames to `reasoning`, and `provider` dissolves into the alias value (`vendor/model`) so profiles override the vendor through the existing `model_aliases` overlay; every bee in this repo repeats the same three boilerplate keys. Full as-is/proposed analysis is in [Adapter launch resolution](../reference/adapter-launch-resolution.md).
-- **Why deferred:** It is a behavioral change to precedence that operators rely on (machine-local currently beats the repo commit), so it wants a deliberate migration — presence-aware machine overlay first, shared `ResolveLaunch` → `LaunchPlan` second — not a refactor folded into a feature.
-- **Revisit when:** A fifth adapter lands, or an operator reports that a committed `params.binary` / param typo did not take effect.
+- **Source:** guard review of `011-deprecation-cleanup-docs` (spec 038 Phase 8)
+- **Summary:** Phase 8 keeps `trust`, `force`, `thinking`, `provider`, and `output_format` in the bee `params` schema for one full release so an operator upgrading from the previous release has a migration path — `paseka doctor` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). Once a release has shipped with the keys deprecated, remove them: move each out of `RunParamKeys` into `RemovedRunParamKeys` (`internal/colony/params.go`), drop the legacy mappings in `LayerFromBee`, the `provider` fold in `launch.MapModel`, and the deprecation warnings in `params_diagnose.go`. The `ValidateRunParamKeys` removed-key branch then names the replacement instead of failing as a bare typo.
+- **Why deferred:** Release-gated by design — the aliases must survive one full release before removal, or an operator goes straight from "these keys work" to "the colony fails to load" with no released warning.
+- **Revisit when:** A release has shipped with the deprecated aliases and the following release is being cut.
 
 ### Colony roles
 

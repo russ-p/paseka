@@ -51,7 +51,7 @@ func TestColonyOnlyProfileRemapsLLMBees(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	writeColonyProfile(t, repo, "pi", `adapter: pi
 params:
-  provider: google
+  reasoning: high
 `)
 	resetProcessProfile(t)
 	colony.SetProcessProfile(colony.ProfileSelection{Name: "pi", FlagSet: true})
@@ -73,7 +73,7 @@ params:
 	if name != "pi" {
 		t.Fatalf("scout adapter = %q", name)
 	}
-	if scout.Params["provider"] != "google" {
+	if scout.Params["reasoning"] != "high" {
 		t.Fatalf("params = %+v", scout.Params)
 	}
 	guard, _, err := ctx.LoadBee("oracle-guard")
@@ -97,6 +97,33 @@ params:
 	}
 	if customName != "cursor" {
 		t.Fatalf("command bee remapped to %q", customName)
+	}
+}
+
+// TestColonyProfileAcceptsLegacyParams pins that the deprecated params keys are
+// still accepted on a profile while the window is open, so a colony mid-migration
+// keeps loading.
+func TestColonyProfileAcceptsLegacyParams(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	writeColonyProfile(t, repo, "legacy", `adapter: pi
+params:
+  trust: true
+  thinking: high
+  provider: google
+  output_format: json
+`)
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "legacy", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scout, _, err := ctx.LoadBee("scout")
+	if err != nil {
+		t.Fatalf("legacy profile params should load: %v", err)
+	}
+	if scout.Params["provider"] != "google" || scout.Params["thinking"] != "high" {
+		t.Fatalf("params = %+v", scout.Params)
 	}
 }
 
@@ -134,6 +161,83 @@ bees:
 	if scout.Params["model"] != "special" {
 		t.Fatalf("scout params = %+v", scout.Params)
 	}
+}
+
+func TestProfileParamsOnCommandBeeFailLoad(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	writeColonyProfile(t, repo, "conflict", `adapter: cursor
+bees:
+  custom:
+    params:
+      model: special
+`)
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "conflict", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = ctx.LoadBee("custom")
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("err = %v, want command/params exclusivity failure", err)
+	}
+}
+
+func TestColonyProfileBooleanFalseBeatsBeeDefault(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	mustWriteProfile(t, filepath.Join(repo, ".paseka", "bees", "scout.yaml"),
+		"role: scout\nadapter: cursor\nparams:\n  yolo: true\n")
+	writeColonyProfile(t, repo, "off", "adapter: cursor\nparams:\n  yolo: false\n")
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "off", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bee, _, err := ctx.LoadBee("scout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), colony.AdapterExtraLayer(ctx, "cursor"))
+	if params.Trust || params.Force {
+		t.Fatalf("params = %+v, want the profile's explicit yolo false to beat the bee's true", params)
+	}
+}
+
+func TestDoctorProfileViewReportsGlobalAdapterSkips(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	writeColonyProfile(t, repo, "pi", "adapter: pi\n")
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "pi", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := ctx.DoctorProfileView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !equalStrings(view.Remapped, []string{"builder", "scout"}) {
+		t.Fatalf("remapped = %v, want scout and builder", view.Remapped)
+	}
+	if !equalStrings(view.SkippedScript, []string{"oracle-guard"}) {
+		t.Fatalf("skipped script = %v, want oracle-guard", view.SkippedScript)
+	}
+	if !equalStrings(view.SkippedCommand, []string{"custom"}) {
+		t.Fatalf("skipped command = %v, want custom", view.SkippedCommand)
+	}
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestProfileRejectsForbiddenKeysAndScript(t *testing.T) {

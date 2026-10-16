@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
-	"github.com/russ-p/paseka/internal/adapters/cursor"
 	"github.com/russ-p/paseka/internal/artifacts"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/launch"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
@@ -29,8 +29,7 @@ type preparedDispatch struct {
 	adapterName    string
 	rendered       string
 	renderedSystem string
-	params         adapters.RunParams
-	command        []string
+	plan           launch.LaunchPlan
 	runDir         runs.Dir
 	baseline       adapters.WorkspaceBaseline
 	insights       []string
@@ -74,6 +73,9 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		if err != nil {
 			return nil, err
 		}
+	}
+	if err := bee.ValidateAdapterRequirements(); err != nil {
+		return nil, err
 	}
 
 	workspace := req.Workspace
@@ -177,46 +179,34 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, fmt.Errorf("runtime: adapter %q not registered", adapterName)
 	}
 
-	params := colony.MergeRunParams(colony.RunParamsFromBee(bee), req.AdapterExtra)
 	aliases := req.ModelAliases
 	if len(aliases) == 0 {
 		aliases = manifest.ModelAliases
 	}
-	colony.ApplyModelAliases(&params, aliases)
 
-	runDirPath := runDir.Root()
-	commandPrompt := rendered
-	if adapterName == "cursor" || adapterName == "opencode" {
-		commandPrompt = cursor.JoinPrompt(renderedSystem, rendered)
-	}
-	cmdVars := colony.CommandVars{
-		Prompt:       commandPrompt,
-		SystemPrompt: renderedSystem,
-		SystemFile:   runDir.SystemPath(),
+	plan, err := launch.ResolveLaunch(launch.Request{
+		Mode:         launch.AFK,
+		Adapter:      adapterName,
+		Bee:          bee,
+		Extra:        req.AdapterExtra,
+		Aliases:      aliases,
 		Workspace:    workspace,
-		TraceID:      req.TraceID,
-		AgentID:      agentID,
 		TaskID:       req.TaskID,
-		ColonyRoot:   colonyRoot,
-		ResultFile:   resultFile,
-		RunDir:       runDirPath,
+		Prompt:       rendered,
+		SystemPrompt: renderedSystem,
+		RunDir:       runDir,
+		Raw:          req.Raw,
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	var command []string
-	if bee.Command.IsSet() {
-		if bee.HasParams() {
-			runtimeLog.Warn("bee command overrides params",
-				logging.F("bee", bee.Role),
-				logging.F("trace", req.TraceID),
-				logging.F("agent", agentID),
-			)
-		}
-		command, err = bee.Command.RenderCommand(cmdVars)
-		if err != nil {
-			return nil, fmt.Errorf("runtime: render command: %w", err)
-		}
-	} else if adapterName == "script" {
-		return nil, fmt.Errorf("runtime: bee %q: adapter script requires command", bee.Role)
+	for _, warning := range plan.Warnings {
+		runtimeLog.Warn("launch warning",
+			logging.F("bee", bee.Role),
+			logging.F("trace", req.TraceID),
+			logging.F("agent", agentID),
+			logging.F("warning", warning),
+		)
 	}
 
 	if err := runDir.Prepare(); err != nil {
@@ -255,13 +245,27 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, fmt.Errorf("runtime: write status: %w", err)
 	}
 
+	if req.Raw {
+		if degraded := adapters.RawOutputDegradedFeatures(adapterName); len(degraded) > 0 {
+			note := "raw output: degraded " + strings.Join(degraded, ", ")
+			runtimeLog.Warn("raw output: structured parsing disabled for this run",
+				logging.F("adapter", adapterName),
+				logging.F("bee", bee.Role),
+				logging.F("trace", req.TraceID),
+				logging.F("agent", agentID),
+				logging.F("degraded", strings.Join(degraded, ", ")),
+			)
+			_ = runDir.AppendStatusNote(note)
+		}
+	}
+
 	runtimeLog.Info("adapter run",
 		logging.F("adapter", adapterName),
 		logging.F("bee", bee.Role),
 		logging.F("trace", req.TraceID),
 		logging.F("agent", agentID),
 		logging.F("workspace", workspace),
-		logging.F("run_dir", RelRunDir(colonyRoot, runDirPath)),
+		logging.F("run_dir", RelRunDir(colonyRoot, runDir.Root())),
 	)
 
 	baseline, baselineErr := adapters.CaptureWorkspaceBaseline(ctx, workspace)
@@ -285,8 +289,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		adapterName:    adapterName,
 		rendered:       rendered,
 		renderedSystem: renderedSystem,
-		params:         params,
-		command:        command,
+		plan:           plan,
 		runDir:         runDir,
 		baseline:       baseline,
 		insights:       insights,
@@ -295,6 +298,14 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 }
 
 func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*adapters.RunResult, error) {
+	// params.timeout is measured from launch: bound the run context so the
+	// adapter process is brought down (SIGTERM, then SIGKILL after the grace)
+	// and reports cancelled/timeout instead of holding a worker slot forever.
+	if p.plan.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.plan.Timeout)
+		defer cancel()
+	}
 	return p.adapter.Run(ctx, adapters.RunRequest{
 		Bee:          p.bee.Role,
 		Prompt:       p.rendered,
@@ -303,8 +314,13 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Workspace:    p.workspace,
 		Sector:       p.req.Sector,
 		SectorPath:   p.req.SectorPath,
-		Params:       p.params,
-		Command:      p.command,
+		Params:       p.plan.Params,
+		Command:      p.plan.Command,
+		Binary:       p.plan.Binary,
+		Env:          p.plan.Env,
+		Dir:          p.plan.Dir,
+		Raw:          p.plan.Raw,
+		RedactedEnv:  p.plan.RedactedEnv,
 		TraceID:      p.req.TraceID,
 		AgentID:      p.agentID,
 		TaskID:       p.req.TaskID,
@@ -364,7 +380,7 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 		d.enforceCompletionContract(p.bee, runEvents, result)
 	}
 
-	d.runPostExec(ctx, p.bee, p.rendered, p.workspace, p.runDir, p.req.TaskID, result)
+	d.runPostExec(ctx, p.bee, p.rendered, p.workspace, p.runDir, p.req.TaskID, result, p.plan.Env)
 
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
 		ColonyRoot: p.colonyRoot,

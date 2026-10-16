@@ -29,6 +29,11 @@ type CommandVars struct {
 	ResultFile   string // path to summary.md (human-readable run log)
 	Meta         string // path to meta.json
 	RunDir       string // .paseka/runs/<traceId>/<agentId>/
+	// Env carries the launch plan's assembled environment as name/value pairs,
+	// so a command template can reference the same names the child process sees
+	// (PASEKA_* for script, the injected credential for the LLM adapters). The
+	// fixed fields above win on a name collision.
+	Env map[string]string
 }
 
 // IsSet reports whether the bee declares a custom command.
@@ -113,6 +118,11 @@ func substituteCommandVars(s string, vars CommandVars) string {
 		"RESULT_FILE":   vars.ResultFile,
 		"META":          vars.Meta,
 		"RUN_DIR":       vars.RunDir,
+	}
+	for name, val := range vars.Env {
+		if _, ok := replacements[name]; !ok {
+			replacements[name] = val
+		}
 	}
 	for name, val := range replacements {
 		s = strings.ReplaceAll(s, "${"+name+"}", val)

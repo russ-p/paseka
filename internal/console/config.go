@@ -7,6 +7,8 @@ import (
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/gate/telegram"
+	"github.com/russ-p/paseka/internal/launch"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // Sources a ConfigValue can name. They are display-ready strings because the
@@ -50,6 +52,20 @@ type ConfigAdapterView struct {
 	// Configured reports whether adapters/<name>.yaml exists, as opposed to
 	// every value here having been inferred from the loader's defaults.
 	Configured bool `json:"configured"`
+	// Attribution is the resolved launch attribution for this adapter, mirrored
+	// from launch.AttributionField. It is the same surface `paseka doctor
+	// --explain` prints, so the panel shows declared-vs-default per setting from
+	// the resolver the runtime uses rather than a second, drifting read.
+	Attribution []ConfigAttributionView `json:"attribution"`
+}
+
+// ConfigAttributionView is one launch setting and the layer that decided it.
+// The field and layer strings come straight from the launch package, so the
+// Console and doctor cannot name a source differently.
+type ConfigAttributionView struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
+	Layer string `json:"layer"`
 }
 
 // ConfigNotifyView is one outbound push category and the mode it delivers in.
@@ -272,16 +288,16 @@ func telegramConfigView(slug string) (ConfigTelegramView, error) {
 
 func adapterViews(ctx colony.Context) []ConfigAdapterView {
 	views := []ConfigAdapterView{
-		adapterView(ctx.Slug, "cursor", ctx.Cursor.Binary, ctx.Cursor.APIKeyEnv),
-		adapterView(ctx.Slug, "pi", ctx.Pi.Binary, ctx.Pi.APIKeyEnv),
-		adapterView(ctx.Slug, "claude", ctx.Claude.Binary, ctx.Claude.APIKeyEnv),
-		adapterView(ctx.Slug, "opencode", ctx.OpenCode.Binary, ""),
+		adapterView(ctx, "cursor", ctx.Cursor.Binary, ctx.Cursor.APIKeyEnv),
+		adapterView(ctx, "pi", ctx.Pi.Binary, ctx.Pi.APIKeyEnv),
+		adapterView(ctx, "claude", ctx.Claude.Binary, ctx.Claude.APIKeyEnv),
+		adapterView(ctx, "opencode", ctx.OpenCode.Binary, ""),
 	}
 	return views
 }
 
-func adapterView(slug, name, binary, apiKeyEnv string) ConfigAdapterView {
-	present, declared := colony.AdapterConfigDeclared(slug, name)
+func adapterView(ctx colony.Context, name, binary, apiKeyEnv string) ConfigAdapterView {
+	present, declared := colony.AdapterConfigDeclared(ctx.Slug, name)
 
 	env := ConfigValue{Value: strings.TrimSpace(apiKeyEnv), Source: configSourceDefault}
 	switch {
@@ -291,21 +307,84 @@ func adapterView(slug, name, binary, apiKeyEnv string) ConfigAdapterView {
 		env.Source = configSourceHome
 	}
 
-	binarySource := configSourceDefault
-	if declared["binary"] {
-		binarySource = configSourceHome
-	}
+	// The binary's source is the resolver's own attribution, not a second read
+	// of the file: the panel and the run then agree even when a profile, rather
+	// than the base machine file, decided the value.
+	attribution := adapterAttribution(ctx, name)
 
 	return ConfigAdapterView{
 		Name: name,
 		Binary: ConfigValue{
 			Value:  binary,
-			Source: binarySource,
+			Source: configSourceForLayer(attributionLayer(attribution, launch.FieldBinary)),
 		},
 		APIKeyEnv: env,
 		APIKeySet: env.Value != "" && strings.TrimSpace(os.Getenv(env.Value)) != "",
 		// Present is reported beside the sources rather than replacing them: it
 		// answers whether the operator has a file to edit at all.
-		Configured: present,
+		Configured:  present,
+		Attribution: attribution,
+	}
+}
+
+// adapterAttribution resolves one adapter with no bee, so the machine-local file
+// and the adapter's built-in defaults are the only layers in play — exactly the
+// declared-vs-default question the panel asks. A resolution failure leaves the
+// list empty rather than failing the whole config read: the panel's direct reads
+// still answer, and an adapter that cannot resolve is a fact worth blaming on
+// the adapter, not on the settings page.
+func adapterAttribution(ctx colony.Context, name string) []ConfigAttributionView {
+	plan, err := launch.ResolveLaunch(launch.Request{
+		Mode:      launch.AFK,
+		Adapter:   name,
+		Extra:     colony.AdapterExtraLayer(ctx, name),
+		Aliases:   ctx.ModelAliases,
+		Workspace: ctx.ColonyRoot,
+		RunDir: runs.Dir{
+			ColonyRoot: ctx.ColonyRoot,
+			TraceID:    "config",
+			AgentID:    "config",
+		},
+	})
+	if err != nil {
+		return []ConfigAttributionView{}
+	}
+	fields := plan.Attribution()
+	out := make([]ConfigAttributionView, 0, len(fields))
+	for _, field := range fields {
+		out = append(out, ConfigAttributionView{
+			Field: field.Field,
+			Value: field.Value,
+			Layer: string(field.Layer),
+		})
+	}
+	return out
+}
+
+// attributionLayer finds one field's winning layer, defaulting to the adapter
+// default when the field is absent (an unrecognized adapter, or a failed
+// resolution that returned no rows).
+func attributionLayer(fields []ConfigAttributionView, name string) launch.Layer {
+	for _, field := range fields {
+		if field.Field == name {
+			return launch.Layer(field.Layer)
+		}
+	}
+	return launch.LayerDefault
+}
+
+// configSourceForLayer maps a resolver layer to this view's source vocabulary so
+// the settings page keeps reading the same strings while the value comes from
+// the shared attribution.
+func configSourceForLayer(layer launch.Layer) string {
+	switch layer {
+	case launch.LayerMachine:
+		return configSourceHome
+	case launch.LayerBee:
+		return "bee"
+	case launch.LayerAlias:
+		return "alias"
+	default:
+		return configSourceDefault
 	}
 }

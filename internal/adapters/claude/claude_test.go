@@ -16,10 +16,9 @@ func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/colony/worktree",
 		Params: adapters.RunParams{
-			Model:        "claude-opus-4-8",
-			OutputFormat: "stream-json",
-			Trust:        true,
-			Force:        true,
+			Model: "claude-opus-4-8",
+			Trust: true,
+			Force: true,
 		},
 	}
 	args := buildArgs(req, "implement feature", "")
@@ -37,6 +36,30 @@ func TestBuildArgs(t *testing.T) {
 	for i := range want {
 		if args[i] != want[i] {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, args[i], want[i], args)
+		}
+	}
+}
+
+func TestBuildArgsRawDropsVerbose(t *testing.T) {
+	req := adapters.RunRequest{Workspace: "/ws", Raw: true}
+	args := buildArgs(req, "debug", "")
+	want := []string{
+		"-p",
+		"--output-format", "text",
+		"--permission-mode", "acceptEdits",
+		"debug",
+	}
+	if len(args) != len(want) {
+		t.Fatalf("got %d args, want %d: %v", len(args), len(want), args)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, args[i], want[i], args)
+		}
+	}
+	for _, a := range args {
+		if a == "--verbose" {
+			t.Fatalf("raw text must not add --verbose: %v", args)
 		}
 	}
 }

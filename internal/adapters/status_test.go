@@ -11,22 +11,34 @@ import (
 
 func TestResolveStatusProcessOutcome(t *testing.T) {
 	t.Run("completed on clean exit", func(t *testing.T) {
-		status, msg := adapters.ResolveStatus(nil, nil)
-		if status != protocol.StatusCompleted || msg != "" {
-			t.Fatalf("status=%q msg=%q", status, msg)
+		status, reason, msg := adapters.ResolveStatus(nil, nil)
+		if status != protocol.StatusCompleted || reason != "" || msg != "" {
+			t.Fatalf("status=%q reason=%q msg=%q", status, reason, msg)
 		}
 	})
 	t.Run("failed on run error", func(t *testing.T) {
 		runErr := errors.New("exit 1")
-		status, _ := adapters.ResolveStatus(nil, runErr)
-		if status != protocol.StatusFailed {
-			t.Fatalf("status=%q", status)
+		status, reason, _ := adapters.ResolveStatus(nil, runErr)
+		if status != protocol.StatusFailed || reason != "" {
+			t.Fatalf("status=%q reason=%q", status, reason)
 		}
 	})
 	t.Run("cancelled on context cancel", func(t *testing.T) {
-		status, _ := adapters.ResolveStatus(context.Canceled, nil)
+		status, reason, _ := adapters.ResolveStatus(context.Canceled, nil)
+		if status != protocol.StatusCancelled || reason != "" {
+			t.Fatalf("status=%q reason=%q, want cancelled without reason", status, reason)
+		}
+	})
+	t.Run("timeout on context deadline", func(t *testing.T) {
+		status, reason, msg := adapters.ResolveStatus(context.DeadlineExceeded, nil)
 		if status != protocol.StatusCancelled {
-			t.Fatalf("status=%q", status)
+			t.Fatalf("status=%q, want cancelled", status)
+		}
+		if reason != protocol.ReasonTimeout {
+			t.Fatalf("reason=%q, want %q", reason, protocol.ReasonTimeout)
+		}
+		if msg == "" {
+			t.Fatal("timeout should carry a diagnostic message")
 		}
 	})
 }

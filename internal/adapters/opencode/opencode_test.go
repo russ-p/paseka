@@ -35,45 +35,22 @@ func TestJoinPrompt(t *testing.T) {
 	}
 }
 
-func TestResolveModel(t *testing.T) {
-	tests := []struct {
-		name string
-		p    adapters.RunParams
-		want string
-	}{
-		{name: "provider slash model", p: adapters.RunParams{Model: "anthropic/claude-sonnet-4"}, want: "anthropic/claude-sonnet-4"},
-		{name: "join provider", p: adapters.RunParams{Model: "claude-sonnet-4", Provider: "anthropic"}, want: "anthropic/claude-sonnet-4"},
-		{name: "model only", p: adapters.RunParams{Model: "claude-sonnet-4"}, want: "claude-sonnet-4"},
-		{name: "slash wins over provider", p: adapters.RunParams{Model: "opencode/gpt-5", Provider: "anthropic"}, want: "opencode/gpt-5"},
-		{name: "empty", p: adapters.RunParams{}, want: ""},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveModel(tc.p); got != tc.want {
-				t.Fatalf("resolveModel = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/colony/worktree",
 		AgentID:   "agent-1",
 		Params: adapters.RunParams{
-			Model:        "claude-sonnet-4",
-			Provider:     "anthropic",
-			OutputFormat: "json",
-			Trust:        true,
-			Force:        true,
-			Plan:         true,
-			Thinking:     "high",
+			Model:     "anthropic/claude-sonnet-4",
+			Trust:     true,
+			Force:     true,
+			Plan:      true,
+			Reasoning: "high",
 		},
 	}
 	args := buildArgs(req, "implement feature")
+	// plan wins over yolo: --auto is suppressed while --agent plan is set.
 	want := []string{
 		"run", "--format", "json", "--dir", "/colony/worktree",
-		"--auto",
 		"--title", "agent-1",
 		"--agent", "plan",
 		"--model", "anthropic/claude-sonnet-4",
@@ -83,11 +60,33 @@ func TestBuildArgs(t *testing.T) {
 	assertArgs(t, args, want)
 }
 
+func TestBuildArgsYoloWithoutPlan(t *testing.T) {
+	req := adapters.RunRequest{
+		Workspace: "/ws",
+		AgentID:   "a1",
+		Params:    adapters.RunParams{Trust: true, Force: true},
+	}
+	args := buildArgs(req, "task")
+	var sawAuto bool
+	for _, arg := range args {
+		if arg == "--auto" {
+			sawAuto = true
+		}
+		if arg == "--agent" {
+			t.Fatalf("did not expect --agent without plan: %v", args)
+		}
+	}
+	if !sawAuto {
+		t.Fatalf("expected --auto with yolo and no plan: %v", args)
+	}
+}
+
 func TestBuildArgsNoAutoWhenUntrusted(t *testing.T) {
 	req := adapters.RunRequest{
 		Workspace: "/ws",
 		AgentID:   "a1",
-		Params:    adapters.RunParams{Trust: false, Force: false, OutputFormat: "text"},
+		Raw:       true,
+		Params:    adapters.RunParams{Trust: false, Force: false},
 	}
 	args := buildArgs(req, "task")
 	for _, arg := range args {
@@ -151,11 +150,10 @@ func TestAdapterRunEndToEnd(t *testing.T) {
 		TraceID:      "trace-oc-1",
 		AgentID:      "agent-oc-1",
 		Params: adapters.RunParams{
-			Binary:       fake,
-			OutputFormat: "json",
-			Trust:        true,
-			Force:        true,
-			Model:        "anthropic/claude-sonnet-4",
+			Binary: fake,
+			Trust:  true,
+			Force:  true,
+			Model:  "anthropic/claude-sonnet-4",
 		},
 	})
 	if err != nil {

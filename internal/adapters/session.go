@@ -41,6 +41,13 @@ type SessionRequest struct {
 	// Detached is retained for compatibility but ignored by session adapters.
 	// StartDetached means "no local terminal attach / use PTY hub", not headless -p.
 	Detached bool
+	// Binary, Env, and Dir are resolved by the launch resolver. When set they
+	// are authoritative: the adapter must not re-read machine config or the
+	// parent environment. An empty Dir means "inherit the parent cwd" and a nil
+	// Env means "inherit the parent environment".
+	Binary string
+	Env    []string
+	Dir    string
 }
 
 // SessionPromptDelivery describes an initial prompt that must be delivered to
@@ -80,7 +87,8 @@ type SessionHandle struct {
 	ColonyRoot        string
 	Bee               string
 	Adapter           string
-	Binary            string // resolved agent binary, so post-run hooks can reuse it
+	Binary            string   // resolved agent binary, so post-run hooks can reuse it
+	Env               []string // resolved child environment, reused by post-run provider probes
 	PID               int
 	State             SessionState
 	StartedAt         time.Time

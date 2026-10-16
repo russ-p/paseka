@@ -40,7 +40,7 @@ type RunResult struct {
 
 Adapters live under `internal/adapters/<name>/`. Registration is declarative via `adapter` field in bee config.
 
-How a bee becomes a binary, argv, and env — config layer precedence (repo, profile, machine-local), `params` vs `command`, credentials, and the proposed single-resolver model: **[Adapter launch resolution](../reference/adapter-launch-resolution.md)**.
+How a bee becomes a binary, argv, and env — config layer precedence (repo, profile, machine-local), `params` vs `command`, credentials, and the single-resolver model: **[Adapter launch resolution](../reference/adapter-launch-resolution.md)**.
 
 ### 1.1 File-based agent IPC (`runs/`)
 
@@ -106,10 +106,9 @@ Agents build one JSON object per event, pass it on stdin, and receive machine-re
 | `Workspace` | `--workspace <path>` (repo root or `.paseka/worktrees/<traceId>/`) |
 | `Prompt` | positional prompt argument (`system_template` + task, newline-separated, when system is set) |
 | `params.model` | `--model <id>` (resolved vendor id after `model_aliases` lookup) |
-| `params.trust` (default true) | `--trust` |
-| `params.force` (default true) | `--force` |
-| `params.output_format` (default `stream-json`) | `--output-format stream-json` |
-| `params.mode: plan` | `--plan` |
+| `params.yolo` (default true) | `--trust --force` (suppressed when `params.plan`) |
+| output format (runtime-owned) | `--output-format stream-json` (unless `bee run --raw`) |
+| `params.plan` | `--plan` |
 | API key | `CURSOR_API_KEY` env or `--api-key` from home config |
 
 Default non-interactive invocation (same spirit as fizman script):
@@ -127,7 +126,7 @@ agent -p --trust --force \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `agent` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root). Pre-existing dirty files are not attributed to the run.
-5. **Stream JSON** — stdout when `output_format: stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). When stream (or compact JSON) lines include `session_id`, the adapter persists **`providerSessionId`** on `result.json` and `meta.json` so later export/inspect can associate the run with Cursor’s native chat without copying the vendor store. `paseka export --include agent-logs` resolves a per-run **Agent log** through `SessionLogResolver` at read time: Cursor reads `~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl` (UUID = `providerSessionId`; workspace slug first, then glob). Missing provider data never fails export. Pi still stubs that seam. Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
+5. **Stream JSON** — stdout, because the runtime always requests `--output-format stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). When stream (or compact JSON) lines include `session_id`, the adapter persists **`providerSessionId`** on `result.json` and `meta.json` so later export/inspect can associate the run with Cursor’s native chat without copying the vendor store. `paseka export --include agent-logs` resolves a per-run **Agent log** through `SessionLogResolver` at read time: Cursor reads `~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl` (UUID = `providerSessionId`; workspace slug first, then glob). Missing provider data never fails export. Pi still stubs that seam. Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandContext` (no tmux — process wait replaces the shell's `tmux wait-for` pattern).
@@ -145,22 +144,12 @@ Optional: Cursor's built-in `--worktree` flag exists but Paseka prefers **`.pase
 | `Prompt` | positional prompt argument |
 | run directory | `--session-dir <runDir>/pi-sessions` (AFK and interactive) |
 | `agentId` | `--session-id <agentId>` (AFK and interactive) |
-| `params.model` | `--model <pattern>` |
-| `params.provider` | `--provider <name>` |
-| `params.thinking` | `--thinking <level>` |
-| `params.output_format` | `--mode <mode>` (AFK only; see below) |
+| `params.model` | `--model <pattern>`; a `vendor/model[:suffix]` id splits at the **first** `/` into `--provider <vendor> --model <rest>`, keeping inner slashes and colon suffixes |
+| `params.reasoning` | `--thinking <level>` |
+| output format (runtime-owned) | `--mode json` (AFK; `text` only under `bee run --raw`) |
 | `params.plan` | `--plan` |
 | `params.binary` | CLI binary name (default `pi`) |
 | API key | `api_key_env` from `~/.config/paseka/<slug>/adapters/pi.yaml` → `--api-key` |
-
-**`output_format` → `--mode` (AFK only):**
-
-| `params.output_format` | Pi `--mode` |
-| ---------------------- | ----------- |
-| `text` | `text` |
-| `json` | `json` |
-| `rpc` | `rpc` |
-| empty or any other value | `json` (default) |
 
 Default non-interactive invocation:
 
@@ -173,7 +162,7 @@ pi -p --mode json \
   "$PROMPT"
 ```
 
-**Ignored params:** Pi does not map Paseka `trust` or `force` (no equivalent flags).
+**Ignored params:** Pi has no `yolo` equivalent (no `--trust`/`--force` flag); `paseka doctor` warns when `params.yolo` is set.
 
 **Result collection:**
 
@@ -203,10 +192,8 @@ Example bee config:
 role: scout
 adapter: pi
 params:
-  model: gemini-2.5-pro
-  provider: google
-  thinking: high
-  output_format: json
+  model: google/gemini-2.5-pro
+  reasoning: high
 prompt_template: scout.md
 ```
 
@@ -225,9 +212,9 @@ Claude TUI through the shared PTY session layer.
 | Prompt | positional prompt after `-p` |
 | `system_template` | `--append-system-prompt-file <runDir>/system.txt` |
 | `params.model` | `--model <id>` |
-| `params.output_format` | `--output-format` (`stream-json` default; adds `--verbose`) |
+| output format (runtime-owned) | `--output-format stream-json --verbose` |
 | `params.plan` | `--permission-mode plan` |
-| `params.trust` or `params.force` | `--permission-mode bypassPermissions` |
+| `params.yolo` (unless `params.plan`) | `--permission-mode bypassPermissions` |
 | default permissions | `--permission-mode acceptEdits` |
 | API key | `ANTHROPIC_API_KEY` from machine-local adapter config |
 
@@ -257,11 +244,11 @@ Go implementation: `internal/adapters/claude/`.
 | `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
 | `Workspace` | `--dir <path>` (AFK `run`) and process cwd (AFK and HITL) |
 | Prompt + `system_template` | joined into one message (OpenCode has no append-system flag) |
-| `params.model` | `--model <id>`; if the id has no `/` and `params.provider` is set, `provider/model` |
-| `params.trust` / `params.force` (AFK) | `--auto` |
+| `params.model` | `--model <id>` (OpenCode consumes a native `provider/model` id) |
+| `params.yolo` (AFK, unless `params.plan`) | `--auto` |
 | `params.plan` | `--agent plan` (built-in read-only Plan primary; not Paseka `agentId`) |
-| `params.output_format` | AFK `--format json` (default) or `--format default` when `text` |
-| `params.thinking` | `--variant` (reasoning effort) |
+| output format (runtime-owned) | AFK `--format json` (`default` only under `bee run --raw`) |
+| `params.reasoning` | `--variant` (reasoning effort) |
 | `params.binary` | CLI binary name (default `opencode`) |
 | Auth | `opencode auth login`, provider env, or project `.env` (no `--api-key`) |
 | `agentId` (AFK) | `--title <agentId>` for later list correlation |
@@ -303,7 +290,6 @@ role: scout
 adapter: opencode
 params:
   model: anthropic/claude-sonnet-4
-  output_format: json
 prompt_template: scout.md
 ```
 

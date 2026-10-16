@@ -140,8 +140,7 @@ worktree: true
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: MUTATION
     kind: code.proposal.isolated
@@ -205,8 +204,7 @@ worktree: false
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: MUTATION
     kind: code.proposal.root
@@ -263,8 +261,7 @@ worktree: false
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: MUTATION
     kind: code.proposal.isolated
@@ -284,8 +281,7 @@ worktree: false
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: MUTATION
     kind: code.proposal.root
@@ -343,8 +339,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 `)
 
 	pub := &recordingPublisher{}

@@ -29,6 +29,7 @@ func newBeeRunCmd() *cobra.Command {
 		intent       string
 		inlinePrompt string
 		noBus        bool
+		raw          bool
 	)
 	cmd := &cobra.Command{
 		Use:   "run <role>",
@@ -55,6 +56,7 @@ func newBeeRunCmd() *cobra.Command {
 				Intent:       intent,
 				InlinePrompt: inlinePrompt,
 				NoBus:        noBus,
+				Raw:          raw,
 			})
 			if err != nil {
 				return err
@@ -75,6 +77,7 @@ func newBeeRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().BoolVar(&noBus, "no-bus", false, "skip NATS publish (file-only run)")
+	cmd.Flags().BoolVar(&raw, "raw", false, "request plain-text adapter output (degrades usage/session parsing; debug only)")
 	return cmd
 }
 

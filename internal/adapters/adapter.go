@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
 )
@@ -31,19 +32,66 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	Profile      string
+	// Raw is the runtime-owned `--raw` escape hatch: the adapter requests plain
+	// text instead of its structured mode, so usage and providerSessionId
+	// accounting degrade for this invocation only.
+	Raw bool
+	// Binary, Env, and Dir are resolved by the launch resolver. When set they
+	// are authoritative: the adapter must not re-read machine config or the
+	// parent environment. An empty Dir means "inherit the parent cwd" and a nil
+	// Env means "inherit the parent environment".
+	Binary string
+	Env    []string
+	Dir    string
+	// RedactedEnv names plan env keys whose values must never appear in logs:
+	// the injected credential and the declared pass-through keys.
+	RedactedEnv []string
 }
 
-// RunParams holds adapter CLI flags and shared bee params.
+// RunParams holds adapter CLI flags and shared bee params. Output format is
+// intentionally absent: the runtime always requests the adapter's structured
+// mode (see RunRequest.Raw for the plain-text escape hatch).
 type RunParams struct {
-	Model        string
-	OutputFormat string // text | json | stream-json | rpc
-	Trust        bool
-	Force        bool
-	Plan         bool
-	Binary       string // adapter binary override
-	APIKey       string // optional; from machine-local api_key_env when set
-	Provider     string
-	Thinking     string
+	Model     string
+	Trust     bool
+	Force     bool
+	Plan      bool
+	Binary    string // adapter binary override
+	APIKey    string // optional; from machine-local api_key_env when set
+	Provider  string // vendor half of a `vendor/model` id, derived per adapter
+	Reasoning string // low | medium | high | passthrough
+	// Env is the declared pass-through environment from params.env. Values are
+	// literals or `$HOST_VAR` references resolved against the inherited
+	// environment at launch.
+	Env map[string]string
+	// EnvMode selects the child environment policy. The empty string inherits
+	// the parent environment (undeclared keys keep flowing); EnvModeStrict strips
+	// every undeclared key.
+	EnvMode string
+	// Timeout bounds an AFK run, measured from launch. Zero means unbounded,
+	// which is the default and the only value interactive sessions use.
+	Timeout time.Duration
+}
+
+// EnvModeStrict is the opt-in params.env_mode value: the child receives only the
+// declared pass-through, the injected credential, and a small allow-list of
+// non-secret process essentials (PATH, HOME, locale, and PASEKA_*).
+const EnvModeStrict = "strict"
+
+// RunParamsLayer is a RunParams together with the set of keys its source
+// actually declared. RunParams uses plain strings and bools, so a zero value
+// cannot say whether it was set: "trust unset" and "trust: false" both read as
+// Trust == false. Recording the declared keys restores that distinction so the
+// layered merge can be presence-aware and tri-state (an explicit false beats a
+// lower layer's true). The keys are the bee params names plus api_key.
+type RunParamsLayer struct {
+	Params   RunParams
+	Declared map[string]bool
+}
+
+// Declares reports whether the source set the given params key.
+func (l RunParamsLayer) Declares(key string) bool {
+	return l.Declared[key]
 }
 
 // RunResult is the normalized adapter output.

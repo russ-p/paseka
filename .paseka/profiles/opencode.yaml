@@ -5,5 +5,3 @@ model_aliases:
   medium: opencode/big-pickle
   high: opencode/big-pickle
   medium-gpt: opencode/big-pickle
-params:
-  output_format: json

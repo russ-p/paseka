@@ -59,8 +59,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 `,
 		".paseka/prompts/builder.md": `Builder bee.
 Task: {{.Task}}
@@ -279,8 +278,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: fast
-  trust: true
-  force: true
+  yolo: true
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -556,5 +554,50 @@ func TestDispatchScriptBee(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) != 2 || lines[0] != "trace-script" || lines[1] != "task-script" {
 		t.Fatalf("script output = %v", lines)
+	}
+}
+
+// TestDispatchDeclaredEnvReachesRunAndPostExec pins that params.env declared
+// pass-through reaches both the adapter child (via the plan env) and the
+// post_exec hook, which now inherits the same environment as the run.
+func TestDispatchDeclaredEnvReachesRunAndPostExec(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	hookOut := filepath.Join(root, "hook.env")
+	beeYAML := `role: builder
+adapter: cursor
+prompt_template: builder.md
+params:
+  env:
+    PLAN_TOKEN: declared-token
+post_exec: ["sh", "-c", "printenv PLAN_TOKEN > ` + hookOut + `"]
+`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{result: &adapters.RunResult{Status: "completed", Summary: "ok"}}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-hook-env",
+		Task:       "notify me",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := adapters.EnvMap(rec.lastReq.Env)["PLAN_TOKEN"]; got != "declared-token" {
+		t.Fatalf("child env PLAN_TOKEN = %q, want declared-token", got)
+	}
+
+	data, err := os.ReadFile(hookOut)
+	if err != nil {
+		t.Fatalf("post_exec env output missing: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "declared-token" {
+		t.Fatalf("post_exec PLAN_TOKEN = %q, want declared-token", data)
 	}
 }

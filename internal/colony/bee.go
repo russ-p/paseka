@@ -158,16 +158,28 @@ func HasSystemTemplate(bee Bee, overlay BeeLocalOverlay, defaults Defaults) bool
 	return ResolvedSystemTemplate(bee, overlay, defaults) != ""
 }
 
+// beeLoadMode selects how much validation loadBee applies. loadStrict is the
+// runtime path: a retired or unknown params key fails the load. loadDiagnosis
+// trades that gate for the ability to report the leftovers itself — doctor must
+// see a misconfigured bee to name what is wrong with it.
+type beeLoadMode int
+
+const (
+	loadStrict beeLoadMode = iota
+	loadDiagnosis
+)
+
 // LoadBee reads .paseka/bees/<role>.yaml and optional <role>.local.yaml overlay.
 func LoadBee(colonyRoot, role string) (Bee, BeeLocalOverlay, error) {
-	bee, overlay, err := loadBee(colonyRoot, role, true)
+	bee, overlay, err := loadBee(colonyRoot, role, loadStrict)
 	if err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
 	return bee, overlay, nil
 }
 
-func loadBee(colonyRoot, role string, validateProposal bool) (Bee, BeeLocalOverlay, error) {
+func loadBee(colonyRoot, role string, mode beeLoadMode) (Bee, BeeLocalOverlay, error) {
+	strict := mode == loadStrict
 	if err := validateRole(role); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
@@ -183,6 +195,17 @@ func loadBee(colonyRoot, role string, validateProposal bool) (Bee, BeeLocalOverl
 	if bee.Role == "" {
 		bee.Role = role
 	}
+	// The strict loader rejects a leftover or unknown params key outright. The
+	// diagnosis loader relaxes only that key gate so doctor can name the key;
+	// it still enforces values, so a colony the runtime refuses to load is not
+	// silently doctor-clean.
+	if strict {
+		if err := ValidateRunParams(bee.Params); err != nil {
+			return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: bee %q: %w", role, err)
+		}
+	} else if err := ValidateRunParamValues(bee.Params); err != nil {
+		return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: bee %q: %w", role, err)
+	}
 	if err := bee.ValidateEventRules(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
@@ -192,7 +215,7 @@ func loadBee(colonyRoot, role string, validateProposal bool) (Bee, BeeLocalOverl
 	if err := bee.ValidateAdapterRequirements(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
-	if validateProposal {
+	if strict {
 		if err := bee.ValidateCodeProposalWorktreeInvariants(); err != nil {
 			return Bee{}, BeeLocalOverlay{}, err
 		}

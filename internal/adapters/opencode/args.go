@@ -1,8 +1,6 @@
 package opencode
 
 import (
-	"strings"
-
 	"github.com/russ-p/paseka/internal/adapters"
 )
 
@@ -17,22 +15,10 @@ func joinPrompt(system, prompt string) string {
 	}
 }
 
-func resolveModel(p adapters.RunParams) string {
-	model := strings.TrimSpace(p.Model)
-	if model == "" {
-		return ""
-	}
-	if strings.Contains(model, "/") {
-		return model
-	}
-	if provider := strings.TrimSpace(p.Provider); provider != "" {
-		return provider + "/" + model
-	}
-	return model
-}
-
-func runFormat(outputFormat string) string {
-	if outputFormat == "text" {
+// runFormat returns OpenCode's runtime-owned output format: json by default,
+// default (human text) only for a --raw invocation.
+func runFormat(raw bool) string {
+	if raw {
 		return "default"
 	}
 	return "json"
@@ -40,8 +26,9 @@ func runFormat(outputFormat string) string {
 
 func buildArgs(req adapters.RunRequest, prompt string) []string {
 	p := req.Params
-	args := []string{"run", "--format", runFormat(p.OutputFormat), "--dir", req.Workspace}
-	if p.Trust || p.Force {
+	args := []string{"run", "--format", runFormat(req.Raw), "--dir", req.Workspace}
+	// plan wins over yolo: --auto would conflict with the read-only plan agent.
+	if (p.Trust || p.Force) && !p.Plan {
 		args = append(args, "--auto")
 	}
 	if req.AgentID != "" {
@@ -50,11 +37,13 @@ func buildArgs(req adapters.RunRequest, prompt string) []string {
 	if p.Plan {
 		args = append(args, "--agent", "plan")
 	}
-	if model := resolveModel(p); model != "" {
-		args = append(args, "--model", model)
+	// The launch resolver already folded any provider into params.model, so
+	// OpenCode receives the vendor-qualified id natively.
+	if p.Model != "" {
+		args = append(args, "--model", p.Model)
 	}
-	if p.Thinking != "" {
-		args = append(args, "--variant", p.Thinking)
+	if p.Reasoning != "" {
+		args = append(args, "--variant", p.Reasoning)
 	}
 	if prompt != "" {
 		args = append(args, "--", prompt)
@@ -68,11 +57,11 @@ func buildInteractiveArgs(req adapters.SessionRequest, prompt, resumeID string) 
 	if p.Plan {
 		args = append(args, "--agent", "plan")
 	}
-	if model := resolveModel(p); model != "" {
-		args = append(args, "--model", model)
+	if p.Model != "" {
+		args = append(args, "--model", p.Model)
 	}
-	if p.Thinking != "" {
-		args = append(args, "--variant", p.Thinking)
+	if p.Reasoning != "" {
+		args = append(args, "--variant", p.Reasoning)
 	}
 	if resumeID != "" {
 		args = append(args, "--session", resumeID)

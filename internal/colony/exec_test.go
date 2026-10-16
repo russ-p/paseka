@@ -13,7 +13,7 @@ func TestExecArgvWritesFile(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "hook.out")
 	argv := []string{"sh", "-c", "echo hooked > " + out}
-	if err := colony.ExecArgv(context.Background(), argv, dir); err != nil {
+	if err := colony.ExecArgv(context.Background(), argv, dir, nil); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(out)
@@ -26,7 +26,7 @@ func TestExecArgvWritesFile(t *testing.T) {
 }
 
 func TestRunPostExecSkipsWhenUnset(t *testing.T) {
-	if err := colony.RunPostExec(context.Background(), colony.Command{}, colony.CommandVars{}, ""); err != nil {
+	if err := colony.RunPostExec(context.Background(), colony.Command{}, colony.CommandVars{}, "", nil); err != nil {
 		t.Fatal(err)
 	}
 }

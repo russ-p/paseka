@@ -32,6 +32,14 @@ const (
 	StatusCancelled RunStatus = "cancelled"
 )
 
+// Status reasons classify why a terminal run status was reached, so a
+// post-mortem can tell "slow" from "stuck". A cancelled run carries
+// ReasonTimeout when params.timeout elapsed; a human/system cancel carries no
+// reason.
+const (
+	ReasonTimeout = "timeout"
+)
+
 // Event is one NDJSON line in events.ndjson.
 type Event struct {
 	ProtocolVersion string          `json:"protocolVersion"`
@@ -113,11 +121,14 @@ type Result struct {
 type StatusSnapshot struct {
 	ProtocolVersion string    `json:"protocolVersion"`
 	State           RunStatus `json:"state"`
-	PID             int       `json:"pid,omitempty"`
-	ExitCode        int       `json:"exitCode,omitempty"`
-	StartedAt       time.Time `json:"startedAt,omitempty"`
-	FinishedAt      time.Time `json:"finishedAt,omitempty"`
-	Error           string    `json:"error,omitempty"`
+	// Reason is a machine-readable classifier for a terminal state, e.g.
+	// "timeout" for a cancelled run that exceeded params.timeout.
+	Reason     string    `json:"reason,omitempty"`
+	PID        int       `json:"pid,omitempty"`
+	ExitCode   int       `json:"exitCode,omitempty"`
+	StartedAt  time.Time `json:"startedAt,omitempty"`
+	FinishedAt time.Time `json:"finishedAt,omitempty"`
+	Error      string    `json:"error,omitempty"`
 }
 
 // BusEvent is the minimal JSON shape agents send to `paseka event emit --stdin`.

@@ -27,6 +27,11 @@ func (a *Adapter) Name() string {
 	return adapterName
 }
 
+// LaunchSpec reports no default binary: a script bee always supplies a command.
+func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
+	return adapters.LaunchSpec{}
+}
+
 // Run executes the configured command argv in the bee workspace.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {
@@ -74,8 +79,12 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 
 	adapters.LogAgentLaunch(nil, adapterName, binary, req, req.Command)
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = req.Workspace
-	cmd.Env = adapters.ScriptEnv(req, runDir)
+	cmd.Dir = adapters.ResolveDir(req.Dir, req.Workspace)
+	if req.Env != nil {
+		cmd.Env = req.Env
+	} else {
+		cmd.Env = adapters.ScriptEnv(nil, req, runDir)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -118,7 +127,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		artifacts = append(artifacts, adapters.Artifact{Kind: "diff", Content: diff})
 	}
 
-	status, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
+	status, reason, statusErr := adapters.ResolveStatus(ctx.Err(), runErr)
 	finishedAt := time.Now().UTC()
 	adapters.LogAgentDone(nil, adapterName, binary, req, startedAt, string(status), exitCode, runErr, adapters.AgentDoneOutput{
 		Stdout: stdoutStr, Stderr: stderrStr, Summary: summary,
@@ -147,7 +156,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		return nil, fmt.Errorf("script: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, exitCode, startedAt, finishedAt, statusErr)
+	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:    string(status),

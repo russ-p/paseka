@@ -35,6 +35,8 @@ type ColonyDispatchRequest struct {
 	// ProposalKind, when set, resolves adapter cwd from the proposal MUTATION kind
 	// (isolated/alias → trace worktree; root → colony root) instead of bee.Worktree.
 	ProposalKind string
+	// Raw requests plain-text adapter output for this run only (CLI --raw).
+	Raw bool
 }
 
 // DispatchColonyBee prepares workspace and runs one bee without re-resolving colony context.
@@ -88,7 +90,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if err != nil {
 		return nil, err
 	}
-	adapterExtra := colony.AdapterExtra(ctxColony, adapterName)
+	adapterExtra := colony.AdapterExtraLayer(ctxColony, adapterName)
 	aliases := ctxColony.ModelAliases
 	if len(aliases) == 0 {
 		aliases = manifest.ModelAliases
@@ -116,6 +118,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		ModelAliases:   aliases,
 		IsLastWorkTask: isLastWorkTask,
 		Profile:        ctxColony.Profile,
+		Raw:            req.Raw,
 		ProfileApply: func(bee colony.Bee) (colony.Bee, error) {
 			applied, _, err := ctxColony.ApplyBeeProfile(bee)
 			return applied, err

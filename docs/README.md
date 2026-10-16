@@ -43,7 +43,7 @@ Follow the shortest path from the model to a running colony:
 | [Event contracts](reference/event-contracts.md) | `SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION` kinds and authoring rules |
 | [Insight kinds](reference/insight-kinds.md) | `INSIGHT` taxonomy and `{{.Insights}}` projection |
 | [Task ledger](reference/task-ledger.md) | `traceId` → `taskId` → `agentId`, task lifecycle |
-| [Adapter launch resolution](reference/adapter-launch-resolution.md) | Bee → OS process: config layers, params, command, env — as-is vs proposed |
+| [Adapter launch resolution](reference/adapter-launch-resolution.md) | Bee → OS process: config layers, params, command, env |
 
 ## Architecture
 

@@ -36,6 +36,14 @@ func LogAgentLaunch(log *logging.Logger, adapter, binary string, req RunRequest,
 		logging.F("agent", req.AgentID),
 		logging.F("args", strings.Join(RedactArgs(args), " ")),
 	)
+	if len(req.Env) > 0 {
+		log.Debug("agent env",
+			logging.F("adapter", adapter),
+			logging.F("trace", req.TraceID),
+			logging.F("agent", req.AgentID),
+			logging.F("env", strings.Join(RedactEnv(req.Env, req.RedactedEnv), " ")),
+		)
+	}
 }
 
 // LogAgentDone logs adapter process completion.
