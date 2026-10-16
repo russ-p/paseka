@@ -100,6 +100,33 @@ params:
 	}
 }
 
+// TestColonyProfileAcceptsLegacyParams pins that the deprecated params keys are
+// still accepted on a profile while the window is open, so a colony mid-migration
+// keeps loading.
+func TestColonyProfileAcceptsLegacyParams(t *testing.T) {
+	repo, _ := setupProfileColony(t)
+	writeColonyProfile(t, repo, "legacy", `adapter: pi
+params:
+  trust: true
+  thinking: high
+  provider: google
+  output_format: json
+`)
+	resetProcessProfile(t)
+	colony.SetProcessProfile(colony.ProfileSelection{Name: "legacy", FlagSet: true})
+	ctx, err := colony.ResolveContext(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scout, _, err := ctx.LoadBee("scout")
+	if err != nil {
+		t.Fatalf("legacy profile params should load: %v", err)
+	}
+	if scout.Params["provider"] != "google" || scout.Params["thinking"] != "high" {
+		t.Fatalf("params = %+v", scout.Params)
+	}
+}
+
 func TestPerBeeExceptionOverridesCommandSkip(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	writeColonyProfile(t, repo, "mix", `adapter: pi

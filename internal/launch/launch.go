@@ -109,7 +109,8 @@ type LaunchPlan struct {
 	// means unbounded. Interactive plans always carry zero: the human is the
 	// timeout.
 	Timeout time.Duration
-	// Warnings are operator-facing notices raised during resolution.
+	// Warnings are operator-facing notices raised during resolution, such as a
+	// deprecated params.provider that was mapped into the model id.
 	Warnings []string
 
 	// attribution records which layer set each field, so `doctor --explain` and
@@ -138,10 +139,9 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 	_, aliasApplied := colony.ResolveModel(params.Model, req.Aliases)
 	colony.ApplyModelAliases(&params, req.Aliases)
 
-	// The one model-id mapping: split the vendor off for the adapters that need
-	// it. The vendor lives in the model id, so the mapping is values-in,
-	// values-out with no deprecated key to fold.
-	mapping := MapModel(req.Adapter, params.Model)
+	// The one model-id mapping: fold a deprecated provider into the model, then
+	// split the vendor off for the adapters that need it.
+	mapping := MapModel(req.Adapter, params.Model, params.Provider)
 	params.Model = mapping.Model
 	params.Provider = mapping.Provider
 
@@ -162,6 +162,9 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 		Dir:           resolveDir(req),
 		Binary:        params.Binary,
 		attribution:   attributeFields(beeLayer, req.Extra, aliasApplied),
+	}
+	if mapping.Warning != "" {
+		plan.Warnings = append(plan.Warnings, mapping.Warning)
 	}
 	if plan.Binary == "" {
 		plan.Binary = spec.DefaultBinary

@@ -52,6 +52,16 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** The block is lazy by contract — arriving on `/next/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
 - **Revisit when:** A fifth adapter is added, or the roster stops being a fixed set.
 
+### Adapter launch resolution
+
+#### Remove the legacy params aliases after a release ships with them deprecated
+
+- **Kind:** follow-up
+- **Source:** guard review of `011-deprecation-cleanup-docs` (spec 038 Phase 8)
+- **Summary:** Phase 8 keeps `trust`, `force`, `thinking`, `provider`, and `output_format` in the bee `params` schema for one full release so an operator upgrading from the previous release has a migration path — `paseka doctor` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). Once a release has shipped with the keys deprecated, remove them: move each out of `RunParamKeys` into `RemovedRunParamKeys` (`internal/colony/params.go`), drop the legacy mappings in `LayerFromBee`, the `provider` fold in `launch.MapModel`, and the deprecation warnings in `params_diagnose.go`. The `ValidateRunParamKeys` removed-key branch then names the replacement instead of failing as a bare typo.
+- **Why deferred:** Release-gated by design — the aliases must survive one full release before removal, or an operator goes straight from "these keys work" to "the colony fails to load" with no released warning.
+- **Revisit when:** A release has shipped with the deprecated aliases and the following release is being cut.
+
 ### Colony roles
 
 #### `archivist` bee — audit a finished trail

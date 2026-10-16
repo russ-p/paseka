@@ -11,7 +11,7 @@ A bee's `params` block now carries only colony-level decisions, and one resolver
 - **A planned environment.** The child env is assembled explicitly: inherited base, the resolved credential (recorded for log redaction), and declared `params.env` pass-through; `params.env_mode: strict` opts into denying undeclared secrets. `post_exec` now inherits the same environment.
 - **AFK runs can time out.** `params.timeout` bounds a headless run and reports `cancelled` with reason `timeout`; interactive sessions stay unbounded.
 - **The launch is explainable.** `paseka doctor --explain <bee>` prints the plan and the layer that set each field.
-- **Breaking: the migration window closed.** `trust`, `force`, `thinking`, `provider`, and `output_format` are removed. A bee or profile that still declares one now fails to load with the replacement named (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold it into `model`); `paseka doctor` reports leftovers.
+- **The migration window is still open (one release).** The retired keys keep working with a deprecation warning: `trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model` (`model: <vendor>/<model>`), and `output_format` → runtime-owned. A bee or profile that still declares one loads; `paseka doctor` names the replacement. **Removal is deferred to the next release**, so operators get a full release to migrate.
 
 - Spec: [038-adapter-launch-resolution](../specs/038-adapter-launch-resolution.md)
 - Canonical: [Adapter launch resolution](../reference/adapter-launch-resolution.md), [bee config](../guide/bee-config.md), [colony layout](../guide/colony-layout.md), [interactive sessions](../guide/interactive-sessions.md)

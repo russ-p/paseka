@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented** — all eight phases shipped; the deprecation window (Phases 3–4) closed in Phase 8, so the retired keys now fail at load rather than warn.
+**Implemented** — all eight phases shipped. The deprecation window (Phases 3–4) stays **open for one full release**: the retired keys (`trust`/`force`/`thinking`/`provider`/`output_format`) keep working with a `paseka doctor` deprecation warning, and removal is deferred to the next release.
 
 Turns the launch model in [Adapter launch resolution](../reference/adapter-launch-resolution.md) into a phased implementation plan; that reference is the authoritative description of the shipped behavior and this spec is the execution record.
 
@@ -229,14 +229,14 @@ Phases are ordered by dependency. Each phase is independently shippable and leav
 
 ### Phase 8 — Migration cleanup and docs
 
-- **Goal:** remove the deprecation window; record the ship.
+- **Goal:** ship the semantic surface, keep the deprecation window open for one full release, and record the ship.
 - **Steps:**
-  1. Remove `trust`/`force`/`thinking`/`provider` aliases and `output_format` from the schema after one release; `doctor` flags leftovers.
+  1. Keep `trust`/`force`/`thinking`/`provider` and `output_format` in the schema for one full release so an operator upgrading from the previous release has a migration path; `paseka doctor` warns with the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). Removal is **deferred / release-gated** — it lands in the release after one ships with the keys deprecated (see the [backlog](../plans/backlog.md#remove-the-legacy-params-aliases-after-a-release-ships-with-them-deprecated)).
   2. Update [Adapter launch resolution](../reference/adapter-launch-resolution.md) from "Proposed" to shipped and update bee-config/colony-layout guides.
-  3. Add a changelog entry, mark this spec Implemented, remove the backlog item.
-- **Deliverable:** no compatibility shims remain; docs match code.
-- **Acceptance:** schema rejects removed keys; docs reference shipped behavior.
-- **Rollback:** none needed (cleanup).
+  3. Add a changelog entry, mark this spec Implemented, re-add the deferred removal to the backlog.
+- **Deliverable:** the semantic surface is authoritative and documented; the legacy keys keep loading with a deprecation warning until the next release.
+- **Acceptance:** legacy keys load and `doctor` names the replacement; docs reference shipped behavior.
+- **Rollback:** none needed (additive).
 - **Risk:** low.
 
 ## Testing Decisions
@@ -263,6 +263,6 @@ Phases are ordered by dependency. Each phase is independently shippable and leav
 
 **Deliberate consequences.** A machine with no `adapters/cursor.yaml` gets `agent` from built-in defaults; a bee pinning `params.binary: agent-next` finally wins over an absent machine file. Operators relying on machine-local-always-wins will see a change in Phase 1 and should be told in that release's notes.
 
-**Resolved decisions.** The deprecation window was a single release and closed in Phase 8: `trust`/`force`/`thinking`/`provider`/`output_format` now fail at load. `--raw` is `paseka bee run` only; interactive `bee chat` owns its TTY and never opts out of structured output.
+**Resolved decisions.** The deprecation window is a single release and stays **open**: `trust`/`force`/`thinking`/`provider`/`output_format` still load with a `paseka doctor` deprecation warning, and Phase 8 removal is **deferred / release-gated** so a release ships with the keys deprecated before they are removed. `--raw` is `paseka bee run` only; interactive `bee chat` owns its TTY and never opts out of structured output.
 
 Related: [Adapter launch resolution](../reference/adapter-launch-resolution.md) · [bee config](../guide/bee-config.md) · [colony layout](../guide/colony-layout.md) · [config profiles](027-config-profiles.md) · [model aliases](019-model-aliases.md) · [architecture overview](../architecture/overview.md).

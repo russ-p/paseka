@@ -1,6 +1,7 @@
 package launch_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/russ-p/paseka/internal/launch"
@@ -11,8 +12,10 @@ func TestMapModelPerAdapter(t *testing.T) {
 		name         string
 		adapter      string
 		model        string
+		provider     string
 		wantModel    string
 		wantProvider string
+		wantWarning  bool
 	}{
 		{
 			name:      "cursor passes vendor id through",
@@ -71,23 +74,92 @@ func TestMapModelPerAdapter(t *testing.T) {
 			wantModel: "gpt-4o:extended",
 		},
 		{
+			name:         "deprecated provider folds into pi provider and model",
+			adapter:      "pi",
+			model:        "gpt-4",
+			provider:     "gemini",
+			wantProvider: "gemini",
+			wantModel:    "gpt-4",
+			wantWarning:  true,
+		},
+		{
+			name:        "deprecated provider folds into opencode model",
+			adapter:     "opencode",
+			model:       "gpt-4",
+			provider:    "openai",
+			wantModel:   "openai/gpt-4",
+			wantWarning: true,
+		},
+		{
+			name:        "deprecated provider is ignored when model already has a vendor",
+			adapter:     "opencode",
+			model:       "anthropic/claude-sonnet-4",
+			provider:    "openai",
+			wantModel:   "anthropic/claude-sonnet-4",
+			wantWarning: true,
+		},
+		{
+			name:        "deprecated provider folds into cursor model",
+			adapter:     "cursor",
+			model:       "gpt-4",
+			provider:    "openai",
+			wantModel:   "openai/gpt-4",
+			wantWarning: true,
+		},
+		{
 			name:      "empty model stays empty",
 			adapter:   "pi",
 			model:     "",
 			wantModel: "",
 		},
+		{
+			name:         "pi keeps a provider-only model for one release",
+			adapter:      "pi",
+			model:        "",
+			provider:     "gemini",
+			wantProvider: "gemini",
+			wantWarning:  true,
+		},
 	}
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			got := launch.MapModel(tc.adapter, tc.model)
+			got := launch.MapModel(tc.adapter, tc.model, tc.provider)
 			if got.Model != tc.wantModel {
 				t.Fatalf("model = %q, want %q", got.Model, tc.wantModel)
 			}
 			if got.Provider != tc.wantProvider {
 				t.Fatalf("provider = %q, want %q", got.Provider, tc.wantProvider)
 			}
+			if tc.wantWarning && got.Warning == "" {
+				t.Fatalf("expected a deprecation warning")
+			}
+			if !tc.wantWarning && got.Warning != "" {
+				t.Fatalf("unexpected warning %q", got.Warning)
+			}
+			if tc.provider != "" && !strings.Contains(got.Warning, "params.provider") {
+				t.Fatalf("warning %q should name params.provider", got.Warning)
+			}
 		})
+	}
+}
+
+// TestResolveLaunchMapsModelAndWarnsOnDeprecatedProvider pins the end-to-end
+// fold through the resolver: a deprecated provider reaches the plan and raises
+// an operator warning.
+func TestResolveLaunchMapsModelAndWarnsOnDeprecatedProvider(t *testing.T) {
+	req := baseRequest(t, "pi", launch.AFK)
+	req.Bee.Params = map[string]any{"model": "gpt-4", "provider": "gemini"}
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Params.Model != "gpt-4" || plan.Params.Provider != "gemini" {
+		t.Fatalf("params = %+v, want provider gemini and model gpt-4", plan.Params)
+	}
+	if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], "params.provider") {
+		t.Fatalf("warnings = %v", plan.Warnings)
 	}
 }
 

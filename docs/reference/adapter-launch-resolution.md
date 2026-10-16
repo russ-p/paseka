@@ -75,6 +75,8 @@ Bee-visible `params` carry **only colony-level decisions**; vendor flags are the
 
 Unknown keys fail at load time with the valid-key list (`ValidateRunParams`), so typos stop being silent no-ops. `LayerFromBee` maps the block and records the declared set so merging and attribution stay tri-state (`yolo` drives the internal `trust`/`force` pair the adapters still take).
 
+**Legacy keys are accepted for one release (deprecated, not removed).** `trust`/`force` alias `yolo`, `thinking` aliases `reasoning`, `provider` folds into the model id as `X/Y`, and `output_format` is accepted and ignored (the runtime owns structured output). A bee or profile that declares one loads; `paseka doctor` names the replacement so the migration is one edit. Removal is deferred to the next release — see [backlog](../plans/backlog.md#remove-the-legacy-params-aliases-after-a-release-ships-with-them-deprecated).
+
 **Runtime-owned output format.** The runtime always requests each adapter's structured mode, because usage, `providerSessionId`, and summary normalization are parsed from it:
 
 | Adapter | Runtime-requested structured mode |
@@ -86,13 +88,13 @@ Unknown keys fail at load time with the valid-key list (`ValidateRunParams`), so
 
 Debugging escape hatch: `paseka bee run --raw` (per invocation, never committed). When `--raw` costs a runtime feature — cursor loses `usage`/`providerSessionId`, session tracking degrades — the run log says so.
 
-**Migration is over.** `trust`, `force`, `thinking`, `provider`, and `output_format` are removed from the schema. A bee or profile that still declares one fails to load; `RemovedRunParamKeys` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). `paseka doctor` loads the bee leniently (`LoadAllBeesForDiagnosis`) so it can report the leftover as a warning instead of just failing the strict load.
+**Migration window is open.** `trust`, `force`, `thinking`, `provider`, and `output_format` still load, deprecated for one release. `paseka doctor` reports each as a deprecation warning naming the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). The keys are slated for removal in the next release, after one ships with them deprecated; `RemovedRunParamKeys` holds that removal list and its `ValidateRunParamKeys` branch only fires once the keys leave the valid set.
 
 **Attribution** is kept: `ResolveLaunch` returns which layer set each field, driving `paseka doctor --explain <bee>` and the Console adapter panel.
 
 ### Provider lives in the model id
 
-`provider` is no longer its own key. Provider and model are one atomic pair — switching vendor while keeping the id produces a broken combination — so the vendor moves into the alias value:
+`provider` is the deprecated legacy key (accepted for one release); the vendor belongs in the model id. Provider and model are one atomic pair — switching vendor while keeping the id produces a broken combination — so the vendor moves into the alias value:
 
 - Alias values are full ids: `high: anthropic/claude-sonnet-4`, `small: openai/gpt-5.5` (`colony.yaml` / home / profile `model_aliases`). A bare id without `/` (`composer-2.5`) stays valid — no provider.
 - `launch.MapModel` (`internal/launch/modelid.go`) maps the resolved id per adapter: cursor/claude pass it through; opencode consumes `provider/model` natively; **pi splits at the first `/`** → `--provider <vendor> --model <rest>`, where the rest keeps inner slashes and colon suffixes.
@@ -154,7 +156,7 @@ Logs redact argv and the plan's `RedactedEnv` keys (`adapters/log.go`); the Cons
 | Params shape | semantic keys only (`yolo`, `reasoning`, `plan`, `model`, `binary`, `env`, `env_mode`, `timeout`); output format runtime-owned |
 | Provider | vendor lives in the model id (`vendor/model[:suffix]`); pi splits the first `/` (rest keeps suffixes), others pass through |
 | Booleans | one semantic bool (`yolo`), tri-state across layers |
-| Unknown / retired params | error at load with the valid-key list and the replacement |
+| Unknown params | error at load with the valid-key list; legacy keys load with a deprecation warning |
 | `command` + params | error unless params are defaults (timeout exempt) |
 | Env | assembled plan, declared pass-through, credentials recorded for redaction |
 | Timeout | opt-in `params.timeout` on AFK runs |

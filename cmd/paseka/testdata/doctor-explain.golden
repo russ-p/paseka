@@ -8,7 +8,7 @@ Launch plan for bee builder
   yolo:       true            [default]
   plan:       false           [default]
   reasoning:  high            [bee]
-  provider:   -               [alias]
+  provider:   -               [default]
   env:        -               [default]
   env_mode:   inherit         [default]
   timeout:    unbounded       [default]

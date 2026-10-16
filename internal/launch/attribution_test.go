@@ -137,6 +137,14 @@ func TestAttributionNamesTheWinningLayerPerField(t *testing.T) {
 			wantLayer: launch.LayerBee,
 		},
 		{
+			name:      "deprecated thinking reports as a bee reasoning declaration",
+			bee:       beeWith(map[string]any{"thinking": "high"}),
+			extra:     extraWith(map[string]bool{}, adapters.RunParams{}),
+			field:     launch.FieldReasoning,
+			wantValue: "high",
+			wantLayer: launch.LayerBee,
+		},
+		{
 			name:      "machine timeout is attributed to the machine",
 			bee:       beeWith(nil),
 			extra:     extraWith(map[string]bool{"timeout": true}, adapters.RunParams{Timeout: 30 * time.Second}),
