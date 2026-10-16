@@ -308,18 +308,20 @@
 					</div>
 				{/if}
 
-				{#if focused}
-					<p class="mb-2 shrink-0 text-xs text-base-content/50">
-						Full screen · Escape or the button leaves
-					</p>
-				{/if}
-				<div class={focused ? 'min-h-0 grow' : ''}>
-					<SessionTerminal
-						sessionId={session.sessionId}
-						{attachable}
-						enabled={attached}
-						onstatus={onTerminalStatus}
-					/>
+				<div class={focused ? 'flex min-h-0 grow flex-col' : ''}>
+					{#if focused}
+						<p class="mb-2 shrink-0 text-xs text-base-content/50">
+							Full screen · Escape or the button leaves
+						</p>
+					{/if}
+					<div class={focused ? 'min-h-0 grow' : ''}>
+						<SessionTerminal
+							sessionId={session.sessionId}
+							{attachable}
+							enabled={attached}
+							onstatus={onTerminalStatus}
+						/>
+					</div>
 				</div>
 			</Section>
 		{:else}

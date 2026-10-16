@@ -66,19 +66,19 @@
 				{@render controls()}
 			</span>
 		</summary>
-		<div class="collapse-content px-3 pb-3">
+		<div class="collapse-content flex min-h-0 grow flex-col px-3 pb-3">
 			{@render children()}
 		</div>
 	</details>
 {:else}
-	<section {id} class="rounded-box border border-base-300 bg-base-100 {extra}">
+	<section {id} class="flex flex-col rounded-box border border-base-300 bg-base-100 {extra}">
 		<header class="flex min-h-8 flex-wrap items-center justify-between gap-2 px-3 py-2">
 			<h2 class="min-w-0 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
 				{@render heading()}
 			</h2>
 			{@render controls()}
 		</header>
-		<div class="px-3 pb-3">
+		<div class="flex min-h-0 grow flex-col px-3 pb-3">
 			{@render children()}
 		</div>
 	</section>
