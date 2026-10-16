@@ -68,10 +68,8 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 			"model":     "gpt-4",
 			"plan":      true,
 			"binary":    "/usr/bin/pi",
-			"provider":  "gemini",
 			"reasoning": "high",
-			"trust":     false,
-			"force":     false,
+			"yolo":      false,
 		},
 	}
 	p := colony.RunParamsFromBee(bee)
@@ -84,33 +82,24 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 	if p.Binary != "/usr/bin/pi" {
 		t.Fatalf("binary = %q", p.Binary)
 	}
-	if p.Provider != "gemini" {
-		t.Fatalf("provider = %q", p.Provider)
-	}
 	if p.Reasoning != "high" {
 		t.Fatalf("reasoning = %q", p.Reasoning)
 	}
-	if p.Trust {
-		t.Fatal("trust = true, want false")
-	}
-	if p.Force {
-		t.Fatal("force = true, want false")
+	if p.Trust || p.Force {
+		t.Fatalf("yolo false should clear trust/force: %+v", p)
 	}
 }
 
-func TestMergeRunParamsProviderReasoning(t *testing.T) {
+func TestMergeRunParamsReasoning(t *testing.T) {
 	base := adapters.RunParamsLayer{
 		Params:   adapters.RunParams{Model: "base"},
 		Declared: map[string]bool{"model": true},
 	}
 	over := adapters.RunParamsLayer{
-		Params:   adapters.RunParams{Provider: "openai", Reasoning: "low"},
-		Declared: map[string]bool{"provider": true, "reasoning": true},
+		Params:   adapters.RunParams{Reasoning: "low"},
+		Declared: map[string]bool{"reasoning": true},
 	}
 	got := colony.MergeRunParamsLayers(base, over)
-	if got.Provider != "openai" {
-		t.Fatalf("provider = %q", got.Provider)
-	}
 	if got.Reasoning != "low" {
 		t.Fatalf("reasoning = %q", got.Reasoning)
 	}
@@ -119,37 +108,13 @@ func TestMergeRunParamsProviderReasoning(t *testing.T) {
 	}
 }
 
-func TestRunParamsReasoningLegacyAlias(t *testing.T) {
-	// thinking is a one-release deprecation alias for reasoning.
-	legacy := colony.LayerFromBee(colony.Bee{
-		Role:   "builder",
-		Params: map[string]any{"thinking": "low"},
-	})
-	if legacy.Params.Reasoning != "low" {
-		t.Fatalf("thinking alias = %q, want low", legacy.Params.Reasoning)
-	}
-	if !legacy.Declares("reasoning") {
-		t.Fatalf("thinking should declare reasoning: %+v", legacy.Declared)
-	}
-
-	// reasoning wins when both keys are present.
-	both := colony.LayerFromBee(colony.Bee{
-		Role:   "builder",
-		Params: map[string]any{"reasoning": "high", "thinking": "low"},
-	})
-	if both.Params.Reasoning != "high" {
-		t.Fatalf("reasoning = %q, want high (new key wins)", both.Params.Reasoning)
-	}
-}
-
-func TestYoloMatchesLegacyTrustForce(t *testing.T) {
+func TestYoloSetsTrustAndForce(t *testing.T) {
 	yolo := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"yolo": true}})
-	legacy := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"trust": true, "force": true}})
-	if yolo.Params.Trust != legacy.Params.Trust || yolo.Params.Force != legacy.Params.Force {
-		t.Fatalf("yolo %+v != trust+force %+v", yolo.Params, legacy.Params)
-	}
 	if !yolo.Params.Trust || !yolo.Params.Force {
 		t.Fatalf("yolo should enable trust and force: %+v", yolo.Params)
+	}
+	if !yolo.Declares("trust") || !yolo.Declares("force") {
+		t.Fatalf("yolo should declare trust and force: %+v", yolo.Declared)
 	}
 }
 
@@ -158,19 +123,18 @@ func TestDiagnoseBeeParams(t *testing.T) {
 		"builder": {Role: "builder", Adapter: "cursor", Params: map[string]any{"trust": true, "force": true}},
 		"planner": {Role: "planner", Adapter: "cursor", Params: map[string]any{"reasoning": "high"}},
 		"thinker": {Role: "thinker", Adapter: "cursor", Params: map[string]any{"thinking": "high"}},
+		"typo":    {Role: "typo", Adapter: "cursor", Params: map[string]any{"modle": "gpt-4"}},
 		"scout":   {Role: "scout", Adapter: "pi", Params: map[string]any{"yolo": true}},
 		"clean":   {Role: "clean", Adapter: "pi", Params: map[string]any{"plan": false}},
 	}
 	warnings := colony.DiagnoseBeeParams(bees)
 	joined := strings.Join(warnings, "\n")
 	for _, want := range []string{
-		`bee "builder": params.trust is deprecated; use params.yolo`,
-		`bee "builder": params.force is deprecated; use params.yolo`,
+		`bee "builder": params.trust was removed; use params.yolo`,
+		`bee "builder": params.force was removed; use params.yolo`,
 		`bee "planner": params.reasoning has no mapping on adapter cursor`,
-		// The deprecated spelling is not silently ignored: it warns both that it
-		// is deprecated and that cursor has no flag for it.
-		`bee "thinker": params.thinking is deprecated; use params.reasoning`,
-		`bee "thinker": params.reasoning has no mapping on adapter cursor`,
+		`bee "thinker": params.thinking was removed; use params.reasoning`,
+		`bee "typo": unknown params key "modle"`,
 		`bee "scout": adapter pi has no yolo equivalent`,
 	} {
 		if !strings.Contains(joined, want) {
@@ -182,14 +146,38 @@ func TestDiagnoseBeeParams(t *testing.T) {
 	}
 }
 
-func TestDiagnoseBeeParamsWarnsProviderDeprecation(t *testing.T) {
+func TestDiagnoseBeeParamsFlagsRemovedProvider(t *testing.T) {
 	bees := map[string]colony.Bee{
-		"builder": {Role: "builder", Adapter: "pi", Params: map[string]any{"model": "gpt-4", "provider": "gemini"}},
+		"builder": {Role: "builder", Adapter: "pi", Params: map[string]any{"model": "gemini/gpt-4", "provider": "gemini"}},
 	}
 	warnings := colony.DiagnoseBeeParams(bees)
 	joined := strings.Join(warnings, "\n")
-	if !strings.Contains(joined, `bee "builder": params.provider is deprecated`) {
-		t.Fatalf("missing provider deprecation warning:\n%s", joined)
+	if !strings.Contains(joined, `bee "builder": params.provider was removed; use params.model`) {
+		t.Fatalf("missing provider removal warning:\n%s", joined)
+	}
+}
+
+// TestValidateRunParamKeysRejectsRemovedAliases pins that every key the
+// deprecation window carried is now a load error that still names the semantic
+// replacement, so a colony from the old surface migrates in one edit.
+func TestValidateRunParamKeysRejectsRemovedAliases(t *testing.T) {
+	for key, repl := range map[string]string{
+		"trust":    "yolo",
+		"force":    "yolo",
+		"thinking": "reasoning",
+		"provider": "model",
+	} {
+		err := colony.ValidateRunParamKeys(map[string]any{key: "x"})
+		if err == nil {
+			t.Fatalf("expected params.%s to be rejected", key)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "params."+key+" was removed") {
+			t.Fatalf("err = %v, want %s named as removed", err, key)
+		}
+		if !strings.Contains(msg, "use params."+repl) {
+			t.Fatalf("err = %v, want replacement params.%s named", err, repl)
+		}
 	}
 }
 
@@ -333,8 +321,8 @@ func TestValidateRunParamKeysRejectsRemovedOutputFormat(t *testing.T) {
 		t.Fatal("expected output_format to be rejected as a removed key")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, `unknown params key "output_format"`) {
-		t.Fatalf("err = %v, want output_format named as unknown", err)
+	if !strings.Contains(msg, `params.output_format was removed`) {
+		t.Fatalf("err = %v, want output_format named as removed", err)
 	}
 	_, valid, ok := strings.Cut(msg, "valid keys:")
 	if !ok {
@@ -359,8 +347,82 @@ func TestLoadBeeRejectsRemovedOutputFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected load to fail on the removed output_format key")
 	}
-	if !strings.Contains(err.Error(), `unknown params key "output_format"`) {
+	if !strings.Contains(err.Error(), `params.output_format was removed`) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestLoadBeeRejectsRetiredAlias pins the schema half of the cleanup: a bee
+// that still carries a key from the deprecation window fails at load rather
+// than quietly dropping it.
+func TestLoadBeeRejectsRetiredAlias(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "role: builder\nadapter: cursor\nparams:\n  trust: true\n  force: true\n"
+	if err := os.WriteFile(filepath.Join(dir, "builder.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := colony.LoadBee(root, "builder")
+	if err == nil {
+		t.Fatal("expected load to fail on retired params.trust/force")
+	}
+	if !strings.Contains(err.Error(), `params.trust was removed; use params.yolo`) {
+		t.Fatalf("err = %v, want the migration named", err)
+	}
+}
+
+// TestDiagnosisLoaderToleratesRetiredAlias pins the doctor half: the diagnosis
+// loader must see a bee with a retired key so DiagnoseBeeParams can name it,
+// while the strict loader rejects the same file.
+func TestDiagnosisLoaderToleratesRetiredAlias(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "role: builder\nadapter: cursor\nparams:\n  trust: true\n"
+	if err := os.WriteFile(filepath.Join(dir, "builder.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bees, err := colony.LoadAllBeesForDiagnosis(root)
+	if err != nil {
+		t.Fatalf("diagnosis load should tolerate a retired key: %v", err)
+	}
+	warnings := strings.Join(colony.DiagnoseBeeParams(bees), "\n")
+	if !strings.Contains(warnings, `params.trust was removed; use params.yolo`) {
+		t.Fatalf("doctor did not flag the leftover:\n%s", warnings)
+	}
+}
+
+// TestDiagnosisLoaderRejectsBadParamValue pins the other half of the diagnosis
+// gate: doctor relaxes only the key check, so a colony the runtime refuses to
+// load on a bad value must still fail the diagnosis loader (and therefore make
+// doctor exit non-zero) rather than passing silently.
+func TestDiagnosisLoaderRejectsBadParamValue(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".paseka", "bees")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "role: builder\nadapter: cursor\nparams:\n  env_mode: bogus\n"
+	if err := os.WriteFile(filepath.Join(dir, "builder.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := colony.LoadAllBeesForDiagnosis(root); err == nil {
+		t.Fatal("diagnosis load should reject a bad params.env_mode value")
+	} else if !strings.Contains(err.Error(), "params.env_mode must be") {
+		t.Fatalf("err = %v, want the env_mode value named", err)
+	}
+
+	// The key gate still relaxes: a retired key alone loads for diagnosis.
+	if err := os.WriteFile(filepath.Join(dir, "builder.yaml"), []byte("role: builder\nadapter: cursor\nparams:\n  trust: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := colony.LoadAllBeesForDiagnosis(root); err != nil {
+		t.Fatalf("diagnosis load should tolerate a retired key: %v", err)
 	}
 }
 

@@ -209,7 +209,6 @@ Mapped by `LayerFromBee` (`internal/colony/params.go`). Defaults: `yolo: true`.
 | `yolo` | bool | cursor (`--trust --force`); claude (`bypassPermissions`); opencode AFK (`--auto`); pi has no equivalent (doctor warns) |
 | `plan` | bool | cursor (`--plan`); pi (`--plan`); claude (`plan`); opencode (`--agent plan`). Wins over `yolo`: the read-only plan mode drops trust/force. |
 | `binary` | string | override CLI binary name |
-| `provider` | string | **deprecated** (one release); fold the vendor into `model` instead (`model: vendor/model`). A separate key still maps `provider` + `model` → `X/Y` and warns via `paseka doctor`. |
 | `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant`); cursor and claude have no mapping (doctor warns) |
 | `env` | map | declared pass-through environment for the child and its `post_exec` hook. Values are literals or host references (`GITHUB_TOKEN: $HOST_GITHUB_TOKEN`). The declared keys are redacted in adapter logs. |
 | `env_mode` | string | `strict` opts into denying undeclared environment: the child keeps only process essentials (`PATH`, `HOME`, locale, `PASEKA_*`), declared `env`, and the injected credential. Default inherits the whole parent environment. |
@@ -219,7 +218,7 @@ Adapter output format is **runtime-owned**, not a bee param. The runtime always 
 
 The launch plan assembles the child environment explicitly: the inherited environment, the adapter's resolved `api_key_env` credential (recorded on the plan so logs redact it), and `params.env`. `post_exec` receives that same plan environment, so a credential handed to a bee also reaches its post-run hook. `paseka doctor` warns when a machine-local adapter declares an `api_key_env` whose host variable is unset, so a credential that resolves empty is visible rather than mistaken for valid auth.
 
-Deprecated aliases (accepted for one release; `paseka doctor` warns): `trust` and `force` collapse into `yolo`, `thinking` aliases `reasoning`, and `provider` folds into the model id as `X/Y`.
+The migration aliases `trust`, `force`, `thinking`, `provider`, and `output_format` are **gone**: a bee that still carries one fails to load with the valid-key list. `paseka doctor` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned).
 
 When `command` is set, these params are **not** turned into CLI flags. `command` and non-default `params` are mutually exclusive and fail at load (`paseka bee run`/`bee chat`/`init`); params that equal the adapter defaults (e.g. `yolo: true`) are accepted as a no-op. `adapter` still selects result parsing, session PTY, and home-config credential injection.
 

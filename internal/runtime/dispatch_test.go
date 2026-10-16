@@ -59,8 +59,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 `,
 		".paseka/prompts/builder.md": `Builder bee.
 Task: {{.Task}}
@@ -279,8 +278,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: fast
-  trust: true
-  force: true
+  yolo: true
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}

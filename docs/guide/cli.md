@@ -186,6 +186,7 @@ Dispatch one bee — a single non-interactive adapter invocation (AFK run).
 | `--intent` | | | Task intent for the bee role (vocabulary from bee `intents` or `<role>-intent-*` partials; default from bee config or discovered vocabulary) |
 | `--path` | `-C` | | Colony resolution start directory |
 | `--no-bus` | | | Skip NATS publish (file-only run) |
+| `--raw` | | | Debug only: request plain text instead of the runtime-owned structured output, logging the runtime features it degrades (usage, session tracking, summary normalization) |
 
 \* Provide `--body` or `--prompt` for LLM bees. Script bees (`adapter: script`) do not require a prompt; they run the bee's `command:` and receive runtime context via `PASEKA_*` env vars (see [architecture overview](../architecture/overview.md) § Script adapter).
 

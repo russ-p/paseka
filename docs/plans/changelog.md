@@ -2,6 +2,20 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — Launch params describe the work, not the vendor
+
+A bee's `params` block now carries only colony-level decisions, and one resolver turns them into a process. Before, four code paths merged the same layered config and each adapter re-assembled its own argv and environment, so a committed `params.binary` never took effect, a profile could not turn a colony boolean off, and a param typo was a silent no-op. Resolution now happens once, in a `LaunchPlan` shared by AFK runs and interactive sessions alike.
+
+- **Semantic keys, adapter-owned flags.** A bee says `yolo`, `plan`, `reasoning`, `model`, `binary`, `env`, `env_mode`, or `timeout`; each adapter maps them to its own flags. Output format is runtime-owned, with `paseka bee run --raw` as a per-invocation debugging escape hatch.
+- **The vendor rides in the model id.** Alias values are full ids (`high: anthropic/claude-sonnet-4`), so switching a profile's `model_aliases` moves a bee's vendor and model in one atomic edit. Pi splits the first `/` and keeps the rest intact, so OpenRouter-style ids survive the trip.
+- **A planned environment.** The child env is assembled explicitly: inherited base, the resolved credential (recorded for log redaction), and declared `params.env` pass-through; `params.env_mode: strict` opts into denying undeclared secrets. `post_exec` now inherits the same environment.
+- **AFK runs can time out.** `params.timeout` bounds a headless run and reports `cancelled` with reason `timeout`; interactive sessions stay unbounded.
+- **The launch is explainable.** `paseka doctor --explain <bee>` prints the plan and the layer that set each field.
+- **Breaking: the migration window closed.** `trust`, `force`, `thinking`, `provider`, and `output_format` are removed. A bee or profile that still declares one now fails to load with the replacement named (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold it into `model`); `paseka doctor` reports leftovers.
+
+- Spec: [038-adapter-launch-resolution](../specs/038-adapter-launch-resolution.md)
+- Canonical: [Adapter launch resolution](../reference/adapter-launch-resolution.md), [bee config](../guide/bee-config.md), [colony layout](../guide/colony-layout.md), [interactive sessions](../guide/interactive-sessions.md)
+
 ## 2026-10 — A review can be closed without merging
 
 A review-gated task now has a third outcome beside approve and reject: **discard**. It is the deliberate "not doing this" close — the terminal, non-completed end of the queue that approve (merge or publish) and reject (feedback, and rework on a final gate) both left uncovered. A task waiting on a human could be accepted or sent back, but there was no way to simply stop, so work nobody wanted kept the queue occupied.

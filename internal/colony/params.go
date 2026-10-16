@@ -43,7 +43,7 @@ func (b Bee) NonDefaultParamKeys() []string {
 
 func isDefaultParamValue(key string, value any) bool {
 	switch key {
-	case "trust", "force", "yolo":
+	case "yolo":
 		b, ok := value.(bool)
 		return ok && b
 	case "plan":
@@ -74,15 +74,25 @@ var RunParamKeys = []string{
 	"binary",
 	"env",
 	"env_mode",
-	"force",
 	"model",
 	"plan",
-	"provider",
 	"reasoning",
-	"thinking",
 	"timeout",
-	"trust",
 	"yolo",
+}
+
+// RemovedRunParamKeys names the retired keys the deprecation window carried and
+// the semantic replacement for each. The window closed in the release that
+// shipped the semantic params surface, so a leftover key is now a load error
+// rather than a warning; the replacement is still named so the migration is one
+// edit. An empty replacement means the key was dropped outright (the runtime
+// owns the behavior now).
+var RemovedRunParamKeys = map[string]string{
+	"trust":         "yolo",
+	"force":         "yolo",
+	"thinking":      "reasoning",
+	"provider":      "model",
+	"output_format": "",
 }
 
 // ValidateRunParams rejects unknown keys and invalid values. Unknown keys fail
@@ -91,6 +101,17 @@ var RunParamKeys = []string{
 func ValidateRunParams(params map[string]any) error {
 	if err := ValidateRunParamKeys(params); err != nil {
 		return err
+	}
+	return ValidateRunParamValues(params)
+}
+
+// ValidateRunParamValues checks the value of every accepted params key. It is
+// the half of ValidateRunParams the diagnosis loader keeps: doctor relaxes only
+// the key gate so it can name a leftover key, but still fails on a value the
+// runtime would reject, so a colony that cannot load is not silently doctor-clean.
+func ValidateRunParamValues(params map[string]any) error {
+	if len(params) == 0 {
+		return nil
 	}
 	if v, ok := params["env_mode"]; ok && v != nil {
 		s, ok := v.(string)
@@ -125,27 +146,62 @@ func ValidateRunParams(params map[string]any) error {
 }
 
 // ValidateRunParamKeys rejects any key outside RunParamKeys and names the valid
-// set. It is applied to bee `params` and to profile `params` at load time.
+// set. It is applied to bee `params` and to profile `params` at load time. A
+// retired key (RemovedRunParamKeys) is reported with its replacement so a colony
+// from the deprecation window migrates in one edit rather than reading as a
+// bare typo.
 func ValidateRunParamKeys(params map[string]any) error {
 	if len(params) == 0 {
 		return nil
 	}
-	var unknown []string
+	var removed, unknown []string
 	for key := range params {
-		if !isRunParamKey(key) {
+		switch {
+		case isRunParamKey(key):
+		case isRemovedRunParamKey(key):
+			removed = append(removed, key)
+		default:
 			unknown = append(unknown, key)
 		}
 	}
-	if len(unknown) == 0 {
+	if len(removed) == 0 && len(unknown) == 0 {
 		return nil
 	}
+	sort.Strings(removed)
 	sort.Strings(unknown)
-	noun := "key"
-	if len(unknown) > 1 {
-		noun = "keys"
+	var parts []string
+	if len(removed) > 0 {
+		parts = append(parts, removedParamMessage(removed))
 	}
-	return fmt.Errorf("unknown params %s %s (valid keys: %s)",
-		noun, quoteKeys(unknown), strings.Join(RunParamKeys, ", "))
+	if len(unknown) > 0 {
+		noun := "key"
+		if len(unknown) > 1 {
+			noun = "keys"
+		}
+		parts = append(parts, fmt.Sprintf("unknown params %s %s", noun, quoteKeys(unknown)))
+	}
+	return fmt.Errorf("%s (valid keys: %s)",
+		strings.Join(parts, "; "), strings.Join(RunParamKeys, ", "))
+}
+
+// removedParamMessage renders one migration sentence per retired key. The
+// replacement is named when there is one; a key the runtime absorbed says so
+// instead of pointing at a semantic key that does not exist.
+func removedParamMessage(keys []string) string {
+	msgs := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if repl := RemovedRunParamKeys[key]; repl != "" {
+			msgs = append(msgs, fmt.Sprintf("params.%s was removed; use params.%s", key, repl))
+			continue
+		}
+		msgs = append(msgs, fmt.Sprintf("params.%s was removed (the runtime owns it now)", key))
+	}
+	return strings.Join(msgs, "; ")
+}
+
+func isRemovedRunParamKey(key string) bool {
+	_, ok := RemovedRunParamKeys[key]
+	return ok
 }
 
 func isRunParamKey(key string) bool {
@@ -172,8 +228,8 @@ func RunParamsFromBee(b Bee) adapters.RunParams {
 
 // LayerFromBee maps bee YAML params and records which keys the bee declared.
 // The declared set lets a higher layer merge tri-state: a bee that never set
-// `trust` still floats the default true, while a profile that sets `trust:
-// false` can carry the explicit false through.
+// `yolo` still floats the autonomous default, while a profile that sets
+// `yolo: false` can carry the explicit false through.
 func LayerFromBee(b Bee) adapters.RunParamsLayer {
 	p := adapters.RunParams{Trust: true, Force: true}
 	layer := adapters.RunParamsLayer{Declared: map[string]bool{}}
@@ -186,16 +242,9 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Model = v
 		declared["model"] = true
 	}
-	if v, ok := boolParam(b.Params, "trust"); ok {
-		p.Trust = v
-		declared["trust"] = true
-	}
-	if v, ok := boolParam(b.Params, "force"); ok {
-		p.Force = v
-		declared["force"] = true
-	}
-	// yolo is the semantic collapse of trust/force and wins when both appear:
-	// the legacy keys are the deprecation fallback, not the other way around.
+	// yolo is the single autonomous switch: it drives both the trust and force
+	// flags the adapters still take. The declared set records trust/force,
+	// which is the pair the merge and attribution work in.
 	if v, ok := boolParam(b.Params, "yolo"); ok {
 		p.Trust = v
 		p.Force = v
@@ -210,21 +259,9 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Binary = v
 		declared["binary"] = true
 	}
-	if v, ok := stringParam(b.Params, "provider"); ok {
-		p.Provider = v
-		declared["provider"] = true
-	}
-	// reasoning is the semantic key; thinking is a one-release deprecation
-	// alias for it. reasoning wins when both appear.
 	if v, ok := stringParam(b.Params, "reasoning"); ok {
 		p.Reasoning = v
 		declared["reasoning"] = true
-	}
-	if v, ok := stringParam(b.Params, "thinking"); ok {
-		if !declared["reasoning"] {
-			p.Reasoning = v
-			declared["reasoning"] = true
-		}
 	}
 	if v, ok := envParam(b.Params, "env"); ok {
 		p.Env = v
@@ -257,9 +294,6 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 	declared := over.Declared
 	if declared["model"] {
 		out.Model = over.Params.Model
-	}
-	if declared["provider"] {
-		out.Provider = over.Params.Provider
 	}
 	if declared["reasoning"] {
 		out.Reasoning = over.Params.Reasoning

@@ -52,16 +52,6 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** The block is lazy by contract — arriving on `/next/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
 - **Revisit when:** A fifth adapter is added, or the roster stops being a fixed set.
 
-### Adapter launch resolution
-
-#### One resolver instead of four launch sites
-
-- **Kind:** follow-up
-- **Source:** launch-resolution audit (whole-tree read of the dispatch chain)
-- **Summary:** The bee → process chain resolves layered config in four duplicated bodies — `dispatch_stages.go:180/189/214` (AFK) and `manager.go:297/301/314` (interactive) — and every adapter re-assembles env/argv on its own. Three distortions follow: machine-local `adapters/<name>.yaml` always wins over bee `params.binary` because loaders fill defaults and `MergeRunParams` lets any non-zero overlay win (`params.go:11`); booleans can only merge to true, so no layer can turn a colony default off (`params.go:23-31`); unknown param keys are silently ignored (`params.go:42-75`). The bee-visible params surface also carries vendor flags as colony decisions — `output_format` is runtime-owned (usage/`providerSessionId` parsing), `trust` + `force` collapse into `yolo`, `thinking` renames to `reasoning`, and `provider` dissolves into the alias value (`vendor/model`) so profiles override the vendor through the existing `model_aliases` overlay; every bee in this repo repeats the same three boilerplate keys. Full as-is/proposed analysis is in [Adapter launch resolution](../reference/adapter-launch-resolution.md).
-- **Why deferred:** It is a behavioral change to precedence that operators rely on (machine-local currently beats the repo commit), so it wants a deliberate migration — presence-aware machine overlay first, shared `ResolveLaunch` → `LaunchPlan` second — not a refactor folded into a feature.
-- **Revisit when:** A fifth adapter lands, or an operator reports that a committed `params.binary` / param typo did not take effect.
-
 ### Colony roles
 
 #### `archivist` bee — audit a finished trail

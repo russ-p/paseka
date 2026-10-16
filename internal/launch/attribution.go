@@ -96,11 +96,13 @@ func attributeFields(base, over adapters.RunParamsLayer, aliasApplied bool) map[
 		FieldYolo:      declaredLayer(base, over, "trust", "force"),
 		FieldPlan:      declaredLayer(base, over, "plan"),
 		FieldReasoning: declaredLayer(base, over, "reasoning"),
-		FieldProvider:  declaredLayer(base, over, "provider"),
-		FieldEnv:       declaredLayer(base, over, "env"),
-		FieldEnvMode:   declaredLayer(base, over, "env_mode"),
-		FieldTimeout:   declaredLayer(base, over, "timeout"),
-		FieldAPIKey:    declaredLayer(base, over, "api_key"),
+		// The provider is the vendor half of the resolved model, so it is
+		// decided wherever the model was (the alias layer included).
+		FieldProvider: modelLayer(base, over, aliasApplied),
+		FieldEnv:      declaredLayer(base, over, "env"),
+		FieldEnvMode:  declaredLayer(base, over, "env_mode"),
+		FieldTimeout:  declaredLayer(base, over, "timeout"),
+		FieldAPIKey:   declaredLayer(base, over, "api_key"),
 	}
 	return attr
 }

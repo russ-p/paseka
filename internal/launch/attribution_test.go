@@ -51,8 +51,8 @@ func extraWith(declared map[string]bool, params adapters.RunParams) adapters.Run
 // TestAttributionNamesTheWinningLayerPerField is the layering matrix: every
 // field must name the layer that actually decided its value, including the
 // binary asymmetry (committed wins, machine is a fallback), the alias layer
-// above the model's declaring layer, `thinking` reporting as reasoning, and a
-// field no layer declared falling to the adapter default.
+// above the model's declaring layer, and a field no layer declared falling to
+// the adapter default.
 func TestAttributionNamesTheWinningLayerPerField(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -129,16 +129,8 @@ func TestAttributionNamesTheWinningLayerPerField(t *testing.T) {
 			wantLayer: launch.LayerBee,
 		},
 		{
-			name:      "machine trust false is attributed to the machine",
-			bee:       beeWith(nil),
-			extra:     extraWith(map[string]bool{"trust": true}, adapters.RunParams{Trust: false}),
-			field:     launch.FieldYolo,
-			wantValue: "trust=false force=true",
-			wantLayer: launch.LayerMachine,
-		},
-		{
-			name:      "deprecated thinking reports as a bee reasoning declaration",
-			bee:       beeWith(map[string]any{"thinking": "high"}),
+			name:      "bee reasoning is attributed to the bee",
+			bee:       beeWith(map[string]any{"reasoning": "high"}),
 			extra:     extraWith(map[string]bool{}, adapters.RunParams{}),
 			field:     launch.FieldReasoning,
 			wantValue: "high",

@@ -122,8 +122,7 @@ prompt_template: builder.md
 run_summary: disabled
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 `
 	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(builderYAML), 0o644); err != nil {
 		t.Fatal(err)
@@ -165,8 +164,7 @@ prompt_template: builder.md
 run_summary: required
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 `
 	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(builderYAML), 0o644); err != nil {
 		t.Fatal(err)
@@ -203,8 +201,7 @@ worktree: true
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: MUTATION
     kind: code.proposal
@@ -250,8 +247,7 @@ adapter: cursor
 prompt_template: builder.md
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: VERIFICATION
     kind: verification.success

@@ -51,7 +51,7 @@ func TestColonyOnlyProfileRemapsLLMBees(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	writeColonyProfile(t, repo, "pi", `adapter: pi
 params:
-  provider: google
+  reasoning: high
 `)
 	resetProcessProfile(t)
 	colony.SetProcessProfile(colony.ProfileSelection{Name: "pi", FlagSet: true})
@@ -73,7 +73,7 @@ params:
 	if name != "pi" {
 		t.Fatalf("scout adapter = %q", name)
 	}
-	if scout.Params["provider"] != "google" {
+	if scout.Params["reasoning"] != "high" {
 		t.Fatalf("params = %+v", scout.Params)
 	}
 	guard, _, err := ctx.LoadBee("oracle-guard")
@@ -159,8 +159,8 @@ bees:
 func TestColonyProfileBooleanFalseBeatsBeeDefault(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	mustWriteProfile(t, filepath.Join(repo, ".paseka", "bees", "scout.yaml"),
-		"role: scout\nadapter: cursor\nparams:\n  trust: true\n  force: true\n")
-	writeColonyProfile(t, repo, "off", "adapter: cursor\nparams:\n  trust: false\n")
+		"role: scout\nadapter: cursor\nparams:\n  yolo: true\n")
+	writeColonyProfile(t, repo, "off", "adapter: cursor\nparams:\n  yolo: false\n")
 	resetProcessProfile(t)
 	colony.SetProcessProfile(colony.ProfileSelection{Name: "off", FlagSet: true})
 	ctx, err := colony.ResolveContext(repo)
@@ -172,11 +172,8 @@ func TestColonyProfileBooleanFalseBeatsBeeDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), colony.AdapterExtraLayer(ctx, "cursor"))
-	if params.Trust {
-		t.Fatal("trust = true, want the profile's explicit false to win")
-	}
-	if !params.Force {
-		t.Fatal("force = false, want the bee default true preserved")
+	if params.Trust || params.Force {
+		t.Fatalf("params = %+v, want the profile's explicit yolo false to beat the bee's true", params)
 	}
 }
 

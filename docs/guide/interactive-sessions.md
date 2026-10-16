@@ -240,8 +240,7 @@ Bees with `adapter: pi` launch the Pi CLI in its normal interactive UI (no `-p`,
 | `Workspace` | process cwd |
 | `SystemPrompt` | `--append-system-prompt <system.txt>` (file path) |
 | `InitialPrompt` | positional prompt when provided |
-| `params.model` | `--model <pattern>` |
-| `params.provider` | `--provider <name>` |
+| `params.model` | `--model <pattern>`; a `vendor/model[:suffix]` id splits at the **first** `/` into `--provider <vendor> --model <rest>` |
 | `params.reasoning` | `--thinking <level>` |
 | `params.plan` | `--plan` |
 | `params.binary` | CLI binary name (default `pi`) |
@@ -303,7 +302,7 @@ Bees with `adapter: opencode` launch the OpenCode TUI (no `run` subcommand).
 | `command` (optional) | full argv; overrides `params` mapping (see [architecture overview](../architecture/overview.md)) |
 | `Workspace` | process cwd (TUI has no `--dir`; that flag is `run`/`attach` only) |
 | `SystemPrompt` + `InitialPrompt` | delivered as the first turn through the TUI's loopback control server (not `--prompt`, which the TUI ignores with `--session`) |
-| `params.model` | `--model <id>` (`provider/model` when `params.provider` is set and model has no `/`); also sent with the first turn |
+| `params.model` | `--model <id>` (OpenCode consumes a native `provider/model` id); also sent with the first turn |
 | `params.plan` | `--agent plan`; also sent with the first turn |
 | `params.reasoning` | `--variant`; also sent with the first turn |
 | `params.binary` | CLI binary name (default `opencode`) |

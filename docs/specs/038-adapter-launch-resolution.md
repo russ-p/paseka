@@ -2,9 +2,9 @@
 
 ## Status
 
-**Draft**
+**Implemented** — all eight phases shipped; the deprecation window (Phases 3–4) closed in Phase 8, so the retired keys now fail at load rather than warn.
 
-Turns the "Proposed" model in [Adapter launch resolution](../reference/adapter-launch-resolution.md) into a phased implementation plan. No code implements it yet. Full as-is analysis, `file:line` anchors, and the field-level argument live in that reference; this spec is the execution record. Promote to **Approved** once the phasing and the migration window are agreed.
+Turns the launch model in [Adapter launch resolution](../reference/adapter-launch-resolution.md) into a phased implementation plan; that reference is the authoritative description of the shipped behavior and this spec is the execution record.
 
 ## Problem Statement
 
@@ -106,7 +106,7 @@ Bee-visible keys reduce to colony decisions:
 
 ### Provider dissolves into the model id
 
-Alias values become full ids (`high: anthropic/claude-sonnet-4`, `small: openai/gpt-5.5`); a bare id without `/` stays valid. The runtime maps the resolved id per adapter: cursor/claude pass through; opencode consumes `provider/model` natively (the `resolveModel` join is deleted); pi splits at the **first** `/` into `--provider <vendor> --model <rest>`, where `rest` keeps all inner slashes and colon suffixes (`openrouter/deepseek-r1:free` → `--provider openrouter --model deepseek/deepseek-r1:free`). `params.provider` is removed after a deprecation release that maps `provider: X` + `model: Y` → `X/Y` and warns via `doctor`. Profile vendor switching needs no new machinery: profiles already overlay `model_aliases`.
+Alias values become full ids (`high: anthropic/claude-sonnet-4`, `small: openai/gpt-5.5`); a bare id without `/` stays valid. The runtime maps the resolved id per adapter: cursor/claude pass through; opencode consumes `provider/model` natively (the `resolveModel` join is deleted); pi splits at the **first** `/` into `--provider <vendor> --model <rest>`, where `rest` keeps all inner slashes and colon suffixes (`openrouter/deepseek/deepseek-r1:free` → `--provider openrouter --model deepseek/deepseek-r1:free`). `params.provider` is removed after a deprecation release that maps `provider: X` + `model: Y` → `X/Y` and warns via `doctor`. Profile vendor switching needs no new machinery: profiles already overlay `model_aliases`.
 
 ### Command selection and exclusivity
 
@@ -181,7 +181,7 @@ Phases are ordered by dependency. Each phase is independently shippable and leav
   1. Extend alias validation to accept `vendor/model[:suffix]` and bare ids.
   2. Map resolved id per adapter: opencode native; pi split at first `/` preserving the rest; cursor/claude pass through.
   3. Remove `params.provider`; deprecation release maps `provider` + `model` → `X/Y` and warns.
-  4. Add the Pi split-rule tests (`openrouter/deepseek-r1:free` → provider + full rest).
+  4. Add the Pi split-rule tests (`openrouter/deepseek/deepseek-r1:free` → provider + full rest).
   5. Update `colony.yaml`/profile alias examples and reference docs.
 - **Deliverable:** one atomic alias edit moves vendor and model; profile vendor switch works through existing alias overlay.
 - **Acceptance:** table-driven adapter mapping tests including colon suffixes and bare ids; deprecation mapping test.
@@ -263,6 +263,6 @@ Phases are ordered by dependency. Each phase is independently shippable and leav
 
 **Deliberate consequences.** A machine with no `adapters/cursor.yaml` gets `agent` from built-in defaults; a bee pinning `params.binary: agent-next` finally wins over an absent machine file. Operators relying on machine-local-always-wins will see a change in Phase 1 and should be told in that release's notes.
 
-**Open decision to confirm before Approved.** Whether the deprecation window is exactly one release, and whether `--raw` is `paseka bee run` only or also accepted by `bee chat` (interactive already owns its TTY, so the reference leaves this to mode).
+**Resolved decisions.** The deprecation window was a single release and closed in Phase 8: `trust`/`force`/`thinking`/`provider`/`output_format` now fail at load. `--raw` is `paseka bee run` only; interactive `bee chat` owns its TTY and never opts out of structured output.
 
 Related: [Adapter launch resolution](../reference/adapter-launch-resolution.md) · [bee config](../guide/bee-config.md) · [colony layout](../guide/colony-layout.md) · [config profiles](027-config-profiles.md) · [model aliases](019-model-aliases.md) · [architecture overview](../architecture/overview.md).

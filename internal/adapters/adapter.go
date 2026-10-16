@@ -58,7 +58,7 @@ type RunParams struct {
 	Plan      bool
 	Binary    string // adapter binary override
 	APIKey    string // optional; from machine-local api_key_env when set
-	Provider  string
+	Provider  string // vendor half of a `vendor/model` id, derived per adapter
 	Reasoning string // low | medium | high | passthrough
 	// Env is the declared pass-through environment from params.env. Values are
 	// literals or `$HOST_VAR` references resolved against the inherited

@@ -101,7 +101,7 @@ The runtime passes a single context object (`prompts.Context`) to every template
 
 Variables **not** available in templates today:
 
-- Bee adapter params (`model`, `trust`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
+- Bee adapter params (`model`, `yolo`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
 - Arbitrary bus event fields — only `Task`, `Intent`, and `Insights` are surfaced in MVP.
 
 Bus event publishing is instructed through emit partials: `emit-howto` (safe CLI mechanics for all bees) plus type-scoped partials (`emit-insight`, `emit-signal`, `emit-verification`, `emit-task-completed`) included only by bees that may publish those types.

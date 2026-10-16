@@ -512,8 +512,7 @@ prompt_template: builder.md
 worktree: true
 params:
   model: composer-2.5
-  trust: true
-  force: true
+  yolo: true
 publishes:
   - type: MUTATION
     kind: code.proposal
