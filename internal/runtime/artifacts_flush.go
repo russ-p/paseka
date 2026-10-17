@@ -60,7 +60,7 @@ func FlushSessionArtifacts(ctx context.Context, colonyRoot, traceID, agentID str
 		return nil
 	}
 	if pub == nil {
-		pub = bus.NopPublisher{}
+		pub = bus.LocalPublisher{ColonyRoot: colonyRoot}
 	}
 	return artifacts.FlushRunDelta(ctx, pub, colonyRoot, subjectPrefixForColonyRoot(colonyRoot), traceID, agentID)
 }

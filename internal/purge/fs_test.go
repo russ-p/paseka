@@ -9,6 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/purge"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/worktree"
@@ -194,4 +195,70 @@ func TestBusPurgePlanFromTrace(t *testing.T) {
 	if plan.TraceID != "trace-bus" || !plan.TaskLedgerKey || plan.EventCount != 2 {
 		t.Fatalf("plan = %#v", plan)
 	}
+}
+
+func TestPurgeRunsRemovesTrailRecordAndBusPurgeLeavesIt(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	traceID := "trace-trail-retention"
+
+	trail := runs.Trail{ColonyRoot: repo, TraceID: traceID}
+	ev, err := protocol.NewEvent(traceID, "cli", 0, protocol.EventSignal, map[string]any{"kind": "feature.requested"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := trail.AppendEvent(ev); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(trail.EventsPath()); err != nil {
+		t.Fatalf("trail record not written: %v", err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	// Retention is the existing trail retention: removing a trail's run data
+	// removes the record with it, and no new target exists for it.
+	if _, err := purge.Execute(ctx, purge.PurgeTarget{Runs: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(trail.EventsPath()); !os.IsNotExist(err) {
+		t.Fatalf("trail record survived a runs purge: %v", err)
+	}
+}
+
+func TestPurgeWithoutRunsTargetLeavesTrailRecordAlone(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	traceID := "trace-trail-bus-purge"
+
+	trail := runs.Trail{ColonyRoot: repo, TraceID: traceID}
+	if err := trail.AppendEvent(trailEventForPurge(t, traceID)); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	// Purging bus state must not destroy the filesystem record of what the
+	// colony did. Only a purge that targets runs removes the record, and that
+	// target is what the bus purge deliberately does not set.
+	if _, err := purge.Execute(ctx, purge.PurgeTarget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(trail.EventsPath()); err != nil {
+		t.Fatalf("trail record removed by a purge that did not target runs: %v", err)
+	}
+	events, err := runs.ReadTrailEvents(repo, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("trail record holds %d events after a bus-only purge, want 1", len(events))
+	}
+}
+
+func trailEventForPurge(t *testing.T, traceID string) protocol.Event {
+	t.Helper()
+	ev, err := protocol.NewEvent(traceID, "cli", 0, protocol.EventSignal, map[string]any{"kind": "feature.requested"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ev
 }

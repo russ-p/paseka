@@ -92,9 +92,20 @@ func (c *Client) Health() error {
 }
 
 // PublishEvent publishes a domain event to JetStream.
-func (c *Client) PublishEvent(_ context.Context, event protocol.Event) error {
+//
+// The trail record is written first, so the window between "published" and
+// "recorded" — the window that loses events when a broker dies mid-run — is
+// closed rather than widened. The record is the colony's account of what it
+// decided to do: an event it holds may still have failed to reach the bus, and
+// `paseka verify` is the way to tell.
+func (c *Client) PublishEvent(ctx context.Context, event protocol.Event) error {
 	if !protocol.IsDomainEvent(event.Type) {
 		return nil
+	}
+	// The record is best-effort and never blocks the publish: see recordTrailEvent.
+	_ = recordTrailEvent(c.cfg.ColonyRoot, event)
+	if c.js == nil {
+		return fmt.Errorf("bus: not connected")
 	}
 	subject := EventSubject(c.cfg.SubjectPrefix, event)
 	data, err := json.Marshal(event)
@@ -136,26 +147,71 @@ func (c *Client) StoreArtifact(name string, data []byte) (string, error) {
 	return name, nil
 }
 
+const (
+	// replayIdleTimeout paces `paseka replay`, which prints what it has read and
+	// is a listing rather than a verdict.
+	replayIdleTimeout = 200 * time.Millisecond
+	// exhaustiveIdleTimeout paces a read whose result is compared against another
+	// record, where stopping early would invent a disagreement.
+	exhaustiveIdleTimeout = 2 * time.Second
+	// exhaustiveReadBudget bounds that read outright, so a stream that keeps
+	// trickling cannot hold the command open.
+	exhaustiveReadBudget = 30 * time.Second
+)
+
 // ReplayTrace returns all domain events for a trace from JetStream.
+//
+// It stops after the first stretch of silence, which is enough for a listing and
+// not enough for a verdict: a caller that compares this against another record
+// must use ReplayTraceExhaustive, because an event that arrives later would read
+// as one the broker never took.
 func (c *Client) ReplayTrace(traceID string) ([]protocol.Event, error) {
+	events, _, err := c.replayTrace(traceID, replayIdleTimeout, false)
+	return events, err
+}
+
+// ReplayTraceExhaustive returns all domain events for a trace, waiting until the
+// stream has actually been drained rather than until it goes quiet.
+//
+// complete is false when the budget ran out with the stream still delivering.
+// That is not an empty answer — it is an unknown one, and a caller comparing
+// against another record must report it as such instead of calling it a
+// divergence.
+func (c *Client) ReplayTraceExhaustive(traceID string) (events []protocol.Event, complete bool, err error) {
+	return c.replayTrace(traceID, exhaustiveIdleTimeout, true)
+}
+
+func (c *Client) replayTrace(traceID string, idle time.Duration, exhaustive bool) ([]protocol.Event, bool, error) {
 	if traceID == "" {
-		return nil, fmt.Errorf("bus: traceId is required")
+		return nil, false, fmt.Errorf("bus: traceId is required")
 	}
 	subject := EventsWildcard(c.cfg.SubjectPrefix)
 	sub, err := c.js.SubscribeSync(subject, nats.DeliverAll(), nats.AckNone())
 	if err != nil {
-		return nil, fmt.Errorf("bus: replay subscribe: %w", err)
+		return nil, false, fmt.Errorf("bus: replay subscribe: %w", err)
 	}
 	defer func() { _ = sub.Unsubscribe() }()
 
+	started := time.Now()
 	var events []protocol.Event
 	for {
-		msg, err := sub.NextMsg(200 * time.Millisecond)
+		msg, err := sub.NextMsg(idle)
 		if err == nats.ErrTimeout {
-			break
+			if !exhaustive {
+				return events, true, nil
+			}
+			// Quiet is only proof of an empty stream when the consumer says
+			// nothing is left to deliver. Otherwise keep waiting within budget.
+			if !streamPending(sub) {
+				return events, true, nil
+			}
+			if time.Since(started) >= exhaustiveReadBudget {
+				return events, false, nil
+			}
+			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("bus: replay next: %w", err)
+			return nil, false, fmt.Errorf("bus: replay next: %w", err)
 		}
 		var ev protocol.Event
 		if err := json.Unmarshal(msg.Data, &ev); err != nil {
@@ -165,7 +221,17 @@ func (c *Client) ReplayTrace(traceID string) ([]protocol.Event, error) {
 			events = append(events, ev)
 		}
 	}
-	return events, nil
+}
+
+// streamPending reports whether the consumer still has messages to deliver. A
+// consumer that cannot say is treated as pending, because guessing "nothing left"
+// is what turns a slow stream into a false divergence.
+func streamPending(sub *nats.Subscription) bool {
+	info, err := sub.ConsumerInfo()
+	if err != nil || info == nil {
+		return true
+	}
+	return info.NumPending > 0
 }
 
 // Close shuts down the NATS connection.

@@ -65,6 +65,13 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 			defer busClient.Close()
 		}
 	}
+	if d.publisher == nil {
+		// No bus is not no record. Without this the runtime's own events for a
+		// run — the synthesized MUTATION above all — would go nowhere in a
+		// file-only colony, and a trail that changed code would report that
+		// nothing was proposed.
+		d.SetPublisher(bus.LocalPublisher{ColonyRoot: ctxColony.ColonyRoot}, false)
+	}
 
 	traceID := req.TraceID
 	if traceID == "" {

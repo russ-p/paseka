@@ -637,7 +637,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 			)
 			statusErr = joinStatusNotes(statusErr, msg)
 		}
-		var pub bus.Publisher = bus.NopPublisher{}
+		var pub bus.Publisher = bus.LocalPublisher{ColonyRoot: entry.Handle.ColonyRoot}
 		if client, err := bus.ConnectColony(ctxColony, false); err == nil && client != nil {
 			pub = client
 			defer client.Close()

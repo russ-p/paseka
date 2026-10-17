@@ -9,8 +9,10 @@ import (
 	"testing"
 
 	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/runtime"
 )
 
@@ -384,4 +386,91 @@ func findMutation(t *testing.T, events []protocol.Event) protocol.Event {
 	}
 	t.Fatalf("no MUTATION in %+v", events)
 	return protocol.Event{}
+}
+
+// seamPublisher is the shape a colony's publisher has in production: record the
+// event locally, then forward it to the transport.
+type seamPublisher struct {
+	local   bus.Publisher
+	forward *recordingPublisher
+}
+
+func (p *seamPublisher) PublishEvent(ctx context.Context, ev protocol.Event) error {
+	if err := p.local.PublishEvent(ctx, ev); err != nil {
+		return err
+	}
+	return p.forward.PublishEvent(ctx, ev)
+}
+
+func TestSynthesizedProposalLandsInTrailRecordWithoutBus(t *testing.T) {
+	root := t.TempDir()
+	writeProposalColony(t, root, `role: builder
+adapter: cursor
+worktree: true
+prompt_template: builder.md
+params:
+  model: composer-2.5
+  yolo: true
+publishes:
+  - type: MUTATION
+    kind: code.proposal.isolated
+`)
+
+	traceID := "trace-trail-record"
+	pub := &recordingPublisher{}
+	local := bus.LocalPublisher{ColonyRoot: root}
+	// The seam records and forwards, exactly as a bus-backed publisher does.
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", &mutatingAdapter{run: func(workspace string) error {
+		readme := filepath.Join(workspace, "README.md")
+		data, err := os.ReadFile(readme)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(readme, append(data, []byte("feature\n")...), 0o644)
+	}})
+	d.SetPublisher(&seamPublisher{local: local, forward: pub}, false)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+
+	if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    traceID,
+		TaskID:     "task-1",
+		Task:       "add feature",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	published := findMutation(t, pub.events)
+	recorded, err := runs.ReadTrailEvents(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 {
+		t.Fatalf("trail record holds %d events, want the synthesized proposal", len(recorded))
+	}
+	if recorded[0].ID != published.ID {
+		t.Fatalf("recorded identity = %q, want the published event's %q", recorded[0].ID, published.ID)
+	}
+
+	// The same event is also the trail's history, once, even though the run's
+	// own audit log exists beside it.
+	merged, err := runs.ReadTraceEvents(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mutations int
+	for _, ev := range merged {
+		if ev.Type == protocol.EventMutation {
+			mutations++
+		}
+	}
+	if mutations != 1 {
+		t.Fatalf("merged trail history holds %d proposals, want 1", mutations)
+	}
 }

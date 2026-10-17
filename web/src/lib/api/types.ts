@@ -268,6 +268,8 @@ export interface TraceSummary extends HoneyReserve {
 	lastActivityAt: string;
 	runCount: number;
 	taskCount: number;
+	/** Events in the trail's own record — the trail's history, not just its runs. */
+	eventCount: number;
 	bees?: string[];
 	hasFailures: boolean;
 	hasActive: boolean;
@@ -735,6 +737,11 @@ export interface SignalSummary {
 	traceId: string;
 	agentId: string;
 	bee?: string;
+	/**
+	 * Who produced the event when no bee run did: the beekeeper, or the runtime
+	 * on a bee's behalf. Without it an operator action reads as an unknown bee.
+	 */
+	producer?: string;
 	payloadKind?: string;
 	/** Event type, set on feed rows; absent on the dashboard's insight projection. */
 	type?: string;
@@ -748,6 +755,12 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [key:
 /** Mirrors `protocol.Event`, the raw envelope the feed carries beside its projection. */
 export interface ProtocolEvent {
 	protocolVersion: string;
+	/**
+	 * The event's stable identity, minted by the colony where the event was
+	 * created. Absent on records written before identities existed, and on the
+	 * agent-facing input shape, so a bee never sets it.
+	 */
+	id?: string;
 	traceId: string;
 	agentId: string;
 	seq: number;

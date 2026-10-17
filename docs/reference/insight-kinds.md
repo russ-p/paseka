@@ -87,7 +87,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 
 Before rendering a bee prompt, runtime:
 
-1. Reads all `events.ndjson` files under `.paseka/runs/<traceId>/`.
+1. Reads the trail's history: `.paseka/runs/<traceId>/trail-events.ndjson` merged with every run's own `events.ndjson`, one reader for both stores.
 2. Selects narrative `INSIGHT` kinds (`run.summary`, `review.note`, `context.note`, `human.feedback`).
 3. Prefers insights scoped to the current `taskId`, then adds trace-scoped insights (no `taskId`).
 4. Deduplicates, truncates long lines, and caps the list (default: 5 entries).

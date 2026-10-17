@@ -124,7 +124,7 @@ func PublishWritten(ctx context.Context, pub bus.Publisher, colonyRoot, subjectP
 		return err
 	}
 	if pub == nil {
-		pub = bus.NopPublisher{}
+		pub = bus.LocalPublisher{ColonyRoot: colonyRoot}
 	}
 	if err := pub.PublishEvent(ctx, ev); err != nil {
 		return fmt.Errorf("artifacts: publish: %w", err)

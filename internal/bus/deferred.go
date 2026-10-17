@@ -120,6 +120,32 @@ func FlushPending(ctx context.Context, pub Publisher, colonyRoot, traceID, agent
 
 	published := 0
 	for len(pending) > 0 {
+		if pending[0].ID == "" {
+			// A queue written before identities existed — every queue written now
+			// arrives with one from the event constructor. Mint it here and put
+			// it back in the queue *before* publishing: the local record is
+			// written during the publish attempt, so leaving an identity-less copy
+			// behind would let the retry mint a second id and record the same
+			// event twice — the exact inflation the identity exists to prevent.
+			id, err := protocol.NewEventID()
+			if err != nil {
+				return FlushResult{
+					OK:        false,
+					TraceID:   traceID,
+					AgentID:   agentID,
+					Published: published,
+					Error:     "identity_failed",
+					Details: []protocol.ValidationDetail{{
+						Path:    "",
+						Message: err.Error(),
+					}},
+				}, nil
+			}
+			pending[0].ID = id
+			if err := runDir.WritePending(pending); err != nil {
+				return FlushResult{}, err
+			}
+		}
 		ev := pending[0]
 		if err := validateEventFileRefs(colonyRoot, traceID, ev); err != nil {
 			return FlushResult{
@@ -285,7 +311,9 @@ func FlushPendingForRun(ctx context.Context, ctxColony colony.Context, traceID, 
 	if client != nil {
 		defer client.Close()
 	}
-	var pub Publisher = NopPublisher{}
+	// No bus is not no record: a file-only colony still writes the flushed
+	// events into its trail history.
+	var pub Publisher = LocalPublisher{ColonyRoot: ctxColony.ColonyRoot}
 	if client != nil {
 		pub = client
 	}

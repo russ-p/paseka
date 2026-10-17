@@ -247,7 +247,9 @@ func TestCollectRecentInsightsExcludesTraceSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	traceSummary.CreatedAt = started
-	if err := d.AppendEvent(traceSummary); err != nil {
+	// The dashboard reads trail records, not per-run logs.
+	trail := runs.Trail{ColonyRoot: repo, TraceID: traceID}
+	if err := trail.AppendEvent(traceSummary); err != nil {
 		t.Fatal(err)
 	}
 
@@ -260,7 +262,7 @@ func TestCollectRecentInsightsExcludesTraceSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	runSummary.CreatedAt = started.Add(time.Second)
-	if err := d.AppendEvent(runSummary); err != nil {
+	if err := trail.AppendEvent(runSummary); err != nil {
 		t.Fatal(err)
 	}
 

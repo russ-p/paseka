@@ -36,11 +36,14 @@ type EventLink struct {
 
 // EventFeedItem is a normalized timeline row for trace event feeds.
 type EventFeedItem struct {
-	ID          string             `json:"id"`
-	CreatedAt   time.Time          `json:"createdAt"`
-	TraceID     string             `json:"traceId"`
-	AgentID     string             `json:"agentId"`
-	Bee         string             `json:"bee,omitempty"`
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	TraceID   string    `json:"traceId"`
+	AgentID   string    `json:"agentId"`
+	Bee       string    `json:"bee,omitempty"`
+	// Producer names a non-bee producer — the beekeeper, or the runtime on a
+	// bee's behalf — so a human action is not read as an unknown bee.
+	Producer    string             `json:"producer,omitempty"`
 	Type        protocol.EventType `json:"type"`
 	PayloadKind string             `json:"payloadKind,omitempty"`
 	TaskID      string             `json:"taskId,omitempty"`
@@ -78,6 +81,7 @@ type TraceSummaryView struct {
 	LastActivityAt  time.Time            `json:"lastActivityAt"`
 	RunCount        int                  `json:"runCount"`
 	TaskCount       int                  `json:"taskCount"`
+	EventCount      int                  `json:"eventCount"`
 	Bees            []string             `json:"bees,omitempty"`
 	HasFailures     bool                 `json:"hasFailures"`
 	HasActive       bool                 `json:"hasActive"`
@@ -295,7 +299,9 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 		if err != nil {
 			return TraceDetailView{}, false, err
 		}
-		if summary.RunCount == 0 && summary.TaskCount == 0 {
+		// A trail that only ever received events still exists: its history is
+		// on disk even though it never flew a bee.
+		if summary.RunCount == 0 && summary.TaskCount == 0 && summary.EventCount == 0 {
 			return TraceDetailView{}, false, nil
 		}
 	}
@@ -401,12 +407,9 @@ func ListEventFeed(ctx colony.Context, filter EventFilter) (EventFeedPage, error
 		if err != nil {
 			return EventFeedPage{}, err
 		}
-		beeCache := map[string]string{}
+		producerCache := map[string]runs.EventProducer{}
 		for _, ev := range events {
-			scanned = append(scanned, runs.ScannedEvent{
-				Event: ev,
-				Bee:   runsBeeForEvent(ctx.ColonyRoot, filter.TraceID, ev.AgentID, beeCache),
-			})
+			scanned = append(scanned, scannedEventFor(ctx.ColonyRoot, filter.TraceID, ev, producerCache))
 		}
 		sortScannedEventsDesc(scanned)
 	} else {
@@ -503,6 +506,7 @@ func TraceSummaryFromRuns(s runs.TraceSummary) TraceSummaryView {
 		LastActivityAt: s.LastActivityAt,
 		RunCount:       s.RunCount,
 		TaskCount:      s.TaskCount,
+		EventCount:     s.EventCount,
 		Bees:           append([]string(nil), s.Bees...),
 		HasFailures:    s.HasFailures,
 		HasActive:      s.HasActive,
@@ -580,15 +584,18 @@ func resolveTraceTasks(ctx colony.Context, ledger taskledger.Ledger, traceID str
 // BuildEventFeedItems maps trace events to normalized feed rows, preserving input order
 // (typically chronological ascending from runs.ReadTraceEvents).
 func BuildEventFeedItems(colonyRoot, traceID string, events []protocol.Event) []EventFeedItem {
-	beeCache := map[string]string{}
+	producerCache := map[string]runs.EventProducer{}
 	items := make([]EventFeedItem, 0, len(events))
 	for _, ev := range events {
-		items = append(items, eventFeedItemFromScanned(runs.ScannedEvent{
-			Event: ev,
-			Bee:   runsBeeForEvent(colonyRoot, traceID, ev.AgentID, beeCache),
-		}))
+		items = append(items, eventFeedItemFromScanned(scannedEventFor(colonyRoot, traceID, ev, producerCache)))
 	}
 	return items
+}
+
+// scannedEventFor pairs an event with who produced it, cached per agent id.
+func scannedEventFor(colonyRoot, traceID string, ev protocol.Event, cache map[string]runs.EventProducer) runs.ScannedEvent {
+	producer := runs.ProducerForEvent(colonyRoot, traceID, ev.AgentID, cache)
+	return runs.ScannedEvent{Event: ev, Bee: producer.Bee, Producer: producer.Producer}
 }
 
 func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {
@@ -604,6 +611,7 @@ func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {
 		TraceID:     ev.TraceID,
 		AgentID:     ev.AgentID,
 		Bee:         row.Bee,
+		Producer:    row.Producer,
 		Type:        ev.Type,
 		PayloadKind: kind,
 		TaskID:      eventTaskID(ev),
@@ -615,7 +623,14 @@ func eventFeedItemFromScanned(row runs.ScannedEvent) EventFeedItem {
 	return item
 }
 
+// eventFeedID is the feed row's cursor key. A minted identity is the key: it is
+// unique by construction, so paging through events that share an instant cannot
+// repeat or skip a row. Records written before identities existed fall back to
+// the previous composite key.
 func eventFeedID(ev protocol.Event) string {
+	if ev.ID != "" {
+		return ev.ID
+	}
 	return fmt.Sprintf("%s|%s|%s|%d",
 		ev.CreatedAt.UTC().Format(time.RFC3339Nano),
 		ev.TraceID,
@@ -648,7 +663,7 @@ func matchesEventFilter(item EventFeedItem, filter EventFilter) bool {
 	if filter.AgentID != "" && item.AgentID != filter.AgentID {
 		return false
 	}
-	if filter.Bee != "" && !strings.EqualFold(item.Bee, filter.Bee) {
+	if filter.Bee != "" && !strings.EqualFold(item.Bee, filter.Bee) && !strings.EqualFold(item.Producer, filter.Bee) {
 		return false
 	}
 	if filter.EventType != "" && string(item.Type) != filter.EventType {
@@ -799,6 +814,10 @@ func defaultEventSummary(ev protocol.Event, kind string) string {
 	return string(ev.Type)
 }
 
+// sortScannedEventsDesc orders the feed newest first. The identity is the last
+// key, so the order is total rather than merely stable: nothing about the
+// comparator's inputs decides the order on its own, and a page boundary can
+// never fall between two rows it cannot tell apart.
 func sortScannedEventsDesc(items []runs.ScannedEvent) {
 	sort.SliceStable(items, func(i, j int) bool {
 		a, b := items[i].Event, items[j].Event
@@ -811,20 +830,9 @@ func sortScannedEventsDesc(items []runs.ScannedEvent) {
 		if a.TraceID != b.TraceID {
 			return a.TraceID > b.TraceID
 		}
-		return a.AgentID > b.AgentID
+		if a.AgentID != b.AgentID {
+			return a.AgentID > b.AgentID
+		}
+		return a.ID > b.ID
 	})
-}
-
-func runsBeeForEvent(colonyRoot, traceID, agentID string, cache map[string]string) string {
-	key := traceID + "/" + agentID
-	if bee, ok := cache[key]; ok {
-		return bee
-	}
-	meta, ok, err := runs.FindRun(colonyRoot, traceID, agentID)
-	if err != nil || !ok {
-		cache[key] = ""
-		return ""
-	}
-	cache[key] = meta.Bee
-	return meta.Bee
 }

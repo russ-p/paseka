@@ -40,6 +40,7 @@ export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummar
 		lastActivityAt: '2026-09-25T18:04:22Z',
 		runCount: 4,
 		taskCount: 2,
+		eventCount: 17,
 		bees: ['builder'],
 		hasFailures: false,
 		hasActive: true,

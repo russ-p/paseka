@@ -80,3 +80,34 @@ func TestParsePrefixedTimeRejectsManualIDs(t *testing.T) {
 		t.Fatal("expected short body to be rejected")
 	}
 }
+
+func TestRandomCarriesFullEntropyAndNoTimestamp(t *testing.T) {
+	const draws = 20000
+	seen := make(map[string]struct{}, draws)
+	for range draws {
+		body, err := ids.Random()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(body) != ids.RandomHexLen {
+			t.Fatalf("body %q is %d chars, want %d", body, len(body), ids.RandomHexLen)
+		}
+		if _, dup := seen[body]; dup {
+			t.Fatalf("body %q drawn twice in %d draws", body, draws)
+		}
+		seen[body] = struct{}{}
+	}
+}
+
+func TestPrefixedRandomKeepsThePrefix(t *testing.T) {
+	id, err := ids.PrefixedRandom("evt-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(id, "evt-") {
+		t.Fatalf("id %q lost its prefix", id)
+	}
+	if strings.HasPrefix(id, "trace-") {
+		t.Fatalf("id %q must not be a mini-ULID: nothing may parse its time", id)
+	}
+}

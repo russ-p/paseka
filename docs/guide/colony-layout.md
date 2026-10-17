@@ -45,6 +45,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 ├── .gitignore           # ignores worktrees/, runs/, cache/, *.local.yaml
 ├── runs/                # gitignored — per-agent file IPC and trail comb (architecture overview; purge --runs wipes standing checkpoints)
 │   └── <traceId>/
+│       ├── trail-events.ndjson   # the trail's own record — every domain event the colony published for it
 │       ├── <agentId>/
 │       │   ├── prompt.txt
 │       │   ├── system.txt   # optional — rendered system_template

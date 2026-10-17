@@ -2,8 +2,10 @@
 
 ## Status
 
-**(Approved)**
+**(Implemented)**
 A trail gains one append-only event log of its own, written by the colony's single publish path, that answers the question no current surface can: what happened on this trail. It records every domain event, whoever produced it, without requiring a live broker. Related: [039-proposal-patch-records](039-proposal-patch-records.md) depends on this to place its patches in a trail's story.
+
+Shipped with the record, the merge, and `paseka verify <traceId>` for the comparison against the bus. Canonical behaviour: [architecture overview](../architecture/overview.md) § Run tree layout, [event contracts](../reference/event-contracts.md), [CLI](../guide/cli.md).
 
 ## Problem Statement
 

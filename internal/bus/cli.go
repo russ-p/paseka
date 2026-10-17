@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
 )
@@ -23,12 +22,7 @@ func NewEventFromCLI(traceID, agentID, typ, payloadJSON string) (protocol.Event,
 	if !json.Valid([]byte(payloadJSON)) {
 		return protocol.Event{}, fmt.Errorf("bus: payload must be valid JSON")
 	}
-	return protocol.Event{
-		ProtocolVersion: protocol.Version,
-		TraceID:         traceID,
-		AgentID:         agentID,
-		Type:            eventType,
-		CreatedAt:       time.Now().UTC(),
-		Payload:         json.RawMessage(payloadJSON),
-	}, nil
+	// NewEvent is the single place identity is minted, so a hand-authored
+	// event is recognizable in the trail log exactly like a runtime one.
+	return protocol.NewEvent(traceID, agentID, 0, eventType, json.RawMessage(payloadJSON))
 }

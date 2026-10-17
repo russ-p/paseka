@@ -828,6 +828,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if err := d.AppendEvent(insight); err != nil {
 		t.Fatal(err)
 	}
+	appendTrailEvent(t, repo, traceID, insight)
 
 	signal, err := protocol.NewEvent(traceID, agentID, 2, protocol.EventSignal, protocol.TaskReadyPayload{
 		Kind:   protocol.TaskEventReady,
@@ -841,6 +842,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if err := d.AppendEvent(signal); err != nil {
 		t.Fatal(err)
 	}
+	appendTrailEvent(t, repo, traceID, signal)
 
 	titleEv, err := protocol.NewEvent(traceID, agentID, 3, protocol.EventInsight, protocol.TraceTitlePayload{
 		Kind:  protocol.InsightTraceTitle,
@@ -853,6 +855,7 @@ func TestDashboardAndTimelineAPIHandlers(t *testing.T) {
 	if err := d.AppendEvent(titleEv); err != nil {
 		t.Fatal(err)
 	}
+	appendTrailEvent(t, repo, traceID, titleEv)
 
 	taskDir, err := runs.NewTaskDir(repo, traceID, "task-dash")
 	if err != nil {
@@ -2391,5 +2394,16 @@ func TestTracesAPIListPaging(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), "limit") && !strings.Contains(rec.Body.String(), "before") {
 			t.Fatalf("GET %s body = %q, want the reason", bad, rec.Body.String())
 		}
+	}
+}
+
+// appendTrailEvent records an event in the trail-level log the way the
+// publisher seam does. The same event may also sit in the run's own audit log;
+// both copies carry one identity, so a merged read shows it once.
+func appendTrailEvent(t *testing.T, colonyRoot, traceID string, ev protocol.Event) {
+	t.Helper()
+	trail := runs.Trail{ColonyRoot: colonyRoot, TraceID: traceID}
+	if err := trail.AppendEvent(ev); err != nil {
+		t.Fatal(err)
 	}
 }

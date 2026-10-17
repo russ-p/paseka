@@ -33,6 +33,9 @@
 
 	const time = $derived(formatTimestamp(signal.createdAt));
 
+	/** A bee role where a run exists, the producing surface otherwise, and no guess beyond that. */
+	const producerLine = $derived(signal.bee ?? signal.producer ?? 'unknown bee');
+
 	/** A feed row names both the contract and the payload kind; the dashboard's insight projection carries one word. */
 	const kindLine = $derived(eventKindLine(signal));
 </script>
@@ -51,9 +54,9 @@
 		{/if}
 	</div>
 	<div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/50">
-		<Hint lines={[kindLine, signal.bee ?? 'unknown bee', time]}>
+		<Hint lines={[kindLine, producerLine, time]}>
 			<span class="cursor-help">
-				{kindLine}{signal.bee ? ` · ${signal.bee}` : ''} · {time}
+				{kindLine}{signal.bee || signal.producer ? ` · ${producerLine}` : ''} · {time}
 			</span>
 		</Hint>
 		{#if showTrace}

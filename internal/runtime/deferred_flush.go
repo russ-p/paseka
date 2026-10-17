@@ -38,7 +38,7 @@ func (d *Dispatcher) flushPublisher(colonyRoot string) (bus.Publisher, func(), e
 		return nil, nil, err
 	}
 	if client == nil {
-		return bus.NopPublisher{}, nil, nil
+		return bus.LocalPublisher{ColonyRoot: colonyRoot}, nil, nil
 	}
 	return client, func() { client.Close() }, nil
 }

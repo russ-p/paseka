@@ -13,14 +13,19 @@ import (
 
 var traceLog = logging.Component("runs")
 
-// ReadTraceEvents loads domain events from all agent runs under .paseka/runs/<traceId>/.
-// Events are returned in chronological order (by createdAt, then seq).
+// ReadTraceEvents loads one trail's history: the union of its per-run event
+// logs and its trail-level record, each event once, oldest first.
+//
+// This is the single reader behind the timeline, the export, prompt memory,
+// trail titles and summaries, and worktree branch and pull-request body
+// resolution, so none of them can drift apart. It reads the filesystem only —
+// no broker is required to answer "what happened".
 func ReadTraceEvents(colonyRoot, traceID string) ([]protocol.Event, error) {
 	if colonyRoot == "" || traceID == "" {
 		return nil, fmt.Errorf("runs: colony root and traceId are required")
 	}
-	traceRoot := filepath.Join(colonyRoot, ".paseka", "runs", traceID)
-	entries, err := os.ReadDir(traceRoot)
+	trailRoot := filepath.Join(colonyRoot, ".paseka", "runs", traceID)
+	entries, err := os.ReadDir(trailRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -28,7 +33,7 @@ func ReadTraceEvents(colonyRoot, traceID string) ([]protocol.Event, error) {
 		return nil, fmt.Errorf("runs: list trace %s: %w", traceID, err)
 	}
 
-	var all []protocol.Event
+	var perRun [][]protocol.Event
 	for _, ent := range entries {
 		if !ent.IsDir() || skipTraceEventDir(ent.Name()) {
 			continue
@@ -49,18 +54,42 @@ func ReadTraceEvents(colonyRoot, traceID string) ([]protocol.Event, error) {
 				logging.F("error", err.Error()))
 			continue
 		}
-		all = append(all, events...)
+		perRun = append(perRun, events)
 	}
 
-	sort.SliceStable(all, func(i, j int) bool {
-		a, b := all[i], all[j]
+	trail := Trail{ColonyRoot: colonyRoot, TraceID: traceID}
+	trailEvents, err := readEventsFile(trail.EventsPath())
+	if err != nil {
+		// Same rule as a run log: a damaged file costs its own trail its
+		// events, never the whole colony's read.
+		traceLog.Warn("skip unreadable trail event log",
+			logging.F("traceId", traceID),
+			logging.F("path", trail.EventsPath()),
+			logging.F("error", err.Error()))
+		trailEvents = nil
+	}
+
+	return mergeTrailEvents(append(perRun, trailEvents)...), nil
+}
+
+// sortTraceEvents orders trail history oldest first, and totally: creation
+// time, then the per-store sequence, then the producer, then the minted
+// identity. The sequence still decides ties within one store — that is what the
+// last-write-wins resolvers above it have always read — while identity makes the
+// order total where nothing else can separate two records, so paging through a
+// trail never repeats or skips a row.
+func sortTraceEvents(events []protocol.Event) {
+	sort.SliceStable(events, func(i, j int) bool {
+		a, b := events[i], events[j]
 		if !a.CreatedAt.Equal(b.CreatedAt) {
 			return a.CreatedAt.Before(b.CreatedAt)
 		}
 		if a.Seq != b.Seq {
 			return a.Seq < b.Seq
 		}
-		return strings.Compare(a.AgentID, b.AgentID) < 0
+		if c := strings.Compare(a.AgentID, b.AgentID); c != 0 {
+			return c < 0
+		}
+		return a.ID < b.ID
 	})
-	return all, nil
 }

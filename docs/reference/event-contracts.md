@@ -33,6 +33,25 @@ the colony namespace, event type, and payload kind.
 `LOG`, `PROGRESS`, `TOOL_CALL`, and `ASSISTANT_TEXT` are run-lifecycle records,
 not domain events published to the choreography bus.
 
+Every event the colony publishes is also written to its Flight Trail's record,
+`.paseka/runs/<traceId>/trail-events.ndjson`, before the bus attempt. A Bee's own
+`events.ndjson` remains the per-attempt audit of what that run published; the
+trail record is the whole-trail history and is what the timeline, `paseka export`,
+prompt memory, trail titles and summaries, and branch and pull-request copy read.
+See [Architecture overview](../architecture/overview.md) § Run tree layout.
+
+The trail record is what the colony decided to do, not proof of what was
+broadcast: a saved event may still have failed to reach the bus, and nothing on
+the record says so. `paseka verify <traceId>` compares the record against the
+stream and reports what is only local, only on the bus, or in both.
+
+Each event envelope also carries an `id`, minted by the colony where the event is
+created. It is what makes storing one event in two files safe — a merged read
+shows it once — and it is readable in the raw envelope on a timeline row so a row
+can be correlated with a bus message. It is **not** part of this contract: no
+producer supplies it, it is absent from the agent-facing input shape, and no
+colony author may rely on its name or meaning.
+
 ## Platform-validated kinds
 
 These kinds have stable type and payload validation in `internal/protocol`.

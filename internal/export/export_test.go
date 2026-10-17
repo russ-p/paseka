@@ -917,3 +917,93 @@ func TestExportTraceIncludeAgentLogsFakeToolCalls(t *testing.T) {
 		t.Fatalf("HTML timeline must not dump tool calls")
 	}
 }
+
+func TestExportCarriesRuntimeEventsAndProposalDiff(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-export-trail"
+	started := time.Now().UTC().Add(-time.Minute)
+	writeCompletedRun(t, repo, traceID, started, nil)
+
+	// A proposal the runtime synthesized and the operator charged honey for: no
+	// bee published either through the event CLI, and both are the trail's
+	// history now that the publisher seam records them.
+	proposal, err := protocol.NewEvent(traceID, "agent-1", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:    protocol.MutationCodeProposalIsolated,
+		Diff:    "diff --git a/README.md b/README.md\n+feature\n",
+		Summary: "add feature",
+		Ref:     "trace-export-trail-agent-1.diff",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal.CreatedAt = started.Add(30 * time.Second)
+	charge, err := protocol.NewEvent(traceID, "console", 0, protocol.EventSignal, map[string]any{
+		"kind":   "energy.consume",
+		"amount": 12,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	charge.CreatedAt = started.Add(40 * time.Second)
+	trail := runs.Trail{ColonyRoot: repo, TraceID: traceID}
+	for _, ev := range []protocol.Event{proposal, charge} {
+		if err := trail.AppendEvent(ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, format := range []Format{FormatHTML, FormatMarkdown} {
+		body, err := RenderTrace(ctx, Options{TraceID: traceID, Format: format})
+		if err != nil {
+			t.Fatalf("RenderTrace(%s): %v", format, err)
+		}
+		text := string(body)
+		for _, want := range []string{
+			"code.proposal.isolated",
+			proposal.ID,
+			// The patch reference and the inline diff travel with the event, so
+			// "a proposal happened" leads to its bytes with no second lookup.
+			"trace-export-trail-agent-1.diff",
+			"energy.consume",
+			charge.ID,
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s export missing %q", format, want)
+			}
+		}
+	}
+}
+
+func TestExportTimelineMatchesTheTrailReader(t *testing.T) {
+	_, repo := setupExportColony(t)
+	traceID := "trace-export-consistent"
+	started := time.Now().UTC().Add(-time.Minute)
+	writeCompletedRun(t, repo, traceID, started, nil)
+
+	runDir := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-1"}
+	shared, err := protocol.NewEvent(traceID, "agent-1", 0, protocol.EventInsight, map[string]any{"kind": "run.summary", "summary": "done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runDir.AppendEvent(shared); err != nil {
+		t.Fatal(err)
+	}
+	if err := (runs.Trail{ColonyRoot: repo, TraceID: traceID}).AppendEvent(shared); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := runs.ReadTraceEvents(repo, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := hiveview.BuildEventFeedItems(repo, traceID, events)
+	counts := map[string]int{}
+	for _, item := range items {
+		counts[item.ID]++
+	}
+	for id, n := range counts {
+		if n != 1 {
+			t.Fatalf("event %s appears %d times in the export feed, want once", id, n)
+		}
+	}
+}

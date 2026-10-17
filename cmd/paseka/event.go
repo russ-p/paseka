@@ -96,7 +96,7 @@ func newEventFlushCmd() *cobra.Command {
 			if client != nil {
 				defer client.Close()
 			}
-			var pub bus.Publisher = bus.NopPublisher{}
+			var pub bus.Publisher = bus.LocalPublisher{ColonyRoot: ctxColony.ColonyRoot}
 			if client != nil {
 				pub = client
 			}
@@ -176,6 +176,14 @@ func runEventCommand(cmd *cobra.Command, startDir, agentID string, publish bool,
 				defer client.Close()
 				pub = client
 				subjectPrefix = client.Config().SubjectPrefix
+			} else {
+				// No broker is not no record. Every other publishing site in the
+				// colony falls back to the local publisher, and a laptop colony
+				// that emits an event must not be the one place it disappears —
+				// the trail record is what the timeline and the export read.
+				// The result carries no subject, which is how a caller can tell
+				// the event was recorded rather than broadcast.
+				pub = bus.LocalPublisher{ColonyRoot: colonyRoot}
 			}
 		}
 	}

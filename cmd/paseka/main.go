@@ -68,6 +68,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newInspectCmd())
 	root.AddCommand(newReplayCmd())
+	root.AddCommand(newVerifyCmd())
 	root.AddCommand(newSignalCmd())
 	root.AddCommand(newCueCmd())
 	root.AddCommand(newEventCmd())

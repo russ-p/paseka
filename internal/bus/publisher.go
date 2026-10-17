@@ -29,10 +29,27 @@ func (NopPublisher) PublishEvent(context.Context, protocol.Event) error { return
 
 // PublisherAvailable reports whether pub is non-nil and not a typed-nil pointer/interface.
 func PublisherAvailable(pub Publisher) bool {
-	if pub == nil {
+	return seamAvailable(pub)
+}
+
+// ReplayerAvailable reports whether r is usable, guarding the typed-nil
+// pointer a nil *Client lands in an interface as.
+func ReplayerAvailable(r TraceReplayer) bool {
+	return seamAvailable(r)
+}
+
+// streamAvailable is ReplayerAvailable for the verification seam.
+func streamAvailable(s TraceStream) bool {
+	return seamAvailable(s)
+}
+
+// seamAvailable reports whether an interface value carries a real value, so a
+// typed-nil pointer is never mistaken for a live collaborator.
+func seamAvailable(v any) bool {
+	if v == nil {
 		return false
 	}
-	val := reflect.ValueOf(pub)
+	val := reflect.ValueOf(v)
 	switch val.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice:
 		return !val.IsNil()

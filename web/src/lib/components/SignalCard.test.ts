@@ -47,6 +47,27 @@ describe('SignalCard feed rows', () => {
 		expect(screen.getByText(/^INSIGHT · builder · /)).toBeInTheDocument();
 	});
 
+	it('names the producing surface instead of an unknown bee when no run did', () => {
+		render(SignalCard, {
+			signal: eventFeedItem({
+				type: 'SIGNAL',
+				payloadKind: 'feature.requested',
+				agentId: 'cli',
+				bee: undefined,
+				producer: 'beekeeper'
+			})
+		});
+
+		expect(screen.getByText(/^SIGNAL · feature\.requested · beekeeper · /)).toBeInTheDocument();
+		expect(screen.queryByText(/unknown bee/)).not.toBeInTheDocument();
+	});
+
+	it('falls back to an unknown bee only when nothing identifies the producer', () => {
+		render(SignalCard, { signal: eventFeedItem({ bee: undefined }) });
+
+		expect(screen.getByText(/unknown bee/)).toBeInTheDocument();
+	});
+
 	it('drops the trace id inside a trail, where the header already names it', () => {
 		const { unmount } = render(SignalCard, { signal: eventFeedItem() });
 		expect(screen.getByText('trace-01a0bd6963faa14f')).toBeInTheDocument();

@@ -211,32 +211,7 @@ func (d Dir) nextEventSeq() (int, error) {
 }
 
 func (d Dir) ReadEvents() ([]protocol.Event, error) {
-	f, err := os.Open(d.EventsPath())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-
-	var events []protocol.Event
-	scanner := newLineScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var ev protocol.Event
-		if err := json.Unmarshal([]byte(line), &ev); err != nil {
-			return nil, fmt.Errorf("runs: parse event: %w", err)
-		}
-		events = append(events, ev)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return events, nil
+	return readEventsFile(d.EventsPath())
 }
 
 func (d Dir) WriteResult(res protocol.Result) error {

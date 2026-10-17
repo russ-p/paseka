@@ -3,9 +3,14 @@ package protocol
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/russ-p/paseka/internal/ids"
 )
 
 const Version = "agent-runtime.v1"
+
+// eventIDPrefix namespaces minted event identities on disk and on the bus.
+const eventIDPrefix = "evt-"
 
 // EventType is a domain or lifecycle event emitted during an agent run.
 type EventType string
@@ -42,13 +47,19 @@ const (
 
 // Event is one NDJSON line in events.ndjson.
 type Event struct {
-	ProtocolVersion string          `json:"protocolVersion"`
-	TraceID         string          `json:"traceId"`
-	AgentID         string          `json:"agentId"`
-	Seq             int             `json:"seq"`
-	Type            EventType       `json:"type"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	Payload         json.RawMessage `json:"payload,omitempty"`
+	ProtocolVersion string `json:"protocolVersion"`
+	// ID is the event's stable identity, minted where the event is created.
+	// It is colony-internal: no producer supplies it, no bee sees it, and it
+	// is absent from the agent-facing input shape. Storing the same event in a
+	// per-run audit log and in a trail log is safe because both copies carry
+	// it. Absent on records written before identities existed.
+	ID        string          `json:"id,omitempty"`
+	TraceID   string          `json:"traceId"`
+	AgentID   string          `json:"agentId"`
+	Seq       int             `json:"seq"`
+	Type      EventType       `json:"type"`
+	CreatedAt time.Time       `json:"createdAt"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
 // Request is written to request.json before the agent starts.
@@ -143,6 +154,18 @@ type BusEvent struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// NewEventID mints a stable identity for one event.
+//
+// It carries no timestamp and no counter, so nothing about an id reveals when
+// or how often it was minted, and the same event found in a per-run log and in a
+// trail log is recognizably the same event. The body is 128 random bits rather
+// than a mini-ULID: a millisecond-prefixed id gives two events minted in the
+// same millisecond a real chance of colliding, and a collision is silent — the
+// colony would deduplicate one event away and never know.
+func NewEventID() (string, error) {
+	return ids.PrefixedRandom(eventIDPrefix)
+}
+
 // NewEvent builds a protocol event with defaults filled in.
 func NewEvent(traceID, agentID string, seq int, typ EventType, payload any) (Event, error) {
 	var raw json.RawMessage
@@ -153,8 +176,13 @@ func NewEvent(traceID, agentID string, seq int, typ EventType, payload any) (Eve
 		}
 		raw = data
 	}
+	id, err := NewEventID()
+	if err != nil {
+		return Event{}, err
+	}
 	return Event{
 		ProtocolVersion: Version,
+		ID:              id,
 		TraceID:         traceID,
 		AgentID:         agentID,
 		Seq:             seq,

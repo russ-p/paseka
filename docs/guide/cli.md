@@ -67,7 +67,7 @@ Non-empty **`PASEKA_PROFILE`** selects a profile when the flags are omitted (fla
 | `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
-| `paseka run`, `doctor`, `replay`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
+| `paseka run`, `doctor`, `replay`, `verify`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
 | `paseka task list`, `paseka task show`, `export` | Optional — prefers JetStream KV, falls back to filesystem projection |
 
 Default NATS URL after `paseka init`: `nats://127.0.0.1:4222` (see `docker-compose.yml`).
@@ -106,6 +106,7 @@ paseka
 ├── inspect
 │   └── usage
 ├── replay <traceId>
+├── verify <traceId>
 ├── cue
 │   ├── list
 │   └── run <id> <text>
@@ -498,6 +499,39 @@ Prints event type, `payload.kind`, and agent id per event. Does not re-execute b
 ```bash
 paseka replay trace-abc123
 ```
+
+---
+
+## `paseka verify <traceId>`
+
+Compare a trail's local event record against what reached the bus.
+
+**Arguments:** `traceId` — flight trail to verify.
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--json` | | Emit the comparison as JSON |
+
+Each trail keeps its own record of every domain event the colony published for
+it (`.paseka/runs/<traceId>/trail-events.ndjson`), written before the broker
+attempt. That record is what the colony decided to do; the stream is what was
+broadcast. This command is where the two are compared, reporting events that are
+**only local**, **only on the bus**, or **in both**, matched on the identity every
+event carries. It exits non-zero when the two records disagree.
+
+```bash
+paseka verify trace-abc123
+```
+
+It waits until the stream has actually been drained rather than until it goes
+quiet. If that read does not finish inside its budget the verdict is
+**inconclusive**, not a divergence: an event still in flight would otherwise be
+reported as one the broker never took. An inconclusive run exits non-zero too.
+
+With no broker reachable it reports that verification was not possible and exits
+non-zero — an unreachable broker is not evidence of divergence, so it never
+claims one. Reading a trail needs no broker; only this comparison does.
 
 ---
 

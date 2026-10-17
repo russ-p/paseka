@@ -58,6 +58,13 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 └── transcript.ndjson  # interactive only: dialogue audit log
 ```
 
+One record per Flight Trail, beside the run directories rather than inside one
+of them:
+
+```
+.paseka/runs/<traceId>/trail-events.ndjson   # the trail's history — see below
+```
+
 Task ledger projection (updated by `paseka run`):
 
 ```
@@ -95,7 +102,19 @@ Implementation: `internal/runs/` prepares directories and files; adapters may st
 agent -> paseka event emit --stdin -> validation -> NATS/JetStream
 ```
 
-Agents build one JSON object per event, pass it on stdin, and receive machine-readable validation/publish feedback. `events.ndjson` is the per-run audit log under `.paseka/runs/<traceId>/<agentId>/`; `paseka event emit` appends there after a successful publish when the event includes the correct `traceId` and `agentId`.
+Agents build one JSON object per event, pass it on stdin, and receive machine-readable validation/publish feedback.
+
+**The per-run log** — `.paseka/runs/<traceId>/<agentId>/events.ndjson` — is the audit of what one run published. It is per-attempt: the run launcher deletes and recreates it on every dispatch, so a retried or explicitly identified run replaces its predecessor's file. `paseka event emit` appends there after a successful publish when the event includes the correct `traceId` and `agentId`, and a script bee writes to it through `PASEKA_EVENT_LOG`.
+
+**The trail record** — `.paseka/runs/<traceId>/trail-events.ndjson` — is the whole-trail history: every domain event the colony decided to publish for that trail, whoever produced it. It is written by the publisher seam on the way to the bus, not by each publishing site, so the runtime, the task ledger, the honey reserve, the review gate, the cue layer, the console, the Human Gateway, and the CLI are all covered by one writer; an operator signal, a console action, or an explain run that has no run directory of its own still lands somewhere. The name differs from the per-run log deliberately: a path fragment gets quoted on its own — in an error, in documentation, in a console action — where the directory it came from is no longer in view, and an audit tool that quietly answers with the wrong half is the worst kind of wrong.
+
+**What the trail record is not.** It is the colony's account of what it decided to do, not proof of what was broadcast. The write happens before the broker attempt, so an event it holds may still have failed to reach the bus; nothing marks that state on the record. Compare the trail against the stream with `paseka verify <traceId>` to answer it.
+
+Only domain events are recorded — `SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`, the same test that gates the bus. `LOG`, `PROGRESS`, `TOOL_CALL`, and `ASSISTANT_TEXT` are run-lifecycle diagnostics and stay out of the trail's history.
+
+Both files are written by appending a line at a time, so a reader skips a line that will not parse — a process that dies mid-append leaves a torn last line, and everything before it is history the colony actually has. The skip is logged with the file and line number.
+
+Every trail surface reads the record: the timeline, `paseka export`, prompt memory, trail titles and summaries, worktree branch and pull-request body resolution. A trail-scoped read merges the record with the per-run logs and collapses an event that sits in both by its identity, so the two storage locations never double a row. A colony-wide read costs one file per trail instead of every run log in every scanned trail. Nothing here needs a broker.
 
 **Optional MCP layer:** a future MCP tool may wrap the same validation/publish backend used by `paseka event emit`. MCP is not required for the base contract.
 
@@ -514,7 +533,7 @@ internal/
   homestate/                # machine-local state.json registry (runtime, sessions, invites, worktrees, pull requests)
   purge/                    # FS + bus purge (runs, worktrees, cache, trace artifacts)
   prompts/                  # load + render .paseka/prompts/*.md templates
-  runs/                     # .paseka/runs/<traceId>/<agentId>/ layout + meta/status
+  runs/                     # .paseka/runs/<traceId>/ layout: run dirs + meta/status, and the trail record (trail-events.ndjson)
   adapters/                 # adapter registry + cursor/, pi/, claude/, opencode/, script/
   sessions/                 # interactive PTY sessions, terminal attach
   gitroot/                  # repo identity, origin, replica fetch/push/ff-only pull, worktree-branch push, branch delete
@@ -530,6 +549,8 @@ internal/
 **Layering:** `hiveview` holds transport-agnostic projections consumed by Queen Console, Telegram Gate, and HTML export. `console` is HTTP/SPA wiring and mutations; it must not be imported by other UIs.
 
 **Bus seams:** `bus.Publisher`, `bus.TraceReplayer`, `bus.ArtifactStore`, `bus.EventSubscriber`, and `bus.TracePurger` are the narrow interfaces consumers depend on. `*bus.Client` (Connect, JetStream KV) stays at composition roots: CLI, Queen Console handlers, `NewReactor`, `NewNotifier`, `OpenLedger`, and `purge.connectBus`.
+
+`bus.Publisher` is the colony's event sink, and the sink is both the bus and the local record: `*bus.Client` records each domain event in its trail before it publishes, and `bus.LocalPublisher` (the file-only publisher installed wherever a composition root would otherwise fall back to no publisher) records without a bus at all. A producer that can publish can record, and the trail's location reaches the publisher through `bus.ConfigFromContext` — the one place a transport is built from colony configuration — rather than through callers that know nothing about the run tree.
 
 **Runtime dispatch:** `Reactor` owns Task vs Direct choreography (`dispatch_task.go`, `dispatch_direct.go`) after ledger apply. `Dispatcher.Dispatch` is a thin orchestrator over **Prepare → Run → Finalize** (`dispatch_stages.go`): render prompts and run dir, adapter invocation, then deferred flush / run.summary / publish. `ResolveContext` merges an optional config profile (root `--profile` / `PASEKA_PROFILE` / home sticky) into adapters, aliases, NATS, and effective bee `adapter`/`params` for the process lifetime.
 
