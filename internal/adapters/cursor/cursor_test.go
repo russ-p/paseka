@@ -228,6 +228,41 @@ func TestAdapterRunCommandOverridePersistsSessionID(t *testing.T) {
 	}
 }
 
+func TestAdapterRunKeepsStreamDiagnosticsOutOfEventLog(t *testing.T) {
+	repo := initCursorRepo(t)
+	stdout := `{"type":"assistant","timestamp_ms":1,"message":{"content":[{"text":"working"}]}}
+{"type":"tool_call","subtype":"started","toolCall":{"readToolCall":{"args":{"path":"main.go"}}}}
+{"type":"result","subtype":"success","result":"done"}`
+	fake := writeFakeAgent(t, stdout)
+
+	result, err := New().Run(context.Background(), adapters.RunRequest{
+		Bee:        "builder",
+		Prompt:     "do the task",
+		ColonyRoot: repo,
+		Workspace:  repo,
+		TraceID:    "trace-1",
+		AgentID:    "agent-1",
+		Params:     adapters.RunParams{Binary: fake},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The parser still reports them to the in-process completion checks; only the
+	// run's event log is a domain-bus audit and must not carry them.
+	if len(result.Events) == 0 {
+		t.Fatal("expected the adapter to report parsed stream events")
+	}
+
+	runDir := runs.Dir{ColonyRoot: repo, TraceID: "trace-1", AgentID: "agent-1"}
+	events, err := runDir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("events.ndjson has %d line(s), want 0: %+v", len(events), events)
+	}
+}
+
 func initCursorRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

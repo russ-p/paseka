@@ -138,9 +138,10 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		parsed := parseStreamJSON(stdoutStr, req.TraceID, req.AgentID)
 		events = parsed.Events
 		streamSummary = strings.TrimSpace(parsed.Summary)
-		for _, ev := range events {
-			_ = runDir.AppendEvent(ev)
-		}
+		// parsed.Events are stream diagnostics (TOOL_CALL, ASSISTANT_TEXT), not
+		// domain bus publishes, so they are not appended to the run's event log.
+		// That file is the audit of what was published to the colony; the same
+		// tool calls are readable from the provider session log instead.
 	}
 
 	fileSummary, _ := runDir.ReadResult()

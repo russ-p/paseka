@@ -118,10 +118,13 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 
 ### 7. `events.ndjson` boundary (hard)
 
+This boundary now holds in both directions: the file receives only domain publishes, and the normalized Console and export readers see only domain rows from it.
+
 - Canonical meaning: audit of **domain bus** publishes for that run (emit + runtime domain synthesis).
 - Remove (Slice A) writing `TOOL_CALL` and `ASSISTANT_TEXT` from Cursor/Claude stream parsers into that file.
 - `IsDomainEvent` remains the gate for NATS and completion contracts; cleanup aligns the file with that mental model for Console/export readers.
 - PTY transcript stays a separate file; not bus audit.
+- The stream parsers still report their diagnostics to the adapter's in-process result, so completion checks and the Agent log path are unaffected; only the on-disk audit loses them. The same tool calls remain readable through the provider session log (section 6).
 
 ### 8. Modules (indicative)
 
@@ -143,7 +146,7 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 | Slice | Deliverable |
 | ----- | ----------- |
 | A (partial) | AFK Cursor + Pi `providerSessionId` on run meta/result (export Agent log and stream→events cleanup not in this slice) |
-| A (remaining) | Stop stream→events dump |
+| A (remaining) | Stop stream→events dump — **shipped**: the Cursor and Claude stream parsers no longer append their `TOOL_CALL` / `ASSISTANT_TEXT` diagnostics to the run's event log, so the file holds domain publishes only |
 | B (partial) | HITL Cursor `create-chat` / `--resume` + Pi HITL persist `providerSessionId` (export Agent log not in this slice) |
 | Export (stubs) | `--include agent-logs` + per-run Agent log; Pi stub omit `not implemented` |
 | Cursor jsonl | Read-in-place `agent-transcripts/<uuid>/<uuid>.jsonl` for Agent log tool calls |
