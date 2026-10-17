@@ -18,14 +18,6 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** Needs a decision about what a trail is authoritative from: run directories (durable, agent-authored, survives `purge --bus`) or JetStream (complete, but gone with `--bus`). Appending runtime events to the emitting run directory is the smallest fix; reading the bus on export is the honest one and needs an offline path for a stopped broker.
 - **Revisit when:** Any trail tooling needs the triggering `MUTATION`, the intake request, or honey accounting — the "Colony roles" archivist bee's `chronicle` intent is already blocked on it — or an operator audits a trail and cannot answer "what was asked" or "what was proposed" from the export.
 
-#### A reviewed diff does not outlive the review
-
-- **Kind:** bug
-- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
-- **Summary:** `mutationFromRun` inlines the diff in the `MUTATION` payload and stores an artifact only above 64 KiB (`internal/runtime/publish.go:120`), `paseka replay` prints kinds and agent ids without payloads, and the worktree is removed at merge. So once a trail is merged the exact bytes a guard approved cannot be recovered — that trail's export says "No trail artifacts in the comb", and the reviewed diff of an 18-file, +1433/−14 change is gone.
-- **Why deferred:** The artifact size policy is a disk-versus-inspectability trade-off, and lowering the 64 KiB threshold stores a full diff per builder run including the throwaway ones from a reject cycle.
-- **Revisit when:** A `verification.success` needs re-audit after its worktree is gone, or an operator asks what a specific run actually proposed.
-
 #### Two `trace.summary` events for one trail step
 
 - **Kind:** bug
@@ -222,9 +214,9 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 
 - **Kind:** follow-up
 - **Source:** [002-queen-console-mvp](../specs/002-queen-console-mvp.md); planning (reviews)
-- **Summary:** Side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks. Final merge gate preview (`GET /api/traces/:traceId/merge-diff`) already ships.
+- **Summary:** Side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks. Final merge gate preview (`GET /api/traces/:traceId/merge-diff`) already ships. The per-run patches this needs are stored by [039-proposal-patch-records](../specs/039-proposal-patch-records.md); the diff UI itself stays here.
 - **Why deferred:** Final merge gate was enough for MVP; per-run preview is extra UI surface.
-- **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate.
+- **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate, or 039 ships its patch listing and the remaining work is only the side-by-side view.
 
 #### An index over trail summaries, so a page costs a page
 
