@@ -56,6 +56,9 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │           └── <taskId>/
 │               ├── task.md
 │               └── runs.ndjson
+│       └── proposals/           # proposal patches — runtime-owned code history (not a comb)
+│           ├── <agentId>.patch  # the diff the collector returned at finalization
+│           └── <agentId>.json   # sidecar metadata + publication state
 └── worktrees/           # gitignored — isolated mutation workspaces
     └── <traceId>/
 ```

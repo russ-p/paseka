@@ -37,6 +37,10 @@ type TraceExportData struct {
 	CueYAML    []NamedYAML
 	Artifacts  []ArtifactExport
 	AgentLogs  []AgentLogExport
+	Patches    []PatchExport
+	// PatchDiagnostics explain records on disk that are not ordinary entries, so one
+	// malformed file cannot make the valid ones disappear.
+	PatchDiagnostics []PatchDiagnosticExport
 }
 
 // ArtifactExport is one inlined comb file for trace export.
@@ -185,6 +189,14 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 			return TraceExportData{}, err
 		}
 		data.Artifacts = artifactExports
+	}
+	if include.Has(IncludePatches) {
+		patchExports, patchDiagnostics, err := loadPatchExports(ctx.ColonyRoot, detail.TraceID)
+		if err != nil {
+			return TraceExportData{}, err
+		}
+		data.Patches = patchExports
+		data.PatchDiagnostics = patchDiagnostics
 	}
 	return data, nil
 }

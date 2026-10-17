@@ -2,15 +2,21 @@ package runtime
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/logging"
+	"github.com/russ-p/paseka/internal/proposal"
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
+// publishRunOutcome publishes what a finished run decided, in three passes: the events the
+// adapter reported, the events the runtime synthesized, and finally the code proposal.
+//
+// The proposal pass is not conditional on a publisher being configured. A colony with no
+// broker still archives the proposal diff on disk and reports the record as unpublished,
+// because losing the code record to bus availability is exactly the failure the archive
+// exists to prevent.
 func (d *Dispatcher) publishRunOutcome(
 	ctx context.Context,
 	req DispatchRequest,
@@ -18,36 +24,38 @@ func (d *Dispatcher) publishRunOutcome(
 	baseline adapters.WorkspaceBaseline,
 	result *adapters.RunResult,
 	synthesized []protocol.Event,
+	explicitProposal bool,
 ) error {
-	if d.publisher == nil || result == nil {
+	if result == nil {
 		return nil
 	}
-	for _, ev := range result.Events {
-		if !protocol.IsDomainEvent(ev.Type) {
-			continue
+	if d.publisher != nil {
+		for _, ev := range result.Events {
+			if !protocol.IsDomainEvent(ev.Type) {
+				continue
+			}
+			d.advisePublish(req.Bee, ev, result)
+			if err := d.publisher.PublishEvent(ctx, ev); err != nil {
+				return err
+			}
 		}
-		d.advisePublish(req.Bee, ev, result)
-		if err := d.publisher.PublishEvent(ctx, ev); err != nil {
-			return err
-		}
-	}
-	for _, ev := range synthesized {
-		d.advisePublish(req.Bee, ev, result)
-		if err := d.publisher.PublishEvent(ctx, ev); err != nil {
-			return err
-		}
-	}
-	mutation, err := d.mutationFromRun(ctx, req, bee, baseline, result)
-	if err != nil {
-		return err
-	}
-	if mutation != nil {
-		d.advisePublish(req.Bee, *mutation, result)
-		if err := d.publisher.PublishEvent(ctx, *mutation); err != nil {
-			return err
+		for _, ev := range synthesized {
+			d.advisePublish(req.Bee, ev, result)
+			if err := d.publisher.PublishEvent(ctx, ev); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
+
+	res, err := proposal.Archive(ctx, d.publisher, d.proposalArchiveRequestFromRun(req, bee, baseline, result, explicitProposal))
+	if res.Misconfigured != "" {
+		logAutoProposalSkip(bee, res.Misconfigured)
+		result.Warnings = append(result.Warnings, res.Misconfigured)
+	}
+	if res.Event != nil {
+		d.advisePublish(req.Bee, *res.Event, result)
+	}
+	return err
 }
 
 func (d *Dispatcher) shouldAutoPublishMutation(bee colony.Bee) bool {
@@ -57,7 +65,7 @@ func (d *Dispatcher) shouldAutoPublishMutation(bee colony.Bee) bool {
 	if d.registry != nil {
 		return d.registry.ShouldAutoPublishMutation(bee.Role)
 	}
-	return shouldAutoPublishProposal(bee)
+	return proposal.ShouldAutoPublish(bee)
 }
 
 func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *adapters.RunResult) {
@@ -72,62 +80,4 @@ func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *ad
 	if result != nil {
 		result.Warnings = append(result.Warnings, warning)
 	}
-}
-
-func (d *Dispatcher) mutationFromRun(
-	ctx context.Context,
-	req DispatchRequest,
-	bee colony.Bee,
-	baseline adapters.WorkspaceBaseline,
-	result *adapters.RunResult,
-) (*protocol.Event, error) {
-	if !d.shouldAutoPublishMutation(bee) {
-		return nil, nil
-	}
-
-	plan := planAutoProposal(bee)
-	if !plan.ok {
-		appendAutoProposalSkipWarning(bee, plan, result)
-		return nil, nil
-	}
-
-	workspace := req.Workspace
-	if workspace == "" {
-		workspace = req.ColonyRoot
-	}
-
-	diff, err := adapters.AttributableDiff(ctx, workspace, baseline)
-	if err != nil {
-		return nil, fmt.Errorf("runtime: attributable diff: %w", err)
-	}
-	if strings.TrimSpace(diff) == "" {
-		return nil, nil
-	}
-
-	payload := protocol.MutationPayload{
-		Kind:      plan.kind,
-		Diff:      diff,
-		Summary:   strings.TrimSpace(result.Summary),
-		TaskID:    req.TaskID,
-		Workspace: plan.workspace,
-		BaseSha:   baseline.BaseSHA,
-		Sector:    req.Sector,
-	}
-	if bee.Worktree {
-		payload.WorktreePath = worktreeRelPath(req.ColonyRoot, req.TraceID)
-	}
-
-	if d.artifacts != nil && len(diff) > 64*1024 {
-		ref, storeErr := d.artifacts.StoreArtifact(fmt.Sprintf("%s-%s.diff", req.TraceID, req.AgentID), []byte(diff))
-		if storeErr == nil {
-			payload.Ref = ref
-			payload.Diff = ""
-		}
-	}
-
-	ev, err := protocol.NewEvent(req.TraceID, req.AgentID, 0, protocol.EventMutation, payload)
-	if err != nil {
-		return nil, err
-	}
-	return &ev, nil
 }

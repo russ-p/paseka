@@ -61,10 +61,13 @@ type htmlPageData struct {
 	IncludeColony      bool
 	IncludeCues        bool
 	IncludeArtifacts   bool
+	IncludePatches     bool
 	BeeYAML            []NamedYAML
 	ColonyYAML         *NamedYAML
 	CueYAML            []NamedYAML
 	Artifacts          []ArtifactExport
+	Patches            []PatchExport
+	PatchDiagnostics   []PatchDiagnosticExport
 }
 
 // RenderHTML builds a self-contained HTML document for one trace export.
@@ -83,10 +86,13 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		IncludeColony:    data.Include.Has(IncludeColony),
 		IncludeCues:      data.Include.Has(IncludeCues),
 		IncludeArtifacts: data.Include.Has(IncludeArtifacts),
+		IncludePatches:   data.Include.Has(IncludePatches),
 		BeeYAML:          data.BeeYAML,
 		ColonyYAML:       data.ColonyYAML,
 		CueYAML:          data.CueYAML,
 		Artifacts:        data.Artifacts,
+		Patches:          data.Patches,
+		PatchDiagnostics: data.PatchDiagnostics,
 	}
 	if data.Include.Has(IncludeUsage) {
 		page.UsageAggregateLine = formatUsageAggregate(data.Trace.Usage)
@@ -142,10 +148,11 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 	}
 
 	funcs := template.FuncMap{
-		"badgeClass":     badgeClass,
-		"formatTime":     formatTime,
-		"formatMarkdown": formatMarkdown,
-		"lower":          strings.ToLower,
+		"badgeClass":            badgeClass,
+		"formatTime":            formatTime,
+		"formatMarkdown":        formatMarkdown,
+		"lower":                 strings.ToLower,
+		"patchPublicationLabel": patchPublicationLabel,
 		"kindSuffix": func(kind string) string {
 			if kind == "" {
 				return ""
@@ -629,6 +636,39 @@ code { font-family: var(--mono); font-size: 0.85em; }
     {{ end }}
     {{ else }}
     <p class="muted">No trail artifacts in the comb.</p>
+    {{ end }}
+  </section>
+  {{ end }}
+
+  {{ if .IncludePatches }}
+  <section class="panel">
+    <h2>Proposal patches</h2>
+    <p class="muted">Archive of what the diff collector returned when each run finished.
+      Not a strict per-run delta, not a workspace backup, and not proof of the code a Guard approved.</p>
+    {{ if .Patches }}
+    {{ range .Patches }}
+    <h3>{{ .AgentID }} · {{ patchPublicationLabel .Publication }}</h3>
+    <p class="muted"><code>{{ .Ref }}</code></p>
+    <p class="muted">{{ .Bee }} · {{ .Mode }} · {{ .Kind }} · workspace {{ .Workspace }} · {{ .Bytes }} bytes{{ if .FileCount }}, {{ .FileCount }} file(s){{ end }} · captured {{ formatTime .CapturedAt }}</p>
+    {{ if or .TaskID .BaseSha .WorktreePath }}<p class="muted">{{ if .TaskID }}task <code>{{ .TaskID }}</code>{{ end }}{{ if .BaseSha }}{{ if .TaskID }} · {{ end }}base <code>{{ .BaseSha }}</code>{{ end }}{{ if .WorktreePath }}{{ if or .TaskID .BaseSha }} · {{ end }}worktree <code>{{ .WorktreePath }}</code>{{ end }}</p>{{ end }}
+    {{ if .Summary }}<p>{{ .Summary }}</p>{{ end }}
+    {{ if .PublishError }}<p class="muted">last publish error: {{ .PublishError }}</p>{{ end }}
+    {{ if .Omitted }}
+    <p class="muted">{{ .Omitted }}</p>
+    {{ else }}
+    <pre class="timeline-raw">{{ .Content }}</pre>
+    {{ end }}
+    {{ end }}
+    {{ else }}
+    <p class="muted">No proposal patches archived for this trail.</p>
+    {{ end }}
+    {{ if .PatchDiagnostics }}
+    <h3>Incomplete patch records</h3>
+    <ul>
+    {{ range .PatchDiagnostics }}
+      <li><code>{{ .AgentID }}</code>: {{ .Reason }}</li>
+    {{ end }}
+    </ul>
     {{ end }}
   </section>
   {{ end }}

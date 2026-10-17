@@ -33,6 +33,11 @@ func TestParseInclude(t *testing.T) {
 			want: []IncludeKind{IncludeBees, IncludeCues, IncludeArtifacts},
 		},
 		{
+			name: "patches",
+			in:   []string{"patches"},
+			want: []IncludeKind{IncludePatches},
+		},
+		{
 			name: "dedupe",
 			in:   []string{"usage", "usage,colony"},
 			want: []IncludeKind{IncludeUsage, IncludeColony},

@@ -79,6 +79,27 @@ Narrative and operational `INSIGHT` kinds are catalogued separately in
 [INSIGHT kinds](insight-kinds.md) (`pr.body` is operational pull-request copy;
 see [pull-request delivery](../guide/pull-request-delivery.md)).
 
+### `MUTATION` refs
+
+A `code.proposal*` payload is valid with at least one of `diff`, `ref`, or
+`summary`, and the two ref conventions are different things:
+
+- **Archive ref** — a runtime-synthesized proposal carries `ref` = a
+  colony-root-relative path into the trail's proposal store
+  (`.paseka/runs/<traceId>/proposals/<agentId>.patch`) and **no** `diff`. The
+  bytes live in the patch file; the Guard reviews the working tree, not this
+  ref. Only the runtime writes these, and only a new synthesized event acquires
+  the semantics — the shape is what distinguishes one, so a reader resolves it
+  against `ColonyRoot` and never against a sector or worktree.
+- **Legacy object-store ref** — a proposal published by a version that offloaded
+  diffs above 64 KiB carries an opaque `ref` (an object name, not a path). It is
+  never reclassified as a file: no reader turns a legacy object name into a
+  filesystem path. `paseka purge --bus` still deletes those objects.
+
+An explicitly authored `MUTATION` with an inline `diff` remains valid and is
+passed through unchanged; it gets no automatic patch conversion. See
+[Spec 039](../specs/039-proposal-patch-records.md).
+
 ## Colony-defined kinds
 
 Unknown kinds are accepted when their event envelope is valid. This lets a

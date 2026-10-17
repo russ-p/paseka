@@ -61,7 +61,6 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 			}
 		} else if busClient != nil {
 			d.SetPublisher(busClient, req.BusRequired)
-			d.SetArtifactStore(busClient)
 			defer busClient.Close()
 		}
 	}

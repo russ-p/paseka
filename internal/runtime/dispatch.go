@@ -40,7 +40,6 @@ type DispatchRequest struct {
 type Dispatcher struct {
 	adapters    map[string]adapters.Adapter
 	publisher   bus.Publisher
-	artifacts   bus.ArtifactStore
 	busRequired bool
 	registry    *BeeRegistry
 }
@@ -67,11 +66,6 @@ func (d *Dispatcher) RegisterAdapter(name string, a adapters.Adapter) {
 func (d *Dispatcher) SetPublisher(pub bus.Publisher, required bool) {
 	d.publisher = pub
 	d.busRequired = required
-}
-
-// SetArtifactStore configures optional object-store uploads for large diffs.
-func (d *Dispatcher) SetArtifactStore(store bus.ArtifactStore) {
-	d.artifacts = store
 }
 
 // SetBeeRegistry configures advisory publish validation against bee YAML contracts.

@@ -56,4 +56,7 @@ func (p LocalPublisher) PublishEvent(_ context.Context, event protocol.Event) er
 	return recordTrailEvent(p.ColonyRoot, event)
 }
 
+// ConfirmsPublication reports false: a file-only colony has no broker to acknowledge to.
+func (LocalPublisher) ConfirmsPublication() bool { return false }
+
 var _ Publisher = LocalPublisher{}

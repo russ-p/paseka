@@ -206,7 +206,8 @@ Bees are **not** required to call `paseka event emit` for comb files. Bee-run an
 | Comb + `artifact.written` | Trace working handoff files + scent (bee: after success delta; human: after write) |
 | Colony `spec.ready` | Milestone: durable spec path ready for breakdown |
 | Adapter `Artifacts` on run result | Process outputs (stdout, stderr, diff capture) |
-| Object Store `ref` on mutations | Large blob offload for proposals |
+| Proposal patch store (`runs/<traceId>/proposals/`) | Runtime-owned code history; **not** a comb, never announced as `artifact.written`, never listed as a trail artifact — see [039](039-proposal-patch-records.md) |
+| Legacy Object Store `ref` on mutations | Blob offload written by versions before [039](039-proposal-patch-records.md); retained for `purge --bus` only |
 | [015 deferred emit](015-deferred-event-emit.md) | General queue-then-flush for any kind; coexistence = skip scan if deferred `artifact.written` already pending/flushed for that run |
 | [017](017-console-diff-review.md) review-comments file | Human comb write + `artifact.written`; comments body not an insight |
 
@@ -227,6 +228,7 @@ Bees are **not** required to call `paseka event emit` for comb files. Bee-run an
 - `paseka export --include artifacts` walks the trail comb (same skip-list) and inlines text bodies into the self-contained report (HTML: Markdown rendered; Markdown export: nested sections or fenced blocks).
 - Default export omits comb bodies. Binary/invalid UTF-8/oversize files get an omitted note, not inline content.
 - Distinct from runtime prompt inlining (still out of scope for `{{.Insights}}`).
+- The trail comb does **not** contain proposal patches: a patch is captured code history the runtime owns, and keeping it in the comb would make `artifact.written` announcements and comb listings lie about what the trail handed off. Proposals are listed by the Console's proposal-patches endpoint and exported by `--include patches`.
 
 ## Testing Decisions
 

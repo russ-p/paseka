@@ -309,6 +309,10 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		a.handleTraceArtifacts(w, r, traceID)
 		return
 	}
+	if suffix == "proposal-patches" {
+		a.handleTraceProposalPatches(w, r, traceID)
+		return
+	}
 	if suffix == "export" {
 		a.handleTraceExport(w, r, traceID)
 		return

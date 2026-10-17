@@ -986,7 +986,7 @@ Write a self-contained report for one flight trail to the current working direct
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | yes | Flight trail id |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `patches` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -1006,8 +1006,11 @@ Write a self-contained report for one flight trail to the current working direct
 | `cues` | All committed `.paseka/cues/*.yaml` in the colony |
 | `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
 | `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place. Missing id, unsupported adapter, missing transcript (`store not found`), parse errors, Pi stub (`not implemented`), or resolve errors omit the section with a reason; export still succeeds. |
+| `patches` | Proposal patches under `.paseka/runs/<traceId>/proposals/` — one record per proposal attempt, with run identity, bee, AFK/HITL mode, proposal kind, workspace, base SHA, summary, size, capture time, and publication state. Bodies are inlined within per-patch and aggregate budgets; oversized, unsuitable-for-text, or unreadable entries keep their metadata and ref and say why. Filesystem-only: no broker is required, and a trail without a proposals directory reads as an empty slice. |
 
 Default export omits all config snapshots. Home config and machine-local overlays are never included.
+
+A proposal patch is the diff the collector returned when a run finished, not a strict per-run delta, not a workspace backup, and not proof of the code a Guard approved. Earlier edits inside a changed file can be included, untracked files and changes committed during the run can be omitted, and applying a patch to its `baseSha` is not guaranteed to reconstruct the workspace. An export with omitted bodies is a history report, not a complete portable archive — a local `ref` does not make an omitted body available offline.
 
 Data is read from `.paseka/runs/` (same as Queen Console). Task and energy fields prefer JetStream KV when NATS is configured; otherwise filesystem projections are used.
 
@@ -1018,6 +1021,7 @@ paseka export --trace trace-abc123 --include usage,durations
 paseka export --trace trace-abc123 --include bees --include colony --format md
 paseka export --trace trace-abc123 --include artifacts --format md
 paseka export --trace trace-abc123 --include agent-logs --format md
+paseka export --trace trace-abc123 --include patches --format md
 paseka export --trace trace-abc123 -C /path/to/repo
 ```
 
@@ -1049,6 +1053,8 @@ At least one target flag (`--runs`, `--worktrees`, `--cache`, `--state`, `--all`
 **`--reseed-energy`:** Operator hygiene for retrying work on a fixed trace — after a successful `--bus` purge, seeds the trace honey reserve (`budget` and `remaining`) to the colony `defaults.energy_budget` (same source as reactor first seed). Works with the reactor stopped; verify with `paseka energy show --trace <id>`. Not an eval harness command.
 
 **Standing checkpoints:** `purge --runs` removes `.paseka/runs/<traceId>/`, including the trail comb. On a Standing Trail that directory is procedure memory (`checkpoint.json` and journals). Do not purge the standing `traceId` unless you intend to wipe skip lists; keep durable facts in git.
+
+**Proposal patches ride on run retention.** The proposal store lives at `.paseka/runs/<traceId>/proposals/`, so `purge --runs` and `prune --runs` remove it with the trail — there is no separate cleanup command and no individual-patch TTL. `purge --bus` deliberately leaves the bytes and their last-known publication state on disk, because removing bus state must not destroy the code record. An active Standing Trail can therefore accumulate proposal records until it is explicitly cleaned.
 
 ```bash
 paseka purge --runs --yes
@@ -1129,6 +1135,8 @@ When neither `--runs` nor `--worktrees` is given (and `--bus` is not the only ta
 **`--bus` correlation:** prune lists task-ledger KV traces and removes the ones that are stale, including ledger-only traces with no filesystem directory left. A ledger entry with no task timestamps cannot be correlated and is skipped. Requires a configured `nats.url`.
 
 **Standing checkpoints:** `prune --runs` removes `.paseka/runs/<traceId>/`, including the trail comb. Do not prune a standing `traceId` unless you intend to wipe skip lists; keep durable facts in git.
+
+**Proposal patches ride on run retention.** `prune --runs` removes the trail's proposal store with the rest of `.paseka/runs/<traceId>/`; there is no per-patch age target, and an active Standing Trail retains its full proposal history until the whole trail is pruned.
 
 ```bash
 # Remove runs and worktrees idle for more than 14 days

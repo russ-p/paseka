@@ -206,9 +206,9 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 
 - **Kind:** follow-up
 - **Source:** [002-queen-console-mvp](../specs/002-queen-console-mvp.md); planning (reviews)
-- **Summary:** Side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks. Final merge gate preview (`GET /api/traces/:traceId/merge-diff`) already ships. The per-run patches this needs are stored by [039-proposal-patch-records](../specs/039-proposal-patch-records.md); the diff UI itself stays here.
+- **Summary:** Side-by-side preview of per-run `MUTATION/code.proposal.isolated` / `code.proposal.root` for `review: required` tasks. Final merge gate preview (`GET /api/traces/:traceId/merge-diff`) already ships, and [039-proposal-patch-records](../specs/039-proposal-patch-records.md) shipped the storage plus a per-trail proposal-patches list and body preview; what remains is the **side-by-side, per-run diff view** built on those archived bodies. The `Proposal patches` block in the review detail is a list with an on-demand body, not the reviewer's two-column diff.
 - **Why deferred:** Final merge gate was enough for MVP; per-run preview is extra UI surface.
-- **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate, or 039 ships its patch listing and the remaining work is only the side-by-side view.
+- **Revisit when:** Beekeepers need mid-trace proposal diffs without waiting for the merge gate, now that 039 ships the patch listing and only the side-by-side view is left.
 
 #### An index over trail summaries, so a page costs a page
 

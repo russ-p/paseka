@@ -18,6 +18,10 @@ type TraceReplayer interface {
 }
 
 // ArtifactStore stores large binary artifacts (e.g. diffs) in the colony object store.
+//
+// Proposals no longer use it: a synthesized code proposal is archived on disk under the
+// trail's proposal store instead. It stays for objects written by earlier versions, which
+// `paseka purge --bus` still deletes.
 type ArtifactStore interface {
 	StoreArtifact(name string, data []byte) (string, error)
 }
@@ -26,6 +30,28 @@ type ArtifactStore interface {
 type NopPublisher struct{}
 
 func (NopPublisher) PublishEvent(context.Context, protocol.Event) error { return nil }
+
+// ConfirmsPublication reports that PublishEvent's nil means a broker took the event.
+func (NopPublisher) ConfirmsPublication() bool { return false }
+
+// ConfirmsPublication reports whether pub's acknowledgement means a broker accepted the
+// event.
+//
+// A publisher opts out by answering false: the file-only recorder and the discard no-op
+// both return nil from PublishEvent with no broker having seen anything, so a durable
+// record must not read their silence as confirmation. Anything else is treated as a
+// broker, because PublishEvent returning nil is otherwise the only acknowledgement a
+// caller has.
+func ConfirmsPublication(pub Publisher) bool {
+	if !PublisherAvailable(pub) {
+		return false
+	}
+	confirmer, ok := pub.(interface{ ConfirmsPublication() bool })
+	if !ok {
+		return true
+	}
+	return confirmer.ConfirmsPublication()
+}
 
 // PublisherAvailable reports whether pub is non-nil and not a typed-nil pointer/interface.
 func PublisherAvailable(pub Publisher) bool {

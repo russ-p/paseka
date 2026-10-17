@@ -128,6 +128,8 @@ import {
 	artifactLabel,
 	artifactMeta,
 	artifactState,
+	proposalPatchLabel,
+	proposalPatchNote,
 	runMeta,
 	runUsageLabel,
 	taskMeta,
@@ -554,6 +556,27 @@ describe('trace row and comb formatting', () => {
 	it('separates an announced comb file from a staged one', () => {
 		expect(artifactState({ announced: true })).toBe('announced');
 		expect(artifactState({ announced: false })).toBe('staged');
+	});
+
+	it('names a proposal record by where it came from, and leaves publication out', () => {
+		// Publication is a separate fact with its own phrase. Folding it into the label
+		// would read a proposal as a review outcome, which it is not.
+		expect(
+			proposalPatchLabel({ mode: 'afk', kind: 'code.proposal.isolated', workspace: 'isolated' })
+		).toBe('afk · code.proposal.isolated');
+		// Both kinds already name their workspace, so it is not repeated as a third field.
+		expect(
+			proposalPatchLabel({ mode: 'hitl', kind: 'code.proposal.root', workspace: 'root' })
+		).toBe('hitl · code.proposal.root');
+	});
+
+	it('spells out what each publication state does and does not claim', () => {
+		expect(proposalPatchNote('published')).toBe('published');
+		// Neither of the other two is a rejection: a published event may already point at
+		// these bytes, so the record stays and the state says what is merely unknown.
+		expect(proposalPatchNote('unconfirmed')).toContain('outcome is unknown');
+		expect(proposalPatchNote('unpublished')).toContain('no broker was asked');
+		expect(proposalPatchNote('surprise')).toBe('surprise');
 	});
 
 	it('lists the flags a trail actually carries', () => {

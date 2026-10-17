@@ -2,6 +2,7 @@ import type {
 	AdapterCLI,
 	AgentItem,
 	ArtifactView,
+	ProposalPatchView,
 	Bee,
 	BuildView,
 	ColonyConfig,
@@ -720,6 +721,38 @@ export function formatSize(value: number | undefined): string | null {
 	const kib = value / 1024;
 	if (kib >= 1) return `${kib.toFixed(0)} KiB`;
 	return `${Math.round(value)} B`;
+}
+
+/**
+ * The one-line identity of an archived proposal record: where it came from and what kind
+ * of proposal it was. Publication state is deliberately not here — it is a separate fact
+ * and gets its own phrase, because a patch is not a review outcome.
+ */
+export function proposalPatchLabel(
+	patch: Pick<ProposalPatchView, 'mode' | 'kind' | 'workspace'>
+): string {
+	// The kind already names the workspace (`code.proposal.isolated`, `code.proposal.root`),
+	// so it is not repeated here as a third field.
+	return [patch.mode, patch.kind].filter(Boolean).join(' · ');
+}
+
+/**
+ * What the broker actually confirmed at capture time.
+ *
+ * `unconfirmed` is not a failure and `unpublished` is not a rejection: a published event
+ * may already reference these bytes, so a record is never deleted on a doubtful outcome.
+ */
+export function proposalPatchNote(publication: string): string {
+	switch (publication) {
+		case 'published':
+			return 'published';
+		case 'unconfirmed':
+			return 'unconfirmed — a broker attempt was made and its outcome is unknown';
+		case 'unpublished':
+			return 'unpublished — no broker was asked';
+		default:
+			return publication;
+	}
 }
 
 /** `used / total`, or `null` when the server could not measure either half. */

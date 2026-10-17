@@ -2,6 +2,7 @@
 	import { base } from '$app/paths';
 	import { Maximize2 } from 'lucide-svelte';
 	import MetaList from '$lib/components/MetaList.svelte';
+	import ProposalPatchList from '$lib/components/ProposalPatchList.svelte';
 	import ReviewActions from '$lib/components/ReviewActions.svelte';
 	import Section from '$lib/components/Section.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -248,6 +249,13 @@
 						{/if}
 					</div>
 				{/if}
+			</Section>
+
+			<!-- The archived proposals sit beside the live gate preview, not instead of it:
+			     "what each run proposed" and "what is staged now" are different questions,
+			     and a trail whose worktree is already gone still has its history here. -->
+			<Section id="review-proposal-patches" title="Proposal patches" note="per run">
+				<ProposalPatchList {traceId} />
 			</Section>
 		{/if}
 

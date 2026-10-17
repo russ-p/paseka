@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/runtime"
@@ -193,8 +195,26 @@ publishes:
 	if payload.WorktreePath != ".paseka/worktrees/trace-abc" {
 		t.Fatalf("worktreePath = %q", payload.WorktreePath)
 	}
-	if strings.TrimSpace(payload.Diff) == "" {
-		t.Fatal("expected diff in payload")
+	if payload.Diff != "" {
+		t.Fatal("synthesized proposal must not carry an inline diff")
+	}
+	// The ref resolves against the colony root, not the caller's cwd or the worktree.
+	body := readArchivedPatch(t, root, payload.Ref)
+	if !strings.Contains(body, "README.md") {
+		t.Fatalf("archived patch missing the change: %q", body)
+	}
+	rec := readPatchRecord(t, root, payload.Ref)
+	if rec.Publication != patches.PublicationPublished {
+		t.Fatalf("publication = %q, want published", rec.Publication)
+	}
+	if rec.Bytes != int64(len(body)) {
+		t.Fatalf("recorded bytes = %d, want %d", rec.Bytes, len(body))
+	}
+	if rec.Mode != patches.ModeAFK {
+		t.Fatalf("mode = %q, want afk", rec.Mode)
+	}
+	if rec.Kind != string(protocol.MutationCodeProposalIsolated) {
+		t.Fatalf("record kind = %q", rec.Kind)
 	}
 }
 
@@ -326,11 +346,12 @@ publishes:
 	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(payload.Diff, "pre-existing") {
-		t.Fatalf("proposal must not attribute pre-existing README dirt: %q", payload.Diff)
+	body := readArchivedPatch(t, root, payload.Ref)
+	if strings.Contains(body, "pre-existing") {
+		t.Fatalf("proposal must not attribute pre-existing README dirt: %q", body)
 	}
-	if !strings.Contains(payload.Diff, "tracked.txt") {
-		t.Fatalf("proposal missing tracked.txt: %q", payload.Diff)
+	if !strings.Contains(body, "tracked.txt") {
+		t.Fatalf("proposal missing tracked.txt: %q", body)
 	}
 }
 
@@ -386,6 +407,36 @@ func findMutation(t *testing.T, events []protocol.Event) protocol.Event {
 	}
 	t.Fatalf("no MUTATION in %+v", events)
 	return protocol.Event{}
+}
+
+// readArchivedPatch reads an archive ref the way a history surface does: resolved against
+// the colony root, independent of the caller's working directory.
+func readArchivedPatch(t *testing.T, colonyRoot, ref string) string {
+	t.Helper()
+	abs, err := patches.ResolveRef(colonyRoot, ref)
+	if err != nil {
+		t.Fatalf("resolve ref %q: %v", ref, err)
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		t.Fatalf("read %s: %v", abs, err)
+	}
+	return string(data)
+}
+
+// readPatchRecord reads the sidecar behind an archive ref.
+func readPatchRecord(t *testing.T, colonyRoot, ref string) patches.Record {
+	t.Helper()
+	parsed, ok := patches.ParseArchiveRef(ref)
+	if !ok {
+		t.Fatalf("ref %q is not an archive ref", ref)
+	}
+	store := patches.NewStore(colonyRoot, parsed.TraceID)
+	rec, ok, err := store.Read(parsed.AgentID)
+	if err != nil || !ok {
+		t.Fatalf("read record for %q: ok=%v err=%v", parsed.AgentID, ok, err)
+	}
+	return rec
 }
 
 // seamPublisher is the shape a colony's publisher has in production: record the
@@ -472,5 +523,289 @@ publishes:
 	}
 	if mutations != 1 {
 		t.Fatalf("merged trail history holds %d proposals, want 1", mutations)
+	}
+}
+
+// statusAdapter reports whatever status the test wants without a Go error, so the gate is
+// exercised on the status the run actually finished with.
+type statusAdapter struct {
+	status  string
+	summary string
+	events  []protocol.Event
+}
+
+func (s *statusAdapter) Name() string { return "cursor" }
+
+func (s *statusAdapter) Run(_ context.Context, _ adapters.RunRequest) (*adapters.RunResult, error) {
+	return &adapters.RunResult{Status: s.status, Summary: s.summary, Events: s.events}, nil
+}
+
+func proposalBuilderYAML() string {
+	return `role: builder
+adapter: cursor
+worktree: false
+prompt_template: builder.md
+params:
+  model: composer-2.5
+  yolo: true
+publishes:
+  - type: MUTATION
+    kind: code.proposal.root
+`
+}
+
+func dispatchProposalRun(t *testing.T, adapter adapters.Adapter, traceID string) (*recordingPublisher, string) {
+	t.Helper()
+	root := t.TempDir()
+	writeProposalColony(t, root, proposalBuilderYAML())
+	pub := &recordingPublisher{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", adapter)
+	d.SetPublisher(pub, false)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+	if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    traceID,
+		Task:       "work",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return pub, root
+}
+
+// A run that failed, was cancelled, or was downgraded by its completion contract reached
+// the end of a process without proposing anything, so no record is installed even though
+// the adapter returned no Go error.
+func TestDispatchSuppressesSynthesisForUnsuccessfulRuns(t *testing.T) {
+	for _, status := range []string{"failed", "cancelled"} {
+		t.Run(status, func(t *testing.T) {
+			adapter := &statusAdapter{status: status}
+			pub, root := dispatchProposalRun(t, adapter, "trace-"+status)
+
+			if len(pub.events) != 0 {
+				t.Fatalf("a %s run must publish nothing, got %+v", status, pub.events)
+			}
+			listed, err := patches.NewStore(root, "trace-"+status).List()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(listed.Records) != 0 {
+				t.Fatalf("a %s run must leave no proposal record, got %+v", status, listed.Records)
+			}
+		})
+	}
+}
+
+// A run that emitted its own proposal is passed through unchanged: synthesizing a second
+// one would dispatch a Guard twice for one proposal.
+func TestDispatchExplicitProposalSuppressesSynthesis(t *testing.T) {
+	explicit, err := protocol.NewEvent("trace-explicit", "builder", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:    protocol.MutationCodeProposalRoot,
+		Summary: "hand-authored",
+		Diff:    "diff --git a/x b/x\n+explicit\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := &statusAdapter{status: "completed", events: []protocol.Event{explicit}}
+	pub, root := dispatchProposalRun(t, adapter, "trace-explicit")
+
+	var mutations []protocol.Event
+	for _, ev := range pub.events {
+		if ev.Type == protocol.EventMutation {
+			mutations = append(mutations, ev)
+		}
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("expected exactly the explicit proposal, got %d mutations", len(mutations))
+	}
+	var payload protocol.MutationPayload
+	if err := json.Unmarshal(mutations[0].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Diff != "diff --git a/x b/x\n+explicit\n" {
+		t.Fatalf("the explicit payload was rewritten: %+v", payload)
+	}
+	listed, err := patches.NewStore(root, "trace-explicit").List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Records) != 0 {
+		t.Fatalf("an explicit proposal must not be archived as a runtime patch: %+v", listed.Records)
+	}
+}
+
+// A collector error is surfaced and no ref is published against a partial or broken record.
+func TestDispatchCollectorErrorPublishesNoBrokenRef(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	// A builder that auto-publishes, but a workspace that is not a git repository, so the
+	// collector cannot produce a diff at all.
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(proposalBuilderYAML()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pub := &recordingPublisher{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", &mutatingAdapter{})
+	d.SetPublisher(pub, false)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+
+	result, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-collector-error",
+		Task:       "work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range pub.events {
+		if ev.Type == protocol.EventMutation {
+			t.Fatalf("a collector error must not publish a proposal, got %+v", ev)
+		}
+	}
+	joined := strings.Join(result.Warnings, " | ")
+	if !strings.Contains(joined, "proposal finalization") {
+		t.Fatalf("the collector error must be visible, warnings = %q", joined)
+	}
+	listed, err := patches.NewStore(root, "trace-collector-error").List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Records) != 0 {
+		t.Fatalf("a collector error must not install a record: %+v", listed.Records)
+	}
+}
+
+// queuedProposalAdapter edits the workspace and queues an explicit proposal instead of
+// publishing it live, then exits successfully.
+type queuedProposalAdapter struct{}
+
+func (queuedProposalAdapter) Name() string { return "cursor" }
+
+func (queuedProposalAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
+	readme := filepath.Join(req.Workspace, "README.md")
+	data, err := os.ReadFile(readme)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(readme, append(data, []byte("queued edit\n")...), 0o644); err != nil {
+		return nil, err
+	}
+	runDir := runs.Dir{ColonyRoot: req.ColonyRoot, TraceID: req.TraceID, AgentID: req.AgentID}
+	ev, err := protocol.NewEvent(req.TraceID, req.AgentID, 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:    protocol.MutationCodeProposalRoot,
+		Summary: "queued explicit proposal",
+		Diff:    "diff --git a/README.md b/README.md\n+queued\n",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := runDir.AppendPending(ev); err != nil {
+		return nil, err
+	}
+	return &adapters.RunResult{Status: string(protocol.StatusCompleted)}, nil
+}
+
+// offlineProposalPublisher fails only the queued proposal's publish, so the pending queue
+// survives the flush and the fallback detection is what has to suppress synthesis.
+type offlineProposalPublisher struct{}
+
+func (offlineProposalPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
+	var payload protocol.MutationPayload
+	if err := json.Unmarshal(ev.Payload, &payload); err == nil && payload.Diff != "" {
+		return errors.New("offline")
+	}
+	return nil
+}
+
+// A queued proposal is still the run's own proposal. When the flush fails and leaves it in
+// the pending queue, the runtime must not synthesize a second one.
+func TestDispatchQueuedExplicitProposalSuppressesSynthesisWhenFlushFails(t *testing.T) {
+	root := t.TempDir()
+	writeProposalColony(t, root, proposalBuilderYAML())
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", queuedProposalAdapter{})
+	d.SetPublisher(offlineProposalPublisher{}, false)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+
+	if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-queued-explicit",
+		Task:       "work",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := patches.NewStore(root, "trace-queued-explicit").List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Records) != 0 {
+		t.Fatalf("a queued explicit proposal was synthesized again: %+v", listed.Records)
+	}
+}
+
+// Two runs of the same bee are two proposal attempts, and each gets its own record: a
+// rework cycle leaves a readable history rather than one overwritten entry.
+func TestDispatchTwoRunsProduceDistinctRecords(t *testing.T) {
+	root := t.TempDir()
+	writeProposalColony(t, root, proposalBuilderYAML())
+	pub := &recordingPublisher{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", &mutatingAdapter{run: func(workspace string) error {
+		readme := filepath.Join(workspace, "README.md")
+		data, err := os.ReadFile(readme)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(readme, append(data, []byte("more\n")...), 0o644)
+	}})
+	d.SetPublisher(pub, false)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+
+	for _, traceID := range []string{"trace-first", "trace-second"} {
+		if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+			ColonyRoot: root,
+			Bee:        "builder",
+			TraceID:    traceID,
+			Task:       "work",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	first, err := patches.NewStore(root, "trace-first").List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := patches.NewStore(root, "trace-second").List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Records) != 1 || len(second.Records) != 1 {
+		t.Fatalf("expected one record per trail, got %d and %d", len(first.Records), len(second.Records))
+	}
+	if first.Records[0].AgentID == second.Records[0].AgentID {
+		t.Fatal("two runs must not share one agent id")
 	}
 }

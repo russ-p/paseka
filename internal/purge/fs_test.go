@@ -9,6 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/homestate"
+	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/purge"
 	"github.com/russ-p/paseka/internal/runs"
@@ -261,4 +262,50 @@ func trailEventForPurge(t *testing.T, traceID string) protocol.Event {
 		t.Fatal(err)
 	}
 	return ev
+}
+
+// Proposal patches ride on the existing whole-trail run retention: no new cleanup path,
+// no bus-side lifecycle, and no individual-patch TTL.
+func TestPurgeRunsRemovesProposalPatches(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	traceID := "trace-proposals-retention"
+
+	store := patches.NewStore(repo, traceID)
+	if _, err := store.Write(patches.Record{AgentID: "agent-1"}, []byte("diff --git a/x b/x\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	if _, err := purge.Execute(ctx, purge.PurgeTarget{Runs: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(store.Root()); !os.IsNotExist(err) {
+		t.Fatalf("proposal store survived a runs purge: %v", err)
+	}
+}
+
+// Purging bus state must not destroy the code record: a retained patch keeps its bytes and
+// its last-known publication status even after the event it describes is gone.
+func TestBusPurgeLeavesProposalPatchesAndTheirPublicationState(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	traceID := "trace-proposals-bus"
+
+	store := patches.NewStore(repo, traceID)
+	if _, err := store.Write(patches.Record{AgentID: "agent-1", Publication: patches.PublicationPublished}, []byte("body")); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	if _, err := purge.Execute(ctx, purge.PurgeTarget{}); err != nil {
+		t.Fatal(err)
+	}
+	rec, ok, err := store.Read("agent-1")
+	if err != nil || !ok {
+		t.Fatalf("record gone after a bus-only purge: ok=%v err=%v", ok, err)
+	}
+	if rec.Publication != patches.PublicationPublished {
+		t.Fatalf("publication = %q, want the state recorded at capture time", rec.Publication)
+	}
 }

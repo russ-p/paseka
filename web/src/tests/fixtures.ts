@@ -14,6 +14,8 @@ import type {
 	GitView,
 	GitWorktree,
 	InsightHighlight,
+	ProposalPatchList,
+	ProposalPatchView,
 	ProtocolEvent,
 	MergeDiff,
 	ReviewQueue,
@@ -105,6 +107,35 @@ export function artifactView(overrides: Partial<ArtifactView> = {}): ArtifactVie
 		// A real comb file in this colony is a few KiB; the size is what the trail's
 		// artifact list now prints and what makes an omitted body legible.
 		bytes: 3381,
+		...overrides
+	};
+}
+
+export function proposalPatch(overrides: Partial<ProposalPatchView> = {}): ProposalPatchView {
+	return {
+		ref: '.paseka/runs/trace-01a0bd6963faa14f/proposals/01a0bd6963faa150.patch',
+		traceId: 'trace-01a0bd6963faa14f',
+		agentId: '01a0bd6963faa150',
+		bee: 'builder',
+		mode: 'afk',
+		taskId: 'task-1',
+		kind: 'code.proposal.isolated',
+		workspace: 'isolated',
+		baseSha: '9f2c1ab',
+		summary: 'add the export flag',
+		capturedAt: '2026-01-09T10:15:00Z',
+		bytes: 4213,
+		fileCount: 2,
+		publication: 'published',
+		hasBody: true,
+		...overrides
+	};
+}
+
+export function proposalPatchList(overrides: Partial<ProposalPatchList> = {}): ProposalPatchList {
+	return {
+		patches: [proposalPatch()],
+		diagnostics: [],
 		...overrides
 	};
 }

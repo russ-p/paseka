@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
@@ -138,6 +139,17 @@ func formatSignalTask(kind string, payload map[string]any) string {
 	}
 }
 
+// formatMutationTask builds the Guard's review task from a proposal event.
+//
+// For a new runtime-generated archive ref the task carries the summary and the existing
+// workspace context only. Neither the patch bytes nor the archive pointer is copied in:
+// Guard reviews the working tree with git, and pasting a diff neither improves nor scales
+// the review. Saving a proposal also does not assert that Guard reviewed or approved those
+// exact bytes, so handing them over would imply a correlation that does not exist.
+//
+// Explicit inline diffs and historical object-store refs keep their previous formatting:
+// neither is a runtime archive ref, and dropping third-party proposal input is not a
+// consequence of changing where the runtime stores its own.
 func formatMutationTask(p protocol.MutationPayload) string {
 	var b strings.Builder
 	b.WriteString("Review the following code proposal")
@@ -146,6 +158,11 @@ func formatMutationTask(p protocol.MutationPayload) string {
 		b.WriteString(p.Summary)
 	}
 	b.WriteByte('\n')
+	if patches.IsArchiveRef(p.Ref) {
+		b.WriteString("\nReview the working tree in the assigned workspace with git")
+		b.WriteString(" (git status, git diff). Do not treat this message as the diff.\n")
+		return b.String()
+	}
 	if p.Diff != "" {
 		b.WriteString("\n```diff\n")
 		b.WriteString(p.Diff)

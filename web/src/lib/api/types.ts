@@ -892,6 +892,59 @@ export interface ArtifactContent {
 	bytes?: number;
 }
 
+/**
+ * Mirrors `hiveview.ProposalPatchView`, one archived proposal record.
+ *
+ * The archive is what the diff collector returned when a run finished. It is not a
+ * strict per-run delta, not a workspace backup, and not proof of the code a Guard
+ * approved — which is why the field is `publication` and not `approved`.
+ */
+export interface ProposalPatchView {
+	ref: string;
+	traceId: string;
+	agentId: string;
+	bee?: string;
+	mode?: string;
+	taskId?: string;
+	kind?: string;
+	workspace?: string;
+	worktreePath?: string;
+	baseSha?: string;
+	summary?: string;
+	sector?: string;
+	capturedAt: string;
+	/** Body size on disk, so a patch the preview will refuse is legible before opening it. */
+	bytes: number;
+	/** Best effort: a diff the collector reformatted may not carry every file header. */
+	fileCount?: number;
+	publication: string;
+	publishError?: string;
+	hasBody: boolean;
+}
+
+/** A record on disk that is not an ordinary listing entry. */
+export interface ProposalPatchDiagnostic {
+	agentId: string;
+	reason: string;
+}
+
+export interface ProposalPatchList {
+	patches: ProposalPatchView[] | null;
+	diagnostics: ProposalPatchDiagnostic[] | null;
+}
+
+/** Mirrors `hiveview.ProposalPatchContentView`. */
+export interface ProposalPatchContent {
+	ref: string;
+	agentId: string;
+	content?: string;
+	/** A truncated preview is never presented as the original patch. */
+	truncated?: boolean;
+	omitted?: string;
+	bytes: number;
+	publication?: string;
+}
+
 /** Mirrors `hiveview.InsightHighlight`. */
 export interface InsightHighlight extends SignalSummary {
 	payloadKind: string;
@@ -980,7 +1033,8 @@ export type TraceExportInclude =
 	| 'colony'
 	| 'cues'
 	| 'artifacts'
-	| 'agent-logs';
+	| 'agent-logs'
+	| 'patches';
 
 export interface TraceExportIncludeOption {
 	value: TraceExportInclude;
@@ -1000,7 +1054,12 @@ export const traceExportIncludes: TraceExportIncludeOption[] = [
 	{ value: 'colony', label: 'Colony config', description: 'The colony.yaml manifest' },
 	{ value: 'cues', label: 'Cue definitions', description: 'The signal cues' },
 	{ value: 'artifacts', label: 'Trail artifacts', description: 'The reported artifact files' },
-	{ value: 'agent-logs', label: 'Agent logs', description: 'The raw event log for each run' }
+	{ value: 'agent-logs', label: 'Agent logs', description: 'The raw event log for each run' },
+	{
+		value: 'patches',
+		label: 'Proposal patches',
+		description: 'Archived diff each run proposed, with publication state'
+	}
 ];
 
 /**

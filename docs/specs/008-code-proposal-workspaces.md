@@ -260,7 +260,7 @@ Extend `MutationPayload` (names indicative):
 | Field | Required | Notes |
 | ----- | -------- | ----- |
 | `kind` | yes | `code.proposal.isolated` \| `code.proposal.root` (alias normalized on auto-publish write) |
-| `diff` / `ref` | one of | Same offload rules as today (>64KiB → object store) |
+| `diff` / `ref` | one of | Runtime-synthesized proposals carry `ref` (a colony-root-relative archive path) and no `diff`; an explicit inline `diff` stays valid. See [039](039-proposal-patch-records.md). |
 | `summary` | no | From run summary |
 | `taskId` | no | Ledger linkage |
 | `workspace` | yes on auto-publish | `isolated` \| `root` (redundant with kind; useful for projections) |

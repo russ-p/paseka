@@ -23,6 +23,9 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 	writeMarkdownRuns(&buf, data)
 	writeMarkdownTimeline(&buf, data.Events)
 	writeMarkdownConfigSnapshots(&buf, data)
+	if data.Include.Has(IncludePatches) {
+		writeMarkdownPatches(&buf, data)
+	}
 
 	return buf.Bytes(), nil
 }
@@ -218,6 +221,93 @@ func writeMarkdownConfigSnapshots(buf *bytes.Buffer, data TraceExportData) {
 			}
 		}
 	}
+}
+
+func writeMarkdownPatches(buf *bytes.Buffer, data TraceExportData) {
+	buf.WriteString("## Proposal patches\n\n")
+	if len(data.Patches) == 0 {
+		buf.WriteString("_No proposal patches archived for this trail._\n\n")
+		writeMarkdownPatchDiagnostics(buf, data.PatchDiagnostics)
+		return
+	}
+	for _, patch := range data.Patches {
+		fmt.Fprintf(buf, "### %s · %s\n\n", patch.AgentID, patchPublicationLabel(patch.Publication))
+		fmt.Fprintf(buf, "`%s`\n\n", patch.Ref)
+		fmt.Fprintf(buf, "- Bee: **%s** · mode `%s` · kind `%s` · workspace `%s`\n", patch.Bee, patch.Mode, patch.Kind, patch.Workspace)
+		if patch.TaskID != "" {
+			fmt.Fprintf(buf, "- Task: `%s`\n", patch.TaskID)
+		}
+		if patch.BaseSha != "" {
+			fmt.Fprintf(buf, "- Base SHA: `%s`\n", patch.BaseSha)
+		}
+		if patch.WorktreePath != "" {
+			fmt.Fprintf(buf, "- Worktree: `%s`\n", patch.WorktreePath)
+		}
+		fmt.Fprintf(buf, "- Captured %s · %s", patch.CapturedAt.UTC().Format("2006-01-02 15:04:05 UTC"), patchSizeLabel(patch.Bytes, patch.FileCount))
+		if patch.PublishError != "" {
+			fmt.Fprintf(buf, " · last publish error: %s", patch.PublishError)
+		}
+		buf.WriteString("\n")
+		if patch.Summary != "" {
+			fmt.Fprintf(buf, "- Summary: %s\n", patch.Summary)
+		}
+		buf.WriteString("\n")
+		if patch.Omitted != "" {
+			fmt.Fprintf(buf, "_%s_\n\n", patch.Omitted)
+			continue
+		}
+		writeDiffFence(buf, patch.Content)
+	}
+	writeMarkdownPatchDiagnostics(buf, data.PatchDiagnostics)
+	buf.WriteString("_Proposal patches archive what the diff collector returned when a run finished._")
+	buf.WriteString(" They are not a strict per-run delta, not a workspace backup,")
+	buf.WriteString(" and not proof of the code a Guard approved._\n\n")
+}
+
+func writeMarkdownPatchDiagnostics(buf *bytes.Buffer, diagnostics []PatchDiagnosticExport) {
+	if len(diagnostics) == 0 {
+		return
+	}
+	buf.WriteString("### Incomplete patch records\n\n")
+	for _, d := range diagnostics {
+		fmt.Fprintf(buf, "- `%s`: %s\n", d.AgentID, d.Reason)
+	}
+	buf.WriteString("\n")
+}
+
+// writeDiffFence writes a patch body in a fence that the body cannot terminate itself.
+func writeDiffFence(buf *bytes.Buffer, content string) {
+	fence := "```"
+	if strings.Contains(content, "```") {
+		fence = "~~~"
+	}
+	buf.WriteString(fence)
+	buf.WriteString("diff\n")
+	buf.WriteString(strings.TrimRight(content, "\n"))
+	buf.WriteString("\n")
+	buf.WriteString(fence)
+	buf.WriteString("\n\n")
+}
+
+func patchPublicationLabel(state string) string {
+	switch state {
+	case "published":
+		return "published"
+	case "unconfirmed":
+		return "unconfirmed — a broker attempt was made and its outcome is unknown"
+	case "unpublished":
+		return "unpublished — no broker was asked"
+	default:
+		return state
+	}
+}
+
+func patchSizeLabel(bytes int64, fileCount *int) string {
+	files := "unknown file count"
+	if fileCount != nil {
+		files = fmt.Sprintf("%d file(s)", *fileCount)
+	}
+	return fmt.Sprintf("%s, %d bytes", files, bytes)
 }
 
 func writeYAMLFence(buf *bytes.Buffer, content string) {

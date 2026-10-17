@@ -81,6 +81,19 @@ type activeSession struct {
 	hub     *ptyHub
 	cancel  context.CancelFunc
 	done    chan struct{}
+	// proposal carries what proposal finalization needs: the workspace baseline captured
+	// before the PTY started and the effective bee configuration for this launch. A
+	// resumed provider session still mints a fresh run id and a fresh baseline here, so
+	// it never overwrites the earlier session's record.
+	proposal sessionProposal
+}
+
+// sessionProposal is the proposal-finalization context captured at launch.
+type sessionProposal struct {
+	bee      colony.Bee
+	baseline adapters.WorkspaceBaseline
+	taskID   string
+	task     string
 }
 
 // NewManager creates a session manager with default adapters.
@@ -380,6 +393,18 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			logging.F("error", err.Error()),
 		)
 	}
+	// The workspace baseline is captured here, beside the comb baseline and before the PTY
+	// starts, so the same collector rules and attribution limits apply to interactive work
+	// as to AFK work. A capture failure leaves a zero baseline, which widens attribution
+	// rather than blocking the session.
+	baseline, baselineErr := adapters.CaptureWorkspaceBaseline(ctx, workspace)
+	if baselineErr != nil {
+		logging.Component("sessions").Warn("workspace baseline capture failed",
+			logging.F("trace", traceID),
+			logging.F("agent", agentID),
+			logging.F("error", baselineErr.Error()),
+		)
+	}
 
 	// Detached attach mode (PTY hub / no local terminal) must still launch the
 	// interactive agent TUI. Headless -p belongs to Adapter.Run(), not sessions.
@@ -497,6 +522,12 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		process: proc,
 		cancel:  cancel,
 		done:    make(chan struct{}),
+		proposal: sessionProposal{
+			bee:      bee,
+			baseline: baseline,
+			taskID:   req.TaskID,
+			task:     req.Task,
+		},
 	}
 
 	m.mu.Lock()
@@ -625,6 +656,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	resultText := buildSessionResultText(entry.RunDir)
 	_ = entry.RunDir.WriteResultText(resultText)
 
+	var proposalPub bus.Publisher
 	if state == adapters.SessionCompleted {
 		ctxColony := colony.EnrichFromHome(colony.Context{ColonyRoot: entry.Handle.ColonyRoot, Slug: entry.Slug})
 		if err := bus.FlushPendingForRun(context.Background(), ctxColony, entry.Handle.TraceID, entry.Handle.AgentID); err != nil {
@@ -642,6 +674,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 			pub = client
 			defer client.Close()
 		}
+		proposalPub = pub
 		if err := flushSessionArtifacts(context.Background(), entry.Handle.ColonyRoot, entry.Handle.TraceID, entry.Handle.AgentID, pub); err != nil {
 			msg := "runtime: flush artifacts: " + err.Error()
 			logging.Component("sessions").Warn("flush artifacts failed",
@@ -691,6 +724,8 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 			)
 		}
 	}
+
+	m.finalizeSessionProposal(active, state, proposalPub)
 
 	_ = homestate.UnregisterSession(entry.Slug, sessionID)
 	_ = homestate.MarkInviteIncompleteOnSessionEnd(entry.Slug, sessionID)

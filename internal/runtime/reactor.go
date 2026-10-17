@@ -75,7 +75,6 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 
 	d := NewDispatcher()
 	d.SetPublisher(busClient, true)
-	d.SetArtifactStore(busClient)
 	d.SetBeeRegistry(registry)
 
 	return &Reactor{

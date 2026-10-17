@@ -386,6 +386,18 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 
 	d.runPostExec(ctx, p.bee, p.rendered, p.workspace, p.runDir, p.req.TaskID, result, p.plan.Env)
 
+	// The proposal gate reads the final status, not just a nil adapter error: a run the
+	// completion contract downgraded, a cancelled run, and a timed-out run all reach here
+	// having executed partly, and none of them is a completed proposal attempt.
+	explicitProposal := runOpenedCodeProposalEvent(runEvents) || runOpenedCodeProposalEvent(result.Events)
+	if !explicitProposal {
+		// A deferred proposal is still the run's own proposal even when the flush failed
+		// and left it in the queue: synthesizing a second one would dispatch a Guard twice.
+		if pending, err := p.runDir.ReadPending(); err == nil {
+			explicitProposal = runOpenedCodeProposalEvent(pending)
+		}
+	}
+
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
 		ColonyRoot: p.colonyRoot,
 		Bee:        p.req.Bee,
@@ -394,10 +406,13 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 		TaskID:     p.req.TaskID,
 		Sector:     p.req.Sector,
 		Workspace:  p.workspace,
-	}, p.bee, p.baseline, result, synthesized); pubErr != nil {
+	}, p.bee, p.baseline, result, synthesized, explicitProposal); pubErr != nil {
+		msg := "runtime: proposal finalization: " + pubErr.Error()
 		if d.busRequired {
 			return result, pubErr
 		}
+		result.Warnings = append(result.Warnings, msg)
+		_ = p.runDir.AppendStatusNote(msg)
 	}
 	return result, nil
 }

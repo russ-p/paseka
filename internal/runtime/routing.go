@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/proposal"
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
@@ -87,7 +88,7 @@ func (r *BeeRegistry) ShouldAutoPublishMutation(role string) bool {
 	if !ok {
 		return false
 	}
-	return shouldAutoPublishProposal(bee)
+	return proposal.ShouldAutoPublish(bee)
 }
 
 // ShouldAutoPublishRunSummary reports whether runtime may synthesize INSIGHT/run.summary.

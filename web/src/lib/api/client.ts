@@ -21,6 +21,8 @@ import type {
 	EventFilters,
 	GitActionResult,
 	GitView,
+	ProposalPatchContent,
+	ProposalPatchList,
 	Invite,
 	MergeDiff,
 	RejectTaskRequest,
@@ -145,6 +147,21 @@ export function listTraceArtifacts(traceId: string): Promise<ArtifactView[]> {
 export function getTraceArtifactContent(traceId: string, ref: string): Promise<ArtifactContent> {
 	const query = new URLSearchParams({ ref });
 	return request<ArtifactContent>(`/traces/${encodeURIComponent(traceId)}/artifacts?${query}`);
+}
+
+export function listTraceProposalPatches(traceId: string): Promise<ProposalPatchList> {
+	return request<ProposalPatchList>(`/traces/${encodeURIComponent(traceId)}/proposal-patches`);
+}
+
+/** `agentId` selects the bounded content read of the proposal-patches endpoint. */
+export function getTraceProposalPatchContent(
+	traceId: string,
+	agentId: string
+): Promise<ProposalPatchContent> {
+	const query = new URLSearchParams({ agentId });
+	return request<ProposalPatchContent>(
+		`/traces/${encodeURIComponent(traceId)}/proposal-patches?${query}`
+	);
 }
 
 export function addTraceEnergy(traceId: string, amount: number): Promise<EnergyAddResult> {

@@ -365,8 +365,28 @@ paseka bee chat <role> [prompt]
   On exit → update session.json, status.json, transcript
         │
         ▼
+  post_exec hook (when configured)
+        │
+        ▼
+  Proposal finalization (successful sessions only) → proposals/<agentId>.{patch,json}
+        │
+        ▼
   Unregister from state.json
 ```
+
+---
+
+## 11a. Proposal finalization
+
+A successfully completed session runs the same proposal gate, diff collector, patch writer, and publisher as an AFK run, so interactive work gets the same proposal history. It is **not** a call through the AFK dispatcher: the baseline is captured before the PTY starts (beside the comb baseline), and finalization runs after `post_exec`, so the captured diff describes the workspace the hook left behind.
+
+- **Only successful sessions.** A failed or cancelled session never reaches the preparation gate, so partial interactive work is not presented as a completed proposal attempt.
+- **Resume is a new run.** Continuing a provider session mints a fresh Paseka `agentId` and captures a fresh baseline, so the earlier session's patch record is left intact.
+- **Explicit proposals suppress synthesis.** A session that already emitted or queued a `code.proposal*` is passed through unchanged, so a Guard is never dispatched twice for one proposal.
+- **Bus absence is honest.** Without a reachable broker the record is retained as `unpublished`; the session cannot silently claim publication.
+- **Diagnostics land in the run outcome.** A collection, storage, or publication error is written to `status.json` as a proposal-finalization note, readable through the normal session/run surfaces, and a successful agent process is not described as a successfully published proposal when finalization failed.
+
+The record lives at `.paseka/runs/<traceId>/proposals/<agentId>.{patch,json}` — the trail's proposal store, not the comb. It is what the diff collector returned, with the collector's documented limits: not a strict per-run delta, not a workspace backup, and not proof of the code a Guard approved. See [Spec 039](../specs/039-proposal-patch-records.md).
 
 ---
 

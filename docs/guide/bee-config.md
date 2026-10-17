@@ -288,6 +288,8 @@ Subscriber mismatches (`guard` with `worktree: false`, `main-guard` with `worktr
 
 Fail closed: empty / missing `publishes` must **not** auto-publish mutations.
 
+An auto-published proposal is archived as a patch under `.paseka/runs/<traceId>/proposals/` and the `MUTATION` carries a colony-root-relative `ref` instead of an inline diff. This is runtime-owned: a bee declares the kind and nothing else, and it never sees or writes the store. A bee that emits its own `MUTATION` (with an inline `diff`) is passed through unchanged and gets no automatic patch conversion. See [Spec 039](../specs/039-proposal-patch-records.md).
+
 Colony sector definitions remain in [architecture overview](../architecture/overview.md).
 
 ---

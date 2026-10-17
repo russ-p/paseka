@@ -23,12 +23,14 @@ import {
 	getTrace,
 	listEvents,
 	getTraceArtifactContent,
+	getTraceProposalPatchContent,
 	gitDeleteBranches,
 	gitFetch,
 	gitPruneWorktrees,
 	gitPull,
 	gitPush,
 	listTraceArtifacts,
+	listTraceProposalPatches,
 	listTraces,
 	traceCursor,
 	listReviews,
@@ -99,10 +101,14 @@ describe('trace endpoints', () => {
 		await getTrace('trace/../evil');
 		await listTraceArtifacts('trace/../evil');
 		await getTraceArtifactContent('trace-1', 'notes file.md');
+		await listTraceProposalPatches('trace/../evil');
+		await getTraceProposalPatchContent('trace-1', '01a0 bd');
 		expect(mock.mock.calls.map((call) => call[0])).toEqual([
 			'/api/traces/trace%2F..%2Fevil',
 			'/api/traces/trace%2F..%2Fevil/artifacts',
-			'/api/traces/trace-1/artifacts?ref=notes+file.md'
+			'/api/traces/trace-1/artifacts?ref=notes+file.md',
+			'/api/traces/trace%2F..%2Fevil/proposal-patches',
+			'/api/traces/trace-1/proposal-patches?agentId=01a0+bd'
 		]);
 	});
 

@@ -131,7 +131,14 @@ func (c *Client) PublishEvent(ctx context.Context, event protocol.Event) error {
 	return nil
 }
 
+// ConfirmsPublication reports true: a nil return from PublishEvent means JetStream
+// accepted the message.
+func (c *Client) ConfirmsPublication() bool { return true }
+
 // StoreArtifact stores bytes in the colony object store and returns the object name.
+//
+// Proposals no longer come through here — see ArtifactStore — so this only serves
+// artifacts written by earlier versions, which `paseka purge --bus` still deletes.
 func (c *Client) StoreArtifact(name string, data []byte) (string, error) {
 	if err := ensureObjectStore(c.js, c.cfg); err != nil {
 		return "", err

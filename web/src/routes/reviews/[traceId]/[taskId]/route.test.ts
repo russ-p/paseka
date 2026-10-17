@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mergeDiff, reviewQueue, taskDetail } from '../../../../tests/fixtures';
+import { mergeDiff, proposalPatchList, reviewQueue, taskDetail } from '../../../../tests/fixtures';
 import { setRouteParams } from '../../../../tests/route-params.svelte';
 import * as pageModule from './+page.ts';
 
@@ -42,6 +42,7 @@ function stubApi(overrides: {
 			if (taskMatch) return task(decodeURIComponent(taskMatch[1]), decodeURIComponent(taskMatch[2]));
 			const diffMatch = url.match(/^\/api\/traces\/([^/]+)\/merge-diff$/);
 			if (diffMatch) return diff(decodeURIComponent(diffMatch[1]));
+			if (url.match(/^\/api\/traces\/[^/]+\/proposal-patches(\?|$)/)) return json(proposalPatchList());
 			return new Response('not found', { status: 404 });
 		})
 	);
