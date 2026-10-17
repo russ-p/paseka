@@ -1,7 +1,6 @@
 package runs
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -169,7 +168,7 @@ func (d TaskDir) ReadTaskRuns() ([]TaskRunEntry, error) {
 	defer f.Close()
 
 	var entries []TaskRunEntry
-	scanner := bufio.NewScanner(f)
+	scanner := newLineScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

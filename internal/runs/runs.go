@@ -1,7 +1,6 @@
 package runs
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -222,7 +221,7 @@ func (d Dir) ReadEvents() ([]protocol.Event, error) {
 	defer f.Close()
 
 	var events []protocol.Event
-	scanner := bufio.NewScanner(f)
+	scanner := newLineScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -386,7 +385,7 @@ func (d Dir) readTranscriptFrom(skip int) ([]TranscriptEntry, error) {
 	defer f.Close()
 
 	var entries []TranscriptEntry
-	scanner := bufio.NewScanner(f)
+	scanner := newLineScanner(f)
 	idx := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

@@ -7,8 +7,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 )
+
+var traceLog = logging.Component("runs")
 
 // ReadTraceEvents loads domain events from all agent runs under .paseka/runs/<traceId>/.
 // Events are returned in chronological order (by createdAt, then seq).
@@ -34,7 +37,17 @@ func ReadTraceEvents(colonyRoot, traceID string) ([]protocol.Event, error) {
 		runDir := Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: agentID}
 		events, err := runDir.ReadEvents()
 		if err != nil {
-			return nil, fmt.Errorf("runs: read events for agent %s: %w", agentID, err)
+			// One unreadable run log must not take down the colony-wide feed:
+			// this reader backs the Console timeline, export, and prompt memory,
+			// so a hard failure here hides every other trail as well. Skip the
+			// file and say so, the way loadTraceSummary already does for a run
+			// whose meta will not parse.
+			traceLog.Warn("skip unreadable run event log",
+				logging.F("traceId", traceID),
+				logging.F("agentId", agentID),
+				logging.F("path", runDir.EventsPath()),
+				logging.F("error", err.Error()))
+			continue
 		}
 		all = append(all, events...)
 	}
