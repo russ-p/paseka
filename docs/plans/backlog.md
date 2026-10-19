@@ -18,14 +18,6 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** Unverified and harmless on its own: `runs.ResolveTraceSummary` takes the last non-empty summary, so a duplicate changes nothing downstream.
 - **Revisit when:** A trail shows a summary that disagrees with what actually happened, or trail tooling needs to diff two bus payloads rather than match them.
 
-#### `paseka export` rejects the trace id as a positional argument
-
-- **Kind:** idea
-- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
-- **Summary:** The natural invocation `paseka export trace-01a1…` fails with `required flag(s) "trace" not set`; only `--trace` works. Accept the id positionally, as `paseka replay <traceId>` already does, and keep `--trace` as the alternative.
-- **Why deferred:** The flag works; this is ergonomics, and export is not a hot path.
-- **Revisit when:** Export gets a wrapper script or lands in a documented quickstart.
-
 ### Adapter catalog
 
 #### The Agent CLI roster is duplicated across the Go/TS boundary

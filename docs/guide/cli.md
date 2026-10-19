@@ -982,9 +982,16 @@ paseka proposal discard --trace trace-1 --task _review --reason "Superseded by t
 
 Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs) without changing the renderer.
 
+Pass the flight trail id as a positional argument, matching `paseka replay <traceId>`. `--trace` is kept as an alternative; passing both is fine when they match, and passing two different ids is an error.
+
+```text
+paseka export <traceId> [--format html|md] [--include ...] [-C <dir>]
+paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
+```
+
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
-| `--trace` | | yes | Flight trail id |
+| `--trace` | | no | Flight trail id (alternative to the positional argument) |
 | `--format` | | | Export renderer: `html` (default) or `md` |
 | `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `patches` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
@@ -1015,14 +1022,15 @@ A proposal patch is the diff the collector returned when a run finished, not a s
 Data is read from `.paseka/runs/` (same as Queen Console). Task and energy fields prefer JetStream KV when NATS is configured; otherwise filesystem projections are used.
 
 ```bash
+paseka export trace-abc123
+paseka export trace-abc123 --format md
+paseka export trace-abc123 --include usage,durations
+paseka export trace-abc123 --include bees --include colony --format md
+paseka export trace-abc123 --include artifacts --format md
+paseka export trace-abc123 --include agent-logs --format md
+paseka export trace-abc123 --include patches --format md
+paseka export trace-abc123 -C /path/to/repo
 paseka export --trace trace-abc123
-paseka export --trace trace-abc123 --format md
-paseka export --trace trace-abc123 --include usage,durations
-paseka export --trace trace-abc123 --include bees --include colony --format md
-paseka export --trace trace-abc123 --include artifacts --format md
-paseka export --trace trace-abc123 --include agent-logs --format md
-paseka export --trace trace-abc123 --include patches --format md
-paseka export --trace trace-abc123 -C /path/to/repo
 ```
 
 ---
