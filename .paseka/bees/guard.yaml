@@ -2,7 +2,7 @@ role: guard
 adapter: cursor
 prompt_template: guard.md
 params:
-  model: small
+  model: reviewer
   yolo: true
 worktree: true
 subscribes:

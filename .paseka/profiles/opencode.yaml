@@ -1,7 +1,5 @@
 adapter: opencode
 model_aliases:
-  small: opencode/deepseek-v4.1-flash-free
-  low: opencode/big-pickle
-  medium: opencode/space-bunny-free
-  high: opencode/glm-5.3-flash-free
-  medium-gpt: opencode/glm-5.3-flash-free
+  builder: opencode/deepseek-v4.1-flash-free
+  reviewer: opencode/glm-5.3-flash-free
+  thinker: opencode/minimax-m3.1-flash-free

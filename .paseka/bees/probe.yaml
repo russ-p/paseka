@@ -5,7 +5,7 @@ intents:
   - probe
 default_intent: probe
 params:
-  model: small
+  model: builder
   timeout: 3m
 worktree: false
 subscribes:

@@ -2,7 +2,7 @@ role: receiver
 adapter: cursor
 prompt_template: receiver.md
 params:
-  model: small
+  model: builder
   yolo: true
 worktree: true
 subscribes:

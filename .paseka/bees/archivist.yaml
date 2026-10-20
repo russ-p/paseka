@@ -3,7 +3,7 @@ adapter: cursor
 prompt_template: archivist.md
 default_intent: task
 params:
-  model: medium
+  model: thinker
   yolo: true
 worktree: false
 publishes:

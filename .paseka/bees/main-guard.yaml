@@ -2,7 +2,7 @@ role: main-guard
 adapter: cursor
 prompt_template: main-guard.md
 params:
-  model: medium-gpt
+  model: reviewer
   yolo: true
 worktree: false
 subscribes:

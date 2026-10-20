@@ -3,7 +3,7 @@ adapter: cursor
 prompt_template: scout.md
 default_intent: intake
 params:
-  model: low
+  model: thinker
   yolo: true
   plan: false
 worktree: false

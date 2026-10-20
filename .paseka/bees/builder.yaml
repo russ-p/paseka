@@ -2,7 +2,7 @@ role: builder
 adapter: cursor
 prompt_template: builder.md
 params:
-  model: small
+  model: builder
   yolo: true
 worktree: true
 subscribes:
