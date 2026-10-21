@@ -75,6 +75,7 @@ nav:
       - Principles: idea/principles.md
       - Glossary: idea/glossary.md
       - Brief (RU): idea/brief.md
+      - Self-improving colonies: idea/self-improving-colony.md
   - Using Paseka:
       - Start here — Colony layout: guide/colony-layout.md
       - Bee config: guide/bee-config.md

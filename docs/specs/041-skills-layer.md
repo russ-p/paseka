@@ -7,6 +7,8 @@ The colony owns a skill store, Bees declare which skills they may use, the runti
 
 Scope of this spec is the whole layer — store, selection, delivery, attribution, proposal — described as four phases in Further Notes. Phase 1 (store, selection, delivery, run record) is the implementable core; Phases 2–4 (attribution and export, proposal and approval, native client bridge) build on it.
 
+Four amendments (A1–A4) are proposed below in response to [the self-improving-colony brief](../idea/self-improving-colony.md): a second delivery mode, the `load` verb, skills in a portable pack, and the phase list that follows from them.
+
 ## Problem Statement
 
 A Bee that does generic work well still does this colony's work badly, because the colony's procedures live only in a Beekeeper's head and in prompt templates. The Beekeeper writes a procedure down once, in the best place available — the role's prompt template — and from then on it is unconditional, unconditional per role, and grows without bound. There is no way to say "this procedure applies to the release task and to nothing else", no way to hand the same procedure to two roles, and no way to know which procedure a given run actually used.
@@ -245,6 +247,47 @@ The properties that make this safe rather than merely convenient:
 
 42. **The read commands speak JSON on request; the mutating commands speak in prose.** `list`, `show`, and `proposals` emit a machine contract on request, for a script or another tool. The mutating commands are read by a person deciding something, and a person's reading of "installed into the shared root, working tree has one new file" should not be a JSON document.
 
+## Amendments
+
+The four amendments below are proposed in response to [the self-improving-colony brief](../idea/self-improving-colony.md) and [spec 042](042-trail-fork.md). They amend decision 8, decision 27, one out-of-scope item, and the phase list. Each is additive to the settled design; none of them reopens a decision the review closed.
+
+**A1. The delivery mechanism is chosen per colony, and one of the two choices is a command.**
+
+Decision 8 fixes the advertisement as name, description and the absolute path to the `SKILL.md`. That is right for the client-native bridge of Phase 4, where the client reads the file itself. It is the wrong shape when the colony wants to know what a run actually used: the path in the advertisement lets a role read the file behind the runtime's back, and the only evidence of that read is the client's transcript, which only some adapters can produce today.
+
+So the advertisement gains a second form, and the colony chooses which one it uses:
+
+| Mode | The advertisement carries | The body is obtained by | Usage evidence |
+| --- | --- | --- | --- |
+| `path` (default, decision 8) | name, description, absolute path | the role reads the file | the adapter's transcript, where it exists |
+| `command` | name, description, and the command to run | `paseka skills load <name>` | the load record, on every adapter |
+
+In `command` mode the path is not advertised, so the runtime is the only way to the body, and a load is a deterministic fact rather than an inference. The mode is a colony setting, not a per-role one: a colony that measures usage wants it everywhere, and a colony that wants a client to read skills natively wants `path`.
+
+**A2. `load` joins the command group.**
+
+Decision 27's group gains an eleventh verb:
+
+```
+paseka skills load <reference> --trace <traceId> --agent <agentId>
+```
+
+It resolves the reference with the same resolver every other command uses (decision 28), refuses a reference the run's role does not carry (exit 2, `skill_not_offered`), prints the body, and appends `{name, tier, contentHash, at}` to `.paseka/runs/<traceId>/<agentId>/skills-used.ndjson`. At finalize the runtime folds the file into the run's result as the deduplicated set of loaded skills.
+
+`load` is a read command with a side effect on the run's own record, so it speaks prose, not JSON. It exists because a colony that runs the same task twice and compares the two runs needs to know whether the procedure was even opened — a question the transcript cannot answer for every adapter.
+
+**A3. A portable pack may carry skills.**
+
+The out-of-scope item "Carrying skills in a portable Bee pack" is amended: a Nuc may carry skills alongside bees, prompts and cues, and `paseka nuc import` installs them into the shared root with their provenance recorded.
+
+The reason is the split the brief draws. A role's procedure, its prompts and its thresholds are one unit of content, and a colony that receives the procedure without the prompts that call it has received half of it. Keeping skills out of the pack made the pack unable to carry a methodology — and a methodology that cannot be moved between colonies is a colony's private improvisation, which is precisely what a portable pack exists to prevent.
+
+The format change is additive: a pack without skills imports exactly as it does today.
+
+**A4. The phase list gains the load path.**
+
+Phase 1 becomes the store, its ledger, selection, the advertisement in both modes, the run record, `load`, and the reading half of the command group — `list`, `show`, `validate` — plus `move`, `remove`, `disable` and `enable`, which need nothing but the store itself. Phase 2 keeps usage attribution and the export section, and now sits beside the load record rather than ahead of it. Phases 3 and 4 are unchanged.
+
 ## Testing Decisions
 
 Good tests here assert what an operator can observe: what a Bee was offered, what it was told, what a run recorded, and what a Beekeeper can approve. A test that reaches into the resolver's internals is testing the wrong thing.
@@ -281,7 +324,7 @@ Prior art in-repo: the colony configuration load and validation tests, the run-d
 - Skill selection by the task's intent, by the task's text, or by any automatic matching. The gate is declared, not inferred.
 - Changing what a role's prompt templates contain, or introducing prompt composition that includes a skill body.
 - Changing how the existing note-producing intent of the Archivist works.
-- Carrying skills in a portable Bee pack. The pack format is unchanged by this spec.
+- Carrying skills in a portable Bee pack. The pack format is unchanged by this spec. **Amended by A3**: a pack may carry skills, and `paseka nuc import` installs them.
 - Reading a client's own skill configuration to discover what the client would have offered on its own.
 - Fetching a skill from a URL, from another colony, or from a catalog. The store is filled by hand, by a move, or by approval, and nothing is downloaded.
 - An interactive full-screen browser for the store. The listing is a table and the store is a directory; a browsing UI is the console's job, in a later phase.

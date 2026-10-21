@@ -18,6 +18,7 @@ Follow the shortest path from the model to a running colony:
 | [Principles](idea/principles.md) | Choreography model, contracts, honey, HITL, colony vs machine |
 | [Glossary](idea/glossary.md) | Bee-language vocabulary and domain terms |
 | [Brief (RU)](idea/brief.md) | Historic product brief (concept, EDA, stack, HITL) |
+| [Self-improving colonies](idea/self-improving-colony.md) | Idea note: what a colony could learn from its own trails, and the line between platform capabilities and the methodology that uses them |
 
 ## Using Paseka
 

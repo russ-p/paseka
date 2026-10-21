@@ -18,6 +18,7 @@
 | [Principles](idea/principles.md) | Хореография, контракты, honey, HITL, colony vs machine |
 | [Glossary](idea/glossary.md) | Bee-глоссарий и доменный словарь |
 | [Brief (RU)](idea/brief.md) | Исторический продуктовый бриф |
+| [Self-improving colonies](idea/self-improving-colony.md) | Idea-заметка: чему колония может учиться на своих trail'ах и где проходит граница между возможностями платформы и методологией, которая их использует |
 
 ## Использование
 

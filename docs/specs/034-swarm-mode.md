@@ -4,7 +4,10 @@
 **Supersedes:** —
 **Related:** [008 code proposal workspaces](008-code-proposal-workspaces.md),
 [016 cue layer](016-cue-layer.md), [019 model aliases](019-model-aliases.md),
-[027 config profiles](027-config-profiles.md), [024 pull-request delivery](024-pull-request-delivery.md)
+[027 config profiles](027-config-profiles.md), [024 pull-request delivery](024-pull-request-delivery.md),
+[042 trail fork](042-trail-fork.md),
+[043 trail observability](043-trail-observability.md),
+[idea: self-improving colonies](../idea/self-improving-colony.md)
 
 ---
 
@@ -334,6 +337,60 @@ their statuses.
   `MUTATION/code.proposal.isolated` (root proposals do not swarm in v1).
 - **Warning** — `max_count > 5` without an explicit `budget_multiplier`.
 
+### 4.12 Dynamic configuration (proposed amendment)
+
+The two layers in 4.1 are both **committed**: the bee policy lives in
+`.paseka/bees/<role>.yaml`, the cue request in `.paseka/cues/<id>.yaml`.
+A colony therefore cannot say "for this task, try these three models" without
+editing a reviewed file — and a role that wants to choose its own variants at
+dispatch time has no way to express it.
+
+The request layer is already the right place: `INSIGHT/task.plan` carries an
+optional `tasks[].swarm`, and a cue is only one of the things that publish a
+task plan. A planning role is another. So the amendment is not a new
+mechanism — it is a second source of the same request.
+
+**Precedence.** The effective variant set for a task is resolved in this
+order, first match wins:
+
+| # | Source | Kind |
+| --- | --- | --- |
+| 1 | the task plan's `tasks[].swarm` | request |
+| 2 | the cue's `swarm.pick` | request |
+| 3 | the bee's `swarm:` section | policy |
+
+A request narrows the policy; it never widens it. A task plan that names a
+variant the bee policy does not define is refused, and the refusal names the
+bee, the task and the missing id — the same rule the cue path already uses.
+
+**What a role may set.** The request is data from a role, so it is bounded by
+policy, not trusted:
+
+| Axis | Settable by a role | Why |
+| --- | --- | --- |
+| which of the policy's variants to run | yes | a choice inside the reviewed set |
+| `params` (model alias, thinking level) | yes, within the variant's declared params | cost is bounded by the policy's variant list |
+| `adapter` | only when `allow_adapter_override` is true | changes the client's trust boundary |
+| `publishes`, `subscribes`, `completion_contract` | never | these are the role's contract, not its execution detail |
+
+A request that tries to set a forbidden axis is refused with the axis named.
+The refusal is not fatal to the dispatch: the task runs with the policy's
+default set, and the refusal is recorded.
+
+**Relation to the fork.** [Spec 042](042-trail-fork.md) forks one task with
+one changed `.paseka/`; this section fans one task out over several variants.
+The two compose: a fan-out whose variants each carry a config delta is the
+shape a methodology needs, and the delta is applied by the fork mechanism
+rather than invented here. This spec owns the fan-out; the fork spec owns the
+delta.
+
+### 4.13 Doctor checks (amended)
+
+The checks in 4.11 gain one: **Warning** — a role that publishes
+`INSIGHT/task.plan` with a `swarm` request, but whose bee configuration has
+no `swarm:` policy section. Without a policy there is nothing to narrow, so
+the request is refused at dispatch and the trail runs one variant instead.
+
 ## 5. Data model changes
 
 | Store | Change |
@@ -410,6 +467,39 @@ No breaking changes.
 6. **PR delivery for shadow variants.** Currently no head is pushed for
    shadow losers. Confirm that is acceptable for the comparison use case.
 
+The dynamic configuration in 4.12 adds its own questions.
+
+7. **Who may request a variant set.** Is a role's `tasks[].swarm` accepted
+   as-is, or does it need the colony's consent for the model it names? The
+   amendment bounds the request to the policy's variant list, which bounds
+   cost, but a policy that lists an expensive model is still an expensive
+   model. Alternative: the policy may carry a per-variant cost ceiling that
+   a request cannot exceed.
+8. **What a request costs.** Every variant spends the trail's honey, so a
+   role that requests four variants spends four dispatches' worth of budget
+   on one task. Should a request be charged against the same honey reserve,
+   or against a separate experiment budget the way a fork has its own
+   ([spec 042](042-trail-fork.md))?
+9. **Judge visibility.** The judging section (§4.7) has the judge pick a
+   winner. Harness²'s selection is **blind** — the judge sees anonymised
+   deliverables and not the harness that produced them — and the reason is
+   that an unblinded judge rewards the most elaborate output rather than the
+   best one. Should the judge here also be blind to which variant produced
+   which candidate?
+10. **A variant that changes the procedure, not the model.** 4.2 overlays
+    `adapter` and `params` only. A methodology would want variants that
+    differ in the procedure itself — a different prompt set, a different
+    skill set. That is a config delta, which is what a fork carries
+    ([spec 042](042-trail-fork.md)). Should a variant be able to name a
+    delta, or should a fan-out of forks be the only way to express it?
+11. **Task plan ownership.** A cue publishes a task plan, and now a planning
+    role may publish one with a swarm request. Does the runtime distinguish a
+    cue's plan from a role's plan when the role's plan arrives later for the
+    same task — last writer wins, or is a plan immutable once dispatched?
+12. **Naming.** `variant` already means a reasoning level in the adapter
+    layer (`internal/adapters/session.go:63`). Should the swarm concept keep
+    the name, and the reasoning level take another?
+
 ## 10. References
 
 - [008 code proposal workspaces](008-code-proposal-workspaces.md) —
@@ -420,6 +510,12 @@ No breaking changes.
   profile overlay: profiles are process-scoped, swarm is dispatch-scoped
 - [024 pull-request delivery](024-pull-request-delivery.md) — how the
   winner publishes under `pull_request`
+- [042 trail fork](042-trail-fork.md) — the config delta a variant may
+  carry; a fork is the smallest unit of comparison
+- [043 trail observability](043-trail-observability.md) — the per-trail
+  metrics that `swarm stats` aggregates
+- [idea: self-improving colonies](../idea/self-improving-colony.md) — why a
+  fan-out and a fork are the same idea at two sizes
 - `internal/colony/bee.go` — `Bee` struct and `LoadBee`
 - `internal/runtime/reactor.go` — dispatch fan-out and dedupe
 - `internal/worktree/` — worktree registry and variant sub-paths

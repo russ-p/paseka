@@ -41,6 +41,7 @@ The beekeeper is a first-class participant, not a blocked approval step in an or
 | ---- | --- |
 | Vocabulary | [Glossary](glossary.md) |
 | Historic product brief (RU) | [Brief](brief.md) |
+| What a colony could learn from its own trails | [Self-improving colonies](self-improving-colony.md) |
 | Config layout / `paseka init` | [Colony layout](../guide/colony-layout.md) |
 | Configure a bee | [Bee config](../guide/bee-config.md) |
 | CLI reference | [CLI](../guide/cli.md) |
