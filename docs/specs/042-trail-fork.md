@@ -2,8 +2,8 @@
 
 ## Status
 
-**Draft**
-Trail-owned configuration snapshots, explicit application of new revisions during ordinary work, and pinned experimental forks executed by the colony's existing Reactor. Admission policy and remaining scope questions are listed in Further Notes.
+**Approved**
+Trail-owned configuration snapshots, explicit application of new revisions during ordinary work, and pinned experimental forks executed by the colony's existing Reactor. Human approval for agent-originated requests and consumer scope are fixed for v1; active-fork cap and spending policy are deferred.
 
 Related: [008 code proposal workspaces](008-code-proposal-workspaces.md),
 [027 config profiles](027-config-profiles.md),
@@ -116,6 +116,9 @@ The platform supplies reproducible configuration inputs and records the differen
 42. As a Beekeeper, I want conflicting and duplicate apply requests handled predictably, so that concurrent controls do not silently replace each other's settings.
 43. As a Beekeeper, I want applying configuration to preserve code, task progress, and honey, so that changing procedure does not restart or clone the trail.
 44. As a Beekeeper, I want a fork to name the source task attempt it inherits, so that a later active configuration is never substituted for the procedure being studied.
+45. As a Beekeeper, I want an agent-initiated fork request to remain pending without creating a trail, workspace, or honey reserve, so that a request cannot spend resources before I approve it.
+46. As a Beekeeper, I want an explicit approve action that advances a pending request and performs the on-disk creation, so that admission and resource allocation are one deliberate act.
+47. As a Beekeeper, I want pending fork requests to be discoverable, rejectable, and expirable without leaving runnable half-created forks, so that abandoned experiments do not accumulate.
 
 ## Implementation Decisions
 
@@ -261,23 +264,27 @@ The Reactor provides logical separation by resolving each event's trail context.
 
 Built-in gateways and side-effecting consumers apply the same rules before acting. Independent NATS subscribers still receive matching subjects and must implement this contract themselves. This design does not promise broker-level separation from arbitrary subscribers or filesystem sandboxing of external agents. Separate transport namespaces and operating-system sandboxes are outside v1.
 
+Fork events are ordinary trail events in v1: the same subjects and envelope, identified only by `traceId`. No fork-specific envelope field or subject prefix is added. A consumer that needs experimental scope resolves `traceId` through the trail lookup and reads the recorded lineage. V1 supports built-in consumers; an external side-effecting subscriber that cannot perform this lookup is unsupported. Before enabling shared-bus forks, built-in gateways and notifiers are inventoried and made to enforce experimental scope. A transport-level marker, such as a NATS header, is deferred until a concrete external consumer requires it.
+
 ### 14. Admission, honey, and concurrency belong to the colony
 
-An agent request is eligible only when its sender resolves to a recorded bee run and canonical colony policy grants that role `SIGNAL/trail.fork` publication. A claimed role or a grant added by the candidate is insufficient. Empty or absent declarations grant no eligibility. This is an enforced action check; ordinary publish declarations retain their advisory behaviour.
+An agent request is eligible only when its sender resolves to a recorded bee run and canonical colony policy grants that role `SIGNAL/trail.fork` publication. A claimed role or a grant added by the candidate is insufficient. Empty or absent declarations grant no eligibility. This is an enforced action check; ordinary publish declarations retain their advisory behaviour. Eligibility creates a pending request, not a fork.
 
-The fork gets a fresh reserve. The initial budget defaults to the canonical colony's resolved energy default and cannot exceed that ceiling; source honey is untouched. Operator top-ups remain explicit ordinary trail controls. Configuration deltas cannot seed or raise a reserve.
+Approval seeds a fresh reserve. The initial budget defaults to the canonical colony's resolved energy default and cannot exceed that ceiling; source honey is untouched. Operator top-ups remain explicit ordinary trail controls. Configuration deltas cannot seed or raise a reserve. A pending request holds no honey.
 
-The colony enforces a cap on concurrently active forks before making a prepared fork runnable. Slot reservation and any reacquisition on resume must be atomic with admission to dispatch. Exhausting honey pauses dispatch; it does not establish an unlimited new-fork allowance. Concurrency bounds active work, not total monetary spending. Automatic campaigns are outside this spec.
+V1 has no separate active-fork cap. Human approval is the admission gate for agent-originated requests, and each fork has its own capped honey reserve; the operator may deliberately create or approve several forks. A configurable active-fork cap, a per-source fan-out limit, and a cumulative experiment allowance are deferred for v1 (Further Notes). Exhausting honey pauses dispatch; it does not establish an unlimited new-fork allowance. Colony-wide provider concurrency belongs to the runtime's active-invocation policy rather than this spec. Automatic campaigns are outside this spec.
 
-Human admission of bus requests, the concrete active-fork cap, and a possible cumulative experiment allowance remain policy questions below. Until an admission policy is selected, a publication declaration must not be treated as implicit approval to spend.
+Human approval is required for agent-originated requests in v1; CLI creation is an operator action and may be approved in the same invocation. Pending-request quotas and expiry bound request spam. No fork-specific concurrency cap is enforced in v1; when one is introduced, its definition and slot lifecycle must be fixed before enabling pre-authorized or automatic experiments.
 
 ### 15. Creation is durable and idempotent
 
 `SIGNAL/trail.fork` is a platform control request with required `requestId`, `sourceTrace`, and explicit delta selection; optional fields are `sourceTask`, `sourceRun`, `baseSha`, `budget`, and `title`. The CLI creates a request identity before submission. The colony records one result per identity; repeated delivery returns it rather than minting another trail or reseeding honey. Reusing an identity with different request contents is refused.
 
-Creation resolves recorded inputs, validates and snapshots the delta and effective configuration, prepares the worktree and branch, persists lineage and binding, and passes admission before publishing the new task plan and ready signal. The existing Reactor executes the runnable fork. Preparation never starts another daemon.
+An agent-originated request starts as a durable pending request. It records the resolved source evidence, delta identity, requested budget and title, and any validation result, but creates no trail identity, snapshot directory, worktree, honey reserve, or task plan. It is exposed as a pending request rather than as a trail. Pending requests are quota-bound and expire; rejection or expiry retains only the request record and launches nothing.
 
-Binding and lineage must be durably discoverable before any event can route on the new trail. Complete local snapshot contents and their manifest are published atomically; partially copied directories cannot become a usable binding. Preparation, pending admission, runnable execution, and refusal are distinct states. Interrupted creation or publication recovers under the same request identity without exposing a fork as an ordinary unbound trail, resetting honey, or duplicating the initial task. Refusal launches no agent and records the reason and any resources retained for cleanup.
+`SIGNAL/trail.fork.approve` carries a `requestId` and an optional reason and must come from the operator control path. CLI creation is an operator action and may be approved in the same invocation. Approval performs the on-disk creation: it resolves the recorded inputs against the source's retained immutable evidence and patch bytes, validates and materializes the source and effective snapshots, prepares the worktree and branch, persists lineage and binding, seeds honey, and then publishes the new task plan and ready signal. Approval is idempotent; duplicate delivery returns the recorded outcome, and approval after required source evidence is gone is refused. The existing Reactor executes the runnable fork. Neither request nor approval starts another daemon.
+
+Binding and lineage must be durably discoverable before any event can route on the new trail. Complete local snapshot contents and their manifest are published atomically; partially copied directories cannot become a usable binding. Pending, creating, runnable, refused, and expired or cancelled are distinct states. Interrupted creation or publication recovers under the same request identity without exposing a fork as an ordinary unbound trail, resetting honey, or duplicating the initial task. Refusal launches no agent and records the reason and any resources retained for cleanup.
 
 ### 16. Records expose the actual comparison
 
@@ -296,7 +303,7 @@ The versioned fork record and configuration binding expose at least:
 | Workspace and branch identity | Execution location and retained branch |
 | Comparison differences | Changed base, effective configuration differences, and evidence limitations |
 
-Every trail binding records its initial and active references, revision, policy, retained snapshot inventory, pending action when present, and append-only transition history. Every attempt, run request, session, and review context records its actual `ConfigRef` and revision; old records are never re-derived from the active pointer. Apply records are visible in the trail's event history with old/new references, actor, and outcome.
+A pending request carries only `requestId` plus its resolved evidence and validation result; `forkId` and `traceId` are minted at approval. Every trail binding records its initial and active references, revision, policy, retained snapshot inventory, pending action when present, and append-only transition history. Every attempt, run request, session, and review context records its actual `ConfigRef` and revision; old records are never re-derived from the active pointer. Apply records are visible in the trail's event history with old/new references, actor, and outcome.
 
 Metrics carry `forkOf` as specified by spec 043 and reference the configuration history. A trail using several versions is marked as such, with execution records identifying which runs used each version; one current reference must not stand in for the entire history. Metrics and export readers find this evidence without another checkout. A derived lineage index lists a source's forks without rewriting its historical record.
 
@@ -312,7 +319,9 @@ Legacy sources lacking captured inputs are refused in v1. Repetition counts, ext
 
 ### 18. CLI and Console use the same trail collection
 
-`paseka trail fork` accepts `--source`, optional `--task`, `--source-run`, and `--base`, exactly one of `--delta` or `--no-delta`, optional `--honey` and `--title`, and `--dry-run`. Preview reports the selected task attempt, source configuration and revision, effective differences, code base, workspace and branch, budget, admission requirements, and comparison limitations. Dry run creates no durable resources and launches no agents.
+`paseka trail fork` accepts `--source`, optional `--task`, `--source-run`, and `--base`, exactly one of `--delta` or `--no-delta`, optional `--honey` and `--title`, and `--dry-run`. Preview reports the selected task attempt, source configuration and revision, effective differences, code base, workspace and branch, budget, admission requirements, and comparison limitations. Dry run creates no durable resources and launches no agents. CLI creation is treated as operator approval and proceeds to creation unless `--dry-run` is set.
+
+`paseka trail fork pending` lists requests awaiting admission with their source, selected task attempt, delta, requested budget, and validation result. `paseka trail fork approve <requestId>` advances a pending request and performs the on-disk creation; `paseka trail fork reject <requestId> --reason` records refusal without creating resources. Both are idempotent by request identity. Agent-originated requests stay pending until approved; they are not listed as trails.
 
 `paseka trail config apply <traceId>` accepts exactly one source: `--from-colony`, repeatable `--set <key=value>` for validated behavioural overrides, or `--snapshot <ConfigRef>` for a retained version. `--reason`, `--expected-revision`, and `--dry-run` are available. The CLI obtains and submits the expected revision when omitted; an explicitly chosen profile is part of colony-source capture. Preview identifies the exact candidate, effective changes, remaining-work validation, and any blocking execution scope. Existing work keeps running under its old version during preparation.
 
@@ -320,7 +329,7 @@ Legacy sources lacking captured inputs are refused in v1. Repetition counts, ext
 
 `paseka trail show <traceId>` exposes lineage, binding, and state. `paseka trail list --forks` lists experiments; `--source <traceId>` filters by source. `paseka trail drop <traceId>` stops a fork and removes its execution resources under the retention rules below. These operations use the same collection as Console. There is no isolation-tag or fork-plane run flag; execution uses the ordinary colony runtime lifecycle.
 
-Console marks experimental trails and pinned policy, links source and fork, exposes configuration differences, and preserves inspect, kill, honey, and read-only review controls. Pinned experiments reject apply with a clear reason. Delivery controls enforce experimental policy. A dedicated experiment editor or comparison dashboard is deferred.
+Console marks experimental trails and pinned policy, links source and fork, exposes configuration differences, and preserves inspect, kill, honey, and read-only review controls. It also shows pending fork requests with their evidence and approve/reject actions. Pinned experiments reject apply with a clear reason. Delivery controls enforce experimental policy. A dedicated experiment editor or comparison dashboard is deferred.
 
 ### 19. Recovery and retention preserve evidence
 
@@ -360,7 +369,9 @@ Cover at least:
 - **Concurrency:** interleaved task/direct runs with different configurations do not exchange registries, profiles, prompts, or finalization behaviour.
 - **Workspace:** worktree-enabled and root-working roles, including guards, operate in the fork checkout. Platform workspace operations leave the primary checkout and source worktree unchanged.
 - **Execution paths:** manual runs, HITL, retries, emit, and deferred flush preserve colony, selected attempt/version, audit location, and workspace. New independent executions use the active binding; in-chain continuation keeps the old one. A profile selected outside the apply action cannot replace either implicitly.
-- **Admission and energy:** sender identity and canonical grants are enforced; candidate grants cannot escalate authority; source honey is untouched; initial budgets and active-fork limits are atomic.
+- **Admission and energy:** sender identity and canonical grants are enforced; candidate grants cannot escalate authority; source honey is untouched; initial budgets are atomic; v1 enforces no fork-specific concurrency cap.
+- **Pending approval:** an agent request creates one durable pending record but no trail, snapshot directory, worktree, honey reserve, or task plan. Duplicate delivery stays pending; approve performs creation once against retained source evidence and patch bytes; reject, expiry, or cancellation leaves no runnable resources; approval after evidence loss is refused; CLI creation and pending approval are distinguishable.
+- **Consumer scope:** fork events use ordinary subjects and envelopes with no extra fork field; a built-in consumer that resolves `traceId` sees lineage and enforces experimental policy, while an unresolving side-effecting subscriber is treated as unsupported; Console, metrics, and audit reads observe both source and fork.
 - **Delivery:** internal proposal/verification choreography works, while CLI approval, Console approval, and reconciliation cannot merge, push, or publish the fork branch.
 - **Recovery:** duplicate fork/apply requests, interrupted snapshot publication or active-reference transitions, and Reactor restarts preserve action outcomes and the admission barrier without exposing partial snapshots, losing attempt ownership, duplicating tasks/honey, or applying a transition twice.
 - **Controls:** apply, cancellation, history, kill, top-up, source/fork listing, consumer scope, and settled-trail handling use the common collection. Multi-configuration trails expose execution/version associations and cannot claim one current configuration for aggregate source metrics.
@@ -381,6 +392,7 @@ Prior art: configuration/profile merge tests, task-ledger KV and honey tests, ta
 - Continuation forks from execution checkpoints: restoring task-ledger state, artifacts, intermediate code, or suspended agent processes at an arbitrary point is a separate capability.
 - Best-effort reconstruction of legacy historical configuration.
 - Moving Git refs as live selectors; released-configuration import can later prepare a snapshot.
+- Fork-specific concurrency caps, per-source fan-out limits, and cumulative experiment allowances in v1; deferred in Further Notes.
 - Forks of forks, automatic campaigns, experiment queues, and schedulers.
 - Merge-back, push, pull-request publication, or automatic promotion of experimental output.
 - Scoring, pass@k, benchmarks, repetition policy, and lesson-selection methodology.
@@ -388,11 +400,17 @@ Prior art: configuration/profile merge tests, task-ledger KV and honey tests, ta
 
 ## Further Notes
 
-### Open decisions
+### Admission decision
 
-1. **Human admission of bus requests.** A canonical publication declaration establishes eligibility. Should every request require release by a Beekeeper, or may explicit colony policy pre-authorize bounded requests? Recommended initial behaviour: CLI creation is an operator action; agent requests remain pending for human admission. An unapproved proposal may be tested after admission; proposal approval and experiment spending are separate acts.
-2. **Active-fork cap and spending policy.** Choose the configuration surface and default cap before implementation. Concurrency and honey do not establish a monetary ceiling or cumulative allowance; repeated automatic experiments would need another policy.
-3. **Independent consumers.** Inventory built-in gateways, notifiers, and external side-effecting integrations. Define their explicit experimental scope before enabling shared-bus forks; a NATS subscription alone does not implement the resolver contract.
+Agent-originated fork requests require explicit human approval in v1. A canonical publication declaration establishes eligibility but produces only a durable pending request: no trail identity, snapshot directory, worktree, honey reserve, or task plan. `SIGNAL/trail.fork.approve` is an operator action that advances the request and performs the on-disk creation; CLI creation is itself operator approval. Approval is idempotent and works from the source's retained immutable evidence and patch bytes, so it does not introduce a live-file reread. Rejected, expired, or cancelled requests leave no runnable resources. Pending requests are quota-bound and are exposed separately from trails. Proposal approval and experiment spending remain separate acts. Policy-based pre-authorization of bounded agent requests is deferred.
+
+### Deferred for v1
+
+1. **Active-fork cap, per-source fan-out, and cumulative experiment allowance.** V1 enforces no fork-specific concurrency cap: human approval gates agent-originated requests, and each fork owns a capped honey reserve. When a cap is introduced, an active fork should mean an approved fork trail with a reserved execution slot and unfinished work; pending and terminal forks hold no slot; a paused fork releases its slot and reacquires one atomically on resume or top-up. The cap is an experimental admission and fairness control, not a provider limit. A per-source fan-out limit and cumulative allowance are deferred until pre-authorized agent experiments or automatic campaigns exist. Global provider concurrency remains the separate [global concurrent invocation cap](../plans/backlog.md#global-concurrent-invocation-cap). Revisit when policy pre-authorizes bounded agent requests, campaigns are enabled, or concurrency causes provider rate limits, worktree pressure, or starvation.
+
+### Consumer decision
+
+V1 supports built-in Reactor consumers, gateways, notifiers, metrics, and Console reads. Every work-producing or side-effecting built-in consumer resolves the event's trail lineage and enforces experimental policy before acting. Fork events carry no fork-specific envelope field or subject prefix; the only general filter is trail lookup by `traceId`, because the fork record, trail lineage, and metrics `forkOf` are authoritative. An external side-effecting subscriber that cannot resolve lineage is unsupported in v1: a subscription alone does not implement the contract. Before enabling shared-bus forks, built-in consumers are inventoried and their scope is verified. A NATS header marker such as `Paseka-Trail-Kind: fork` is deferred in the backlog until a concrete external consumer requires it.
 
 ### Storage decision
 

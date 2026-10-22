@@ -118,6 +118,22 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Requires adapter-layer changes without a running reactor.
 - **Revisit when:** Operators need honey accounting for one-shot/interactive launches, or eval/product rules demand it.
 
+#### Global concurrent invocation cap
+
+- **Kind:** idea
+- **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Deferred for v1 (active-fork cap); planning (runtime concurrency)
+- **Summary:** Add a colony-wide limit on concurrent agent invocations rather than counting active trails or forks. Acquire the slot before `gateDispatchEnergy` so queued work does not spend honey, release it on every terminal path including kill and restart, and add a per-trail fairness limit so one long trail cannot occupy the whole colony budget. Adapter-specific or provider limits can layer on top. A future fork-specific cap in spec 042, when added, is a secondary experimental admission/fairness control, not a provider or monetary ceiling. Today the Reactor has an `inflight` map for dedup and kill only; there is no concurrency semaphore.
+- **Why deferred:** Orthogonal to spec 042 and cross-cutting: dispatch, task and direct paths, HITL, retry, kill, recovery, and Console/runtime status need one queueing and fairness policy; introducing it inside fork admission would leave ordinary trails uncontrolled.
+- **Revisit when:** Concurrent ordinary trails or forks produce provider rate limits, CPU or memory pressure, or an operator needs a predictable queue instead of unbounded parallel dispatch; or spec 042 fork admission is implemented and needs the colony-wide guard underneath it.
+
+#### Fork admission caps and cumulative experiment allowance
+
+- **Kind:** idea
+- **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Deferred for v1
+- **Summary:** Decide and implement experimental admission limits for forks: an optional colony-wide cap on active forks, an optional per-source fan-out limit, and an optional cumulative allowance across repeated experiments. V1 deliberately enforces none: human approval gates agent-originated requests, and each fork has its own capped honey reserve. When added, an active fork should mean an approved fork trail with a reserved execution slot and unfinished work; pending and terminal forks hold no slot, and a paused fork releases its slot until resume or top-up. The cap is an admission and fairness control, not a provider or monetary ceiling.
+- **Why deferred:** There is no v1 need and no data for a default: human approval prevents agent-initiated self-spending, while automatic campaigns and pre-authorized requests are out of scope. A fork cap would not bound provider load, which the colony-wide invocation cap owns instead.
+- **Revisit when:** Policy pre-authorizes bounded agent requests, automatic campaigns are enabled, or concurrent experiments produce provider rate limits, worktree pressure, or starvation of ordinary work.
+
 #### Per-bee cost multipliers
 
 - **Kind:** idea
@@ -339,6 +355,14 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 - **Summary:** Opt-in in-process NATS+JetStream for a single-machine hive so first `paseka run` does not need Docker or a separately installed broker. Keep `PASEKA_NATS_URL` / home `nats.url` as the override for shared LAN/homelab JetStream. Store embedded server files under machine-local state (not `.paseka/` in the repo). Choreography contracts stay unchanged.
 - **Why deferred:** Orthogonal to bee contracts; needs a written split (embedded vs external, bind address, data dir, one-consumer-per-prefix, shutdown) before changing `paseka init` defaults.
 - **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
+
+#### Fork marker on shared-bus events
+
+- **Kind:** idea
+- **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Consumer decision
+- **Summary:** Add an optional NATS message header such as `Paseka-Trail-Kind: fork` and `Paseka-Fork-Of: <sourceTrace>` so an external side-effecting subscriber can filter experimental trails without querying trail lineage. Keep the event envelope and payload unchanged. Persist the header in the trail event record only if replay or audit needs that provenance. V1 has no confirmed external consumers and uses lineage lookup by `traceId` instead.
+- **Why deferred:** Headers are not part of the persisted event record and existing subscribers ignore them; adding durable provenance and a cross-language contract costs more than the current unknown risk. Fork events are ordinary trail events by design, with no separate subject prefix.
+- **Revisit when:** A concrete external subscriber cannot query lineage but must avoid side effects from fork trails, or broker-level filtering of experimental events becomes a requirement.
 
 ## Assumptions and gotchas
 
