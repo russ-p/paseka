@@ -78,6 +78,8 @@ type Request struct {
 	Model           string    `json:"model,omitempty"`
 	ModelAlias      string    `json:"modelAlias,omitempty"`
 	Profile         string    `json:"profile,omitempty"`
+	ConfigRef       string    `json:"configRef,omitempty"`
+	ConfigRevision  int       `json:"configRevision,omitempty"`
 	LaunchForm      string    `json:"launchForm,omitempty"`
 	ResultPath      string    `json:"resultPath"`
 	EventLogPath    string    `json:"eventLogPath"`

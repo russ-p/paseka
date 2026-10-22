@@ -30,6 +30,7 @@ func hasInsightKind(events []protocol.Event, agentID string, kind protocol.Insig
 func (d *Dispatcher) synthesizeRunSummary(
 	runDir runs.Dir,
 	bee colony.Bee,
+	registry *BeeRegistry,
 	traceID, agentID, taskID string,
 	result *adapters.RunResult,
 	runEvents []protocol.Event,
@@ -45,7 +46,7 @@ func (d *Dispatcher) synthesizeRunSummary(
 	if hasInsightKind(runEvents, agentID, protocol.InsightRunSummary) {
 		return runEvents, nil, nil
 	}
-	if !d.shouldAutoPublishRunSummary(bee.Role) {
+	if !shouldAutoPublishRunSummary(registry, bee.Role) {
 		return runEvents, nil, nil
 	}
 
@@ -87,9 +88,9 @@ func (d *Dispatcher) enforceRunSummaryRequired(bee colony.Bee, agentID string, r
 	}
 }
 
-func (d *Dispatcher) shouldAutoPublishRunSummary(beeRole string) bool {
-	if d.registry == nil {
+func shouldAutoPublishRunSummary(registry *BeeRegistry, beeRole string) bool {
+	if registry == nil {
 		return true
 	}
-	return d.registry.ShouldAutoPublishRunSummary(beeRole)
+	return registry.ShouldAutoPublishRunSummary(beeRole)
 }

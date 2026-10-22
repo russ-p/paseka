@@ -21,7 +21,7 @@ func TestHandleAutoInviteIgnoresNonMatching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.handleAutoInvite(context.Background(), ev); err != nil {
+	if err := r.handleAutoInvite(context.Background(), ev, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -38,7 +38,7 @@ func TestHandleAutoInviteEmptyRules(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		Payload:   classifiedRaw,
 	}
-	if err := r.handleAutoInvite(context.Background(), ev); err != nil {
+	if err := r.handleAutoInvite(context.Background(), ev, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -67,7 +67,7 @@ func TestHandleAutoInviteMatch(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		Payload:   classifiedRaw,
 	}
-	if err := r.handleAutoInvite(context.Background(), ev); err != nil {
+	if err := r.handleAutoInvite(context.Background(), ev, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(stub.published) != 1 {

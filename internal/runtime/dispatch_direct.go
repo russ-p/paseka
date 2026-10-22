@@ -9,7 +9,14 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 )
 
-func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {
+func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string, execCtx *trailExecutionContext) error {
+	if execCtx == nil {
+		resolved, err := r.executionContext(ev.TraceID)
+		if err != nil {
+			return err
+		}
+		execCtx = resolved
+	}
 	if r.traceKilled(ev.TraceID) {
 		logDispatchSkip("trace killed", ev.TraceID, "", beeRole)
 		return nil
@@ -57,7 +64,7 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 
 	proposalSector, proposalKind := proposalDispatchFields(ev)
 
-	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
+	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, execCtx.Colony, ColonyDispatchRequest{
 		Bee:          beeRole,
 		TraceID:      ev.TraceID,
 		TaskID:       taskID,

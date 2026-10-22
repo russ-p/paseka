@@ -299,7 +299,7 @@ func writeColony(t *testing.T, manifest string) string {
 	root := t.TempDir()
 	files := map[string]string{
 		".paseka/colony.yaml":                 manifest,
-		".paseka/bees/builder.yaml":           "role: builder\nadapter: script\nprompt_template: builder.md\ncommand:\n  argv: [echo]\n",
+		".paseka/bees/builder.yaml":           "role: builder\nadapter: script\nprompt_template: builder.md\ncommand: [echo]\n",
 		".paseka/bees/builder.local.yaml":     "prompt_template: builder.md\n",
 		".paseka/prompts/builder.md":          "build the thing\n",
 		".paseka/prompts/_partials/shared.md": "shared partial\n",
@@ -317,4 +317,73 @@ func writeColony(t *testing.T, manifest string) string {
 		}
 	}
 	return root
+}
+
+func TestBindReturnsImmutableExecutionContext(t *testing.T) {
+	root := writeColony(t, "slug: test\nmodel_aliases:\n  builder: vendor/builder\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+
+	bound, manifest, err := trailconfig.Bind(ctx, "trace-bind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bound.BoundConfig() {
+		t.Fatal("context was not bound")
+	}
+	if bound.ConfigRef != manifest.InitialConfigRef || bound.ConfigRevision != 1 {
+		t.Fatalf("binding = %q rev %d, want %q rev 1", bound.ConfigRef, bound.ConfigRevision, manifest.InitialConfigRef)
+	}
+	if want := filepath.Join(root, ".paseka", "runs", "trace-bind", "config", "snapshots", bound.ConfigRef, "tree"); bound.ConfigRoot != want {
+		t.Fatalf("config root = %q, want %q", bound.ConfigRoot, want)
+	}
+	if bound.WorkspaceRoot != root {
+		t.Fatalf("workspace root = %q, want %q", bound.WorkspaceRoot, root)
+	}
+	if bound.ModelAliases["builder"] != "vendor/builder" || bound.Profile != "pi" {
+		t.Fatalf("resolved settings = %+v", bound)
+	}
+	bee, _, err := bound.LoadBee("builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(bee.Command.Argv(), " "); got != "echo" {
+		t.Fatalf("bound command = %q, want echo", got)
+	}
+	if bee.Adapter != "script" {
+		t.Fatalf("bound adapter = %q, want script", bee.Adapter)
+	}
+
+	live := filepath.Join(root, ".paseka", "bees", "builder.yaml")
+	if err := os.WriteFile(live, []byte("role: builder\nadapter: cursor\nprompt_template: builder.md\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stillBound, _, err := trailconfig.Bind(testContext(root), "trace-bind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bee, _, err = stillBound.LoadBee("builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bee.Adapter != "script" {
+		t.Fatalf("bound adapter changed with live edit: %q", bee.Adapter)
+	}
+}
+
+func TestBindBlocksMissingSnapshotContent(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	bound, _, err := trailconfig.Bind(ctx, "trace-corrupt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := filepath.Join(bound.ConfigRoot, ".paseka", "prompts", "builder.md")
+	if err := os.Remove(prompt); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := trailconfig.Bind(ctx, "trace-corrupt"); err == nil {
+		t.Fatal("expected binding to fail when snapshot content is missing")
+	}
 }

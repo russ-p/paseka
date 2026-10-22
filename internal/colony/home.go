@@ -101,6 +101,12 @@ type Context struct {
 	Profile       string
 	ProfileLayers ProfileLayers
 	colonyProfile ColonyProfile
+	// ConfigRoot, when set, is the materialized configuration tree an execution
+	// is bound to. It replaces ColonyRoot for configuration-file reads only.
+	ConfigRoot     string
+	ConfigRef      string
+	ConfigRevision int
+	WorkspaceRoot  string
 }
 
 // ResolveContext finds the git repo, loads colony + home config.

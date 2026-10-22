@@ -18,23 +18,31 @@ import (
 
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
 type Reactor struct {
-	colony          colony.Context
-	publisher       bus.Publisher
-	subscriber      bus.EventSubscriber
-	close           func()
-	subjectPrefix   string
-	replayer        bus.TraceReplayer
-	dispatcher      *Dispatcher
-	ledger          taskledger.Ledger
-	registry        *BeeRegistry
-	mu              sync.Mutex
-	inflight        map[string]context.CancelFunc
-	directInflight  map[string]context.CancelFunc
-	directProcessed map[string]struct{}
-	recentLocal     map[string]time.Time // fingerprints of events applied before publish
-	asyncDispatch   bool
-	invitePublisher bus.Publisher // test override for auto-invite publish
-	autoInvites     []colony.AutoInviteRule
+	colony           colony.Context
+	publisher        bus.Publisher
+	subscriber       bus.EventSubscriber
+	close            func()
+	subjectPrefix    string
+	replayer         bus.TraceReplayer
+	dispatcher       *Dispatcher
+	ledger           taskledger.Ledger
+	registry         *BeeRegistry
+	mu               sync.Mutex
+	inflight         map[string]context.CancelFunc
+	directInflight   map[string]context.CancelFunc
+	directProcessed  map[string]struct{}
+	recentLocal      map[string]time.Time // fingerprints of events applied before publish
+	asyncDispatch    bool
+	invitePublisher  bus.Publisher // test override for auto-invite publish
+	autoInvites      []colony.AutoInviteRule
+	configMu         sync.Mutex
+	configRegistries map[string]*BeeRegistry
+}
+
+type trailExecutionContext struct {
+	Colony   colony.Context
+	Manifest colony.Colony
+	Registry *BeeRegistry
 }
 
 // ReactorOptions configures a hive runtime reactor.
@@ -79,21 +87,22 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 	d.SetBeeRegistry(registry)
 
 	return &Reactor{
-		colony:          ctxColony,
-		publisher:       busClient,
-		subscriber:      busClient,
-		close:           busClient.Close,
-		subjectPrefix:   busClient.Config().SubjectPrefix,
-		replayer:        busClient,
-		dispatcher:      d,
-		ledger:          taskledger.NewKVLedger(kv),
-		registry:        registry,
-		inflight:        make(map[string]context.CancelFunc),
-		directInflight:  make(map[string]context.CancelFunc),
-		directProcessed: make(map[string]struct{}),
-		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   true,
-		autoInvites:     manifest.AutoInvites,
+		colony:           ctxColony,
+		publisher:        busClient,
+		subscriber:       busClient,
+		close:            busClient.Close,
+		subjectPrefix:    busClient.Config().SubjectPrefix,
+		replayer:         busClient,
+		dispatcher:       d,
+		ledger:           taskledger.NewKVLedger(kv),
+		registry:         registry,
+		inflight:         make(map[string]context.CancelFunc),
+		directInflight:   make(map[string]context.CancelFunc),
+		directProcessed:  make(map[string]struct{}),
+		recentLocal:      make(map[string]time.Time),
+		asyncDispatch:    true,
+		autoInvites:      manifest.AutoInvites,
+		configRegistries: make(map[string]*BeeRegistry),
 	}, nil
 }
 
@@ -150,11 +159,12 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	// A trail owns its configuration from its first event onward. Capture the
 	// binding before any configuration-dependent validation or routing, so the
 	// event cannot be judged by live files that a later edit would replace.
-	if _, err := trailconfig.Ensure(r.colony, ev.TraceID); err != nil {
+	execCtx, err := r.executionContext(ev.TraceID)
+	if err != nil {
 		return fmt.Errorf("runtime: trail config: %w", err)
 	}
 
-	if err := r.validateIncomingTaskPlan(ev); err != nil {
+	if err := r.validateIncomingTaskPlan(ev, execCtx); err != nil {
 		return err
 	}
 
@@ -173,16 +183,59 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		r.syncTaskProjection(res.Trace)
 	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
-	if err := r.handlePostApplySideEffects(ctx, ev); err != nil {
+	if err := r.handlePostApplySideEffects(ctx, ev, execCtx); err != nil {
 		return err
 	}
-	if err := r.executeDispatches(ctx, ev, res.Ready); err != nil {
+	if err := r.executeDispatches(ctx, ev, res.Ready, execCtx); err != nil {
 		return err
 	}
 	if ev.Type == protocol.EventVerification && protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventCompleted) {
 		return r.maybeActivateFinalReview(ctx, ev.TraceID)
 	}
 	return nil
+}
+
+func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, error) {
+	if r.colony.ColonyRoot == "" {
+		return nil, fmt.Errorf("colony root is required")
+	}
+	bound, _, err := trailconfig.Bind(r.colony, traceID)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := r.registryForConfig(bound)
+	if err != nil {
+		return nil, err
+	}
+	colonyManifest, err := colony.LoadColony(bound.ConfigRootPath())
+	if err != nil {
+		return nil, err
+	}
+	return &trailExecutionContext{
+		Colony:   bound,
+		Manifest: colonyManifest,
+		Registry: registry,
+	}, nil
+}
+
+func (r *Reactor) registryForConfig(ctx colony.Context) (*BeeRegistry, error) {
+	if ctx.ConfigRef == "" {
+		return r.registry, nil
+	}
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
+	if r.configRegistries == nil {
+		r.configRegistries = make(map[string]*BeeRegistry)
+	}
+	if cached := r.configRegistries[ctx.ConfigRef]; cached != nil {
+		return cached, nil
+	}
+	registry, err := BuildBeeRegistryFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.configRegistries[ctx.ConfigRef] = registry
+	return registry, nil
 }
 
 func eventFingerprint(ev protocol.Event) string {
@@ -218,35 +271,37 @@ func (r *Reactor) takeLocalEcho(ev protocol.Event) bool {
 	return true
 }
 
-func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot) error {
+func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot, execCtx *trailExecutionContext) error {
 	if r.traceKilled(ev.TraceID) {
 		return nil
 	}
 	dispatched := false
 
 	for _, task := range ready {
-		bee := taskBeeName(task)
-		if r.registry.CanDispatchTaskReady(bee) {
+		bee := colony.EffectiveTaskBee(task.Bee, execCtx.Manifest.Defaults)
+		if execCtx.Registry.CanDispatchTaskReady(bee) {
 			logTaskDispatchPlan(ev.TraceID, task.TaskID, bee)
 			dispatched = true
 		}
 		task := task
+		execCtx := execCtx
 		if err := r.runDispatch(ctx, func() error {
-			return r.dispatchReady(ctx, ev.TraceID, task)
+			return r.dispatchReady(ctx, ev.TraceID, task, execCtx)
 		}); err != nil {
 			return err
 		}
 	}
 
-	directBees := r.registry.DirectSubscribers(ev)
+	directBees := execCtx.Registry.DirectSubscribers(ev)
 	if len(directBees) > 0 {
 		logDirectDispatchPlan(ev.TraceID, ev, directBees)
 		dispatched = true
 	}
 	for _, beeRole := range directBees {
 		beeRole := beeRole
+		execCtx := execCtx
 		if err := r.runDispatch(ctx, func() error {
-			return r.dispatchDirect(ctx, ev, beeRole)
+			return r.dispatchDirect(ctx, ev, beeRole, execCtx)
 		}); err != nil {
 			return err
 		}
@@ -271,7 +326,7 @@ func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event) error {
+func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	if energyAddDetected(ev) {
 		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
 			return err
@@ -280,16 +335,16 @@ func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Ev
 	if systemKillDetected(ev) {
 		r.cancelInflightForTrace(ev.TraceID)
 	}
-	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
+	if err := r.handleReviewSideEffects(ctx, ev, execCtx); err != nil {
 		return err
 	}
-	if err := r.handleVerificationSuccess(ctx, ev); err != nil {
+	if err := r.handleVerificationSuccess(ctx, ev, execCtx); err != nil {
 		return err
 	}
 	if err := r.handleInviteCompletion(ctx, ev); err != nil {
 		return err
 	}
-	if err := r.handleAutoInvite(ctx, ev); err != nil {
+	if err := r.handleAutoInvite(ctx, ev, execCtx); err != nil {
 		return err
 	}
 	if err := r.handleWorktreeBranch(ctx, ev); err != nil {
@@ -362,16 +417,17 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		}
 	}
 	return &Reactor{
-		colony:          colony.Context{ColonyRoot: opts.ColonyRoot},
-		dispatcher:      opts.Dispatcher,
-		ledger:          opts.Ledger,
-		registry:        opts.Registry,
-		inflight:        make(map[string]context.CancelFunc),
-		directInflight:  make(map[string]context.CancelFunc),
-		directProcessed: make(map[string]struct{}),
-		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   opts.AsyncDispatch,
-		autoInvites:     autoInvites,
+		colony:           colony.Context{ColonyRoot: opts.ColonyRoot},
+		dispatcher:       opts.Dispatcher,
+		ledger:           opts.Ledger,
+		registry:         opts.Registry,
+		inflight:         make(map[string]context.CancelFunc),
+		directInflight:   make(map[string]context.CancelFunc),
+		directProcessed:  make(map[string]struct{}),
+		recentLocal:      make(map[string]time.Time),
+		asyncDispatch:    opts.AsyncDispatch,
+		autoInvites:      autoInvites,
+		configRegistries: make(map[string]*BeeRegistry),
 	}
 }
 

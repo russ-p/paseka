@@ -13,30 +13,33 @@ import (
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
-func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot) error {
+func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot, execCtx *trailExecutionContext) error {
+	if execCtx == nil {
+		resolved, err := r.executionContext(traceID)
+		if err != nil {
+			return fmt.Errorf("runtime: trail config: %w", err)
+		}
+		execCtx = resolved
+	}
+	bee := colony.EffectiveTaskBee(task.Bee, execCtx.Manifest.Defaults)
 	key := traceID + ":" + task.TaskID
 	r.mu.Lock()
 	if _, ok := r.inflight[key]; ok {
 		r.mu.Unlock()
-		logDispatchSkip("already running", traceID, task.TaskID, taskBeeName(task))
+		logDispatchSkip("already running", traceID, task.TaskID, bee)
 		return nil
 	}
 	r.mu.Unlock()
 
 	if r.traceKilled(traceID) {
-		logDispatchSkip("trace killed", traceID, task.TaskID, taskBeeName(task))
+		logDispatchSkip("trace killed", traceID, task.TaskID, bee)
 		return nil
 	}
 
 	dispatchCtx, endInflight := r.beginTaskInflight(traceID, task.TaskID)
 	defer endInflight()
 
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
-		return err
-	}
-	bee := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
-	if !r.registry.CanDispatchTaskReady(bee) {
+	if !execCtx.Registry.CanDispatchTaskReady(bee) {
 		logDispatchSkip("bee not subscribed to task.ready", traceID, task.TaskID, bee)
 		return nil
 	}
@@ -76,7 +79,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	}
 
 	startedAt := time.Now().UTC()
-	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
+	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, execCtx.Colony, ColonyDispatchRequest{
 		Bee:            bee,
 		TraceID:        traceID,
 		TaskID:         task.TaskID,
@@ -126,7 +129,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 
 	summary := strings.TrimSpace(res.Result.Summary)
 	if protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired {
-		if runOpenedRootProposal(r.registry, bee, res.Result) {
+		if runOpenedRootProposal(execCtx.Registry, bee, res.Result) {
 			return nil
 		}
 		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
@@ -134,7 +137,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	if ev, ok := runEmittedTaskCompleted(res.Result, task.TaskID); ok {
 		return r.applyTaskCompletedEvent(dispatchCtx, traceID, ev)
 	}
-	if shouldDeferAFKCompletion(r.registry, bee, res.Result) {
+	if shouldDeferAFKCompletion(execCtx.Registry, bee, res.Result) {
 		afkSummary := summary
 		if afkSummary == "" {
 			afkSummary = "Awaiting AFK verification gate"

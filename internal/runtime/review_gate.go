@@ -14,7 +14,7 @@ import (
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
-func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event) error {
+func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	if ev.Type != protocol.EventInsight || protocol.PayloadKind(ev.Payload) != string(protocol.InsightHumanFeedback) {
 		return nil
 	}
@@ -47,14 +47,21 @@ func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event) er
 		return err
 	}
 	task = snap.Tasks[payload.TaskID]
-	return r.dispatchReady(ctx, ev.TraceID, task)
+	if execCtx == nil {
+		resolved, err := r.executionContext(ev.TraceID)
+		if err != nil {
+			return err
+		}
+		execCtx = resolved
+	}
+	return r.dispatchReady(ctx, ev.TraceID, task, execCtx)
 }
 
-func (r *Reactor) handleReviewSideEffects(ctx context.Context, ev protocol.Event) error {
-	return r.handleHumanFeedback(ctx, ev)
+func (r *Reactor) handleReviewSideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
+	return r.handleHumanFeedback(ctx, ev, execCtx)
 }
 
-func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Event) error {
+func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.VerificationSuccess) {
 		return nil
 	}
@@ -76,26 +83,28 @@ func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Eve
 	if protocol.NormalizeTaskReviewPolicy(task.Review) != protocol.TaskReviewRequired {
 		return nil
 	}
-	if !r.taskExpectsRootProposal(task) {
+	if execCtx == nil {
+		resolved, err := r.executionContext(ev.TraceID)
+		if err != nil {
+			return err
+		}
+		execCtx = resolved
+	}
+	if !r.taskExpectsRootProposal(task, execCtx) {
 		return nil
 	}
 	summary := strings.TrimSpace(payload.Summary)
 	return r.setTaskStatus(ctx, ev.TraceID, payload.TaskID, protocol.TaskStatusWaitingReview, summary)
 }
 
-func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot) bool {
+func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot, execCtx *trailExecutionContext) bool {
 	switch task.ProposalWorkspace {
 	case protocol.ProposalWorkspaceRoot:
 		return true
 	case protocol.ProposalWorkspaceIsolated:
 		return false
 	}
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
-		return false
-	}
-	beeName := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
-	bee, ok := r.registry.Bee(beeName)
+	bee, ok := execCtx.Registry.Bee(colony.EffectiveTaskBee(task.Bee, execCtx.Manifest.Defaults))
 	if !ok {
 		return false
 	}
@@ -103,7 +112,7 @@ func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot) bool {
 	return ok && ws == protocol.ProposalWorkspaceRoot
 }
 
-func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event) error {
+func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event, execCtx *trailExecutionContext) error {
 	if ev.Type != protocol.EventInsight || protocol.PayloadKind(ev.Payload) != string(protocol.TaskEventPlan) {
 		return nil
 	}
@@ -111,12 +120,8 @@ func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event) error {
 	if err := unmarshalPayload(ev.Payload, &payload); err != nil {
 		return nil
 	}
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
-		return err
-	}
 	for _, spec := range payload.Tasks {
-		if err := colony.ValidateTaskReviewPolicy(spec, r.registry.Bees(), manifest.Defaults); err != nil {
+		if err := colony.ValidateTaskReviewPolicy(spec, execCtx.Registry.Bees(), execCtx.Manifest.Defaults); err != nil {
 			return err
 		}
 	}
@@ -167,7 +172,7 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 		}
 	}
 	for _, t := range res.Ready {
-		if err := r.dispatchReady(ctx, traceID, t); err != nil {
+		if err := r.dispatchReady(ctx, traceID, t, nil); err != nil {
 			return err
 		}
 	}

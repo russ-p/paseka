@@ -8,8 +8,12 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
-func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event) error {
-	if len(r.autoInvites) == 0 {
+func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
+	rules := r.autoInvites
+	if execCtx != nil {
+		rules = execCtx.Manifest.AutoInvites
+	}
+	if len(rules) == 0 {
 		return nil
 	}
 
@@ -26,7 +30,7 @@ func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event) error
 	if bus.PublisherAvailable(r.invitePublisher) {
 		svc.Publisher = r.invitePublisher
 	}
-	published, ok, err := svc.AutoInviteFromEvent(ctx, ev, r.autoInvites, traceEvents)
+	published, ok, err := svc.AutoInviteFromEvent(ctx, ev, rules, traceEvents)
 	if err != nil {
 		return err
 	}

@@ -182,19 +182,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 
-	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
-	if err != nil {
-		return nil, err
-	}
-	bee, overlay, err := ctxColony.LoadBee(req.Bee)
-	if err != nil {
-		return nil, err
-	}
 	resuming := strings.TrimSpace(req.resumeProviderID) != ""
-	if !resuming && req.Task == "" && req.InlinePrompt == "" && !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
-		return nil, fmt.Errorf("sessions: task, inline prompt, or system_template is required")
-	}
-
 	traceID := req.TraceID
 	if resuming && strings.TrimSpace(traceID) == "" {
 		return nil, fmt.Errorf("sessions: resume requires traceId")
@@ -206,11 +194,26 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		}
 		traceID = id
 	}
-	if _, err := trailconfig.Ensure(ctxColony, traceID); err != nil {
+	execColony, _, err := trailconfig.Bind(ctxColony, traceID)
+	if err != nil {
 		return nil, fmt.Errorf("sessions: trail config: %w", err)
+	}
+	manifest, err := colony.LoadColony(execColony.ConfigRootPath())
+	if err != nil {
+		return nil, err
+	}
+	bee, overlay, err := execColony.LoadBee(req.Bee)
+	if err != nil {
+		return nil, err
+	}
+	if !resuming && req.Task == "" && req.InlinePrompt == "" && !colony.HasSystemTemplate(bee, overlay, manifest.Defaults) {
+		return nil, fmt.Errorf("sessions: task, inline prompt, or system_template is required")
 	}
 
 	workspace := ctxColony.ColonyRoot
+	if execColony.WorkspaceRoot != "" {
+		workspace = execColony.WorkspaceRoot
+	}
 	if bee.Worktree {
 		entry, err := worktree.Ensure(worktree.EnsureOptions{
 			ColonyRoot: ctxColony.ColonyRoot,
@@ -252,11 +255,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if resuming {
 		rendered = strings.TrimSpace(req.Task)
 	} else {
-		loader, err := prompts.NewLoader(ctxColony.ColonyRoot)
+		loader, err := prompts.NewLoader(execColony.ConfigRootPath())
 		if err != nil {
 			return nil, err
 		}
-		knownIntents, defaultIntent, err := prompts.DiscoverIntents(ctxColony.ColonyRoot, bee)
+		knownIntents, defaultIntent, err := prompts.DiscoverIntents(execColony.ConfigRootPath(), bee)
 		if err != nil {
 			return nil, fmt.Errorf("sessions: discover intents: %w", err)
 		}
@@ -316,8 +319,8 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Mode:         launch.Interactive,
 		Adapter:      adapterName,
 		Bee:          bee,
-		Extra:        colony.AdapterExtraLayer(ctxColony, adapterName),
-		Aliases:      ctxColony.ModelAliases,
+		Extra:        colony.AdapterExtraLayer(execColony, adapterName),
+		Aliases:      execColony.ModelAliases,
 		Workspace:    workspace,
 		TaskID:       req.TaskID,
 		Prompt:       rendered,
@@ -356,7 +359,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Workspace:         workspace,
 		ProviderSessionID: req.resumeProviderID,
 		ResumedFrom:       req.resumeFrom,
-		Profile:           ctxColony.Profile,
+		Profile:           execColony.Profile,
 		StartedAt:         startedAt,
 	}); err != nil {
 		return nil, err
@@ -375,7 +378,9 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Insights:        req.Insights,
 		Model:           plan.ModelID,
 		ModelAlias:      plan.ModelAlias,
-		Profile:         ctxColony.Profile,
+		Profile:         execColony.Profile,
+		ConfigRef:       execColony.ConfigRef,
+		ConfigRevision:  execColony.ConfigRevision,
 		LaunchForm:      string(plan.Form),
 		ResultPath:      resultFile,
 		EventLogPath:    runDir.EventsPath(),
@@ -450,7 +455,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			Workspace:         workspace,
 			ProviderSessionID: providerSessionID,
 			ResumedFrom:       req.resumeFrom,
-			Profile:           ctxColony.Profile,
+			Profile:           execColony.Profile,
 			StartedAt:         startedAt,
 		}); err != nil {
 			return nil, fmt.Errorf("sessions: write meta: %w", err)
@@ -479,7 +484,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		StartedAt:         startedAt,
 		ProviderSessionID: providerSessionID,
 		ResumedFrom:       req.resumeFrom,
-		Profile:           ctxColony.Profile,
+		Profile:           execColony.Profile,
 	}
 
 	if err := runDir.WriteSession(runs.SessionMeta{
@@ -495,7 +500,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		State:             string(adapters.SessionActive),
 		ProviderSessionID: providerSessionID,
 		ResumedFrom:       req.resumeFrom,
-		Profile:           ctxColony.Profile,
+		Profile:           execColony.Profile,
 		StartedAt:         startedAt,
 	}); err != nil {
 		_ = proc.Kill()

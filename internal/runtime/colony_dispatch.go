@@ -48,11 +48,16 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if req.TraceID == "" {
 		return nil, fmt.Errorf("runtime: traceId is required")
 	}
-	if _, err := trailconfig.Ensure(ctxColony, req.TraceID); err != nil {
-		return nil, fmt.Errorf("runtime: trail config: %w", err)
+	execColony := ctxColony
+	if !execColony.BoundConfig() {
+		bound, _, err := trailconfig.Bind(ctxColony, req.TraceID)
+		if err != nil {
+			return nil, fmt.Errorf("runtime: trail config: %w", err)
+		}
+		execColony = bound
 	}
 
-	bee, _, err := ctxColony.LoadBee(req.Bee)
+	bee, _, err := execColony.LoadBee(req.Bee)
 	if err != nil {
 		return nil, err
 	}
@@ -60,13 +65,13 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, fmt.Errorf("runtime: task or inline prompt is required")
 	}
 
-	manifest, err := colony.LoadColony(ctxColony.ColonyRoot)
+	manifest, err := colony.LoadColony(execColony.ConfigRootPath())
 	if err != nil {
 		return nil, err
 	}
 
 	effectiveSector := colony.EffectiveSector(req.Sector, bee.Sector)
-	workspace, sectorRel, err := workspaceForDispatch(ctxColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind)
+	workspace, sectorRel, err := workspaceForDispatch(execColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind)
 	if err != nil {
 		return nil, err
 	}
@@ -94,10 +99,18 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if err != nil {
 		return nil, err
 	}
-	adapterExtra := colony.AdapterExtraLayer(ctxColony, adapterName)
-	aliases := ctxColony.ModelAliases
+	adapterExtra := colony.AdapterExtraLayer(execColony, adapterName)
+	aliases := execColony.ModelAliases
 	if len(aliases) == 0 {
 		aliases = manifest.ModelAliases
+	}
+	registry := d.registry
+	if execColony.BoundConfig() {
+		built, err := BuildBeeRegistryFromContext(execColony)
+		if err != nil {
+			return nil, fmt.Errorf("runtime: build trail registry: %w", err)
+		}
+		registry = built
 	}
 
 	isLastWorkTask := false
@@ -105,8 +118,19 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		isLastWorkTask = req.IsLastWorkTask
 	}
 
+	var profileApply func(colony.Bee) (colony.Bee, error)
+	if !execColony.BoundConfig() {
+		profileApply = func(bee colony.Bee) (colony.Bee, error) {
+			applied, _, err := execColony.ApplyBeeProfile(bee)
+			return applied, err
+		}
+	}
+
 	result, err := d.Dispatch(ctx, DispatchRequest{
 		ColonyRoot:     ctxColony.ColonyRoot,
+		ConfigRoot:     execColony.ConfigRootPath(),
+		ConfigRef:      execColony.ConfigRef,
+		ConfigRevision: execColony.ConfigRevision,
 		Bee:            req.Bee,
 		TraceID:        req.TraceID,
 		AgentID:        agentID,
@@ -121,12 +145,10 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		AdapterExtra:   adapterExtra,
 		ModelAliases:   aliases,
 		IsLastWorkTask: isLastWorkTask,
-		Profile:        ctxColony.Profile,
+		Profile:        execColony.Profile,
 		Raw:            req.Raw,
-		ProfileApply: func(bee colony.Bee) (colony.Bee, error) {
-			applied, _, err := ctxColony.ApplyBeeProfile(bee)
-			return applied, err
-		},
+		ProfileApply:   profileApply,
+		Registry:       registry,
 	})
 	if err != nil {
 		return nil, err
@@ -149,6 +171,9 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 
 func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string) (workspace string, sectorRel string, err error) {
 	base := ctxColony.ColonyRoot
+	if ctxColony.WorkspaceRoot != "" {
+		base = ctxColony.WorkspaceRoot
+	}
 	useWorktree := bee.Worktree
 	if proposalKind != "" {
 		if !protocol.IsCodeProposalKind(proposalKind) {

@@ -6,7 +6,6 @@ import (
 
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
-	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 var runtimeLog = logging.Component("runtime")
@@ -83,13 +82,6 @@ func logNoDispatch(ev protocol.Event) {
 		logging.F("type", string(ev.Type)),
 		logging.F("kind", kindOrDash(kind)),
 	)
-}
-
-func taskBeeName(task taskledger.TaskSnapshot) string {
-	if task.Bee != "" {
-		return task.Bee
-	}
-	return protocol.DefaultBee
 }
 
 func kindOrDash(kind string) string {

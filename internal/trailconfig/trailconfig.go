@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -298,6 +299,108 @@ func Read(colonyRoot, traceID string) (Binding, error) {
 	}, nil
 }
 
+// Bind returns the trail's active configuration as an immutable execution
+// context. It captures revision 1 when the trail has no binding yet.
+func Bind(ctx colony.Context, traceID string) (colony.Context, Manifest, error) {
+	manifest, err := Ensure(ctx, traceID)
+	if err != nil {
+		return colony.Context{}, Manifest{}, err
+	}
+	bound, err := BindRef(ctx, traceID, manifest.ActiveConfigRef, manifest.ConfigRevision)
+	if err != nil {
+		return colony.Context{}, Manifest{}, err
+	}
+	return bound, manifest, nil
+}
+
+// BindRef resolves one retained snapshot as an immutable execution context.
+// Missing or corrupt content blocks binding rather than falling back to live
+// colony files.
+func BindRef(ctx colony.Context, traceID, ref string, revision int) (colony.Context, error) {
+	if ctx.ColonyRoot == "" {
+		return ctx, fmt.Errorf("trailconfig: colony root is required")
+	}
+	if err := validateConfigRef(ref); err != nil {
+		return ctx, err
+	}
+	snapshotDir := filepath.Join(SnapshotDir(ctx.ColonyRoot, traceID), ref)
+	inventory, err := loadVerifiedSnapshot(snapshotDir, ref)
+	if err != nil {
+		return ctx, err
+	}
+	bound := ctx
+	bound.ConfigRoot = filepath.Join(snapshotDir, SnapshotTreeDirName)
+	bound.ConfigRef = ref
+	bound.ConfigRevision = revision
+	bound.WorkspaceRoot = ctx.WorkspaceRoot
+	if bound.WorkspaceRoot == "" {
+		bound.WorkspaceRoot = ctx.ColonyRoot
+	}
+	bound.Profile = inventory.Resolved.Profile
+	bound.ProfileLayers = colony.ProfileLayers{
+		Colony: inventory.Resolved.ProfileLayers.Colony,
+		Home:   inventory.Resolved.ProfileLayers.Home,
+	}
+	bound.ModelAliases = cloneAliases(inventory.Resolved.ModelAliases)
+	return bound, nil
+}
+
+func validateConfigRef(ref string) error {
+	ref = strings.TrimSpace(ref)
+	if !strings.HasPrefix(ref, configRefPrefix) || len(ref) != len(configRefPrefix)+sha256.Size*2 {
+		return fmt.Errorf("trailconfig: invalid configuration ref %q", ref)
+	}
+	if _, err := hex.DecodeString(strings.TrimPrefix(ref, configRefPrefix)); err != nil {
+		return fmt.Errorf("trailconfig: invalid configuration ref %q", ref)
+	}
+	return nil
+}
+
+func cloneAliases(aliases map[string]string) map[string]string {
+	if len(aliases) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(aliases))
+	for key, value := range aliases {
+		out[key] = value
+	}
+	return out
+}
+
+func loadVerifiedSnapshot(snapshotDir, expectedRef string) (Inventory, error) {
+	data, err := os.ReadFile(filepath.Join(snapshotDir, InventoryFileName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Inventory{}, fmt.Errorf("trailconfig: configuration %s is unavailable", expectedRef)
+		}
+		return Inventory{}, fmt.Errorf("trailconfig: retained snapshot is unreadable: %w", err)
+	}
+	var inventory Inventory
+	if err := json.Unmarshal(data, &inventory); err != nil {
+		return Inventory{}, fmt.Errorf("trailconfig: retained snapshot inventory is corrupt: %w", err)
+	}
+	ref, err := configRef(inventory)
+	if err != nil {
+		return Inventory{}, err
+	}
+	if ref != expectedRef {
+		return Inventory{}, fmt.Errorf("trailconfig: retained snapshot %s does not match its identity", expectedRef)
+	}
+	tree := filepath.Join(snapshotDir, SnapshotTreeDirName)
+	for _, entry := range inventory.Entries {
+		path := filepath.Join(tree, filepath.FromSlash(entry.Path))
+		fileData, err := os.ReadFile(path)
+		if err != nil {
+			return Inventory{}, fmt.Errorf("trailconfig: configuration %s is missing %s: %w", expectedRef, entry.Path, err)
+		}
+		sum := sha256.Sum256(fileData)
+		if hex.EncodeToString(sum[:]) != entry.SHA256 {
+			return Inventory{}, fmt.Errorf("trailconfig: configuration %s has corrupt content at %s", expectedRef, entry.Path)
+		}
+	}
+	return inventory, nil
+}
+
 func validateManifest(manifest Manifest) error {
 	if manifest.ConfigRevision < 1 {
 		return fmt.Errorf("trailconfig: manifest configRevision must be positive")
@@ -355,6 +458,10 @@ func capture(ctx colony.Context) ([]capturedFile, Resolved, error) {
 			data: data,
 		})
 	}
+	contents, err = materializeEffectiveBees(ctx, contents)
+	if err != nil {
+		return nil, Resolved{}, err
+	}
 	sort.Slice(contents, func(i, j int) bool { return contents[i].path < contents[j].path })
 
 	resolved := Resolved{
@@ -367,6 +474,38 @@ func capture(ctx colony.Context) ([]capturedFile, Resolved, error) {
 		ModelAliases: normalizedAliases(ctx.ModelAliases),
 	}
 	return contents, resolved, nil
+}
+
+// materializeEffectiveBees replaces the committed bee definitions with the
+// resolved execution view (process profile applied) so a bound snapshot never
+// re-reads the live profile to decide how a role runs.
+func materializeEffectiveBees(ctx colony.Context, contents []capturedFile) ([]capturedFile, error) {
+	bees, err := ctx.LoadAllBees()
+	if err != nil {
+		return nil, fmt.Errorf("trailconfig: resolve effective bees: %w", err)
+	}
+	if len(bees) == 0 {
+		return contents, nil
+	}
+	index := make(map[string]int, len(contents))
+	for i, file := range contents {
+		index[file.path] = i
+	}
+	for role, bee := range bees {
+		data, err := yaml.Marshal(bee)
+		if err != nil {
+			return nil, fmt.Errorf("trailconfig: encode effective bee %q: %w", role, err)
+		}
+		logical := filepath.ToSlash(filepath.Join(".paseka", "bees", role+".yaml"))
+		if i, ok := index[logical]; ok {
+			contents[i].data = data
+			contents[i].mode = 0o644
+			continue
+		}
+		contents = append(contents, capturedFile{path: logical, mode: 0o644, data: data})
+		index[logical] = len(contents) - 1
+	}
+	return contents, nil
 }
 
 func normalizedAliases(aliases map[string]string) map[string]string {
@@ -564,22 +703,8 @@ func materializeSnapshot(configDir, ref string, contents []capturedFile, invento
 }
 
 func verifySnapshot(dir, expectedRef string) error {
-	data, err := os.ReadFile(filepath.Join(dir, InventoryFileName))
-	if err != nil {
-		return fmt.Errorf("trailconfig: retained snapshot is unreadable: %w", err)
-	}
-	var inventory Inventory
-	if err := json.Unmarshal(data, &inventory); err != nil {
-		return fmt.Errorf("trailconfig: retained snapshot inventory is corrupt: %w", err)
-	}
-	ref, err := configRef(inventory)
-	if err != nil {
-		return err
-	}
-	if ref != expectedRef {
-		return fmt.Errorf("trailconfig: retained snapshot %s does not match its identity", expectedRef)
-	}
-	return nil
+	_, err := loadVerifiedSnapshot(dir, expectedRef)
+	return err
 }
 
 func writeManifest(configDir string, manifest Manifest) error {

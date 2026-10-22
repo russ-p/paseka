@@ -32,7 +32,7 @@ func (d *Dispatcher) proposalArchiveRequestFromRun(
 		Mode:        patches.ModeAFK,
 		Baseline:    baseline,
 		Summary:     result.Summary,
-		AutoPublish: d.shouldAutoPublishMutation(bee),
+		AutoPublish: shouldAutoPublishMutation(req.Registry, bee),
 		Completed:   result.Status == string(protocol.StatusCompleted),
 		Explicit:    explicit,
 	}
