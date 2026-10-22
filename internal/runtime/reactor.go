@@ -13,6 +13,7 @@ import (
 	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
@@ -145,6 +146,13 @@ func (r *Reactor) handleEvent(ev protocol.Event) error {
 
 func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	logEventReceived(ev)
+
+	// A trail owns its configuration from its first event onward. Capture the
+	// binding before any configuration-dependent validation or routing, so the
+	// event cannot be judged by live files that a later edit would replace.
+	if _, err := trailconfig.Ensure(r.colony, ev.TraceID); err != nil {
+		return fmt.Errorf("runtime: trail config: %w", err)
+	}
 
 	if err := r.validateIncomingTaskPlan(ev); err != nil {
 		return err

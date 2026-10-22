@@ -9,6 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailconfig"
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
@@ -46,6 +47,9 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 	if req.TraceID == "" {
 		return nil, fmt.Errorf("runtime: traceId is required")
+	}
+	if _, err := trailconfig.Ensure(ctxColony, req.TraceID); err != nil {
+		return nil, fmt.Errorf("runtime: trail config: %w", err)
 	}
 
 	bee, _, err := ctxColony.LoadBee(req.Bee)

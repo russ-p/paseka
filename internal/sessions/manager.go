@@ -27,6 +27,7 @@ import (
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailconfig"
 	"github.com/russ-p/paseka/internal/worktree"
 	"golang.org/x/term"
 )
@@ -204,6 +205,9 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			return nil, err
 		}
 		traceID = id
+	}
+	if _, err := trailconfig.Ensure(ctxColony, traceID); err != nil {
+		return nil, fmt.Errorf("sessions: trail config: %w", err)
 	}
 
 	workspace := ctxColony.ColonyRoot

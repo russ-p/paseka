@@ -2,6 +2,7 @@ package cues
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -14,6 +15,7 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 // RunInput describes a cue run request from any channel.
@@ -60,6 +62,11 @@ func runSignal(ctx context.Context, publisher bus.Publisher, ledger taskledger.L
 	if err != nil {
 		return RunResult{}, err
 	}
+	if in.ColonyRoot != "" {
+		if _, err := trailconfig.EnsureForRoot(in.ColonyRoot, traceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
+			return RunResult{}, fmt.Errorf("cue %q: trail config: %w", cue.ID, err)
+		}
+	}
 
 	source := strings.TrimSpace(in.Source)
 	if source == "" {
@@ -103,6 +110,11 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 	traceID, err := resolveRunTraceID(cue, in.TraceID)
 	if err != nil {
 		return RunResult{}, err
+	}
+	if in.ColonyRoot != "" {
+		if _, err := trailconfig.EnsureForRoot(in.ColonyRoot, traceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
+			return RunResult{}, fmt.Errorf("cue %q: trail config: %w", cue.ID, err)
+		}
 	}
 
 	source := strings.TrimSpace(in.Source)

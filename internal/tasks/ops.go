@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 // Source identifies where a trace snapshot was loaded from.
@@ -120,6 +121,10 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 		traceID = id
 	}
+	if _, err := trailconfig.Ensure(session.Colony, traceID); err != nil {
+		return CreateResult{}, fmt.Errorf("task config: %w", err)
+	}
+
 	taskID := in.TaskID
 	if taskID == "" {
 		id, err := colony.NewTaskID()
