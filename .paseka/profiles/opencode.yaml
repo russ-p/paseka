@@ -1,5 +1,6 @@
 adapter: opencode
 model_aliases:
   builder: opencode/deepseek-v4.1-flash-free
+  classifier: opencode/deepseek-v4.1-flash-free
   reviewer: opencode/glm-5.3-flash-free
-  thinker: opencode/minimax-m3.1-flash-free
+  thinker: deepseek/deepseek-flash

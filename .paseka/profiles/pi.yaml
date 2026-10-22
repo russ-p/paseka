@@ -1,5 +1,6 @@
 adapter: pi
 model_aliases:
   builder: deepseek/deepseek-v4-flash
+  classifier: deepseek/deepseek-v4-flash
   reviewer: deepseek/deepseek-v4-flash
   thinker: deepseek/deepseek-v4-flash

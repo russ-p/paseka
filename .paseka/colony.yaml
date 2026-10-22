@@ -3,6 +3,7 @@ defaults:
     prompt_template: default.md
 model_aliases:
     builder: composer-2.5
+    classifier: composer-2.5
     reviewer: cursor-grok-4.6-medium
     thinker: cursor-grok-4.6-high-fast
 auto_invites:
