@@ -352,3 +352,70 @@ func writeRuntimeLineage(t *testing.T, root string, lineage trailfork.Lineage) {
 		t.Fatal(err)
 	}
 }
+
+func TestDroppedForkRefusesDispatch(t *testing.T) {
+	repo := initProposalDispatchRepo(t)
+	ctxColony := colony.Context{ColonyRoot: repo, Slug: "test-colony"}
+	source, err := trailconfig.Ensure(ctxColony, "trace-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forkWorktree, err := worktree.Ensure(worktree.EnsureOptions{ColonyRoot: repo, TraceID: "trace-fork"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trailconfig.CreateForkBinding(trailconfig.ForkBindingOptions{
+		Context:       ctxColony,
+		SourceTraceID: "trace-source",
+		TraceID:       "trace-fork",
+		ConfigRef:     source.ActiveConfigRef,
+		WorkspaceRoot: forkWorktree.Path,
+		RequestID:     "req-dropped",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lineage := trailfork.Lineage{
+		Version:         1,
+		ForkID:          "fork-dropped",
+		TraceID:         "trace-fork",
+		SourceTrace:     "trace-source",
+		SourceConfigRef: source.ActiveConfigRef,
+		ConfigRef:       source.ActiveConfigRef,
+		Policy:          trailconfig.PolicyPinned,
+		State:           trailfork.StateDropped,
+		Workspace:       forkWorktree.Path,
+		Branch:          forkWorktree.Branch,
+	}
+	data, err := json.Marshal(lineage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(repo, "trace-fork")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := NewDispatcher()
+	rec := &proposalRecordingAdapter{}
+	d.RegisterAdapter("cursor", rec)
+	r := NewTestReactor(TestReactorOptions{ColonyRoot: repo, Dispatcher: d, Ledger: taskledger.NewMemoryLedger()})
+
+	ev, err := protocol.NewEvent("trace-fork", "agent-fork", 1, protocol.EventSignal, map[string]any{
+		"kind":  "feature.requested",
+		"title": "dropped work",
+		"body":  "dropped work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = r.ProcessEvent(context.Background(), ev)
+	if err == nil || !strings.Contains(err.Error(), "was dropped") {
+		t.Fatalf("dropped fork dispatch error = %v", err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("dropped fork dispatched %d adapter call(s)", rec.calls)
+	}
+}

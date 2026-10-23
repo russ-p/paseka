@@ -262,7 +262,8 @@ func (t *Trail) applyLineage(lineage trailfork.Lineage) {
 	}
 }
 
-// Forks returns runnable experimental trails, newest activity first.
+// Forks returns experimental trails, newest activity first. A dropped fork
+// keeps its records and stays listed so it remains inspectable.
 func (c Collection) Forks() []Trail {
 	out := make([]Trail, 0)
 	for _, trail := range c.Trails {
@@ -273,8 +274,8 @@ func (c Collection) Forks() []Trail {
 	return out
 }
 
-// ForksOf returns the runnable forks whose source is sourceTrace. Passing an
-// empty source returns every fork.
+// ForksOf returns the forks whose source is sourceTrace, including dropped
+// records. Passing an empty source returns every fork.
 func (c Collection) ForksOf(sourceTrace string) []Trail {
 	sourceTrace = strings.TrimSpace(sourceTrace)
 	out := make([]Trail, 0)

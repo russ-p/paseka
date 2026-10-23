@@ -81,6 +81,10 @@ type htmlPageData struct {
 	IncludeCues        bool
 	IncludeArtifacts   bool
 	IncludePatches     bool
+	IncludeConfig      bool
+	Config             *ConfigExport
+	ConfigOmissions    []string
+	ConfigOmitted      int
 	BeeYAML            []NamedYAML
 	ColonyYAML         *NamedYAML
 	CueYAML            []NamedYAML
@@ -112,6 +116,10 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		IncludeCues:      data.Include.Has(IncludeCues),
 		IncludeArtifacts: data.Include.Has(IncludeArtifacts),
 		IncludePatches:   data.Include.Has(IncludePatches),
+		IncludeConfig:    data.Include.Has(IncludeConfig),
+		Config:           data.Config,
+		ConfigOmissions:  configOmissions(data.Config),
+		ConfigOmitted:    configOmittedCount(data.Config),
 		BeeYAML:          data.BeeYAML,
 		ColonyYAML:       data.ColonyYAML,
 		CueYAML:          data.CueYAML,
@@ -198,6 +206,7 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		"formatTime":            formatTime,
 		"formatMarkdown":        formatMarkdown,
 		"lower":                 strings.ToLower,
+		"join":                  strings.Join,
 		"patchPublicationLabel": patchPublicationLabel,
 		"kindSuffix": func(kind string) string {
 			if kind == "" {
@@ -708,6 +717,43 @@ code { font-family: var(--mono); font-size: 0.85em; }
     {{ end }}
     {{ else }}
     <p class="muted">No trail artifacts in the comb.</p>
+    {{ end }}
+  </section>
+  {{ end }}
+
+  {{ if .IncludeConfig }}
+  <section class="panel">
+    <h2>Configuration</h2>
+    {{ if not .Config }}
+    <p class="muted">Configuration evidence was not requested.</p>
+    {{ else if .Config.Missing }}
+    <p class="muted">{{ .Config.Missing }}</p>
+    {{ else }}
+    <p class="muted">policy {{ .Config.Policy }} · revision {{ .Config.Revision }} · initial <code>{{ .Config.InitialConfigRef }}</code> · active <code>{{ .Config.ActiveConfigRef }}</code></p>
+    {{ if gt .ConfigOmitted 0 }}<p class="muted">{{ .ConfigOmitted }} retained file(s) omitted from this export; the reasons are listed below.</p>{{ end }}
+    {{ range .Config.Snapshots }}
+    <h3><code>{{ .ConfigRef }}</code>{{ if .Roles }} · {{ join .Roles ", " }}{{ end }}</h3>
+    {{ if .Missing }}
+    <p class="muted">unavailable: {{ .Missing }}</p>
+    {{ else }}
+    <p class="muted">{{ .FileCount }} file(s){{ if .Omitted }} · {{ .Omitted }} omitted{{ end }}</p>
+    {{ range .Files }}
+    <h4><code>{{ .Path }}</code></h4>
+    <p class="muted">{{ .Bytes }} bytes · mode {{ .Mode }}{{ if .Private }} · private{{ end }}</p>
+    {{ if .Omitted }}
+    <p class="muted">omitted: {{ .Omitted }}</p>
+    {{ else }}
+    <pre class="timeline-raw">{{ .Content }}</pre>
+    {{ end }}
+    {{ end }}
+    {{ end }}
+    {{ end }}
+    {{ if .ConfigOmissions }}
+    <h3>Export omissions</h3>
+    <ul>
+    {{ range .ConfigOmissions }}<li>{{ . }}</li>{{ end }}
+    </ul>
+    {{ end }}
     {{ end }}
   </section>
   {{ end }}

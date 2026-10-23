@@ -14,6 +14,7 @@ import (
 	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 func setupExportColony(t *testing.T) (colony.Context, string) {
@@ -1005,5 +1006,113 @@ func TestExportTimelineMatchesTheTrailReader(t *testing.T) {
 		if n != 1 {
 			t.Fatalf("event %s appears %d times in the export feed, want once", id, n)
 		}
+	}
+}
+
+func TestExportConfigIncludeOmitsPrivateInputsAndReportsThem(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-config"
+	writeCompletedRun(t, repo, traceID, time.Now().UTC().Add(-time.Minute), nil)
+
+	pasekaDir := filepath.Join(repo, ".paseka")
+	files := map[string]string{
+		".paseka/colony.yaml":        "slug: export-test\n",
+		".paseka/prompts/builder.md": "public prompt body\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(repo, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(pasekaDir, "bees"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	homeDir, err := colony.HomeDir(ctx.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privatePath := filepath.Join(homeDir, "skills", "secret", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(privatePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(privatePath, []byte("private skill bytes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	include, err := ParseInclude([]string{"config"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outDir := t.TempDir()
+	path, err := ExportTrace(ctx, Options{
+		TraceID:   traceID,
+		OutputDir: outDir,
+		Format:    FormatMarkdown,
+		Include:   include,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, want := range []string{
+		"## Configuration",
+		manifest.ActiveConfigRef,
+		"public prompt body",
+		"home/skills/secret/SKILL.md",
+		"omitted: private configuration input is not exported",
+		"Export omissions",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("config export missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "private skill bytes") {
+		t.Fatalf("private input contents leaked into the export:\n%s", text)
+	}
+
+	htmlPath, err := ExportTrace(ctx, Options{
+		TraceID:   traceID,
+		OutputDir: outDir,
+		Format:    FormatHTML,
+		Include:   include,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	htmlBody, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(htmlBody), "Configuration") || !strings.Contains(string(htmlBody), "private configuration input is not exported") {
+		t.Fatalf("html config export missing classification report")
+	}
+	if strings.Contains(string(htmlBody), "private skill bytes") {
+		t.Fatal("html config export leaked private input contents")
+	}
+
+	// The default report stays free of configuration contents.
+	plain, err := ExportTrace(ctx, Options{TraceID: traceID, OutputDir: outDir, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plainBody, err := os.ReadFile(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plainBody), "## Configuration") || strings.Contains(string(plainBody), "private skill bytes") {
+		t.Fatalf("default export carried configuration contents:\n%s", plainBody)
 	}
 }

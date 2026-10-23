@@ -4,11 +4,40 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/trailfork"
 )
+
+// recoverInterruptedForkCreations finishes approvals that a restart cut short.
+//
+// Only requests already recorded as creating are resumed: they were approved by
+// an operator and their identities were minted before the crash. Creation is
+// idempotent under the request identity, so recovery cannot create a second
+// trail, reset honey, or duplicate the initial task plan.
+func (r *Reactor) recoverInterruptedForkCreations(ctx context.Context) {
+	if r.colony.ColonyRoot == "" || r.ledger == nil || !bus.PublisherAvailable(r.publisher) {
+		return
+	}
+	recovered, err := trailfork.RecoverCreating(ctx, trailfork.DecisionOptions{
+		Context:   r.colony,
+		Actor:     "runtime",
+		Reason:    "recovered interrupted creation after restart",
+		Publisher: r.publisher,
+		Ledger:    r.ledger,
+	})
+	if err != nil {
+		runtimeLog.Warn("recover interrupted fork creation failed", logging.F("error", err.Error()))
+	}
+	for _, result := range recovered {
+		runtimeLog.Info("recovered fork creation",
+			logging.F("trace", result.Plan.TraceID),
+			logging.F("request", result.Plan.RequestID),
+		)
+	}
+}
 
 // handleForkControl applies platform trail-fork signals before routing.
 //

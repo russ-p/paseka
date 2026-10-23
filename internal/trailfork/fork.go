@@ -42,6 +42,10 @@ const (
 	DeltaPatch = "patch"
 	// StateRunnable marks an admitted fork whose task has been published.
 	StateRunnable = "runnable"
+	// StateDropped marks a fork whose dispatch was stopped and whose execution
+	// resources were removed. Configuration evidence, lineage, attempts, and run
+	// records stay readable and keep the trail inspectable.
+	StateDropped = "dropped"
 
 	lineageVersion = 1
 	// DeltaFileName is the retained patch body under the fork's run root.
@@ -95,31 +99,37 @@ type TaskLineage struct {
 
 // Lineage is the durable fork record stored beside the fork's tasks.
 type Lineage struct {
-	Version              int         `json:"version"`
-	RequestID            string      `json:"requestId,omitempty"`
-	ForkID               string      `json:"forkId"`
-	TraceID              string      `json:"traceId"`
-	SourceTrace          string      `json:"sourceTrace"`
-	SourceTask           string      `json:"sourceTask"`
-	SourceAttempt        string      `json:"sourceAttempt"`
-	SourceRun            string      `json:"sourceRun,omitempty"`
-	SourceBaseSHA        string      `json:"sourceBaseSha,omitempty"`
-	BaseSHA              string      `json:"baseSha"`
-	BaseOverridden       bool        `json:"baseOverridden,omitempty"`
-	SourceConfigRef      string      `json:"sourceConfigRef"`
-	SourceConfigRevision int         `json:"sourceRevision"`
-	ConfigRef            string      `json:"configRef"`
-	Policy               string      `json:"policy"`
-	Delta                Delta       `json:"delta"`
-	Profile              string      `json:"profile,omitempty"`
-	Budget               int         `json:"budget"`
-	State                string      `json:"state"`
-	Workspace            string      `json:"workspace"`
-	Branch               string      `json:"branch"`
-	Title                string      `json:"title,omitempty"`
-	Task                 TaskLineage `json:"task"`
-	Limitations          []string    `json:"limitations,omitempty"`
-	CreatedAt            time.Time   `json:"createdAt"`
+	Version              int    `json:"version"`
+	RequestID            string `json:"requestId,omitempty"`
+	ForkID               string `json:"forkId"`
+	TraceID              string `json:"traceId"`
+	SourceTrace          string `json:"sourceTrace"`
+	SourceTask           string `json:"sourceTask"`
+	SourceAttempt        string `json:"sourceAttempt"`
+	SourceRun            string `json:"sourceRun,omitempty"`
+	SourceBaseSHA        string `json:"sourceBaseSha,omitempty"`
+	BaseSHA              string `json:"baseSha"`
+	BaseOverridden       bool   `json:"baseOverridden,omitempty"`
+	SourceConfigRef      string `json:"sourceConfigRef"`
+	SourceConfigRevision int    `json:"sourceRevision"`
+	ConfigRef            string `json:"configRef"`
+	Policy               string `json:"policy"`
+	Delta                Delta  `json:"delta"`
+	Profile              string `json:"profile,omitempty"`
+	Budget               int    `json:"budget"`
+	State                string `json:"state"`
+	Workspace            string `json:"workspace"`
+	Branch               string `json:"branch"`
+	Title                string `json:"title,omitempty"`
+	// DroppedAt, DroppedBy, and DropReason record an explicit drop. They are
+	// retained with the lineage so a removed worktree cannot erase the reason an
+	// experiment stopped.
+	DroppedAt   *time.Time  `json:"droppedAt,omitempty"`
+	DroppedBy   string      `json:"droppedBy,omitempty"`
+	DropReason  string      `json:"dropReason,omitempty"`
+	Task        TaskLineage `json:"task"`
+	Limitations []string    `json:"limitations,omitempty"`
+	CreatedAt   time.Time   `json:"createdAt"`
 }
 
 // Options describes one preview or creation request.
@@ -228,6 +238,12 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options, plan Lineage, evidence sourceEvidence) (Result, error) {
 	if plan.RequestID != "" {
 		if existing, err := LoadLineage(opts.Context.ColonyRoot, plan.TraceID); err == nil && existing.RequestID == plan.RequestID {
+			// An interrupted approval may have written the lineage and binding
+			// before its initial plan reached the ledger. Finish that publication
+			// idempotently instead of leaving a created-but-unrunnable fork.
+			if err := finishInitialPublication(ctx, publisher, ledger, existing, evidence.forkColony.Defaults); err != nil {
+				return Result{}, err
+			}
 			return resultFromLineage(opts.Context, existing)
 		}
 	}
@@ -344,6 +360,77 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 		LineagePath: LineagePath(opts.Context.ColonyRoot, plan.TraceID),
 		Events:      []protocol.Event{planEv, readyEv},
 	}, nil
+}
+
+// finishInitialPublication completes the initial plan and ready signal for a
+// fork whose lineage already exists. A normal repeat approval publishes
+// nothing: once the carried task is past planned, the publication is done.
+//
+// The ledger can record the task as planned without it ever becoming ready when
+// a crash lands between task.plan and task.ready. That gap is finished here by
+// publishing only the missing event: task.plan is skipped when the ledger
+// already applied it, and task.ready only promotes a still-planned task.
+func finishInitialPublication(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, lineage Lineage, defaults colony.Defaults) error {
+	if ledger == nil {
+		return fmt.Errorf("trailfork: task ledger is required to finish fork creation")
+	}
+	if strings.TrimSpace(lineage.Task.TaskID) == "" {
+		return fmt.Errorf("trailfork: fork %s has no recorded initial task", lineage.TraceID)
+	}
+	snap, err := ledger.Snapshot(lineage.TraceID)
+	if err != nil {
+		return fmt.Errorf("trailfork: inspect fork ledger: %w", err)
+	}
+	planned, known := snap.Tasks[lineage.Task.TaskID]
+	// A carried task past planned (ready, running, or terminal) already had its
+	// ready published. Republishing would reset a live task, so leave it alone.
+	applied := known && planned.Status != ""
+	if applied && planned.Status != protocol.TaskStatusPlanned {
+		return nil
+	}
+	if snap.Killed {
+		return fmt.Errorf("trailfork: fork %s was stopped before its initial task was published", lineage.TraceID)
+	}
+	if err := ledger.SeedEnergy(lineage.TraceID, lineage.Budget); err != nil {
+		return fmt.Errorf("trailfork: seed honey reserve: %w", err)
+	}
+	task := taskledger.TaskSnapshot{
+		TaskID: lineage.Task.TaskID,
+		Title:  lineage.Task.Title,
+		Body:   lineage.Task.Body,
+		Bee:    lineage.Task.Bee,
+		Sector: lineage.Task.Sector,
+		Intent: lineage.Task.Intent,
+		Review: protocol.TaskReviewPolicy(lineage.Task.Review),
+	}
+	spec := protocol.TaskSpec{
+		TaskID: task.TaskID,
+		Title:  task.Title,
+		Body:   task.Body,
+		Bee:    task.Bee,
+		Sector: task.Sector,
+		Intent: task.Intent,
+		Review: task.Review,
+	}
+	var publication []protocol.Event
+	if !applied {
+		planEv, err := tasks.PlanEvent(lineage.TraceID, "cli", spec)
+		if err != nil {
+			return err
+		}
+		publication = append(publication, planEv)
+	}
+	readyEv, err := tasks.ReadyEvent(lineage.TraceID, "cli", task, defaults)
+	if err != nil {
+		return err
+	}
+	publication = append(publication, readyEv)
+	for _, ev := range publication {
+		if err := publisher.PublishEvent(ctx, ev); err != nil {
+			return fmt.Errorf("trailfork: publish %s: %w", protocol.PayloadKind(ev.Payload), err)
+		}
+	}
+	return nil
 }
 
 // resolveEvidence validates the selected source evidence without minting trail

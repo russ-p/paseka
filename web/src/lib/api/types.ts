@@ -1231,7 +1231,8 @@ export type TraceExportInclude =
 	| 'cues'
 	| 'artifacts'
 	| 'agent-logs'
-	| 'patches';
+	| 'patches'
+	| 'config';
 
 export interface TraceExportIncludeOption {
 	value: TraceExportInclude;
@@ -1256,6 +1257,11 @@ export const traceExportIncludes: TraceExportIncludeOption[] = [
 		value: 'patches',
 		label: 'Proposal patches',
 		description: 'Archived diff each run proposed, with publication state'
+	},
+	{
+		value: 'config',
+		label: 'Trail configuration',
+		description: 'Retained configuration versions; private inputs are listed but never inlined'
 	}
 ];
 

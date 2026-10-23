@@ -467,3 +467,127 @@ func TestForkBindingPinsExecutionRoot(t *testing.T) {
 		t.Fatalf("ordinary source workspace root = %q, want %q", sourceBound.WorkspaceRoot, root)
 	}
 }
+
+func TestPrivateInputsAreClassifiedRestrictedAndReadable(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+
+	manifest, err := trailconfig.Ensure(ctx, "trace-private")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory, contents, err := trailconfig.ReadSnapshot(root, "trace-private", manifest.InitialConfigRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	private := map[string]bool{}
+	for _, entry := range inventory.Entries {
+		private[entry.Path] = entry.Private
+	}
+	for _, rel := range []string{
+		"home/skills/private/SKILL.md",
+		"home/profiles/pi/adapters/cursor.yaml",
+		".paseka/bees/builder.local.yaml",
+	} {
+		if !private[rel] {
+			t.Fatalf("%s was not classified private: %+v", rel, private)
+		}
+	}
+	for _, rel := range []string{
+		".paseka/colony.yaml",
+		".paseka/bees/builder.yaml",
+		".paseka/prompts/builder.md",
+		".agents/skills/example/SKILL.md",
+	} {
+		if private[rel] {
+			t.Fatalf("%s was classified private", rel)
+		}
+	}
+	if len(contents) != len(inventory.Entries) {
+		t.Fatalf("contents = %d, entries = %d", len(contents), len(inventory.Entries))
+	}
+	found := false
+	for _, file := range contents {
+		if file.Path != "home/skills/private/SKILL.md" {
+			continue
+		}
+		found = true
+		if string(file.Data) != "private: true\n" {
+			t.Fatalf("retained private input = %q", file.Data)
+		}
+	}
+	if !found {
+		t.Fatal("retained snapshot did not return the private input")
+	}
+
+	// The private subtree is not world-traversable, so classification also
+	// carries an access restriction on disk.
+	privateDir := filepath.Join(root, ".paseka", "runs", "trace-private", "config", "snapshots",
+		manifest.InitialConfigRef, "tree", "home")
+	info, err := os.Stat(privateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("private subtree mode = %o, want 700", info.Mode().Perm())
+	}
+}
+
+func TestConfigRefTracksPrivateInputContent(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	home := setupHome(t, "test")
+	ctx := testContext(root)
+	first, err := trailconfig.Ensure(ctx, "trace-private-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "skills", "private", "SKILL.md"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := trailconfig.Ensure(ctx, "trace-private-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.InitialConfigRef == second.InitialConfigRef {
+		t.Fatal("private input content did not contribute to ConfigRef")
+	}
+}
+
+func TestBindingAndAttemptOwnershipSurviveRestart(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	ctx := testContext(root)
+	if _, err := trailconfig.Ensure(ctx, "trace-restart"); err != nil {
+		t.Fatal(err)
+	}
+	input := trailconfig.NewTaskInputEvidence("task-1", "title", "body", "builder", "", "feature", "none")
+	attempt, err := trailconfig.EnsureTaskAttempt(ctx, "trace-restart", "task-1", "evt-1", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A fresh process reads the same durable binding and attempt ownership
+	// instead of capturing a second version or admitting a duplicate attempt.
+	reloaded, err := trailconfig.Load(root, "trace-restart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.ConfigRevision != 1 || reloaded.ActiveConfigRef == "" {
+		t.Fatalf("reloaded binding = %+v", reloaded)
+	}
+	reopened, err := trailconfig.EnsureTaskAttempt(ctx, "trace-restart", "task-1", "evt-2", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.AttemptID != attempt.AttemptID {
+		t.Fatalf("restart admitted a duplicate attempt: %s -> %s", attempt.AttemptID, reopened.AttemptID)
+	}
+	attempts, err := trailconfig.Attempts(root, "trace-restart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 1 {
+		t.Fatalf("attempt records = %d, want 1", len(attempts))
+	}
+}

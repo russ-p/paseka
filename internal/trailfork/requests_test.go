@@ -3,6 +3,7 @@ package trailfork_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -440,5 +441,308 @@ func writeSenderRun(t *testing.T, root, traceID, agentID, bee string) {
 		CreatedAt:       time.Now().UTC(),
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRecoverCreatingResumesInterruptedApprovalWithoutDuplication(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+	req := submitRequest(t, ctx, "req-recover", "trace-source", "agent-sender")
+
+	// A fresh process reads the durable pending request without creating
+	// anything.
+	pending, err := trailfork.ListPending(root)
+	if err != nil || len(pending) != 1 || pending[0].RequestID != req.RequestID {
+		t.Fatalf("pending after restart = %+v %v", pending, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".paseka", "runs", req.RequestID)); !os.IsNotExist(err) {
+		t.Fatalf("pending request created a trace dir: %v", err)
+	}
+
+	// Simulate a crash after approval minted identities and recorded the
+	// creating state but before the on-disk creation finished.
+	req.State = trailfork.StateCreating
+	req.TraceID = "trace-recovered"
+	req.TaskID = "task-recovered"
+	req.ForkID = "fork-recovered"
+	req.DecidedBy = "alice"
+	req.UpdatedAt = time.Now().UTC()
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.RequestPath(root, req.Evidence.SourceTrace, req.RequestID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ledger := taskledger.NewMemoryLedger()
+	pub := &capturePublisher{}
+	recovered, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Plan.TraceID != "trace-recovered" || recovered[0].Plan.Task.TaskID != "task-recovered" {
+		t.Fatalf("recovered = %+v", recovered)
+	}
+
+	// A second restart finds nothing to recover and does not create a duplicate.
+	again, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil || len(again) != 0 {
+		t.Fatalf("second recovery = %+v %v", again, err)
+	}
+	tasksSnapshot, err := runs.LoadTraceTasksFromFS(root, "trace-recovered")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasksSnapshot.Tasks) != 1 {
+		t.Fatalf("recovered fork tasks = %+v", tasksSnapshot.Tasks)
+	}
+	snap, err := ledger.Snapshot("trace-recovered")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyBudget != 8 || snap.EnergyRemaining != 8 {
+		t.Fatalf("recovered fork honey = budget %d remaining %d", snap.EnergyBudget, snap.EnergyRemaining)
+	}
+
+	stored, err := trailfork.LoadRequest(root, req.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != trailfork.StateApproved || stored.TraceID != "trace-recovered" || stored.Lineage == nil {
+		t.Fatalf("stored request = %+v", stored)
+	}
+}
+
+func TestRecoverCreatingFinishesAPlanWhoseReadyCrashed(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-half",
+		ForkTraceID:   "trace-half",
+		ForkTaskID:    "task-half",
+	}
+	plan, err := trailfork.Preview(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewMemoryLedger()
+	// A crash between task.plan and task.ready leaves the ledger holding the
+	// carried task as planned while the request stays creating.
+	if _, err := trailfork.Create(context.Background(), &readyCrashPublisher{ledger: ledger}, ledger, opts); err == nil {
+		t.Fatal("expected the task.ready publish to fail")
+	}
+	snap, err := ledger.Snapshot(plan.Plan.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.Tasks[plan.Plan.Task.TaskID].Status; got != protocol.TaskStatusPlanned {
+		t.Fatalf("task status before recovery = %q", got)
+	}
+	lineage, err := trailfork.LoadLineage(root, plan.Plan.TraceID)
+	if err != nil {
+		t.Fatalf("partial creation lost its lineage: %v", err)
+	}
+
+	req := trailfork.Request{
+		Version:       1,
+		RequestID:     "req-half",
+		State:         trailfork.StateCreating,
+		Origin:        "cli",
+		Evidence:      lineage,
+		ContentDigest: "half",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+		TraceID:       plan.Plan.TraceID,
+		TaskID:        plan.Plan.Task.TaskID,
+		ForkID:        plan.Plan.ForkID,
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.RequestPath(root, lineage.SourceTrace, req.RequestID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pub := &capturePublisher{}
+	recovered, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Plan.TraceID != plan.Plan.TraceID {
+		t.Fatalf("recovered = %+v", recovered)
+	}
+	kinds := map[string]int{}
+	for _, ev := range pub.events {
+		kinds[protocol.PayloadKind(ev.Payload)]++
+	}
+	if kinds[string(protocol.TaskEventPlan)] != 0 || kinds[string(protocol.TaskEventReady)] != 1 {
+		t.Fatalf("recovered publication = %+v", kinds)
+	}
+
+	// The published ready promotes the carried task out of planned.
+	for _, ev := range pub.events {
+		if _, err := ledger.Apply(ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snap, err = ledger.Snapshot(plan.Plan.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.Tasks[plan.Plan.Task.TaskID].Status; got != protocol.TaskStatusReady {
+		t.Fatalf("task status after recovery = %q", got)
+	}
+
+	// A later restart finds nothing to publish again.
+	again, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil || len(again) != 0 {
+		t.Fatalf("second recovery = %+v %v", again, err)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("recovery republished events: %d", len(pub.events))
+	}
+}
+
+// readyCrashPublisher applies everything it publishes to the ledger and fails
+// the first task.ready, reproducing a crash between task.plan and task.ready.
+type readyCrashPublisher struct {
+	ledger taskledger.Ledger
+}
+
+func (p *readyCrashPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
+	if protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventReady) {
+		return errors.New("bus unavailable before task.ready")
+	}
+	_, err := p.ledger.Apply(ev)
+	return err
+}
+
+func TestRecoverCreatingFinishesAnUnpublishedInitialPlan(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-partial",
+		ForkTraceID:   "trace-partial",
+		ForkTaskID:    "task-partial",
+	}
+	plan, err := trailfork.Preview(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewMemoryLedger()
+	if _, err := trailfork.Create(context.Background(), &dropProbePublisher{failPublish: true}, ledger, opts); err == nil {
+		t.Fatal("expected the initial publish to fail")
+	}
+	lineage, err := trailfork.LoadLineage(root, "trace-partial")
+	if err != nil {
+		t.Fatalf("partial creation lost its lineage: %v", err)
+	}
+
+	// An approval that crashed after writing the binding and lineage but before
+	// its plan reached the ledger is recorded as creating.
+	req := trailfork.Request{
+		Version:       1,
+		RequestID:     "req-partial",
+		State:         trailfork.StateCreating,
+		Origin:        "cli",
+		Evidence:      lineage,
+		ContentDigest: "partial",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+		TraceID:       plan.Plan.TraceID,
+		TaskID:        plan.Plan.Task.TaskID,
+		ForkID:        plan.Plan.ForkID,
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.RequestPath(root, lineage.SourceTrace, req.RequestID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pub := &capturePublisher{}
+	recovered, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Plan.TraceID != "trace-partial" {
+		t.Fatalf("recovered = %+v", recovered)
+	}
+	kinds := map[string]int{}
+	for _, ev := range pub.events {
+		kinds[protocol.PayloadKind(ev.Payload)]++
+	}
+	if kinds[string(protocol.TaskEventPlan)] != 1 || kinds[string(protocol.TaskEventReady)] != 1 {
+		t.Fatalf("recovered publication = %+v", kinds)
+	}
+
+	// The completed recovery leaves nothing to publish again.
+	again, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil || len(again) != 0 {
+		t.Fatalf("second recovery = %+v %v", again, err)
+	}
+	if len(pub.events) != 2 {
+		t.Fatalf("recovery republished events: %d", len(pub.events))
+	}
+	stored, err := trailfork.LoadRequest(root, req.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != trailfork.StateApproved {
+		t.Fatalf("stored state = %q", stored.State)
 	}
 }

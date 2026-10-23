@@ -108,8 +108,8 @@ can retry work on a fixed trace without starting a new flight trail.`,
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository (default: current directory)")
-	cmd.Flags().BoolVar(&purgeRuns, "runs", false, "remove .paseka/runs/ trace directories")
-	cmd.Flags().BoolVar(&purgeWorktrees, "worktrees", false, "remove .paseka/worktrees/ and git worktrees")
+	cmd.Flags().BoolVar(&purgeRuns, "runs", false, "remove .paseka/runs/ trace directories (only --trace when set)")
+	cmd.Flags().BoolVar(&purgeWorktrees, "worktrees", false, "remove .paseka/worktrees/ and git worktrees (only --trace when set)")
 	cmd.Flags().BoolVar(&purgeCache, "cache", false, "remove .paseka/cache/")
 	cmd.Flags().BoolVar(&purgeState, "state", false, "reset ~/.config/paseka/<slug>/state.json worktree registry")
 	cmd.Flags().BoolVar(&purgeBus, "bus", false, "remove JetStream KV, stream events, and artifacts for --trace (requires NATS)")

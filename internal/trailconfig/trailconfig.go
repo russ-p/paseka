@@ -81,6 +81,16 @@ type Entry struct {
 	SHA256 string `json:"sha256"`
 	Mode   uint32 `json:"mode"`
 	Size   int64  `json:"size"`
+	// Private marks a machine-local input that must not appear in shared Git
+	// history or ordinary exports. The content is retained with the trail under
+	// restrictive permissions and its identity still contributes to ConfigRef.
+	Private bool `json:"private,omitempty"`
+}
+
+// FileContent is one retained configuration file together with its bytes.
+type FileContent struct {
+	Entry
+	Data []byte `json:"-"`
 }
 
 // Inventory is the canonical content of one snapshot.
@@ -171,6 +181,19 @@ type Binding struct {
 	InitialCodeBaseSHA   string `json:"initialCodeBaseSha,omitempty"`
 	InitialCodeBaseDirty bool   `json:"initialCodeBaseDirty,omitempty"`
 	WorkspaceRoot        string `json:"workspaceRoot,omitempty"`
+}
+
+// PrivatePath reports whether a captured logical path is a machine-local
+// private input. Home-scoped contributions (adapter recipes and skills from
+// ~/.config/paseka/<slug>) and gitignored *.local.yaml overlays never live in
+// the colony's shared Git history, so they are retained privately instead of
+// being exported like committed files.
+func PrivatePath(logical string) bool {
+	p := filepath.ToSlash(strings.TrimSpace(logical))
+	if p == "home" || strings.HasPrefix(p, "home/") {
+		return true
+	}
+	return strings.HasSuffix(p, ".local.yaml")
 }
 
 // ConfigDir returns .paseka/runs/<traceId>/config under colonyRoot.
@@ -818,10 +841,11 @@ func buildInventory(contents []capturedFile, resolved Resolved) Inventory {
 	for _, file := range contents {
 		sum := sha256.Sum256(file.data)
 		entries = append(entries, Entry{
-			Path:   file.path,
-			SHA256: hex.EncodeToString(sum[:]),
-			Mode:   file.mode,
-			Size:   int64(len(file.data)),
+			Path:    file.path,
+			SHA256:  hex.EncodeToString(sum[:]),
+			Mode:    file.mode,
+			Size:    int64(len(file.data)),
+			Private: PrivatePath(file.path),
 		})
 	}
 	return Inventory{Version: inventoryVersion, Entries: entries, Resolved: resolved}
@@ -878,6 +902,11 @@ func materializeSnapshot(configDir, ref string, contents []capturedFile, invento
 		if err := os.Chmod(dest, os.FileMode(file.mode)); err != nil {
 			return fmt.Errorf("trailconfig: chmod snapshot file %s: %w", file.path, err)
 		}
+		if PrivatePath(file.path) {
+			if err := restrictPrivateDirs(tree, dest); err != nil {
+				return fmt.Errorf("trailconfig: restrict private input %s: %w", file.path, err)
+			}
+		}
 	}
 	if err := writeJSON(filepath.Join(tmp, InventoryFileName), inventory); err != nil {
 		return err
@@ -896,6 +925,46 @@ func materializeSnapshot(configDir, ref string, contents []capturedFile, invento
 	}
 	renamed = true
 	return nil
+}
+
+// restrictPrivateDirs narrows traversal into a private input subtree without
+// changing the file modes recorded in the inventory.
+func restrictPrivateDirs(tree, dest string) error {
+	for dir := filepath.Dir(dest); dir != tree && strings.HasPrefix(dir, tree+string(filepath.Separator)); dir = filepath.Dir(dir) {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ReadSnapshot verifies one retained snapshot and returns its inventory and
+// file contents. Callers that expose configuration read through this seam so
+// private classification travels with the bytes.
+func ReadSnapshot(colonyRoot, traceID, ref string) (Inventory, []FileContent, error) {
+	if colonyRoot == "" {
+		return Inventory{}, nil, fmt.Errorf("trailconfig: colony root is required")
+	}
+	if err := validateTraceID(traceID); err != nil {
+		return Inventory{}, nil, err
+	}
+	if err := validateConfigRef(ref); err != nil {
+		return Inventory{}, nil, err
+	}
+	snapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), ref)
+	inventory, err := loadVerifiedSnapshot(snapshotDir, ref)
+	if err != nil {
+		return Inventory{}, nil, err
+	}
+	contents := make([]FileContent, 0, len(inventory.Entries))
+	for _, entry := range inventory.Entries {
+		data, err := os.ReadFile(filepath.Join(snapshotDir, SnapshotTreeDirName, filepath.FromSlash(entry.Path)))
+		if err != nil {
+			return Inventory{}, nil, fmt.Errorf("trailconfig: configuration %s is missing %s: %w", ref, entry.Path, err)
+		}
+		contents = append(contents, FileContent{Entry: entry, Data: data})
+	}
+	return inventory, contents, nil
 }
 
 func verifySnapshot(dir, expectedRef string) error {

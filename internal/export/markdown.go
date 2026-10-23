@@ -24,6 +24,9 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 	writeMarkdownRuns(&buf, data)
 	writeMarkdownTimeline(&buf, data.Events)
 	writeMarkdownConfigSnapshots(&buf, data)
+	if data.Include.Has(IncludeConfig) {
+		writeMarkdownConfiguration(&buf, data.Config)
+	}
 	if data.Include.Has(IncludePatches) {
 		writeMarkdownPatches(&buf, data)
 	}
@@ -408,5 +411,63 @@ func writeMarkdownTimeline(buf *bytes.Buffer, events []hiveview.EventFeedItem) {
 		buf.WriteString("\n```json\n")
 		buf.WriteString(rawEventJSON(item.Raw))
 		buf.WriteString("\n```\n\n")
+	}
+}
+
+func writeMarkdownConfiguration(buf *bytes.Buffer, config *ConfigExport) {
+	buf.WriteString("## Configuration\n\n")
+	if config == nil {
+		buf.WriteString("_Configuration evidence was not requested._\n\n")
+		return
+	}
+	if config.Missing != "" {
+		fmt.Fprintf(buf, "_%s_\n\n", config.Missing)
+		return
+	}
+	fmt.Fprintf(buf, "- **Policy:** %s\n", config.Policy)
+	fmt.Fprintf(buf, "- **Revision:** %d\n", config.Revision)
+	fmt.Fprintf(buf, "- **Initial ConfigRef:** `%s`\n", config.InitialConfigRef)
+	fmt.Fprintf(buf, "- **Active ConfigRef:** `%s`\n", config.ActiveConfigRef)
+	fmt.Fprintf(buf, "- **Retained versions:** %d\n", len(config.Snapshots))
+	if omitted := configOmittedCount(config); omitted > 0 {
+		fmt.Fprintf(buf, "- **Omitted files:** %d (contents deliberately not exported)\n", omitted)
+	}
+	buf.WriteString("\n")
+	for _, snapshot := range config.Snapshots {
+		roles := strings.Join(snapshot.Roles, ", ")
+		if roles == "" {
+			roles = "retained"
+		}
+		fmt.Fprintf(buf, "### `%s` (%s)\n\n", snapshot.ConfigRef, roles)
+		if snapshot.Missing != "" {
+			fmt.Fprintf(buf, "_unavailable: %s_\n\n", snapshot.Missing)
+			continue
+		}
+		fmt.Fprintf(buf, "%d file(s)", snapshot.FileCount)
+		if snapshot.Omitted > 0 {
+			fmt.Fprintf(buf, " · %d omitted", snapshot.Omitted)
+		}
+		buf.WriteString("\n\n")
+		for _, file := range snapshot.Files {
+			fmt.Fprintf(buf, "#### `%s`\n\n", file.Path)
+			fmt.Fprintf(buf, "%d bytes · mode %o", file.Bytes, file.Mode)
+			if file.Private {
+				buf.WriteString(" · private")
+			}
+			buf.WriteString("\n\n")
+			if file.Omitted != "" {
+				fmt.Fprintf(buf, "_omitted: %s_\n\n", file.Omitted)
+				continue
+			}
+			writeYAMLFence(buf, file.Content)
+		}
+	}
+	omissions := configOmissions(config)
+	if len(omissions) > 0 {
+		buf.WriteString("### Export omissions\n\n")
+		for _, note := range omissions {
+			fmt.Fprintf(buf, "- %s\n", note)
+		}
+		buf.WriteString("\n")
 	}
 }

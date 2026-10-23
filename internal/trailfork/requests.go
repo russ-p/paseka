@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -373,6 +374,61 @@ func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 		return Result{}, err
 	}
 	return result, nil
+}
+
+// RecoverCreating resumes fork requests whose approved creation was interrupted
+// by a restart.
+//
+// Creation is idempotent under the request identity: an interrupted approval
+// either finishes the missing steps or returns the fork it already created. It
+// never mints another trail, reseeds honey, or republishes an initial plan that a
+// completed attempt already published.
+func RecoverCreating(ctx context.Context, opts DecisionOptions) ([]Result, error) {
+	if strings.TrimSpace(opts.Context.ColonyRoot) == "" {
+		return nil, fmt.Errorf("trailfork: colony root is required")
+	}
+	requests, err := ListRequests(opts.Context.ColonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	var recovered []Result
+	var failures []error
+	for _, req := range requests {
+		if req.State != StateCreating {
+			continue
+		}
+		// A fork dropped while its creation was incomplete must not be
+		// republished on every restart.
+		if req.TraceID != "" {
+			if lineage, err := LoadLineage(opts.Context.ColonyRoot, req.TraceID); err == nil && lineage.State == StateDropped {
+				req.State = StateCancelled
+				req.Reason = "fork was dropped before its creation completed"
+				req.UpdatedAt = time.Now().UTC()
+				if err := saveRequest(RequestPath(opts.Context.ColonyRoot, req.Evidence.SourceTrace, req.RequestID), req); err != nil {
+					failures = append(failures, fmt.Errorf("trailfork: cancel dropped request %s: %w", req.RequestID, err))
+				}
+				continue
+			}
+		}
+		decision := opts
+		decision.RequestID = req.RequestID
+		if strings.TrimSpace(decision.Actor) == "" {
+			decision.Actor = "runtime"
+		}
+		if strings.TrimSpace(decision.Reason) == "" {
+			decision.Reason = "recovered interrupted creation after restart"
+		}
+		result, err := ApproveRequest(ctx, decision)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("trailfork: recover request %s: %w", req.RequestID, err))
+			continue
+		}
+		recovered = append(recovered, result)
+	}
+	if len(failures) > 0 {
+		return recovered, errors.Join(failures...)
+	}
+	return recovered, nil
 }
 
 // RejectRequest refuses a pending request without creating resources.

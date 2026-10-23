@@ -14,6 +14,7 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
 	"github.com/russ-p/paseka/internal/trailview"
 )
 
@@ -131,6 +132,9 @@ func (r *Reactor) Run(ctx context.Context) error {
 	if err := r.RecoverPendingConfigs(ctx); err != nil {
 		runtimeLog.Warn("recover pending configuration failed", logging.F("error", err.Error()))
 	}
+	// An interrupted fork approval resumes under its recorded request identity
+	// before any new event can plan the same initial task again.
+	r.recoverInterruptedForkCreations(ctx)
 
 	go r.runPullRequestReconcile(ctx)
 
@@ -260,6 +264,11 @@ func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, erro
 	scope, err := trailview.ResolveScope(r.colony, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: resolve trail scope: %w", err)
+	}
+	// A dropped fork keeps its records but can never dispatch again, even if a
+	// later ledger reset forgot the kill.
+	if scope.AdmissionState == trailfork.StateDropped {
+		return nil, fmt.Errorf("runtime: trail %s was dropped and cannot dispatch", traceID)
 	}
 	bound, manifest, isBound, err := trailconfig.BindNewWork(r.colony, traceID)
 	if err != nil {

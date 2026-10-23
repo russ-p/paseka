@@ -26,6 +26,7 @@ func newTrailCmd() *cobra.Command {
 	cmd.AddCommand(newTrailShowCmd())
 	cmd.AddCommand(newTrailConfigCmd())
 	cmd.AddCommand(newTrailForkCmd())
+	cmd.AddCommand(newTrailDropCmd())
 	return cmd
 }
 
@@ -482,6 +483,87 @@ func newTrailConfigShowCmd() *cobra.Command {
 	return cmd
 }
 
+func newTrailDropCmd() *cobra.Command {
+	var (
+		startDir string
+		reason   string
+		dryRun   bool
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   "drop <traceId>",
+		Short: "Stop a fork and remove its execution resources, retaining its evidence",
+		Long: "Drop stops dispatch for an experimental fork before removing its worktree and\n" +
+			"branch. Configuration snapshots, fork lineage, attempt ownership, run records,\n" +
+			"and the comb stay readable, so the experiment remains inspectable even after\n" +
+			"its source trail is removed. Use paseka purge for ordinary trail deletion.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			traceID := args[0]
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			var session *tasks.LedgerSession
+			if !dryRun {
+				session, err = tasks.OpenLedger(ctxColony)
+				if err != nil {
+					return err
+				}
+				defer session.Close()
+			}
+			result, err := trailfork.Drop(cmd.Context(), trailfork.DropOptions{
+				Context: ctxColony,
+				TraceID: traceID,
+				Reason:  reason,
+				Actor:   "cli",
+				Session: session,
+				DryRun:  dryRun,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(result)
+			}
+			printDropResult(result, dryRun)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&reason, "reason", "", "operator reason retained with the dropped lineage")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would be stopped and removed without acting")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
+	return cmd
+}
+
+func printDropResult(result trailfork.DropResult, dryRun bool) {
+	verb := "Dropped"
+	if dryRun {
+		verb = "Would drop"
+	}
+	fmt.Printf("%s fork %s (source %s)\n", verb, result.TraceID, result.ForkOf)
+	if result.AlreadyDropped {
+		fmt.Println("state: already dropped; finishing resource cleanup")
+	}
+	if dryRun {
+		fmt.Printf("worktree: %s\n", result.Workspace)
+		fmt.Printf("branch: %s\n", result.Branch)
+		return
+	}
+	if result.RemovedWorktree != "" {
+		fmt.Printf("worktree removed: %s\n", result.RemovedWorktree)
+	}
+	if result.RemovedBranch != "" {
+		fmt.Printf("branch removed: %s\n", result.RemovedBranch)
+	}
+	fmt.Printf("configuration retained: %s\n", result.RetainedConfigDir)
+	fmt.Printf("lineage retained: %s\n", result.RetainedLineagePath)
+	for _, ref := range result.ConfigRefs {
+		fmt.Printf("  - %s\n", ref)
+	}
+}
+
 func newTrailListCmd() *cobra.Command {
 	var (
 		startDir string
@@ -524,7 +606,7 @@ func newTrailListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().BoolVar(&forks, "forks", false, "list only runnable forks")
+	cmd.Flags().BoolVar(&forks, "forks", false, "list only experimental forks (dropped records stay listed)")
 	cmd.Flags().StringVar(&source, "source", "", "list runnable forks of one source trail")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum rows to print (0 = all)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
@@ -753,6 +835,16 @@ func printForkLineage(lineage trailfork.Lineage) {
 	fmt.Printf("branch: %s\n", lineage.Branch)
 	fmt.Printf("budget: %d\n", lineage.Budget)
 	fmt.Printf("state: %s\n", lineage.State)
+	if lineage.DroppedAt != nil {
+		fmt.Printf("dropped: %s", lineage.DroppedAt.UTC().Format(time.RFC3339))
+		if lineage.DroppedBy != "" {
+			fmt.Printf(" by %s", lineage.DroppedBy)
+		}
+		fmt.Println()
+	}
+	if lineage.DropReason != "" {
+		fmt.Printf("drop reason: %s\n", lineage.DropReason)
+	}
 }
 
 func printForkResult(result trailfork.Result) {
