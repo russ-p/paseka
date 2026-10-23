@@ -163,6 +163,7 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	if err != nil {
 		return fmt.Errorf("runtime: trail config: %w", err)
 	}
+	r.stampIncomingProvenance(&ev)
 
 	if err := r.validateIncomingTaskPlan(ev, execCtx); err != nil {
 		return err
@@ -175,12 +176,31 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		return nil
 	}
 
+	stale, err := r.staleTaskCompletion(ev)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	res, err := r.ledger.Apply(ev)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
+		if task, ok := res.Trace.Tasks[taskID]; ok && terminalTaskStatus(task.Status) {
+			if err := r.closeCompletedTaskAttempt(ev.TraceID, taskID, ev.AttemptID); err != nil {
+				runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+			}
+		}
+	}
+	if systemKillDetected(ev) {
+		if err := trailconfig.CloseTraceAttempts(r.colony.ColonyRoot, ev.TraceID, "trace killed"); err != nil {
+			runtimeLog.Warn("close attempts after kill failed", logging.F("error", err.Error()))
+		}
 	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
 	if err := r.handlePostApplySideEffects(ctx, ev, execCtx); err != nil {
@@ -285,23 +305,32 @@ func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, read
 		}
 		task := task
 		execCtx := execCtx
+		sourceEventID := eventIdentity(ev)
 		if err := r.runDispatch(ctx, func() error {
-			return r.dispatchReady(ctx, ev.TraceID, task, execCtx)
+			return r.dispatchReady(ctx, ev.TraceID, task, execCtx, sourceEventID)
 		}); err != nil {
 			return err
 		}
 	}
 
-	directBees := execCtx.Registry.DirectSubscribers(ev)
+	directCtx, skipDirect, err := r.directRoutingContext(ev, execCtx)
+	if err != nil {
+		return err
+	}
+	if skipDirect {
+		logDispatchSkip("attempt closed or unknown", ev.TraceID, protocol.PayloadTaskID(ev.Payload), "")
+		return nil
+	}
+	directBees := directCtx.Registry.DirectSubscribers(ev)
 	if len(directBees) > 0 {
 		logDirectDispatchPlan(ev.TraceID, ev, directBees)
 		dispatched = true
 	}
 	for _, beeRole := range directBees {
 		beeRole := beeRole
-		execCtx := execCtx
+		directCtx := directCtx
 		if err := r.runDispatch(ctx, func() error {
-			return r.dispatchDirect(ctx, ev, beeRole, execCtx)
+			return r.dispatchDirect(ctx, ev, beeRole, directCtx)
 		}); err != nil {
 			return err
 		}

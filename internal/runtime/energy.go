@@ -64,7 +64,7 @@ func (r *Reactor) unblockEnergyBlockedTasks(ctx context.Context, traceID string)
 			return err
 		}
 		task = updated.Tasks[task.TaskID]
-		if err := r.dispatchReady(ctx, traceID, task, nil); err != nil {
+		if err := r.dispatchReady(ctx, traceID, task, nil, "energy-unblock:"+traceID+":"+task.TaskID); err != nil {
 			return err
 		}
 	}

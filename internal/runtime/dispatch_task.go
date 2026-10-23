@@ -11,9 +11,10 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
-func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot, execCtx *trailExecutionContext) error {
+func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot, execCtx *trailExecutionContext, sourceEventID string) error {
 	if execCtx == nil {
 		resolved, err := r.executionContext(traceID)
 		if err != nil {
@@ -66,6 +67,17 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
+	attempt, attemptCtx, skip, err := r.prepareTaskAttempt(execCtx, traceID, task, bee, sourceEventID)
+	if err != nil {
+		return err
+	}
+	if skip {
+		logDispatchSkip("duplicate or closed attempt", traceID, task.TaskID, bee)
+		return nil
+	}
+	execCtx = attemptCtx
+	bee = colony.EffectiveTaskBee(task.Bee, execCtx.Manifest.Defaults)
+
 	if err := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusRunning, ""); err != nil {
 		return err
 	}
@@ -87,6 +99,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		Sector:         task.Sector,
 		Intent:         task.Intent,
 		IsLastWorkTask: taskledger.IsLastWorkTask(snap, task.TaskID),
+		Provenance:     attemptProvenance(attempt),
 	}, DispatchModeTask)
 	if err != nil {
 		// Kill may cancel finalize after a completed adapter run (busRequired); do not
@@ -99,7 +112,10 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		}
 		return nil
 	}
-	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt)
+	if err := trailconfig.RecordAttemptAgent(r.colony.ColonyRoot, traceID, attempt.AttemptID, res.AgentID); err != nil {
+		runtimeLog.Warn("attempt agent record failed", logging.F("error", err.Error()))
+	}
+	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt, attempt)
 	if res.Result == nil || res.Result.Status != string(protocol.StatusCompleted) {
 		if res.Result != nil {
 			r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, res.Result.Status, time.Now().UTC())
@@ -166,16 +182,19 @@ func taskDispatchFailureSummary(res *BeeRunResult, dispatchErr error) string {
 	return "adapter failed"
 }
 
-func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time) {
+func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time, attempt trailconfig.Attempt) {
 	if res == nil || taskID == "" {
 		return
 	}
 	if err := runs.AppendTaskRun(r.colony.ColonyRoot, traceID, taskID, runs.TaskRunEntry{
-		AgentID:   res.AgentID,
-		Bee:       bee,
-		RunDir:    res.RunDir,
-		StartedAt: startedAt,
-		RunStatus: "running",
+		AgentID:        res.AgentID,
+		Bee:            bee,
+		RunDir:         res.RunDir,
+		StartedAt:      startedAt,
+		RunStatus:      "running",
+		AttemptID:      attempt.AttemptID,
+		ConfigRef:      attempt.ConfigRef,
+		ConfigRevision: attempt.ConfigRevision,
 	}); err != nil {
 		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
 	}

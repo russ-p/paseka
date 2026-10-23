@@ -67,6 +67,8 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 		return protocol.EventCLIResult{}, err
 	}
 
+	stampRunProvenance(colonyRoot, &ev)
+
 	kind := protocol.PayloadKind(ev.Payload)
 	subject := ""
 	if subjectPrefix != "" {

@@ -22,6 +22,7 @@ func (d *Dispatcher) proposalArchiveRequestFromRun(
 	explicit bool,
 ) proposal.ArchiveRequest {
 	return proposal.ArchiveRequest{
+		Provenance:  req.provenance(),
 		ColonyRoot:  req.ColonyRoot,
 		TraceID:     req.TraceID,
 		AgentID:     req.AgentID,

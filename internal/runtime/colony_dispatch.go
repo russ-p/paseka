@@ -36,6 +36,9 @@ type ColonyDispatchRequest struct {
 	// ProposalKind, when set, resolves adapter cwd from the proposal MUTATION kind
 	// (isolated/alias → trace worktree; root → colony root) instead of bee.Worktree.
 	ProposalKind string
+	// Provenance is the owning attempt and configuration snapshot, when the
+	// caller already admitted one.
+	Provenance protocol.Provenance
 	// Raw requests plain-text adapter output for this run only (CLI --raw).
 	Raw bool
 }
@@ -57,6 +60,29 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		execColony = bound
 	}
 
+	agentID, err := colony.NewAgentID()
+	if err != nil {
+		return nil, err
+	}
+
+	// A CLI invocation has no reactor admission step; give it durable ownership
+	// here. Reactor task and direct paths admit before calling so they also get
+	// retry, rework, and duplicate semantics from the same store.
+	if mode == DispatchModeCLI && req.Provenance.AttemptID == "" {
+		attempt, err := ensureCLIAttempt(ctxColony, execColony, req, agentID)
+		if err != nil {
+			return nil, err
+		}
+		req.Provenance = attemptProvenance(attempt)
+		if attempt.ConfigRef != "" && attempt.ConfigRef != execColony.ConfigRef {
+			bound, err := trailconfig.BindRef(execColony, req.TraceID, attempt.ConfigRef, attempt.ConfigRevision)
+			if err != nil {
+				return nil, fmt.Errorf("runtime: bind attempt config: %w", err)
+			}
+			execColony = bound
+		}
+	}
+
 	bee, _, err := execColony.LoadBee(req.Bee)
 	if err != nil {
 		return nil, err
@@ -72,11 +98,6 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 
 	effectiveSector := colony.EffectiveSector(req.Sector, bee.Sector)
 	workspace, sectorRel, err := workspaceForDispatch(execColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind)
-	if err != nil {
-		return nil, err
-	}
-
-	agentID, err := colony.NewAgentID()
 	if err != nil {
 		return nil, err
 	}
@@ -127,28 +148,31 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 
 	result, err := d.Dispatch(ctx, DispatchRequest{
-		ColonyRoot:     ctxColony.ColonyRoot,
-		ConfigRoot:     execColony.ConfigRootPath(),
-		ConfigRef:      execColony.ConfigRef,
-		ConfigRevision: execColony.ConfigRevision,
-		Bee:            req.Bee,
-		TraceID:        req.TraceID,
-		AgentID:        agentID,
-		TaskID:         req.TaskID,
-		Task:           req.Task,
-		Sector:         effectiveSector,
-		SectorPath:     sectorRel,
-		Intent:         req.Intent,
-		Insights:       req.Insights,
-		InlinePrompt:   req.InlinePrompt,
-		Workspace:      workspace,
-		AdapterExtra:   adapterExtra,
-		ModelAliases:   aliases,
-		IsLastWorkTask: isLastWorkTask,
-		Profile:        execColony.Profile,
-		Raw:            req.Raw,
-		ProfileApply:   profileApply,
-		Registry:       registry,
+		ColonyRoot:           ctxColony.ColonyRoot,
+		ConfigRoot:           execColony.ConfigRootPath(),
+		ConfigRef:            execColony.ConfigRef,
+		ConfigRevision:       execColony.ConfigRevision,
+		AttemptID:            req.Provenance.AttemptID,
+		InitialCodeBaseSHA:   req.Provenance.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: req.Provenance.InitialCodeBaseDirty,
+		Bee:                  req.Bee,
+		TraceID:              req.TraceID,
+		AgentID:              agentID,
+		TaskID:               req.TaskID,
+		Task:                 req.Task,
+		Sector:               effectiveSector,
+		SectorPath:           sectorRel,
+		Intent:               req.Intent,
+		Insights:             req.Insights,
+		InlinePrompt:         req.InlinePrompt,
+		Workspace:            workspace,
+		AdapterExtra:         adapterExtra,
+		ModelAliases:         aliases,
+		IsLastWorkTask:       isLastWorkTask,
+		Profile:              execColony.Profile,
+		Raw:                  req.Raw,
+		ProfileApply:         profileApply,
+		Registry:             registry,
 	})
 	if err != nil {
 		return nil, err
@@ -167,6 +191,22 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		RunDir:    runDir.Root(),
 		Result:    result,
 	}, nil
+}
+
+func ensureCLIAttempt(ctxColony, execColony colony.Context, req ColonyDispatchRequest, agentID string) (trailconfig.Attempt, error) {
+	if req.TaskID == "" {
+		attempt, _, err := trailconfig.AdmitChainAttempt(execColony, req.TraceID, "cli:"+req.TraceID+":"+agentID, "", "")
+		return attempt, err
+	}
+	input := trailconfig.NewTaskInputEvidence(req.TaskID, "", req.Task, req.Bee, req.Sector, req.Intent, "")
+	attempt, err := trailconfig.EnsureTaskAttempt(execColony, req.TraceID, req.TaskID, "cli:"+agentID, input)
+	if err != nil {
+		return trailconfig.Attempt{}, err
+	}
+	if _, _, err := trailconfig.MarkAttemptDispatched(ctxColony.ColonyRoot, req.TraceID, attempt.AttemptID, "cli:"+agentID); err != nil {
+		return trailconfig.Attempt{}, err
+	}
+	return attempt, nil
 }
 
 func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string) (workspace string, sectorRel string, err error) {

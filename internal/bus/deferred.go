@@ -147,6 +147,7 @@ func FlushPending(ctx context.Context, pub Publisher, colonyRoot, traceID, agent
 			}
 		}
 		ev := pending[0]
+		stampRunProvenance(colonyRoot, &ev)
 		if err := validateEventFileRefs(colonyRoot, traceID, ev); err != nil {
 			return FlushResult{
 				OK:        false,

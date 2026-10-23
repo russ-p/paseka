@@ -91,10 +91,11 @@ type activeSession struct {
 
 // sessionProposal is the proposal-finalization context captured at launch.
 type sessionProposal struct {
-	bee      colony.Bee
-	baseline adapters.WorkspaceBaseline
-	taskID   string
-	task     string
+	bee        colony.Bee
+	baseline   adapters.WorkspaceBaseline
+	taskID     string
+	task       string
+	provenance protocol.Provenance
 }
 
 // NewManager creates a session manager with default adapters.
@@ -198,6 +199,22 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, fmt.Errorf("sessions: trail config: %w", err)
 	}
+
+	var attempt trailconfig.Attempt
+	if req.TaskID != "" {
+		input := trailconfig.NewTaskInputEvidence(req.TaskID, "", req.Task, req.Bee, "", req.Intent, "")
+		attempt, err = trailconfig.EnsureTaskAttempt(execColony, traceID, req.TaskID, "", input)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: task attempt: %w", err)
+		}
+		if attempt.ConfigRef != "" && attempt.ConfigRef != execColony.ConfigRef {
+			execColony, err = trailconfig.BindRef(execColony, traceID, attempt.ConfigRef, attempt.ConfigRevision)
+			if err != nil {
+				return nil, fmt.Errorf("sessions: bind attempt config: %w", err)
+			}
+		}
+	}
+
 	manifest, err := colony.LoadColony(execColony.ConfigRootPath())
 	if err != nil {
 		return nil, err
@@ -231,6 +248,13 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 	sessionID := agentID
+	if attempt.AttemptID == "" {
+		attempt, _, err = trailconfig.AdmitChainAttempt(execColony, traceID, "session:"+traceID+":"+agentID, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("sessions: session attempt: %w", err)
+		}
+	}
+	provenance := attemptProvenanceForSession(attempt)
 
 	runDir := runs.Dir{
 		ColonyRoot: ctxColony.ColonyRoot,
@@ -361,30 +385,34 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ResumedFrom:       req.resumeFrom,
 		Profile:           execColony.Profile,
 		StartedAt:         startedAt,
+		Provenance:        provenance,
 	}); err != nil {
 		return nil, err
 	}
 	if err := runDir.WriteRequest(protocol.Request{
-		ProtocolVersion: protocol.Version,
-		TraceID:         traceID,
-		AgentID:         agentID,
-		Bee:             bee.Role,
-		Adapter:         adapterName,
-		Workspace:       workspace,
-		ColonyRoot:      ctxColony.ColonyRoot,
-		TaskID:          req.TaskID,
-		Task:            req.Task,
-		Intent:          req.Intent,
-		Insights:        req.Insights,
-		Model:           plan.ModelID,
-		ModelAlias:      plan.ModelAlias,
-		Profile:         execColony.Profile,
-		ConfigRef:       execColony.ConfigRef,
-		ConfigRevision:  execColony.ConfigRevision,
-		LaunchForm:      string(plan.Form),
-		ResultPath:      resultFile,
-		EventLogPath:    runDir.EventsPath(),
-		CreatedAt:       startedAt,
+		ProtocolVersion:      protocol.Version,
+		TraceID:              traceID,
+		AgentID:              agentID,
+		Bee:                  bee.Role,
+		Adapter:              adapterName,
+		Workspace:            workspace,
+		ColonyRoot:           ctxColony.ColonyRoot,
+		TaskID:               req.TaskID,
+		Task:                 req.Task,
+		Intent:               req.Intent,
+		Insights:             req.Insights,
+		Model:                plan.ModelID,
+		ModelAlias:           plan.ModelAlias,
+		Profile:              execColony.Profile,
+		AttemptID:            provenance.AttemptID,
+		ConfigRef:            execColony.ConfigRef,
+		ConfigRevision:       execColony.ConfigRevision,
+		InitialCodeBaseSHA:   provenance.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: provenance.InitialCodeBaseDirty,
+		LaunchForm:           string(plan.Form),
+		ResultPath:           resultFile,
+		EventLogPath:         runDir.EventsPath(),
+		CreatedAt:            startedAt,
 	}); err != nil {
 		return nil, err
 	}
@@ -392,6 +420,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ProtocolVersion: protocol.Version,
 		State:           protocol.StatusRunning,
 		StartedAt:       startedAt,
+		Provenance:      provenance,
 	}); err != nil {
 		return nil, err
 	}
@@ -435,6 +464,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Intent:          req.Intent,
 		Insights:        req.Insights,
 		ResumeSessionID: req.resumeProviderID,
+		Provenance:      provenance,
 	}
 
 	cmd, err := sessAdapter.SessionCommand(sessReq)
@@ -457,6 +487,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			ResumedFrom:       req.resumeFrom,
 			Profile:           execColony.Profile,
 			StartedAt:         startedAt,
+			Provenance:        provenance,
 		}); err != nil {
 			return nil, fmt.Errorf("sessions: write meta: %w", err)
 		}
@@ -464,7 +495,17 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 
 	proc, err := startPTY(cmd)
 	if err != nil {
+		if attempt.Kind == trailconfig.AttemptKindDirect {
+			_ = trailconfig.CloseAttempt(ctxColony.ColonyRoot, traceID, attempt.AttemptID, "session start failed")
+		}
 		return nil, err
+	}
+	if _, _, err := trailconfig.MarkAttemptDispatched(ctxColony.ColonyRoot, traceID, attempt.AttemptID, "session:"+agentID); err != nil {
+		_ = proc.Kill()
+		return nil, fmt.Errorf("sessions: mark attempt dispatch: %w", err)
+	}
+	if err := trailconfig.RecordAttemptAgent(ctxColony.ColonyRoot, traceID, attempt.AttemptID, agentID); err != nil {
+		logging.Component("sessions").Warn("attempt agent record failed", logging.F("error", err.Error()))
 	}
 
 	handle := adapters.SessionHandle{
@@ -502,6 +543,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ResumedFrom:       req.resumeFrom,
 		Profile:           execColony.Profile,
 		StartedAt:         startedAt,
+		Provenance:        provenance,
 	}); err != nil {
 		_ = proc.Kill()
 		return nil, err
@@ -532,10 +574,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		cancel:  cancel,
 		done:    make(chan struct{}),
 		proposal: sessionProposal{
-			bee:      bee,
-			baseline: baseline,
-			taskID:   req.TaskID,
-			task:     req.Task,
+			bee:        bee,
+			baseline:   baseline,
+			taskID:     req.TaskID,
+			task:       req.Task,
+			provenance: provenance,
 		},
 	}
 
@@ -637,6 +680,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		Profile:           entry.Handle.Profile,
 		StartedAt:         entry.Handle.StartedAt,
 		FinishedAt:        finishedAt,
+		Provenance:        entry.handleProvenance(),
 	}
 	_ = entry.RunDir.WriteSession(sessionMeta)
 
@@ -701,7 +745,15 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		statusErr = joinStatusNotes(statusErr, warn)
 	}
 
-	_ = entry.RunDir.WriteStatus(protoState, "", exitCode, entry.Handle.StartedAt, finishedAt, statusErr)
+	_ = entry.RunDir.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protoState,
+		ExitCode:        exitCode,
+		StartedAt:       entry.Handle.StartedAt,
+		FinishedAt:      finishedAt,
+		Error:           statusErr,
+		Provenance:      entry.handleProvenance(),
+	})
 	_ = entry.RunDir.AppendTranscript(runs.TranscriptEntry{
 		At:      finishedAt,
 		Role:    "system",
@@ -744,6 +796,32 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	m.mu.Unlock()
 
 	close(active.done)
+}
+
+func attemptProvenanceForSession(attempt trailconfig.Attempt) protocol.Provenance {
+	return protocol.Provenance{
+		AttemptID:            attempt.AttemptID,
+		ConfigRef:            attempt.ConfigRef,
+		ConfigRevision:       attempt.ConfigRevision,
+		InitialCodeBaseSHA:   attempt.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: attempt.InitialCodeBaseDirty,
+	}
+}
+
+// handleProvenance rereads the run request so a resumed or remote handle still
+// carries the attempt recorded at launch.
+func (e Entry) handleProvenance() protocol.Provenance {
+	req, err := e.RunDir.ReadRequest()
+	if err != nil {
+		return protocol.Provenance{}
+	}
+	return protocol.Provenance{
+		AttemptID:            req.AttemptID,
+		ConfigRef:            req.ConfigRef,
+		ConfigRevision:       req.ConfigRevision,
+		InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+	}
 }
 
 func joinStatusNotes(existing, note string) string {

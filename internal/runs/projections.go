@@ -31,6 +31,7 @@ type RunMeta struct {
 	FinishedAt        time.Time       `json:"finishedAt,omitempty"`
 	HasEvents         bool            `json:"hasEvents"`
 	HasSession        bool            `json:"hasSession"`
+	protocol.Provenance
 }
 
 // LoadRunMeta reads a run projection from an existing run directory.
@@ -54,6 +55,13 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		Profile:    req.Profile,
 		RunDir:     d.Root(),
 		StartedAt:  req.CreatedAt,
+		Provenance: protocol.Provenance{
+			AttemptID:            req.AttemptID,
+			ConfigRef:            req.ConfigRef,
+			ConfigRevision:       req.ConfigRevision,
+			InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
+			InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+		},
 	}
 
 	if snap, err := d.ReadStatus(); err == nil {

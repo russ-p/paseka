@@ -45,6 +45,17 @@ const (
 	ReasonTimeout = "timeout"
 )
 
+// Provenance identifies the durable execution ownership and configuration a
+// record belongs to. It is flattened into envelopes and sidecars so consumers do
+// not need a second lookup to know which attempt produced the record.
+type Provenance struct {
+	AttemptID            string `json:"attemptId,omitempty"`
+	ConfigRef            string `json:"configRef,omitempty"`
+	ConfigRevision       int    `json:"configRevision,omitempty"`
+	InitialCodeBaseSHA   string `json:"initialCodeBaseSha,omitempty"`
+	InitialCodeBaseDirty bool   `json:"initialCodeBaseDirty,omitempty"`
+}
+
 // Event is one NDJSON line in events.ndjson.
 type Event struct {
 	ProtocolVersion string `json:"protocolVersion"`
@@ -60,30 +71,34 @@ type Event struct {
 	Type      EventType       `json:"type"`
 	CreatedAt time.Time       `json:"createdAt"`
 	Payload   json.RawMessage `json:"payload,omitempty"`
+	Provenance
 }
 
 // Request is written to request.json before the agent starts.
 type Request struct {
-	ProtocolVersion string    `json:"protocolVersion"`
-	TraceID         string    `json:"traceId"`
-	AgentID         string    `json:"agentId"`
-	Bee             string    `json:"bee"`
-	Adapter         string    `json:"adapter"`
-	Workspace       string    `json:"workspace"`
-	ColonyRoot      string    `json:"colonyRoot"`
-	TaskID          string    `json:"taskId,omitempty"`
-	Task            string    `json:"task,omitempty"`
-	Intent          string    `json:"intent,omitempty"`
-	Insights        []string  `json:"insights,omitempty"`
-	Model           string    `json:"model,omitempty"`
-	ModelAlias      string    `json:"modelAlias,omitempty"`
-	Profile         string    `json:"profile,omitempty"`
-	ConfigRef       string    `json:"configRef,omitempty"`
-	ConfigRevision  int       `json:"configRevision,omitempty"`
-	LaunchForm      string    `json:"launchForm,omitempty"`
-	ResultPath      string    `json:"resultPath"`
-	EventLogPath    string    `json:"eventLogPath"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ProtocolVersion      string    `json:"protocolVersion"`
+	TraceID              string    `json:"traceId"`
+	AgentID              string    `json:"agentId"`
+	Bee                  string    `json:"bee"`
+	Adapter              string    `json:"adapter"`
+	Workspace            string    `json:"workspace"`
+	ColonyRoot           string    `json:"colonyRoot"`
+	TaskID               string    `json:"taskId,omitempty"`
+	Task                 string    `json:"task,omitempty"`
+	Intent               string    `json:"intent,omitempty"`
+	Insights             []string  `json:"insights,omitempty"`
+	Model                string    `json:"model,omitempty"`
+	ModelAlias           string    `json:"modelAlias,omitempty"`
+	Profile              string    `json:"profile,omitempty"`
+	AttemptID            string    `json:"attemptId,omitempty"`
+	ConfigRef            string    `json:"configRef,omitempty"`
+	ConfigRevision       int       `json:"configRevision,omitempty"`
+	InitialCodeBaseSHA   string    `json:"initialCodeBaseSha,omitempty"`
+	InitialCodeBaseDirty bool      `json:"initialCodeBaseDirty,omitempty"`
+	LaunchForm           string    `json:"launchForm,omitempty"`
+	ResultPath           string    `json:"resultPath"`
+	EventLogPath         string    `json:"eventLogPath"`
+	CreatedAt            time.Time `json:"createdAt"`
 }
 
 // ArtifactRef points to a normalized output artifact.
@@ -132,6 +147,7 @@ type Result struct {
 	Usage             *Usage        `json:"usage,omitempty"`
 	ProviderSessionID string        `json:"providerSessionId,omitempty"`
 	FinishedAt        time.Time     `json:"finishedAt"`
+	Provenance
 }
 
 // StatusSnapshot is written to status.json at lifecycle transitions.
@@ -146,6 +162,7 @@ type StatusSnapshot struct {
 	StartedAt  time.Time `json:"startedAt,omitempty"`
 	FinishedAt time.Time `json:"finishedAt,omitempty"`
 	Error      string    `json:"error,omitempty"`
+	Provenance
 }
 
 // BusEvent is the minimal JSON shape agents send to `paseka event emit --stdin`.

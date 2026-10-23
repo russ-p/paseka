@@ -11,6 +11,8 @@ var ReservedTraceSubdirs = map[string]struct{}{
 	"tasks":     {},
 	"artifacts": {},
 	"console":   {},
+	// Trail configuration snapshots and attempt ownership are runtime-owned.
+	"config": {},
 	// Proposal patches: captured code history the runtime owns, not a bee handoff.
 	proposalsDir: {},
 }
@@ -22,6 +24,7 @@ var ReservedTraceSubdirs = map[string]struct{}{
 var skipTraceEventSubdirs = map[string]struct{}{
 	"tasks":      {},
 	"artifacts":  {},
+	"config":     {},
 	proposalsDir: {},
 }
 

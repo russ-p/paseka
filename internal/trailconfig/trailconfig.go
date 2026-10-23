@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,26 +109,34 @@ type Revision struct {
 
 // Manifest is the trail-owned configuration binding.
 type Manifest struct {
-	Version          int        `json:"version"`
-	TraceID          string     `json:"traceId"`
-	InitialConfigRef string     `json:"initialConfigRef"`
-	ActiveConfigRef  string     `json:"activeConfigRef"`
-	ConfigRevision   int        `json:"configRevision"`
-	Policy           string     `json:"policy"`
-	CreatedAt        time.Time  `json:"createdAt,omitempty"`
-	UpdatedAt        time.Time  `json:"updatedAt,omitempty"`
-	Snapshots        []Snapshot `json:"snapshots"`
-	History          []Revision `json:"history"`
-}
-
-// Binding is the minimal read surface for a trail's configuration.
-type Binding struct {
+	Version          int    `json:"version"`
 	TraceID          string `json:"traceId"`
 	InitialConfigRef string `json:"initialConfigRef"`
 	ActiveConfigRef  string `json:"activeConfigRef"`
 	ConfigRevision   int    `json:"configRevision"`
 	Policy           string `json:"policy"`
-	ConfigDir        string `json:"configDir,omitempty"`
+	// InitialCodeBase records the repository state the trail started from. It is
+	// captured once, beside the initial configuration, and never follows later
+	// commits or worktree edits.
+	InitialCodeBaseSHA        string     `json:"initialCodeBaseSha,omitempty"`
+	InitialCodeBaseDirty      bool       `json:"initialCodeBaseDirty,omitempty"`
+	InitialCodeBaseCapturedAt time.Time  `json:"initialCodeBaseCapturedAt,omitempty"`
+	CreatedAt                 time.Time  `json:"createdAt,omitempty"`
+	UpdatedAt                 time.Time  `json:"updatedAt,omitempty"`
+	Snapshots                 []Snapshot `json:"snapshots"`
+	History                   []Revision `json:"history"`
+}
+
+// Binding is the minimal read surface for a trail's configuration.
+type Binding struct {
+	TraceID              string `json:"traceId"`
+	InitialConfigRef     string `json:"initialConfigRef"`
+	ActiveConfigRef      string `json:"activeConfigRef"`
+	ConfigRevision       int    `json:"configRevision"`
+	Policy               string `json:"policy"`
+	ConfigDir            string `json:"configDir,omitempty"`
+	InitialCodeBaseSHA   string `json:"initialCodeBaseSha,omitempty"`
+	InitialCodeBaseDirty bool   `json:"initialCodeBaseDirty,omitempty"`
 }
 
 // ConfigDir returns .paseka/runs/<traceId>/config under colonyRoot.
@@ -225,15 +234,19 @@ func Ensure(ctx colony.Context, traceID string) (Manifest, error) {
 	}
 
 	now := time.Now().UTC()
+	codeBaseSHA, codeBaseDirty := captureCodeBase(ctx.ColonyRoot)
 	manifest := Manifest{
-		Version:          manifestVersion,
-		TraceID:          traceID,
-		InitialConfigRef: ref,
-		ActiveConfigRef:  ref,
-		ConfigRevision:   1,
-		Policy:           PolicyEditable,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Version:                   manifestVersion,
+		TraceID:                   traceID,
+		InitialConfigRef:          ref,
+		ActiveConfigRef:           ref,
+		ConfigRevision:            1,
+		Policy:                    PolicyEditable,
+		InitialCodeBaseSHA:        codeBaseSHA,
+		InitialCodeBaseDirty:      codeBaseDirty,
+		InitialCodeBaseCapturedAt: now,
+		CreatedAt:                 now,
+		UpdatedAt:                 now,
 		Snapshots: []Snapshot{{
 			ConfigRef: ref,
 			Path:      filepath.ToSlash(filepath.Join(SnapshotsDirName, ref)),
@@ -290,12 +303,14 @@ func Read(colonyRoot, traceID string) (Binding, error) {
 		return Binding{}, err
 	}
 	return Binding{
-		TraceID:          manifest.TraceID,
-		InitialConfigRef: manifest.InitialConfigRef,
-		ActiveConfigRef:  manifest.ActiveConfigRef,
-		ConfigRevision:   manifest.ConfigRevision,
-		Policy:           manifest.Policy,
-		ConfigDir:        ConfigDir(colonyRoot, traceID),
+		TraceID:              manifest.TraceID,
+		InitialConfigRef:     manifest.InitialConfigRef,
+		ActiveConfigRef:      manifest.ActiveConfigRef,
+		ConfigRevision:       manifest.ConfigRevision,
+		Policy:               manifest.Policy,
+		ConfigDir:            ConfigDir(colonyRoot, traceID),
+		InitialCodeBaseSHA:   manifest.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: manifest.InitialCodeBaseDirty,
 	}, nil
 }
 
@@ -343,6 +358,24 @@ func BindRef(ctx colony.Context, traceID, ref string, revision int) (colony.Cont
 	}
 	bound.ModelAliases = cloneAliases(inventory.Resolved.ModelAliases)
 	return bound, nil
+}
+
+// captureCodeBase is best-effort: a colony fixture without git still gets a
+// configuration binding, but cannot claim an initial commit.
+func captureCodeBase(colonyRoot string) (string, bool) {
+	sha, err := gitroot.Run(gitroot.RunOpts{
+		Dir:     colonyRoot,
+		Timeout: gitroot.StatusTimeout,
+		Args:    []string{"rev-parse", "HEAD"},
+	})
+	if err != nil {
+		return "", false
+	}
+	dirty, err := gitroot.Dirty(colonyRoot)
+	if err != nil {
+		dirty = false
+	}
+	return strings.TrimSpace(sha), dirty
 }
 
 func validateConfigRef(ref string) error {

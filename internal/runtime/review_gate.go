@@ -9,9 +9,11 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
@@ -54,7 +56,7 @@ func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event, ex
 		}
 		execCtx = resolved
 	}
-	return r.dispatchReady(ctx, ev.TraceID, task, execCtx)
+	return r.dispatchReady(ctx, ev.TraceID, task, execCtx, eventIdentity(ev))
 }
 
 func (r *Reactor) handleReviewSideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
@@ -138,7 +140,24 @@ func (r *Reactor) setTaskStatus(ctx context.Context, traceID, taskID string, sta
 	if err != nil {
 		return err
 	}
-	return r.applyAndSync(ctx, ev)
+	if err := r.applyAndSync(ctx, ev); err != nil {
+		return err
+	}
+	if terminalTaskStatus(status) {
+		if err := r.closeLatestTaskAttempt(traceID, taskID, string(status)); err != nil {
+			runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+		}
+	}
+	return nil
+}
+
+func terminalTaskStatus(status protocol.TaskStatus) bool {
+	switch status {
+	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, commit string) error {
@@ -157,12 +176,25 @@ func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, co
 }
 
 func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, completed protocol.Event) error {
+	r.stampRuntimeProvenance(&completed)
+	stale, err := r.staleTaskCompletion(completed)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	res, err := r.ledger.Apply(completed)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	if taskID := protocol.PayloadTaskID(completed.Payload); taskID != "" {
+		if err := r.closeCompletedTaskAttempt(traceID, taskID, completed.AttemptID); err != nil {
+			runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+		}
 	}
 	// Remember before publish so the JetStream echo cannot re-apply.
 	r.rememberLocalEvent(completed)
@@ -172,7 +204,7 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 		}
 	}
 	for _, t := range res.Ready {
-		if err := r.dispatchReady(ctx, traceID, t, nil); err != nil {
+		if err := r.dispatchReady(ctx, traceID, t, nil, eventIdentity(completed)); err != nil {
 			return err
 		}
 	}
@@ -199,13 +231,68 @@ func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string) 
 // applyAndSync applies locally first, then publishes. Publish-before-apply would
 // leave a bad stream event when CAS/apply fails, and the reactor's own
 // subscription would double-apply non-idempotent events (e.g. energy.consume).
+// staleTaskCompletion drops a terminal task event owned by an older attempt once
+// a newer attempt is open. A replay must not overwrite the work in progress.
+func (r *Reactor) staleTaskCompletion(ev protocol.Event) (bool, error) {
+	if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.TaskEventCompleted) {
+		return false, nil
+	}
+	taskID := protocol.PayloadTaskID(ev.Payload)
+	if ev.AttemptID == "" || taskID == "" {
+		return false, nil
+	}
+	latest, ok, err := trailconfig.LatestTaskAttempt(r.colony.ColonyRoot, ev.TraceID, taskID)
+	if err != nil {
+		return false, err
+	}
+	if ok && latest.Open() && latest.AttemptID != ev.AttemptID {
+		logDispatchSkip("stale attempt completion", ev.TraceID, taskID, "")
+		return true, nil
+	}
+	return false, nil
+}
+
+func (r *Reactor) closeLatestTaskAttempt(traceID, taskID, reason string) error {
+	latest, ok, err := trailconfig.LatestTaskAttempt(r.colony.ColonyRoot, traceID, taskID)
+	if err != nil || !ok || !latest.Open() {
+		return err
+	}
+	return trailconfig.CloseAttempt(r.colony.ColonyRoot, traceID, latest.AttemptID, reason)
+}
+
+func (r *Reactor) closeCompletedTaskAttempt(traceID, taskID, attemptID string) error {
+	if attemptID == "" {
+		return r.closeLatestTaskAttempt(traceID, taskID, "completed")
+	}
+	attempt, ok, err := trailconfig.FindAttempt(r.colony.ColonyRoot, traceID, attemptID)
+	if err != nil || !ok || !attempt.Open() {
+		return err
+	}
+	return trailconfig.CloseAttempt(r.colony.ColonyRoot, traceID, attemptID, "completed")
+}
+
 func (r *Reactor) applyAndSync(ctx context.Context, ev protocol.Event) error {
+	r.stampRuntimeProvenance(&ev)
+	stale, err := r.staleTaskCompletion(ev)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	res, err := r.ledger.Apply(ev)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
+		if task, ok := res.Trace.Tasks[taskID]; ok && terminalTaskStatus(task.Status) {
+			if err := r.closeCompletedTaskAttempt(ev.TraceID, taskID, ev.AttemptID); err != nil {
+				runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+			}
+		}
 	}
 	r.rememberLocalEvent(ev)
 	if bus.PublisherAvailable(r.publisher) {
