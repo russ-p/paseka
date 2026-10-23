@@ -142,12 +142,17 @@ type Manifest struct {
 	// InitialCodeBase records the repository state the trail started from. It is
 	// captured once, beside the initial configuration, and never follows later
 	// commits or worktree edits.
-	InitialCodeBaseSHA        string     `json:"initialCodeBaseSha,omitempty"`
-	InitialCodeBaseDirty      bool       `json:"initialCodeBaseDirty,omitempty"`
-	InitialCodeBaseCapturedAt time.Time  `json:"initialCodeBaseCapturedAt,omitempty"`
-	CreatedAt                 time.Time  `json:"createdAt,omitempty"`
-	UpdatedAt                 time.Time  `json:"updatedAt,omitempty"`
-	Snapshots                 []Snapshot `json:"snapshots"`
+	InitialCodeBaseSHA        string    `json:"initialCodeBaseSha,omitempty"`
+	InitialCodeBaseDirty      bool      `json:"initialCodeBaseDirty,omitempty"`
+	InitialCodeBaseCapturedAt time.Time `json:"initialCodeBaseCapturedAt,omitempty"`
+	// WorkspaceRoot is the immutable execution root for this trail. An
+	// experimental fork records its own checkout so every later dispatch runs
+	// there instead of the primary colony; ordinary trails leave it empty and
+	// resolve to the colony root.
+	WorkspaceRoot string     `json:"workspaceRoot,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt,omitempty"`
+	UpdatedAt     time.Time  `json:"updatedAt,omitempty"`
+	Snapshots     []Snapshot `json:"snapshots"`
 	// Pending holds the only in-flight configuration action, when a caller
 	// prepared a candidate that cannot activate at the current safe boundary.
 	Pending *Change    `json:"pending,omitempty"`
@@ -164,6 +169,7 @@ type Binding struct {
 	ConfigDir            string `json:"configDir,omitempty"`
 	InitialCodeBaseSHA   string `json:"initialCodeBaseSha,omitempty"`
 	InitialCodeBaseDirty bool   `json:"initialCodeBaseDirty,omitempty"`
+	WorkspaceRoot        string `json:"workspaceRoot,omitempty"`
 }
 
 // ConfigDir returns .paseka/runs/<traceId>/config under colonyRoot.
@@ -343,6 +349,7 @@ func Read(colonyRoot, traceID string) (Binding, error) {
 		ConfigDir:            ConfigDir(colonyRoot, traceID),
 		InitialCodeBaseSHA:   manifest.InitialCodeBaseSHA,
 		InitialCodeBaseDirty: manifest.InitialCodeBaseDirty,
+		WorkspaceRoot:        manifest.WorkspaceRoot,
 	}, nil
 }
 
@@ -375,14 +382,23 @@ func BindRef(ctx colony.Context, traceID, ref string, revision int) (colony.Cont
 	if err != nil {
 		return ctx, err
 	}
+	workspaceRoot := strings.TrimSpace(ctx.WorkspaceRoot)
+	if manifest, loadErr := Load(ctx.ColonyRoot, traceID); loadErr == nil {
+		if trailRoot := strings.TrimSpace(manifest.WorkspaceRoot); trailRoot != "" {
+			workspaceRoot = trailRoot
+		}
+	} else if !errors.Is(loadErr, ErrNoBinding) {
+		return ctx, loadErr
+	}
+	if workspaceRoot == "" {
+		workspaceRoot = ctx.ColonyRoot
+	}
+
 	bound := ctx
 	bound.ConfigRoot = filepath.Join(snapshotDir, SnapshotTreeDirName)
 	bound.ConfigRef = ref
 	bound.ConfigRevision = revision
-	bound.WorkspaceRoot = ctx.WorkspaceRoot
-	if bound.WorkspaceRoot == "" {
-		bound.WorkspaceRoot = ctx.ColonyRoot
-	}
+	bound.WorkspaceRoot = workspaceRoot
 	bound.Profile = inventory.Resolved.Profile
 	bound.ProfileLayers = colony.ProfileLayers{
 		Colony: inventory.Resolved.ProfileLayers.Colony,

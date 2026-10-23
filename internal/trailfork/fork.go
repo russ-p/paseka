@@ -154,6 +154,7 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 		ConfigRef:            plan.ConfigRef,
 		InitialCodeBaseSHA:   plan.BaseSHA,
 		InitialCodeBaseDirty: false,
+		WorkspaceRoot:        plan.Workspace,
 		Actor:                actor(opts),
 		RequestID:            plan.RequestID,
 	})

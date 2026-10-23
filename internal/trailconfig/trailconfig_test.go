@@ -387,3 +387,73 @@ func TestBindBlocksMissingSnapshotContent(t *testing.T) {
 		t.Fatal("expected binding to fail when snapshot content is missing")
 	}
 }
+
+func TestForkBindingPinsExecutionRoot(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+
+	source, err := trailconfig.Ensure(ctx, "trace-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := filepath.Join(root, ".paseka", "worktrees", "trace-fork")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fork, err := trailconfig.CreateForkBinding(trailconfig.ForkBindingOptions{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		TraceID:       "trace-fork",
+		ConfigRef:     source.ActiveConfigRef,
+		WorkspaceRoot: workspace,
+		RequestID:     "req-fork",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fork.WorkspaceRoot != workspace {
+		t.Fatalf("manifest workspace root = %q, want %q", fork.WorkspaceRoot, workspace)
+	}
+
+	binding, err := trailconfig.Read(root, "trace-fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.WorkspaceRoot != workspace {
+		t.Fatalf("binding workspace root = %q, want %q", binding.WorkspaceRoot, workspace)
+	}
+
+	bound, err := trailconfig.BindRef(ctx, "trace-fork", fork.ActiveConfigRef, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound.WorkspaceRoot != workspace {
+		t.Fatalf("bound workspace root = %q, want %q", bound.WorkspaceRoot, workspace)
+	}
+
+	// Editing the live colony and the fork checkout's configuration does not
+	// move the pinned execution root or its captured configuration.
+	if err := os.WriteFile(filepath.Join(workspace, "colony.yaml"), []byte("slug: other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka", "bees", "builder.yaml"), []byte("role: builder\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rebound, err := trailconfig.BindRef(ctx, "trace-fork", fork.ActiveConfigRef, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rebound.WorkspaceRoot != workspace || rebound.ConfigRoot != bound.ConfigRoot {
+		t.Fatalf("rebound = %#v, want root %q config %q", rebound, workspace, bound.ConfigRoot)
+	}
+
+	sourceBound, err := trailconfig.BindRef(ctx, "trace-source", source.ActiveConfigRef, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sourceBound.WorkspaceRoot != root {
+		t.Fatalf("ordinary source workspace root = %q, want %q", sourceBound.WorkspaceRoot, root)
+	}
+}

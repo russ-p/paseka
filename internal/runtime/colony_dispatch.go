@@ -211,8 +211,14 @@ func ensureCLIAttempt(ctxColony, execColony colony.Context, req ColonyDispatchRe
 
 func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string) (workspace string, sectorRel string, err error) {
 	base := ctxColony.ColonyRoot
+	fixedRoot := ""
 	if ctxColony.WorkspaceRoot != "" {
 		base = ctxColony.WorkspaceRoot
+		if samePath(ctxColony.WorkspaceRoot, ctxColony.ColonyRoot) {
+			base = ctxColony.ColonyRoot
+		} else {
+			fixedRoot = ctxColony.WorkspaceRoot
+		}
 	}
 	useWorktree := bee.Worktree
 	if proposalKind != "" {
@@ -222,15 +228,20 @@ func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee 
 		useWorktree = protocol.NormalizeCodeProposalKind(protocol.MutationKind(proposalKind)) == protocol.MutationCodeProposalIsolated
 	}
 	if useWorktree {
-		entry, err := worktree.Ensure(worktree.EnsureOptions{
-			ColonyRoot: ctxColony.ColonyRoot,
-			TraceID:    traceID,
-			Slug:       ctxColony.Slug,
-		})
-		if err != nil {
-			return "", "", fmt.Errorf("runtime: worktree: %w", err)
+		// A fork owns its checkout. Worktree-enabled roles and isolated
+		// proposals reuse that execution root instead of creating a per-role
+		// worktree or falling back to the primary colony checkout.
+		if fixedRoot == "" {
+			entry, err := worktree.Ensure(worktree.EnsureOptions{
+				ColonyRoot: ctxColony.ColonyRoot,
+				TraceID:    traceID,
+				Slug:       ctxColony.Slug,
+			})
+			if err != nil {
+				return "", "", fmt.Errorf("runtime: worktree: %w", err)
+			}
+			base = entry.Path
 		}
-		base = entry.Path
 	}
 
 	sectorRel, err = manifest.SectorRelPath(sectorName)
@@ -247,6 +258,18 @@ func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee 
 		}
 	}
 	return workspace, sectorRel, nil
+}
+
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	if errA == nil && errB == nil {
+		return absA == absB
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // RelRunDir returns a path relative to colony root when possible.

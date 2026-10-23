@@ -22,8 +22,11 @@ type ForkBindingOptions struct {
 	InitialCodeBaseSHA string
 	// InitialCodeBaseDirty records whether that base matched a clean checkout.
 	InitialCodeBaseDirty bool
-	Actor                string
-	RequestID            string
+	// WorkspaceRoot is the fork's own checkout. It becomes the immutable
+	// execution root for every run in the trail.
+	WorkspaceRoot string
+	Actor         string
+	RequestID     string
 }
 
 // CreateForkBinding copies a retained source snapshot into a new trail and
@@ -53,6 +56,10 @@ func CreateForkBinding(opts ForkBindingOptions) (Manifest, error) {
 	}
 	if strings.TrimSpace(opts.Actor) == "" {
 		opts.Actor = "cli"
+	}
+	workspaceRoot := strings.TrimSpace(opts.WorkspaceRoot)
+	if workspaceRoot == "" {
+		return Manifest{}, fmt.Errorf("trailconfig: fork workspace root is required")
 	}
 
 	sourceManifest, err := Load(opts.Context.ColonyRoot, opts.SourceTraceID)
@@ -115,6 +122,7 @@ func CreateForkBinding(opts ForkBindingOptions) (Manifest, error) {
 		InitialCodeBaseSHA:        strings.TrimSpace(opts.InitialCodeBaseSHA),
 		InitialCodeBaseDirty:      opts.InitialCodeBaseDirty,
 		InitialCodeBaseCapturedAt: now,
+		WorkspaceRoot:             workspaceRoot,
 		CreatedAt:                 now,
 		UpdatedAt:                 now,
 		Snapshots: []Snapshot{{

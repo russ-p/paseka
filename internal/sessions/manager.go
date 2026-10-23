@@ -228,10 +228,14 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	}
 
 	workspace := ctxColony.ColonyRoot
+	fixedRoot := ""
 	if execColony.WorkspaceRoot != "" {
 		workspace = execColony.WorkspaceRoot
+		if !sameSessionPath(execColony.WorkspaceRoot, ctxColony.ColonyRoot) {
+			fixedRoot = execColony.WorkspaceRoot
+		}
 	}
-	if bee.Worktree {
+	if bee.Worktree && fixedRoot == "" {
 		entry, err := worktree.Ensure(worktree.EnsureOptions{
 			ColonyRoot: ctxColony.ColonyRoot,
 			TraceID:    traceID,
@@ -1006,6 +1010,19 @@ func LaunchInGhostty(cfg colony.TerminalConfig, runArgs []string) error {
 		GhosttyBinary: cfg.GhosttyBinary,
 	}
 	return LaunchAttach(termCfg, attachCmd)
+}
+
+// sameSessionPath reports whether two execution roots identify the same directory.
+func sameSessionPath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	if errA == nil && errB == nil {
+		return absA == absB
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // DefaultManager is the process-wide session manager for CLI attach/stop.

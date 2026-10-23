@@ -117,6 +117,16 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 	if binding.InitialCodeBaseSHA != base {
 		t.Fatalf("binding base = %q, want %q", binding.InitialCodeBaseSHA, base)
 	}
+	if binding.WorkspaceRoot != result.Worktree.Path {
+		t.Fatalf("binding workspace root = %q, want %q", binding.WorkspaceRoot, result.Worktree.Path)
+	}
+	bound, err := trailconfig.BindRef(ctx, plan.TraceID, plan.ConfigRef, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound.WorkspaceRoot != result.Worktree.Path {
+		t.Fatalf("bound workspace root = %q, want %q", bound.WorkspaceRoot, result.Worktree.Path)
+	}
 	snapshot := filepath.Join(root, ".paseka", "runs", plan.TraceID, "config", "snapshots", plan.ConfigRef, "tree", ".paseka", "colony.yaml")
 	if _, err := os.Stat(snapshot); err != nil {
 		t.Fatalf("fork snapshot missing: %v", err)
