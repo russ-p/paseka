@@ -309,6 +309,18 @@ func TestApplySnapshotRollbackKeepsFutureOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	writeRemainingTask(t, root, "trace-rollback", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "finished", Bee: "builder", Status: protocol.TaskStatusCompleted,
+	})
+	taskPath := filepath.Join(root, ".paseka", "runs", "trace-rollback", "tasks", "task-1", runs.TaskFileName)
+	taskBefore, err := os.ReadFile(taskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codePath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(codePath, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, ".paseka", "prompts", "builder.md"), []byte("changed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -336,6 +348,22 @@ func TestApplySnapshotRollbackKeepsFutureOnly(t *testing.T) {
 	}
 	if rolled.Manifest.ActiveConfigRef != applied.Manifest.InitialConfigRef {
 		t.Fatalf("rollback active = %s, want %s", rolled.Manifest.ActiveConfigRef, applied.Manifest.InitialConfigRef)
+	}
+	if len(rolled.EffectiveDiff) == 0 {
+		t.Fatal("rollback preview did not report the effective change")
+	}
+	prompt, err := os.ReadFile(filepath.Join(root, ".paseka", "runs", "trace-rollback", "config", "snapshots", rolled.Manifest.ActiveConfigRef, "tree", ".paseka", "prompts", "builder.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(prompt) != "build the thing\n" {
+		t.Fatalf("rollback did not restore the complete selection: %q", prompt)
+	}
+	if data, err := os.ReadFile(codePath); err != nil || string(data) != "package main\n" {
+		t.Fatalf("rollback changed completed code: %q %v", data, err)
+	}
+	if data, err := os.ReadFile(taskPath); err != nil || string(data) != string(taskBefore) {
+		t.Fatalf("rollback changed completed task progress: %q %v", data, err)
 	}
 }
 
@@ -433,6 +461,97 @@ func TestApplyOverridesRefusesPolicyKey(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "cannot change colony policy") {
 		t.Fatalf("forbidden override err = %v", err)
+	}
+}
+
+func TestApplyOverridesPreviewReportsEffectiveShadowedAndRemainingWork(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	beePath := filepath.Join(root, ".paseka", "bees", "builder.yaml")
+	if err := os.WriteFile(beePath, []byte("role: builder\nadapter: cursor\nprompt_template: builder.md\nparams:\n  model: old\n  yolo: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := testContext(root)
+	manifest, err := trailconfig.Ensure(ctx, "trace-preview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRemainingTask(t, root, "trace-preview", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusReady,
+	})
+	expected := manifest.ConfigRevision
+	result, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-preview", Source: trailconfig.SourceOverrides,
+		Actor: "operator", ExpectedRevision: &expected,
+		Overrides: []trailconfig.Override{
+			{Role: "builder", Key: "model", Value: "first"},
+			{Role: "builder", Key: "model", Value: "second"},
+			{Role: "builder", Key: "yolo", Value: "true"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Change.Outcome != trailconfig.OutcomeApplied || result.NewRef == manifest.ActiveConfigRef {
+		t.Fatalf("override apply = %+v", result)
+	}
+	effective := strings.Join(result.EffectiveDiff, "\n")
+	if !strings.Contains(effective, "bee builder param model: old -> second") {
+		t.Fatalf("effective diff = %v", result.EffectiveDiff)
+	}
+	shadowed := strings.Join(result.ShadowedDiff, "\n")
+	if !strings.Contains(shadowed, "shadowed by a later override") {
+		t.Fatalf("superseded override not reported: %v", result.ShadowedDiff)
+	}
+	if !strings.Contains(shadowed, "already true") {
+		t.Fatalf("no-op override not reported: %v", result.ShadowedDiff)
+	}
+	if !result.RemainingWork.Evaluated || !result.RemainingWork.Compatible {
+		t.Fatalf("remaining work = %+v", result.RemainingWork)
+	}
+	if strings.Join(result.RemainingWork.Checked, ",") != "task-1" {
+		t.Fatalf("checked tasks = %v", result.RemainingWork.Checked)
+	}
+}
+
+func TestApplyOverridesRefuseProtectedCategories(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	if _, err := trailconfig.Ensure(ctx, "trace-protected"); err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{
+		"slug", "identity", "nats", "nats_url", "subject_prefix", "transport",
+		"binary", "env", "env_mode", "api_key_env", "credentials",
+		"energy", "energy_budget", "budget", "budget_ceiling",
+		"delivery", "delivery_policy", "policy", "config_policy",
+	}
+	for _, key := range keys {
+		_, err := trailconfig.Apply(trailconfig.ApplyOptions{
+			Context: ctx, TraceID: "trace-protected", Source: trailconfig.SourceOverrides,
+			Actor: "operator", Overrides: []trailconfig.Override{{Role: "builder", Key: key, Value: "x"}},
+		})
+		if err == nil || !strings.Contains(err.Error(), "cannot change") {
+			t.Fatalf("override %q err = %v, want policy refusal", key, err)
+		}
+	}
+}
+
+func TestApplyRefusesUnretainedSnapshot(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	if _, err := trailconfig.Ensure(ctx, "trace-unretained"); err != nil {
+		t.Fatal(err)
+	}
+	unknown := "sha256:" + strings.Repeat("0", 64)
+	_, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-unretained", Source: trailconfig.SourceSnapshot,
+		SnapshotRef: unknown, Actor: "operator",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not retained") {
+		t.Fatalf("unretained snapshot err = %v", err)
 	}
 }
 

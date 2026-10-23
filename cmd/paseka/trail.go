@@ -290,7 +290,19 @@ func printApplyResult(result trailconfig.ApplyResult) {
 	fmt.Printf("expected revision: %d\n", change.ExpectedRevision)
 	fmt.Printf("oldConfigRef: %s\n", change.OldConfigRef)
 	fmt.Printf("newConfigRef: %s\n", change.NewConfigRef)
-	fmt.Println("remaining work: compatible")
+	if result.RemainingWork.Evaluated {
+		if !result.RemainingWork.Compatible {
+			fmt.Println("remaining work: incompatible")
+			for _, problem := range result.RemainingWork.Problems {
+				fmt.Println("  - " + problem)
+			}
+		} else if len(result.RemainingWork.Checked) == 0 {
+			fmt.Println("remaining work: none")
+		} else {
+			fmt.Printf("remaining work: compatible (%d unstarted: %s)\n",
+				len(result.RemainingWork.Checked), strings.Join(result.RemainingWork.Checked, ", "))
+		}
+	}
 	if result.DryRun {
 		fmt.Printf("Dry run: %s -> %s\n", change.OldConfigRef, result.NewRef)
 	} else {
@@ -315,6 +327,18 @@ func printApplyResult(result trailconfig.ApplyResult) {
 	if len(result.Diff) > 0 {
 		fmt.Println("Diff:")
 		for _, line := range result.Diff {
+			fmt.Println("  " + line)
+		}
+	}
+	if len(result.EffectiveDiff) > 0 {
+		fmt.Println("Effective diff:")
+		for _, line := range result.EffectiveDiff {
+			fmt.Println("  " + line)
+		}
+	}
+	if len(result.ShadowedDiff) > 0 {
+		fmt.Println("Shadowed changes:")
+		for _, line := range result.ShadowedDiff {
 			fmt.Println("  " + line)
 		}
 	}

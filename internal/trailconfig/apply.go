@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,13 +65,32 @@ type ApplyOptions struct {
 	DryRun   bool
 }
 
+// RemainingWorkPreview reports how a candidate matches the unstarted accepted
+// work that must dispatch after activation.
+type RemainingWorkPreview struct {
+	Evaluated  bool     `json:"evaluated"`
+	Compatible bool     `json:"compatible"`
+	Checked    []string `json:"checked,omitempty"`
+	Problems   []string `json:"problems,omitempty"`
+}
+
 // ApplyResult is the preview and recorded outcome of one apply request.
 type ApplyResult struct {
 	Manifest Manifest
 	Change   Change
 	NewRef   string
-	Diff     []string
-	DryRun   bool
+	// Diff is the raw file-level inventory difference between the active and
+	// candidate snapshots.
+	Diff []string
+	// EffectiveDiff is the resolved behaviour that actually changes, including
+	// bee parameters and the frozen profile/model-alias view.
+	EffectiveDiff []string
+	// ShadowedDiff names requested overrides that do not change effective
+	// behaviour, for example a setting superseded by a later override.
+	ShadowedDiff []string
+	// RemainingWork reports candidate compatibility with unstarted tasks.
+	RemainingWork RemainingWorkPreview
+	DryRun        bool
 }
 
 type preparedCandidate struct {
@@ -136,6 +156,10 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 		}
 	}
 
+	if opts.Source == SourceSnapshot && !retainsSnapshot(manifest, opts.SnapshotRef) {
+		return ApplyResult{}, fmt.Errorf("trailconfig: snapshot %s is not retained by this trail", opts.SnapshotRef)
+	}
+
 	if opts.ExpectedRevision != nil && *opts.ExpectedRevision != manifest.ConfigRevision {
 		return recordRejection(opts, manifest, fmt.Sprintf("expected revision %d, trail is at %d", *opts.ExpectedRevision, manifest.ConfigRevision))
 	}
@@ -165,20 +189,26 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("trailconfig: load remaining tasks: %w", err)
 	}
-	if err := ValidateRemaining(candidate.tree, snapshot); err != nil {
-		return ApplyResult{}, err
+	remaining := EvaluateRemaining(candidate.tree, snapshot)
+	if !remaining.Compatible {
+		return ApplyResult{}, fmt.Errorf("%s", strings.Join(remaining.Problems, "; "))
 	}
 
-	baseInventory, err := loadVerifiedSnapshot(filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), manifest.ActiveConfigRef), manifest.ActiveConfigRef)
+	baseSnapshotDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), manifest.ActiveConfigRef)
+	baseInventory, err := loadVerifiedSnapshot(baseSnapshotDir, manifest.ActiveConfigRef)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	diff := diffInventories(baseInventory.Entries, candidate.inventory.Entries)
+	baseTree := filepath.Join(baseSnapshotDir, SnapshotTreeDirName)
+	effective, shadowed := previewDiffs(opts, baseInventory, candidate.inventory, baseTree, candidate.tree)
 	result := ApplyResult{
-		Manifest: manifest,
-		NewRef:   candidate.ref,
-		Diff:     diff,
-		DryRun:   opts.DryRun,
+		Manifest:      manifest,
+		NewRef:        candidate.ref,
+		Diff:          diffInventories(baseInventory.Entries, candidate.inventory.Entries),
+		EffectiveDiff: effective,
+		ShadowedDiff:  shadowed,
+		RemainingWork: remaining,
+		DryRun:        opts.DryRun,
 	}
 
 	if opts.DryRun {
@@ -252,6 +282,9 @@ func validateApplySource(opts ApplyOptions) error {
 	case SourceSnapshot:
 		if strings.TrimSpace(opts.SnapshotRef) == "" {
 			return fmt.Errorf("trailconfig: snapshot ref is required")
+		}
+		if err := validateConfigRef(opts.SnapshotRef); err != nil {
+			return err
 		}
 		if len(opts.Overrides) > 0 {
 			return fmt.Errorf("trailconfig: overrides cannot be combined with a retained snapshot")
@@ -354,13 +387,36 @@ func materializeCandidateTree(ref string, contents []capturedFile, inventory Inv
 // ValidateRemaining checks that a candidate still satisfies every unstarted
 // accepted task that must dispatch after activation.
 func ValidateRemaining(candidateRoot string, snapshot taskledger.TraceSnapshot) error {
+	preview := EvaluateRemaining(candidateRoot, snapshot)
+	if preview.Compatible {
+		return nil
+	}
+	return fmt.Errorf("%s", strings.Join(preview.Problems, "; "))
+}
+
+// EvaluateRemaining reports candidate compatibility with every unstarted
+// accepted task and names the tasks that were checked. Incompatibility is a
+// preview result rather than an early error so an operator can see the exact
+// remaining work that blocks the candidate.
+func EvaluateRemaining(candidateRoot string, snapshot taskledger.TraceSnapshot) RemainingWorkPreview {
+	preview := RemainingWorkPreview{Evaluated: true, Compatible: true}
+	problems := make([]string, 0)
+	fail := func(problem string) {
+		preview.Compatible = false
+		problems = append(problems, problem)
+	}
+
 	manifest, err := colony.LoadColony(candidateRoot)
 	if err != nil {
-		return fmt.Errorf("trailconfig: load candidate colony: %w", err)
+		fail(fmt.Sprintf("trailconfig: load candidate colony: %v", err))
+		preview.Problems = problems
+		return preview
 	}
 	bees, err := colony.LoadAllBees(candidateRoot)
 	if err != nil {
-		return fmt.Errorf("trailconfig: load candidate bees: %w", err)
+		fail(fmt.Sprintf("trailconfig: load candidate bees: %v", err))
+		preview.Problems = problems
+		return preview
 	}
 	for _, task := range snapshot.Tasks {
 		if taskledger.IsFinalReviewTask(task) {
@@ -371,21 +427,249 @@ func ValidateRemaining(candidateRoot string, snapshot taskledger.TraceSnapshot) 
 		default:
 			continue
 		}
+		preview.Checked = append(preview.Checked, task.TaskID)
 		beeRole := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
 		bee, ok := bees[beeRole]
 		if !ok {
-			return fmt.Errorf("trailconfig: candidate removes bee %q needed by remaining task %s", beeRole, task.TaskID)
+			fail(fmt.Sprintf("trailconfig: candidate removes bee %q needed by remaining task %s", beeRole, task.TaskID))
+			continue
 		}
 		if err := bee.ValidateAdapterRequirements(); err != nil {
-			return fmt.Errorf("trailconfig: candidate invalid for remaining task %s: %w", task.TaskID, err)
+			fail(fmt.Sprintf("trailconfig: candidate invalid for remaining task %s: %v", task.TaskID, err))
+			continue
 		}
 		if task.Sector != "" {
 			if _, err := manifest.ResolveSector(task.Sector); err != nil {
-				return fmt.Errorf("trailconfig: candidate invalid for remaining task %s: %w", task.TaskID, err)
+				fail(fmt.Sprintf("trailconfig: candidate invalid for remaining task %s: %v", task.TaskID, err))
 			}
 		}
 	}
-	return nil
+	preview.Problems = problems
+	return preview
+}
+
+// retainsSnapshot reports whether this trail still retains the named version.
+func retainsSnapshot(manifest Manifest, ref string) bool {
+	ref = strings.TrimSpace(ref)
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == ref {
+			return true
+		}
+	}
+	return false
+}
+
+// previewDiffs reports the resolved candidate changes and the requested
+// overrides that cannot affect them. Both are derived from the frozen trees,
+// never from live colony files.
+func previewDiffs(opts ApplyOptions, base, candidate Inventory, baseTree, candidateTree string) ([]string, []string) {
+	effective := append([]string(nil), diffInventories(base.Entries, candidate.Entries)...)
+	effective = append(effective, resolvedDiffs(base.Resolved, candidate.Resolved)...)
+
+	baseBees, baseErr := colony.LoadAllBees(baseTree)
+	candidateBees, candidateErr := colony.LoadAllBees(candidateTree)
+	switch {
+	case baseErr != nil:
+		effective = append(effective, "bees: active configuration is unreadable: "+baseErr.Error())
+	case candidateErr != nil:
+		effective = append(effective, "bees: candidate is unreadable: "+candidateErr.Error())
+	default:
+		effective = append(effective, beeDiffs(baseBees, candidateBees)...)
+	}
+
+	return normalizePreviewLines(effective), shadowedOverrides(opts, baseBees, candidateBees)
+}
+
+func resolvedDiffs(base, candidate Resolved) []string {
+	var out []string
+	if base.Profile != candidate.Profile {
+		out = append(out, fmt.Sprintf("profile: %s -> %s", previewValue(base.Profile), previewValue(candidate.Profile)))
+	}
+	seen := make(map[string]struct{}, len(base.ModelAliases)+len(candidate.ModelAliases))
+	keys := make([]string, 0, len(base.ModelAliases)+len(candidate.ModelAliases))
+	for key := range base.ModelAliases {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	for key := range candidate.ModelAliases {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		before := previewValue(base.ModelAliases[key])
+		after := previewValue(candidate.ModelAliases[key])
+		if before != after {
+			out = append(out, fmt.Sprintf("model alias %s: %s -> %s", key, before, after))
+		}
+	}
+	return out
+}
+
+func beeDiffs(base, candidate map[string]colony.Bee) []string {
+	seen := make(map[string]struct{}, len(base)+len(candidate))
+	roles := make([]string, 0, len(base)+len(candidate))
+	for role := range base {
+		seen[role] = struct{}{}
+		roles = append(roles, role)
+	}
+	for role := range candidate {
+		if _, ok := seen[role]; ok {
+			continue
+		}
+		seen[role] = struct{}{}
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+
+	var out []string
+	for _, role := range roles {
+		before, hasBefore := base[role]
+		after, hasAfter := candidate[role]
+		switch {
+		case !hasAfter:
+			out = append(out, "bee "+role+": removed")
+		case !hasBefore:
+			out = append(out, "bee "+role+": added")
+		default:
+			out = append(out, beeSettingDiffs(role, before, after)...)
+		}
+	}
+	return out
+}
+
+func beeSettingDiffs(role string, before, after colony.Bee) []string {
+	var out []string
+	add := func(name, oldValue, newValue string) {
+		if oldValue == newValue {
+			return
+		}
+		out = append(out, fmt.Sprintf("bee %s %s: %s -> %s", role, name, oldValue, newValue))
+	}
+
+	add("adapter", before.Adapter, after.Adapter)
+	add("prompt_template", before.PromptTemplate, after.PromptTemplate)
+	add("system_template", before.SystemTemplate, after.SystemTemplate)
+	add("sector", before.Sector, after.Sector)
+	add("worktree", strconv.FormatBool(before.Worktree), strconv.FormatBool(after.Worktree))
+	add("default_intent", before.DefaultIntent, after.DefaultIntent)
+	add("intents", strings.Join(before.Intents, ","), strings.Join(after.Intents, ","))
+	add("command", strings.Join(before.Command.Argv(), " "), strings.Join(after.Command.Argv(), " "))
+	add("post_exec", strings.Join(before.PostExec.Argv(), " "), strings.Join(after.PostExec.Argv(), " "))
+	add("subscribes", settingJSON(before.Subscribes), settingJSON(after.Subscribes))
+	add("publishes", settingJSON(before.Publishes), settingJSON(after.Publishes))
+	add("completion_contract", settingJSON(before.CompletionContract), settingJSON(after.CompletionContract))
+	add("run_summary", string(before.RunSummary), string(after.RunSummary))
+
+	seen := make(map[string]struct{}, len(before.Params)+len(after.Params))
+	keys := make([]string, 0, len(before.Params)+len(after.Params))
+	for key := range before.Params {
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	for key := range after.Params {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		oldValue := previewValue(before.Params[key])
+		newValue := previewValue(after.Params[key])
+		if oldValue != newValue {
+			out = append(out, fmt.Sprintf("bee %s param %s: %s -> %s", role, key, oldValue, newValue))
+		}
+	}
+	return out
+}
+
+func shadowedOverrides(opts ApplyOptions, baseBees, candidateBees map[string]colony.Bee) []string {
+	if opts.Source != SourceOverrides || len(opts.Overrides) == 0 {
+		return nil
+	}
+	last := make(map[string]int, len(opts.Overrides))
+	for i, override := range opts.Overrides {
+		last[overrideIdentity(override)] = i
+	}
+	var out []string
+	for i, override := range opts.Overrides {
+		role := strings.TrimSpace(override.Role)
+		key := strings.TrimSpace(override.Key)
+		label := fmt.Sprintf("bee %s param %s", role, key)
+		if last[overrideIdentity(override)] != i {
+			out = append(out, label+": shadowed by a later override for the same setting")
+			continue
+		}
+		before := previewValue(baseBees[role].Params[key])
+		after := previewValue(candidateBees[role].Params[key])
+		value := strings.TrimSpace(override.Value)
+		switch {
+		case before == after && after == value:
+			out = append(out, label+": already "+value+" (no effective change)")
+		case after != value:
+			out = append(out, fmt.Sprintf("%s: requested %q but the effective value is %q", label, value, after))
+		}
+	}
+	return out
+}
+
+func overrideIdentity(override Override) string {
+	return strings.TrimSpace(override.Role) + "\x00" + strings.TrimSpace(override.Key)
+}
+
+func previewValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case bool:
+		return strconv.FormatBool(typed)
+	case int:
+		return strconv.Itoa(typed)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case float64:
+		return strconv.FormatFloat(typed, 'g', -1, 64)
+	default:
+		return settingJSON(value)
+	}
+}
+
+func settingJSON(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprint(value)
+	}
+	if string(data) == "null" {
+		return ""
+	}
+	return string(data)
+}
+
+func normalizePreviewLines(lines []string) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	sort.Strings(lines)
+	out := lines[:0]
+	var previous string
+	for i, line := range lines {
+		if i > 0 && line == previous {
+			continue
+		}
+		out = append(out, line)
+		previous = line
+	}
+	return out
 }
 
 // TryActivate advances a pending change when its blockers have cleared.
@@ -833,9 +1117,20 @@ func applyOverrides(treeRoot string, overrides []Override) error {
 	return nil
 }
 
+// forbiddenOverrideKey blocks keys that would change colony identity,
+// transport, credential sources, budget ceilings, delivery permissions, or
+// configuration policy. These belong to canonical colony policy and cannot be
+// redirected by a trail-local behavioural override.
 func forbiddenOverrideKey(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "adapter", "slug", "nats", "energy", "energy_budget", "energy_default", "delivery", "credentials", "credential":
+	case "adapter", "binary",
+		"slug", "identity", "trace", "trace_id",
+		"nats", "nats_url", "subject_prefix", "transport",
+		"home", "home_root", "colony_root",
+		"energy", "energy_budget", "energy_default", "budget", "budget_ceiling",
+		"delivery", "delivery_policy", "merge", "pull_request",
+		"credentials", "credential", "api_key", "api_key_env", "token", "secret", "env", "env_mode",
+		"policy", "config_policy":
 		return true
 	default:
 		return false
