@@ -36,6 +36,9 @@ type ApproveResult struct {
 	PRURL        string
 	PRNumber     int
 	PRState      string
+	// Experimental marks a pinned fork approval. Its work is accepted internally,
+	// but the branch is never merged, pushed, or published.
+	Experimental bool
 }
 
 // Approve merges the trace worktree or publishes a pull request, then completes the review task
@@ -72,33 +75,41 @@ func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, l
 		return ApproveResult{}, err
 	}
 
-	result := ApproveResult{}
-	if ShouldPublishOnApprove(task, bees, manifest.Defaults) {
-		published, err := publishPullRequest(ctx, colonyCtx, in.TraceID, in)
-		if err != nil {
-			return ApproveResult{}, err
-		}
-		return published, nil
+	experimental, err := IsExperimentalTrail(colonyCtx.ColonyRoot, in.TraceID)
+	if err != nil {
+		return ApproveResult{}, err
 	}
-	if ShouldMergeOnApprove(task, bees, manifest.Defaults) {
-		wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
-		if gitroot.IsInsideWorkTree(wtPath) {
-			traceSummary, err := runs.ResolveTraceSummary(colonyCtx.ColonyRoot, in.TraceID)
+	result := ApproveResult{Experimental: experimental}
+	// Experimental work may complete its internal review, but its branch is
+	// never delivered. Promotion is a separate ordinary-trail proposal.
+	if !experimental {
+		if ShouldPublishOnApprove(task, bees, manifest.Defaults) {
+			published, err := publishPullRequest(ctx, colonyCtx, in.TraceID, in)
 			if err != nil {
 				return ApproveResult{}, err
 			}
-			mergeMessage := ComposeMergeMessage(in.TraceID, in.MergeMessage, traceSummary).FormatMessage()
-			mergeRes, err := worktree.Merge(worktree.MergeOptions{
-				ColonyRoot: colonyCtx.ColonyRoot,
-				TraceID:    in.TraceID,
-				Slug:       colonyCtx.Slug,
-				Message:    mergeMessage,
-			})
-			if err != nil {
-				return ApproveResult{StashOutcome: mergeRes.StashOutcome}, err
+			return published, nil
+		}
+		if ShouldMergeOnApprove(task, bees, manifest.Defaults) {
+			wtPath := worktree.Path(colonyCtx.ColonyRoot, in.TraceID)
+			if gitroot.IsInsideWorkTree(wtPath) {
+				traceSummary, err := runs.ResolveTraceSummary(colonyCtx.ColonyRoot, in.TraceID)
+				if err != nil {
+					return ApproveResult{}, err
+				}
+				mergeMessage := ComposeMergeMessage(in.TraceID, in.MergeMessage, traceSummary).FormatMessage()
+				mergeRes, err := worktree.Merge(worktree.MergeOptions{
+					ColonyRoot: colonyCtx.ColonyRoot,
+					TraceID:    in.TraceID,
+					Slug:       colonyCtx.Slug,
+					Message:    mergeMessage,
+				})
+				if err != nil {
+					return ApproveResult{StashOutcome: mergeRes.StashOutcome}, err
+				}
+				result.CommitSHA = mergeRes.CommitSHA
+				result.StashOutcome = mergeRes.StashOutcome
 			}
-			result.CommitSHA = mergeRes.CommitSHA
-			result.StashOutcome = mergeRes.StashOutcome
 		}
 	}
 

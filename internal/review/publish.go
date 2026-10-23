@@ -54,6 +54,13 @@ func ResolvePublishCopy(colonyRoot, traceID, prTitle, prBody string) (PublishCop
 }
 
 func publishPullRequest(ctx context.Context, colonyCtx colony.Context, traceID string, in ApproveInput) (ApproveResult, error) {
+	experimental, err := IsExperimentalTrail(colonyCtx.ColonyRoot, traceID)
+	if err != nil {
+		return ApproveResult{}, err
+	}
+	if experimental {
+		return ApproveResult{}, errExperimentalDelivery(traceID)
+	}
 	if strings.TrimSpace(in.MergeMessage) != "" {
 		return ApproveResult{}, fmt.Errorf("review: --merge-message is not valid when defaults.delivery is pull_request; use --pr-title / --pr-body")
 	}

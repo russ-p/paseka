@@ -14,10 +14,16 @@ type ApproveMessageOptions struct {
 	StashOutcome      worktree.StashOutcome
 	Published         bool
 	PRURL             string
+	// Experimental marks pinned fork work, which is approved internally without
+	// merging, pushing, or publishing its branch.
+	Experimental bool
 }
 
 // ApproveMessage returns a user-facing message after a successful approve.
 func ApproveMessage(opts ApproveMessageOptions) string {
+	if opts.Experimental {
+		return "Task approved (experimental trail — no branch merge or publication)."
+	}
 	if opts.Published {
 		if u := strings.TrimSpace(opts.PRURL); u != "" {
 			return "Pull request published. Trail stays open until the PR is merged: " + u
@@ -42,6 +48,9 @@ func ApproveMessage(opts ApproveMessageOptions) string {
 
 // CLIApproveMessage returns the CLI variant of the approve success message.
 func CLIApproveMessage(opts ApproveMessageOptions) string {
+	if opts.Experimental {
+		return "Approved (experimental trail — no branch merge or publication)."
+	}
 	if opts.Published {
 		if u := strings.TrimSpace(opts.PRURL); u != "" {
 			return "Published pull request. Trail stays open until the PR is merged: " + u

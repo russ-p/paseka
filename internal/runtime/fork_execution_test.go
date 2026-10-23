@@ -179,3 +179,127 @@ subscribes:
 		t.Fatalf("ordinary dispatch prompt = %q, want live prompt", rec.lastReq.Prompt)
 	}
 }
+
+func TestForkInternalProposalAndVerificationChoreography(t *testing.T) {
+	repo := initProposalDispatchRepo(t)
+	bees := map[string]colony.Bee{
+		"builder": {Role: "builder", Worktree: true, Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: "verification.failed"}, Dispatch: colony.DispatchDirect},
+		}},
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal.isolated"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	if err := writeProposalDispatchColony(repo, bees); err != nil {
+		t.Fatal(err)
+	}
+	runGitProposal(t, repo, "add", ".")
+	runGitProposal(t, repo, "commit", "-m", "source config")
+
+	ctxColony := colony.Context{ColonyRoot: repo, Slug: "test-colony"}
+	source, err := trailconfig.Ensure(ctxColony, "trace-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forkWorktree, err := worktree.Ensure(worktree.EnsureOptions{ColonyRoot: repo, TraceID: "trace-fork"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trailconfig.CreateForkBinding(trailconfig.ForkBindingOptions{
+		Context:       ctxColony,
+		SourceTraceID: "trace-source",
+		TraceID:       "trace-fork",
+		ConfigRef:     source.ActiveConfigRef,
+		WorkspaceRoot: forkWorktree.Path,
+		RequestID:     "req-fork",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	liveRegistry, err := BuildBeeRegistry(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := NewDispatcher()
+	d.SetBeeRegistry(liveRegistry)
+	rec := &proposalRecordingAdapter{}
+	d.RegisterAdapter("cursor", rec)
+	r := NewTestReactor(TestReactorOptions{
+		ColonyRoot: repo,
+		Dispatcher: d,
+		Registry:   liveRegistry,
+		Ledger:     taskledger.NewMemoryLedger(),
+	})
+
+	plan, err := protocol.NewEvent("trace-fork", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "task-1",
+			Title:  "fork work",
+			Bee:    "builder",
+			Review: protocol.TaskReviewRequired,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	running, err := protocol.NewEvent("trace-fork", "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: "task-1", Status: protocol.TaskStatusRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), running); err != nil {
+		t.Fatal(err)
+	}
+
+	proposal, err := protocol.NewEvent("trace-fork", "builder-1", 0, protocol.EventMutation, protocol.MutationPayload{
+		Kind:      protocol.MutationCodeProposalIsolated,
+		TaskID:    "task-1",
+		Workspace: protocol.ProposalWorkspaceIsolated,
+		Diff:      "+line",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), proposal); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("guard dispatch calls = %d, want 1", rec.calls)
+	}
+	if rec.lastReq.Workspace != forkWorktree.Path {
+		t.Fatalf("guard workspace = %q, want fork checkout %q", rec.lastReq.Workspace, forkWorktree.Path)
+	}
+
+	verification, err := protocol.NewEvent("trace-fork", "guard-1", 0, protocol.EventVerification, protocol.VerificationPayload{
+		Kind:    protocol.VerificationFailed,
+		TaskID:  "task-1",
+		Summary: "proposal needs rework",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), verification); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 2 {
+		t.Fatalf("rework dispatch calls = %d, want 2", rec.calls)
+	}
+	if rec.lastReq.Bee != "builder" {
+		t.Fatalf("rework bee = %q, want pinned builder", rec.lastReq.Bee)
+	}
+	if rec.lastReq.Workspace != forkWorktree.Path {
+		t.Fatalf("rework workspace = %q, want fork checkout %q", rec.lastReq.Workspace, forkWorktree.Path)
+	}
+	snap, err := r.Ledger().Snapshot("trace-fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks["task-1"].ProposalWorkspace != protocol.ProposalWorkspaceIsolated {
+		t.Fatalf("proposal workspace = %q, want isolated", snap.Tasks["task-1"].ProposalWorkspace)
+	}
+}

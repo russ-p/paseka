@@ -196,6 +196,7 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		StashOutcome:      approveRes.StashOutcome,
 		Published:         approveRes.Published,
 		PRURL:             approveRes.PRURL,
+		Experimental:      approveRes.Experimental,
 	})
 	return ApproveTaskResponse{
 		TraceID:   traceID,
