@@ -27,6 +27,9 @@ func writeTestColonyWithBees(root string, bees map[string]colony.Bee) error {
 	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/default.md"), []byte("{{.Task}}"), 0o644); err != nil {
 		return err
 	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".paseka/runs/\n.paseka/worktrees/\n"), 0o644); err != nil {
+		return err
+	}
 	for role, bee := range bees {
 		content := fmt.Sprintf(`role: %s
 adapter: cursor

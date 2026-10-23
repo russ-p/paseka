@@ -138,7 +138,16 @@ type Options struct {
 	Title      string
 	RequestID  string
 	Actor      string
-	DryRun     bool
+	// Origin distinguishes a direct operator creation ("cli") from an approved
+	// agent request ("agent").
+	Origin string
+	// ApprovedBy records the operator control path that admitted the fork.
+	ApprovedBy string
+	// ForkTraceID and ForkTaskID let approval resume an interrupted creation
+	// under the identities minted for the same request.
+	ForkTraceID string
+	ForkTaskID  string
+	DryRun      bool
 }
 
 // Result is the previewed plan plus the resources created for it.
@@ -169,19 +178,58 @@ func Preview(opts Options) (Result, error) {
 
 // Create performs the on-disk fork creation and publishes its initial task
 // plan and ready signal to the colony's existing Reactor.
+//
+// A non-empty request identity makes creation idempotent: a repeated delivery
+// with the same contents returns the recorded fork, while reusing the identity
+// with different contents is refused.
 func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options) (Result, error) {
+	opts = withDirectDefaults(opts)
+	if opts.DryRun {
+		plan, _, err := resolve(opts)
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{Plan: plan}, nil
+	}
+	if existing, found, err := findRequest(opts.Context.ColonyRoot, opts.RequestID); err != nil {
+		return Result{}, err
+	} else if found {
+		if existing.ContentDigest != directDigest(opts) {
+			return Result{}, fmt.Errorf("trailfork: request id %s was already used with different contents", opts.RequestID)
+		}
+		switch {
+		case existing.State == StateApproved && existing.Lineage != nil:
+			return resultFromLineage(opts.Context, *existing.Lineage)
+		case existing.State == StatePending || existing.State == StateCreating:
+			return Result{}, fmt.Errorf("trailfork: request %s is pending operator approval", opts.RequestID)
+		default:
+			return Result{}, fmt.Errorf("trailfork: request %s is %s and cannot create a fork", opts.RequestID, existing.State)
+		}
+	}
 	plan, evidence, err := resolve(opts)
 	if err != nil {
 		return Result{}, err
-	}
-	if opts.DryRun {
-		return Result{Plan: plan}, nil
 	}
 	if !bus.PublisherAvailable(publisher) {
 		return Result{}, fmt.Errorf("trailfork: nats url not configured (fork creation requires NATS)")
 	}
 	if ledger == nil {
 		return Result{}, fmt.Errorf("trailfork: task ledger is required (fork creation requires NATS)")
+	}
+
+	result, err := createResolved(ctx, publisher, ledger, opts, plan, evidence)
+	if err != nil {
+		return Result{}, err
+	}
+	_ = recordDirectRequest(opts, result.Plan)
+	return result, nil
+}
+
+func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options, plan Lineage, evidence sourceEvidence) (Result, error) {
+	if plan.RequestID != "" {
+		if existing, err := LoadLineage(opts.Context.ColonyRoot, plan.TraceID); err == nil && existing.RequestID == plan.RequestID {
+			return resultFromLineage(opts.Context, existing)
+		}
 	}
 
 	binding, err := trailconfig.CreateForkBinding(trailconfig.ForkBindingOptions{
@@ -298,7 +346,10 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 	}, nil
 }
 
-func resolve(opts Options) (Lineage, sourceEvidence, error) {
+// resolveEvidence validates the selected source evidence without minting trail
+// or task identities. Submit uses it to record a pending request; approval
+// repeats it before any on-disk creation.
+func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 	if opts.Context.ColonyRoot == "" {
 		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: colony root is required")
 	}
@@ -386,36 +437,14 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: budget %d exceeds the colony ceiling %d", budget, ceiling)
 	}
 
-	traceID, err := colony.NewTraceID()
-	if err != nil {
-		return Lineage{}, sourceEvidence{}, err
-	}
-	taskID, err := colony.NewTaskID()
-	if err != nil {
-		return Lineage{}, sourceEvidence{}, err
-	}
-	workspace := worktree.Path(opts.Context.ColonyRoot, traceID)
-	branch := worktree.BranchName(traceID)
-	if _, statErr := os.Stat(workspace); statErr == nil {
-		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: worktree %s already exists", workspace)
-	}
-	if gitroot.LocalBranchExists(opts.Context.ColonyRoot, branch) {
-		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: branch %q already exists", branch)
-	}
-
 	activeConfigRef := attempt.ConfigRef
 	if candidate != nil {
 		activeConfigRef = candidate.ConfigRef
-	}
-	if delta.Form == DeltaPatch {
-		delta.Path = DeltaPath(opts.Context.ColonyRoot, traceID)
 	}
 	review := string(protocol.NormalizeTaskReviewPolicy(protocol.TaskReviewPolicy(strings.TrimSpace(input.Review))))
 	plan := Lineage{
 		Version:              lineageVersion,
 		RequestID:            strings.TrimSpace(opts.RequestID),
-		ForkID:               "fork-" + strings.TrimPrefix(traceID, "trace-"),
-		TraceID:              traceID,
 		SourceTrace:          sourceTrace,
 		SourceTask:           task.TaskID,
 		SourceAttempt:        attempt.AttemptID,
@@ -430,12 +459,8 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 		Delta:                delta,
 		Profile:              bound.Profile,
 		Budget:               budget,
-		State:                StateRunnable,
-		Workspace:            workspace,
-		Branch:               branch,
 		Title:                strings.TrimSpace(opts.Title),
 		Task: TaskLineage{
-			TaskID:           taskID,
 			SourceTaskID:     task.TaskID,
 			Title:            strings.TrimSpace(input.Title),
 			Body:             strings.TrimSpace(input.Body),
@@ -452,6 +477,54 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 		plan.Title = plan.Task.Title
 	}
 	return plan, sourceEvidence{forkColony: forkColony, candidate: candidate, patchBytes: patchBytes}, nil
+}
+
+func resolve(opts Options) (Lineage, sourceEvidence, error) {
+	plan, evidence, err := resolveEvidence(opts)
+	if err != nil {
+		return Lineage{}, sourceEvidence{}, err
+	}
+
+	traceID := strings.TrimSpace(opts.ForkTraceID)
+	mintedTrace := traceID == ""
+	if mintedTrace {
+		traceID, err = colony.NewTraceID()
+		if err != nil {
+			return Lineage{}, sourceEvidence{}, err
+		}
+	}
+	taskID := strings.TrimSpace(opts.ForkTaskID)
+	if taskID == "" {
+		taskID, err = colony.NewTaskID()
+		if err != nil {
+			return Lineage{}, sourceEvidence{}, err
+		}
+	}
+
+	workspace := worktree.Path(opts.Context.ColonyRoot, traceID)
+	branch := worktree.BranchName(traceID)
+	// Only a freshly minted identity must be collision-free. A resumed approval
+	// reuses the identities recorded on its pending request and may find the
+	// worktree or branch it already created.
+	if mintedTrace {
+		if _, statErr := os.Stat(workspace); statErr == nil {
+			return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: worktree %s already exists", workspace)
+		}
+		if gitroot.LocalBranchExists(opts.Context.ColonyRoot, branch) {
+			return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: branch %q already exists", branch)
+		}
+	}
+
+	plan.ForkID = "fork-" + strings.TrimPrefix(traceID, "trace-")
+	plan.TraceID = traceID
+	plan.Task.TaskID = taskID
+	plan.State = StateRunnable
+	plan.Workspace = workspace
+	plan.Branch = branch
+	if plan.Delta.Form == DeltaPatch {
+		plan.Delta.Path = DeltaPath(opts.Context.ColonyRoot, traceID)
+	}
+	return plan, evidence, nil
 }
 
 // resolveDelta selects the configuration delta and prepares a patch candidate.

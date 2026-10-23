@@ -113,6 +113,159 @@ func newTrailForkCmd() *cobra.Command {
 	cmd.Flags().StringVar(&requestID, "request-id", "", "idempotency request id recorded in lineage")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate and preview without durable changes")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
+	cmd.AddCommand(newTrailForkPendingCmd())
+	cmd.AddCommand(newTrailForkApproveCmd())
+	cmd.AddCommand(newTrailForkRejectCmd())
+	cmd.AddCommand(newTrailForkCancelCmd())
+	return cmd
+}
+
+func newTrailForkPendingCmd() *cobra.Command {
+	var (
+		startDir string
+		all      bool
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   "pending",
+		Short: "List agent-originated fork requests awaiting a decision",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			var requests []trailfork.Request
+			if all {
+				requests, err = trailfork.ListRequests(ctxColony.ColonyRoot)
+			} else {
+				requests, err = trailfork.ListPending(ctxColony.ColonyRoot)
+			}
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				if requests == nil {
+					requests = []trailfork.Request{}
+				}
+				return printJSON(requests)
+			}
+			if len(requests) == 0 {
+				fmt.Println("No pending fork requests.")
+				return nil
+			}
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			_, _ = fmt.Fprintln(w, "REQUEST\tSTATE\tSENDER\tSOURCE\tSECTOR\tTITLE\tEXPIRES")
+			for _, req := range requests {
+				expires := ""
+				if req.State == trailfork.StatePending && !req.ExpiresAt.IsZero() {
+					expires = req.ExpiresAt.Format(time.RFC3339)
+				}
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s/%s\t%s\t%s\t%s\t%s\n",
+					req.RequestID, req.State, req.Sender.TraceID, req.Sender.AgentID,
+					req.Evidence.SourceTrace, req.Evidence.Task.Sector, req.Evidence.Title, expires)
+			}
+			return w.Flush()
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().BoolVar(&all, "all", false, "include decided and expired requests")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
+	return cmd
+}
+
+func newTrailForkApproveCmd() *cobra.Command {
+	var (
+		startDir string
+		reason   string
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   "approve <requestId>",
+		Short: "Approve a pending fork request and create it exactly once",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			session, err := tasks.OpenLedger(ctxColony)
+			if err != nil {
+				return err
+			}
+			defer session.Close()
+			result, err := trailfork.ApproveRequest(cmd.Context(), trailfork.DecisionOptions{
+				Context:   ctxColony,
+				RequestID: args[0],
+				Actor:     "cli",
+				Reason:    reason,
+				Publisher: session.Publisher,
+				Ledger:    session.Ledger,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(result)
+			}
+			printForkResult(result)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&reason, "reason", "", "operator reason recorded on the request")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
+	return cmd
+}
+
+func newTrailForkRejectCmd() *cobra.Command {
+	return newTrailForkDecisionCmd("reject", "Reject a pending fork request without creating resources", func(opts trailfork.DecisionOptions) (trailfork.Request, error) {
+		return trailfork.RejectRequest(opts)
+	})
+}
+
+func newTrailForkCancelCmd() *cobra.Command {
+	return newTrailForkDecisionCmd("cancel", "Cancel a pending fork request without creating resources", func(opts trailfork.DecisionOptions) (trailfork.Request, error) {
+		return trailfork.CancelRequest(opts)
+	})
+}
+
+func newTrailForkDecisionCmd(use, short string, decide func(trailfork.DecisionOptions) (trailfork.Request, error)) *cobra.Command {
+	var (
+		startDir string
+		reason   string
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   use + " <requestId>",
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			req, err := decide(trailfork.DecisionOptions{
+				Context:   ctxColony,
+				RequestID: args[0],
+				Actor:     "cli",
+				Reason:    reason,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(req)
+			}
+			fmt.Printf("%s: %s\n", req.State, req.RequestID)
+			if req.Reason != "" {
+				fmt.Printf("reason: %s\n", req.Reason)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&reason, "reason", "", "operator reason recorded on the request")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
 	return cmd
 }
 

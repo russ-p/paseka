@@ -162,6 +162,14 @@ func (r *Reactor) handleEvent(ev protocol.Event) error {
 func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	logEventReceived(ev)
 
+	// Fork control is admission, not trail work. Intercept it before the trail
+	// binding is required so a rejected request leaves no runnable trace.
+	if handled, err := r.handleForkControl(ctx, ev); err != nil {
+		return err
+	} else if handled {
+		return nil
+	}
+
 	// A trail owns its configuration from its first event onward. Capture the
 	// binding before any configuration-dependent validation or routing, so the
 	// event cannot be judged by live files that a later edit would replace.
