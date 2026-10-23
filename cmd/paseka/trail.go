@@ -44,13 +44,11 @@ func newTrailForkCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "fork",
-		Short: "Preview and create a no-delta control fork of an existing trail",
+		Short: "Preview and create a control or patch-delta fork of an existing trail",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if strings.TrimSpace(delta) != "" {
-				return fmt.Errorf("--delta is not supported yet; use --no-delta for a control arm")
-			}
-			if !noDelta {
-				return fmt.Errorf("choose --no-delta (control arm); --delta is not supported yet")
+			hasDelta := strings.TrimSpace(delta) != ""
+			if hasDelta == noDelta {
+				return fmt.Errorf("choose exactly one of --delta <proposal-patch> or --no-delta")
 			}
 			if strings.TrimSpace(source) == "" {
 				return fmt.Errorf("--source <traceId> is required")
@@ -70,6 +68,10 @@ func newTrailForkCmd() *cobra.Command {
 				RequestID:     requestID,
 				Actor:         "cli",
 				DryRun:        dryRun,
+			}
+			if hasDelta {
+				opts.DeltaForm = trailfork.DeltaPatch
+				opts.DeltaPatch = delta
 			}
 			if dryRun {
 				result, err := trailfork.Preview(opts)
@@ -104,7 +106,7 @@ func newTrailForkCmd() *cobra.Command {
 	cmd.Flags().StringVar(&taskID, "task", "", "source task id (default: the single unambiguous root task)")
 	cmd.Flags().StringVar(&sourceRun, "source-run", "", "source agent run id selecting one recorded attempt")
 	cmd.Flags().StringVar(&base, "base", "", "explicit code base commit (removes the equal-base guarantee)")
-	cmd.Flags().StringVar(&delta, "delta", "", "configuration patch record (not supported yet)")
+	cmd.Flags().StringVar(&delta, "delta", "", "recorded proposal patch ref or agent id to apply as the configuration delta")
 	cmd.Flags().BoolVar(&noDelta, "no-delta", false, "create a control arm with the source configuration")
 	cmd.Flags().IntVar(&honey, "honey", 0, "initial honey reserve (default: colony energy ceiling)")
 	cmd.Flags().StringVar(&title, "title", "", "fork trail title")
@@ -379,6 +381,37 @@ func printConfigHistory(manifest trailconfig.Manifest) {
 	_ = w.Flush()
 }
 
+func printDelta(delta trailfork.Delta) {
+	fmt.Printf("delta: %s\n", delta.Form)
+	if delta.Form != trailfork.DeltaPatch {
+		return
+	}
+	fmt.Printf("delta proposal: %s (%s) trace %s\n", delta.PatchAgentID, delta.ProposalKind, delta.PatchTrace)
+	fmt.Printf("delta publication: %s\n", delta.Publication)
+	fmt.Printf("delta sha256: %s (%d bytes)\n", delta.SHA256, delta.Bytes)
+	if delta.Path != "" {
+		fmt.Printf("delta retained: %s\n", delta.Path)
+	}
+	if len(delta.RawDiff) > 0 {
+		fmt.Println("raw differences:")
+		for _, line := range delta.RawDiff {
+			fmt.Println("  - " + line)
+		}
+	}
+	if len(delta.EffectiveDiff) > 0 {
+		fmt.Println("effective differences:")
+		for _, line := range delta.EffectiveDiff {
+			fmt.Println("  - " + line)
+		}
+	}
+	if len(delta.ShadowedDiff) > 0 {
+		fmt.Println("shadowed by frozen configuration:")
+		for _, line := range delta.ShadowedDiff {
+			fmt.Println("  - " + line)
+		}
+	}
+}
+
 func printForkLineage(lineage trailfork.Lineage) {
 	fmt.Printf("forkId: %s\n", lineage.ForkID)
 	fmt.Printf("forkOf: %s\n", lineage.SourceTrace)
@@ -389,7 +422,7 @@ func printForkLineage(lineage trailfork.Lineage) {
 	if lineage.BaseOverridden {
 		fmt.Printf("baseOverriddenFrom: %s\n", lineage.SourceBaseSHA)
 	}
-	fmt.Printf("delta: %s\n", lineage.Delta.Form)
+	printDelta(lineage.Delta)
 	fmt.Printf("workspace: %s\n", lineage.Workspace)
 	fmt.Printf("branch: %s\n", lineage.Branch)
 	fmt.Printf("budget: %d\n", lineage.Budget)
@@ -414,7 +447,7 @@ func printForkResult(result trailfork.Result) {
 	fmt.Printf("fork task: %s\n", plan.Task.TaskID)
 	fmt.Printf("task: %s\n", plan.Task.Title)
 	fmt.Printf("bee: %s\n", plan.Task.Bee)
-	fmt.Printf("delta: %s\n", plan.Delta.Form)
+	printDelta(plan.Delta)
 	fmt.Printf("policy: %s\n", plan.Policy)
 	fmt.Printf("workspace: %s\n", plan.Workspace)
 	fmt.Printf("branch: %s\n", plan.Branch)

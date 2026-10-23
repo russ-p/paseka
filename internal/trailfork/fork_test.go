@@ -2,14 +2,18 @@ package trailfork_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -495,4 +499,404 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func TestPatchDeltaProducesValidatedCandidateAndOwnEvidence(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	writeFile(t, root, ".paseka/prompts/obsolete.md", "obsolete\n")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-q", "-m", "add obsolete prompt")
+
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	sourceManifest, err := trailconfig.Load(root, "trace-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceRef := sourceManifest.ActiveConfigRef
+	sourceTree := sourceSnapshotTree(t, root, "trace-source")
+
+	patch := makePatch(t, sourceTree, func(dir string) {
+		writeFile(t, dir, ".paseka/prompts/builder.md", "build it differently\n")
+		if err := os.Remove(filepath.Join(dir, ".paseka", "prompts", "obsolete.md")); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dir, ".paseka/prompts/added.md", "added prompt\n")
+		writeFile(t, dir, ".paseka/skills/new-skill/SKILL.md", "---\nname: new-skill\ndescription: new\n---\nbody\n")
+	})
+	writePatchRecord(t, root, "trace-source", "agent-delta", patch)
+
+	preview, err := trailfork.Preview(trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		DeltaForm:     trailfork.DeltaPatch,
+		DeltaPatch:    "agent-delta",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := preview.Plan
+	if plan.Delta.Form != trailfork.DeltaPatch || plan.Delta.PatchAgentID != "agent-delta" {
+		t.Fatalf("delta = %+v", plan.Delta)
+	}
+	if plan.Delta.SHA256 == "" || plan.Delta.Bytes != int64(len(patch)) {
+		t.Fatalf("patch identity = %+v", plan.Delta)
+	}
+	if plan.ConfigRef == sourceRef {
+		t.Fatal("candidate configuration ref did not change")
+	}
+	if !containsLine(plan.Delta.RawDiff, "changed .paseka/prompts/builder.md") ||
+		!containsLine(plan.Delta.RawDiff, "removed .paseka/prompts/obsolete.md") ||
+		!containsLine(plan.Delta.RawDiff, "added .paseka/prompts/added.md") {
+		t.Fatalf("raw diff = %v", plan.Delta.RawDiff)
+	}
+	if !containsLine(plan.Delta.EffectiveDiff, "changed .paseka/prompts/builder.md") {
+		t.Fatalf("effective diff = %v", plan.Delta.EffectiveDiff)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".paseka", "runs", plan.TraceID)); !os.IsNotExist(err) {
+		t.Fatalf("preview created trail records: %v", err)
+	}
+	if _, err := os.Stat(plan.Workspace); !os.IsNotExist(err) {
+		t.Fatalf("preview created worktree: %v", err)
+	}
+
+	ledger := taskledger.NewMemoryLedger()
+	result, err := trailfork.Create(context.Background(), &capturePublisher{}, ledger, trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		DeltaForm:     trailfork.DeltaPatch,
+		DeltaPatch:    "agent-delta",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := result.Plan
+	if created.ConfigRef == sourceRef || created.SourceConfigRef != sourceRef {
+		t.Fatalf("created refs = source %s active %s", created.SourceConfigRef, created.ConfigRef)
+	}
+
+	binding, err := trailconfig.Load(root, created.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.InitialConfigRef != sourceRef || binding.ActiveConfigRef != created.ConfigRef || binding.ConfigRevision != 1 {
+		t.Fatalf("binding = %+v", binding)
+	}
+	if len(binding.Snapshots) != 2 {
+		t.Fatalf("binding snapshots = %+v", binding.Snapshots)
+	}
+
+	candidateTree := filepath.Join(trailconfig.SnapshotDir(root, created.TraceID), created.ConfigRef, trailconfig.SnapshotTreeDirName)
+	if data := readFile(t, candidateTree, ".paseka/prompts/builder.md"); data != "build it differently\n" {
+		t.Fatalf("candidate prompt = %q", data)
+	}
+	if data := readFile(t, candidateTree, ".paseka/prompts/added.md"); data != "added prompt\n" {
+		t.Fatalf("added prompt = %q", data)
+	}
+	if _, err := os.Stat(filepath.Join(candidateTree, ".paseka", "prompts", "obsolete.md")); !os.IsNotExist(err) {
+		t.Fatalf("deleted prompt survived in candidate: %v", err)
+	}
+	baseTree := filepath.Join(trailconfig.SnapshotDir(root, created.TraceID), sourceRef, trailconfig.SnapshotTreeDirName)
+	if data := readFile(t, baseTree, ".paseka/prompts/builder.md"); data != "build the thing\n" {
+		t.Fatalf("base prompt was rewritten = %q", data)
+	}
+	if data := readFile(t, baseTree, ".paseka/prompts/obsolete.md"); data != "obsolete\n" {
+		t.Fatalf("base deleted prompt = %q", data)
+	}
+
+	if created.Delta.Path == "" {
+		t.Fatal("delta retained path is missing")
+	}
+	retained, err := os.ReadFile(created.Delta.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(retained) != string(patch) || created.Delta.SHA256 != digestHex(patch) {
+		t.Fatalf("retained patch does not match evidence")
+	}
+
+	lineage, err := trailfork.LoadLineage(root, created.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lineage.Delta.PatchAgentID != "agent-delta" || lineage.Delta.Publication == "" || lineage.Delta.ProposalID != "agent-delta" {
+		t.Fatalf("lineage delta = %+v", lineage.Delta)
+	}
+	attempt, ok, err := trailconfig.LatestTaskAttempt(root, created.TraceID, created.Task.TaskID)
+	if err != nil || !ok || attempt.ConfigRef != created.ConfigRef {
+		t.Fatalf("attempt config = %+v (%v %v)", attempt, ok, err)
+	}
+
+	// Later loss of the source proposal and source binding does not rewrite the
+	// fork's retained evidence or invalidate its candidate snapshot.
+	if err := os.RemoveAll(patches.NewStore(root, "trace-source").Root()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(root, ".paseka", "runs", "trace-source", "config")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(created.Delta.Path); err != nil || string(data) != string(patch) {
+		t.Fatalf("retained delta lost with source proposal: %v", err)
+	}
+	if _, err := trailconfig.BindRef(ctx, created.TraceID, created.ConfigRef, 1); err != nil {
+		t.Fatalf("candidate snapshot unavailable: %v", err)
+	}
+}
+
+func TestPatchDeltaPreviewReportsShadowedFrozenResolution(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	writeFile(t, root, ".paseka/colony.yaml", "slug: test\ndefaults:\n  energy_budget: 8\nmodel_aliases:\n  fast: vendor/original\n")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-q", "-m", "aliases")
+
+	ctx := colony.Context{ColonyRoot: root, ModelAliases: map[string]string{"fast": "vendor/frozen"}}
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	sourceTree := sourceSnapshotTree(t, root, "trace-source")
+	patch := makePatch(t, sourceTree, func(dir string) {
+		writeFile(t, dir, ".paseka/colony.yaml", "slug: test\ndefaults:\n  energy_budget: 8\nmodel_aliases:\n  fast: vendor/patched\n")
+	})
+	writePatchRecord(t, root, "trace-source", "agent-alias", patch)
+
+	result, err := trailfork.Preview(trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		DeltaForm:     trailfork.DeltaPatch,
+		DeltaPatch:    "agent-alias",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := result.Plan
+	if !containsSubstring(plan.Delta.ShadowedDiff, "model alias fast") {
+		t.Fatalf("shadowed diff = %v", plan.Delta.ShadowedDiff)
+	}
+	for _, line := range plan.Delta.EffectiveDiff {
+		if strings.Contains(line, "model alias") {
+			t.Fatalf("frozen alias leaked into effective diff: %v", plan.Delta.EffectiveDiff)
+		}
+	}
+	if !containsLine(plan.Delta.RawDiff, "changed .paseka/colony.yaml") {
+		t.Fatalf("raw diff = %v", plan.Delta.RawDiff)
+	}
+}
+
+func TestPatchDeltaRefusesUnsafeChanges(t *testing.T) {
+	cases := []struct {
+		name   string
+		patch  func(t *testing.T, sourceTree string) []byte
+		errSub string
+	}{
+		{
+			name: "application source",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return makePatch(t, sourceTree, func(dir string) { writeFile(t, dir, "README.md", "source\n") })
+			},
+			errSub: "may not change README.md",
+		},
+		{
+			name: "runtime data",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return makePatch(t, sourceTree, func(dir string) { writeFile(t, dir, ".paseka/runs/evil.txt", "x\n") })
+			},
+			errSub: "may not change .paseka/runs/evil.txt",
+		},
+		{
+			name: "identity",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return makePatch(t, sourceTree, func(dir string) {
+					writeFile(t, dir, ".paseka/colony.yaml", "slug: evil\ndefaults:\n  energy_budget: 8\n")
+				})
+			},
+			errSub: "cannot change colony identity",
+		},
+		{
+			name: "energy budget",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return makePatch(t, sourceTree, func(dir string) {
+					writeFile(t, dir, ".paseka/colony.yaml", "slug: test\ndefaults:\n  energy_budget: 100\n")
+				})
+			},
+			errSub: "cannot change the colony energy budget",
+		},
+		{
+			name: "path escape",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return []byte("diff --git a/../escape.txt b/../escape.txt\nnew file mode 100644\n--- /dev/null\n+++ b/../escape.txt\n@@ -0,0 +1 @@\n+escape\n")
+			},
+			errSub: "escapes the configuration tree",
+		},
+		{
+			name: "conflict",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return []byte("diff --git a/.paseka/prompts/builder.md b/.paseka/prompts/builder.md\n--- a/.paseka/prompts/builder.md\n+++ b/.paseka/prompts/builder.md\n@@ -1,1 +1,1 @@\n-does not exist\n+replacement\n")
+			},
+			errSub: "does not apply",
+		},
+		{
+			name: "broken template reference",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return makePatch(t, sourceTree, func(dir string) {
+					if err := os.Remove(filepath.Join(dir, ".paseka", "prompts", "builder.md")); err != nil {
+						t.Fatal(err)
+					}
+				})
+			},
+			errSub: "prompt template \"builder.md\" is missing",
+		},
+		{
+			name: "broken bee reference",
+			patch: func(t *testing.T, sourceTree string) []byte {
+				return makePatch(t, sourceTree, func(dir string) {
+					if err := os.Remove(filepath.Join(dir, ".paseka", "bees", "builder.yaml")); err != nil {
+						t.Fatal(err)
+					}
+				})
+			},
+			errSub: "candidate has no bee \"builder\"",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, _ := setupGitRepo(t)
+			ctx := testContext(root)
+			writeSource(t, ctx, "trace-source", "task-1", nil)
+			patch := tc.patch(t, sourceSnapshotTree(t, root, "trace-source"))
+			writePatchRecord(t, root, "trace-source", "agent-unsafe", patch)
+
+			_, err := trailfork.Preview(trailfork.Options{
+				Context:       ctx,
+				SourceTraceID: "trace-source",
+				DeltaForm:     trailfork.DeltaPatch,
+				DeltaPatch:    "agent-unsafe",
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.errSub) {
+				t.Fatalf("error = %v, want %q", err, tc.errSub)
+			}
+		})
+	}
+}
+
+func sourceSnapshotTree(t *testing.T, root, traceID string) string {
+	t.Helper()
+	manifest, err := trailconfig.Load(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(trailconfig.SnapshotDir(root, traceID), manifest.ActiveConfigRef, trailconfig.SnapshotTreeDirName)
+}
+
+func writePatchRecord(t *testing.T, root, traceID, agentID string, body []byte) {
+	t.Helper()
+	store := patches.NewStore(root, traceID)
+	if _, err := store.Write(patches.Record{
+		AgentID:     agentID,
+		Bee:         "builder",
+		Kind:        "code.proposal.isolated",
+		Publication: patches.PublicationPublished,
+		CapturedAt:  time.Date(2026, 10, 23, 8, 0, 0, 0, time.UTC),
+		Summary:     "proposal",
+	}, body); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func makePatch(t *testing.T, sourceTree string, mutate func(dir string)) []byte {
+	t.Helper()
+	dir := t.TempDir()
+	copyDir(t, sourceTree, dir)
+	runGit(t, dir, "init", "-q", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	mutate(dir)
+	runGit(t, dir, "add", "-A")
+	cmd := exec.Command("git", "-C", dir, "diff", "--cached", "--binary", "--no-color")
+	data, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git diff: %v", err)
+	}
+	return data
+}
+
+func copyDir(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, current)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		target := filepath.Join(dst, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(current)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeFile(t *testing.T, root, rel, content string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readFile(t *testing.T, root, rel string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func containsLine(lines []string, want string) bool {
+	for _, line := range lines {
+		if line == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSubstring(lines []string, want string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func digestHex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }

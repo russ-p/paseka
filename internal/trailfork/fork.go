@@ -9,6 +9,8 @@ package trailfork
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -34,18 +37,45 @@ const (
 	LineageFileName = "fork.json"
 	// DeltaNone identifies a no-delta control arm.
 	DeltaNone = "none"
+	// DeltaPatch identifies a fork whose candidate configuration was derived
+	// from a recorded proposal patch.
+	DeltaPatch = "patch"
 	// StateRunnable marks an admitted fork whose task has been published.
 	StateRunnable = "runnable"
 
 	lineageVersion = 1
+	// DeltaFileName is the retained patch body under the fork's run root.
+	DeltaFileName = "delta.patch"
 )
 
-// Delta records which configuration delta produced the fork. This version only
-// admits control arms.
+// Delta records which configuration delta produced the fork and retains the
+// evidence needed to explain it after the source proposal changes or disappears.
 type Delta struct {
-	Form       string `json:"form"`
-	Patch      string `json:"patch,omitempty"`
-	ProposalID string `json:"proposalId,omitempty"`
+	Form string `json:"form"`
+	// Patch is the source proposal archive ref.
+	Patch string `json:"patch,omitempty"`
+	// PatchTrace and PatchAgentID identify the recorded proposal.
+	PatchTrace   string `json:"patchTrace,omitempty"`
+	PatchAgentID string `json:"patchAgentId,omitempty"`
+	// ProposalID is the stable proposal identity (agent run) and Kind its
+	// normalized proposal kind.
+	ProposalID   string `json:"proposalId,omitempty"`
+	ProposalKind string `json:"proposalKind,omitempty"`
+	// Publication is the source proposal's publication state at capture time.
+	Publication string `json:"publication,omitempty"`
+	// CapturedAt is when the source proposal record was captured.
+	CapturedAt time.Time `json:"capturedAt,omitempty"`
+	// SHA256 and Bytes identify the immutable retained patch body.
+	SHA256 string `json:"sha256,omitempty"`
+	Bytes  int64  `json:"bytes,omitempty"`
+	// Path is the retained patch body inside the fork's own run directory.
+	Path string `json:"path,omitempty"`
+	// RawDiff is the file-level delta between the source snapshot and the
+	// candidate; EffectiveDiff is the resolved behaviour that changes.
+	RawDiff       []string `json:"rawDiff,omitempty"`
+	EffectiveDiff []string `json:"effectiveDiff,omitempty"`
+	// ShadowedDiff names changes a frozen higher-priority layer keeps inert.
+	ShadowedDiff []string `json:"shadowedDiff,omitempty"`
 }
 
 // TaskLineage records the carried task input and the identity minted for it.
@@ -99,11 +129,16 @@ type Options struct {
 	TaskID        string
 	SourceRun     string
 	BaseSHA       string
-	Budget        int
-	Title         string
-	RequestID     string
-	Actor         string
-	DryRun        bool
+	// DeltaForm is DeltaNone (the default) or DeltaPatch.
+	DeltaForm string
+	// DeltaPatch names a recorded proposal patch: either its colony-root-relative
+	// archive ref or an agent id in the source trail's proposal store.
+	DeltaPatch string
+	Budget     int
+	Title      string
+	RequestID  string
+	Actor      string
+	DryRun     bool
 }
 
 // Result is the previewed plan plus the resources created for it.
@@ -118,6 +153,8 @@ type Result struct {
 
 type sourceEvidence struct {
 	forkColony colony.Colony
+	candidate  *trailconfig.ForkDelta
+	patchBytes []byte
 }
 
 // Preview resolves the source evidence and reports the fork that creation would
@@ -152,6 +189,8 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 		SourceTraceID:        plan.SourceTrace,
 		TraceID:              plan.TraceID,
 		ConfigRef:            plan.ConfigRef,
+		BaseConfigRef:        plan.SourceConfigRef,
+		Candidate:            evidence.candidate,
 		InitialCodeBaseSHA:   plan.BaseSHA,
 		InitialCodeBaseDirty: false,
 		WorkspaceRoot:        plan.Workspace,
@@ -160,6 +199,12 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 	})
 	if err != nil {
 		return Result{}, err
+	}
+
+	if len(evidence.patchBytes) > 0 {
+		if err := writeDelta(opts.Context.ColonyRoot, plan.TraceID, evidence.patchBytes); err != nil {
+			return Result{}, err
+		}
 	}
 
 	entry, err := worktree.Ensure(worktree.EnsureOptions{
@@ -304,9 +349,23 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 	if err != nil {
 		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source configuration evidence is unavailable: %w", err)
 	}
-	forkColony, bee, err := validateCandidate(bound, task, input)
+	delta, patchBytes, candidate, err := resolveDelta(opts, sourceTrace, attempt.ConfigRef, task.TaskID, input)
 	if err != nil {
 		return Lineage{}, sourceEvidence{}, err
+	}
+
+	var forkColony colony.Colony
+	var bee string
+	if candidate != nil {
+		bee = candidate.TaskBee
+		if bee == "" {
+			bee = colony.EffectiveTaskBee(input.Bee, colony.Defaults{})
+		}
+	} else {
+		forkColony, bee, err = validateCandidate(bound, task, input)
+		if err != nil {
+			return Lineage{}, sourceEvidence{}, err
+		}
 	}
 
 	baseSHA, sourceBaseSHA, overridden, err := resolveBase(opts, sourceManifest)
@@ -344,6 +403,13 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: branch %q already exists", branch)
 	}
 
+	activeConfigRef := attempt.ConfigRef
+	if candidate != nil {
+		activeConfigRef = candidate.ConfigRef
+	}
+	if delta.Form == DeltaPatch {
+		delta.Path = DeltaPath(opts.Context.ColonyRoot, traceID)
+	}
 	review := string(protocol.NormalizeTaskReviewPolicy(protocol.TaskReviewPolicy(strings.TrimSpace(input.Review))))
 	plan := Lineage{
 		Version:              lineageVersion,
@@ -359,9 +425,9 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 		BaseOverridden:       overridden,
 		SourceConfigRef:      attempt.ConfigRef,
 		SourceConfigRevision: attempt.ConfigRevision,
-		ConfigRef:            attempt.ConfigRef,
+		ConfigRef:            activeConfigRef,
 		Policy:               trailconfig.PolicyPinned,
-		Delta:                Delta{Form: DeltaNone},
+		Delta:                delta,
 		Profile:              bound.Profile,
 		Budget:               budget,
 		State:                StateRunnable,
@@ -379,13 +445,97 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 			Review:           review,
 			SourceTaskDigest: input.Digest,
 		},
-		Limitations: limitations(baseSHA, sourceBaseSHA, overridden),
+		Limitations: limitations(baseSHA, sourceBaseSHA, overridden, delta),
 		CreatedAt:   time.Now().UTC(),
 	}
 	if plan.Title == "" {
 		plan.Title = plan.Task.Title
 	}
-	return plan, sourceEvidence{forkColony: forkColony}, nil
+	return plan, sourceEvidence{forkColony: forkColony, candidate: candidate, patchBytes: patchBytes}, nil
+}
+
+// resolveDelta selects the configuration delta and prepares a patch candidate.
+//
+// A patch delta is read from the recorded proposal store and copied into the
+// candidate by PrepareForkDelta. The returned bytes are retained by the fork so
+// later changes to the source proposal cannot rewrite its evidence.
+func resolveDelta(opts Options, sourceTrace, sourceConfigRef, sourceTaskID string, input *trailconfig.TaskInputEvidence) (Delta, []byte, *trailconfig.ForkDelta, error) {
+	form := strings.TrimSpace(opts.DeltaForm)
+	if form == "" {
+		form = DeltaNone
+	}
+	switch form {
+	case DeltaNone:
+		if strings.TrimSpace(opts.DeltaPatch) != "" {
+			return Delta{}, nil, nil, fmt.Errorf("trailfork: a patch selector requires delta form %q", DeltaPatch)
+		}
+		return Delta{Form: DeltaNone}, nil, nil, nil
+	case DeltaPatch:
+		selector := strings.TrimSpace(opts.DeltaPatch)
+		if selector == "" {
+			return Delta{}, nil, nil, fmt.Errorf("trailfork: --delta requires a proposal patch ref or agent id")
+		}
+		var store patches.Store
+		agentID := selector
+		if parsed, ok := patches.ParseArchiveRef(selector); ok {
+			store = patches.NewStore(opts.Context.ColonyRoot, parsed.TraceID)
+			agentID = parsed.AgentID
+		} else {
+			if strings.ContainsAny(selector, `/\`) {
+				return Delta{}, nil, nil, fmt.Errorf("trailfork: delta %q is not a proposal archive ref", selector)
+			}
+			store = patches.NewStore(opts.Context.ColonyRoot, sourceTrace)
+		}
+		record, ok, err := store.Read(agentID)
+		if err != nil {
+			return Delta{}, nil, nil, fmt.Errorf("trailfork: read proposal patch %s: %w", agentID, err)
+		}
+		if !ok {
+			return Delta{}, nil, nil, fmt.Errorf("trailfork: proposal patch record %s was not found", agentID)
+		}
+		body, err := os.ReadFile(store.PatchPath(agentID))
+		if err != nil {
+			return Delta{}, nil, nil, fmt.Errorf("trailfork: read proposal patch bytes %s: %w", agentID, err)
+		}
+		if int64(len(body)) != record.Bytes {
+			return Delta{}, nil, nil, fmt.Errorf("trailfork: proposal patch %s does not match its recorded size", agentID)
+		}
+		candidate, err := trailconfig.PrepareForkDelta(trailconfig.ForkDeltaOptions{
+			Context:         opts.Context,
+			SourceTraceID:   sourceTrace,
+			SourceConfigRef: sourceConfigRef,
+			Patch:           body,
+			PatchName:       record.Ref(opts.Context.ColonyRoot),
+			TaskID:          sourceTaskID,
+			TaskInput:       input,
+		})
+		if err != nil {
+			return Delta{}, nil, nil, err
+		}
+		delta := Delta{
+			Form:          DeltaPatch,
+			Patch:         record.Ref(opts.Context.ColonyRoot),
+			PatchTrace:    record.TraceID,
+			PatchAgentID:  record.AgentID,
+			ProposalID:    record.AgentID,
+			ProposalKind:  record.Kind,
+			Publication:   record.Publication,
+			CapturedAt:    record.CapturedAt,
+			SHA256:        digestHex(body),
+			Bytes:         int64(len(body)),
+			RawDiff:       candidate.RawDiff,
+			EffectiveDiff: candidate.EffectiveDiff,
+			ShadowedDiff:  candidate.ShadowedDiff,
+		}
+		return delta, body, &candidate, nil
+	default:
+		return Delta{}, nil, nil, fmt.Errorf("trailfork: unknown delta form %q", form)
+	}
+}
+
+func digestHex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func selectTask(snapshot taskledger.TraceSnapshot, requested string) (taskledger.TaskSnapshot, error) {
@@ -594,12 +744,19 @@ func retainsSnapshot(manifest trailconfig.Manifest, ref string) bool {
 	return false
 }
 
-func limitations(baseSHA, sourceBaseSHA string, overridden bool) []string {
+func limitations(baseSHA, sourceBaseSHA string, overridden bool, delta Delta) []string {
+	headline := "control arm: the source attempt's configuration and task input are inherited without a delta"
+	if delta.Form == DeltaPatch {
+		headline = "patch delta: the candidate applies the recorded proposal patch to the source snapshot's portable tree"
+	}
 	out := []string{
-		"control arm: the source attempt's configuration and task input are inherited without a delta",
+		headline,
 		"comparison uses one recorded attempt of one source task; aggregate source-trail metrics are not a baseline",
 		"model nondeterminism, external services, credentials, client-discovered instructions, and tool versions can still differ",
 		"the fork runs in its own worktree; source code changes, runs, comb, and honey are not copied",
+	}
+	if delta.Form == DeltaPatch {
+		out = append(out, "the retained patch bytes and proposal provenance are fork-owned evidence; later proposal changes do not rewrite them")
 	}
 	if overridden {
 		out = append(out, fmt.Sprintf("explicit base override %s -> %s removes the equal-base comparison guarantee", shortSHA(sourceBaseSHA), shortSHA(baseSHA)))
@@ -628,6 +785,40 @@ func actor(opts Options) string {
 // LineagePath returns .paseka/runs/<traceId>/fork.json.
 func LineagePath(colonyRoot, traceID string) string {
 	return filepath.Join(colonyRoot, ".paseka", "runs", traceID, LineageFileName)
+}
+
+// DeltaPath returns the colony-root-relative retained patch body for a fork:
+// .paseka/runs/<traceId>/delta.patch.
+func DeltaPath(colonyRoot, traceID string) string {
+	return filepath.Join(colonyRoot, ".paseka", "runs", traceID, DeltaFileName)
+}
+
+func writeDelta(colonyRoot, traceID string, body []byte) error {
+	path := DeltaPath(colonyRoot, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("trailfork: mkdir delta dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".delta-*.patch")
+	if err != nil {
+		return fmt.Errorf("trailfork: create delta temp: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("trailfork: write delta: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("trailfork: sync delta: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("trailfork: close delta: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("trailfork: publish delta: %w", err)
+	}
+	return nil
 }
 
 // LoadLineage reads a fork lineage record.
