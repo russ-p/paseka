@@ -98,14 +98,38 @@ type Snapshot struct {
 	Files     int       `json:"files"`
 }
 
-// Revision is one entry in the append-only binding history.
+// Revision is one entry in the append-only binding history. It doubles as the
+// recorded operator configuration change, so a trail can show who applied which
+// source and why without a second audit file.
 type Revision struct {
-	Revision         int       `json:"revision"`
-	InitialConfigRef string    `json:"initialConfigRef"`
-	ActiveConfigRef  string    `json:"activeConfigRef"`
-	Source           string    `json:"source,omitempty"`
-	CreatedAt        time.Time `json:"createdAt"`
+	Revision         int    `json:"revision"`
+	InitialConfigRef string `json:"initialConfigRef"`
+	ActiveConfigRef  string `json:"activeConfigRef"`
+	Source           string `json:"source,omitempty"`
+	// ChangeID is the identity of one apply request. The initial capture also
+	// receives one so every history entry is addressable.
+	ChangeID string `json:"changeId,omitempty"`
+	// RequestID is the idempotency key supplied by the operator/CLI.
+	RequestID string `json:"requestId,omitempty"`
+	// RequestFingerprint identifies the requested contents so a reused request
+	// identity with different parameters can be refused.
+	RequestFingerprint string `json:"requestFingerprint,omitempty"`
+	Actor              string `json:"actor,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	ExpectedRevision   int    `json:"expectedRevision,omitempty"`
+	OldConfigRef       string `json:"oldConfigRef,omitempty"`
+	NewConfigRef       string `json:"newConfigRef,omitempty"`
+	// Outcome is one of pending, applied, unchanged, rejected, or cancelled.
+	Outcome     string     `json:"outcome,omitempty"`
+	RequestedAt time.Time  `json:"requestedAt,omitempty"`
+	AppliedAt   *time.Time `json:"appliedAt,omitempty"`
+	Blockers    []string   `json:"blockers,omitempty"`
+	Detail      string     `json:"detail,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
 }
+
+// Change is the recorded apply request stored in a trail's history.
+type Change = Revision
 
 // Manifest is the trail-owned configuration binding.
 type Manifest struct {
@@ -124,7 +148,10 @@ type Manifest struct {
 	CreatedAt                 time.Time  `json:"createdAt,omitempty"`
 	UpdatedAt                 time.Time  `json:"updatedAt,omitempty"`
 	Snapshots                 []Snapshot `json:"snapshots"`
-	History                   []Revision `json:"history"`
+	// Pending holds the only in-flight configuration action, when a caller
+	// prepared a candidate that cannot activate at the current safe boundary.
+	Pending *Change    `json:"pending,omitempty"`
+	History []Revision `json:"history"`
 }
 
 // Binding is the minimal read surface for a trail's configuration.
@@ -258,8 +285,13 @@ func Ensure(ctx colony.Context, traceID string) (Manifest, error) {
 			Revision:         1,
 			InitialConfigRef: ref,
 			ActiveConfigRef:  ref,
-			Source:           "colony",
+			Source:           SourceColony,
+			ChangeID:         newChangeID(),
+			Actor:            "runtime",
+			Outcome:          OutcomeApplied,
+			RequestedAt:      now,
 			CreatedAt:        now,
+			NewConfigRef:     ref,
 		}},
 	}
 	if err := writeManifest(dir, manifest); err != nil {
