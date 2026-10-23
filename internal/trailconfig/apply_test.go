@@ -435,3 +435,216 @@ func TestApplyOverridesRefusesPolicyKey(t *testing.T) {
 		t.Fatalf("forbidden override err = %v", err)
 	}
 }
+
+func TestApplyPendingBarrierActivatesOnceAtSafeBoundary(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	manifest, err := trailconfig.Ensure(ctx, "trace-barrier")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRemainingTask(t, root, "trace-barrier", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusRunning,
+	})
+	if err := os.WriteFile(filepath.Join(root, ".paseka", "prompts", "builder.md"), []byte("barrier\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expected := manifest.ConfigRevision
+	result, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-barrier", Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Change.Outcome != trailconfig.OutcomePending {
+		t.Fatalf("outcome = %q, want pending", result.Change.Outcome)
+	}
+	if result.Manifest.ActiveConfigRef != manifest.ActiveConfigRef || result.Manifest.ConfigRevision != manifest.ConfigRevision {
+		t.Fatalf("pending action changed the active binding: %+v", result.Manifest)
+	}
+	if len(result.Change.Blockers) == 0 || !strings.Contains(strings.Join(result.Change.Blockers, ","), "task-1") {
+		t.Fatalf("blockers = %v", result.Change.Blockers)
+	}
+
+	writeRemainingTask(t, root, "trace-barrier", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusCompleted,
+	})
+	activated, changed, err := trailconfig.TryActivate(root, "trace-barrier", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || activated.ActiveConfigRef != result.NewRef || activated.ConfigRevision != manifest.ConfigRevision+1 {
+		t.Fatalf("activation = %+v (changed %v)", activated, changed)
+	}
+	again, changedAgain, err := trailconfig.TryActivate(root, "trace-barrier", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedAgain || again.ConfigRevision != activated.ConfigRevision {
+		t.Fatalf("duplicate activation applied twice: %+v", again)
+	}
+}
+
+func TestApplyCancelPendingLeavesActiveAndRefusesAfterActivation(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	manifest, err := trailconfig.Ensure(ctx, "trace-cancel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRemainingTask(t, root, "trace-cancel", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusRunning,
+	})
+	if err := os.WriteFile(filepath.Join(root, ".paseka", "prompts", "builder.md"), []byte("cancel me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expected := manifest.ConfigRevision
+	pending, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-cancel", Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := trailconfig.Cancel(root, "trace-cancel", pending.Change.ChangeID, "operator", "stay on old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Pending != nil || cancelled.ActiveConfigRef != manifest.ActiveConfigRef || cancelled.ConfigRevision != manifest.ConfigRevision {
+		t.Fatalf("cancel changed the active binding: %+v", cancelled)
+	}
+	if _, err := trailconfig.Cancel(root, "trace-cancel", pending.Change.ChangeID, "operator", ""); err == nil {
+		t.Fatal("second cancel unexpectedly succeeded")
+	}
+
+	writeRemainingTask(t, root, "trace-cancel", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusCompleted,
+	})
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-cancel", Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.Change.Outcome != trailconfig.OutcomeApplied {
+		t.Fatalf("apply after cancel = %q", applied.Change.Outcome)
+	}
+	if _, err := trailconfig.Cancel(root, "trace-cancel", applied.Change.ChangeID, "operator", ""); err == nil {
+		t.Fatal("cancel after activation unexpectedly succeeded")
+	}
+}
+
+func TestApplyDuplicateDeliveryRecoversPendingBarrier(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	manifest, err := trailconfig.Ensure(ctx, "trace-recover")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRemainingTask(t, root, "trace-recover", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusRunning,
+	})
+	if err := os.WriteFile(filepath.Join(root, ".paseka", "prompts", "builder.md"), []byte("recover\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expected := manifest.ConfigRevision
+	first, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-recover", Source: trailconfig.SourceColony,
+		Actor: "operator", RequestID: "recover-request", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Change.Outcome != trailconfig.OutcomePending {
+		t.Fatalf("first outcome = %q", first.Change.Outcome)
+	}
+	duplicate, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-recover", Source: trailconfig.SourceColony,
+		Actor: "operator", RequestID: "recover-request", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicate.Change.ChangeID != first.Change.ChangeID || duplicate.Manifest.Pending == nil {
+		t.Fatalf("duplicate did not return the pending action: %+v", duplicate.Change)
+	}
+	traceIDs, err := trailconfig.PendingTraceIDs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(traceIDs) != 1 || traceIDs[0] != "trace-recover" {
+		t.Fatalf("pending traces = %v", traceIDs)
+	}
+	writeRemainingTask(t, root, "trace-recover", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusCompleted,
+	})
+	activated, changed, err := trailconfig.TryActivate(root, "trace-recover", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || activated.ConfigRevision != manifest.ConfigRevision+1 {
+		t.Fatalf("pending barrier did not recover: %+v", activated)
+	}
+	after, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-recover", Source: trailconfig.SourceColony,
+		Actor: "operator", RequestID: "recover-request", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Change.Outcome != trailconfig.OutcomeApplied || after.Manifest.ConfigRevision != activated.ConfigRevision {
+		t.Fatalf("duplicate after activation applied again: %+v", after)
+	}
+}
+
+func TestTryActivateRejectsCandidateIncompatibleWithNewRemainingWork(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	manifest, err := trailconfig.Ensure(ctx, "trace-revalidate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRemainingTask(t, root, "trace-revalidate", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusRunning,
+	})
+	if err := os.WriteFile(filepath.Join(root, ".paseka", "prompts", "builder.md"), []byte("candidate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expected := manifest.ConfigRevision
+	pending, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: "trace-revalidate", Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Change.Outcome != trailconfig.OutcomePending {
+		t.Fatalf("apply outcome = %q", pending.Change.Outcome)
+	}
+	writeRemainingTask(t, root, "trace-revalidate", taskledger.TaskSnapshot{
+		TaskID: "task-2", Title: "review", Bee: "reviewer", Status: protocol.TaskStatusPlanned,
+	})
+	writeRemainingTask(t, root, "trace-revalidate", taskledger.TaskSnapshot{
+		TaskID: "task-1", Title: "implement", Bee: "builder", Status: protocol.TaskStatusCompleted,
+	})
+	after, changed, err := trailconfig.TryActivate(root, "trace-revalidate", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed || after.Pending != nil {
+		t.Fatalf("incompatible candidate was activated: %+v", after)
+	}
+	if after.ActiveConfigRef != manifest.ActiveConfigRef || after.ConfigRevision != manifest.ConfigRevision {
+		t.Fatalf("rejection changed active config: %+v", after)
+	}
+	last := after.History[len(after.History)-1]
+	if last.Outcome != trailconfig.OutcomeRejected || !strings.Contains(last.Detail, "reviewer") {
+		t.Fatalf("rejection not recorded: %+v", last)
+	}
+}

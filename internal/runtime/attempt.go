@@ -129,17 +129,20 @@ func (r *Reactor) prepareTaskAttempt(ctx *trailExecutionContext, traceID string,
 	if r.colony.ColonyRoot == "" {
 		return trailconfig.Attempt{}, nil, true, fmt.Errorf("runtime: colony root is required")
 	}
-	attempt, err := trailconfig.EnsureTaskAttempt(ctx.Colony, traceID, task.TaskID, sourceEventID, taskAttemptInput(task))
+	attempt, blocked, err := trailconfig.EnsureTaskAttemptGated(ctx.Colony, traceID, task.TaskID, sourceEventID, taskAttemptInput(task))
 	if err != nil {
 		return trailconfig.Attempt{}, nil, false, err
 	}
-	if !attempt.Open() {
+	if blocked || !attempt.Open() {
 		return attempt, ctx, true, nil
 	}
 	attemptCtx, err := r.contextForAttempt(ctx, traceID, attempt)
 	if err != nil {
 		return trailconfig.Attempt{}, nil, false, err
 	}
+	// The effective role must be resolved against the configuration the
+	// attempt was admitted with, not the one used to plan this event.
+	beeRole = colony.EffectiveTaskBee(task.Bee, attemptCtx.Manifest.Defaults)
 	if attemptCtx.Registry == nil || !attemptCtx.Registry.CanDispatchTaskReady(beeRole) {
 		return attempt, attemptCtx, true, nil
 	}
@@ -224,21 +227,21 @@ func (r *Reactor) prepareDirectAttempt(ev protocol.Event, beeRole string, active
 			}
 			attempt = found
 		} else {
-			admitted, _, err := trailconfig.AdmitChainAttempt(active.Colony, ev.TraceID, key, taskID, ev.ID)
+			admitted, _, blocked, err := trailconfig.AdmitChainAttemptGated(active.Colony, ev.TraceID, key, taskID, ev.ID)
 			if err != nil {
 				return trailconfig.Attempt{}, nil, false, err
 			}
-			if !admitted.Open() {
+			if blocked || !admitted.Open() {
 				return admitted, active, true, nil
 			}
 			attempt = admitted
 		}
 	default:
-		admitted, _, err := trailconfig.AdmitChainAttempt(active.Colony, ev.TraceID, key, "", ev.ID)
+		admitted, _, blocked, err := trailconfig.AdmitChainAttemptGated(active.Colony, ev.TraceID, key, "", ev.ID)
 		if err != nil {
 			return trailconfig.Attempt{}, nil, false, err
 		}
-		if !admitted.Open() {
+		if blocked || !admitted.Open() {
 			return admitted, active, true, nil
 		}
 		attempt = admitted

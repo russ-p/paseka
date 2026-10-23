@@ -125,6 +125,12 @@ func (r *Reactor) Run(ctx context.Context) error {
 	}
 	defer func() { _ = sub.Unsubscribe() }()
 
+	// A pending configuration transition and its admission barrier survive a
+	// restart. Recover them before any new event can be admitted.
+	if err := r.RecoverPendingConfigs(ctx); err != nil {
+		runtimeLog.Warn("recover pending configuration failed", logging.F("error", err.Error()))
+	}
+
 	go r.runPullRequestReconcile(ctx)
 
 	<-ctx.Done()
@@ -201,12 +207,31 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		if err := trailconfig.CloseTraceAttempts(r.colony.ColonyRoot, ev.TraceID, "trace killed"); err != nil {
 			runtimeLog.Warn("close attempts after kill failed", logging.F("error", err.Error()))
 		}
+		r.cancelPendingConfig(ev.TraceID, "trace killed")
 	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
+
+	// A transition that became safe at this boundary switches future work
+	// before the event's ready tasks are admitted. Existing attempt-owned work
+	// still resolves its own recorded context.
+	if _, err := r.tryActivateConfig(ctx, ev.TraceID, false); err != nil {
+		return err
+	}
+	ready := res.Ready
+	refreshed, configChanged, err := r.refreshExecutionIfChanged(execCtx, ev.TraceID)
+	if err != nil {
+		return err
+	}
+	if configChanged {
+		execCtx = refreshed
+		if ready, err = r.readyTasksInLedger(ev.TraceID); err != nil {
+			return err
+		}
+	}
 	if err := r.handlePostApplySideEffects(ctx, ev, execCtx); err != nil {
 		return err
 	}
-	if err := r.executeDispatches(ctx, ev, res.Ready, execCtx); err != nil {
+	if err := r.executeDispatches(ctx, ev, ready, execCtx); err != nil {
 		return err
 	}
 	if ev.Type == protocol.EventVerification && protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventCompleted) {

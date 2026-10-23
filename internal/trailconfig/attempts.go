@@ -166,6 +166,104 @@ func AdmitChainAttempt(ctx colony.Context, traceID, chainKey, taskID, sourceEven
 	return entry, created, err
 }
 
+// EnsureTaskAttemptGated admits a task attempt only when no configuration
+// transition is waiting for a safe boundary. An already-open attempt keeps its
+// recorded configuration and may continue; a replay of a closed attempt is
+// returned so the caller can skip it. blocked is true when new work was held.
+func EnsureTaskAttemptGated(ctx colony.Context, traceID, taskID, sourceEventID string, input *TaskInputEvidence) (Attempt, bool, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return Attempt{}, false, fmt.Errorf("trailconfig: task id is required")
+	}
+	dir := ConfigDir(ctx.ColonyRoot, traceID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return Attempt{}, false, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)
+	}
+	release, err := acquireLock(filepath.Join(dir, lockFileName))
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	defer release()
+
+	m, err := Load(ctx.ColonyRoot, traceID)
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	entry := Attempt{}
+	blocked := false
+	err = withAttempts(ctx.ColonyRoot, traceID, func(entries []Attempt) ([]Attempt, error) {
+		latest := latestTask(entries, taskID)
+		if latest.AttemptID != "" {
+			if latest.Open() {
+				entry = latest
+				if entry.TaskInput == nil {
+					entry.TaskInput = input
+					replaceAttempt(entries, entry)
+				}
+				return entries, nil
+			}
+			if sourceEventID != "" && (latest.SourceEventID == sourceEventID || latest.LastDispatchKey == sourceEventID) {
+				entry = latest
+				return entries, nil
+			}
+		}
+		if m.Pending != nil {
+			blocked = true
+			return entries, nil
+		}
+		entry = newAttempt(m, traceID, taskID, "", AttemptKindTask, sourceEventID, input)
+		return append(entries, entry), nil
+	})
+	return entry, blocked, err
+}
+
+// AdmitChainAttemptGated admits an independent direct chain only when no
+// configuration transition is waiting for a safe boundary. Chains and task
+// attempts that already exist keep their recorded configuration.
+func AdmitChainAttemptGated(ctx colony.Context, traceID, chainKey, taskID, sourceEventID string) (Attempt, bool, bool, error) {
+	if strings.TrimSpace(chainKey) == "" {
+		return Attempt{}, false, false, fmt.Errorf("trailconfig: chain key is required")
+	}
+	dir := ConfigDir(ctx.ColonyRoot, traceID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return Attempt{}, false, false, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)
+	}
+	release, err := acquireLock(filepath.Join(dir, lockFileName))
+	if err != nil {
+		return Attempt{}, false, false, err
+	}
+	defer release()
+
+	m, err := Load(ctx.ColonyRoot, traceID)
+	if err != nil {
+		return Attempt{}, false, false, err
+	}
+	entry := Attempt{}
+	created := false
+	blocked := false
+	err = withAttempts(ctx.ColonyRoot, traceID, func(entries []Attempt) ([]Attempt, error) {
+		for _, existing := range entries {
+			if existing.ChainKey == chainKey {
+				entry = existing
+				return entries, nil
+			}
+		}
+		if taskID != "" {
+			if latest := latestTask(entries, taskID); latest.AttemptID != "" {
+				entry = latest
+				return entries, nil
+			}
+		}
+		if m.Pending != nil {
+			blocked = true
+			return entries, nil
+		}
+		entry = newAttempt(m, traceID, taskID, chainKey, AttemptKindDirect, sourceEventID, nil)
+		created = true
+		return append(entries, entry), nil
+	})
+	return entry, created, blocked, err
+}
+
 func newAttempt(m Manifest, traceID, taskID, chainKey, kind, sourceEventID string, input *TaskInputEvidence) Attempt {
 	return Attempt{
 		SchemaVersion:        attemptsVersion,

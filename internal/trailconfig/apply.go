@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -142,6 +143,16 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 		return recordRejection(opts, manifest, "another configuration change is pending")
 	}
 
+	// Execution that still needs the old configuration holds activation at a
+	// safe boundary. Explicit blockers from the caller are merged with the
+	// durable evidence so a CLI request cannot silently cut over live work.
+	blockers := append([]string(nil), opts.Blockers...)
+	observed, err := Blockers(opts.Context.ColonyRoot, opts.TraceID)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	blockers = uniqueBlockers(append(blockers, observed...))
+
 	candidate, err := prepareCandidate(opts, manifest.ActiveConfigRef)
 	if err != nil {
 		return ApplyResult{}, err
@@ -210,9 +221,9 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	})
 
 	change := newChange(opts, manifest, candidate.ref)
-	if len(opts.Blockers) > 0 {
+	if len(blockers) > 0 {
 		change.Outcome = OutcomePending
-		change.Blockers = append([]string(nil), opts.Blockers...)
+		change.Blockers = append([]string(nil), blockers...)
 		manifest.Pending = &change
 		manifest.UpdatedAt = time.Now().UTC()
 		if err := writeManifest(dir, manifest); err != nil {
@@ -396,6 +407,11 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 	if manifest.Pending == nil {
 		return manifest, false, nil
 	}
+	observed, err := Blockers(colonyRoot, traceID)
+	if err != nil {
+		return Manifest{}, false, err
+	}
+	blockers = uniqueBlockers(append(blockers, observed...))
 	if len(blockers) > 0 {
 		manifest.Pending.Blockers = append([]string(nil), blockers...)
 		manifest.UpdatedAt = time.Now().UTC()
@@ -480,6 +496,89 @@ func Cancel(colonyRoot, traceID, changeID, actor, reason string) (Manifest, erro
 	return manifest, nil
 }
 
+// CancelIfPending cancels a pending action when one exists. It is the
+// idempotent form used by kill and recovery paths, where no pending action is a
+// normal outcome rather than an operator error.
+func CancelIfPending(colonyRoot, traceID, actor, reason string) (Manifest, bool, error) {
+	dir := ConfigDir(colonyRoot, traceID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return Manifest{}, false, err
+	}
+	release, err := acquireLock(filepath.Join(dir, lockFileName))
+	if err != nil {
+		return Manifest{}, false, err
+	}
+	defer release()
+
+	manifest, err := Load(colonyRoot, traceID)
+	if err != nil {
+		if errors.Is(err, ErrNoBinding) {
+			return Manifest{}, false, nil
+		}
+		return Manifest{}, false, err
+	}
+	if manifest.Pending == nil {
+		return manifest, false, nil
+	}
+	change := *manifest.Pending
+	change.Outcome = OutcomeCancelled
+	if strings.TrimSpace(actor) != "" {
+		change.Actor = actor
+	}
+	if strings.TrimSpace(reason) != "" {
+		change.Reason = reason
+	}
+	manifest.Pending = nil
+	manifest.History = append(manifest.History, change)
+	manifest.UpdatedAt = time.Now().UTC()
+	if err := writeManifest(dir, manifest); err != nil {
+		return Manifest{}, false, err
+	}
+	return manifest, true, nil
+}
+
+// HasPending reports whether a trail is holding new admissions for a pending
+// configuration action.
+func HasPending(colonyRoot, traceID string) (bool, error) {
+	manifest, err := Load(colonyRoot, traceID)
+	if err != nil {
+		if errors.Is(err, ErrNoBinding) {
+			return false, nil
+		}
+		return false, err
+	}
+	return manifest.Pending != nil, nil
+}
+
+// PendingTraceIDs lists trails whose configuration transition is still waiting
+// for a safe boundary. It is used to recover the admission barrier after a
+// Reactor restart.
+func PendingTraceIDs(colonyRoot string) ([]string, error) {
+	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs")
+	entries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var traceIDs []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		manifest, err := Load(colonyRoot, entry.Name())
+		if err != nil {
+			continue
+		}
+		if manifest.Pending != nil {
+			traceIDs = append(traceIDs, manifest.TraceID)
+		}
+	}
+	sort.Strings(traceIDs)
+	return traceIDs, nil
+}
+
 // Blockers reports execution that still needs the old configuration.
 func Blockers(colonyRoot, traceID string) ([]string, error) {
 	var blockers []string
@@ -488,6 +587,9 @@ func Blockers(colonyRoot, traceID string) ([]string, error) {
 			switch task.Status {
 			case protocol.TaskStatusRunning, protocol.TaskStatusWaitingReview:
 				blockers = append(blockers, "task "+task.TaskID+" is "+string(task.Status))
+				if attempt, ok, err := LatestTaskAttempt(colonyRoot, traceID, task.TaskID); err == nil && ok && attempt.Open() {
+					blockers = append(blockers, "attempt "+attempt.AttemptID+" for task "+task.TaskID+" is open")
+				}
 			}
 		}
 	}

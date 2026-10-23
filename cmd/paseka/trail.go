@@ -30,7 +30,46 @@ func newTrailConfigCmd() *cobra.Command {
 		Short: "Inspect a trail's captured configuration",
 	}
 	cmd.AddCommand(newTrailConfigApplyCmd())
+	cmd.AddCommand(newTrailConfigCancelCmd())
 	cmd.AddCommand(newTrailConfigShowCmd())
+	return cmd
+}
+
+func newTrailConfigCancelCmd() *cobra.Command {
+	var (
+		startDir string
+		reason   string
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   "cancel <traceId> [changeId]",
+		Short: "Cancel a pending configuration change without touching the active version",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			traceID := args[0]
+			changeID := ""
+			if len(args) == 2 {
+				changeID = args[1]
+			}
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			manifest, err := trailconfig.Cancel(ctxColony.ColonyRoot, traceID, changeID, "cli", reason)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(manifest)
+			}
+			fmt.Printf("Cancelled pending configuration change for %s\n", traceID)
+			fmt.Printf("activeConfigRef: %s (revision %d)\n", manifest.ActiveConfigRef, manifest.ConfigRevision)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&reason, "reason", "", "operator reason recorded in history")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
 	return cmd
 }
 

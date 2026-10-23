@@ -15,6 +15,11 @@ import (
 )
 
 func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskledger.TaskSnapshot, execCtx *trailExecutionContext, sourceEventID string) error {
+	defer func() {
+		if _, err := r.tryActivateConfig(context.Background(), traceID, true); err != nil {
+			runtimeLog.Warn("activate pending configuration failed", logging.F("error", err.Error()))
+		}
+	}()
 	if execCtx == nil {
 		resolved, err := r.executionContext(traceID)
 		if err != nil {
@@ -56,6 +61,13 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	if taskledger.ShouldSkipDispatch(task) {
 		logDispatchSkip("final review gate — no AFK dispatch", traceID, task.TaskID, bee)
 		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
+	}
+
+	if held, err := r.taskAdmissionHeld(traceID, task.TaskID); err != nil {
+		return err
+	} else if held {
+		logDispatchSkip("pending configuration change", traceID, task.TaskID, bee)
+		return nil
 	}
 
 	ok, err := r.gateDispatchEnergy(dispatchCtx, traceID, task.TaskID, "task.dispatch")

@@ -11,6 +11,11 @@ import (
 )
 
 func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string, execCtx *trailExecutionContext) error {
+	defer func() {
+		if _, err := r.tryActivateConfig(context.Background(), ev.TraceID, true); err != nil {
+			runtimeLog.Warn("activate pending configuration failed", logging.F("error", err.Error()))
+		}
+	}()
 	if execCtx == nil {
 		resolved, err := r.executionContext(ev.TraceID)
 		if err != nil {
@@ -53,6 +58,13 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 
 	dispatchCtx, endInflight := r.beginDirectInflight(key)
 	defer endInflight()
+
+	if held, err := r.directAdmissionHeld(ev, beeRole, taskID); err != nil {
+		return err
+	} else if held {
+		logDispatchSkip("pending configuration change", ev.TraceID, taskID, beeRole)
+		return nil
+	}
 
 	ok, err := r.gateDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
 	if err != nil {
