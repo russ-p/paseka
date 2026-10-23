@@ -62,6 +62,148 @@ func TestEnsureCreatesWorktree(t *testing.T) {
 	_ = homeDir
 }
 
+func TestEnsureStartsAtExplicitBase(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := "base-colony"
+	setupHome(t, repo, slug)
+	base := gitRevParse(t, repo, "HEAD")
+
+	if err := os.WriteFile(filepath.Join(repo, "later.txt"), []byte("later\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "later.txt")
+	runGit(t, repo, "commit", "-m", "later")
+	head := gitRevParse(t, repo, "HEAD")
+	if head == base {
+		t.Fatal("expected HEAD to advance")
+	}
+
+	entry, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    "trace-base",
+		Slug:       slug,
+		BaseSHA:    base,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.BaseSHA != base {
+		t.Fatalf("base = %q, want %q", entry.BaseSHA, base)
+	}
+	if got := gitRevParse(t, entry.Path, "HEAD"); got != base {
+		t.Fatalf("worktree HEAD = %q, want %q", got, base)
+	}
+	if _, err := os.Stat(filepath.Join(entry.Path, "later.txt")); !os.IsNotExist(err) {
+		t.Fatalf("later.txt should not exist in explicit-base worktree: %v", err)
+	}
+
+	st, err := homestate.LoadState(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Worktrees) != 1 || st.Worktrees[0].BaseSHA != base {
+		t.Fatalf("registry = %+v, want base %q", st.Worktrees, base)
+	}
+}
+
+func TestEnsureOmittedBaseUsesHEAD(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := "head-colony"
+	setupHome(t, repo, slug)
+	head := gitRevParse(t, repo, "HEAD")
+
+	entry, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    "trace-head",
+		Slug:       slug,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.BaseSHA != head {
+		t.Fatalf("base = %q, want HEAD %q", entry.BaseSHA, head)
+	}
+	if got := gitRevParse(t, entry.Path, "HEAD"); got != head {
+		t.Fatalf("worktree HEAD = %q, want %q", got, head)
+	}
+}
+
+func TestEnsureMissingBaseFailsBeforeCreation(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := "missing-base"
+	setupHome(t, repo, slug)
+
+	_, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    "trace-missing-base",
+		Slug:       slug,
+		BaseSHA:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+	})
+	if err == nil {
+		t.Fatal("expected missing base error")
+	}
+	if !strings.Contains(err.Error(), "base commit") {
+		t.Fatalf("error = %q, want base commit context", err)
+	}
+	if _, statErr := os.Stat(worktree.Path(repo, "trace-missing-base")); !os.IsNotExist(statErr) {
+		t.Fatalf("worktree path should not exist: %v", statErr)
+	}
+	st, err := homestate.LoadState(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Worktrees) != 0 {
+		t.Fatalf("registry should be empty, got %+v", st.Worktrees)
+	}
+}
+
+func TestEnsureNonCommitBaseFailsBeforeCreation(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := "noncommit-base"
+	setupHome(t, repo, slug)
+	blob := gitOutputString(t, repo, "hash-object", "README.md")
+
+	_, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    "trace-blob-base",
+		Slug:       slug,
+		BaseSHA:    blob,
+	})
+	if err == nil {
+		t.Fatal("expected non-commit base error")
+	}
+	if _, statErr := os.Stat(worktree.Path(repo, "trace-blob-base")); !os.IsNotExist(statErr) {
+		t.Fatalf("worktree path should not exist: %v", statErr)
+	}
+}
+
+func TestWorktreeServesAsExecutionRoot(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := "root-colony"
+	setupHome(t, repo, slug)
+
+	entry, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    "trace-root",
+		Slug:       slug,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Path == repo {
+		t.Fatal("execution root must be distinct from the colony checkout")
+	}
+	if !gitroot.IsCheckoutRoot(entry.Path) {
+		t.Fatal("worktree should be its own checkout root")
+	}
+	if err := os.WriteFile(filepath.Join(entry.Path, "fork-only.txt"), []byte("candidate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "fork-only.txt")); !os.IsNotExist(err) {
+		t.Fatalf("colony checkout should be untouched: %v", err)
+	}
+}
+
 func TestEnsureCreatesNamedBranch(t *testing.T) {
 	repo := initTestRepo(t)
 	slug := "named-colony"
@@ -263,10 +405,20 @@ func TestEnsureBranchCollisionFails(t *testing.T) {
 
 func gitBranch(t *testing.T, dir string) string {
 	t.Helper()
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
+	return gitOutputString(t, dir, "rev-parse", "--abbrev-ref", "HEAD")
+}
+
+func gitRevParse(t *testing.T, dir, ref string) string {
+	t.Helper()
+	return gitOutputString(t, dir, "rev-parse", ref)
+}
+
+func gitOutputString(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("git rev-parse HEAD: %v", err)
+		t.Fatalf("git %v: %v", args, err)
 	}
 	return strings.TrimSpace(string(out))
 }

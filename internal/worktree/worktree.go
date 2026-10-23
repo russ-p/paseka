@@ -29,6 +29,7 @@ type EnsureOptions struct {
 	TraceID    string
 	Slug       string // home config slug for state.json
 	Branch     string // optional resolved branch override (else from latest insight)
+	BaseSHA    string // optional explicit commit; empty means current HEAD
 }
 
 // ApplyBranchOptions renames an existing trace worktree to the given branch name.
@@ -62,6 +63,15 @@ func Ensure(opts EnsureOptions) (Entry, error) {
 		return Entry{}, err
 	}
 
+	explicitBase := strings.TrimSpace(opts.BaseSHA)
+	baseSHA := ""
+	if explicitBase != "" {
+		baseSHA, err = revParseCommit(colonyRoot, explicitBase)
+		if err != nil {
+			return Entry{}, fmt.Errorf("worktree: base commit %q: %w", explicitBase, err)
+		}
+	}
+
 	insight, resolved, err := resolveBranchForEnsure(colonyRoot, opts)
 	if err != nil {
 		return Entry{}, err
@@ -81,9 +91,11 @@ func Ensure(opts EnsureOptions) (Entry, error) {
 		return Entry{}, fmt.Errorf("worktree: %s exists but is not a git worktree", path)
 	}
 
-	baseSHA, err := revParse(colonyRoot, "HEAD")
-	if err != nil {
-		return Entry{}, fmt.Errorf("worktree: resolve HEAD: %w", err)
+	if baseSHA == "" {
+		baseSHA, err = revParseCommit(colonyRoot, "HEAD")
+		if err != nil {
+			return Entry{}, fmt.Errorf("worktree: resolve HEAD: %w", err)
+		}
 	}
 
 	if gitroot.LocalBranchExists(colonyRoot, resolved) {
@@ -94,7 +106,7 @@ func Ensure(opts EnsureOptions) (Entry, error) {
 		return Entry{}, err
 	}
 
-	if err := addWorktree(colonyRoot, resolved, path, "HEAD"); err != nil {
+	if err := addWorktree(colonyRoot, resolved, path, baseSHA); err != nil {
 		return Entry{}, err
 	}
 
@@ -352,6 +364,21 @@ func revParse(dir, ref string) (string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// revParseCommit resolves ref to a commit id, rejecting paths, trees, and
+// missing objects so an invalid base cannot reach worktree admission.
+func revParseCommit(dir, ref string) (string, error) {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", ref+"^{commit}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return "", err
+		}
+		return "", fmt.Errorf("%s", msg)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
