@@ -542,6 +542,27 @@ func cloneAliases(aliases map[string]string) map[string]string {
 	return out
 }
 
+// VerifySnapshot checks that a trail still retains one complete immutable
+// snapshot and that its content still matches the recorded ConfigRef. Read
+// models use it to report missing or corrupt evidence instead of assuming a
+// manifest reference is still readable.
+func VerifySnapshot(colonyRoot, traceID, ref string) error {
+	if colonyRoot == "" {
+		return fmt.Errorf("trailconfig: colony root is required")
+	}
+	if err := validateTraceID(traceID); err != nil {
+		return err
+	}
+	if err := validateConfigRef(ref); err != nil {
+		return err
+	}
+	snapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), ref)
+	if _, err := loadVerifiedSnapshot(snapshotDir, ref); err != nil {
+		return err
+	}
+	return nil
+}
+
 func loadVerifiedSnapshot(snapshotDir, expectedRef string) (Inventory, error) {
 	data, err := os.ReadFile(filepath.Join(snapshotDir, InventoryFileName))
 	if err != nil {

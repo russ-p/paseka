@@ -13,6 +13,7 @@ import (
 	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/russ-p/paseka/internal/trailconfig"
 	"github.com/russ-p/paseka/internal/trailfork"
+	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +22,7 @@ func newTrailCmd() *cobra.Command {
 		Use:   "trail",
 		Short: "Inspect flight trails and their configuration binding",
 	}
+	cmd.AddCommand(newTrailListCmd())
 	cmd.AddCommand(newTrailShowCmd())
 	cmd.AddCommand(newTrailConfigCmd())
 	cmd.AddCommand(newTrailForkCmd())
@@ -480,39 +482,170 @@ func newTrailConfigShowCmd() *cobra.Command {
 	return cmd
 }
 
+func newTrailListCmd() *cobra.Command {
+	var (
+		startDir string
+		forks    bool
+		source   string
+		limit    int
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List runnable trails with configuration, lineage, and admission evidence",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			collection, err := trailview.Load(ctxColony)
+			if err != nil {
+				return err
+			}
+			trails := collection.Trails
+			if forks || strings.TrimSpace(source) != "" {
+				trails = collection.ForksOf(source)
+			}
+			if limit > 0 && len(trails) > limit {
+				trails = trails[:limit]
+			}
+			if jsonOut {
+				return printJSON(struct {
+					Trails              []trailview.Trail   `json:"trails"`
+					PendingForkRequests []trailfork.Request `json:"pendingForkRequests"`
+				}{Trails: trails, PendingForkRequests: collection.PendingForkRequests})
+			}
+			printTrailRows(trails)
+			if len(collection.PendingForkRequests) > 0 {
+				fmt.Printf("%d pending fork request(s) are not runnable trails; run `paseka trail fork pending` to inspect them.\n",
+					len(collection.PendingForkRequests))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().BoolVar(&forks, "forks", false, "list only runnable forks")
+	cmd.Flags().StringVar(&source, "source", "", "list runnable forks of one source trail")
+	cmd.Flags().IntVar(&limit, "limit", 0, "maximum rows to print (0 = all)")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
+	return cmd
+}
+
 func newTrailShowCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		startDir string
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
 		Use:   "show <traceId>",
-		Short: "Show a trail's configuration binding",
+		Short: "Show a trail's configuration, lineage, admission state, and missing evidence",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return showTrailBinding(args[0])
+			return showTrailBinding(startDir, args[0], jsonOut)
 		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
+	return cmd
+}
+
+func showTrailBinding(startDir, traceID string, jsonOut bool) error {
+	ctxColony, err := colony.ResolveContext(startDir)
+	if err != nil {
+		return err
+	}
+	trail, ok, err := trailview.LoadTrail(ctxColony, traceID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		manifest, manifestErr := trailconfig.Load(ctxColony.ColonyRoot, traceID)
+		if manifestErr != nil {
+			if errors.Is(manifestErr, trailconfig.ErrNoBinding) {
+				return fmt.Errorf("trail %s has no runnable history or configuration binding", traceID)
+			}
+			return manifestErr
+		}
+		admission := trailview.AdmissionOrdinary
+		if manifest.Policy == trailconfig.PolicyPinned {
+			admission = trailview.AdmissionPinned
+		}
+		trail = trailview.Trail{
+			TraceID:          traceID,
+			ConfigBound:      true,
+			ConfigRef:        manifest.ActiveConfigRef,
+			ActiveConfigRef:  manifest.ActiveConfigRef,
+			InitialConfigRef: manifest.InitialConfigRef,
+			ConfigRevision:   manifest.ConfigRevision,
+			Policy:           manifest.Policy,
+			Config:           &manifest,
+			PendingConfig:    manifest.Pending,
+			AdmissionState:   admission,
+			Evidence:         []string{"configuration exists but the trail has no runnable history"},
+		}
+	}
+	if jsonOut {
+		return printJSON(trail)
+	}
+	printTrailEvidenceSummary(trail)
+	if trail.Config != nil {
+		printTrailManifest(*trail.Config, trailconfig.ConfigDir(ctxColony.ColonyRoot, trail.TraceID))
+	} else {
+		fmt.Println("configuration: not captured (legacy trail)")
+	}
+	if trail.Lineage != nil {
+		printForkLineage(*trail.Lineage)
+	}
+	if trail.Config != nil {
+		printConfigHistory(*trail.Config)
+	}
+	if len(trail.Evidence) > 0 {
+		fmt.Println("missing evidence:")
+		for _, note := range trail.Evidence {
+			fmt.Println("  - " + note)
+		}
+	}
+	return nil
+}
+
+func printTrailRows(trails []trailview.Trail) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "TRACE\tADMISSION\tCONFIG\tREV\tPOLICY\tFORK OF\tRUNS\tLAST ACTIVITY\tTITLE")
+	for _, trail := range trails {
+		config := trail.ConfigRef
+		if config == "" {
+			config = "-"
+		}
+		policy := trail.Policy
+		if policy == "" {
+			policy = "-"
+		}
+		forkOf := trail.ForkOf
+		if forkOf == "" {
+			forkOf = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%d\t%s\t%s\n",
+			trail.TraceID, trail.AdmissionState, config, trail.ConfigRevision, policy,
+			forkOf, trail.RunCount, formatTrailActivity(trail.LastActivityAt), trail.Title)
+	}
+	_ = w.Flush()
+}
+
+func printTrailEvidenceSummary(trail trailview.Trail) {
+	fmt.Printf("trace: %s\n", trail.TraceID)
+	fmt.Printf("admission: %s\n", trail.AdmissionState)
+	fmt.Printf("configRef: %s\n", trail.ConfigRef)
+	fmt.Printf("forkOf: %s\n", trail.ForkOf)
+	if trail.PendingForkRequests > 0 {
+		fmt.Printf("pendingForkRequests: %d\n", trail.PendingForkRequests)
 	}
 }
 
-func showTrailBinding(traceID string) error {
-	ctxColony, err := colony.ResolveContext("")
-	if err != nil {
-		return err
+func formatTrailActivity(at time.Time) string {
+	if at.IsZero() {
+		return "-"
 	}
-	manifest, err := trailconfig.Load(ctxColony.ColonyRoot, traceID)
-	if err != nil {
-		if errors.Is(err, trailconfig.ErrNoBinding) {
-			return fmt.Errorf("trail %s has no configuration binding", traceID)
-		}
-		return err
-	}
-	printTrailManifest(manifest, trailconfig.ConfigDir(ctxColony.ColonyRoot, manifest.TraceID))
-	lineage, err := trailfork.LoadLineage(ctxColony.ColonyRoot, manifest.TraceID)
-	switch {
-	case err == nil:
-		printForkLineage(lineage)
-	case !errors.Is(err, os.ErrNotExist):
-		return err
-	}
-	printConfigHistory(manifest)
-	return nil
+	return at.UTC().Format(time.RFC3339)
 }
 
 func parseOverrides(values []string) ([]trailconfig.Override, error) {

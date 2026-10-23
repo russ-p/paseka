@@ -15,6 +15,9 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/tasks"
+	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
+	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
@@ -92,6 +95,31 @@ type TraceSummaryView struct {
 	LowEnergy       bool                 `json:"lowEnergy,omitempty"`
 	Standing        bool                 `json:"standing,omitempty"`
 	Usage           *runs.UsageAggregate `json:"usage,omitempty"`
+
+	// Trail collection evidence. ConfigRef is the active retained
+	// configuration; ForkOf is the source trail for an experiment.
+	ConfigBound          bool                `json:"configBound"`
+	ConfigRef            string              `json:"configRef,omitempty"`
+	InitialConfigRef     string              `json:"initialConfigRef,omitempty"`
+	ActiveConfigRef      string              `json:"activeConfigRef,omitempty"`
+	ConfigRevision       int                 `json:"configRevision,omitempty"`
+	CandidateConfigRef   string              `json:"candidateConfigRef,omitempty"`
+	ConfigPolicy         string              `json:"configPolicy,omitempty"`
+	ForkID               string              `json:"forkId,omitempty"`
+	ForkOf               string              `json:"forkOf,omitempty"`
+	SourceTask           string              `json:"sourceTask,omitempty"`
+	SourceAttempt        string              `json:"sourceAttempt,omitempty"`
+	SourceConfigRef      string              `json:"sourceConfigRef,omitempty"`
+	SourceConfigRevision int                 `json:"sourceConfigRevision,omitempty"`
+	SourceBaseSHA        string              `json:"sourceBaseSha,omitempty"`
+	BaseSHA              string              `json:"baseSha,omitempty"`
+	Delta                *trailfork.Delta    `json:"delta,omitempty"`
+	Budget               int                 `json:"budget,omitempty"`
+	Branch               string              `json:"branch,omitempty"`
+	AdmissionState       string              `json:"admissionState,omitempty"`
+	PendingConfig        *trailconfig.Change `json:"pendingConfig,omitempty"`
+	PendingForkRequests  int                 `json:"pendingForkRequests,omitempty"`
+	Evidence             []string            `json:"evidence,omitempty"`
 }
 
 // TaskSummaryView is a lightweight task row for trace detail.
@@ -114,11 +142,13 @@ type WorktreeView struct {
 // TraceDetailView aggregates one trace for inspection UIs and export.
 type TraceDetailView struct {
 	TraceSummaryView
-	Tasks        []TaskSummaryView `json:"tasks"`
-	Runs         []RunView         `json:"runs"`
-	Worktree     *WorktreeView     `json:"worktree,omitempty"`
-	PullRequest  *PullRequestView  `json:"pullRequest,omitempty"`
-	RecentEvents []EventFeedItem   `json:"recentEvents"`
+	Tasks        []TaskSummaryView     `json:"tasks"`
+	Runs         []RunView             `json:"runs"`
+	Worktree     *WorktreeView         `json:"worktree,omitempty"`
+	PullRequest  *PullRequestView      `json:"pullRequest,omitempty"`
+	RecentEvents []EventFeedItem       `json:"recentEvents"`
+	Config       *trailconfig.Manifest `json:"config,omitempty"`
+	Lineage      *trailfork.Lineage    `json:"lineage,omitempty"`
 }
 
 // PullRequestView is machine-local forge identity on a trace.
@@ -250,8 +280,12 @@ func ListTracesPage(ctx colony.Context, query TracePageQuery) ([]TraceSummaryVie
 // projectTraces enriches raw run summaries into the Console projection.
 func projectTraces(ctx colony.Context, summaries []runs.TraceSummary) ([]TraceSummaryView, error) {
 	standing := LoadStandingTraceIDs(ctx.ColonyRoot)
+	trails, _, err := trailview.LoadSummaries(ctx, summaries)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]TraceSummaryView, 0, len(summaries))
-	for _, s := range summaries {
+	for i, s := range summaries {
 		view := TraceSummaryFromRuns(s)
 		EnrichTraceTitle(ctx, &view)
 		EnrichTraceSummary(ctx, &view)
@@ -259,9 +293,40 @@ func projectTraces(ctx colony.Context, summaries []runs.TraceSummary) ([]TraceSu
 		if view.Standing {
 			EnrichTraceEnergy(ctx, &view)
 		}
+		if i < len(trails) {
+			applyTrailView(&view, trails[i])
+		}
 		out = append(out, view)
 	}
 	return out, nil
+}
+
+// applyTrailView copies the shared trail collection fields onto a Console row.
+// The raw run summary stays authoritative for counts and activity; the read
+// model contributes configuration and lineage evidence.
+func applyTrailView(view *TraceSummaryView, trail trailview.Trail) {
+	view.ConfigBound = trail.ConfigBound
+	view.ConfigRef = trail.ConfigRef
+	view.InitialConfigRef = trail.InitialConfigRef
+	view.ActiveConfigRef = trail.ActiveConfigRef
+	view.ConfigRevision = trail.ConfigRevision
+	view.CandidateConfigRef = trail.CandidateConfigRef
+	view.ConfigPolicy = trail.Policy
+	view.ForkID = trail.ForkID
+	view.ForkOf = trail.ForkOf
+	view.SourceTask = trail.SourceTask
+	view.SourceAttempt = trail.SourceAttempt
+	view.SourceConfigRef = trail.SourceConfigRef
+	view.SourceConfigRevision = trail.SourceConfigRevision
+	view.SourceBaseSHA = trail.SourceBaseSHA
+	view.BaseSHA = trail.BaseSHA
+	view.Delta = trail.Delta
+	view.Budget = trail.Budget
+	view.Branch = trail.Branch
+	view.AdmissionState = trail.AdmissionState
+	view.PendingConfig = trail.PendingConfig
+	view.PendingForkRequests = trail.PendingForkRequests
+	view.Evidence = trail.Evidence
 }
 
 // ListTraces returns recent trace summaries.
@@ -318,6 +383,16 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 	EnrichTraceTitle(ctx, &view.TraceSummaryView)
 	EnrichTraceSummary(ctx, &view.TraceSummaryView)
 	EnrichTraceStanding(LoadStandingTraceIDs(ctx.ColonyRoot), &view.TraceSummaryView)
+
+	trails, _, err := trailview.LoadSummaries(ctx, []runs.TraceSummary{summary})
+	if err != nil {
+		return TraceDetailView{}, false, err
+	}
+	if len(trails) > 0 {
+		applyTrailView(&view.TraceSummaryView, trails[0])
+		view.Config = trails[0].Config
+		view.Lineage = trails[0].Lineage
+	}
 
 	taskSnap, err := loadTraceTasksOfflineFirst(ctx, traceID)
 	if err != nil {

@@ -54,6 +54,25 @@ type htmlPageData struct {
 	WorktreeCreated    string
 	HasWorktree        bool
 	UsageAggregateLine string
+	AdmissionState     string
+	HasConfig          bool
+	ConfigPolicy       string
+	ConfigRevision     int
+	InitialConfigRef   string
+	ActiveConfigRef    string
+	PendingConfig      string
+	HasLineage         bool
+	ForkOf             string
+	ForkID             string
+	SourceTask         string
+	SourceAttempt      string
+	SourceConfigRef    string
+	SourceRevision     int
+	SourceBaseSHA      string
+	BaseSHA            string
+	DeltaForm          string
+	Branch             string
+	Evidence           []string
 	Tasks              []hiveview.TaskSummaryView
 	Runs               []htmlRunView
 	Events             []htmlEventView
@@ -81,6 +100,12 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		RunCount:         data.Trace.RunCount,
 		TaskCount:        data.Trace.TaskCount,
 		Bees:             strings.Join(data.Trace.Bees, ", "),
+		AdmissionState:   data.Trace.AdmissionState,
+		ConfigPolicy:     data.Trace.ConfigPolicy,
+		ConfigRevision:   data.Trace.ConfigRevision,
+		InitialConfigRef: data.Trace.InitialConfigRef,
+		ActiveConfigRef:  data.Trace.ActiveConfigRef,
+		Evidence:         data.Trace.Evidence,
 		Tasks:            data.Trace.Tasks,
 		IncludeBees:      data.Include.Has(IncludeBees),
 		IncludeColony:    data.Include.Has(IncludeColony),
@@ -125,6 +150,27 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 			data.Trace.EnergyRemaining, data.Trace.EnergyBudget, data.Trace.EnergyAdded)
 		page.HoneySecondary = taskledger.FormatHoneySecondary(data.Trace.EnergyBudget, data.Trace.EnergyAdded)
 		page.LowEnergy = data.Trace.LowEnergy
+	}
+	if data.Trace.Config != nil {
+		page.HasConfig = true
+		if data.Trace.Config.Pending != nil {
+			page.PendingConfig = fmt.Sprintf("%s · source %s · expected revision %d",
+				data.Trace.Config.Pending.ChangeID, data.Trace.Config.Pending.Source, data.Trace.Config.Pending.ExpectedRevision)
+		}
+	}
+	if data.Trace.Lineage != nil {
+		lineage := data.Trace.Lineage
+		page.HasLineage = true
+		page.ForkOf = lineage.SourceTrace
+		page.ForkID = lineage.ForkID
+		page.SourceTask = lineage.SourceTask
+		page.SourceAttempt = lineage.SourceAttempt
+		page.SourceConfigRef = lineage.SourceConfigRef
+		page.SourceRevision = lineage.SourceConfigRevision
+		page.SourceBaseSHA = lineage.SourceBaseSHA
+		page.BaseSHA = lineage.BaseSHA
+		page.DeltaForm = lineage.Delta.Form
+		page.Branch = lineage.Branch
 	}
 	if data.Trace.Worktree != nil {
 		page.HasWorktree = true
@@ -479,6 +525,24 @@ code { font-family: var(--mono); font-size: 0.85em; }
     </div>
     <dl class="meta">
       <dt>Colony root</dt><dd><code>{{ .ColonyRoot }}</code></dd>
+      <dt>Admission</dt><dd>{{ if .AdmissionState }}{{ .AdmissionState }}{{ else }}—{{ end }}</dd>
+      {{ if .HasConfig }}
+      <dt>Configuration</dt><dd><code>{{ .ActiveConfigRef }}</code> · {{ .ConfigPolicy }} · revision {{ .ConfigRevision }}</dd>
+      <dt>Initial ConfigRef</dt><dd><code>{{ .InitialConfigRef }}</code></dd>
+      {{ if .PendingConfig }}<dt>Pending change</dt><dd>{{ .PendingConfig }}</dd>{{ end }}
+      {{ else }}
+      <dt>Configuration</dt><dd>Not captured (legacy trail); configuration evidence is unavailable</dd>
+      {{ end }}
+      {{ if .HasLineage }}
+      <dt>Fork of</dt><dd><code>{{ .ForkOf }}</code></dd>
+      <dt>Fork id</dt><dd><code>{{ .ForkID }}</code></dd>
+      <dt>Source task</dt><dd><code>{{ .SourceTask }}</code>{{ if .SourceAttempt }} · attempt <code>{{ .SourceAttempt }}</code>{{ end }}</dd>
+      <dt>Source ConfigRef</dt><dd><code>{{ .SourceConfigRef }}</code> · revision {{ .SourceRevision }}</dd>
+      <dt>Base SHA</dt><dd><code>{{ .BaseSHA }}</code></dd>
+      {{ if .SourceBaseSHA }}<dt>Source base SHA</dt><dd><code>{{ .SourceBaseSHA }}</code></dd>{{ end }}
+      <dt>Delta</dt><dd>{{ .DeltaForm }}</dd>
+      {{ if .Branch }}<dt>Branch</dt><dd><code>{{ .Branch }}</code></dd>{{ end }}
+      {{ end }}
       {{ if .HasWorktree }}
       <dt>Worktree</dt><dd><code>{{ .WorktreePath }}</code></dd>
       <dt>Branch</dt><dd>{{ if .WorktreeBranch }}{{ .WorktreeBranch }}{{ else }}—{{ end }}</dd>
@@ -486,6 +550,14 @@ code { font-family: var(--mono); font-size: 0.85em; }
       <dt>Worktree created</dt><dd>{{ .WorktreeCreated }}</dd>
       {{ end }}
     </dl>
+    {{ if .Evidence }}
+    <div class="muted" style="margin-top:1.25rem">
+      <h3 style="font-size:1rem">Missing evidence</h3>
+      <ul class="compact-list">
+        {{ range .Evidence }}<li>{{ . }}</li>{{ end }}
+      </ul>
+    </div>
+    {{ end }}
   </section>
 
   <section class="panel">
