@@ -260,6 +260,118 @@ export interface HoneyReserve {
 	standing?: boolean;
 }
 
+/** Mirrors `trailfork.Delta`, the recorded change a fork carries. */
+export interface ForkDelta {
+	form: string;
+	/** The proposal archive ref this delta was captured from. */
+	patch?: string;
+	patchTrace?: string;
+	patchAgentId?: string;
+	proposalId?: string;
+	proposalKind?: string;
+	publication?: string;
+	capturedAt?: string;
+	sha256?: string;
+	bytes?: number;
+	/** The retained patch body inside the fork's own run directory. */
+	path?: string;
+	rawDiff?: string[];
+	effectiveDiff?: string[];
+	shadowedDiff?: string[];
+}
+
+/** Mirrors `trailfork.Lineage`, the durable evidence behind one experiment. */
+export interface ForkLineage {
+	version: number;
+	requestId?: string;
+	forkId: string;
+	traceId: string;
+	sourceTrace: string;
+	sourceTask: string;
+	sourceAttempt: string;
+	sourceRun?: string;
+	sourceBaseSha?: string;
+	baseSha: string;
+	baseOverridden?: boolean;
+	sourceConfigRef: string;
+	sourceRevision: number;
+	configRef: string;
+	policy: string;
+	delta: ForkDelta;
+	profile?: string;
+	budget: number;
+	state: string;
+	workspace: string;
+	branch: string;
+	title?: string;
+	task: {
+		taskId: string;
+		sourceTaskId: string;
+		title?: string;
+		body?: string;
+		bee?: string;
+		sector?: string;
+		intent?: string;
+		review?: string;
+		sourceTaskDigest: string;
+		taskInputDigest?: string;
+		attemptId?: string;
+	};
+	limitations?: string[];
+	createdAt: string;
+}
+
+/** Mirrors `trailconfig.Snapshot`, one retained immutable configuration version. */
+export interface ConfigSnapshot {
+	configRef: string;
+	path: string;
+	source?: string;
+	createdAt?: string;
+	files: number;
+}
+
+/** Mirrors `trailconfig.Change`, one configuration apply or cancellation. */
+export interface ConfigChange {
+	revision: number;
+	initialConfigRef: string;
+	activeConfigRef: string;
+	source?: string;
+	changeId?: string;
+	requestId?: string;
+	requestFingerprint?: string;
+	actor?: string;
+	reason?: string;
+	expectedRevision?: number;
+	oldConfigRef?: string;
+	newConfigRef?: string;
+	/** `pending`, `applied`, `unchanged`, `rejected`, or `cancelled`. */
+	outcome?: string;
+	requestedAt?: string;
+	appliedAt?: string;
+	blockers?: string[];
+	detail?: string;
+	createdAt: string;
+}
+
+/** Mirrors `trailconfig.Manifest`, a trail's complete configuration binding. */
+export interface ConfigManifest {
+	version: number;
+	traceId: string;
+	initialConfigRef: string;
+	activeConfigRef: string;
+	configRevision: number;
+	policy: string;
+	initialCodeBaseSha?: string;
+	initialCodeBaseDirty?: boolean;
+	initialCodeBaseCapturedAt?: string;
+	workspaceRoot?: string;
+	createdAt?: string;
+	updatedAt?: string;
+	snapshots: ConfigSnapshot[];
+	pending?: ConfigChange;
+	history: ConfigChange[];
+}
+
 /** Mirrors `hiveview.TraceSummaryView`. */
 export interface TraceSummary extends HoneyReserve {
 	traceId: string;
@@ -274,6 +386,30 @@ export interface TraceSummary extends HoneyReserve {
 	hasFailures: boolean;
 	hasActive: boolean;
 	usage?: UsageAggregate;
+
+	/** Shared trail evidence: configuration binding and fork lineage. */
+	configBound?: boolean;
+	configRef?: string;
+	initialConfigRef?: string;
+	activeConfigRef?: string;
+	configRevision?: number;
+	candidateConfigRef?: string;
+	configPolicy?: string;
+	forkId?: string;
+	forkOf?: string;
+	sourceTask?: string;
+	sourceAttempt?: string;
+	sourceConfigRef?: string;
+	sourceConfigRevision?: number;
+	sourceBaseSha?: string;
+	baseSha?: string;
+	delta?: ForkDelta;
+	budget?: number;
+	branch?: string;
+	admissionState?: string;
+	pendingConfig?: ConfigChange;
+	pendingForkRequests?: number;
+	evidence?: string[];
 }
 
 /** Mirrors `hiveview.RunView`. */
@@ -863,6 +999,67 @@ export interface TraceDetail extends TraceSummary {
 	worktree?: Worktree;
 	pullRequest?: PullRequest;
 	recentEvents: EventFeedItem[] | null;
+	config?: ConfigManifest;
+	lineage?: ForkLineage;
+}
+
+/** Mirrors `trailview.Collection`: runnable trails plus pending fork requests. */
+export interface TrailCollection {
+	trails: TraceSummary[];
+	pendingForkRequests: ForkRequest[];
+}
+
+/** Mirrors `trailfork.Request`, one durable pending or decided fork request. */
+export interface ForkRequest {
+	version: number;
+	requestId: string;
+	state: string;
+	origin: string;
+	sender?: { traceId?: string; agentId?: string; bee?: string };
+	evidence: ForkLineage;
+	contentDigest: string;
+	validation?: string;
+	reason?: string;
+	lastError?: string;
+	createdAt: string;
+	updatedAt: string;
+	expiresAt?: string;
+	decidedAt?: string;
+	decidedBy?: string;
+	forkId?: string;
+	traceId?: string;
+	taskId?: string;
+	lineage?: ForkLineage;
+}
+
+/** Mirrors `console.TrailConfigApplyRequest`. */
+export interface TrailConfigApplyRequest {
+	source: string;
+	snapshotRef?: string;
+	overrides?: { role: string; key: string; value: string }[];
+	reason?: string;
+	requestId?: string;
+	expectedRevision?: number;
+	dryRun?: boolean;
+}
+
+/** Mirrors `console.TrailConfigApplyResponse`, including the preview diff. */
+export interface TrailConfigApplyResult {
+	manifest: ConfigManifest;
+	change: ConfigChange;
+	newConfigRef?: string;
+	diff?: string[];
+	effectiveDiff?: string[];
+	shadowedDiff?: string[];
+	remainingWork: { evaluated: boolean; compatible: boolean; checked?: string[]; problems?: string[] };
+	dryRun: boolean;
+}
+
+/** Mirrors `console.ForkDecision`. */
+export interface ForkDecision {
+	request: ForkRequest;
+	lineage?: ForkLineage;
+	created?: boolean;
 }
 
 /** Mirrors `hiveview.ArtifactView`, one trail comb file. */

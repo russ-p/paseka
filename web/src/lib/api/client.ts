@@ -16,9 +16,12 @@ import type {
 	DashboardSummary,
 	DiscardTaskRequest,
 	DiscardTaskResult,
+	ConfigManifest,
 	EnergyAddResult,
 	EventFeedPage,
 	EventFilters,
+	ForkDecision,
+	ForkRequest,
 	GitActionResult,
 	GitView,
 	ProposalPatchContent,
@@ -42,6 +45,9 @@ import type {
 	TaskBoard,
 	TaskDetail,
 	Topology,
+	TrailCollection,
+	TrailConfigApplyRequest,
+	TrailConfigApplyResult,
 	TraceDetail,
 	TraceExportFormat,
 	TraceExportInclude,
@@ -137,6 +143,69 @@ export function traceCursor(trace: TraceSummary): string {
 
 export function getTrace(traceId: string): Promise<TraceDetail> {
 	return request<TraceDetail>(`/traces/${encodeURIComponent(traceId)}`);
+}
+
+/** The whole trail collection: runnable trails and pending fork requests. */
+export function listTrails(): Promise<TrailCollection> {
+	return request<TrailCollection>('/trails');
+}
+
+/** One trail's immutable configuration binding and its append-only history. */
+export function getTrailConfig(traceId: string): Promise<ConfigManifest> {
+	return request<ConfigManifest>(`/traces/${encodeURIComponent(traceId)}/config`);
+}
+
+/** Preview or apply a configuration version through the CLI's service. */
+export function applyTrailConfig(
+	traceId: string,
+	body: TrailConfigApplyRequest
+): Promise<TrailConfigApplyResult> {
+	return request<TrailConfigApplyResult>(`/traces/${encodeURIComponent(traceId)}/config/apply`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+}
+
+/** Cancel the one pending configuration change, leaving the active one in place. */
+export function cancelTrailConfig(
+	traceId: string,
+	body: { changeId?: string; reason?: string } = {}
+): Promise<ConfigManifest> {
+	return request<ConfigManifest>(`/traces/${encodeURIComponent(traceId)}/config/cancel`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+}
+
+/** Runnable forks whose source is this trail. */
+export function listForksOf(traceId: string): Promise<TraceSummary[]> {
+	return request<TraceSummary[]>(`/traces/${encodeURIComponent(traceId)}/forks`);
+}
+
+/** Pending fork requests, optionally for one source and optionally including decided ones. */
+export function listForkRequests(
+	options: { source?: string; all?: boolean } = {}
+): Promise<ForkRequest[]> {
+	const query = new URLSearchParams();
+	if (options.source) query.set('source', options.source);
+	if (options.all) query.set('all', '1');
+	const suffix = query.size > 0 ? `?${query}` : '';
+	return request<ForkRequest[]>(`/fork-requests${suffix}`);
+}
+
+/** Approve, reject, or cancel one fork request. */
+export function decideForkRequest(
+	requestId: string,
+	action: 'approve' | 'reject' | 'cancel',
+	reason = ''
+): Promise<ForkDecision> {
+	return request<ForkDecision>(`/fork-requests/${encodeURIComponent(requestId)}/${action}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ reason })
+	});
 }
 
 export function listTraceArtifacts(traceId: string): Promise<ArtifactView[]> {

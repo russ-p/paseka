@@ -1,6 +1,7 @@
 import {
 	FolderGit2,
 	GitBranch,
+	GitFork,
 	Hexagon,
 	History,
 	LayoutDashboard,
@@ -33,6 +34,7 @@ export const routeGlyphs: Record<RouteGlyph, typeof LayoutDashboard> = {
 	history: History,
 	tasks: ListTodo,
 	reviews: SquareCheckBig,
+	fork: GitFork,
 	terminal: Terminal,
 	bees: Hexagon,
 	worktrees: FolderGit2,
