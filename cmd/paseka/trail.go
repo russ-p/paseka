@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +23,94 @@ func newTrailCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newTrailShowCmd())
 	cmd.AddCommand(newTrailConfigCmd())
+	cmd.AddCommand(newTrailForkCmd())
+	return cmd
+}
+
+func newTrailForkCmd() *cobra.Command {
+	var (
+		startDir  string
+		source    string
+		taskID    string
+		sourceRun string
+		base      string
+		delta     string
+		noDelta   bool
+		honey     int
+		title     string
+		requestID string
+		dryRun    bool
+		jsonOut   bool
+	)
+	cmd := &cobra.Command{
+		Use:   "fork",
+		Short: "Preview and create a no-delta control fork of an existing trail",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(delta) != "" {
+				return fmt.Errorf("--delta is not supported yet; use --no-delta for a control arm")
+			}
+			if !noDelta {
+				return fmt.Errorf("choose --no-delta (control arm); --delta is not supported yet")
+			}
+			if strings.TrimSpace(source) == "" {
+				return fmt.Errorf("--source <traceId> is required")
+			}
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			opts := trailfork.Options{
+				Context:       ctxColony,
+				SourceTraceID: source,
+				TaskID:        taskID,
+				SourceRun:     sourceRun,
+				BaseSHA:       base,
+				Budget:        honey,
+				Title:         title,
+				RequestID:     requestID,
+				Actor:         "cli",
+				DryRun:        dryRun,
+			}
+			if dryRun {
+				result, err := trailfork.Preview(opts)
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					return printJSON(result)
+				}
+				printForkResult(result)
+				return nil
+			}
+
+			session, err := tasks.OpenLedger(ctxColony)
+			if err != nil {
+				return err
+			}
+			defer session.Close()
+			result, err := trailfork.Create(cmd.Context(), session.Publisher, session.Ledger, opts)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(result)
+			}
+			printForkResult(result)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVar(&source, "source", "", "source trail id to fork")
+	cmd.Flags().StringVar(&taskID, "task", "", "source task id (default: the single unambiguous root task)")
+	cmd.Flags().StringVar(&sourceRun, "source-run", "", "source agent run id selecting one recorded attempt")
+	cmd.Flags().StringVar(&base, "base", "", "explicit code base commit (removes the equal-base guarantee)")
+	cmd.Flags().StringVar(&delta, "delta", "", "configuration patch record (not supported yet)")
+	cmd.Flags().BoolVar(&noDelta, "no-delta", false, "create a control arm with the source configuration")
+	cmd.Flags().IntVar(&honey, "honey", 0, "initial honey reserve (default: colony energy ceiling)")
+	cmd.Flags().StringVar(&title, "title", "", "fork trail title")
+	cmd.Flags().StringVar(&requestID, "request-id", "", "idempotency request id recorded in lineage")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate and preview without durable changes")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
 	return cmd
 }
 
@@ -219,6 +309,13 @@ func showTrailBinding(traceID string) error {
 		return err
 	}
 	printTrailManifest(manifest, trailconfig.ConfigDir(ctxColony.ColonyRoot, manifest.TraceID))
+	lineage, err := trailfork.LoadLineage(ctxColony.ColonyRoot, manifest.TraceID)
+	switch {
+	case err == nil:
+		printForkLineage(lineage)
+	case !errors.Is(err, os.ErrNotExist):
+		return err
+	}
 	printConfigHistory(manifest)
 	return nil
 }
@@ -280,6 +377,60 @@ func printConfigHistory(manifest trailconfig.Manifest) {
 			formatApplyTime(change.RequestedAt), applied)
 	}
 	_ = w.Flush()
+}
+
+func printForkLineage(lineage trailfork.Lineage) {
+	fmt.Printf("forkId: %s\n", lineage.ForkID)
+	fmt.Printf("forkOf: %s\n", lineage.SourceTrace)
+	fmt.Printf("sourceTask: %s\n", lineage.SourceTask)
+	fmt.Printf("sourceAttempt: %s\n", lineage.SourceAttempt)
+	fmt.Printf("sourceConfigRef: %s (revision %d)\n", lineage.SourceConfigRef, lineage.SourceConfigRevision)
+	fmt.Printf("baseSha: %s\n", lineage.BaseSHA)
+	if lineage.BaseOverridden {
+		fmt.Printf("baseOverriddenFrom: %s\n", lineage.SourceBaseSHA)
+	}
+	fmt.Printf("delta: %s\n", lineage.Delta.Form)
+	fmt.Printf("workspace: %s\n", lineage.Workspace)
+	fmt.Printf("branch: %s\n", lineage.Branch)
+	fmt.Printf("budget: %d\n", lineage.Budget)
+	fmt.Printf("state: %s\n", lineage.State)
+}
+
+func printForkResult(result trailfork.Result) {
+	plan := result.Plan
+	fmt.Printf("source: %s\n", plan.SourceTrace)
+	fmt.Printf("source task: %s (attempt %s)\n", plan.SourceTask, plan.SourceAttempt)
+	if plan.SourceRun != "" {
+		fmt.Printf("source run: %s\n", plan.SourceRun)
+	}
+	fmt.Printf("source config: %s (revision %d)\n", plan.SourceConfigRef, plan.SourceConfigRevision)
+	fmt.Printf("source task digest: %s\n", plan.Task.SourceTaskDigest)
+	if plan.BaseOverridden {
+		fmt.Printf("base: %s (overridden from %s)\n", plan.BaseSHA, plan.SourceBaseSHA)
+	} else {
+		fmt.Printf("base: %s\n", plan.BaseSHA)
+	}
+	fmt.Printf("fork trace: %s\n", plan.TraceID)
+	fmt.Printf("fork task: %s\n", plan.Task.TaskID)
+	fmt.Printf("task: %s\n", plan.Task.Title)
+	fmt.Printf("bee: %s\n", plan.Task.Bee)
+	fmt.Printf("delta: %s\n", plan.Delta.Form)
+	fmt.Printf("policy: %s\n", plan.Policy)
+	fmt.Printf("workspace: %s\n", plan.Workspace)
+	fmt.Printf("branch: %s\n", plan.Branch)
+	fmt.Printf("budget: %d\n", plan.Budget)
+	fmt.Println("admission: colony NATS and task ledger required for creation")
+	if result.Created {
+		fmt.Printf("Created fork: lineage at %s\n", result.LineagePath)
+	} else {
+		fmt.Println("Dry run: no durable changes")
+	}
+	if len(plan.Limitations) > 0 {
+		fmt.Println("Limitations:")
+		for _, limitation := range plan.Limitations {
+			fmt.Println("  - " + limitation)
+		}
+	}
 }
 
 func printApplyResult(result trailconfig.ApplyResult) {
