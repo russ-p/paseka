@@ -34,13 +34,13 @@ func (d *Dispatcher) publishRunOutcome(
 			if !protocol.IsDomainEvent(ev.Type) {
 				continue
 			}
-			d.advisePublish(req.Bee, ev, result)
+			advisePublish(req.Registry, req.Bee, ev, result)
 			if err := d.publisher.PublishEvent(ctx, ev); err != nil {
 				return err
 			}
 		}
 		for _, ev := range synthesized {
-			d.advisePublish(req.Bee, ev, result)
+			advisePublish(req.Registry, req.Bee, ev, result)
 			if err := d.publisher.PublishEvent(ctx, ev); err != nil {
 				return err
 			}
@@ -53,26 +53,26 @@ func (d *Dispatcher) publishRunOutcome(
 		result.Warnings = append(result.Warnings, res.Misconfigured)
 	}
 	if res.Event != nil {
-		d.advisePublish(req.Bee, *res.Event, result)
+		advisePublish(req.Registry, req.Bee, *res.Event, result)
 	}
 	return err
 }
 
-func (d *Dispatcher) shouldAutoPublishMutation(bee colony.Bee) bool {
+func shouldAutoPublishMutation(registry *BeeRegistry, bee colony.Bee) bool {
 	if len(bee.Publishes) == 0 {
 		return false
 	}
-	if d.registry != nil {
-		return d.registry.ShouldAutoPublishMutation(bee.Role)
+	if registry != nil {
+		return registry.ShouldAutoPublishMutation(bee.Role)
 	}
 	return proposal.ShouldAutoPublish(bee)
 }
 
-func (d *Dispatcher) advisePublish(beeRole string, ev protocol.Event, result *adapters.RunResult) {
-	if d.registry == nil {
+func advisePublish(registry *BeeRegistry, beeRole string, ev protocol.Event, result *adapters.RunResult) {
+	if registry == nil {
 		return
 	}
-	warning, ok := d.registry.ValidatePublish(beeRole, ev)
+	warning, ok := registry.ValidatePublish(beeRole, ev)
 	if ok {
 		return
 	}

@@ -186,6 +186,13 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateArtifactWritten(payload)
 	}
 
+	switch ForkEventKind(kind) {
+	case SignalTrailFork:
+		return validateForkRequest(payload)
+	case SignalTrailForkApprove, SignalTrailForkReject, SignalTrailForkCancel:
+		return validateForkDecision(payload)
+	}
+
 	return nil
 }
 
@@ -223,6 +230,10 @@ func expectedEventType(kind string) EventType {
 	}
 	switch ArtifactEventKind(kind) {
 	case SignalArtifactWritten:
+		return EventSignal
+	}
+	switch ForkEventKind(kind) {
+	case SignalTrailFork, SignalTrailForkApprove, SignalTrailForkReject, SignalTrailForkCancel:
 		return EventSignal
 	}
 	return ""
@@ -559,6 +570,47 @@ func validateBeekeeperReady(payload json.RawMessage) []ValidationDetail {
 		})
 	}
 	return details
+}
+
+func validateForkRequest(payload json.RawMessage) []ValidationDetail {
+	var p ForkRequestPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid trail.fork payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.RequestID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.requestId", Message: "required"})
+	}
+	if strings.TrimSpace(p.SourceTrace) == "" {
+		details = append(details, ValidationDetail{Path: "payload.sourceTrace", Message: "required"})
+	}
+	switch strings.TrimSpace(p.Delta) {
+	case "none":
+		if strings.TrimSpace(p.Patch) != "" {
+			details = append(details, ValidationDetail{Path: "payload.patch", Message: "not allowed with delta \"none\""})
+		}
+	case "patch":
+		if strings.TrimSpace(p.Patch) == "" {
+			details = append(details, ValidationDetail{Path: "payload.patch", Message: "required with delta \"patch\""})
+		}
+	default:
+		details = append(details, ValidationDetail{Path: "payload.delta", Message: "must be one of none, patch"})
+	}
+	if p.Budget < 0 {
+		details = append(details, ValidationDetail{Path: "payload.budget", Message: "must not be negative"})
+	}
+	return details
+}
+
+func validateForkDecision(payload json.RawMessage) []ValidationDetail {
+	var p ForkDecisionPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid trail.fork decision payload"}}
+	}
+	if strings.TrimSpace(p.RequestID) == "" {
+		return []ValidationDetail{{Path: "payload.requestId", Message: "required"}}
+	}
+	return nil
 }
 
 func isBeekeeperAction(action BeekeeperAction) bool {

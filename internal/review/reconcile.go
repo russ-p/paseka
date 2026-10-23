@@ -31,6 +31,13 @@ func ReconcilePublished(ctx context.Context, colonyCtx colony.Context, pub bus.P
 	if traceID == "" || colonyCtx.Slug == "" {
 		return ReconcileResult{}, nil
 	}
+	experimental, err := IsExperimentalTrail(colonyCtx.ColonyRoot, traceID)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	if experimental {
+		return ReconcileResult{TraceID: traceID}, errExperimentalDelivery(traceID)
+	}
 	entry, ok, err := homestate.FindPullRequest(colonyCtx.Slug, traceID)
 	if err != nil || !ok {
 		return ReconcileResult{}, err

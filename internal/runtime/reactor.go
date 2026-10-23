@@ -13,27 +13,38 @@ import (
 	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
+	"github.com/russ-p/paseka/internal/trailview"
 )
 
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
 type Reactor struct {
-	colony          colony.Context
-	publisher       bus.Publisher
-	subscriber      bus.EventSubscriber
-	close           func()
-	subjectPrefix   string
-	replayer        bus.TraceReplayer
-	dispatcher      *Dispatcher
-	ledger          taskledger.Ledger
-	registry        *BeeRegistry
-	mu              sync.Mutex
-	inflight        map[string]context.CancelFunc
-	directInflight  map[string]context.CancelFunc
-	directProcessed map[string]struct{}
-	recentLocal     map[string]time.Time // fingerprints of events applied before publish
-	asyncDispatch   bool
-	invitePublisher bus.Publisher // test override for auto-invite publish
-	autoInvites     []colony.AutoInviteRule
+	colony           colony.Context
+	publisher        bus.Publisher
+	subscriber       bus.EventSubscriber
+	close            func()
+	subjectPrefix    string
+	replayer         bus.TraceReplayer
+	dispatcher       *Dispatcher
+	ledger           taskledger.Ledger
+	registry         *BeeRegistry
+	mu               sync.Mutex
+	inflight         map[string]context.CancelFunc
+	directInflight   map[string]context.CancelFunc
+	directProcessed  map[string]struct{}
+	recentLocal      map[string]time.Time // fingerprints of events applied before publish
+	asyncDispatch    bool
+	invitePublisher  bus.Publisher // test override for auto-invite publish
+	autoInvites      []colony.AutoInviteRule
+	configMu         sync.Mutex
+	configRegistries map[string]*BeeRegistry
+}
+
+type trailExecutionContext struct {
+	Colony   colony.Context
+	Manifest colony.Colony
+	Registry *BeeRegistry
 }
 
 // ReactorOptions configures a hive runtime reactor.
@@ -78,21 +89,22 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 	d.SetBeeRegistry(registry)
 
 	return &Reactor{
-		colony:          ctxColony,
-		publisher:       busClient,
-		subscriber:      busClient,
-		close:           busClient.Close,
-		subjectPrefix:   busClient.Config().SubjectPrefix,
-		replayer:        busClient,
-		dispatcher:      d,
-		ledger:          taskledger.NewKVLedger(kv),
-		registry:        registry,
-		inflight:        make(map[string]context.CancelFunc),
-		directInflight:  make(map[string]context.CancelFunc),
-		directProcessed: make(map[string]struct{}),
-		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   true,
-		autoInvites:     manifest.AutoInvites,
+		colony:           ctxColony,
+		publisher:        busClient,
+		subscriber:       busClient,
+		close:            busClient.Close,
+		subjectPrefix:    busClient.Config().SubjectPrefix,
+		replayer:         busClient,
+		dispatcher:       d,
+		ledger:           taskledger.NewKVLedger(kv),
+		registry:         registry,
+		inflight:         make(map[string]context.CancelFunc),
+		directInflight:   make(map[string]context.CancelFunc),
+		directProcessed:  make(map[string]struct{}),
+		recentLocal:      make(map[string]time.Time),
+		asyncDispatch:    true,
+		autoInvites:      manifest.AutoInvites,
+		configRegistries: make(map[string]*BeeRegistry),
 	}, nil
 }
 
@@ -114,6 +126,15 @@ func (r *Reactor) Run(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = sub.Unsubscribe() }()
+
+	// A pending configuration transition and its admission barrier survive a
+	// restart. Recover them before any new event can be admitted.
+	if err := r.RecoverPendingConfigs(ctx); err != nil {
+		runtimeLog.Warn("recover pending configuration failed", logging.F("error", err.Error()))
+	}
+	// An interrupted fork approval resumes under its recorded request identity
+	// before any new event can plan the same initial task again.
+	r.recoverInterruptedForkCreations(ctx)
 
 	go r.runPullRequestReconcile(ctx)
 
@@ -146,7 +167,25 @@ func (r *Reactor) handleEvent(ev protocol.Event) error {
 func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	logEventReceived(ev)
 
-	if err := r.validateIncomingTaskPlan(ev); err != nil {
+	// Fork control is admission, not trail work. Intercept it before the trail
+	// binding is required so a rejected request leaves no runnable trace.
+	if handled, err := r.handleForkControl(ctx, ev); err != nil {
+		return err
+	} else if handled {
+		return nil
+	}
+
+	// A new trail owns its configuration from its first event onward. Capture
+	// that binding before any configuration-dependent validation or routing, so
+	// the event cannot be judged by live files that a later edit would replace.
+	// A pre-existing unbound trail keeps routing on the live colony.
+	execCtx, err := r.executionContext(ev.TraceID)
+	if err != nil {
+		return fmt.Errorf("runtime: trail config: %w", err)
+	}
+	r.stampIncomingProvenance(&ev)
+
+	if err := r.validateIncomingTaskPlan(ev, execCtx); err != nil {
 		return err
 	}
 
@@ -157,6 +196,13 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		return nil
 	}
 
+	stale, err := r.staleTaskCompletion(ev)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	res, err := r.ledger.Apply(ev)
 	if err != nil {
 		return err
@@ -164,17 +210,136 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
 	}
+	if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
+		if task, ok := res.Trace.Tasks[taskID]; ok && terminalTaskStatus(task.Status) {
+			if err := r.closeCompletedTaskAttempt(ev.TraceID, taskID, ev.AttemptID); err != nil {
+				runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+			}
+		}
+	}
+	if systemKillDetected(ev) {
+		if err := trailconfig.CloseTraceAttempts(r.colony.ColonyRoot, ev.TraceID, "trace killed"); err != nil {
+			runtimeLog.Warn("close attempts after kill failed", logging.F("error", err.Error()))
+		}
+		r.cancelPendingConfig(ev.TraceID, "trace killed")
+	}
 	logLedgerOutcome(ev.TraceID, len(res.Ready))
-	if err := r.handlePostApplySideEffects(ctx, ev); err != nil {
+
+	// A transition that became safe at this boundary switches future work
+	// before the event's ready tasks are admitted. Existing attempt-owned work
+	// still resolves its own recorded context.
+	if _, err := r.tryActivateConfig(ctx, ev.TraceID, false); err != nil {
 		return err
 	}
-	if err := r.executeDispatches(ctx, ev, res.Ready); err != nil {
+	ready := res.Ready
+	refreshed, configChanged, err := r.refreshExecutionIfChanged(execCtx, ev.TraceID)
+	if err != nil {
+		return err
+	}
+	if configChanged {
+		execCtx = refreshed
+		if ready, err = r.readyTasksInLedger(ev.TraceID); err != nil {
+			return err
+		}
+	}
+	if err := r.handlePostApplySideEffects(ctx, ev, execCtx); err != nil {
+		return err
+	}
+	if err := r.executeDispatches(ctx, ev, ready, execCtx); err != nil {
 		return err
 	}
 	if ev.Type == protocol.EventVerification && protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventCompleted) {
 		return r.maybeActivateFinalReview(ctx, ev.TraceID)
 	}
 	return nil
+}
+
+func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, error) {
+	if r.colony.ColonyRoot == "" {
+		return nil, fmt.Errorf("colony root is required")
+	}
+	// Resolve the trail's lineage before admitting work. An experimental trail
+	// must dispatch through its pinned binding; it must never fall back to the
+	// live colony because a binding or lineage record is missing.
+	scope, err := trailview.ResolveScope(r.colony, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: resolve trail scope: %w", err)
+	}
+	// A dropped fork keeps its records but can never dispatch again, even if a
+	// later ledger reset forgot the kill.
+	if scope.AdmissionState == trailfork.StateDropped {
+		return nil, fmt.Errorf("runtime: trail %s was dropped and cannot dispatch", traceID)
+	}
+	bound, manifest, isBound, err := trailconfig.BindNewWork(r.colony, traceID)
+	if err != nil {
+		return nil, err
+	}
+	if !isBound {
+		if scope.Experimental {
+			return nil, fmt.Errorf("runtime: experimental trail %s has no configuration binding", traceID)
+		}
+		return r.liveExecutionContext()
+	}
+	if scope.Experimental {
+		if manifest.Policy != trailconfig.PolicyPinned {
+			return nil, fmt.Errorf("runtime: experimental trail %s has non-pinned policy %q", traceID, manifest.Policy)
+		}
+		if bound.ConfigRef != "" && scope.ConfigRef != "" && bound.ConfigRef != scope.ConfigRef {
+			return nil, fmt.Errorf("runtime: experimental trail %s resolved a configuration the lineage does not pin", traceID)
+		}
+	}
+	registry, err := r.registryForConfig(bound)
+	if err != nil {
+		return nil, err
+	}
+	colonyManifest, err := colony.LoadColony(bound.ConfigRootPath())
+	if err != nil {
+		return nil, err
+	}
+	return &trailExecutionContext{
+		Colony:   bound,
+		Manifest: colonyManifest,
+		Registry: registry,
+	}, nil
+}
+
+// liveExecutionContext keeps a pre-capture legacy trail on the colony's live
+// configuration. It is not an immutable binding and must never be persisted as
+// one.
+func (r *Reactor) liveExecutionContext() (*trailExecutionContext, error) {
+	colonyManifest, err := colony.LoadColony(r.colony.ConfigRootPath())
+	if err != nil {
+		return nil, err
+	}
+	registry, err := r.registryForConfig(r.colony)
+	if err != nil {
+		return nil, err
+	}
+	return &trailExecutionContext{
+		Colony:   r.colony,
+		Manifest: colonyManifest,
+		Registry: registry,
+	}, nil
+}
+
+func (r *Reactor) registryForConfig(ctx colony.Context) (*BeeRegistry, error) {
+	if ctx.ConfigRef == "" {
+		return r.registry, nil
+	}
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
+	if r.configRegistries == nil {
+		r.configRegistries = make(map[string]*BeeRegistry)
+	}
+	if cached := r.configRegistries[ctx.ConfigRef]; cached != nil {
+		return cached, nil
+	}
+	registry, err := BuildBeeRegistryFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.configRegistries[ctx.ConfigRef] = registry
+	return registry, nil
 }
 
 func eventFingerprint(ev protocol.Event) string {
@@ -210,35 +375,46 @@ func (r *Reactor) takeLocalEcho(ev protocol.Event) bool {
 	return true
 }
 
-func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot) error {
+func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, ready []taskledger.TaskSnapshot, execCtx *trailExecutionContext) error {
 	if r.traceKilled(ev.TraceID) {
 		return nil
 	}
 	dispatched := false
 
 	for _, task := range ready {
-		bee := taskBeeName(task)
-		if r.registry.CanDispatchTaskReady(bee) {
+		bee := colony.EffectiveTaskBee(task.Bee, execCtx.Manifest.Defaults)
+		if execCtx.Registry.CanDispatchTaskReady(bee) {
 			logTaskDispatchPlan(ev.TraceID, task.TaskID, bee)
 			dispatched = true
 		}
 		task := task
+		execCtx := execCtx
+		sourceEventID := eventIdentity(ev)
 		if err := r.runDispatch(ctx, func() error {
-			return r.dispatchReady(ctx, ev.TraceID, task)
+			return r.dispatchReady(ctx, ev.TraceID, task, execCtx, sourceEventID)
 		}); err != nil {
 			return err
 		}
 	}
 
-	directBees := r.registry.DirectSubscribers(ev)
+	directCtx, skipDirect, err := r.directRoutingContext(ev, execCtx)
+	if err != nil {
+		return err
+	}
+	if skipDirect {
+		logDispatchSkip("attempt closed or unknown", ev.TraceID, protocol.PayloadTaskID(ev.Payload), "")
+		return nil
+	}
+	directBees := directCtx.Registry.DirectSubscribers(ev)
 	if len(directBees) > 0 {
 		logDirectDispatchPlan(ev.TraceID, ev, directBees)
 		dispatched = true
 	}
 	for _, beeRole := range directBees {
 		beeRole := beeRole
+		directCtx := directCtx
 		if err := r.runDispatch(ctx, func() error {
-			return r.dispatchDirect(ctx, ev, beeRole)
+			return r.dispatchDirect(ctx, ev, beeRole, directCtx)
 		}); err != nil {
 			return err
 		}
@@ -263,7 +439,7 @@ func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event) error {
+func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	if energyAddDetected(ev) {
 		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
 			return err
@@ -272,16 +448,16 @@ func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Ev
 	if systemKillDetected(ev) {
 		r.cancelInflightForTrace(ev.TraceID)
 	}
-	if err := r.handleReviewSideEffects(ctx, ev); err != nil {
+	if err := r.handleReviewSideEffects(ctx, ev, execCtx); err != nil {
 		return err
 	}
-	if err := r.handleVerificationSuccess(ctx, ev); err != nil {
+	if err := r.handleVerificationSuccess(ctx, ev, execCtx); err != nil {
 		return err
 	}
 	if err := r.handleInviteCompletion(ctx, ev); err != nil {
 		return err
 	}
-	if err := r.handleAutoInvite(ctx, ev); err != nil {
+	if err := r.handleAutoInvite(ctx, ev, execCtx); err != nil {
 		return err
 	}
 	if err := r.handleWorktreeBranch(ctx, ev); err != nil {
@@ -354,16 +530,17 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		}
 	}
 	return &Reactor{
-		colony:          colony.Context{ColonyRoot: opts.ColonyRoot},
-		dispatcher:      opts.Dispatcher,
-		ledger:          opts.Ledger,
-		registry:        opts.Registry,
-		inflight:        make(map[string]context.CancelFunc),
-		directInflight:  make(map[string]context.CancelFunc),
-		directProcessed: make(map[string]struct{}),
-		recentLocal:     make(map[string]time.Time),
-		asyncDispatch:   opts.AsyncDispatch,
-		autoInvites:     autoInvites,
+		colony:           colony.Context{ColonyRoot: opts.ColonyRoot},
+		dispatcher:       opts.Dispatcher,
+		ledger:           opts.Ledger,
+		registry:         opts.Registry,
+		inflight:         make(map[string]context.CancelFunc),
+		directInflight:   make(map[string]context.CancelFunc),
+		directProcessed:  make(map[string]struct{}),
+		recentLocal:      make(map[string]time.Time),
+		asyncDispatch:    opts.AsyncDispatch,
+		autoInvites:      autoInvites,
+		configRegistries: make(map[string]*BeeRegistry),
 	}
 }
 

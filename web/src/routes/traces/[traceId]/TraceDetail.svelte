@@ -10,6 +10,8 @@
 	import Section from '$lib/components/Section.svelte';
 	import SignalCard from '$lib/components/SignalCard.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import TrailConfigPanel from './TrailConfigPanel.svelte';
+	import TrailForkPanel from './TrailForkPanel.svelte';
 	import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import { consolePath, runDetailPath, taskDetailPath, traceTimelinePath } from '$lib/navigation';
@@ -167,6 +169,12 @@
 						{#if detail.standing}
 							<StatusBadge status="standing" label="standing" />
 						{/if}
+						{#if detail.forkOf}
+							<StatusBadge status="fork" label="experiment fork" />
+						{/if}
+						{#if detail.configPolicy === 'pinned'}
+							<StatusBadge status="pinned" label="pinned" />
+						{/if}
 						{#if detail.hasActive || detail.hasFailures}
 							<StatusBadge status={traceState(detail)} label={traceState(detail)} />
 						{/if}
@@ -237,6 +245,9 @@
 				<EnergyMeter energy={detail} pending={store.topUpPending} error={store.energyError} ontopup={topUp} />
 			</Section>
 		</div>
+
+		<TrailConfigPanel {store} />
+		<TrailForkPanel {store} />
 
 		<Section
 			id="trace-artifacts"

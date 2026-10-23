@@ -130,6 +130,26 @@ func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 	if sess.State != string(adapters.SessionCompleted) && sess.State != string(adapters.SessionActive) {
 		t.Fatalf("state = %q", sess.State)
 	}
+	if sess.AttemptID == "" || sess.ConfigRef == "" || sess.ConfigRevision == 0 {
+		t.Fatalf("session provenance = %+v", sess.Provenance)
+	}
+	req, err := d.ReadRequest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.AttemptID != sess.AttemptID || req.ConfigRef != sess.ConfigRef || req.ConfigRevision != sess.ConfigRevision {
+		t.Fatalf("request provenance = %+v, session = %+v", req, sess.Provenance)
+	}
+	status, err := d.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.AttemptID != sess.AttemptID || status.ConfigRef != sess.ConfigRef {
+		t.Fatalf("status provenance = %+v", status.Provenance)
+	}
+	if fast.lastReq.AttemptID != sess.AttemptID {
+		t.Fatalf("adapter request attempt = %q, want %q", fast.lastReq.AttemptID, sess.AttemptID)
+	}
 
 	st, err := homestate.LoadState(slug)
 	if err != nil {

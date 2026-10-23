@@ -132,6 +132,20 @@ paseka
 ├── console
 ├── gate
 │   └── telegram
+├── trail
+│   ├── list
+│   ├── show <traceId>
+│   ├── config
+│   │   ├── capture <traceId>
+│   │   ├── apply <traceId>
+│   │   ├── show <traceId>
+│   │   └── cancel <traceId> [changeId]
+│   ├── fork
+│   │   ├── pending
+│   │   ├── approve <requestId>
+│   │   ├── reject <requestId>
+│   │   └── cancel <requestId>
+│   └── drop <traceId>
 ├── export
 ├── purge
 ├── prune
@@ -978,6 +992,50 @@ paseka proposal discard --trace trace-1 --task _review --reason "Superseded by t
 
 ---
 
+## `paseka trail`
+
+Inspect flight trails and manage their captured configuration and experiments.
+`trail list`, `trail show`, and `trail config` read the same collection as Queen
+Console; `trail fork` creates an experiment with its own pinned configuration.
+
+```text
+paseka trail list [--forks] [--source <traceId>] [--limit N] [--json]
+paseka trail show <traceId> [--json]
+paseka trail config show <traceId>
+paseka trail drop <traceId> [--reason <text>] [--dry-run] [--json]
+```
+
+### `paseka trail drop`
+
+Stop an experimental fork and remove its execution resources while keeping its
+evidence:
+
+1. **Stop first.** Drop records the trace kill and waits for the task ledger to
+   report it. In-flight dispatch is cancelled and no further work is admitted.
+   If the stop cannot be recorded (no task ledger, or a failed publish), drop
+   fails and removes nothing.
+2. **Then remove execution resources.** The fork's worktree is removed, pruned
+   from Git, unregistered from the machine-local state, and its branch deleted.
+3. **Keep the record.** Configuration snapshots, fork lineage, attempt
+   ownership, task and run records, and the comb stay under
+   `.paseka/runs/<traceId>/`. `trail show` and `paseka export --include config`
+   keep answering after the worktree is gone, and after the source trail is
+   deleted with `paseka purge --trace <source> --runs`.
+
+Dropping is idempotent: a second call reports `already dropped` and finishes any
+leftover cleanup without needing a live ledger. A dropped fork can never dispatch
+again, even if its ledger kill state is later reset. Ordinary (non-fork) trail
+deletion uses `paseka purge`; `trail drop` refuses a trail without fork lineage.
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--reason` | | Operator reason retained on the dropped lineage |
+| `--dry-run` | | Report the stop and the worktree/branch that would be removed |
+| `--json` | | Print machine-readable result |
+| `--path` | `-C` | Colony resolution start directory |
+
+---
+
 ## `paseka export`
 
 Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs) without changing the renderer.
@@ -993,7 +1051,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | no | Flight trail id (alternative to the positional argument) |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `patches` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `patches`, `config` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -1014,8 +1072,11 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
 | `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place. Missing id, unsupported adapter, missing transcript (`store not found`), parse errors, Pi stub (`not implemented`), or resolve errors omit the section with a reason; export still succeeds. |
 | `patches` | Proposal patches under `.paseka/runs/<traceId>/proposals/` — one record per proposal attempt, with run identity, bee, AFK/HITL mode, proposal kind, workspace, base SHA, summary, size, capture time, and publication state. Bodies are inlined within per-patch and aggregate budgets; oversized, unsuitable-for-text, or unreadable entries keep their metadata and ref and say why. Filesystem-only: no broker is required, and a trail without a proposals directory reads as an empty slice. |
+| `config` | The trail's retained configuration versions: policy, revision, initial/active `ConfigRef`, and each snapshot's files. Committed procedure files are inlined; private inputs (home-scoped adapter recipes and skills, and gitignored `*.local.yaml` overlays) are listed by path with `omitted: private configuration input is not exported`, and an **Export omissions** section repeats every gap. Oversized, binary, missing, or corrupt entries say why instead of disappearing. Filesystem-only: no broker is required. |
 
-Default export omits all config snapshots. Home config and machine-local overlays are never included.
+Default export omits configuration contents. A `config` export carries the
+trail's own retained copies, so it still works after the worktree is pruned or
+the source trail is deleted; private inputs are never inlined.
 
 A proposal patch is the diff the collector returned when a run finished, not a strict per-run delta, not a workspace backup, and not proof of the code a Guard approved. Earlier edits inside a changed file can be included, untracked files and changes committed during the run can be omitted, and applying a patch to its `baseSha` is not guaranteed to reconstruct the workspace. An export with omitted bodies is a history report, not a complete portable archive — a local `ref` does not make an omitted body available offline.
 
@@ -1046,13 +1107,15 @@ Remove ephemeral colony artifacts. Without `--yes`, shows a plan and asks for co
 | `--cache` | | Remove `.paseka/cache/` |
 | `--state` | | Reset `~/.config/paseka/<slug>/state.json` worktree registry |
 | `--bus` | | Remove JetStream task-ledger KV, stream events, and object-store artifacts for `--trace` (requires NATS) |
-| `--trace` | | Flight trail id (required with `--bus`) |
+| `--trace` | | Flight trail id; also scopes `--runs`, `--worktrees`, and `--state` to that trail (required with `--bus`) |
 | `--reseed-energy` | | After `--bus` purge, seed honey to colony `defaults.energy_budget` (requires `--bus` and `--trace`) |
 | `--all` | | Purge runs, worktrees, cache, and state (does **not** include `--bus`) |
 | `--yes` | `-y` | Skip confirmation prompt |
 | `--path` | `-C` | Colony resolution start directory |
 
 At least one target flag (`--runs`, `--worktrees`, `--cache`, `--state`, `--all`, or `--bus`) is required.
+
+**Whole-trail deletion:** with `--trace`, `--runs` removes only `.paseka/runs/<traceId>/`, `--worktrees` removes only that trail's checkout, and `--state` unregisters only that trail. Other trails are untouched, so deleting a fork's source needs no cross-trail update. Without `--trace` those targets remove every trace directory.
 
 **`--bus` behavior:** Deletes the task-ledger KV entry for the trace (tasks, energy reserve), domain events for that `traceId` from the JetStream event stream, and trace-scoped object-store artifacts (`<traceId>-*.diff`). Requires a configured `nats.url` and `--trace`. Not included in `--all` — pass `--bus` explicitly when resetting bus state.
 

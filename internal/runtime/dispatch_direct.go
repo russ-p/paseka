@@ -7,9 +7,22 @@ import (
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
-func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string) error {
+func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string, execCtx *trailExecutionContext) error {
+	defer func() {
+		if _, err := r.tryActivateConfig(context.Background(), ev.TraceID, true); err != nil {
+			runtimeLog.Warn("activate pending configuration failed", logging.F("error", err.Error()))
+		}
+	}()
+	if execCtx == nil {
+		resolved, err := r.executionContext(ev.TraceID)
+		if err != nil {
+			return err
+		}
+		execCtx = resolved
+	}
 	if r.traceKilled(ev.TraceID) {
 		logDispatchSkip("trace killed", ev.TraceID, "", beeRole)
 		return nil
@@ -46,6 +59,13 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 	dispatchCtx, endInflight := r.beginDirectInflight(key)
 	defer endInflight()
 
+	if held, err := r.directAdmissionHeld(ev, beeRole, taskID); err != nil {
+		return err
+	} else if held {
+		logDispatchSkip("pending configuration change", ev.TraceID, taskID, beeRole)
+		return nil
+	}
+
 	ok, err := r.gateDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
 	if err != nil {
 		return err
@@ -55,18 +75,34 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return nil
 	}
 
+	attempt, attemptCtx, skip, err := r.prepareDirectAttempt(ev, beeRole, execCtx)
+	if err != nil {
+		return err
+	}
+	if skip {
+		logDispatchSkip("duplicate or closed attempt", ev.TraceID, taskID, beeRole)
+		return nil
+	}
+	execCtx = attemptCtx
+
 	proposalSector, proposalKind := proposalDispatchFields(ev)
 
-	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, r.colony, ColonyDispatchRequest{
+	res, err := r.dispatcher.DispatchColonyBee(dispatchCtx, execCtx.Colony, ColonyDispatchRequest{
 		Bee:          beeRole,
 		TraceID:      ev.TraceID,
 		TaskID:       taskID,
 		Task:         taskBody,
 		Sector:       proposalSector,
 		ProposalKind: proposalKind,
+		Provenance:   attemptProvenance(attempt),
 	}, DispatchModeDirect)
 	if err != nil {
 		return err
+	}
+	if res != nil {
+		if recErr := trailconfig.RecordAttemptAgent(r.colony.ColonyRoot, ev.TraceID, attempt.AttemptID, res.AgentID); recErr != nil {
+			runtimeLog.Warn("attempt agent record failed", logging.F("error", recErr.Error()))
+		}
 	}
 	r.mu.Lock()
 	r.directProcessed[key] = struct{}{}

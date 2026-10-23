@@ -313,6 +313,7 @@ func newProposalApproveCmd() *cobra.Command {
 				StashOutcome:      approveRes.StashOutcome,
 				Published:         approveRes.Published,
 				PRURL:             approveRes.PRURL,
+				Experimental:      approveRes.Experimental,
 			}))
 			if approveRes.CommitSHA != "" {
 				fmt.Printf("  merge commit: %s\n", approveRes.CommitSHA)

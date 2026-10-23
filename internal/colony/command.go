@@ -51,8 +51,29 @@ func (c Command) Argv() []string {
 	return out
 }
 
+// IsZero reports whether no command was declared, so YAML omitempty keeps an
+// absent command out of encoded configurations.
+func (c Command) IsZero() bool {
+	return len(c.argv) == 0
+}
+
+// MarshalYAML encodes the argv as a sequence so the exact argument boundaries
+// survive a config snapshot round trip.
+func (c Command) MarshalYAML() (any, error) {
+	if len(c.argv) == 0 {
+		return nil, nil
+	}
+	out := make([]string, len(c.argv))
+	copy(out, c.argv)
+	return out, nil
+}
+
 // UnmarshalYAML accepts a string or a sequence of strings.
 func (c *Command) UnmarshalYAML(value *yaml.Node) error {
+	if value.Tag == "!!null" {
+		c.argv = nil
+		return nil
+	}
 	switch value.Kind {
 	case yaml.ScalarNode:
 		parts, err := splitCommandLine(strings.TrimSpace(value.Value))

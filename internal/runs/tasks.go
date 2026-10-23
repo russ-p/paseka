@@ -38,12 +38,15 @@ type TaskFrontmatter struct {
 
 // TaskRunEntry is one line in runs.ndjson linking a task to an agent run directory.
 type TaskRunEntry struct {
-	AgentID    string    `json:"agentId"`
-	Bee        string    `json:"bee,omitempty"`
-	RunDir     string    `json:"runDir"`
-	StartedAt  time.Time `json:"startedAt,omitempty"`
-	FinishedAt time.Time `json:"finishedAt,omitempty"`
-	RunStatus  string    `json:"runStatus,omitempty"`
+	AgentID        string    `json:"agentId"`
+	Bee            string    `json:"bee,omitempty"`
+	RunDir         string    `json:"runDir"`
+	StartedAt      time.Time `json:"startedAt,omitempty"`
+	FinishedAt     time.Time `json:"finishedAt,omitempty"`
+	RunStatus      string    `json:"runStatus,omitempty"`
+	AttemptID      string    `json:"attemptId,omitempty"`
+	ConfigRef      string    `json:"configRef,omitempty"`
+	ConfigRevision int       `json:"configRevision,omitempty"`
 }
 
 // TaskDir holds paths for one task projection under a trace.

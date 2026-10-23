@@ -65,6 +65,7 @@ type Meta struct {
 	ResumedFrom       string    `json:"resumedFrom,omitempty"`
 	Profile           string    `json:"profile"`
 	StartedAt         time.Time `json:"startedAt"`
+	protocol.Provenance
 }
 
 // Prepare creates the run directory and removes stale outputs from a previous attempt.
@@ -280,6 +281,7 @@ type SessionMeta struct {
 	Profile           string          `json:"profile"`
 	StartedAt         time.Time       `json:"startedAt"`
 	FinishedAt        time.Time       `json:"finishedAt,omitempty"`
+	protocol.Provenance
 }
 
 // TranscriptEntry is one NDJSON line in transcript.ndjson.

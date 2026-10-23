@@ -44,11 +44,23 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	if err != nil {
 		return nil, err
 	}
+	configRoot := req.ConfigRoot
+	if configRoot == "" {
+		configRoot = colonyRoot
+	} else {
+		configRoot, err = filepath.Abs(configRoot)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if req.Bee == "" {
 		return nil, fmt.Errorf("runtime: bee role is required")
 	}
 	if req.TraceID == "" {
 		return nil, fmt.Errorf("runtime: traceId is required")
+	}
+	if req.Registry == nil {
+		req.Registry = d.registry
 	}
 
 	agentID := req.AgentID
@@ -60,11 +72,11 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		agentID = id
 	}
 
-	manifest, err := colony.LoadColony(colonyRoot)
+	manifest, err := colony.LoadColony(configRoot)
 	if err != nil {
 		return nil, err
 	}
-	bee, overlay, err := colony.LoadBee(colonyRoot, req.Bee)
+	bee, overlay, err := colony.LoadBee(configRoot, req.Bee)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +110,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, err
 	}
 
-	loader, err := prompts.NewLoader(colonyRoot)
+	loader, err := prompts.NewLoader(configRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +135,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, err
 	}
 
-	knownIntents, defaultIntent, err := prompts.DiscoverIntents(colonyRoot, bee)
+	knownIntents, defaultIntent, err := prompts.DiscoverIntents(configRoot, bee)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: discover intents: %w", err)
 	}
@@ -220,24 +232,29 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 
 	createdAt := time.Now().UTC()
 	if err := runDir.WriteRequest(protocol.Request{
-		ProtocolVersion: protocol.Version,
-		TraceID:         req.TraceID,
-		AgentID:         agentID,
-		Bee:             bee.Role,
-		Adapter:         adapterName,
-		Workspace:       workspace,
-		ColonyRoot:      colonyRoot,
-		TaskID:          req.TaskID,
-		Task:            req.Task,
-		Intent:          req.Intent,
-		Insights:        insights,
-		Model:           plan.ModelID,
-		ModelAlias:      plan.ModelAlias,
-		Profile:         req.Profile,
-		LaunchForm:      string(plan.Form),
-		ResultPath:      resultFile,
-		EventLogPath:    runDir.EventsPath(),
-		CreatedAt:       createdAt,
+		ProtocolVersion:      protocol.Version,
+		TraceID:              req.TraceID,
+		AgentID:              agentID,
+		Bee:                  bee.Role,
+		Adapter:              adapterName,
+		Workspace:            workspace,
+		ColonyRoot:           colonyRoot,
+		TaskID:               req.TaskID,
+		Task:                 req.Task,
+		Intent:               req.Intent,
+		Insights:             insights,
+		Model:                plan.ModelID,
+		ModelAlias:           plan.ModelAlias,
+		Profile:              req.Profile,
+		AttemptID:            req.AttemptID,
+		ConfigRef:            req.ConfigRef,
+		ConfigRevision:       req.ConfigRevision,
+		InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+		LaunchForm:           string(plan.Form),
+		ResultPath:           resultFile,
+		EventLogPath:         runDir.EventsPath(),
+		CreatedAt:            createdAt,
 	}); err != nil {
 		return nil, fmt.Errorf("runtime: write request: %w", err)
 	}
@@ -245,6 +262,13 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		ProtocolVersion: protocol.Version,
 		State:           protocol.StatusQueued,
 		StartedAt:       createdAt,
+		Provenance: protocol.Provenance{
+			AttemptID:            req.AttemptID,
+			ConfigRef:            req.ConfigRef,
+			ConfigRevision:       req.ConfigRevision,
+			InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
+			InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+		},
 	}); err != nil {
 		return nil, fmt.Errorf("runtime: write status: %w", err)
 	}
@@ -301,6 +325,16 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	}, nil
 }
 
+func (req DispatchRequest) provenance() protocol.Provenance {
+	return protocol.Provenance{
+		AttemptID:            req.AttemptID,
+		ConfigRef:            req.ConfigRef,
+		ConfigRevision:       req.ConfigRevision,
+		InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+	}
+}
+
 func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*adapters.RunResult, error) {
 	// params.timeout is measured from launch: bound the run context so the
 	// adapter process is brought down (SIGTERM, then SIGKILL after the grace)
@@ -332,6 +366,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Intent:       p.req.Intent,
 		Insights:     p.insights,
 		Profile:      p.req.Profile,
+		Provenance:   p.req.provenance(),
 	})
 }
 
@@ -369,7 +404,7 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 
 	var synthesized []protocol.Event
 	updatedEvents, synthesizedEvent, synthErr := d.synthesizeRunSummary(
-		p.runDir, p.bee, p.req.TraceID, p.agentID, p.req.TaskID, result, runEvents,
+		p.runDir, p.bee, p.req.Registry, p.req.TraceID, p.agentID, p.req.TaskID, result, runEvents,
 	)
 	if synthErr != nil {
 		return result, synthErr
@@ -399,13 +434,20 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 	}
 
 	if pubErr := d.publishRunOutcome(ctx, DispatchRequest{
-		ColonyRoot: p.colonyRoot,
-		Bee:        p.req.Bee,
-		TraceID:    p.req.TraceID,
-		AgentID:    p.agentID,
-		TaskID:     p.req.TaskID,
-		Sector:     p.req.Sector,
-		Workspace:  p.workspace,
+		ColonyRoot:           p.colonyRoot,
+		ConfigRoot:           p.req.ConfigRoot,
+		ConfigRef:            p.req.ConfigRef,
+		ConfigRevision:       p.req.ConfigRevision,
+		AttemptID:            p.req.AttemptID,
+		InitialCodeBaseSHA:   p.req.InitialCodeBaseSHA,
+		InitialCodeBaseDirty: p.req.InitialCodeBaseDirty,
+		Bee:                  p.req.Bee,
+		TraceID:              p.req.TraceID,
+		AgentID:              p.agentID,
+		TaskID:               p.req.TaskID,
+		Sector:               p.req.Sector,
+		Workspace:            p.workspace,
+		Registry:             p.req.Registry,
 	}, p.bee, p.baseline, result, synthesized, explicitProposal); pubErr != nil {
 		msg := "runtime: proposal finalization: " + pubErr.Error()
 		if d.busRequired {

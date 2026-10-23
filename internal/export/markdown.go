@@ -19,10 +19,14 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 	fmt.Fprintf(&buf, "Exported %s\n\n", formatTime(data.ExportedAt))
 
 	writeMarkdownOverview(&buf, data)
+	writeMarkdownTrailEvidence(&buf, data.Trace)
 	writeMarkdownTasks(&buf, data.Trace.Tasks)
 	writeMarkdownRuns(&buf, data)
 	writeMarkdownTimeline(&buf, data.Events)
 	writeMarkdownConfigSnapshots(&buf, data)
+	if data.Include.Has(IncludeConfig) {
+		writeMarkdownConfiguration(&buf, data.Config)
+	}
 	if data.Include.Has(IncludePatches) {
 		writeMarkdownPatches(&buf, data)
 	}
@@ -60,6 +64,58 @@ func writeMarkdownOverview(buf *bytes.Buffer, data TraceExportData) {
 			fmt.Fprintf(buf, "- **Base SHA:** `%s`\n", wt.BaseSHA)
 		}
 		fmt.Fprintf(buf, "- **Worktree created:** %s\n", formatTime(wt.CreatedAt))
+	}
+	buf.WriteString("\n")
+}
+
+func writeMarkdownTrailEvidence(buf *bytes.Buffer, trace hiveview.TraceDetailView) {
+	buf.WriteString("## Trail evidence\n\n")
+	fmt.Fprintf(buf, "- **Admission state:** %s\n", trace.AdmissionState)
+	if trace.Config != nil {
+		fmt.Fprintf(buf, "- **Configuration policy:** %s\n", trace.ConfigPolicy)
+		fmt.Fprintf(buf, "- **Revision:** %d\n", trace.ConfigRevision)
+		fmt.Fprintf(buf, "- **Initial ConfigRef:** `%s`\n", trace.InitialConfigRef)
+		fmt.Fprintf(buf, "- **Active ConfigRef:** `%s`\n", trace.ActiveConfigRef)
+		if len(trace.Config.Snapshots) == 0 {
+			buf.WriteString("- **Snapshots:** none retained\n")
+		} else {
+			buf.WriteString("- **Snapshots:**\n")
+			for _, snap := range trace.Config.Snapshots {
+				fmt.Fprintf(buf, "  - `%s` (%d files, retained at `%s`)\n", snap.ConfigRef, snap.Files, snap.Path)
+			}
+		}
+		if trace.Config.Pending != nil {
+			fmt.Fprintf(buf, "- **Pending change:** %s · source %s · expected revision %d\n",
+				trace.Config.Pending.ChangeID, trace.Config.Pending.Source, trace.Config.Pending.ExpectedRevision)
+		}
+	} else {
+		buf.WriteString("- **Configuration:** not captured (legacy trail); configuration evidence is unavailable\n")
+	}
+	if trace.Lineage != nil {
+		lineage := trace.Lineage
+		fmt.Fprintf(buf, "- **Fork of:** `%s`\n", lineage.SourceTrace)
+		fmt.Fprintf(buf, "- **Fork id:** `%s`\n", lineage.ForkID)
+		fmt.Fprintf(buf, "- **Source task:** `%s`\n", lineage.SourceTask)
+		if lineage.SourceAttempt != "" {
+			fmt.Fprintf(buf, "- **Source attempt:** `%s`\n", lineage.SourceAttempt)
+		}
+		fmt.Fprintf(buf, "- **Source ConfigRef:** `%s` (revision %d)\n", lineage.SourceConfigRef, lineage.SourceConfigRevision)
+		fmt.Fprintf(buf, "- **Base SHA:** `%s`\n", lineage.BaseSHA)
+		if lineage.BaseOverridden {
+			fmt.Fprintf(buf, "- **Source base SHA:** `%s` (base overridden)\n", lineage.SourceBaseSHA)
+		}
+		fmt.Fprintf(buf, "- **Delta:** %s\n", lineage.Delta.Form)
+		if lineage.Branch != "" {
+			fmt.Fprintf(buf, "- **Branch:** `%s`\n", lineage.Branch)
+		}
+	} else if trace.ConfigPolicy == "pinned" {
+		buf.WriteString("- **Fork lineage:** missing for this pinned trail; source comparison is unavailable\n")
+	}
+	if len(trace.Evidence) > 0 {
+		buf.WriteString("\n### Missing evidence\n\n")
+		for _, note := range trace.Evidence {
+			fmt.Fprintf(buf, "- %s\n", note)
+		}
 	}
 	buf.WriteString("\n")
 }
@@ -355,5 +411,63 @@ func writeMarkdownTimeline(buf *bytes.Buffer, events []hiveview.EventFeedItem) {
 		buf.WriteString("\n```json\n")
 		buf.WriteString(rawEventJSON(item.Raw))
 		buf.WriteString("\n```\n\n")
+	}
+}
+
+func writeMarkdownConfiguration(buf *bytes.Buffer, config *ConfigExport) {
+	buf.WriteString("## Configuration\n\n")
+	if config == nil {
+		buf.WriteString("_Configuration evidence was not requested._\n\n")
+		return
+	}
+	if config.Missing != "" {
+		fmt.Fprintf(buf, "_%s_\n\n", config.Missing)
+		return
+	}
+	fmt.Fprintf(buf, "- **Policy:** %s\n", config.Policy)
+	fmt.Fprintf(buf, "- **Revision:** %d\n", config.Revision)
+	fmt.Fprintf(buf, "- **Initial ConfigRef:** `%s`\n", config.InitialConfigRef)
+	fmt.Fprintf(buf, "- **Active ConfigRef:** `%s`\n", config.ActiveConfigRef)
+	fmt.Fprintf(buf, "- **Retained versions:** %d\n", len(config.Snapshots))
+	if omitted := configOmittedCount(config); omitted > 0 {
+		fmt.Fprintf(buf, "- **Omitted files:** %d (contents deliberately not exported)\n", omitted)
+	}
+	buf.WriteString("\n")
+	for _, snapshot := range config.Snapshots {
+		roles := strings.Join(snapshot.Roles, ", ")
+		if roles == "" {
+			roles = "retained"
+		}
+		fmt.Fprintf(buf, "### `%s` (%s)\n\n", snapshot.ConfigRef, roles)
+		if snapshot.Missing != "" {
+			fmt.Fprintf(buf, "_unavailable: %s_\n\n", snapshot.Missing)
+			continue
+		}
+		fmt.Fprintf(buf, "%d file(s)", snapshot.FileCount)
+		if snapshot.Omitted > 0 {
+			fmt.Fprintf(buf, " · %d omitted", snapshot.Omitted)
+		}
+		buf.WriteString("\n\n")
+		for _, file := range snapshot.Files {
+			fmt.Fprintf(buf, "#### `%s`\n\n", file.Path)
+			fmt.Fprintf(buf, "%d bytes · mode %o", file.Bytes, file.Mode)
+			if file.Private {
+				buf.WriteString(" · private")
+			}
+			buf.WriteString("\n\n")
+			if file.Omitted != "" {
+				fmt.Fprintf(buf, "_omitted: %s_\n\n", file.Omitted)
+				continue
+			}
+			writeYAMLFence(buf, file.Content)
+		}
+	}
+	omissions := configOmissions(config)
+	if len(omissions) > 0 {
+		buf.WriteString("### Export omissions\n\n")
+		for _, note := range omissions {
+			fmt.Fprintf(buf, "- %s\n", note)
+		}
+		buf.WriteString("\n")
 	}
 }

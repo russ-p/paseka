@@ -9,12 +9,14 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
-func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event) error {
+func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	if ev.Type != protocol.EventInsight || protocol.PayloadKind(ev.Payload) != string(protocol.InsightHumanFeedback) {
 		return nil
 	}
@@ -47,14 +49,21 @@ func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event) er
 		return err
 	}
 	task = snap.Tasks[payload.TaskID]
-	return r.dispatchReady(ctx, ev.TraceID, task)
+	if execCtx == nil {
+		resolved, err := r.executionContext(ev.TraceID)
+		if err != nil {
+			return err
+		}
+		execCtx = resolved
+	}
+	return r.dispatchReady(ctx, ev.TraceID, task, execCtx, eventIdentity(ev))
 }
 
-func (r *Reactor) handleReviewSideEffects(ctx context.Context, ev protocol.Event) error {
-	return r.handleHumanFeedback(ctx, ev)
+func (r *Reactor) handleReviewSideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
+	return r.handleHumanFeedback(ctx, ev, execCtx)
 }
 
-func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Event) error {
+func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.VerificationSuccess) {
 		return nil
 	}
@@ -76,26 +85,28 @@ func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Eve
 	if protocol.NormalizeTaskReviewPolicy(task.Review) != protocol.TaskReviewRequired {
 		return nil
 	}
-	if !r.taskExpectsRootProposal(task) {
+	if execCtx == nil {
+		resolved, err := r.executionContext(ev.TraceID)
+		if err != nil {
+			return err
+		}
+		execCtx = resolved
+	}
+	if !r.taskExpectsRootProposal(task, execCtx) {
 		return nil
 	}
 	summary := strings.TrimSpace(payload.Summary)
 	return r.setTaskStatus(ctx, ev.TraceID, payload.TaskID, protocol.TaskStatusWaitingReview, summary)
 }
 
-func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot) bool {
+func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot, execCtx *trailExecutionContext) bool {
 	switch task.ProposalWorkspace {
 	case protocol.ProposalWorkspaceRoot:
 		return true
 	case protocol.ProposalWorkspaceIsolated:
 		return false
 	}
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
-		return false
-	}
-	beeName := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
-	bee, ok := r.registry.Bee(beeName)
+	bee, ok := execCtx.Registry.Bee(colony.EffectiveTaskBee(task.Bee, execCtx.Manifest.Defaults))
 	if !ok {
 		return false
 	}
@@ -103,7 +114,7 @@ func (r *Reactor) taskExpectsRootProposal(task taskledger.TaskSnapshot) bool {
 	return ok && ws == protocol.ProposalWorkspaceRoot
 }
 
-func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event) error {
+func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event, execCtx *trailExecutionContext) error {
 	if ev.Type != protocol.EventInsight || protocol.PayloadKind(ev.Payload) != string(protocol.TaskEventPlan) {
 		return nil
 	}
@@ -111,12 +122,8 @@ func (r *Reactor) validateIncomingTaskPlan(ev protocol.Event) error {
 	if err := unmarshalPayload(ev.Payload, &payload); err != nil {
 		return nil
 	}
-	manifest, err := r.loadColonyManifest()
-	if err != nil {
-		return err
-	}
 	for _, spec := range payload.Tasks {
-		if err := colony.ValidateTaskReviewPolicy(spec, r.registry.Bees(), manifest.Defaults); err != nil {
+		if err := colony.ValidateTaskReviewPolicy(spec, execCtx.Registry.Bees(), execCtx.Manifest.Defaults); err != nil {
 			return err
 		}
 	}
@@ -133,7 +140,24 @@ func (r *Reactor) setTaskStatus(ctx context.Context, traceID, taskID string, sta
 	if err != nil {
 		return err
 	}
-	return r.applyAndSync(ctx, ev)
+	if err := r.applyAndSync(ctx, ev); err != nil {
+		return err
+	}
+	if terminalTaskStatus(status) {
+		if err := r.closeLatestTaskAttempt(traceID, taskID, string(status)); err != nil {
+			runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+		}
+	}
+	return nil
+}
+
+func terminalTaskStatus(status protocol.TaskStatus) bool {
+	switch status {
+	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, commit string) error {
@@ -152,12 +176,25 @@ func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, co
 }
 
 func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, completed protocol.Event) error {
+	r.stampRuntimeProvenance(&completed)
+	stale, err := r.staleTaskCompletion(completed)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	res, err := r.ledger.Apply(completed)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	if taskID := protocol.PayloadTaskID(completed.Payload); taskID != "" {
+		if err := r.closeCompletedTaskAttempt(traceID, taskID, completed.AttemptID); err != nil {
+			runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+		}
 	}
 	// Remember before publish so the JetStream echo cannot re-apply.
 	r.rememberLocalEvent(completed)
@@ -167,7 +204,7 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 		}
 	}
 	for _, t := range res.Ready {
-		if err := r.dispatchReady(ctx, traceID, t); err != nil {
+		if err := r.dispatchReady(ctx, traceID, t, nil, eventIdentity(completed)); err != nil {
 			return err
 		}
 	}
@@ -194,13 +231,68 @@ func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string) 
 // applyAndSync applies locally first, then publishes. Publish-before-apply would
 // leave a bad stream event when CAS/apply fails, and the reactor's own
 // subscription would double-apply non-idempotent events (e.g. energy.consume).
+// staleTaskCompletion drops a terminal task event owned by an older attempt once
+// a newer attempt is open. A replay must not overwrite the work in progress.
+func (r *Reactor) staleTaskCompletion(ev protocol.Event) (bool, error) {
+	if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.TaskEventCompleted) {
+		return false, nil
+	}
+	taskID := protocol.PayloadTaskID(ev.Payload)
+	if ev.AttemptID == "" || taskID == "" {
+		return false, nil
+	}
+	latest, ok, err := trailconfig.LatestTaskAttempt(r.colony.ColonyRoot, ev.TraceID, taskID)
+	if err != nil {
+		return false, err
+	}
+	if ok && latest.Open() && latest.AttemptID != ev.AttemptID {
+		logDispatchSkip("stale attempt completion", ev.TraceID, taskID, "")
+		return true, nil
+	}
+	return false, nil
+}
+
+func (r *Reactor) closeLatestTaskAttempt(traceID, taskID, reason string) error {
+	latest, ok, err := trailconfig.LatestTaskAttempt(r.colony.ColonyRoot, traceID, taskID)
+	if err != nil || !ok || !latest.Open() {
+		return err
+	}
+	return trailconfig.CloseAttempt(r.colony.ColonyRoot, traceID, latest.AttemptID, reason)
+}
+
+func (r *Reactor) closeCompletedTaskAttempt(traceID, taskID, attemptID string) error {
+	if attemptID == "" {
+		return r.closeLatestTaskAttempt(traceID, taskID, "completed")
+	}
+	attempt, ok, err := trailconfig.FindAttempt(r.colony.ColonyRoot, traceID, attemptID)
+	if err != nil || !ok || !attempt.Open() {
+		return err
+	}
+	return trailconfig.CloseAttempt(r.colony.ColonyRoot, traceID, attemptID, "completed")
+}
+
 func (r *Reactor) applyAndSync(ctx context.Context, ev protocol.Event) error {
+	r.stampRuntimeProvenance(&ev)
+	stale, err := r.staleTaskCompletion(ev)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	res, err := r.ledger.Apply(ev)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+	}
+	if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
+		if task, ok := res.Trace.Tasks[taskID]; ok && terminalTaskStatus(task.Status) {
+			if err := r.closeCompletedTaskAttempt(ev.TraceID, taskID, ev.AttemptID); err != nil {
+				runtimeLog.Warn("close task attempt failed", logging.F("error", err.Error()))
+			}
+		}
 	}
 	r.rememberLocalEvent(ev)
 	if bus.PublisherAvailable(r.publisher) {

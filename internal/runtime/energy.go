@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 
-	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/energy"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -13,13 +12,6 @@ const energyDispatchCost = 1
 
 func (r *Reactor) ensureEnergySeeded(ctx context.Context, traceID string) error {
 	return energy.EnsureSeeded(r.ledger, r.colony.ColonyRoot, traceID)
-}
-
-func (r *Reactor) loadColonyManifest() (colony.Colony, error) {
-	if r.colony.ColonyRoot == "" {
-		return colony.Colony{}, nil
-	}
-	return colony.LoadColony(r.colony.ColonyRoot)
 }
 
 func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string) (bool, error) {
@@ -72,7 +64,7 @@ func (r *Reactor) unblockEnergyBlockedTasks(ctx context.Context, traceID string)
 			return err
 		}
 		task = updated.Tasks[task.TaskID]
-		if err := r.dispatchReady(ctx, traceID, task); err != nil {
+		if err := r.dispatchReady(ctx, traceID, task, nil, "energy-unblock:"+traceID+":"+task.TaskID); err != nil {
 			return err
 		}
 	}

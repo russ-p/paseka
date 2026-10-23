@@ -19,6 +19,7 @@ import (
 // the same gate, the same collector, and the same writer instead of calling through the
 // AFK dispatcher.
 type ArchiveRequest struct {
+	protocol.Provenance
 	ColonyRoot string
 	TraceID    string
 	AgentID    string
@@ -147,7 +148,9 @@ func Archive(ctx context.Context, pub bus.Publisher, req ArchiveRequest) (Archiv
 		return out, err
 	}
 
+	ev.Provenance = req.Provenance
 	installed, err := store.Write(patches.Record{
+		Provenance:   req.Provenance,
 		TraceID:      req.TraceID,
 		AgentID:      req.AgentID,
 		Bee:          req.Bee.Role,

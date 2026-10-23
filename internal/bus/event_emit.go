@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 // ProcessEventInput validates stdin JSON and optionally publishes to NATS.
@@ -64,6 +66,8 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 		}
 		return protocol.EventCLIResult{}, err
 	}
+
+	stampRunProvenance(colonyRoot, &ev)
 
 	kind := protocol.PayloadKind(ev.Payload)
 	subject := ""
@@ -139,6 +143,25 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 				Message: "NATS URL is not configured for this colony",
 			}},
 		}, nil
+	}
+
+	// Bind the trail before its first event is published. The runtime repeats
+	// this check, but an emit that reaches the bus first must not leave a trail
+	// routable without the configuration snapshot that describes it.
+	if colonyRoot != "" && trailconfig.IsNewTrail(colonyRoot, ev.TraceID) {
+		if _, err := trailconfig.EnsureForRoot(colonyRoot, ev.TraceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
+			return protocol.EventCLIResult{
+				OK:      false,
+				Error:   "config_capture_failed",
+				TraceID: ev.TraceID,
+				Type:    ev.Type,
+				Kind:    kind,
+				Details: []protocol.ValidationDetail{{
+					Path:    "",
+					Message: err.Error(),
+				}},
+			}, nil
+		}
 	}
 
 	if err := pub.PublishEvent(ctx, ev); err != nil {

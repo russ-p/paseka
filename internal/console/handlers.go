@@ -317,6 +317,26 @@ func (a *api) handleTraceByID(w http.ResponseWriter, r *http.Request) {
 		a.handleTraceExport(w, r, traceID)
 		return
 	}
+	if suffix == "config" {
+		action := "read"
+		if len(parts) == 3 {
+			action = parts[2]
+		}
+		if len(parts) > 3 {
+			http.NotFound(w, r)
+			return
+		}
+		a.handleTrailConfig(w, r, traceID, action)
+		return
+	}
+	if suffix == "forks" && len(parts) == 2 {
+		a.handleTrailForks(w, r, traceID)
+		return
+	}
+	if suffix == "fork-requests" && len(parts) == 2 {
+		a.handleTrailForkRequests(w, r, traceID)
+		return
+	}
 	if len(parts) >= 3 && parts[1] == "energy" && parts[2] == "add" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

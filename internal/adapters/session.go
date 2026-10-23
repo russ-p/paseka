@@ -34,6 +34,7 @@ type SessionRequest struct {
 	Task          string
 	Intent        string
 	Insights      []string
+	protocol.Provenance
 	// ResumeSessionID, when set, asks the adapter to continue an existing
 	// provider chat instead of creating a new one. Cursor uses --resume and
 	// skips create-chat; InitialPrompt is an optional continue line only.

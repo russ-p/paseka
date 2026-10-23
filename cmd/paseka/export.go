@@ -52,7 +52,7 @@ func newExportCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (alternative to the positional argument)")
 	cmd.Flags().StringVar(&formatFlag, "format", "html", "export renderer (html, md)")
-	cmd.Flags().StringSliceVar(&includeFlag, "include", nil, "optional payload slices: usage, durations, bees, colony, cues, artifacts, agent-logs, patches (repeatable or comma-separated)")
+	cmd.Flags().StringSliceVar(&includeFlag, "include", nil, "optional payload slices: usage, durations, bees, colony, cues, artifacts, agent-logs, patches, config (repeatable or comma-separated)")
 	return cmd
 }
 

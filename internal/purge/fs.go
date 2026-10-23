@@ -84,7 +84,7 @@ func planFS(ctx colony.Context, target PurgeTarget) (PurgePlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		plan.Runs = entries
+		plan.Runs = scopedTraces(entries, target.TraceID)
 	}
 
 	if target.Worktrees {
@@ -93,7 +93,7 @@ func planFS(ctx colony.Context, target PurgeTarget) (PurgePlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		plan.Worktrees = entries
+		plan.Worktrees = scopedTraces(entries, target.TraceID)
 	}
 
 	if target.Cache {
@@ -108,7 +108,11 @@ func planFS(ctx colony.Context, target PurgeTarget) (PurgePlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		plan.State = len(st.Worktrees) > 0
+		if target.TraceID != "" {
+			plan.State = hasRegisteredWorktree(st, target.TraceID)
+		} else {
+			plan.State = len(st.Worktrees) > 0
+		}
 	}
 
 	return plan, nil
@@ -123,7 +127,7 @@ func purgeFS(ctx colony.Context, target PurgeTarget) (PurgeResult, error) {
 		if err != nil {
 			return res, err
 		}
-		for _, traceID := range entries {
+		for _, traceID := range scopedTraces(entries, target.TraceID) {
 			path := filepath.Join(wtRoot, traceID)
 			if err := removeGitWorktree(ctx.ColonyRoot, path); err != nil {
 				return res, err
@@ -141,7 +145,7 @@ func purgeFS(ctx colony.Context, target PurgeTarget) (PurgeResult, error) {
 		if err != nil {
 			return res, err
 		}
-		for _, traceID := range entries {
+		for _, traceID := range scopedTraces(entries, target.TraceID) {
 			path := filepath.Join(runsRoot, traceID)
 			if err := os.RemoveAll(path); err != nil {
 				return res, fmt.Errorf("purge runs %s: %w", path, err)
@@ -160,7 +164,15 @@ func purgeFS(ctx colony.Context, target PurgeTarget) (PurgeResult, error) {
 		}
 	}
 
-	if target.State || target.Worktrees {
+	if target.TraceID != "" && (target.State || target.Worktrees) {
+		// A trace-scoped purge must not rewrite another trail's bookkeeping.
+		if err := homestate.UnregisterWorktree(ctx.Slug, target.TraceID); err != nil {
+			return res, err
+		}
+		if target.State {
+			res.Removed = append(res.Removed, "state.json (trace "+target.TraceID+")")
+		}
+	} else if target.State || target.Worktrees {
 		if err := homestate.SaveState(ctx.Slug, homestate.State{}); err != nil {
 			return res, err
 		}
@@ -170,6 +182,31 @@ func purgeFS(ctx colony.Context, target PurgeTarget) (PurgeResult, error) {
 	}
 
 	return res, nil
+}
+
+// scopedTraces restricts a directory listing to one trace when the operator
+// selected whole-trail deletion, so purging a source trail cannot remove the
+// configuration copies or records a retained fork owns.
+func scopedTraces(entries []string, traceID string) []string {
+	traceID = strings.TrimSpace(traceID)
+	if traceID == "" {
+		return entries
+	}
+	for _, entry := range entries {
+		if entry == traceID {
+			return []string{traceID}
+		}
+	}
+	return nil
+}
+
+func hasRegisteredWorktree(state homestate.State, traceID string) bool {
+	for _, entry := range state.Worktrees {
+		if entry.TraceID == traceID {
+			return true
+		}
+	}
+	return false
 }
 
 func listChildDirs(root string) ([]string, error) {

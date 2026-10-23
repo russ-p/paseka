@@ -30,6 +30,7 @@ func (m *Manager) finalizeSessionProposal(active *activeSession, state adapters.
 	}
 	entry := active.entry
 	res, err := proposal.Archive(context.Background(), pub, proposal.ArchiveRequest{
+		Provenance:  active.proposal.provenance,
 		ColonyRoot:  entry.Handle.ColonyRoot,
 		TraceID:     entry.Handle.TraceID,
 		AgentID:     entry.Handle.AgentID,

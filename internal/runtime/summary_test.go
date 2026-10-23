@@ -24,7 +24,7 @@ func TestSynthesizeRunSummaryAppendsEvent(t *testing.T) {
 		Summary: "implemented feature",
 	}
 
-	events, synthesized, err := d.synthesizeRunSummary(runDir, bee, "trace-1", "agent-1", "task-1", result, nil)
+	events, synthesized, err := d.synthesizeRunSummary(runDir, bee, nil, "trace-1", "agent-1", "task-1", result, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSynthesizeRunSummarySkipsDuplicate(t *testing.T) {
 		Summary: "new summary",
 	}
 
-	events, synthesized, err := d.synthesizeRunSummary(runDir, bee, "trace-1", "agent-1", "", result, []protocol.Event{existing})
+	events, synthesized, err := d.synthesizeRunSummary(runDir, bee, nil, "trace-1", "agent-1", "", result, []protocol.Event{existing})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestSynthesizeRunSummaryDisabled(t *testing.T) {
 		Summary: "implemented feature",
 	}
 
-	_, synthesized, err := d.synthesizeRunSummary(runDir, bee, "trace-1", "agent-1", "", result, nil)
+	_, synthesized, err := d.synthesizeRunSummary(runDir, bee, nil, "trace-1", "agent-1", "", result, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +146,7 @@ func TestInsightRunSummaryPayloadTaskID(t *testing.T) {
 	_, synthesized, err := d.synthesizeRunSummary(
 		runDir,
 		colony.Bee{Role: "builder"},
+		nil,
 		"trace-1",
 		"agent-1",
 		"task-42",

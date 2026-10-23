@@ -15,14 +15,18 @@ const maxDirectTaskBody = 8000
 // directSignalDenylist blocks platform SIGNAL kinds from AFK direct dispatch even when
 // misconfigured in bee subscribes.
 var directSignalDenylist = map[string]struct{}{
-	string(protocol.TaskEventReady):       {},
-	string(protocol.TaskEventStatus):      {},
-	string(protocol.SignalEnergyAdd):      {},
-	string(protocol.SignalEnergyConsume):  {},
-	string(protocol.SignalEnergyStipend):  {},
-	string(protocol.SignalSystemKill):     {},
-	string(protocol.SignalSessionInvite):  {},
-	string(protocol.SignalBeekeeperReady): {},
+	string(protocol.TaskEventReady):         {},
+	string(protocol.TaskEventStatus):        {},
+	string(protocol.SignalEnergyAdd):        {},
+	string(protocol.SignalEnergyConsume):    {},
+	string(protocol.SignalEnergyStipend):    {},
+	string(protocol.SignalSystemKill):       {},
+	string(protocol.SignalSessionInvite):    {},
+	string(protocol.SignalBeekeeperReady):   {},
+	string(protocol.SignalTrailFork):        {},
+	string(protocol.SignalTrailForkApprove): {},
+	string(protocol.SignalTrailForkReject):  {},
+	string(protocol.SignalTrailForkCancel):  {},
 }
 
 // eventDispatchContext builds task text and taskId for direct bee dispatch from a bus event.

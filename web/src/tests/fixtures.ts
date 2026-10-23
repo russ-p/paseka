@@ -6,9 +6,12 @@ import type {
 	BuildView,
 	ColonyConfig,
 	ConfigAdapter,
+	ConfigManifest,
 	DashboardSummary,
 	EventFeedItem,
 	EventFeedPage,
+	ForkLineage,
+	ForkRequest,
 	GitBranch,
 	GitCommit,
 	GitView,
@@ -30,6 +33,8 @@ import type {
 	TraceDetail,
 	Invite,
 	Session,
+	TrailCollection,
+	TrailConfigApplyResult,
 	TraceSummary,
 	TranscriptEntry
 } from '$lib/api/types';
@@ -175,6 +180,151 @@ export function traceDetail(overrides: Partial<TraceDetail> = {}): TraceDetail {
 				createdAt: '2026-09-25T18:04:22Z'
 			})
 		),
+		...overrides
+	};
+}
+
+export function configManifest(overrides: Partial<ConfigManifest> = {}): ConfigManifest {
+	return {
+		version: 1,
+		traceId: 'trace-01a0bd6963faa14f',
+		initialConfigRef: 'sha256:initial',
+		activeConfigRef: 'sha256:active',
+		configRevision: 2,
+		policy: 'editable',
+		createdAt: '2026-09-25T17:38:00Z',
+		updatedAt: '2026-09-25T18:04:00Z',
+		snapshots: [
+			{ configRef: 'sha256:initial', path: 'snapshots/sha256:initial', source: 'colony', files: 4 },
+			{ configRef: 'sha256:active', path: 'snapshots/sha256:active', source: 'colony', files: 5 }
+		],
+		history: [
+			{
+				revision: 1,
+				initialConfigRef: 'sha256:initial',
+				activeConfigRef: 'sha256:initial',
+				source: 'colony',
+				changeId: 'change-initial',
+				actor: 'runtime',
+				outcome: 'applied',
+				createdAt: '2026-09-25T17:38:00Z'
+			},
+			{
+				revision: 2,
+				initialConfigRef: 'sha256:initial',
+				activeConfigRef: 'sha256:active',
+				source: 'colony',
+				changeId: 'change-second',
+				actor: 'console',
+				reason: 'adopt the new colony config',
+				expectedRevision: 1,
+				outcome: 'applied',
+				createdAt: '2026-09-25T18:04:00Z'
+			}
+		],
+		...overrides
+	};
+}
+
+export function trailConfigApplyResult(
+	overrides: Partial<TrailConfigApplyResult> = {}
+): TrailConfigApplyResult {
+	return {
+		manifest: configManifest({ configRevision: 3, activeConfigRef: 'sha256:candidate' }),
+		change: {
+			revision: 3,
+			initialConfigRef: 'sha256:initial',
+			activeConfigRef: 'sha256:candidate',
+			source: 'colony',
+			changeId: 'change-preview',
+			actor: 'console',
+			reason: 'preview',
+			expectedRevision: 2,
+			outcome: 'applied',
+			createdAt: '2026-09-25T18:10:00Z'
+		},
+		newConfigRef: 'sha256:candidate',
+		diff: ['M .paseka/bees/scout.yaml'],
+		effectiveDiff: ['scout.model: old -> new'],
+		shadowedDiff: [],
+		remainingWork: { evaluated: true, compatible: true },
+		dryRun: false,
+		...overrides
+	};
+}
+
+export function forkLineage(overrides: Partial<ForkLineage> = {}): ForkLineage {
+	return {
+		version: 1,
+		forkId: 'fork-01a0bd6963faa150',
+		traceId: 'trace-fork-01a0bd6963faa150',
+		sourceTrace: 'trace-01a0bd6963faa14f',
+		sourceTask: 'task-b2',
+		sourceAttempt: 'attempt-1',
+		sourceBaseSha: 'aaaa1111',
+		baseSha: 'aaaa1111',
+		sourceConfigRef: 'sha256:source',
+		sourceRevision: 2,
+		configRef: 'sha256:candidate',
+		policy: 'pinned',
+		delta: {
+			form: 'patch',
+			patch: '.paseka/runs/trace-01a0bd6963faa14f/proposals/run-01.patch',
+			proposalKind: 'code.proposal.isolated',
+			publication: 'published',
+			effectiveDiff: ['guard.model: old -> new'],
+			rawDiff: ['M .paseka/bees/guard.yaml']
+		},
+		budget: 6,
+		state: 'runnable',
+		workspace: '/colony/.paseka/worktrees/trace-fork-01a0bd6963faa150',
+		branch: 'paseka/trace-fork-01a0bd6963faa150',
+		task: {
+			taskId: 'task-fork-1',
+			sourceTaskId: 'task-b2',
+			sourceTaskDigest: 'sha256:task',
+			title: 'Try the stricter guard'
+		},
+		limitations: ['colony configuration is frozen at the source revision'],
+		createdAt: '2026-09-25T18:20:00Z',
+		...overrides
+	};
+}
+
+export function forkRequest(overrides: Partial<ForkRequest> = {}): ForkRequest {
+	const evidence = forkLineage();
+	return {
+		version: 1,
+		requestId: 'req-01a0bd6963faa160',
+		state: 'pending',
+		origin: 'agent',
+		sender: { traceId: evidence.sourceTrace, agentId: 'run-01', bee: 'builder' },
+		evidence,
+		contentDigest: 'digest-1',
+		validation: 'ok',
+		createdAt: '2026-09-25T18:20:00Z',
+		updatedAt: '2026-09-25T18:20:00Z',
+		expiresAt: '2026-09-26T18:20:00Z',
+		...overrides
+	};
+}
+
+export function trailCollection(overrides: Partial<TrailCollection> = {}): TrailCollection {
+	return {
+		trails: [
+			traceSummary({
+				traceId: 'trace-fork-01a0bd6963faa150',
+				title: 'Try the stricter guard',
+				forkOf: 'trace-01a0bd6963faa14f',
+				forkId: 'fork-01a0bd6963faa150',
+				configPolicy: 'pinned',
+				admissionState: 'runnable',
+				sourceTask: 'task-b2',
+				delta: { form: 'patch' },
+				budget: 6
+			})
+		],
+		pendingForkRequests: [forkRequest()],
 		...overrides
 	};
 }

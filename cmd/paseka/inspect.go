@@ -6,6 +6,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/spf13/cobra"
 )
 
@@ -54,6 +55,14 @@ func printTraceUsage(w io.Writer, colonyRoot, traceID string) error {
 		return err
 	}
 	fmt.Fprintf(w, "Trace: %s\n", traceID)
+	if scope, err := trailview.ResolveScope(colony.Context{ColonyRoot: colonyRoot}, traceID); err == nil && scope.Experimental {
+		source := scope.ForkOf
+		if source == "" {
+			source = "(source unavailable)"
+		}
+		fmt.Fprintln(w, "  experimental: true")
+		fmt.Fprintf(w, "  forkOf: %s\n", source)
+	}
 	if summary.Usage != nil {
 		fmt.Fprintf(w, "  runs: %d (%d with usage)\n", summary.RunCount, summary.Usage.RunCountWithUsage)
 		fmt.Fprintf(w, "  input:       %d\n", summary.Usage.InputTokens)

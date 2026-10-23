@@ -55,6 +55,17 @@ func ScanRecentTraces(colonyRoot string, limit int) ([]TraceSummary, error) {
 	return walk.summaries(), nil
 }
 
+// ScanAllTraces returns every trail summary in the colony, newest activity
+// first. It shares the walk with the paged readers, so a full-collection read
+// and a page cannot disagree about which trails exist or how they sort.
+func ScanAllTraces(colonyRoot string) ([]TraceSummary, error) {
+	walk, err := scanTraces(colonyRoot, walkOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return walk.summaries(), nil
+}
+
 // ScanTracesAfter returns the `limit` summaries that sort strictly after `after`,
 // in the same newest-first order — the page an operator gets by asking for what
 // comes after the last row they hold. An empty `after.TraceID` means the newest

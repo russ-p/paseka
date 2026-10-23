@@ -15,23 +15,31 @@ import (
 
 // DispatchRequest is input for spawning one bee/agent run.
 type DispatchRequest struct {
-	ColonyRoot     string
-	Bee            string
-	TraceID        string
-	AgentID        string
-	Task           string
-	TaskID         string
-	Sector         string
-	SectorPath     string
-	Intent         string
-	Insights       []string
-	InlinePrompt   string
-	Workspace      string
-	AdapterExtra   adapters.RunParamsLayer
-	ModelAliases   map[string]string
-	IsLastWorkTask bool // set by AFK ledger task dispatch only
-	Profile        string
-	ProfileApply   func(colony.Bee) (colony.Bee, error)
+	ColonyRoot           string
+	ConfigRoot           string
+	ConfigRef            string
+	ConfigRevision       int
+	AttemptID            string
+	InitialCodeBaseSHA   string
+	InitialCodeBaseDirty bool
+	Bee                  string
+	TraceID              string
+	AgentID              string
+	Task                 string
+	TaskID               string
+	Sector               string
+	SectorPath           string
+	Intent               string
+	Insights             []string
+	InlinePrompt         string
+	Workspace            string
+	AdapterExtra         adapters.RunParamsLayer
+	ModelAliases         map[string]string
+	IsLastWorkTask       bool // set by AFK ledger task dispatch only
+	Profile              string
+	ProfileApply         func(colony.Bee) (colony.Bee, error)
+	// Registry is the trail-scoped bee registry, when the caller has one.
+	Registry *BeeRegistry
 	// Raw requests plain-text adapter output for this run only (CLI --raw).
 	Raw bool
 }

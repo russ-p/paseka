@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // ResolveStatus maps process and context errors to a run status, a machine
@@ -87,4 +89,18 @@ func RawOutputDegradedFeatures(adapter string) []string {
 	default:
 		return nil
 	}
+}
+
+// WriteFinalStatus writes a terminal run status carrying the run provenance.
+func WriteFinalStatus(d runs.Dir, req RunRequest, state protocol.RunStatus, reason string, exitCode int, startedAt, finishedAt time.Time, errMsg string) error {
+	return d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           state,
+		Reason:          reason,
+		ExitCode:        exitCode,
+		StartedAt:       startedAt,
+		FinishedAt:      finishedAt,
+		Error:           errMsg,
+		Provenance:      req.Provenance,
+	})
 }

@@ -264,15 +264,30 @@ func applyBeesProfile(ctx Context, bees map[string]Bee) (map[string]Bee, error) 
 	return out, nil
 }
 
+// ConfigRootPath is the directory configuration files are read from.
+func (c Context) ConfigRootPath() string {
+	if c.ConfigRoot != "" {
+		return c.ConfigRoot
+	}
+	return c.ColonyRoot
+}
+
+// BoundConfig reports whether this context was bound to an immutable trail snapshot.
+func (c Context) BoundConfig() bool {
+	return c.ConfigRoot != ""
+}
+
 // LoadBee reads committed YAML then applies the process profile overlay.
 func (c Context) LoadBee(role string) (Bee, BeeLocalOverlay, error) {
-	bee, overlay, err := LoadBee(c.ColonyRoot, role)
+	bee, overlay, err := LoadBee(c.ConfigRootPath(), role)
 	if err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
-	bee, _, err = c.ApplyBeeProfile(bee)
-	if err != nil {
-		return Bee{}, BeeLocalOverlay{}, err
+	if !c.BoundConfig() {
+		bee, _, err = c.ApplyBeeProfile(bee)
+		if err != nil {
+			return Bee{}, BeeLocalOverlay{}, err
+		}
 	}
 	if err := bee.ValidateAdapterRequirements(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
@@ -282,18 +297,24 @@ func (c Context) LoadBee(role string) (Bee, BeeLocalOverlay, error) {
 
 // LoadAllBees returns committed bees with the process profile applied.
 func (c Context) LoadAllBees() (map[string]Bee, error) {
-	bees, err := LoadAllBees(c.ColonyRoot)
+	bees, err := LoadAllBees(c.ConfigRootPath())
 	if err != nil {
 		return nil, err
+	}
+	if c.BoundConfig() {
+		return bees, nil
 	}
 	return applyBeesProfile(c, bees)
 }
 
 // LoadAllBeesForDiagnosis returns diagnosis bees with the process profile applied.
 func (c Context) LoadAllBeesForDiagnosis() (map[string]Bee, error) {
-	bees, err := LoadAllBeesForDiagnosis(c.ColonyRoot)
+	bees, err := LoadAllBeesForDiagnosis(c.ConfigRootPath())
 	if err != nil {
 		return nil, err
+	}
+	if c.BoundConfig() {
+		return bees, nil
 	}
 	return applyBeesProfile(c, bees)
 }

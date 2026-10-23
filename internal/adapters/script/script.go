@@ -66,13 +66,14 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		}
 	}
 	if err := runDir.WriteMeta(runs.Meta{
-		TraceID:   req.TraceID,
-		AgentID:   req.AgentID,
-		Bee:       req.Bee,
-		Adapter:   adapterName,
-		Workspace: req.Workspace,
-		Profile:   req.Profile,
-		StartedAt: startedAt,
+		TraceID:    req.TraceID,
+		AgentID:    req.AgentID,
+		Bee:        req.Bee,
+		Adapter:    adapterName,
+		Workspace:  req.Workspace,
+		Profile:    req.Profile,
+		Provenance: req.Provenance,
+		StartedAt:  startedAt,
 	}); err != nil {
 		return nil, fmt.Errorf("script: write meta: %w", err)
 	}
@@ -96,6 +97,7 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			State:           protocol.StatusRunning,
 			PID:             pid,
 			StartedAt:       startedAt,
+			Provenance:      req.Provenance,
 		})
 	})
 	exitCode := 0
@@ -151,12 +153,13 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 			Stderr:   stderrStr,
 		},
 		FinishedAt: finishedAt,
+		Provenance: req.Provenance,
 	}
 	if err := runDir.WriteResult(protoResult); err != nil {
 		return nil, fmt.Errorf("script: write result: %w", err)
 	}
 
-	_ = runDir.WriteStatus(status, reason, exitCode, startedAt, finishedAt, statusErr)
+	_ = adapters.WriteFinalStatus(runDir, req, status, reason, exitCode, startedAt, finishedAt, statusErr)
 
 	result := &adapters.RunResult{
 		Status:    string(status),

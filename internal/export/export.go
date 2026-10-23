@@ -41,6 +41,9 @@ type TraceExportData struct {
 	// PatchDiagnostics explain records on disk that are not ordinary entries, so one
 	// malformed file cannot make the valid ones disappear.
 	PatchDiagnostics []PatchDiagnosticExport
+	// Config carries the trail's retained configuration evidence. Private inputs
+	// are listed with their omission reason instead of their contents.
+	Config *ConfigExport
 }
 
 // ArtifactExport is one inlined comb file for trace export.
@@ -189,6 +192,13 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 			return TraceExportData{}, err
 		}
 		data.Artifacts = artifactExports
+	}
+	if include.Has(IncludeConfig) {
+		configExport, err := loadConfigExport(ctx.ColonyRoot, detail.TraceID)
+		if err != nil {
+			return TraceExportData{}, err
+		}
+		data.Config = configExport
 	}
 	if include.Has(IncludePatches) {
 		patchExports, patchDiagnostics, err := loadPatchExports(ctx.ColonyRoot, detail.TraceID)

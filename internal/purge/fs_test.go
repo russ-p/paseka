@@ -309,3 +309,89 @@ func TestBusPurgeLeavesProposalPatchesAndTheirPublicationState(t *testing.T) {
 		t.Fatalf("publication = %q, want the state recorded at capture time", rec.Publication)
 	}
 }
+
+func TestPurgeTraceScopedRunsRemovesOnlyThatTrailCopies(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+
+	for _, traceID := range []string{"trace-keep", "trace-drop"} {
+		d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-a"}
+		if err := d.Prepare(); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(d.ResultPath(), []byte("ok"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		configDir := filepath.Join(repo, ".paseka", "runs", traceID, "config")
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(configDir, "manifest.json"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	plan, err := purge.Plan(ctx, purge.PurgeTarget{Runs: true, TraceID: "trace-drop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Runs) != 1 || plan.Runs[0] != "trace-drop" {
+		t.Fatalf("trace-scoped plan runs = %+v", plan.Runs)
+	}
+	if _, err := purge.Execute(ctx, purge.PurgeTarget{Runs: true, TraceID: "trace-drop"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "runs", "trace-drop")); !os.IsNotExist(err) {
+		t.Fatalf("deleted trail still has records: %v", err)
+	}
+	for _, rel := range []string{
+		filepath.Join(".paseka", "runs", "trace-keep", "config", "manifest.json"),
+		filepath.Join(".paseka", "runs", "trace-keep", "agent-a", "summary.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(repo, rel)); err != nil {
+			t.Fatalf("deleting one trail removed another trail's copy %s: %v", rel, err)
+		}
+	}
+}
+
+func TestPurgeTraceScopedWorktreesLeaveOtherTrailBookkeeping(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+
+	for _, traceID := range []string{"trace-keep", "trace-drop"} {
+		if _, err := worktree.Ensure(worktree.EnsureOptions{
+			ColonyRoot: repo,
+			TraceID:    traceID,
+			Slug:       slug,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	plan, err := purge.Plan(ctx, purge.PurgeTarget{Worktrees: true, TraceID: "trace-drop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Worktrees) != 1 || plan.Worktrees[0] != "trace-drop" {
+		t.Fatalf("trace-scoped worktree plan = %+v", plan.Worktrees)
+	}
+	if _, err := purge.Execute(ctx, purge.PurgeTarget{Worktrees: true, TraceID: "trace-drop"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "worktrees", "trace-drop")); !os.IsNotExist(err) {
+		t.Fatalf("dropped worktree still exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "worktrees", "trace-keep")); err != nil {
+		t.Fatalf("trace-scoped purge removed another trail's worktree: %v", err)
+	}
+	st, err := homestate.LoadState(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Worktrees) != 1 || st.Worktrees[0].TraceID != "trace-keep" {
+		t.Fatalf("worktree registry = %+v", st.Worktrees)
+	}
+}

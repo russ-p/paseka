@@ -10,6 +10,7 @@ export const consoleRoutes = [
 	{ path: '/timeline', label: 'Timeline', shortcut: 'l', group: 'Work', glyph: 'history' },
 	{ path: '/tasks', label: 'Tasks', shortcut: 'k', group: 'Work', glyph: 'tasks' },
 	{ path: '/reviews', label: 'Reviews', shortcut: 'r', group: 'Work', glyph: 'reviews' },
+	{ path: '/forks', label: 'Forks', shortcut: 'f', group: 'Work', glyph: 'fork' },
 	{ path: '/sessions', label: 'Sessions', shortcut: 'i', group: 'Work', glyph: 'terminal' },
 	{ path: '/bees', label: 'Bees', shortcut: 'b', group: 'Colony', glyph: 'bees' },
 	{ path: '/worktrees', label: 'Worktrees', shortcut: 'w', group: 'Colony', glyph: 'worktrees' },

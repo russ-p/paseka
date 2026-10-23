@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 func TestResolveStatusProcessOutcome(t *testing.T) {
@@ -70,5 +72,30 @@ func TestIsStreamFormat(t *testing.T) {
 	}
 	if adapters.IsStreamFormat("text") {
 		t.Fatal("text should not be stream format")
+	}
+}
+
+func TestWriteFinalStatusCarriesRunProvenance(t *testing.T) {
+	runDir := runs.Dir{ColonyRoot: t.TempDir(), TraceID: "trace-1", AgentID: "agent-1"}
+	if err := runDir.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	want := protocol.Provenance{
+		AttemptID:            "attempt-1",
+		ConfigRef:            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		ConfigRevision:       3,
+		InitialCodeBaseSHA:   "abc123",
+		InitialCodeBaseDirty: true,
+	}
+	started := time.Now().UTC().Add(-time.Second)
+	if err := adapters.WriteFinalStatus(runDir, adapters.RunRequest{Provenance: want}, protocol.StatusFailed, "", 1, started, time.Now().UTC(), "boom"); err != nil {
+		t.Fatal(err)
+	}
+	status, err := runDir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Provenance != want {
+		t.Fatalf("status provenance = %+v, want %+v", status.Provenance, want)
 	}
 }

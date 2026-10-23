@@ -1,6 +1,8 @@
 package adapters
 
 import (
+	"fmt"
+
 	"github.com/russ-p/paseka/internal/runs"
 )
 
@@ -19,6 +21,11 @@ func ScriptEnv(base []string, req RunRequest, runDir runs.Dir) []string {
 	set("PASEKA_TRACE_ID", req.TraceID)
 	set("PASEKA_AGENT_ID", req.AgentID)
 	set("PASEKA_TASK_ID", req.TaskID)
+	set("PASEKA_ATTEMPT_ID", req.AttemptID)
+	set("PASEKA_CONFIG_REF", req.ConfigRef)
+	if req.ConfigRevision > 0 {
+		set("PASEKA_CONFIG_REVISION", fmt.Sprintf("%d", req.ConfigRevision))
+	}
 	set("PASEKA_WORKSPACE", req.Workspace)
 	set("PASEKA_COLONY_ROOT", req.ColonyRoot)
 	set("PASEKA_RUN_DIR", runDir.Root())

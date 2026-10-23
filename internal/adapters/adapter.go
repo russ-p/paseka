@@ -32,6 +32,7 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	Profile      string
+	protocol.Provenance
 	// Raw is the runtime-owned `--raw` escape hatch: the adapter requests plain
 	// text instead of its structured mode, so usage and providerSessionId
 	// accounting degrade for this invocation only.

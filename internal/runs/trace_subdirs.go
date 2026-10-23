@@ -11,8 +11,12 @@ var ReservedTraceSubdirs = map[string]struct{}{
 	"tasks":     {},
 	"artifacts": {},
 	"console":   {},
+	// Trail configuration snapshots and attempt ownership are runtime-owned.
+	"config": {},
 	// Proposal patches: captured code history the runtime owns, not a bee handoff.
 	proposalsDir: {},
+	// Fork requests are durable admission records, not agent runs.
+	"fork-requests": {},
 }
 
 // skipTraceEventSubdirs have no per-agent events.ndjson to merge.
@@ -20,9 +24,11 @@ var ReservedTraceSubdirs = map[string]struct{}{
 // "proposals" is reserved and skipped: its sidecars retain a synthesized event envelope,
 // but that envelope is the archive's own context and is never merged into event feeds.
 var skipTraceEventSubdirs = map[string]struct{}{
-	"tasks":      {},
-	"artifacts":  {},
-	proposalsDir: {},
+	"tasks":         {},
+	"artifacts":     {},
+	"config":        {},
+	proposalsDir:    {},
+	"fork-requests": {},
 }
 
 // IsReservedTraceSubdir reports whether name is a reserved trace subdirectory.

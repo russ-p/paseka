@@ -20,6 +20,7 @@ import (
 // Content identity and capture metadata do not change once the record is installed.
 // Publication status may be updated atomically on its own.
 type Record struct {
+	protocol.Provenance
 	SchemaVersion int    `json:"schemaVersion"`
 	TraceID       string `json:"traceId"`
 	AgentID       string `json:"agentId"`

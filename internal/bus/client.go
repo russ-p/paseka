@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 // Client is a NATS/JetStream connection for one colony.
@@ -101,6 +103,11 @@ func (c *Client) Health() error {
 func (c *Client) PublishEvent(ctx context.Context, event protocol.Event) error {
 	if !protocol.IsDomainEvent(event.Type) {
 		return nil
+	}
+	if c.cfg.ColonyRoot != "" && trailconfig.IsNewTrail(c.cfg.ColonyRoot, event.TraceID) {
+		if _, err := trailconfig.EnsureForRoot(c.cfg.ColonyRoot, event.TraceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
+			return fmt.Errorf("bus: trail config: %w", err)
+		}
 	}
 	// The record is best-effort and never blocks the publish: see recordTrailEvent.
 	_ = recordTrailEvent(c.cfg.ColonyRoot, event)
