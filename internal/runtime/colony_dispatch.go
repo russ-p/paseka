@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
@@ -52,12 +53,31 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		return nil, fmt.Errorf("runtime: traceId is required")
 	}
 	execColony := ctxColony
+	scope, err := trailview.ResolveScope(ctxColony, req.TraceID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: resolve trail scope: %w", err)
+	}
 	if !execColony.BoundConfig() {
-		bound, _, _, err := trailconfig.BindNewWork(ctxColony, req.TraceID)
+		bound, _, boundNow, err := trailconfig.BindNewWork(ctxColony, req.TraceID)
 		if err != nil {
 			return nil, fmt.Errorf("runtime: trail config: %w", err)
 		}
 		execColony = bound
+		if scope.Experimental && !boundNow {
+			return nil, fmt.Errorf("runtime: experimental trail %s has no configuration binding", req.TraceID)
+		}
+	}
+	if scope.Experimental {
+		manifest, err := trailconfig.Load(ctxColony.ColonyRoot, req.TraceID)
+		if err != nil {
+			return nil, fmt.Errorf("runtime: experimental trail %s: %w", req.TraceID, err)
+		}
+		if manifest.Policy != trailconfig.PolicyPinned {
+			return nil, fmt.Errorf("runtime: experimental trail %s has non-pinned policy %q", req.TraceID, manifest.Policy)
+		}
+		if execColony.ConfigRef != "" && scope.ConfigRef != "" && execColony.ConfigRef != scope.ConfigRef {
+			return nil, fmt.Errorf("runtime: experimental trail %s resolved a configuration the lineage does not pin", req.TraceID)
+		}
 	}
 
 	agentID, err := colony.NewAgentID()

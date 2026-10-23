@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
@@ -301,5 +303,52 @@ func TestForkInternalProposalAndVerificationChoreography(t *testing.T) {
 	}
 	if snap.Tasks["task-1"].ProposalWorkspace != protocol.ProposalWorkspaceIsolated {
 		t.Fatalf("proposal workspace = %q, want isolated", snap.Tasks["task-1"].ProposalWorkspace)
+	}
+}
+
+func TestReactorRefusesExperimentalTrailWithoutBinding(t *testing.T) {
+	repo := initProposalDispatchRepo(t)
+	writeRuntimeLineage(t, repo, trailfork.Lineage{
+		TraceID:     "trace-fork",
+		ForkID:      "fork-1",
+		SourceTrace: "trace-source",
+		Delta:       trailfork.Delta{Form: trailfork.DeltaNone},
+	})
+
+	registry, err := BuildBeeRegistry(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewTestReactor(TestReactorOptions{
+		ColonyRoot: repo,
+		Dispatcher: NewDispatcher(),
+		Registry:   registry,
+		Ledger:     taskledger.NewMemoryLedger(),
+	})
+	ev, err := protocol.NewEvent("trace-fork", "agent-fork", 1, protocol.EventSignal, map[string]any{
+		"kind":  "feature.requested",
+		"title": "fork work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ev); err == nil ||
+		!strings.Contains(err.Error(), "no configuration binding") {
+		t.Fatalf("err = %v, want experimental binding refusal", err)
+	}
+}
+
+func writeRuntimeLineage(t *testing.T, root string, lineage trailfork.Lineage) {
+	t.Helper()
+	data, err := json.Marshal(lineage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(root, lineage.TraceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

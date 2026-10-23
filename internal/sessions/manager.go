@@ -28,6 +28,7 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/russ-p/paseka/internal/worktree"
 	"golang.org/x/term"
 )
@@ -195,9 +196,24 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		}
 		traceID = id
 	}
-	execColony, _, boundConfig, err := trailconfig.BindNewWork(ctxColony, traceID)
+	scope, err := trailview.ResolveScope(ctxColony, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: resolve trail scope: %w", err)
+	}
+	execColony, trailManifest, boundConfig, err := trailconfig.BindNewWork(ctxColony, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: trail config: %w", err)
+	}
+	if scope.Experimental {
+		if !boundConfig {
+			return nil, fmt.Errorf("sessions: experimental trail %s has no configuration binding", traceID)
+		}
+		if trailManifest.Policy != trailconfig.PolicyPinned {
+			return nil, fmt.Errorf("sessions: experimental trail %s has non-pinned policy %q", traceID, trailManifest.Policy)
+		}
+		if execColony.ConfigRef != "" && scope.ConfigRef != "" && execColony.ConfigRef != scope.ConfigRef {
+			return nil, fmt.Errorf("sessions: experimental trail %s resolved a configuration the lineage does not pin", traceID)
+		}
 	}
 
 	var attempt trailconfig.Attempt

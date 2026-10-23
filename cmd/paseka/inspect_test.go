@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/russ-p/paseka/internal/colonyinit"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailfork"
 )
 
 func TestPrintTraceUsageAggregate(t *testing.T) {
@@ -53,6 +57,42 @@ func TestPrintTraceUsageNone(t *testing.T) {
 	want := "Trace: trace-empty\n  runs: 1\n  usage: (none)\n"
 	if buf.String() != want {
 		t.Fatalf("output = %q, want %q", buf.String(), want)
+	}
+}
+
+func TestPrintTraceUsageShowsForkLineage(t *testing.T) {
+	root := t.TempDir()
+	started := time.Now().UTC()
+	writeInspectRun(t, root, "trace-fork", "agent-a", started, nil)
+	writeInspectLineage(t, root, "trace-fork", "trace-source")
+
+	var buf bytes.Buffer
+	if err := printTraceUsage(&buf, root, "trace-fork"); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "experimental: true\n") || !strings.Contains(got, "forkOf: trace-source\n") {
+		t.Fatalf("output missing fork lineage:\n%s", got)
+	}
+}
+
+func writeInspectLineage(t *testing.T, root, traceID, sourceTrace string) {
+	t.Helper()
+	data, err := json.Marshal(trailfork.Lineage{
+		TraceID:     traceID,
+		ForkID:      "fork-1",
+		SourceTrace: sourceTrace,
+		Delta:       trailfork.Delta{Form: trailfork.DeltaNone},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(root, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

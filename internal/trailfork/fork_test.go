@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
@@ -158,6 +159,7 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 	if lineage.Delta.Form != trailfork.DeltaNone || lineage.Policy != trailconfig.PolicyPinned {
 		t.Fatalf("lineage policy/delta = %+v", lineage)
 	}
+	assertOrdinaryForkEvents(t, pub.events, plan.TraceID)
 
 	snap, err := ledger.Snapshot(plan.TraceID)
 	if err != nil {
@@ -909,4 +911,33 @@ func containsSubstring(lines []string, want string) bool {
 func digestHex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func assertOrdinaryForkEvents(t *testing.T, events []protocol.Event, forkTrace string) {
+	t.Helper()
+	if len(events) == 0 {
+		t.Fatal("fork creation published no events")
+	}
+	for _, ev := range events {
+		if ev.TraceID != forkTrace {
+			t.Fatalf("event trace = %q, want fork %q", ev.TraceID, forkTrace)
+		}
+		subject := bus.EventSubject("paseka.test", ev)
+		if strings.Contains(strings.ToLower(subject), "fork") {
+			t.Fatalf("fork-specific subject %q", subject)
+		}
+		data, err := json.Marshal(ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal(data, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		for key := range envelope {
+			if strings.Contains(strings.ToLower(key), "fork") {
+				t.Fatalf("fork-specific envelope field %q in %s", key, data)
+			}
+		}
+	}
 }

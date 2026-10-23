@@ -14,6 +14,7 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailview"
 )
 
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
@@ -253,12 +254,30 @@ func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, erro
 	if r.colony.ColonyRoot == "" {
 		return nil, fmt.Errorf("colony root is required")
 	}
-	bound, _, isBound, err := trailconfig.BindNewWork(r.colony, traceID)
+	// Resolve the trail's lineage before admitting work. An experimental trail
+	// must dispatch through its pinned binding; it must never fall back to the
+	// live colony because a binding or lineage record is missing.
+	scope, err := trailview.ResolveScope(r.colony, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: resolve trail scope: %w", err)
+	}
+	bound, manifest, isBound, err := trailconfig.BindNewWork(r.colony, traceID)
 	if err != nil {
 		return nil, err
 	}
 	if !isBound {
+		if scope.Experimental {
+			return nil, fmt.Errorf("runtime: experimental trail %s has no configuration binding", traceID)
+		}
 		return r.liveExecutionContext()
+	}
+	if scope.Experimental {
+		if manifest.Policy != trailconfig.PolicyPinned {
+			return nil, fmt.Errorf("runtime: experimental trail %s has non-pinned policy %q", traceID, manifest.Policy)
+		}
+		if bound.ConfigRef != "" && scope.ConfigRef != "" && bound.ConfigRef != scope.ConfigRef {
+			return nil, fmt.Errorf("runtime: experimental trail %s resolved a configuration the lineage does not pin", traceID)
+		}
 	}
 	registry, err := r.registryForConfig(bound)
 	if err != nil {

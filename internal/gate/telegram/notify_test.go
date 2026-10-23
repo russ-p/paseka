@@ -3,6 +3,8 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/russ-p/paseka/internal/homestate"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailfork"
 )
 
 type recordingBot struct {
@@ -273,5 +276,102 @@ func TestFormatTaskCompletedCard(t *testing.T) {
 	}
 	if !strings.Contains(text, "deadbeef") {
 		t.Fatalf("missing commit: %q", text)
+	}
+}
+
+func TestNotifierMarksExperimentalForkNotifications(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	root := t.TempDir()
+
+	slug := "notify-fork"
+	state, err := LoadNotifyState(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeNotifyLineage(t, root, "trace-fork", "trace-source")
+
+	bot := &recordingBot{}
+	n := &Notifier{
+		Colony: colony.Context{Slug: slug, ColonyRoot: root},
+		Config: Config{ChatIDs: []int64{-100}},
+		Bot:    bot,
+		state:  state,
+	}
+	task := taskledger.TaskSnapshot{
+		TaskID:  "task-1",
+		Title:   "Fork work",
+		Bee:     "builder",
+		Status:  protocol.TaskStatusBlocked,
+		Summary: protocol.HoneyReserveExhaustedSummary,
+	}
+	if err := n.pushTaskStatus(context.Background(), "trace-fork", task, protocol.TaskStatusBlocked); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.messages) != 1 {
+		t.Fatalf("messages = %d", len(bot.messages))
+	}
+	if !strings.Contains(bot.messages[0], "Experimental fork of trace-source") {
+		t.Fatalf("notification did not mark the fork: %q", bot.messages[0])
+	}
+}
+
+func TestNotifierSkipsEventWhenLineageCannotBeResolved(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	root := t.TempDir()
+
+	slug := "notify-unresolved"
+	state, err := LoadNotifyState(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(root, "trace-broken")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bot := &recordingBot{}
+	n := &Notifier{
+		Colony: colony.Context{Slug: slug, ColonyRoot: root},
+		Config: Config{ChatIDs: []int64{-100}},
+		Bot:    bot,
+		state:  state,
+	}
+	task := taskledger.TaskSnapshot{
+		TaskID:  "task-1",
+		Title:   "Fork work",
+		Bee:     "builder",
+		Status:  protocol.TaskStatusBlocked,
+		Summary: protocol.HoneyReserveExhaustedSummary,
+	}
+	if err := n.pushTaskStatus(context.Background(), "trace-broken", task, protocol.TaskStatusBlocked); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.messages) != 0 {
+		t.Fatalf("unresolved scope should skip the notification, got %d", len(bot.messages))
+	}
+}
+
+func writeNotifyLineage(t *testing.T, root, traceID, sourceTrace string) {
+	t.Helper()
+	data, err := json.Marshal(trailfork.Lineage{
+		TraceID:     traceID,
+		ForkID:      "fork-1",
+		SourceTrace: sourceTrace,
+		Delta:       trailfork.Delta{Form: trailfork.DeltaNone},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(root, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

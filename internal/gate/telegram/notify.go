@@ -16,6 +16,7 @@ import (
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/trailview"
 )
 
 // Notifier pushes invite notifications from the bus and startup reconcile with dedup.
@@ -125,6 +126,19 @@ func (n *Notifier) notifyPublishedPRs(ctx context.Context) error {
 		if pr.LastNotifiedState == state {
 			continue
 		}
+		// Pull-request notifications are delivery announcements. A fork can
+		// never publish one; if a record is left behind by an older runtime,
+		// do not present it as ordinary delivery.
+		scope, ok := n.trailScope(pr.TraceID)
+		if !ok {
+			continue
+		}
+		if scope.Experimental {
+			logging.Component("gate.telegram.notify").Warn(
+				"skipping pull request notification for experimental trail",
+				logging.F("traceId", pr.TraceID))
+			continue
+		}
 		text := FormatPullRequestCard(pr)
 		key := "pr:" + pr.TraceID + ":" + state
 		if err := n.broadcast(text, tgbotapi.InlineKeyboardMarkup{}, key, mode.Silent()); err != nil {
@@ -174,6 +188,12 @@ func (n *Notifier) ReconcileTaskStatuses(ctx context.Context) error {
 }
 
 func (n *Notifier) handleEvent(ev protocol.Event) error {
+	// Fork events use ordinary subjects and envelopes. Resolve the trail's
+	// lineage before acting so an experiment is never notified as if it were
+	// ordinary work, and an unresolvable scope is not guessed at.
+	if _, ok := n.trailScope(ev.TraceID); !ok {
+		return nil
+	}
 	kind := protocol.PayloadKind(ev.Payload)
 	switch {
 	case ev.Type == protocol.EventSignal && kind == string(protocol.SignalSessionInvite):
@@ -251,6 +271,35 @@ func (n *Notifier) handleTaskCompletedEvent(ev protocol.Event) error {
 	return n.pushTaskCompleted(context.Background(), ev.TraceID, task, payload, mode)
 }
 
+// trailScope resolves the experimental-scope verdict for one event's trail.
+// An unresolvable scope is logged and reported as not-ok so the caller skips
+// the side effect rather than treating unknown lineage as ordinary work.
+func (n *Notifier) trailScope(traceID string) (trailview.Scope, bool) {
+	scope, err := trailview.ResolveScope(n.Colony, traceID)
+	if err != nil {
+		logging.Component("gate.telegram.notify").Warn(
+			"trail scope unresolved; notification skipped",
+			logging.F("traceId", traceID),
+			logging.F("error", err.Error()))
+		return trailview.Scope{}, false
+	}
+	return scope, true
+}
+
+// experimentalNotificationLine marks a fork card without changing the ordinary
+// event envelope or subject. The notification is an observation; delivery
+// remains disabled by the review and publisher checks.
+func experimentalNotificationLine(scope trailview.Scope) string {
+	if !scope.Experimental {
+		return ""
+	}
+	source := strings.TrimSpace(scope.ForkOf)
+	if source == "" {
+		source = "(source unavailable)"
+	}
+	return fmt.Sprintf("Experimental fork of %s; merge, push, and pull-request delivery are disabled.", source)
+}
+
 func (n *Notifier) lookupTask(traceID, taskID string) taskledger.TaskSnapshot {
 	task := taskledger.TaskSnapshot{TaskID: taskID}
 	if n.ledger == nil {
@@ -278,7 +327,14 @@ func (n *Notifier) pushInvite(ctx context.Context, invite homestate.InviteEntry)
 	if !n.state.ShouldNotify(key) {
 		return nil
 	}
+	scope, ok := n.trailScope(invite.TraceID)
+	if !ok {
+		return nil
+	}
 	text := FormatInviteCard(n.Colony, n.ledger, invite)
+	if line := experimentalNotificationLine(scope); line != "" {
+		text += "\n" + line
+	}
 	keyboard := inviteActionKeyboard(invite.InviteID)
 	return n.broadcast(text, keyboard, key, mode.Silent())
 }
@@ -296,7 +352,14 @@ func (n *Notifier) pushTaskStatus(ctx context.Context, traceID string, task task
 	if !n.state.ShouldNotify(key) {
 		return nil
 	}
+	scope, ok := n.trailScope(traceID)
+	if !ok {
+		return nil
+	}
 	text := FormatTaskStatusCard(n.Colony, n.Config, n.ledger, traceID, task, status)
+	if line := experimentalNotificationLine(scope); line != "" {
+		text += "\n" + line
+	}
 	var keyboard tgbotapi.InlineKeyboardMarkup
 	switch {
 	case status == protocol.TaskStatusWaitingReview && taskledger.IsReviewGate(task):
@@ -312,7 +375,14 @@ func (n *Notifier) pushTaskCompleted(ctx context.Context, traceID string, task t
 	if !n.state.ShouldNotify(key) {
 		return nil
 	}
+	scope, ok := n.trailScope(traceID)
+	if !ok {
+		return nil
+	}
 	text := FormatTaskCompletedCard(traceID, task, payload)
+	if line := experimentalNotificationLine(scope); line != "" {
+		text += "\n" + line
+	}
 	return n.broadcast(text, tgbotapi.InlineKeyboardMarkup{}, key, mode.Silent())
 }
 
