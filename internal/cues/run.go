@@ -62,7 +62,7 @@ func runSignal(ctx context.Context, publisher bus.Publisher, ledger taskledger.L
 	if err != nil {
 		return RunResult{}, err
 	}
-	if in.ColonyRoot != "" {
+	if in.ColonyRoot != "" && trailconfig.IsNewTrail(in.ColonyRoot, traceID) {
 		if _, err := trailconfig.EnsureForRoot(in.ColonyRoot, traceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
 			return RunResult{}, fmt.Errorf("cue %q: trail config: %w", cue.ID, err)
 		}
@@ -111,7 +111,7 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 	if err != nil {
 		return RunResult{}, err
 	}
-	if in.ColonyRoot != "" {
+	if in.ColonyRoot != "" && trailconfig.IsNewTrail(in.ColonyRoot, traceID) {
 		if _, err := trailconfig.EnsureForRoot(in.ColonyRoot, traceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
 			return RunResult{}, fmt.Errorf("cue %q: trail config: %w", cue.ID, err)
 		}

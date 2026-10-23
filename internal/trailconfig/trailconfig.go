@@ -24,6 +24,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/gitroot"
+	"github.com/russ-p/paseka/internal/runs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -228,31 +229,59 @@ func EnsureForRoot(colonyRoot, traceID string) (Manifest, error) {
 // rename, so concurrent first events converge on one durable binding rather than
 // appending duplicate revisions or exposing a partially copied snapshot.
 func Ensure(ctx colony.Context, traceID string) (Manifest, error) {
+	manifest, _, err := EnsureInitial(ctx, traceID)
+	return manifest, err
+}
+
+// EnsureInitial captures revision 1 for a trail that has no binding. It is
+// idempotent: an existing binding is returned with created=false.
+func EnsureInitial(ctx colony.Context, traceID string) (Manifest, bool, error) {
+	return EnsureInitialExpected(ctx, traceID, nil)
+}
+
+// EnsureInitialExpected captures revision 1 only when the caller's expected
+// revision matches. Explicit legacy capture uses expected revision 0; nil keeps
+// the idempotent behaviour used by automatic first-event binding.
+func EnsureInitialExpected(ctx colony.Context, traceID string, expected *int) (Manifest, bool, error) {
 	if ctx.ColonyRoot == "" {
-		return Manifest{}, fmt.Errorf("trailconfig: colony root is required")
+		return Manifest{}, false, fmt.Errorf("trailconfig: colony root is required")
 	}
 	if err := validateTraceID(traceID); err != nil {
-		return Manifest{}, err
+		return Manifest{}, false, err
+	}
+	if expected != nil && *expected != 0 {
+		return Manifest{}, false, fmt.Errorf("trailconfig: expected revision %d, but initial capture establishes revision 1 from 0", *expected)
 	}
 	dir := ConfigDir(ctx.ColonyRoot, traceID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Manifest{}, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)
+		return Manifest{}, false, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)
 	}
 
 	release, err := acquireLock(filepath.Join(dir, lockFileName))
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, false, err
 	}
 	defer release()
 
 	existing, err := Load(ctx.ColonyRoot, traceID)
 	if err == nil {
-		return existing, nil
+		if expected != nil {
+			return Manifest{}, false, fmt.Errorf("trailconfig: trail %s is already at revision %d, expected %d", traceID, existing.ConfigRevision, *expected)
+		}
+		return existing, false, nil
 	}
 	if !errors.Is(err, ErrNoBinding) {
-		return Manifest{}, err
+		return Manifest{}, false, err
 	}
 
+	manifest, err := captureInitialLocked(ctx, traceID, dir)
+	if err != nil {
+		return Manifest{}, false, err
+	}
+	return manifest, true, nil
+}
+
+func captureInitialLocked(ctx colony.Context, traceID, dir string) (Manifest, error) {
 	contents, resolved, err := capture(ctx)
 	if err != nil {
 		return Manifest{}, err
@@ -306,6 +335,44 @@ func Ensure(ctx colony.Context, traceID string) (Manifest, error) {
 	return manifest, nil
 }
 
+// IsNewTrail reports whether a trail has started execution. The publisher seam
+// creates the trail root and records the first event before the bus attempt, so
+// the root can exist when the Reactor sees that event. A trail is still new
+// while the root holds only its event log: any run, task, artifact, proposal, or
+// console record means execution already began.
+func IsNewTrail(colonyRoot, traceID string) bool {
+	if strings.TrimSpace(traceID) == "" {
+		return false
+	}
+	root := colony.PasekaPath(colonyRoot, "runs", traceID)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	for _, ent := range entries {
+		if ent.IsDir() && ent.Name() == ConfigDirName {
+			continue
+		}
+		if ent.IsDir() || ent.Name() != runs.TrailEventsFileName {
+			return false
+		}
+	}
+	return true
+}
+
+// LoadManifestIfExists reads a trail's manifest without treating an absent
+// binding as an error.
+func LoadManifestIfExists(colonyRoot, traceID string) (Manifest, bool, error) {
+	manifest, err := Load(colonyRoot, traceID)
+	if err == nil {
+		return manifest, true, nil
+	}
+	if errors.Is(err, ErrNoBinding) {
+		return Manifest{}, false, nil
+	}
+	return Manifest{}, false, err
+}
+
 // Load reads a trail's configuration manifest.
 func Load(colonyRoot, traceID string) (Manifest, error) {
 	if colonyRoot == "" {
@@ -353,18 +420,45 @@ func Read(colonyRoot, traceID string) (Binding, error) {
 	}, nil
 }
 
-// Bind returns the trail's active configuration as an immutable execution
-// context. It captures revision 1 when the trail has no binding yet.
+// Bind resolves a trail's active immutable configuration. It never captures:
+// unbound trails stay legacy until an operator explicitly captures them.
 func Bind(ctx colony.Context, traceID string) (colony.Context, Manifest, error) {
-	manifest, err := Ensure(ctx, traceID)
+	manifest, ok, err := LoadManifestIfExists(ctx.ColonyRoot, traceID)
 	if err != nil {
-		return colony.Context{}, Manifest{}, err
+		return ctx, Manifest{}, err
+	}
+	if !ok {
+		return ctx, Manifest{}, fmt.Errorf("trailconfig: trail %s has no configuration binding", traceID)
 	}
 	bound, err := BindRef(ctx, traceID, manifest.ActiveConfigRef, manifest.ConfigRevision)
 	if err != nil {
-		return colony.Context{}, Manifest{}, err
+		return ctx, Manifest{}, err
 	}
 	return bound, manifest, nil
+}
+
+// BindNewWork binds a trail for newly admitted work. An existing binding is
+// used; a brand-new trail captures revision 1 first. A pre-existing unbound
+// trail keeps legacy behaviour and is returned untouched.
+func BindNewWork(ctx colony.Context, traceID string) (colony.Context, Manifest, bool, error) {
+	if manifest, ok, err := LoadManifestIfExists(ctx.ColonyRoot, traceID); err != nil {
+		return ctx, Manifest{}, false, err
+	} else if ok {
+		bound, _, err := Bind(ctx, traceID)
+		return bound, manifest, true, err
+	}
+	if !IsNewTrail(ctx.ColonyRoot, traceID) {
+		return ctx, Manifest{}, false, nil
+	}
+	manifest, _, err := EnsureInitial(ctx, traceID)
+	if err != nil {
+		return ctx, Manifest{}, false, err
+	}
+	bound, err := BindRef(ctx, traceID, manifest.ActiveConfigRef, manifest.ConfigRevision)
+	if err != nil {
+		return ctx, Manifest{}, false, err
+	}
+	return bound, manifest, true, nil
 }
 
 // BindRef resolves one retained snapshot as an immutable execution context.

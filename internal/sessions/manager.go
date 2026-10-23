@@ -195,13 +195,13 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		}
 		traceID = id
 	}
-	execColony, _, err := trailconfig.Bind(ctxColony, traceID)
+	execColony, _, boundConfig, err := trailconfig.BindNewWork(ctxColony, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: trail config: %w", err)
 	}
 
 	var attempt trailconfig.Attempt
-	if req.TaskID != "" {
+	if req.TaskID != "" && boundConfig {
 		input := trailconfig.NewTaskInputEvidence(req.TaskID, "", req.Task, req.Bee, "", req.Intent, "")
 		attempt, err = trailconfig.EnsureTaskAttempt(execColony, traceID, req.TaskID, "", input)
 		if err != nil {
@@ -252,7 +252,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 	sessionID := agentID
-	if attempt.AttemptID == "" {
+	if attempt.AttemptID == "" && boundConfig {
 		attempt, _, err = trailconfig.AdmitChainAttempt(execColony, traceID, "session:"+traceID+":"+agentID, "", "")
 		if err != nil {
 			return nil, fmt.Errorf("sessions: session attempt: %w", err)
@@ -504,9 +504,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		}
 		return nil, err
 	}
-	if _, _, err := trailconfig.MarkAttemptDispatched(ctxColony.ColonyRoot, traceID, attempt.AttemptID, "session:"+agentID); err != nil {
-		_ = proc.Kill()
-		return nil, fmt.Errorf("sessions: mark attempt dispatch: %w", err)
+	if attempt.AttemptID != "" {
+		if _, _, err := trailconfig.MarkAttemptDispatched(ctxColony.ColonyRoot, traceID, attempt.AttemptID, "session:"+agentID); err != nil {
+			_ = proc.Kill()
+			return nil, fmt.Errorf("sessions: mark attempt dispatch: %w", err)
+		}
 	}
 	if err := trailconfig.RecordAttemptAgent(ctxColony.ColonyRoot, traceID, attempt.AttemptID, agentID); err != nil {
 		logging.Component("sessions").Warn("attempt agent record failed", logging.F("error", err.Error()))

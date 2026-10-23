@@ -53,7 +53,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 	execColony := ctxColony
 	if !execColony.BoundConfig() {
-		bound, _, err := trailconfig.Bind(ctxColony, req.TraceID)
+		bound, _, _, err := trailconfig.BindNewWork(ctxColony, req.TraceID)
 		if err != nil {
 			return nil, fmt.Errorf("runtime: trail config: %w", err)
 		}
@@ -194,6 +194,11 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 }
 
 func ensureCLIAttempt(ctxColony, execColony colony.Context, req ColonyDispatchRequest, agentID string) (trailconfig.Attempt, error) {
+	if _, ok, err := trailconfig.LoadManifestIfExists(ctxColony.ColonyRoot, req.TraceID); err != nil {
+		return trailconfig.Attempt{}, err
+	} else if !ok {
+		return trailconfig.Attempt{}, nil
+	}
 	if req.TaskID == "" {
 		attempt, _, err := trailconfig.AdmitChainAttempt(execColony, req.TraceID, "cli:"+req.TraceID+":"+agentID, "", "")
 		return attempt, err

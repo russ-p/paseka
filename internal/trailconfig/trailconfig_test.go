@@ -324,9 +324,16 @@ func TestBindReturnsImmutableExecutionContext(t *testing.T) {
 	setupHome(t, "test")
 	ctx := testContext(root)
 
+	captured, _, err := trailconfig.EnsureInitial(ctx, "trace-bind")
+	if err != nil {
+		t.Fatal(err)
+	}
 	bound, manifest, err := trailconfig.Bind(ctx, "trace-bind")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if manifest.InitialConfigRef != captured.InitialConfigRef {
+		t.Fatalf("bound manifest = %+v, want captured %+v", manifest, captured)
 	}
 	if !bound.BoundConfig() {
 		t.Fatal("context was not bound")
@@ -375,6 +382,9 @@ func TestBindBlocksMissingSnapshotContent(t *testing.T) {
 	root := writeColony(t, "slug: test\n")
 	setupHome(t, "test")
 	ctx := testContext(root)
+	if _, _, err := trailconfig.EnsureInitial(ctx, "trace-corrupt"); err != nil {
+		t.Fatal(err)
+	}
 	bound, _, err := trailconfig.Bind(ctx, "trace-corrupt")
 	if err != nil {
 		t.Fatal(err)

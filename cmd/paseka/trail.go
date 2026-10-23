@@ -274,9 +274,49 @@ func newTrailConfigCmd() *cobra.Command {
 		Use:   "config",
 		Short: "Inspect a trail's captured configuration",
 	}
+	cmd.AddCommand(newTrailConfigCaptureCmd())
 	cmd.AddCommand(newTrailConfigApplyCmd())
 	cmd.AddCommand(newTrailConfigCancelCmd())
 	cmd.AddCommand(newTrailConfigShowCmd())
+	return cmd
+}
+
+func newTrailConfigCaptureCmd() *cobra.Command {
+	var (
+		startDir string
+		jsonOut  bool
+		expect   int
+	)
+	cmd := &cobra.Command{
+		Use:   "capture <traceId>",
+		Short: "Capture the colony configuration as revision 1 of a trail",
+		Long: "Capture an explicit first configuration binding for a trail that started before " +
+			"configuration capture existed. The trail must still be at revision 0; capture " +
+			"establishes revision 1 for future work without claiming a snapshot for earlier runs.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctxColony, err := colony.ResolveContext(startDir)
+			if err != nil {
+				return err
+			}
+			manifest, created, err := trailconfig.EnsureInitialExpected(ctxColony, args[0], &expect)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(manifest)
+			}
+			if created {
+				fmt.Printf("Captured revision 1 for trail %s (%s)\n", manifest.TraceID, manifest.ActiveConfigRef)
+			} else {
+				fmt.Printf("Trail %s already captured at revision %d (%s)\n", manifest.TraceID, manifest.ConfigRevision, manifest.ActiveConfigRef)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().IntVar(&expect, "expected-revision", 0, "revision the trail must have before capture")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print machine-readable JSON")
 	return cmd
 }
 

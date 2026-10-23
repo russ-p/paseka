@@ -82,7 +82,7 @@ func CreateForkBinding(opts ForkBindingOptions) (Manifest, error) {
 	sourceManifest, err := Load(opts.Context.ColonyRoot, opts.SourceTraceID)
 	if err != nil {
 		if errors.Is(err, ErrNoBinding) {
-			return Manifest{}, fmt.Errorf("trailconfig: source trail %s has no configuration binding", opts.SourceTraceID)
+			return Manifest{}, fmt.Errorf("trailconfig: source trail %s has no configuration binding (legacy trails cannot be forked in v1)", opts.SourceTraceID)
 		}
 		return Manifest{}, err
 	}

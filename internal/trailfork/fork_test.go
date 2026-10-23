@@ -289,6 +289,16 @@ func TestForkRefusesUnsupportedSources(t *testing.T) {
 		}
 	})
 
+	t.Run("unbound legacy source", func(t *testing.T) {
+		root, _ := setupGitRepo(t)
+		ctx := testContext(root)
+		writeTask(t, root, "trace-source", taskledger.TaskSnapshot{TaskID: "task-1", Title: "one", Bee: "builder", Status: protocol.TaskStatusPlanned})
+		_, err := trailfork.Preview(trailfork.Options{Context: ctx, SourceTraceID: "trace-source"})
+		if err == nil || !strings.Contains(err.Error(), "no configuration binding (legacy trails cannot be forked in v1)") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
 	t.Run("missing task input evidence", func(t *testing.T) {
 		root, _ := setupGitRepo(t)
 		ctx := testContext(root)

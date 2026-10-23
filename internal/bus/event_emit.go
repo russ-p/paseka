@@ -148,7 +148,7 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 	// Bind the trail before its first event is published. The runtime repeats
 	// this check, but an emit that reaches the bus first must not leave a trail
 	// routable without the configuration snapshot that describes it.
-	if colonyRoot != "" {
+	if colonyRoot != "" && trailconfig.IsNewTrail(colonyRoot, ev.TraceID) {
 		if _, err := trailconfig.EnsureForRoot(colonyRoot, ev.TraceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
 			return protocol.EventCLIResult{
 				OK:      false,

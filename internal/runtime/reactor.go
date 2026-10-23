@@ -170,9 +170,10 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		return nil
 	}
 
-	// A trail owns its configuration from its first event onward. Capture the
-	// binding before any configuration-dependent validation or routing, so the
-	// event cannot be judged by live files that a later edit would replace.
+	// A new trail owns its configuration from its first event onward. Capture
+	// that binding before any configuration-dependent validation or routing, so
+	// the event cannot be judged by live files that a later edit would replace.
+	// A pre-existing unbound trail keeps routing on the live colony.
 	execCtx, err := r.executionContext(ev.TraceID)
 	if err != nil {
 		return fmt.Errorf("runtime: trail config: %w", err)
@@ -252,9 +253,12 @@ func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, erro
 	if r.colony.ColonyRoot == "" {
 		return nil, fmt.Errorf("colony root is required")
 	}
-	bound, _, err := trailconfig.Bind(r.colony, traceID)
+	bound, _, isBound, err := trailconfig.BindNewWork(r.colony, traceID)
 	if err != nil {
 		return nil, err
+	}
+	if !isBound {
+		return r.liveExecutionContext()
 	}
 	registry, err := r.registryForConfig(bound)
 	if err != nil {
@@ -266,6 +270,25 @@ func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, erro
 	}
 	return &trailExecutionContext{
 		Colony:   bound,
+		Manifest: colonyManifest,
+		Registry: registry,
+	}, nil
+}
+
+// liveExecutionContext keeps a pre-capture legacy trail on the colony's live
+// configuration. It is not an immutable binding and must never be persisted as
+// one.
+func (r *Reactor) liveExecutionContext() (*trailExecutionContext, error) {
+	colonyManifest, err := colony.LoadColony(r.colony.ConfigRootPath())
+	if err != nil {
+		return nil, err
+	}
+	registry, err := r.registryForConfig(r.colony)
+	if err != nil {
+		return nil, err
+	}
+	return &trailExecutionContext{
+		Colony:   r.colony,
 		Manifest: colonyManifest,
 		Registry: registry,
 	}, nil

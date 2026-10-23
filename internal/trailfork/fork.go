@@ -361,7 +361,7 @@ func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 	sourceManifest, err := trailconfig.Load(opts.Context.ColonyRoot, sourceTrace)
 	if err != nil {
 		if errors.Is(err, trailconfig.ErrNoBinding) {
-			return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source trail %s has no configuration snapshot", sourceTrace)
+			return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source trail %s has no configuration binding (legacy trails cannot be forked in v1)", sourceTrace)
 		}
 		return Lineage{}, sourceEvidence{}, err
 	}
@@ -391,7 +391,7 @@ func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 		input.TaskID = task.TaskID
 	}
 	if strings.TrimSpace(attempt.ConfigRef) == "" || attempt.ConfigRevision < 1 {
-		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source attempt %s has no recorded configuration reference", attempt.AttemptID)
+		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source attempt %s has no recorded configuration reference; its historical configuration is unknown", attempt.AttemptID)
 	}
 	if !retainsSnapshot(sourceManifest, attempt.ConfigRef) {
 		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source trail %s no longer retains configuration %s", sourceTrace, attempt.ConfigRef)

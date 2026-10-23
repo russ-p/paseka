@@ -129,6 +129,15 @@ func (r *Reactor) prepareTaskAttempt(ctx *trailExecutionContext, traceID string,
 	if r.colony.ColonyRoot == "" {
 		return trailconfig.Attempt{}, nil, true, fmt.Errorf("runtime: colony root is required")
 	}
+	if _, ok, err := trailconfig.LoadManifestIfExists(r.colony.ColonyRoot, traceID); err != nil {
+		return trailconfig.Attempt{}, nil, false, err
+	} else if !ok {
+		beeRole = colony.EffectiveTaskBee(task.Bee, ctx.Manifest.Defaults)
+		if ctx.Registry == nil || !ctx.Registry.CanDispatchTaskReady(beeRole) {
+			return trailconfig.Attempt{}, ctx, true, nil
+		}
+		return trailconfig.Attempt{}, ctx, false, nil
+	}
 	attempt, blocked, err := trailconfig.EnsureTaskAttemptGated(ctx.Colony, traceID, task.TaskID, sourceEventID, taskAttemptInput(task))
 	if err != nil {
 		return trailconfig.Attempt{}, nil, false, err
@@ -204,6 +213,15 @@ func (r *Reactor) prepareDirectAttempt(ev protocol.Event, beeRole string, active
 	root := r.colony.ColonyRoot
 	key := directDispatchKey(ev, beeRole)
 	taskID := protocol.PayloadTaskID(ev.Payload)
+
+	if _, ok, err := trailconfig.LoadManifestIfExists(root, ev.TraceID); err != nil {
+		return trailconfig.Attempt{}, nil, false, err
+	} else if !ok {
+		if !directRoleSubscribed(active.Registry, ev, beeRole) {
+			return trailconfig.Attempt{}, active, true, nil
+		}
+		return trailconfig.Attempt{}, active, false, nil
+	}
 
 	var attempt trailconfig.Attempt
 	switch {

@@ -104,7 +104,7 @@ func (c *Client) PublishEvent(ctx context.Context, event protocol.Event) error {
 	if !protocol.IsDomainEvent(event.Type) {
 		return nil
 	}
-	if c.cfg.ColonyRoot != "" {
+	if c.cfg.ColonyRoot != "" && trailconfig.IsNewTrail(c.cfg.ColonyRoot, event.TraceID) {
 		if _, err := trailconfig.EnsureForRoot(c.cfg.ColonyRoot, event.TraceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
 			return fmt.Errorf("bus: trail config: %w", err)
 		}

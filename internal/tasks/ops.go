@@ -121,8 +121,10 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 		traceID = id
 	}
-	if _, err := trailconfig.Ensure(session.Colony, traceID); err != nil {
-		return CreateResult{}, fmt.Errorf("task config: %w", err)
+	if trailconfig.IsNewTrail(session.Colony.ColonyRoot, traceID) {
+		if _, err := trailconfig.Ensure(session.Colony, traceID); err != nil {
+			return CreateResult{}, fmt.Errorf("task config: %w", err)
+		}
 	}
 
 	taskID := in.TaskID
