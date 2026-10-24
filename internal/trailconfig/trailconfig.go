@@ -297,6 +297,15 @@ func EnsureInitialExpected(ctx colony.Context, traceID string, expected *int) (M
 	if !errors.Is(err, ErrNoBinding) {
 		return Manifest{}, false, err
 	}
+	if expected != nil {
+		blockers, err := Blockers(ctx.ColonyRoot, traceID)
+		if err != nil {
+			return Manifest{}, false, err
+		}
+		if len(blockers) > 0 {
+			return Manifest{}, false, fmt.Errorf("trailconfig: trail %s cannot capture configuration at an unsafe boundary: %s", traceID, strings.Join(blockers, "; "))
+		}
+	}
 
 	manifest, err := captureInitialLocked(ctx, traceID, dir)
 	if err != nil {

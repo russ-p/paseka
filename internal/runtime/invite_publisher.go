@@ -11,6 +11,13 @@ import (
 func (r *Reactor) handleAutoInvite(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
 	rules := r.autoInvites
 	if execCtx != nil {
+		routed, found, err := r.recordedAttemptContext(ev, execCtx)
+		if err != nil {
+			return err
+		}
+		if found {
+			execCtx = routed
+		}
 		rules = execCtx.Manifest.AutoInvites
 	}
 	if len(rules) == 0 {

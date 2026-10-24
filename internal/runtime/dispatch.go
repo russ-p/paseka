@@ -11,6 +11,7 @@ import (
 	"github.com/russ-p/paseka/internal/adapters/script"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 // DispatchRequest is input for spawning one bee/agent run.
@@ -50,6 +51,7 @@ type Dispatcher struct {
 	publisher   bus.Publisher
 	busRequired bool
 	registry    *BeeRegistry
+	ledger      taskledger.Ledger
 }
 
 // NewDispatcher creates a dispatcher with default adapters.
@@ -79,6 +81,11 @@ func (d *Dispatcher) SetPublisher(pub bus.Publisher, required bool) {
 // SetBeeRegistry configures advisory publish validation against bee YAML contracts.
 func (d *Dispatcher) SetBeeRegistry(reg *BeeRegistry) {
 	d.registry = reg
+}
+
+// SetLedger configures the durable task ledger used to observe trace kill state.
+func (d *Dispatcher) SetLedger(ledger taskledger.Ledger) {
+	d.ledger = ledger
 }
 
 // Dispatch loads bee config, renders prompt, runs the adapter, and finalizes the run.

@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
@@ -552,6 +555,35 @@ func TestConfigRefTracksPrivateInputContent(t *testing.T) {
 	}
 	if first.InitialConfigRef == second.InitialConfigRef {
 		t.Fatal("private input content did not contribute to ConfigRef")
+	}
+}
+
+func TestBlockersIncludeOpenAttemptForReadyTask(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-blocked-attempt"
+	if _, err := trailconfig.Ensure(ctx, traceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := runs.WriteTaskSnapshot(root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1",
+		Title:  "queued but owned",
+		Status: protocol.TaskStatusReady,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	input := trailconfig.NewTaskInputEvidence("task-1", "queued but owned", "body", "builder", "", "feature", "none")
+	attempt, err := trailconfig.EnsureTaskAttempt(ctx, traceID, "task-1", "evt-1", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockers, err := trailconfig.Blockers(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(blockers, "\n"), attempt.AttemptID) {
+		t.Fatalf("blockers = %v, want open attempt %s", blockers, attempt.AttemptID)
 	}
 }
 

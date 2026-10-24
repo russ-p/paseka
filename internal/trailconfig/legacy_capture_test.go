@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
@@ -53,6 +55,25 @@ func TestEnsureInitialExpectedCapturesLegacyAtRevisionZero(t *testing.T) {
 	one := 1
 	if _, _, err := trailconfig.EnsureInitialExpected(ctx, "trace-other", &one); err == nil {
 		t.Fatal("expected a non-zero revision to refuse initial capture")
+	}
+}
+
+func TestEnsureInitialExpectedRefusesUnsafeLegacyBoundary(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-legacy-busy"
+	if err := runs.WriteTaskSnapshot(root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1",
+		Title:  "running work",
+		Status: protocol.TaskStatusRunning,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	zero := 0
+	if _, _, err := trailconfig.EnsureInitialExpected(ctx, traceID, &zero); err == nil {
+		t.Fatal("legacy capture ignored the safe boundary")
 	}
 }
 

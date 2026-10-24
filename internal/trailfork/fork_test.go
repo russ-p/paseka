@@ -770,6 +770,106 @@ func TestPatchDeltaPreviewReportsShadowedFrozenResolution(t *testing.T) {
 	}
 }
 
+func TestPatchDeltaReportsBaseBeeChangeShadowedByLocalOverlay(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	writeFile(t, root, ".paseka/prompts/other.md", "other prompt\n")
+	writeFile(t, root, ".paseka/prompts/local.md", "local prompt\n")
+	writeFile(t, root, ".paseka/bees/builder.local.yaml", "prompt_template: local.md\n")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-q", "-m", "local overlay")
+
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	sourceTree := sourceSnapshotTree(t, root, "trace-source")
+	patch := makePatch(t, sourceTree, func(dir string) {
+		writeFile(t, dir, ".paseka/bees/builder.yaml", "role: builder\nadapter: script\nprompt_template: other.md\ncommand: [echo]\n")
+	})
+	writePatchRecord(t, root, "trace-source", "agent-overlay", patch)
+
+	result, err := trailfork.Preview(trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		DeltaForm:     trailfork.DeltaPatch,
+		DeltaPatch:    "agent-overlay",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsLine(result.Plan.Delta.ShadowedDiff, "changed .paseka/bees/builder.yaml: effective bee settings are unchanged") {
+		t.Fatalf("shadowed diff = %v", result.Plan.Delta.ShadowedDiff)
+	}
+	for _, line := range result.Plan.Delta.EffectiveDiff {
+		if strings.HasPrefix(line, "bee builder prompt_template") {
+			t.Fatalf("frozen local overlay was advertised as effective: %v", result.Plan.Delta.EffectiveDiff)
+		}
+	}
+}
+
+func TestForkKeepsSourceResolvedBeeAndCueProvenance(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	writeFile(t, root, ".paseka/bees/scout.yaml", "role: scout\nadapter: script\nprompt_template: scout.md\ncommand: [echo]\n")
+	writeFile(t, root, ".paseka/prompts/scout.md", "scout\n")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-q", "-m", "scout")
+
+	ctx := testContext(root)
+	if _, err := trailconfig.Ensure(ctx, "trace-source"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runs.WriteTaskSnapshot(root, "trace-source", taskledger.TaskSnapshot{
+		TaskID: "task-1",
+		Title:  "implement task-1",
+		Body:   "body",
+		Bee:    "",
+		Status: protocol.TaskStatusCompleted,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	input := trailconfig.NewTaskInputEvidence("task-1", "implement task-1", "body", "", "", "feature", string(protocol.TaskReviewNone), "feature")
+	if _, err := trailconfig.EnsureTaskAttempt(ctx, "trace-source", "task-1", "evt-1", input); err != nil {
+		t.Fatal(err)
+	}
+	sourceTree := sourceSnapshotTree(t, root, "trace-source")
+	patch := makePatch(t, sourceTree, func(dir string) {
+		writeFile(t, dir, ".paseka/colony.yaml", "slug: test\ndefaults:\n  energy_budget: 8\n  default_bee: scout\n")
+	})
+	writePatchRecord(t, root, "trace-source", "agent-default-bee", patch)
+
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		DeltaForm:     trailfork.DeltaPatch,
+		DeltaPatch:    "agent-default-bee",
+		RequestID:     "req-default-bee",
+	}
+	preview, err := trailfork.Preview(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Plan.Task.Bee != "builder" {
+		t.Fatalf("task bee = %q, want source-resolved builder", preview.Plan.Task.Bee)
+	}
+	if preview.Plan.Task.CueID != "feature" {
+		t.Fatalf("task cue = %q, want feature", preview.Plan.Task.CueID)
+	}
+
+	pub := &capturePublisher{}
+	created, err := trailfork.Create(context.Background(), pub, taskledger.NewMemoryLedger(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Plan.Task.Bee != "builder" || created.Plan.Task.CueID != "feature" {
+		t.Fatalf("created task = %+v", created.Plan.Task)
+	}
+	var plan protocol.TaskPlanPayload
+	if err := json.Unmarshal(pub.events[0].Payload, &plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Tasks) != 1 || plan.Tasks[0].Bee != "builder" || plan.Tasks[0].CueID != "feature" {
+		t.Fatalf("plan tasks = %+v", plan.Tasks)
+	}
+}
+
 func TestPatchDeltaRefusesUnsafeChanges(t *testing.T) {
 	cases := []struct {
 		name   string

@@ -108,6 +108,7 @@ func taskAttemptInput(task taskledger.TaskSnapshot) *trailconfig.TaskInputEviden
 		task.Sector,
 		task.Intent,
 		string(task.Review),
+		task.CueID,
 	)
 }
 
@@ -165,6 +166,40 @@ func (r *Reactor) prepareTaskAttempt(ctx *trailExecutionContext, traceID string,
 		return marked, attemptCtx, true, nil
 	}
 	return marked, attemptCtx, false, nil
+}
+
+// recordedAttemptContext resolves the execution context recorded by the attempt
+// that owns an event. It is used for side effects on attempt-owned events so a
+// later active revision cannot re-route them through a registry that no longer
+// contains their role.
+func (r *Reactor) recordedAttemptContext(ev protocol.Event, active *trailExecutionContext) (*trailExecutionContext, bool, error) {
+	root := r.colony.ColonyRoot
+	if root == "" {
+		return active, false, nil
+	}
+	var (
+		attempt trailconfig.Attempt
+		ok      bool
+		err     error
+	)
+	if ev.AttemptID != "" {
+		attempt, ok, err = trailconfig.FindAttempt(root, ev.TraceID, ev.AttemptID)
+	} else if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
+		attempt, ok, err = trailconfig.LatestTaskAttempt(root, ev.TraceID, taskID)
+	} else {
+		return active, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return active, false, nil
+	}
+	routed, err := r.contextForAttempt(active, ev.TraceID, attempt)
+	if err != nil {
+		return nil, false, err
+	}
+	return routed, true, nil
 }
 
 // directRoutingContext selects the configuration a direct event should be

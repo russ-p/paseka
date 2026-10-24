@@ -42,6 +42,7 @@ type TaskInputEvidence struct {
 	Bee    string `json:"bee,omitempty"`
 	Sector string `json:"sector,omitempty"`
 	Intent string `json:"intent,omitempty"`
+	CueID  string `json:"cueId,omitempty"`
 	Review string `json:"review,omitempty"`
 	Digest string `json:"digest"`
 }
@@ -87,7 +88,11 @@ func AttemptsPath(colonyRoot, traceID string) string {
 }
 
 // NewTaskInputEvidence builds the canonical task-input evidence for an admission.
-func NewTaskInputEvidence(taskID, title, body, bee, sector, intent, review string) *TaskInputEvidence {
+func NewTaskInputEvidence(taskID, title, body, bee, sector, intent, review string, cueID ...string) *TaskInputEvidence {
+	cue := ""
+	if len(cueID) > 0 {
+		cue = strings.TrimSpace(cueID[0])
+	}
 	input := &TaskInputEvidence{
 		TaskID: strings.TrimSpace(taskID),
 		Title:  strings.TrimSpace(title),
@@ -95,6 +100,7 @@ func NewTaskInputEvidence(taskID, title, body, bee, sector, intent, review strin
 		Bee:    strings.TrimSpace(bee),
 		Sector: strings.TrimSpace(sector),
 		Intent: strings.TrimSpace(intent),
+		CueID:  cue,
 		Review: strings.TrimSpace(review),
 	}
 	data, err := json.Marshal(input)

@@ -58,6 +58,27 @@ func OpenLedger(ctx colony.Context) (*LedgerSession, error) {
 	}, nil
 }
 
+// TraceKilled reports whether a trace is durably stopped. When no ledger is
+// available the state is unknown to this process and the call reports false.
+func TraceKilled(ctx colony.Context, traceID string) (bool, error) {
+	if strings.TrimSpace(traceID) == "" {
+		return false, nil
+	}
+	session, err := OpenLedger(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer session.Close()
+	if session.Ledger == nil {
+		return false, nil
+	}
+	snap, err := session.Ledger.Snapshot(traceID)
+	if err != nil {
+		return false, err
+	}
+	return snap.Killed, nil
+}
+
 // LoadTrace returns the task snapshot for a trace, preferring KV when populated.
 func LoadTrace(ctx colony.Context, ledger taskledger.Ledger, traceID string) (taskledger.TraceSnapshot, Source, error) {
 	if traceID == "" {
@@ -323,6 +344,7 @@ func ReadyEvent(traceID, agentID string, task taskledger.TaskSnapshot, defaults 
 		Bee:    bee,
 		Sector: task.Sector,
 		Intent: task.Intent,
+		CueID:  task.CueID,
 	})
 }
 

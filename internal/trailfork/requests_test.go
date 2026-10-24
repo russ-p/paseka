@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -529,6 +530,91 @@ func TestRecoverCreatingResumesInterruptedApprovalWithoutDuplication(t *testing.
 	}
 }
 
+func TestCancelCreatingRequestRemovesPartialFork(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-cancel-creating",
+	}
+	if _, err := trailfork.Create(context.Background(), &dropProbePublisher{failPublish: true}, taskledger.NewMemoryLedger(), opts); err == nil {
+		t.Fatal("expected the initial publish to fail")
+	}
+	req, err := trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.State != trailfork.StateCreating || req.TraceID == "" {
+		t.Fatalf("request = %+v", req)
+	}
+	lineage, err := trailfork.LoadLineage(root, req.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cancelled, err := trailfork.CancelRequest(trailfork.DecisionOptions{
+		Context:   ctx,
+		RequestID: opts.RequestID,
+		Actor:     "operator",
+		Reason:    "abandon failed creation",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.State != trailfork.StateCancelled {
+		t.Fatalf("state = %q", cancelled.State)
+	}
+	if _, err := trailfork.LoadLineage(root, req.TraceID); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("lineage survived cancellation: %v", err)
+	}
+	if _, err := trailconfig.Load(root, req.TraceID); !errors.Is(err, trailconfig.ErrNoBinding) {
+		t.Fatalf("binding survived cancellation: %v", err)
+	}
+	if _, err := os.Stat(lineage.Workspace); !os.IsNotExist(err) {
+		t.Fatalf("worktree survived cancellation: %v", err)
+	}
+	if gitroot.LocalBranchExists(root, lineage.Branch) {
+		t.Fatalf("branch %q survived cancellation", lineage.Branch)
+	}
+}
+
+func TestRecoverCreatingSkipsRecordedFailure(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-failed-creation",
+	}
+	ledger := taskledger.NewMemoryLedger()
+	if _, err := trailfork.Create(context.Background(), &dropProbePublisher{failPublish: true}, ledger, opts); err == nil {
+		t.Fatal("expected the initial publish to fail")
+	}
+	recovered, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: &capturePublisher{},
+		Ledger:    ledger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 0 {
+		t.Fatalf("recovered failed creation: %+v", recovered)
+	}
+	req, err := trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.State != trailfork.StateCreating || req.LastError == "" {
+		t.Fatalf("request = %+v", req)
+	}
+}
+
 func TestRecoverCreatingFinishesAPlanWhoseReadyCrashed(t *testing.T) {
 	root, _ := setupGitRepo(t)
 	ctx := testContext(root)
@@ -658,6 +744,16 @@ func TestRecoverCreatingUsesLineageAfterSourcePurge(t *testing.T) {
 	}
 	if req.State != trailfork.StateCreating || req.TraceID == "" {
 		t.Fatalf("request = %+v", req)
+	}
+	// A crash leaves no recorded failure; clear the error a completed publish
+	// attempt would have written so recovery sees an interrupted creation.
+	req.LastError = ""
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(trailfork.RequestPath(root, req.Evidence.SourceTrace, req.RequestID), data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(filepath.Join(root, ".paseka", "runs", "trace-source", "config")); err != nil {

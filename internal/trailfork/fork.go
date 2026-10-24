@@ -91,6 +91,7 @@ type TaskLineage struct {
 	Bee              string `json:"bee,omitempty"`
 	Sector           string `json:"sector,omitempty"`
 	Intent           string `json:"intent,omitempty"`
+	CueID            string `json:"cueId,omitempty"`
 	Review           string `json:"review,omitempty"`
 	SourceTaskDigest string `json:"sourceTaskDigest"`
 	TaskInputDigest  string `json:"taskInputDigest,omitempty"`
@@ -384,6 +385,7 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 		plan.Task.Sector,
 		plan.Task.Intent,
 		plan.Task.Review,
+		plan.Task.CueID,
 	)
 	attempt, err := trailconfig.EnsureTaskAttempt(opts.Context, plan.TraceID, plan.Task.TaskID, "", inputEvidence)
 	if err != nil {
@@ -407,6 +409,7 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 		Bee:    plan.Task.Bee,
 		Sector: plan.Task.Sector,
 		Intent: plan.Task.Intent,
+		CueID:  plan.Task.CueID,
 		Review: protocol.TaskReviewPolicy(plan.Task.Review),
 	}
 	planEv, err := tasks.PlanEvent(plan.TraceID, agentID, spec)
@@ -420,6 +423,7 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 		Bee:    plan.Task.Bee,
 		Sector: plan.Task.Sector,
 		Intent: plan.Task.Intent,
+		CueID:  plan.Task.CueID,
 		Review: protocol.TaskReviewPolicy(plan.Task.Review),
 	}, evidence.forkColony.Defaults)
 	if err != nil {
@@ -480,6 +484,7 @@ func finishInitialPublication(ctx context.Context, publisher bus.Publisher, ledg
 		Bee:    lineage.Task.Bee,
 		Sector: lineage.Task.Sector,
 		Intent: lineage.Task.Intent,
+		CueID:  lineage.Task.CueID,
 		Review: protocol.TaskReviewPolicy(lineage.Task.Review),
 	}
 	spec := protocol.TaskSpec{
@@ -489,6 +494,7 @@ func finishInitialPublication(ctx context.Context, publisher bus.Publisher, ledg
 		Bee:    task.Bee,
 		Sector: task.Sector,
 		Intent: task.Intent,
+		CueID:  task.CueID,
 		Review: task.Review,
 	}
 	var publication []protocol.Event
@@ -566,7 +572,12 @@ func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 	if err != nil {
 		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source configuration evidence is unavailable: %w", err)
 	}
-	delta, patchBytes, candidate, err := resolveDelta(opts, sourceTrace, attempt.ConfigRef, task.TaskID, input)
+	sourceColony, err := colony.LoadColony(bound.ConfigRootPath())
+	if err != nil {
+		return Lineage{}, sourceEvidence{}, fmt.Errorf("trailfork: source configuration is unreadable: %w", err)
+	}
+	resolvedTaskBee := colony.EffectiveTaskBee(input.Bee, sourceColony.Defaults)
+	delta, patchBytes, candidate, err := resolveDelta(opts, sourceTrace, attempt.ConfigRef, task.TaskID, input, resolvedTaskBee)
 	if err != nil {
 		return Lineage{}, sourceEvidence{}, err
 	}
@@ -576,7 +587,7 @@ func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 	if candidate != nil {
 		bee = candidate.TaskBee
 		if bee == "" {
-			bee = colony.EffectiveTaskBee(input.Bee, colony.Defaults{})
+			bee = resolvedTaskBee
 		}
 	} else {
 		forkColony, bee, err = validateCandidate(bound, task, input)
@@ -633,6 +644,7 @@ func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 			Bee:              bee,
 			Sector:           strings.TrimSpace(input.Sector),
 			Intent:           strings.TrimSpace(input.Intent),
+			CueID:            strings.TrimSpace(input.CueID),
 			Review:           review,
 			SourceTaskDigest: input.Digest,
 		},
@@ -698,7 +710,7 @@ func resolve(opts Options) (Lineage, sourceEvidence, error) {
 // A patch delta is read from the recorded proposal store and copied into the
 // candidate by PrepareForkDelta. The returned bytes are retained by the fork so
 // later changes to the source proposal cannot rewrite its evidence.
-func resolveDelta(opts Options, sourceTrace, sourceConfigRef, sourceTaskID string, input *trailconfig.TaskInputEvidence) (Delta, []byte, *trailconfig.ForkDelta, error) {
+func resolveDelta(opts Options, sourceTrace, sourceConfigRef, sourceTaskID string, input *trailconfig.TaskInputEvidence, resolvedTaskBee string) (Delta, []byte, *trailconfig.ForkDelta, error) {
 	form := strings.TrimSpace(opts.DeltaForm)
 	if form == "" {
 		form = DeltaNone
@@ -747,6 +759,7 @@ func resolveDelta(opts Options, sourceTrace, sourceConfigRef, sourceTaskID strin
 			PatchName:       record.Ref(opts.Context.ColonyRoot),
 			TaskID:          sourceTaskID,
 			TaskInput:       input,
+			ResolvedTaskBee: resolvedTaskBee,
 		})
 		if err != nil {
 			return Delta{}, nil, nil, err

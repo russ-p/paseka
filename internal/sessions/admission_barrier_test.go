@@ -2,6 +2,7 @@ package sessions_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/sessions"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
 )
 
 func TestSessionHoldsNewWorkWhenConfigurationApplyPending(t *testing.T) {
@@ -61,5 +63,41 @@ func TestSessionHoldsNewWorkWhenConfigurationApplyPending(t *testing.T) {
 	}
 	if adapter.lastReq.Bee != "" {
 		t.Fatalf("adapter launched a session while configuration was pending: %+v", adapter.lastReq)
+	}
+}
+
+func TestSessionRefusesDroppedFork(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+	traceID := "trace-dropped-session"
+	lineage := trailfork.Lineage{TraceID: traceID, SourceTrace: "trace-source", State: trailfork.StateDropped}
+	data, err := json.Marshal(lineage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(repo, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := &instantSessionAdapter{}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", adapter)
+	runCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = mgr.RunInteractive(runCtx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		TraceID:  traceID,
+		Task:     "should not launch",
+	})
+	if err == nil || !strings.Contains(err.Error(), "dropped") {
+		t.Fatalf("err = %v, want dropped refusal", err)
+	}
+	if adapter.lastReq.Bee != "" {
+		t.Fatalf("adapter launched a session for a dropped fork: %+v", adapter.lastReq)
 	}
 }

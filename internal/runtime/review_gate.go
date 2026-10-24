@@ -92,6 +92,13 @@ func (r *Reactor) handleVerificationSuccess(ctx context.Context, ev protocol.Eve
 		}
 		execCtx = resolved
 	}
+	routed, found, err := r.recordedAttemptContext(ev, execCtx)
+	if err != nil {
+		return err
+	}
+	if found {
+		execCtx = routed
+	}
 	if !r.taskExpectsRootProposal(task, execCtx) {
 		return nil
 	}

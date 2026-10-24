@@ -14,6 +14,7 @@ type TaskSnapshot struct {
 	Bee               string                     `json:"bee,omitempty"`
 	Sector            string                     `json:"sector,omitempty"`
 	Intent            string                     `json:"intent,omitempty"`
+	CueID             string                     `json:"cueId,omitempty"`
 	Review            protocol.TaskReviewPolicy  `json:"review,omitempty"`
 	Status            protocol.TaskStatus        `json:"status"`
 	DependsOn         []string                   `json:"dependsOn,omitempty"`
@@ -53,6 +54,7 @@ type PendingReadySnapshot struct {
 	Bee    string `json:"bee,omitempty"`
 	Sector string `json:"sector,omitempty"`
 	Intent string `json:"intent,omitempty"`
+	CueID  string `json:"cueId,omitempty"`
 }
 
 // ApplyResult is the outcome of applying one bus event to a trace ledger.

@@ -164,6 +164,7 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 		Body:   resolvedBody,
 		Bee:    bee,
 		Intent: cue.Intent,
+		CueID:  cue.ID,
 		Review: protocol.TaskReviewPolicy(strings.TrimSpace(cue.Review)),
 	}
 	bees, err := colony.LoadAllBees(in.ColonyRoot)
@@ -189,6 +190,7 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 			Body:   resolvedBody,
 			Bee:    bee,
 			Intent: cue.Intent,
+			CueID:  cue.ID,
 		}, manifest.Defaults)
 		if err != nil {
 			return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)

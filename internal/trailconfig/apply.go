@@ -871,11 +871,27 @@ func Blockers(colonyRoot, traceID string) ([]string, error) {
 			switch task.Status {
 			case protocol.TaskStatusRunning, protocol.TaskStatusWaitingReview:
 				blockers = append(blockers, "task "+task.TaskID+" is "+string(task.Status))
-				if attempt, ok, err := LatestTaskAttempt(colonyRoot, traceID, task.TaskID); err == nil && ok && attempt.Open() {
-					blockers = append(blockers, "attempt "+attempt.AttemptID+" for task "+task.TaskID+" is open")
-				}
 			}
 		}
+	}
+	// An open attempt owns execution even when its task is still ready. The
+	// admission -> running gap, a feedback-driven ready state, and an
+	// energy-blocked ready task all still belong to the old configuration.
+	attempts, err := Attempts(colonyRoot, traceID)
+	if err != nil {
+		return nil, err
+	}
+	for _, attempt := range attempts {
+		if !attempt.Open() {
+			continue
+		}
+		label := "attempt " + attempt.AttemptID
+		if strings.TrimSpace(attempt.TaskID) != "" {
+			label += " for task " + attempt.TaskID
+		} else if strings.TrimSpace(attempt.ChainKey) != "" {
+			label += " for chain " + attempt.ChainKey
+		}
+		blockers = append(blockers, label+" is open")
 	}
 	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs", traceID)
 	entries, err := os.ReadDir(runsRoot)

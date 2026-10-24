@@ -45,11 +45,6 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	dispatchCtx, endInflight := r.beginTaskInflight(traceID, task.TaskID)
 	defer endInflight()
 
-	if !execCtx.Registry.CanDispatchTaskReady(bee) {
-		logDispatchSkip("bee not subscribed to task.ready", traceID, task.TaskID, bee)
-		return nil
-	}
-
 	snap, err := r.ledger.Snapshot(traceID)
 	if err != nil {
 		return err

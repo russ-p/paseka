@@ -158,6 +158,7 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 			Bee:       spec.Bee,
 			Sector:    spec.Sector,
 			Intent:    spec.Intent,
+			CueID:     spec.CueID,
 			Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
 			Status:    protocol.TaskStatusPlanned,
 			DependsOn: append([]string(nil), spec.DependsOn...),

@@ -14,6 +14,7 @@ func pendingReadyFromPayload(payload protocol.TaskReadyPayload) *PendingReadySna
 		Bee:    payload.Bee,
 		Sector: payload.Sector,
 		Intent: payload.Intent,
+		CueID:  payload.CueID,
 	}
 }
 
@@ -33,6 +34,9 @@ func applyReadyOverlays(task TaskSnapshot, payload protocol.TaskReadyPayload) Ta
 	if payload.Intent != "" {
 		task.Intent = payload.Intent
 	}
+	if payload.CueID != "" {
+		task.CueID = payload.CueID
+	}
 	return task
 }
 
@@ -43,6 +47,7 @@ func applyPendingOverlays(task TaskSnapshot, pending PendingReadySnapshot) TaskS
 		Bee:    pending.Bee,
 		Sector: pending.Sector,
 		Intent: pending.Intent,
+		CueID:  pending.CueID,
 	})
 }
 

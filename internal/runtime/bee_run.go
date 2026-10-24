@@ -7,6 +7,7 @@ import (
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 // BeeRunRequest is input for a one-shot bee dispatch from the CLI.
@@ -61,6 +62,9 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 			}
 		} else if busClient != nil {
 			d.SetPublisher(busClient, req.BusRequired)
+			if kv, kvErr := busClient.JetStream().KeyValue(bus.TaskLedgerBucket(ctxColony.Slug)); kvErr == nil {
+				d.SetLedger(taskledger.NewKVLedger(kv))
+			}
 			defer busClient.Close()
 		}
 	}

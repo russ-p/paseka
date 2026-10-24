@@ -61,6 +61,7 @@ type TaskSpec struct {
 	Intent    string           `json:"intent,omitempty"`
 	Review    TaskReviewPolicy `json:"review,omitempty"`
 	DependsOn []string         `json:"dependsOn,omitempty"`
+	CueID     string           `json:"cueId,omitempty"`
 }
 
 // TaskPlanPayload is emitted as INSIGHT with payload.kind=task.plan.
@@ -78,6 +79,7 @@ type TaskReadyPayload struct {
 	Bee    string        `json:"bee,omitempty"`
 	Sector string        `json:"sector,omitempty"`
 	Intent string        `json:"intent,omitempty"`
+	CueID  string        `json:"cueId,omitempty"`
 }
 
 // TaskStatusPayload is emitted as SIGNAL with payload.kind=task.status.

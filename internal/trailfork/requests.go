@@ -16,6 +16,7 @@ import (
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/filelock"
+	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/ids"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
@@ -437,7 +438,10 @@ func RecoverCreating(ctx context.Context, opts DecisionOptions) ([]Result, error
 	var recovered []Result
 	var failures []error
 	for _, req := range requests {
-		if req.State != StateCreating {
+		// A recorded failure is terminal until an operator retries or cancels it.
+		// Retrying it on every boot would repeat the same failing worktree or
+		// publish attempt without a new decision.
+		if req.State != StateCreating || strings.TrimSpace(req.LastError) != "" {
 			continue
 		}
 		// A fork dropped while its creation was incomplete must not be
@@ -474,12 +478,49 @@ func RecoverCreating(ctx context.Context, opts DecisionOptions) ([]Result, error
 	return recovered, nil
 }
 
-// RejectRequest refuses a pending request without creating resources.
+// discardCreatingResources removes local resources from a creation that never
+// reached approval. The request record itself stays under its source trace so the
+// operator keeps the audit trail of what was attempted.
+func discardCreatingResources(ctx colony.Context, req Request) error {
+	root := strings.TrimSpace(ctx.ColonyRoot)
+	traceID := strings.TrimSpace(req.TraceID)
+	if root == "" || traceID == "" || traceID == strings.TrimSpace(req.Evidence.SourceTrace) {
+		return nil
+	}
+	branch := ""
+	if lineage, err := LoadLineage(root, traceID); err == nil {
+		branch = strings.TrimSpace(lineage.Branch)
+	}
+	if branch == "" {
+		branch = worktree.BranchName(traceID)
+	}
+	if gitroot.IsCheckoutRoot(root) {
+		if err := worktree.Remove(root, ctx.Slug, traceID); err != nil {
+			return fmt.Errorf("remove worktree: %w", err)
+		}
+		if gitroot.LocalBranchExists(root, branch) {
+			if _, err := gitroot.Run(gitroot.RunOpts{
+				Dir:  root,
+				Args: []string{"branch", "-D", branch},
+			}); err != nil {
+				return fmt.Errorf("remove branch %q: %w", branch, err)
+			}
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(root, ".paseka", "runs", traceID)); err != nil {
+		return fmt.Errorf("remove trail records: %w", err)
+	}
+	return nil
+}
+
+// RejectRequest refuses a pending request, or discards an interrupted creation,
+// without leaving runnable resources.
 func RejectRequest(opts DecisionOptions) (Request, error) {
 	return decidePending(opts, StateRejected)
 }
 
-// CancelRequest cancels a pending request without creating resources.
+// CancelRequest cancels a pending request, or discards an interrupted creation,
+// without leaving runnable resources.
 func CancelRequest(opts DecisionOptions) (Request, error) {
 	return decidePending(opts, StateCancelled)
 }
@@ -509,8 +550,13 @@ func decidePending(opts DecisionOptions, state string) (Request, error) {
 	if req.State == state {
 		return req, nil
 	}
-	if req.State != StatePending {
+	if req.State != StatePending && req.State != StateCreating {
 		return req, fmt.Errorf("trailfork: fork request %s is %s and cannot be %s", req.RequestID, req.State, state)
+	}
+	if req.State == StateCreating {
+		if err := discardCreatingResources(opts.Context, req); err != nil {
+			return Request{}, fmt.Errorf("trailfork: discard creating request %s: %w", req.RequestID, err)
+		}
 	}
 	actorName := strings.TrimSpace(opts.Actor)
 	if actorName == "" {
@@ -675,6 +721,7 @@ func verifyEvidence(expected, actual Lineage) error {
 		{"task bee", expected.Task.Bee, actual.Task.Bee},
 		{"task sector", expected.Task.Sector, actual.Task.Sector},
 		{"task intent", expected.Task.Intent, actual.Task.Intent},
+		{"task cue", expected.Task.CueID, actual.Task.CueID},
 		{"task review", expected.Task.Review, actual.Task.Review},
 		{"task digest", expected.Task.SourceTaskDigest, actual.Task.SourceTaskDigest},
 	}

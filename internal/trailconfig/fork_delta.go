@@ -50,6 +50,9 @@ type ForkDeltaOptions struct {
 	// candidate roles, sectors, review policy, and templates.
 	TaskID    string
 	TaskInput *TaskInputEvidence
+	// ResolvedTaskBee is the source attempt's captured effective role for an
+	// omitted task bee. It must not be re-derived from the candidate defaults.
+	ResolvedTaskBee string
 }
 
 // PrepareForkDelta applies patch bytes to the named source snapshot, validates
@@ -116,9 +119,6 @@ func PrepareForkDelta(opts ForkDeltaOptions) (ForkDelta, error) {
 	if err := validatePortableChanges(changed); err != nil {
 		return ForkDelta{}, err
 	}
-	if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, opts.TaskInput); err != nil {
-		return ForkDelta{}, err
-	}
 	raw, effective, shadowed := compareForkCandidate(sourceTree, tree, inventory, candidateInventory)
 	taskBee := ""
 	if opts.TaskInput != nil {
@@ -126,7 +126,17 @@ func PrepareForkDelta(opts ForkDeltaOptions) (ForkDelta, error) {
 		if err != nil {
 			return ForkDelta{}, err
 		}
-		taskBee = colony.EffectiveTaskBee(opts.TaskInput.Bee, candidateColony.Defaults)
+		taskBee = strings.TrimSpace(opts.ResolvedTaskBee)
+		if taskBee == "" {
+			taskBee = colony.EffectiveTaskBee(opts.TaskInput.Bee, candidateColony.Defaults)
+		}
+		resolvedInput := *opts.TaskInput
+		resolvedInput.Bee = taskBee
+		if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, &resolvedInput); err != nil {
+			return ForkDelta{}, err
+		}
+	} else if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, nil); err != nil {
+		return ForkDelta{}, err
 	}
 
 	return ForkDelta{
@@ -496,8 +506,8 @@ func compareForkCandidate(baseTree, candidateTree string, base, candidate Invent
 	raw := diffInventories(base.Entries, candidate.Entries)
 
 	var effective, shadowed []string
-	baseBees, baseErr := colony.LoadAllBees(baseTree)
-	candidateBees, candidateErr := colony.LoadAllBees(candidateTree)
+	baseBees, baseErr := effectiveBees(baseTree)
+	candidateBees, candidateErr := effectiveBees(candidateTree)
 	if baseErr == nil && candidateErr == nil {
 		effective = append(effective, beeDiffs(baseBees, candidateBees)...)
 	}
@@ -519,7 +529,7 @@ func compareForkCandidate(baseTree, candidateTree string, base, candidate Invent
 			effective = append(effective, line)
 		case isBeePath(p):
 			role := beeRoleFromPath(p)
-			if strings.HasSuffix(p, ".local.yaml") || effectiveRoles[role] {
+			if effectiveRoles[role] {
 				effective = append(effective, line)
 			} else {
 				shadowed = append(shadowed, line+": effective bee settings are unchanged")
@@ -538,6 +548,31 @@ func compareForkCandidate(baseTree, candidateTree string, base, candidate Invent
 	}
 
 	return normalizePreviewLines(raw), normalizePreviewLines(effective), normalizePreviewLines(shadowed)
+}
+
+// effectiveBees returns the bee settings that execution actually sees, including
+// the source's machine-local prompt/system overlays. LoadAllBees alone ignores
+// those overlays, which would report a base-bee change as effective even when a
+// frozen local overlay still wins.
+func effectiveBees(root string) (map[string]colony.Bee, error) {
+	bees, err := colony.LoadAllBees(root)
+	if err != nil {
+		return nil, err
+	}
+	for role, bee := range bees {
+		_, overlay, err := colony.LoadBee(root, role)
+		if err != nil {
+			return nil, err
+		}
+		if prompt := strings.TrimSpace(overlay.PromptTemplate); prompt != "" {
+			bee.PromptTemplate = prompt
+		}
+		if system := strings.TrimSpace(overlay.SystemTemplate); system != "" {
+			bee.SystemTemplate = system
+		}
+		bees[role] = bee
+	}
+	return bees, nil
 }
 
 func isUsedContentPath(p string) bool {

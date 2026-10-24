@@ -27,7 +27,9 @@ import (
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
 	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/russ-p/paseka/internal/worktree"
 	"golang.org/x/term"
@@ -199,6 +201,16 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	scope, err := trailview.ResolveScope(ctxColony, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: resolve trail scope: %w", err)
+	}
+	if scope.AdmissionState == trailfork.StateDropped {
+		return nil, fmt.Errorf("sessions: trail %s was dropped and cannot dispatch", traceID)
+	}
+	killed, err := tasks.TraceKilled(ctxColony, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: inspect trace kill state: %w", err)
+	}
+	if killed {
+		return nil, fmt.Errorf("sessions: trail %s was killed and cannot dispatch", traceID)
 	}
 	execColony, trailManifest, boundConfig, err := trailconfig.BindNewWork(ctxColony, traceID)
 	if err != nil {

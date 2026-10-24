@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/trailconfig"
+	"github.com/russ-p/paseka/internal/trailfork"
 	"github.com/russ-p/paseka/internal/trailview"
 	"github.com/russ-p/paseka/internal/worktree"
 )
@@ -56,6 +57,14 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	scope, err := trailview.ResolveScope(ctxColony, req.TraceID)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: resolve trail scope: %w", err)
+	}
+	if scope.AdmissionState == trailfork.StateDropped {
+		return nil, fmt.Errorf("runtime: trail %s was dropped and cannot dispatch", req.TraceID)
+	}
+	if d.ledger != nil {
+		if snap, snapErr := d.ledger.Snapshot(req.TraceID); snapErr == nil && snap.Killed {
+			return nil, fmt.Errorf("runtime: trail %s was killed and cannot dispatch", req.TraceID)
+		}
 	}
 	if !execColony.BoundConfig() {
 		bound, _, boundNow, err := trailconfig.BindNewWork(ctxColony, req.TraceID)
