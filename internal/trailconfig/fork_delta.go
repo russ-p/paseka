@@ -347,6 +347,20 @@ func diffLinePath(line string) string {
 	return ""
 }
 
+// patchGitEnv keeps the temporary candidate tree's git commands from targeting
+// a repository selected by the caller's environment. A hook or agent shell can
+// export GIT_DIR/GIT_WORK_TREE, and inheriting them would make `git apply` write
+// into the live worktree instead of the candidate tree.
+var patchGitEnv = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_NAMESPACE",
+}
+
 func applyPortablePatch(tree string, patch []byte, name string) error {
 	patchDir, err := os.MkdirTemp("", "paseka-fork-patch-")
 	if err != nil {
@@ -358,18 +372,20 @@ func applyPortablePatch(tree string, patch []byte, name string) error {
 		return fmt.Errorf("trailconfig: write patch temp: %w", err)
 	}
 
-	if _, err := gitroot.Run(gitroot.RunOpts{Dir: tree, Args: []string{"init", "-q"}}); err != nil {
+	if _, err := gitroot.Run(gitroot.RunOpts{Dir: tree, Args: []string{"init", "-q"}, UnsetEnv: patchGitEnv}); err != nil {
 		return fmt.Errorf("trailconfig: prepare delta tree: %w", err)
 	}
 	if _, err := gitroot.Run(gitroot.RunOpts{
-		Dir:  tree,
-		Args: []string{"apply", "--check", "--whitespace=nowarn", patchPath},
+		Dir:      tree,
+		Args:     []string{"apply", "--check", "--whitespace=nowarn", patchPath},
+		UnsetEnv: patchGitEnv,
 	}); err != nil {
 		return fmt.Errorf("trailconfig: delta patch does not apply to the source configuration%s: %w", patchLabel(name), err)
 	}
 	if _, err := gitroot.Run(gitroot.RunOpts{
-		Dir:  tree,
-		Args: []string{"apply", "--whitespace=nowarn", patchPath},
+		Dir:      tree,
+		Args:     []string{"apply", "--whitespace=nowarn", patchPath},
+		UnsetEnv: patchGitEnv,
 	}); err != nil {
 		return fmt.Errorf("trailconfig: apply delta patch%s: %w", patchLabel(name), err)
 	}

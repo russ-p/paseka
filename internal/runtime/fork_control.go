@@ -86,6 +86,17 @@ func (r *Reactor) handleForkControl(ctx context.Context, ev protocol.Event) (boo
 			runtimeLog.Warn("invalid trail.fork decision payload", logging.F("error", err.Error()))
 			return true, nil
 		}
+		// Decisions are admitted only on a positive operator marker. Checking
+		// merely that the sender is not a recorded run would treat an unknown,
+		// empty, or forged id as the operator. The run check stays as a second
+		// gate: a recorded bee may not claim the reserved marker either.
+		if ev.AgentID != protocol.OperatorAgentID {
+			runtimeLog.Warn("trail.fork decision outside the operator control path refused",
+				logging.F("traceId", ev.TraceID),
+				logging.F("agentId", ev.AgentID),
+				logging.F("requestId", payload.RequestID))
+			return true, nil
+		}
 		if _, recorded, err := runs.FindRun(r.colony.ColonyRoot, ev.TraceID, ev.AgentID); err != nil || recorded {
 			runtimeLog.Warn("trail.fork decision from an agent run refused",
 				logging.F("traceId", ev.TraceID),
@@ -93,10 +104,7 @@ func (r *Reactor) handleForkControl(ctx context.Context, ev protocol.Event) (boo
 				logging.F("requestId", payload.RequestID))
 			return true, nil
 		}
-		actor := ev.AgentID
-		if actor == "" {
-			actor = "operator"
-		}
+		actor := protocol.OperatorAgentID
 		switch kind {
 		case protocol.SignalTrailForkApprove:
 			_, err := trailfork.ApproveRequest(ctx, trailfork.DecisionOptions{

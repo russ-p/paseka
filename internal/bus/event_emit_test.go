@@ -93,33 +93,28 @@ func TestAppendRunAuditLog(t *testing.T) {
 	}
 }
 
-func TestProcessEventInputRecordsLocallyWithNoPublisher(t *testing.T) {
-	// A colony with no broker: the seam still records, so an emit is not lost.
-	// This is the shape every no-bus publishing site installs, and `paseka event
-	// emit` used to be the one that did not.
+func TestProcessEventInputRefusesEmitWithoutRunAudit(t *testing.T) {
+	// The run's own audit log is the emit's authority check. An emit from a
+	// sender with no recorded run must fail before anything is published or
+	// recorded on the trail.
 	root := t.TempDir()
-	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"feature.requested"}}`)
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"trail.fork.approve","requestId":"req-1"}}`)
 	local := LocalPublisher{ColonyRoot: root}
 
 	result, err := ProcessEventInput(context.Background(), local, "", raw, "cli", true, false, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The run's own audit log still applies: an emit from a bee's run directory
-	// requires one, and saying so is the command's existing contract.
 	if result.OK || result.Error != "audit_log_failed" {
-		t.Fatalf("result = %#v, want the per-run audit log still to be required", result)
+		t.Fatalf("result = %#v, want the per-run audit log to be required", result)
 	}
 
 	recorded, err := runs.ReadTrailEvents(root, "trace-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(recorded) != 1 {
-		t.Fatalf("trail record holds %d events, want the emitted one", len(recorded))
-	}
-	if recorded[0].ID == "" || PayloadKind(recorded[0].Payload) != "feature.requested" {
-		t.Fatalf("recorded = %+v", recorded[0])
+	if len(recorded) != 0 {
+		t.Fatalf("trail record holds %d events, want none before audit", len(recorded))
 	}
 	if result.Subject != "" {
 		t.Fatalf("subject = %q, want empty — nothing was broadcast", result.Subject)

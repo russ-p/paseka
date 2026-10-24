@@ -79,7 +79,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
-	attempt, attemptCtx, skip, err := r.prepareTaskAttempt(execCtx, traceID, task, bee, sourceEventID)
+	attempt, attemptCtx, skip, err := r.prepareTaskAttempt(execCtx, traceID, task, sourceEventID)
 	if err != nil {
 		return err
 	}

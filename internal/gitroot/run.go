@@ -21,10 +21,14 @@ const (
 
 // RunOpts configures a git child process.
 type RunOpts struct {
-	Dir       string
-	Args      []string
-	Timeout   time.Duration
-	ExtraEnv  []string
+	Dir      string
+	Args     []string
+	Timeout  time.Duration
+	ExtraEnv []string
+	// UnsetEnv names inherited environment variables to remove before ExtraEnv
+	// is applied. Use it when the child must not inherit a repository location
+	// or index from the caller.
+	UnsetEnv  []string
 	AllowFail bool
 }
 
@@ -47,8 +51,8 @@ func Run(opts RunOpts) (string, error) {
 	}
 	cmd := exec.CommandContext(ctx, "git", full...)
 	cmd.Stdin = bytes.NewReader(nil)
-	if len(opts.ExtraEnv) > 0 {
-		cmd.Env = append(os.Environ(), opts.ExtraEnv...)
+	if len(opts.UnsetEnv) > 0 || len(opts.ExtraEnv) > 0 {
+		cmd.Env = append(envWithout(os.Environ(), opts.UnsetEnv), opts.ExtraEnv...)
 	}
 	out, err := cmd.CombinedOutput()
 	text := capOutput(out)
@@ -62,6 +66,30 @@ func Run(opts RunOpts) (string, error) {
 		return text, fmt.Errorf("git %s: %w: %s", strings.Join(opts.Args, " "), err, strings.TrimSpace(text))
 	}
 	return text, nil
+}
+
+func envWithout(env, keys []string) []string {
+	if len(keys) == 0 {
+		return env
+	}
+	drop := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if key = strings.TrimSpace(key); key != "" {
+			drop[key] = struct{}{}
+		}
+	}
+	if len(drop) == 0 {
+		return env
+	}
+	out := env[:0]
+	for _, item := range env {
+		key, _, _ := strings.Cut(item, "=")
+		if _, skip := drop[key]; skip {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func capOutput(out []byte) string {

@@ -3,6 +3,11 @@ package protocol
 // ForkEventKind identifies platform trail-fork control payloads inside SIGNAL events.
 type ForkEventKind string
 
+// OperatorAgentID is the reserved sender identity for operator control-path
+// actions. Decision events are admitted by this positive marker; a sender that
+// does not carry it is not an operator, however it resolves on disk.
+const OperatorAgentID = "operator"
+
 const (
 	// SignalTrailFork is an agent-originated request to fork a trail. It is
 	// recorded as a durable pending request and creates no runnable resources.

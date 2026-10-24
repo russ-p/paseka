@@ -125,10 +125,11 @@ func directRoleSubscribed(registry *BeeRegistry, ev protocol.Event, beeRole stri
 
 // prepareTaskAttempt returns the task attempt a ready dispatch should run under,
 // or skip=true when this is a duplicate or a replay of a closed attempt.
-func (r *Reactor) prepareTaskAttempt(ctx *trailExecutionContext, traceID string, task taskledger.TaskSnapshot, beeRole, sourceEventID string) (trailconfig.Attempt, *trailExecutionContext, bool, error) {
+func (r *Reactor) prepareTaskAttempt(ctx *trailExecutionContext, traceID string, task taskledger.TaskSnapshot, sourceEventID string) (trailconfig.Attempt, *trailExecutionContext, bool, error) {
 	if r.colony.ColonyRoot == "" {
 		return trailconfig.Attempt{}, nil, true, fmt.Errorf("runtime: colony root is required")
 	}
+	var beeRole string
 	if _, ok, err := trailconfig.LoadManifestIfExists(r.colony.ColonyRoot, traceID); err != nil {
 		return trailconfig.Attempt{}, nil, false, err
 	} else if !ok {

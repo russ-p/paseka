@@ -655,6 +655,38 @@ func TestPatchDeltaProducesValidatedCandidateAndOwnEvidence(t *testing.T) {
 	}
 }
 
+func TestPatchDeltaIgnoresInheritedGitRepositoryEnv(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	sourceTree := sourceSnapshotTree(t, root, "trace-source")
+	patch := makePatch(t, sourceTree, func(dir string) {
+		writeFile(t, dir, ".paseka/prompts/builder.md", "candidate\n")
+	})
+	writePatchRecord(t, root, "trace-source", "agent-env", patch)
+
+	// A hook or agent shell can export a repository selection. The delta must
+	// still apply to its temporary candidate tree, never the live worktree.
+	t.Setenv("GIT_DIR", filepath.Join(root, ".git"))
+	t.Setenv("GIT_WORK_TREE", root)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(root, ".git", "index"))
+	preview, err := trailfork.Preview(trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		DeltaForm:     trailfork.DeltaPatch,
+		DeltaPatch:    "agent-env",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsLine(preview.Plan.Delta.RawDiff, "changed .paseka/prompts/builder.md") {
+		t.Fatalf("raw diff = %v", preview.Plan.Delta.RawDiff)
+	}
+	if data := readFile(t, root, ".paseka/prompts/builder.md"); data != "build the thing\n" {
+		t.Fatalf("live prompt was rewritten through inherited git env: %q", data)
+	}
+}
+
 func TestPatchDeltaPreviewReportsShadowedFrozenResolution(t *testing.T) {
 	root, _ := setupGitRepo(t)
 	writeFile(t, root, ".paseka/colony.yaml", "slug: test\ndefaults:\n  energy_budget: 8\nmodel_aliases:\n  fast: vendor/original\n")

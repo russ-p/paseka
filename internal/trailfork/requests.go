@@ -274,7 +274,7 @@ func LoadRequest(colonyRoot, requestID string) (Request, error) {
 // once. Repeated approval returns the recorded fork.
 func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 	root := strings.TrimSpace(opts.Context.ColonyRoot)
-	req, path, err := loadRequestForDecision(root, opts.RequestID, opts.Now)
+	_, path, err := loadRequestForDecision(root, opts.RequestID, opts.Now)
 	if err != nil {
 		return Result{}, err
 	}
@@ -284,11 +284,10 @@ func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 	}
 	defer lock()
 
-	loaded, err := loadRequestFile(path)
+	req, err := loadRequestFile(path)
 	if err != nil {
 		return Result{}, err
 	}
-	req = loaded
 	now := decisionTime(opts.Now)
 	req = expireIfNeeded(req, now)
 	if req.State == StateExpired {
@@ -443,7 +442,7 @@ func CancelRequest(opts DecisionOptions) (Request, error) {
 
 func decidePending(opts DecisionOptions, state string) (Request, error) {
 	root := strings.TrimSpace(opts.Context.ColonyRoot)
-	req, path, err := loadRequestForDecision(root, opts.RequestID, opts.Now)
+	_, path, err := loadRequestForDecision(root, opts.RequestID, opts.Now)
 	if err != nil {
 		return Request{}, err
 	}
@@ -453,7 +452,7 @@ func decidePending(opts DecisionOptions, state string) (Request, error) {
 	}
 	defer lock()
 
-	req, err = loadRequestFile(path)
+	req, err := loadRequestFile(path)
 	if err != nil {
 		return Request{}, err
 	}

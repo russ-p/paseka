@@ -164,17 +164,9 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 		}
 	}
 
-	if err := pub.PublishEvent(ctx, ev); err != nil {
-		return protocol.EventCLIResult{
-			OK:    false,
-			Error: "publish_failed",
-			Details: []protocol.ValidationDetail{{
-				Path:    "",
-				Message: err.Error(),
-			}},
-		}, nil
-	}
-
+	// The run-directory audit is the emit's authority check, not a postscript.
+	// It must pass before the event reaches the bus, or an unrecorded sender
+	// could publish a control event and only learn afterwards that it failed.
 	eventLogPath, err := appendRunAuditLog(colonyRoot, ev)
 	if err != nil {
 		return protocol.EventCLIResult{
@@ -184,6 +176,17 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 			Type:    ev.Type,
 			Kind:    kind,
 			Subject: subject,
+			Details: []protocol.ValidationDetail{{
+				Path:    "",
+				Message: err.Error(),
+			}},
+		}, nil
+	}
+
+	if err := pub.PublishEvent(ctx, ev); err != nil {
+		return protocol.EventCLIResult{
+			OK:    false,
+			Error: "publish_failed",
 			Details: []protocol.ValidationDetail{{
 				Path:    "",
 				Message: err.Error(),
