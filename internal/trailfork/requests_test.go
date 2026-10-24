@@ -638,6 +638,52 @@ func TestRecoverCreatingFinishesAPlanWhoseReadyCrashed(t *testing.T) {
 	}
 }
 
+func TestRecoverCreatingUsesLineageAfterSourcePurge(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+
+	ledger := taskledger.NewMemoryLedger()
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-source-purged",
+	}
+	if _, err := trailfork.Create(context.Background(), &readyCrashPublisher{ledger: ledger}, ledger, opts); err == nil {
+		t.Fatal("expected the task.ready publish to fail")
+	}
+	req, err := trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.State != trailfork.StateCreating || req.TraceID == "" {
+		t.Fatalf("request = %+v", req)
+	}
+
+	if err := os.RemoveAll(filepath.Join(root, ".paseka", "runs", "trace-source", "config")); err != nil {
+		t.Fatal(err)
+	}
+	pub := &capturePublisher{}
+	recovered, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Plan.TraceID != req.TraceID {
+		t.Fatalf("recovered = %+v", recovered)
+	}
+	stored, err := trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != trailfork.StateApproved || stored.Lineage == nil {
+		t.Fatalf("stored request = %+v", stored)
+	}
+}
+
 // readyCrashPublisher applies everything it publishes to the ledger and fails
 // the first task.ready, reproducing a crash between task.plan and task.ready.
 type readyCrashPublisher struct {

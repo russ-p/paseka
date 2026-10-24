@@ -219,9 +219,13 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	var attempt trailconfig.Attempt
 	if req.TaskID != "" && boundConfig {
 		input := trailconfig.NewTaskInputEvidence(req.TaskID, "", req.Task, req.Bee, "", req.Intent, "")
-		attempt, err = trailconfig.EnsureTaskAttempt(execColony, traceID, req.TaskID, "", input)
+		var blocked bool
+		attempt, blocked, err = trailconfig.EnsureTaskAttemptGated(execColony, traceID, req.TaskID, "", input)
 		if err != nil {
 			return nil, fmt.Errorf("sessions: task attempt: %w", err)
+		}
+		if blocked {
+			return nil, fmt.Errorf("sessions: trail %s has a pending configuration change; new work is held", traceID)
 		}
 		if attempt.ConfigRef != "" && attempt.ConfigRef != execColony.ConfigRef {
 			execColony, err = trailconfig.BindRef(execColony, traceID, attempt.ConfigRef, attempt.ConfigRevision)
@@ -269,9 +273,13 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	}
 	sessionID := agentID
 	if attempt.AttemptID == "" && boundConfig {
-		attempt, _, err = trailconfig.AdmitChainAttempt(execColony, traceID, "session:"+traceID+":"+agentID, "", "")
+		var blocked bool
+		attempt, _, blocked, err = trailconfig.AdmitChainAttemptGated(execColony, traceID, "session:"+traceID+":"+agentID, "", "")
 		if err != nil {
 			return nil, fmt.Errorf("sessions: session attempt: %w", err)
+		}
+		if blocked {
+			return nil, fmt.Errorf("sessions: trail %s has a pending configuration change; new work is held", traceID)
 		}
 	}
 	provenance := attemptProvenanceForSession(attempt)

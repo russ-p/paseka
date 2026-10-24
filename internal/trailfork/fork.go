@@ -201,22 +201,23 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 		}
 		return Result{Plan: plan}, nil
 	}
-	if existing, found, err := findRequest(opts.Context.ColonyRoot, opts.RequestID); err != nil {
+	root := strings.TrimSpace(opts.Context.ColonyRoot)
+	if root == "" {
+		return Result{}, fmt.Errorf("trailfork: colony root is required")
+	}
+	requestID := strings.TrimSpace(opts.RequestID)
+	if requestID == "" {
+		return Result{}, fmt.Errorf("trailfork: request id is required")
+	}
+	digest := directDigest(opts)
+
+	if existing, found, err := findRequestFile(root, requestID); err != nil {
 		return Result{}, err
 	} else if found {
-		if existing.ContentDigest != directDigest(opts) {
-			return Result{}, fmt.Errorf("trailfork: request id %s was already used with different contents", opts.RequestID)
-		}
-		switch {
-		case existing.State == StateApproved && existing.Lineage != nil:
-			return resultFromLineage(opts.Context, *existing.Lineage)
-		case existing.State == StatePending || existing.State == StateCreating:
-			return Result{}, fmt.Errorf("trailfork: request %s is pending operator approval", opts.RequestID)
-		default:
-			return Result{}, fmt.Errorf("trailfork: request %s is %s and cannot create a fork", opts.RequestID, existing.State)
-		}
+		return resumeDirectRequest(ctx, publisher, ledger, opts, existing, digest)
 	}
-	plan, evidence, err := resolve(opts)
+
+	plan, _, err := resolve(opts)
 	if err != nil {
 		return Result{}, err
 	}
@@ -227,12 +228,90 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 		return Result{}, fmt.Errorf("trailfork: task ledger is required (fork creation requires NATS)")
 	}
 
-	result, err := createResolved(ctx, publisher, ledger, opts, plan, evidence)
+	now := time.Now().UTC()
+	actor := directActor(opts)
+	req := Request{
+		Version:       requestVersion,
+		RequestID:     requestID,
+		State:         StateCreating,
+		Origin:        requestOriginCLI,
+		Evidence:      pendingEvidence(plan),
+		ContentDigest: digest,
+		Validation:    "ok",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		DecidedBy:     actor,
+		ForkID:        plan.ForkID,
+		TraceID:       plan.TraceID,
+		TaskID:        plan.Task.TaskID,
+	}
+	path := RequestPath(root, plan.SourceTrace, requestID)
+
+	// Serialize the identity lookup and pre-commit so two deliveries cannot both
+	// observe "not found" and mint separate forks. Creation itself runs under
+	// the per-request lock after this one is released.
+	globalLock, err := acquireRequestLock(filepath.Join(root, ".paseka", "runs", ".fork-requests.lock"))
 	if err != nil {
 		return Result{}, err
 	}
-	_ = recordDirectRequest(opts, result.Plan)
-	return result, nil
+	existing, found, findErr := findRequestFile(root, requestID)
+	if findErr != nil {
+		globalLock()
+		return Result{}, findErr
+	}
+	if found {
+		globalLock()
+		return resumeDirectRequest(ctx, publisher, ledger, opts, existing, digest)
+	}
+	saveErr := saveRequest(path, req)
+	globalLock()
+	if saveErr != nil {
+		return Result{}, saveErr
+	}
+	return resumeDirectRequest(ctx, publisher, ledger, opts, requestFile{path: path, request: req}, digest)
+}
+
+func directActor(opts Options) string {
+	actor := strings.TrimSpace(opts.ApprovedBy)
+	if actor == "" {
+		actor = strings.TrimSpace(opts.Actor)
+	}
+	if actor == "" {
+		actor = requestOriginCLI
+	}
+	return actor
+}
+
+func resumeDirectRequest(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options, item requestFile, digest string) (Result, error) {
+	if item.request.ContentDigest != digest {
+		return Result{}, fmt.Errorf("trailfork: request id %s was already used with different contents", opts.RequestID)
+	}
+	if item.request.State == StatePending {
+		return Result{}, fmt.Errorf("trailfork: request %s is pending operator approval", opts.RequestID)
+	}
+	lock, err := acquireRequestLock(item.path + ".lock")
+	if err != nil {
+		return Result{}, err
+	}
+	defer lock()
+
+	req, err := loadRequestFile(item.path)
+	if err != nil {
+		return Result{}, err
+	}
+	if req.ContentDigest != digest {
+		return Result{}, fmt.Errorf("trailfork: request id %s was already used with different contents", opts.RequestID)
+	}
+	if req.State == StatePending {
+		return Result{}, fmt.Errorf("trailfork: request %s is pending operator approval", opts.RequestID)
+	}
+	return approveRequestLocked(ctx, DecisionOptions{
+		Context:   opts.Context,
+		RequestID: req.RequestID,
+		Actor:     directActor(opts),
+		Publisher: publisher,
+		Ledger:    ledger,
+	}, req, item.path)
 }
 
 func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options, plan Lineage, evidence sourceEvidence) (Result, error) {

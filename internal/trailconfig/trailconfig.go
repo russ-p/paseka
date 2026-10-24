@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/filelock"
 	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/runs"
 	"gopkg.in/yaml.v3"
@@ -1021,24 +1022,12 @@ func writeJSONFile(file *os.File, value any) error {
 }
 
 func acquireLock(path string) (func(), error) {
-	deadline := time.Now().Add(lockAcquireBudget)
-	for {
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, _ = fmt.Fprintf(file, "%d\n", os.Getpid())
-			_ = file.Close()
-			return func() { _ = os.Remove(path) }, nil
-		}
-		if !os.IsExist(err) {
-			return nil, fmt.Errorf("trailconfig: acquire lock: %w", err)
-		}
-		if info, statErr := os.Stat(path); statErr == nil && time.Since(info.ModTime()) > lockStaleAfter {
-			_ = os.Remove(path)
-			continue
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("trailconfig: timed out waiting for binding lock")
-		}
-		time.Sleep(10 * time.Millisecond)
+	lock, err := filelock.Acquire(path, filelock.Options{
+		Budget:     lockAcquireBudget,
+		StaleAfter: lockStaleAfter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("trailconfig: %w", err)
 	}
+	return lock.Release, nil
 }

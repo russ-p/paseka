@@ -217,6 +217,52 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 	}
 }
 
+func TestCreateRecordsDirectRequestBeforePublishing(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+
+	ledger := taskledger.NewMemoryLedger()
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-direct-durable",
+	}
+	if _, err := trailfork.Create(context.Background(), &dropProbePublisher{failPublish: true}, ledger, opts); err == nil {
+		t.Fatal("expected the initial publish to fail")
+	}
+	req, err := trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatalf("failed creation left no durable request: %v", err)
+	}
+	if req.State != trailfork.StateCreating || req.TraceID == "" {
+		t.Fatalf("request = %+v", req)
+	}
+	firstTrace := req.TraceID
+
+	result, err := trailfork.Create(context.Background(), &capturePublisher{}, ledger, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Plan.TraceID != firstTrace {
+		t.Fatalf("retry minted a second fork: got %s, want %s", result.Plan.TraceID, firstTrace)
+	}
+	req, err = trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.State != trailfork.StateApproved || req.Lineage == nil {
+		t.Fatalf("retried request = %+v", req)
+	}
+	requests, err := trailfork.ListRequests(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("requests = %+v, want one identity", requests)
+	}
+}
+
 func TestCreateUsesRecordedAlternativeBase(t *testing.T) {
 	root, first := setupGitRepo(t)
 	if err := os.WriteFile(filepath.Join(root, "second.txt"), []byte("second\n"), 0o644); err != nil {

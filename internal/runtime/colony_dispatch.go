@@ -220,13 +220,22 @@ func ensureCLIAttempt(ctxColony, execColony colony.Context, req ColonyDispatchRe
 		return trailconfig.Attempt{}, nil
 	}
 	if req.TaskID == "" {
-		attempt, _, err := trailconfig.AdmitChainAttempt(execColony, req.TraceID, "cli:"+req.TraceID+":"+agentID, "", "")
-		return attempt, err
+		attempt, _, blocked, err := trailconfig.AdmitChainAttemptGated(execColony, req.TraceID, "cli:"+req.TraceID+":"+agentID, "", "")
+		if err != nil {
+			return trailconfig.Attempt{}, err
+		}
+		if blocked {
+			return trailconfig.Attempt{}, fmt.Errorf("runtime: trail %s has a pending configuration change; new work is held", req.TraceID)
+		}
+		return attempt, nil
 	}
 	input := trailconfig.NewTaskInputEvidence(req.TaskID, "", req.Task, req.Bee, req.Sector, req.Intent, "")
-	attempt, err := trailconfig.EnsureTaskAttempt(execColony, req.TraceID, req.TaskID, "cli:"+agentID, input)
+	attempt, blocked, err := trailconfig.EnsureTaskAttemptGated(execColony, req.TraceID, req.TaskID, "cli:"+agentID, input)
 	if err != nil {
 		return trailconfig.Attempt{}, err
+	}
+	if blocked {
+		return trailconfig.Attempt{}, fmt.Errorf("runtime: trail %s has a pending configuration change; new work is held", req.TraceID)
 	}
 	if _, _, err := trailconfig.MarkAttemptDispatched(ctxColony.ColonyRoot, req.TraceID, attempt.AttemptID, "cli:"+agentID); err != nil {
 		return trailconfig.Attempt{}, err

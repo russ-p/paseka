@@ -15,6 +15,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/filelock"
 	"github.com/russ-p/paseka/internal/ids"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
@@ -288,6 +289,17 @@ func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	return approveRequestLocked(ctx, opts, req, path)
+}
+
+// approveRequestLocked advances one request while its per-request lock is held.
+//
+// A creating request that already materialized its lineage is resumed from that
+// retained record, not by re-resolving the live source. The source may have been
+// purged after the fork copied its own binding and snapshots; its lineage is the
+// authoritative evidence for finishing publication.
+func approveRequestLocked(ctx context.Context, opts DecisionOptions, req Request, path string) (Result, error) {
+	root := strings.TrimSpace(opts.Context.ColonyRoot)
 	now := decisionTime(opts.Now)
 	req = expireIfNeeded(req, now)
 	if req.State == StateExpired {
@@ -319,27 +331,30 @@ func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 	if actorName == "" {
 		actorName = requestOriginCLI
 	}
+	if req.State == StateCreating && strings.TrimSpace(req.TraceID) != "" {
+		if lineage, loadErr := LoadLineage(root, req.TraceID); loadErr == nil && lineage.RequestID == req.RequestID {
+			defaults, defaultsErr := forkDefaults(opts.Context, req.TraceID)
+			if defaultsErr != nil {
+				return recordCreationFailure(path, req, defaultsErr, opts.Now)
+			}
+			if err := finishInitialPublication(ctx, opts.Publisher, opts.Ledger, lineage, defaults); err != nil {
+				return recordCreationFailure(path, req, err, opts.Now)
+			}
+			result, err := resultFromLineage(opts.Context, lineage)
+			if err != nil {
+				return recordCreationFailure(path, req, err, opts.Now)
+			}
+			return recordApprovedRequest(path, req, result, actorName, opts.Reason, now, opts.Now)
+		}
+	}
+
 	forkOpts := forkOptionsFromRequest(req, opts.Context, actorName)
 	plan, evidence, err := resolve(forkOpts)
 	if err != nil {
-		req.State = StateRefused
-		req.Reason = err.Error()
-		req.DecidedAt = now
-		req.DecidedBy = actorName
-		req.UpdatedAt = now
-		_ = saveRequest(path, req)
-		return Result{}, fmt.Errorf("trailfork: approve request %s: %w", req.RequestID, err)
+		return refuseRequest(path, req, actorName, now, err)
 	}
-	if req.State == StatePending {
-		if err := verifyEvidence(req.Evidence, plan); err != nil {
-			req.State = StateRefused
-			req.Reason = err.Error()
-			req.DecidedAt = now
-			req.DecidedBy = actorName
-			req.UpdatedAt = now
-			_ = saveRequest(path, req)
-			return Result{}, fmt.Errorf("trailfork: approve request %s: %w", req.RequestID, err)
-		}
+	if err := verifyEvidence(req.Evidence, plan); err != nil {
+		return refuseRequest(path, req, actorName, now, err)
 	}
 
 	req.State = StateCreating
@@ -354,25 +369,54 @@ func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 
 	result, err := createResolved(ctx, opts.Publisher, opts.Ledger, forkOpts, plan, evidence)
 	if err != nil {
-		req.LastError = err.Error()
-		req.UpdatedAt = commitmentTime(opts.Now)
-		_ = saveRequest(path, req)
-		return Result{}, err
+		return recordCreationFailure(path, req, err, opts.Now)
 	}
+	return recordApprovedRequest(path, req, result, actorName, opts.Reason, now, opts.Now)
+}
 
+func refuseRequest(path string, req Request, actorName string, now time.Time, cause error) (Result, error) {
+	req.State = StateRefused
+	req.Reason = cause.Error()
+	req.DecidedAt = now
+	req.DecidedBy = actorName
+	req.UpdatedAt = now
+	_ = saveRequest(path, req)
+	return Result{}, fmt.Errorf("trailfork: approve request %s: %w", req.RequestID, cause)
+}
+
+func recordCreationFailure(path string, req Request, cause error, now time.Time) (Result, error) {
+	req.LastError = cause.Error()
+	req.UpdatedAt = commitmentTime(now)
+	_ = saveRequest(path, req)
+	return Result{}, cause
+}
+
+func recordApprovedRequest(path string, req Request, result Result, actorName, reason string, decidedAt, now time.Time) (Result, error) {
 	req.State = StateApproved
 	req.Lineage = &result.Plan
 	req.TraceID = result.Plan.TraceID
 	req.TaskID = result.Plan.Task.TaskID
 	req.ForkID = result.Plan.ForkID
-	req.DecidedAt = now
+	req.DecidedAt = decidedAt
 	req.DecidedBy = actorName
-	req.Reason = strings.TrimSpace(opts.Reason)
-	req.UpdatedAt = commitmentTime(opts.Now)
+	req.Reason = strings.TrimSpace(reason)
+	req.UpdatedAt = commitmentTime(now)
 	if err := saveRequest(path, req); err != nil {
 		return Result{}, err
 	}
 	return result, nil
+}
+
+func forkDefaults(ctxColony colony.Context, traceID string) (colony.Defaults, error) {
+	bound, _, err := trailconfig.Bind(ctxColony, traceID)
+	if err != nil {
+		return colony.Defaults{}, fmt.Errorf("trailfork: read fork configuration: %w", err)
+	}
+	manifest, err := colony.LoadColony(bound.ConfigRootPath())
+	if err != nil {
+		return colony.Defaults{}, fmt.Errorf("trailfork: read fork configuration: %w", err)
+	}
+	return manifest.Defaults, nil
 }
 
 // RecoverCreating resumes fork requests whose approved creation was interrupted
@@ -535,48 +579,6 @@ func withDirectDefaults(opts Options) Options {
 		opts.Actor = opts.ApprovedBy
 	}
 	return opts
-}
-
-func recordDirectRequest(opts Options, lineage Lineage) error {
-	root := opts.Context.ColonyRoot
-	if root == "" || opts.RequestID == "" {
-		return nil
-	}
-	now := lineage.CreatedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	req := Request{
-		Version:       requestVersion,
-		RequestID:     opts.RequestID,
-		State:         StateApproved,
-		Origin:        requestOriginCLI,
-		Evidence:      pendingEvidence(lineage),
-		ContentDigest: directDigest(opts),
-		Validation:    "ok",
-		CreatedAt:     now,
-		UpdatedAt:     now,
-		DecidedAt:     now,
-		DecidedBy:     opts.ApprovedBy,
-		ForkID:        lineage.ForkID,
-		TraceID:       lineage.TraceID,
-		TaskID:        lineage.Task.TaskID,
-		Lineage:       &lineage,
-	}
-	lock, err := acquireRequestLock(filepath.Join(root, ".paseka", "runs", ".fork-requests.lock"))
-	if err != nil {
-		return err
-	}
-	defer lock()
-	if existing, found, err := findRequest(root, opts.RequestID); err != nil {
-		return err
-	} else if found {
-		if existing.ContentDigest != req.ContentDigest {
-			return fmt.Errorf("trailfork: request id %s was already used with different contents", opts.RequestID)
-		}
-		return nil
-	}
-	return saveRequest(RequestPath(root, lineage.SourceTrace, opts.RequestID), req)
 }
 
 func directDigest(opts Options) string {
@@ -800,20 +802,28 @@ func loadAllRequests(colonyRoot string, now time.Time) ([]requestFile, error) {
 }
 
 func findRequest(colonyRoot, requestID string) (Request, bool, error) {
+	item, found, err := findRequestFile(colonyRoot, requestID)
+	if err != nil || !found {
+		return Request{}, found, err
+	}
+	return item.request, true, nil
+}
+
+func findRequestFile(colonyRoot, requestID string) (requestFile, bool, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
-		return Request{}, false, nil
+		return requestFile{}, false, nil
 	}
 	items, err := loadAllRequests(colonyRoot, time.Now().UTC())
 	if err != nil {
-		return Request{}, false, err
+		return requestFile{}, false, err
 	}
 	for _, item := range items {
 		if item.request.RequestID == requestID {
-			return item.request, true, nil
+			return item, true, nil
 		}
 	}
-	return Request{}, false, nil
+	return requestFile{}, false, nil
 }
 
 func loadRequestForDecision(colonyRoot, requestID string, now time.Time) (Request, string, error) {
@@ -931,27 +941,12 @@ const (
 )
 
 func acquireRequestLock(path string) (func(), error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("trailfork: mkdir lock dir: %w", err)
+	lock, err := filelock.Acquire(path, filelock.Options{
+		Budget:     requestLockBudget,
+		StaleAfter: requestLockStaleAfter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("trailfork: %w", err)
 	}
-	deadline := time.Now().Add(requestLockBudget)
-	for {
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, _ = fmt.Fprintf(file, "%d\n", os.Getpid())
-			_ = file.Close()
-			return func() { _ = os.Remove(path) }, nil
-		}
-		if !os.IsExist(err) {
-			return nil, fmt.Errorf("trailfork: acquire request lock: %w", err)
-		}
-		if info, statErr := os.Stat(path); statErr == nil && time.Since(info.ModTime()) > requestLockStaleAfter {
-			_ = os.Remove(path)
-			continue
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("trailfork: timed out waiting for request lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	return lock.Release, nil
 }
