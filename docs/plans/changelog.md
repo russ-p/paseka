@@ -2,6 +2,17 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — An exhausted honey reserve no longer rewrites a direct reaction
+
+When honey ran out while a guard, receiver, or fix-up Bee was reacting to an event, the runtime wrote `task.status=blocked` over the task's real state. A task in `waiting_review` lost its review state, and a later `energy.add` restarted the task's builder instead of the blocked reaction.
+
+- **Direct reactions defer without touching the task.** The runtime records a durable pending direct dispatch and leaves `task.status` unchanged.
+- **Top-up resumes the same reaction.** `energy.add` recovers the source event by identity and drains pending direct work in creation order, without re-applying the event to the ledger.
+- **The queue survives restart.** Pending work lives in the trail ledger, not in the in-memory dispatch maps.
+- **Task dispatches keep the old path for now.** A deferred task dispatch still uses `blocked` and the existing unblock path until [spec 044](../specs/044-energy-admission-and-pending-dispatch.md) completes the admission/pending split.
+
+- Canonical: [Task ledger](../reference/task-ledger.md), [CLI](../guide/cli.md), [Forage Cues](../guide/cues.md)
+
 ## 2026-10 — A proposal outlives the review that produced it
 
 Once a trail merged, the diff a run proposed was gone: the review worktree was removed, the synthesized `MUTATION` inlined the diff into an event payload nobody archived, and above 64 KiB the runtime stashed the bytes in a JetStream object store that no surface could read. On a real trail an 18-file, +1433/−14 reviewed change left nothing behind. Every proposal attempt now writes an immutable patch and a metadata sidecar to the trail's run tree, and the `MUTATION` points at it.
