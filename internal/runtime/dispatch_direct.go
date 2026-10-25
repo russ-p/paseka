@@ -66,12 +66,15 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return nil
 	}
 
-	ok, err := r.gateDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
+	ok, err := r.gateDirectDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
 	if err != nil {
 		return err
 	}
 	if !ok {
-		logDispatchSkip("honey reserve exhausted", ev.TraceID, taskID, beeRole)
+		if err := r.deferDirectDispatch(ev, beeRole, taskID); err != nil {
+			return err
+		}
+		logDispatchSkip("honey reserve exhausted — direct dispatch deferred", ev.TraceID, taskID, beeRole)
 		return nil
 	}
 

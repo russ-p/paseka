@@ -75,7 +75,7 @@ func (r *Reactor) blockTaskForEnergy(ctx context.Context, traceID, taskID string
 	return r.setTaskStatus(ctx, traceID, taskID, protocol.TaskStatusBlocked, protocol.HoneyReserveExhaustedSummary)
 }
 
-func (r *Reactor) gateDispatchEnergy(ctx context.Context, traceID, taskID, reason string) (bool, error) {
+func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, reason string) (bool, error) {
 	ok, err := r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
 	if err != nil {
 		return false, err
@@ -89,6 +89,13 @@ func (r *Reactor) gateDispatchEnergy(ctx context.Context, traceID, taskID, reaso
 		}
 	}
 	return false, nil
+}
+
+// gateDirectDispatchEnergy never mutates task status: a direct dispatch reacts
+// to an event and can run while the task is waiting_review or running. Deferred
+// direct work is recorded separately and resumed on energy.add.
+func (r *Reactor) gateDirectDispatchEnergy(ctx context.Context, traceID, taskID, reason string) (bool, error) {
+	return r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
 }
 
 func energyAddDetected(ev protocol.Event) bool {

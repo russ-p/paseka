@@ -57,6 +57,32 @@ func (l *KVLedger) SeedEnergy(traceID string, budget int) error {
 	return err
 }
 
+// DeferPendingDispatch records deferred work in the trace snapshot.
+func (l *KVLedger) DeferPendingDispatch(traceID string, dispatch PendingDispatch) (bool, error) {
+	if traceID == "" {
+		return false, fmt.Errorf("taskledger: traceId is required")
+	}
+	added := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, changed := DeferPendingDispatch(trace, dispatch)
+		added = changed
+		return updated, ApplyResult{Trace: updated, Changed: changed}, nil
+	})
+	return added, err
+}
+
+// ResolvePendingDispatch closes one deferred item in the trace snapshot.
+func (l *KVLedger) ResolvePendingDispatch(traceID, dispatchID string, status PendingDispatchStatus) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, changed := ResolvePendingDispatch(trace, dispatchID, status)
+		return updated, ApplyResult{Trace: updated, Changed: changed}, nil
+	})
+	return err
+}
+
 func (l *KVLedger) loadTrace(traceID string) (TraceSnapshot, uint64, error) {
 	entry, err := l.kv.Get(traceID)
 	if err != nil {

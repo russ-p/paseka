@@ -65,7 +65,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
-	ok, err := r.gateDispatchEnergy(dispatchCtx, traceID, task.TaskID, "task.dispatch")
+	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, "task.dispatch")
 	if err != nil {
 		return err
 	}

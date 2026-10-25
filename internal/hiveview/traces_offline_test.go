@@ -27,6 +27,14 @@ func (failingLedger) SeedEnergy(string, int) error {
 	return fmt.Errorf("kv unavailable")
 }
 
+func (failingLedger) DeferPendingDispatch(string, taskledger.PendingDispatch) (bool, error) {
+	return false, fmt.Errorf("kv unavailable")
+}
+
+func (failingLedger) ResolvePendingDispatch(string, string, taskledger.PendingDispatchStatus) error {
+	return fmt.Errorf("kv unavailable")
+}
+
 func TestResolveTraceTasksFallsBackOnLoadTraceError(t *testing.T) {
 	repo := t.TempDir()
 	traceID := "trace-kv-fail"

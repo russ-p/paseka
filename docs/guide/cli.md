@@ -746,7 +746,7 @@ Manage per-trace honey reserve (`energyToken`). `paseka energy show` prints `bud
 
 Inject honey into a trace (`SIGNAL` / `energy.add`). When `paseka run` is active, the command publishes only and the reactor projects the ledger update (avoids double-counting). When the reactor is stopped, the CLI applies the event locally after publish so `energy show` reflects the top-up immediately.
 
-Blocked tasks with exhausted reserve are unblocked when the reactor is running.
+Blocked task dispatches with exhausted reserve are unblocked, and deferred direct dispatches are resumed, when the reactor is running.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |

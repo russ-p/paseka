@@ -35,6 +35,14 @@ func (f failingLedger) SeedEnergy(string, int) error {
 	return f.err
 }
 
+func (f failingLedger) DeferPendingDispatch(string, taskledger.PendingDispatch) (bool, error) {
+	return false, f.err
+}
+
+func (f failingLedger) ResolvePendingDispatch(string, string, taskledger.PendingDispatchStatus) error {
+	return f.err
+}
+
 func TestWriteEventApplyBeforePublish(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	pub := &recordingPublisher{}

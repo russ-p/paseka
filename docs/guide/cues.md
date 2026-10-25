@@ -178,7 +178,7 @@ Bloom seed and top-up, plus standing seed and per-tick replace:
 | **Cue `energy_budget`** | Fresh **bloom** trail only (`energyBudget == 0` on snapshot) | Seeds a **smaller or custom initial** reserve via ledger `SeedEnergy` — can be less than colony default |
 | **Standing first-tick seed** | Fresh standing trail (`energyBudget == 0`) | Seeds `energyBudget` / `energyRemaining` from `standing.stipend` (same `SeedEnergy` primitive) |
 | **Standing later tick** | Standing trail already seeded, not killed, not busy | Publishes `SIGNAL` / `energy.stipend` before ingress; **sets** `energyRemaining` to stipend. Does not change budget or `energyAdded`. Does **not** unblock honey-blocked tasks from a previous tick |
-| **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining`; after seed also increments `energyAdded`. Does not change `energyBudget`. Unblocks honey-blocked tasks on a **live** tick; the next standing stipend wipes leftover remaining back to stipend |
+| **`paseka energy add`** | Any time (live bus) | Increments `energyRemaining`; after seed also increments `energyAdded`. Does not change `energyBudget`. Unblocks honey-blocked task dispatches and resumes deferred direct dispatches on a **live** tick; the next standing stipend wipes leftover remaining back to stipend |
 
 Rules:
 

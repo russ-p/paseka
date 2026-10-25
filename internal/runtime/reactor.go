@@ -444,6 +444,9 @@ func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Ev
 		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
 			return err
 		}
+		if err := r.resumePendingDispatches(ctx, ev.TraceID); err != nil {
+			return err
+		}
 	}
 	if systemKillDetected(ev) {
 		r.cancelInflightForTrace(ev.TraceID)
@@ -515,6 +518,7 @@ type TestReactorOptions struct {
 	Dispatcher    *Dispatcher
 	Registry      *BeeRegistry
 	Ledger        taskledger.Ledger
+	Replayer      bus.TraceReplayer
 	AutoInvites   []colony.AutoInviteRule
 	AsyncDispatch bool
 }
@@ -534,6 +538,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		dispatcher:       opts.Dispatcher,
 		ledger:           opts.Ledger,
 		registry:         opts.Registry,
+		replayer:         opts.Replayer,
 		inflight:         make(map[string]context.CancelFunc),
 		directInflight:   make(map[string]context.CancelFunc),
 		directProcessed:  make(map[string]struct{}),

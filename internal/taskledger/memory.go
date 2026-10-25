@@ -57,6 +57,43 @@ func (l *MemoryLedger) Apply(event protocol.Event) (ApplyResult, error) {
 	return res, nil
 }
 
+// DeferPendingDispatch records deferred work in the trace snapshot.
+func (l *MemoryLedger) DeferPendingDispatch(traceID string, dispatch PendingDispatch) (bool, error) {
+	if traceID == "" {
+		return false, fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		trace = TraceSnapshot{TraceID: traceID, Tasks: map[string]TaskSnapshot{}}
+	}
+	updated, changed := DeferPendingDispatch(trace, dispatch)
+	if !changed {
+		return false, nil
+	}
+	l.traces[traceID] = updated
+	return true, nil
+}
+
+// ResolvePendingDispatch closes one deferred item in the trace snapshot.
+func (l *MemoryLedger) ResolvePendingDispatch(traceID, dispatchID string, status PendingDispatchStatus) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		return nil
+	}
+	updated, changed := ResolvePendingDispatch(trace, dispatchID, status)
+	if changed {
+		l.traces[traceID] = updated
+	}
+	return nil
+}
+
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
 	if traceID == "" {
