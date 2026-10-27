@@ -131,14 +131,20 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	}
 
 	dir := ConfigDir(opts.Context.ColonyRoot, opts.TraceID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return ApplyResult{}, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)
+	// A dry run is a read-only preview: it must not create the configuration
+	// directory or its lock file just to prove the candidate is valid. Writes
+	// still serialize on the lock, and the manifest is replaced atomically, so
+	// a preview can read it without taking part in that protocol.
+	if !opts.DryRun {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return ApplyResult{}, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)
+		}
+		release, err := acquireLock(filepath.Join(dir, lockFileName))
+		if err != nil {
+			return ApplyResult{}, err
+		}
+		defer release()
 	}
-	release, err := acquireLock(filepath.Join(dir, lockFileName))
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	defer release()
 
 	manifest, err := Load(opts.Context.ColonyRoot, opts.TraceID)
 	if err != nil {
@@ -230,8 +236,21 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 
 	if opts.DryRun {
 		change := newChange(opts, manifest, candidate.ref)
-		change.Outcome = OutcomePending
-		change.Detail = "dry run"
+		switch {
+		case candidate.ref == manifest.ActiveConfigRef:
+			change.Outcome = OutcomeUnchanged
+			change.Detail = "dry run: candidate is already active"
+		case len(blockers) > 0:
+			change.Outcome = OutcomePending
+			change.Blockers = append([]string(nil), blockers...)
+			change.Detail = "dry run: activation waits for blockers"
+		default:
+			// Report what the recorded action would become at the current
+			// boundary. The result is not written, so AppliedAt stays empty and
+			// Manifest keeps the active binding.
+			change.Outcome = OutcomeApplied
+			change.Detail = "dry run: activation would proceed immediately"
+		}
 		result.Change = change
 		return result, nil
 	}
