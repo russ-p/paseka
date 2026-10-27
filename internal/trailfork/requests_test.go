@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -521,6 +522,195 @@ func TestPendingQuotaBoundsRequests(t *testing.T) {
 		Quota: 1,
 	}); err == nil || !strings.Contains(err.Error(), "quota") {
 		t.Fatalf("quota error = %v", err)
+	}
+}
+
+func TestListOpenIncludesCreatingRequests(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+	pending := submitRequest(t, ctx, "req-open-pending", "trace-source", "agent-sender")
+	creating := submitRequest(t, ctx, "req-open-creating", "trace-source", "agent-sender")
+
+	if _, err := trailfork.ApproveRequest(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		RequestID: creating.RequestID,
+		Actor:     "alice",
+		Publisher: &dropProbePublisher{failPublish: true},
+		Ledger:    taskledger.NewMemoryLedger(),
+	}); err == nil {
+		t.Fatal("expected the initial publish to fail")
+	}
+	stored, err := trailfork.LoadRequest(root, creating.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != trailfork.StateCreating || stored.LastError == "" {
+		t.Fatalf("interrupted request = %+v", stored)
+	}
+
+	open, err := trailfork.ListOpen(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for i, req := range open {
+		ids[req.RequestID] = true
+		if i > 0 && req.CreatedAt.Before(open[i-1].CreatedAt) {
+			t.Fatalf("ListOpen is not oldest first: %+v", open)
+		}
+	}
+	if len(open) != 2 || !ids[pending.RequestID] || !ids[creating.RequestID] {
+		t.Fatalf("open requests = %+v", open)
+	}
+
+	pendingOnly, err := trailfork.ListPending(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pendingOnly) != 1 || pendingOnly[0].RequestID != pending.RequestID {
+		t.Fatalf("ListPending = %+v", pendingOnly)
+	}
+}
+
+// blockingPublisher blocks the first publish until the test releases it,
+// keeping an approval inside the creation path while a duplicate arrives.
+type blockingPublisher struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+
+	mu     sync.Mutex
+	events []protocol.Event
+}
+
+func newBlockingPublisher() *blockingPublisher {
+	return &blockingPublisher{started: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (p *blockingPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
+	p.once.Do(func() {
+		close(p.started)
+		<-p.release
+	})
+	p.mu.Lock()
+	p.events = append(p.events, ev)
+	p.mu.Unlock()
+	return nil
+}
+
+func TestDuplicateApprovalDuringSlowCreationReturnsRecordedFork(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+	req := submitRequest(t, ctx, "req-duplicate-approval", "trace-source", "agent-sender")
+
+	ledger := taskledger.NewMemoryLedger()
+	pub := newBlockingPublisher()
+	type outcome struct {
+		result trailfork.Result
+		err    error
+	}
+	decide := func() outcome {
+		result, err := trailfork.ApproveRequest(context.Background(), trailfork.DecisionOptions{
+			Context:   ctx,
+			RequestID: req.RequestID,
+			Actor:     "alice",
+			Publisher: pub,
+			Ledger:    ledger,
+		})
+		return outcome{result: result, err: err}
+	}
+	wait := func(name string, ch <-chan outcome) outcome {
+		t.Helper()
+		select {
+		case out := <-ch:
+			return out
+		case <-time.After(30 * time.Second):
+			t.Fatalf("%s approval did not return", name)
+			return outcome{}
+		}
+	}
+
+	first := make(chan outcome, 1)
+	go func() { first <- decide() }()
+	select {
+	case <-pub.started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("first approval never reached publication")
+	}
+
+	second := make(chan outcome, 1)
+	go func() { second <- decide() }()
+	close(pub.release)
+
+	firstOut := wait("first", first)
+	secondOut := wait("second", second)
+	if firstOut.err != nil {
+		t.Fatalf("first approval: %v", firstOut.err)
+	}
+	if secondOut.err != nil {
+		t.Fatalf("second approval: %v", secondOut.err)
+	}
+	if firstOut.result.Plan.TraceID != secondOut.result.Plan.TraceID {
+		t.Fatalf("duplicate approval forked twice: %s -> %s",
+			firstOut.result.Plan.TraceID, secondOut.result.Plan.TraceID)
+	}
+
+	requests, err := trailfork.ListRequests(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 1 || requests[0].TraceID != firstOut.result.Plan.TraceID {
+		t.Fatalf("requests = %+v", requests)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, ".paseka", "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forks := 0
+	for _, entry := range entries {
+		if entry.Name() == firstOut.result.Plan.TraceID {
+			forks++
+		}
+	}
+	if forks != 1 {
+		t.Fatalf("fork trace dirs = %d, want 1", forks)
+	}
+}
+
+func TestCreateFailureNamesTheRecordedRequest(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+
+	_, err := trailfork.Create(context.Background(), &dropProbePublisher{failPublish: true}, taskledger.NewMemoryLedger(), trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+	})
+	if err == nil {
+		t.Fatal("expected the initial publish to fail")
+	}
+	requests, listErr := trailfork.ListRequests(root)
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("requests = %+v", requests)
+	}
+	requestID := requests[0].RequestID
+	if requestID == "" {
+		t.Fatal("failed creation recorded no request identity")
+	}
+	if !strings.Contains(err.Error(), requestID) {
+		t.Fatalf("error %q does not name request %s", err, requestID)
+	}
+	if _, err := trailfork.LoadRequest(root, requestID); err != nil {
+		t.Fatalf("recorded request %s is not loadable: %v", requestID, err)
 	}
 }
 

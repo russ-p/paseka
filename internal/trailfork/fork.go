@@ -214,6 +214,16 @@ func Create(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledg
 	if requestID == "" {
 		return Result{}, fmt.Errorf("trailfork: request id is required")
 	}
+	result, err := createRequest(ctx, publisher, ledger, opts, root, requestID)
+	if err != nil {
+		// The identity is already minted or loaded, so name it: the operator can
+		// retry with --request-id and find the recorded request.
+		return Result{}, fmt.Errorf("trailfork: fork request %s: %w", requestID, err)
+	}
+	return result, nil
+}
+
+func createRequest(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options, root, requestID string) (Result, error) {
 	digest := directDigest(opts)
 
 	if existing, found, err := findRequestFile(root, requestID); err != nil {
@@ -294,7 +304,7 @@ func resumeDirectRequest(ctx context.Context, publisher bus.Publisher, ledger ta
 	if item.request.State == StatePending {
 		return Result{}, fmt.Errorf("trailfork: request %s is pending operator approval", opts.RequestID)
 	}
-	lock, err := acquireRequestLock(item.path + ".lock")
+	lock, err := acquireDecisionLock(ctx, item.path+".lock")
 	if err != nil {
 		return Result{}, err
 	}

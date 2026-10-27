@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -131,7 +132,7 @@ func newTrailForkPendingCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "pending",
-		Short: "List agent-originated fork requests awaiting a decision",
+		Short: "List fork requests awaiting a decision or still being created",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctxColony, err := colony.ResolveContext(startDir)
 			if err != nil {
@@ -141,7 +142,7 @@ func newTrailForkPendingCmd() *cobra.Command {
 			if all {
 				requests, err = trailfork.ListRequests(ctxColony.ColonyRoot)
 			} else {
-				requests, err = trailfork.ListPending(ctxColony.ColonyRoot)
+				requests, err = trailfork.ListOpen(ctxColony.ColonyRoot)
 			}
 			if err != nil {
 				return err
@@ -153,21 +154,11 @@ func newTrailForkPendingCmd() *cobra.Command {
 				return printJSON(requests)
 			}
 			if len(requests) == 0 {
-				fmt.Println("No pending fork requests.")
+				fmt.Println("No fork requests awaiting a decision or still being created.")
 				return nil
 			}
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			_, _ = fmt.Fprintln(w, "REQUEST\tSTATE\tSENDER\tSOURCE\tSECTOR\tTITLE\tEXPIRES")
-			for _, req := range requests {
-				expires := ""
-				if req.State == trailfork.StatePending && !req.ExpiresAt.IsZero() {
-					expires = req.ExpiresAt.Format(time.RFC3339)
-				}
-				_, _ = fmt.Fprintf(w, "%s\t%s\t%s/%s\t%s\t%s\t%s\t%s\n",
-					req.RequestID, req.State, req.Sender.TraceID, req.Sender.AgentID,
-					req.Evidence.SourceTrace, req.Evidence.Task.Sector, req.Evidence.Title, expires)
-			}
-			return w.Flush()
+			printForkRequests(os.Stdout, requests)
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
@@ -688,6 +679,34 @@ func showTrailBinding(startDir, traceID string, jsonOut bool) error {
 		}
 	}
 	return nil
+}
+
+func printForkRequests(out io.Writer, requests []trailfork.Request) {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "REQUEST\tSTATE\tSENDER\tSOURCE\tTASK\tATTEMPT\tDELTA\tBUDGET\tVALIDATION\tTITLE\tEXPIRES\tLAST ERROR")
+	for _, req := range requests {
+		expires := ""
+		if req.State == trailfork.StatePending && !req.ExpiresAt.IsZero() {
+			expires = req.ExpiresAt.Format(time.RFC3339)
+		}
+		attempt := req.Evidence.SourceAttempt
+		if attempt == "" {
+			attempt = "-"
+		}
+		delta := req.Evidence.Delta.Form
+		if delta == "" {
+			delta = "-"
+		}
+		validation := req.Validation
+		if validation == "" {
+			validation = "-"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s/%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
+			req.RequestID, req.State, req.Sender.TraceID, req.Sender.AgentID,
+			req.Evidence.SourceTrace, req.Evidence.SourceTask, attempt, delta,
+			req.Evidence.Budget, validation, req.Evidence.Title, expires, req.LastError)
+	}
+	_ = w.Flush()
 }
 
 func printTrailRows(trails []trailview.Trail) {

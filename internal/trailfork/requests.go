@@ -250,6 +250,25 @@ func ListPending(colonyRoot string) ([]Request, error) {
 	return out, nil
 }
 
+// ListOpen returns fork requests awaiting a decision or still being created,
+// oldest first. A creating request may be an interrupted creation and stays
+// visible until it is approved, rejected, or cancelled. ListPending keeps its
+// decision and quota semantics and returns pending requests only.
+func ListOpen(colonyRoot string) ([]Request, error) {
+	items, err := loadAllRequests(colonyRoot, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	var out []Request
+	for _, item := range items {
+		switch item.request.State {
+		case StatePending, StateCreating:
+			out = append(out, item.request)
+		}
+	}
+	return out, nil
+}
+
 // ListRequests returns all retained requests, pending or decided, oldest first.
 func ListRequests(colonyRoot string) ([]Request, error) {
 	items, err := loadAllRequests(colonyRoot, time.Now().UTC())
@@ -283,7 +302,7 @@ func ApproveRequest(ctx context.Context, opts DecisionOptions) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	lock, err := acquireRequestLock(path + ".lock")
+	lock, err := acquireDecisionLock(ctx, path+".lock")
 	if err != nil {
 		return Result{}, err
 	}
@@ -990,11 +1009,57 @@ func saveRequest(path string, req Request) error {
 const (
 	requestLockBudget     = 5 * time.Second
 	requestLockStaleAfter = 30 * time.Second
+	// requestDecisionLockBudget outlives requestLockStaleAfter: a duplicate
+	// approval or direct retry may legitimately wait for a slow in-flight
+	// creation and must then return its recorded outcome instead of timing out
+	// mid-creation.
+	requestDecisionLockBudget = 90 * time.Second
 )
 
 func acquireRequestLock(path string) (func(), error) {
+	return acquireRequestLockWithBudget(path, requestLockBudget)
+}
+
+// acquireDecisionLock waits for a decision-path lock while honoring caller
+// cancellation. Its budget outlives stale-lock reclamation so a legitimate
+// creation is never mistaken for an abandoned lock.
+func acquireDecisionLock(ctx context.Context, path string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	type acquired struct {
+		release func()
+		err     error
+	}
+	// filelock waits without a context, so acquire in the background and return
+	// the caller's error on cancellation. A late acquisition is released.
+	done := make(chan acquired, 1)
+	go func() {
+		release, err := acquireRequestLockWithBudget(path, requestDecisionLockBudget)
+		done <- acquired{release: release, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		go func() {
+			if late := <-done; late.release != nil {
+				late.release()
+			}
+		}()
+		return nil, ctx.Err()
+	case result := <-done:
+		if err := ctx.Err(); err != nil {
+			if result.release != nil {
+				result.release()
+			}
+			return nil, err
+		}
+		return result.release, result.err
+	}
+}
+
+func acquireRequestLockWithBudget(path string, budget time.Duration) (func(), error) {
 	lock, err := filelock.Acquire(path, filelock.Options{
-		Budget:     requestLockBudget,
+		Budget:     budget,
 		StaleAfter: requestLockStaleAfter,
 	})
 	if err != nil {
