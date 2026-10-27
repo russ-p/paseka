@@ -15,6 +15,7 @@ type RunMeta struct {
 	AgentID           string          `json:"agentId"`
 	Bee               string          `json:"bee"`
 	Adapter           string          `json:"adapter"`
+	Implementation    string          `json:"implementation,omitempty"`
 	Workspace         string          `json:"workspace"`
 	ColonyRoot        string          `json:"colonyRoot"`
 	TaskID            string          `json:"taskId,omitempty"`
@@ -119,6 +120,9 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		}
 		if meta.ProviderSessionID == "" {
 			meta.ProviderSessionID = legacy.ProviderSessionID
+		}
+		if meta.Implementation == "" {
+			meta.Implementation = legacy.Implementation
 		}
 	}
 

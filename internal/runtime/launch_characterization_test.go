@@ -46,6 +46,7 @@ const (
 const fakeAgentScript = `#!/bin/sh
 case "$1" in
   create-chat) echo 11111111-1111-1111-1111-111111111111; exit 0 ;;
+  --version) echo "${PASEKA_FAKE_OPENCODE_VERSION:-1.0.0}"; exit 0 ;;
   serve) exit 1 ;;
 esac
 cap="${PASEKA_CAPTURE_FILE:-}"

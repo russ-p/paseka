@@ -116,23 +116,29 @@ type Diagnostics struct {
 
 // UsageSource identifies where per-run LLM token counts came from.
 const (
-	UsageSourceCursorStreamJSON = "cursor.stream-json"
-	UsageSourceOpenCodeRunJSON  = "opencode.run-json"
-	UsageSourceOpenCodeServer   = "opencode.server-json"
-	UsageSourcePiPrintJSON      = "pi.print-json"
-	UsageSourcePiSessionJSONL   = "pi.session-jsonl"
-	UsageSourceUnavailable      = "unavailable"
+	UsageSourceCursorStreamJSON    = "cursor.stream-json"
+	UsageSourceOpenCodeRunJSON     = "opencode.run-json"
+	UsageSourceOpenCodeServer      = "opencode.server-json"
+	UsageSourceOpenCodeV2RunStream = "opencode.v2-run-stream"
+	UsageSourceOpenCodeV2Session   = "opencode.v2-session-record"
+	UsageSourcePiPrintJSON         = "pi.print-json"
+	UsageSourcePiSessionJSONL      = "pi.session-jsonl"
+	UsageSourceUnavailable         = "unavailable"
 )
 
 // Usage is optional LLM token accounting from an adapter when available.
 // Adapters that cannot report usage omit this field; projections must tolerate nil.
+// ReasoningTokens and CostUSD are additive optional fields: older records do not
+// carry them, and readers must treat zero as "not reported".
 type Usage struct {
-	InputTokens      int64  `json:"inputTokens"`
-	OutputTokens     int64  `json:"outputTokens"`
-	CacheReadTokens  int64  `json:"cacheReadTokens,omitempty"`
-	CacheWriteTokens int64  `json:"cacheWriteTokens,omitempty"`
-	DurationMs       int64  `json:"durationMs,omitempty"`
-	Source           string `json:"source,omitempty"`
+	InputTokens      int64   `json:"inputTokens"`
+	OutputTokens     int64   `json:"outputTokens"`
+	ReasoningTokens  int64   `json:"reasoningTokens,omitempty"`
+	CacheReadTokens  int64   `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens int64   `json:"cacheWriteTokens,omitempty"`
+	CostUSD          float64 `json:"costUsd,omitempty"`
+	DurationMs       int64   `json:"durationMs,omitempty"`
+	Source           string  `json:"source,omitempty"`
 }
 
 // Result is the final envelope written to result.json.

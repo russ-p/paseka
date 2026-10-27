@@ -49,6 +49,13 @@ type SessionRequest struct {
 	Binary string
 	Env    []string
 	Dir    string
+	// AdapterName is the configured adapter name to record in the session
+	// record. Empty means the implementation's own name. A proxy sets it to
+	// itself before delegating.
+	AdapterName string
+	// Implementation names the concrete implementation executing the session.
+	// Empty means the implementation's own name.
+	Implementation string
 }
 
 // SessionPromptDelivery describes an initial prompt that must be delivered to
@@ -73,9 +80,16 @@ type SessionCommand struct {
 	Env               []string
 	Dir               string
 	ProviderSessionID string // optional; native provider session id when known before PTY start
+	// Implementation names the concrete adapter implementation that built this
+	// command, so the session record can name it even when a proxy delegated.
+	Implementation string
 	// Prompt, when set, must be delivered to ProviderSessionID through the
 	// process's HTTP control server once it becomes reachable.
 	Prompt *SessionPromptDelivery
+	// Cleanup, when set, releases resources the adapter started before the PTY
+	// (for example a Paseka-managed OpenCode server). The session manager calls
+	// it once when the session starts failing or finishes.
+	Cleanup func()
 }
 
 // SessionHandle identifies a running or recently finished session.
@@ -88,6 +102,7 @@ type SessionHandle struct {
 	ColonyRoot        string
 	Bee               string
 	Adapter           string
+	Implementation    string   // concrete implementation that ran, e.g. opencodev2
 	Binary            string   // resolved agent binary, so post-run hooks can reuse it
 	Env               []string // resolved child environment, reused by post-run provider probes
 	Model             string   // resolved model id, recorded on the session so a finished one still says what ran it

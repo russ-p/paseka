@@ -68,7 +68,7 @@ func baseRequest(t *testing.T, adapter string, mode launch.Mode) launch.Request 
 // sessions cannot drift. The only sanctioned difference is cursor's AFK cwd
 // inheritance.
 func TestResolveAFKInteractiveParity(t *testing.T) {
-	for _, adapter := range []string{"cursor", "pi", "claude", "opencode", "script"} {
+	for _, adapter := range []string{"cursor", "pi", "claude", "opencode", "opencodev1", "opencodev2", "script"} {
 		adapter := adapter
 		t.Run(adapter, func(t *testing.T) {
 			afk, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.AFK))
@@ -141,7 +141,7 @@ func TestResolveCarriesRaw(t *testing.T) {
 }
 
 func TestResolveJoinsProviderPrompt(t *testing.T) {
-	for _, adapter := range []string{"cursor", "opencode"} {
+	for _, adapter := range []string{"cursor", "opencode", "opencodev1", "opencodev2"} {
 		plan, err := launch.ResolveLaunch(baseRequest(t, adapter, launch.AFK))
 		if err != nil {
 			t.Fatal(err)

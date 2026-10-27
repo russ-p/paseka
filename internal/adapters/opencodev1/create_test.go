@@ -1,4 +1,4 @@
-package opencode
+package opencodev1
 
 import (
 	"context"

@@ -60,6 +60,17 @@ func isDefaultParamValue(key string, value any) bool {
 		default:
 			return false
 		}
+	case "options":
+		switch v := value.(type) {
+		case nil:
+			return true
+		case map[string]any:
+			return len(v) == 0
+		case map[string]string:
+			return len(v) == 0
+		default:
+			return false
+		}
 	default:
 		s, ok := value.(string)
 		return ok && s == ""
@@ -76,6 +87,7 @@ var RunParamKeys = []string{
 	"env_mode",
 	"force",
 	"model",
+	"options",
 	"output_format",
 	"plan",
 	"provider",
@@ -132,6 +144,11 @@ func ValidateRunParamValues(params map[string]any) error {
 	if v, ok := params["env"]; ok && v != nil {
 		if _, ok := v.(map[string]any); !ok {
 			return fmt.Errorf("params.env must be a map of name: value")
+		}
+	}
+	if v, ok := params["options"]; ok && v != nil {
+		if _, ok := v.(map[string]any); !ok {
+			return fmt.Errorf("params.options must be a map of name: value")
 		}
 	}
 	if v, ok := params["timeout"]; ok && v != nil {
@@ -300,6 +317,10 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Env = v
 		declared["env"] = true
 	}
+	if v, ok := optionsParam(b.Params, "options"); ok {
+		p.Options = v
+		declared["options"] = true
+	}
 	if v, ok := stringParam(b.Params, "env_mode"); ok {
 		p.EnvMode = strings.TrimSpace(v)
 		declared["env_mode"] = true
@@ -356,6 +377,19 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 		}
 		out.Env = merged
 	}
+	if declared["options"] {
+		// Like binary, the committed bee's options win over the machine-local
+		// fallback. The machine file supplies defaults; a bee may override any
+		// key it names.
+		merged := make(map[string]string, len(out.Options)+len(over.Params.Options))
+		for k, v := range over.Params.Options {
+			merged[k] = v
+		}
+		for k, v := range out.Options {
+			merged[k] = v
+		}
+		out.Options = merged
+	}
 	if declared["env_mode"] {
 		out.EnvMode = over.Params.EnvMode
 	}
@@ -381,9 +415,10 @@ func AdapterExtra(ctx Context, adapterName string) adapters.RunParams {
 			Binary: ctx.Claude.Binary,
 			APIKey: ctx.Claude.APIKey(),
 		}
-	case "opencode":
+	case "opencode", "opencodev1", "opencodev2":
 		return adapters.RunParams{
-			Binary: ctx.OpenCode.Binary,
+			Binary:  openCodeBinary(ctx.OpenCode, adapterName),
+			Options: openCodeOptions(ctx.OpenCode, adapterName),
 		}
 	default:
 		return adapters.RunParams{
@@ -412,10 +447,14 @@ func AdapterExtraLayer(ctx Context, adapterName string) adapters.RunParamsLayer 
 			layer.Params.Binary = ctx.Claude.Binary
 			layer.Declared["binary"] = true
 		}
-	case "opencode":
-		if ctx.OpenCode.BinaryDeclared() {
-			layer.Params.Binary = ctx.OpenCode.Binary
+	case "opencode", "opencodev1", "opencodev2":
+		if openCodeBinaryDeclared(ctx.OpenCode, adapterName) {
+			layer.Params.Binary = openCodeBinary(ctx.OpenCode, adapterName)
 			layer.Declared["binary"] = true
+		}
+		if options := openCodeOptions(ctx.OpenCode, adapterName); len(options) > 0 {
+			layer.Params.Options = options
+			layer.Declared["options"] = true
 		}
 	default:
 		layer.Params.APIKey = ctx.Cursor.APIKey()
@@ -425,6 +464,57 @@ func AdapterExtraLayer(ctx Context, adapterName string) adapters.RunParamsLayer 
 		}
 	}
 	return layer
+}
+
+// openCodeBinary is the effective binary for one OpenCode name. A pinned name
+// prefers its own path and never falls through to another adapter's defaults.
+func openCodeBinary(cfg OpenCodeAdapterConfig, name string) string {
+	switch name {
+	case "opencodev1":
+		if cfg.v1BinaryDeclared {
+			return cfg.V1Binary
+		}
+	case "opencodev2":
+		if cfg.v2BinaryDeclared {
+			return cfg.V2Binary
+		}
+	}
+	return cfg.Binary
+}
+
+// openCodeBinaryDeclared reports whether the file declares a binary relevant to
+// this OpenCode name. An absent file leaves the adapter's built-in default.
+func openCodeBinaryDeclared(cfg OpenCodeAdapterConfig, name string) bool {
+	switch name {
+	case "opencodev1":
+		return cfg.v1BinaryDeclared || cfg.binaryDeclared
+	case "opencodev2":
+		return cfg.v2BinaryDeclared || cfg.binaryDeclared
+	default:
+		return cfg.binaryDeclared
+	}
+}
+
+// openCodeOptions combines the file's options with the pin a named adapter
+// implies. A pinned bee skips detection, so its version option is authoritative.
+func openCodeOptions(cfg OpenCodeAdapterConfig, name string) map[string]string {
+	opts := cfg.Options()
+	switch name {
+	case "opencodev1":
+		if opts == nil {
+			opts = map[string]string{}
+		}
+		opts["version"] = "1"
+	case "opencodev2":
+		if opts == nil {
+			opts = map[string]string{}
+		}
+		opts["version"] = "2"
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts
 }
 
 func envParam(m map[string]any, key string) (map[string]string, bool) {
@@ -439,6 +529,32 @@ func envParam(m map[string]any, key string) (map[string]string, bool) {
 	out := make(map[string]string, len(raw))
 	for name, value := range raw {
 		out[name] = fmt.Sprint(value)
+	}
+	return out, true
+}
+
+// optionsParam maps params.options to adapter-specific strings. YAML turns an
+// unquoted `version: 2` into an integer, so scalar values are stringified rather
+// than rejected; nested maps and lists are not a valid option value.
+func optionsParam(m map[string]any, key string) (map[string]string, bool) {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil, false
+	}
+	raw, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]string, len(raw))
+	for name, value := range raw {
+		switch value.(type) {
+		case map[string]any, []any:
+			continue
+		}
+		out[name] = fmt.Sprint(value)
+	}
+	if len(out) == 0 {
+		return nil, false
 	}
 	return out, true
 }
@@ -483,7 +599,7 @@ func (b Bee) ResolveAdapter() (string, error) {
 		name = "cursor"
 	}
 	switch name {
-	case "cursor", "pi", "claude", "opencode", "script":
+	case "cursor", "pi", "claude", "opencode", "opencodev1", "opencodev2", "script":
 		return name, nil
 	default:
 		return "", fmt.Errorf("colony: unknown adapter %q for bee %q", name, b.Role)

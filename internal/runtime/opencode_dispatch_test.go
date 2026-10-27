@@ -18,7 +18,7 @@ func TestDispatchOpenCodeAFKEndToEnd(t *testing.T) {
 	repo := initMixedAdapterRepo(t)
 
 	fake := filepath.Join(t.TempDir(), "fake-opencode")
-	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"text\",\"sessionID\":\"ses_dispatch\",\"part\":{\"text\":\"dispatch ok\"}}'\n"
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 1.0.0; exit 0; fi\nprintf '%s\\n' '{\"type\":\"text\",\"sessionID\":\"ses_dispatch\",\"part\":{\"text\":\"dispatch ok\"}}'\n"
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

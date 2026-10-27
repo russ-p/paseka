@@ -91,7 +91,7 @@ func ValidateProfileName(name string) error {
 
 func isLLMAdapterName(name string) bool {
 	switch name {
-	case "cursor", "pi", "claude", "opencode":
+	case "cursor", "pi", "claude", "opencode", "opencodev1", "opencodev2":
 		return true
 	default:
 		return false

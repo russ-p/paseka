@@ -144,7 +144,7 @@ Per-colony state on this machine. Not committed.
 │   ├── cursor.yaml             # CLI binary path, API key env
 │   ├── pi.yaml                 # Pi CLI binary path, API key env
 │   ├── claude.yaml             # Claude Code CLI binary, optional API key env
-│   └── opencode.yaml           # OpenCode CLI binary
+│   └── opencode.yaml           # OpenCode binary + version/v1_binary/v2_binary/detect_timeout
 ```
 
 Telegram bot tokens and allowlists stay machine-local — see [Telegram gateway](telegram-gateway.md).
@@ -197,7 +197,7 @@ Stored in `.paseka/colony.yaml` as `slug` after first `paseka init` so later com
 Run from inside a git repository (or at repo root).
 
 ```
-paseka init [--adapter cursor|pi|opencode]
+paseka init [--adapter cursor|pi|opencode|opencodev1|opencodev2]
   │
   ├─► resolve git root (fail if not a repo)
   ├─► compute / persist project slug
@@ -213,9 +213,17 @@ paseka init [--adapter cursor|pi|opencode]
 ```
 
 `--adapter` selects which LLM adapter the starter bees use (`cursor` by
-default; `pi` and `opencode` are supported scaffold choices). Unknown adapter
-names fall back to `cursor`. Claude and script adapters can be selected later
-in individual bee YAML.
+default; `pi`, `opencode`, `opencodev1`, and `opencodev2` are supported scaffold
+choices). Unknown adapter names fall back to `cursor`. Claude and script adapters
+can be selected later in individual bee YAML.
+
+`opencode` scaffolds version-agnostic bees with `adapter: opencode` and the one
+machine-local `adapters/opencode.yaml`. `opencodev1` / `opencodev2` scaffold the
+same colony with the pinned name in every starter bee, so the major is explicit.
+In all three cases the adapter file documents the optional `version`,
+`v1_binary`, `v2_binary`, and `detect_timeout` keys as commented hints, and the
+printed next steps name the matching install command
+(`npm install -g opencode-ai@1` or `@2`).
 
 `paseka init` is idempotent: existing files are preserved; missing pieces are added.
 
@@ -245,7 +253,9 @@ paseka run
 ```
 
 For Pi or OpenCode, pass the corresponding `--adapter` during init and
-authenticate that CLI. `paseka bee run` and `paseka bee chat` can launch
-one-off work without the reactor; commands that publish or project
+authenticate that CLI. OpenCode users who need a specific major can scaffold with
+`--adapter opencodev1` or `--adapter opencodev2`; the plain `opencode` scaffold
+detects the installed major at run time. `paseka bee run` and `paseka bee chat`
+can launch one-off work without the reactor; commands that publish or project
 choreography events still need NATS. See the
 [CLI NATS dependency matrix](cli.md#nats-dependency).

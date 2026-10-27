@@ -363,6 +363,69 @@ func TestAdapterExtraRoutesByAdapter(t *testing.T) {
 	}
 }
 
+func TestOpenCodeAdapterExtraRoutesPinnedNames(t *testing.T) {
+	slug := setupOpenCodeAdapterHome(t, `binary: /opt/opencode
+version: 2
+v1_binary: /opt/opencode-v1
+v2_binary: /opt/opencode-v2
+`)
+	cfg, err := colony.LoadOpenCodeAdapter(slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := colony.Context{OpenCode: cfg}
+
+	proxy := colony.AdapterExtra(ctx, "opencode")
+	if proxy.Binary != "/opt/opencode" || proxy.Options["version"] != "2" {
+		t.Fatalf("proxy extra = %+v", proxy)
+	}
+
+	v1 := colony.AdapterExtra(ctx, "opencodev1")
+	if v1.Binary != "/opt/opencode-v1" || v1.Options["version"] != "1" {
+		t.Fatalf("v1 extra = %+v", v1)
+	}
+
+	v2 := colony.AdapterExtra(ctx, "opencodev2")
+	if v2.Binary != "/opt/opencode-v2" || v2.Options["version"] != "2" {
+		t.Fatalf("v2 extra = %+v", v2)
+	}
+}
+
+func TestBeeOptionsOverlayMachineDefaults(t *testing.T) {
+	bee := colony.Bee{
+		Role:    "builder",
+		Adapter: "opencode",
+		Params: map[string]any{"options": map[string]any{
+			"version":   "1",
+			"v2_binary": "/bee/opencode-v2",
+		}},
+	}
+	over := adapters.RunParamsLayer{
+		Params:   adapters.RunParams{Options: map[string]string{"version": "2", "v1_binary": "/machine/v1"}},
+		Declared: map[string]bool{"options": true},
+	}
+	got := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), over)
+	if got.Options["version"] != "1" {
+		t.Fatalf("version = %q, want the bee value", got.Options["version"])
+	}
+	if got.Options["v1_binary"] != "/machine/v1" || got.Options["v2_binary"] != "/bee/opencode-v2" {
+		t.Fatalf("merged options = %+v", got.Options)
+	}
+}
+
+func TestValidateRunParamValuesAcceptsOptions(t *testing.T) {
+	if err := colony.ValidateRunParamValues(map[string]any{
+		"options": map[string]any{"version": 2},
+	}); err != nil {
+		t.Fatalf("options map should validate: %v", err)
+	}
+	if err := colony.ValidateRunParamValues(map[string]any{
+		"options": "version=2",
+	}); err == nil {
+		t.Fatal("string options should fail validation")
+	}
+}
+
 func TestValidateRunParamKeysRejectsUnknown(t *testing.T) {
 	err := colony.ValidateRunParamKeys(map[string]any{"modle": "gpt-4"})
 	if err == nil {

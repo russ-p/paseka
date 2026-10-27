@@ -20,10 +20,12 @@ const (
 )
 
 var interactiveAdapters = map[string]bool{
-	"cursor":   true,
-	"pi":       true,
-	"claude":   true,
-	"opencode": true,
+	"cursor":     true,
+	"pi":         true,
+	"claude":     true,
+	"opencode":   true,
+	"opencodev1": true,
+	"opencodev2": true,
 }
 
 // BeeScope selects which bees a listing returns.

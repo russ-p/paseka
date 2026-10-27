@@ -23,6 +23,8 @@ import (
 	"github.com/russ-p/paseka/internal/adapters/claude"
 	"github.com/russ-p/paseka/internal/adapters/cursor"
 	"github.com/russ-p/paseka/internal/adapters/opencode"
+	"github.com/russ-p/paseka/internal/adapters/opencodev1"
+	"github.com/russ-p/paseka/internal/adapters/opencodev2"
 	"github.com/russ-p/paseka/internal/adapters/pi"
 	"github.com/russ-p/paseka/internal/adapters/script"
 	"github.com/russ-p/paseka/internal/colony"
@@ -161,7 +163,7 @@ func ResolveLaunch(req Request) (LaunchPlan, error) {
 	// The one provider prompt join. Cursor and OpenCode take a single positional
 	// prompt built from system + task; a resume passes the continue line alone.
 	commandPrompt := req.Prompt
-	if !req.Resume && (req.Adapter == "cursor" || req.Adapter == "opencode") {
+	if !req.Resume && (req.Adapter == "cursor" || isOpenCodeAdapter(req.Adapter)) {
 		commandPrompt = cursor.JoinPrompt(req.SystemPrompt, req.Prompt)
 	}
 
@@ -396,6 +398,17 @@ func dedupeStrings(in []string) []string {
 	return out
 }
 
+// isOpenCodeAdapter reports whether an adapter name belongs to the OpenCode
+// family. All three take one positional prompt built from system + task.
+func isOpenCodeAdapter(adapter string) bool {
+	switch adapter {
+	case "opencode", "opencodev1", "opencodev2":
+		return true
+	default:
+		return false
+	}
+}
+
 // defaultSpec reports the built-in launch defaults for an adapter name. It
 // instantiates the stateless adapter only to read its declared spec.
 func defaultSpec(adapter string) adapters.LaunchSpec {
@@ -408,6 +421,10 @@ func defaultSpec(adapter string) adapters.LaunchSpec {
 		return claude.New().LaunchSpec()
 	case "opencode":
 		return opencode.New().LaunchSpec()
+	case "opencodev1":
+		return opencodev1.New().LaunchSpec()
+	case "opencodev2":
+		return opencodev2.New().LaunchSpec()
 	case "script":
 		return script.New().LaunchSpec()
 	default:

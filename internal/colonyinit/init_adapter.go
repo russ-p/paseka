@@ -13,6 +13,10 @@ func NormalizeInitAdapter(name string) string {
 		return "pi"
 	case "opencode":
 		return "opencode"
+	case "opencodev1":
+		return "opencodev1"
+	case "opencodev2":
+		return "opencodev2"
 	default:
 		return "cursor"
 	}
@@ -24,6 +28,8 @@ func scoutBeeYAMLFor(adapter string) string {
 		return scoutBeePiYAML
 	case "opencode":
 		return scoutBeeOpenCodeYAML
+	case "opencodev1", "opencodev2":
+		return pinOpenCodeBee(scoutBeeOpenCodeYAML, adapter)
 	default:
 		return scoutBeeYAML
 	}
@@ -35,6 +41,8 @@ func builderBeeYAMLFor(adapter string) string {
 		return builderBeePiYAML
 	case "opencode":
 		return builderBeeOpenCodeYAML
+	case "opencodev1", "opencodev2":
+		return pinOpenCodeBee(builderBeeOpenCodeYAML, adapter)
 	default:
 		return builderBeeYAML
 	}
@@ -46,9 +54,17 @@ func hivewrightBeeYAMLFor(adapter string) string {
 		return hivewrightBeePiYAML
 	case "opencode":
 		return hivewrightBeeOpenCodeYAML
+	case "opencodev1", "opencodev2":
+		return pinOpenCodeBee(hivewrightBeeOpenCodeYAML, adapter)
 	default:
 		return hivewrightBeeYAML
 	}
+}
+
+// pinOpenCodeBee rewrites the scaffolded adapter line for a bee pinned to one
+// OpenCode major, leaving every other line untouched.
+func pinOpenCodeBee(yaml, adapter string) string {
+	return strings.Replace(yaml, "adapter: opencode\n", "adapter: "+adapter+"\n", 1)
 }
 
 func homeConfigYAML(repoRoot, slug, adapter string) string {
@@ -61,7 +77,7 @@ func homeConfigYAML(repoRoot, slug, adapter string) string {
 		adaptersBlock = `adapters:
   pi: {}
 `
-	case "opencode":
+	case "opencode", "opencodev1", "opencodev2":
 		adaptersBlock = `adapters:
   opencode: {}
 `

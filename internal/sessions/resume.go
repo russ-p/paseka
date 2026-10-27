@@ -18,14 +18,18 @@ const (
 	ResumeErrNoProviderSessionID = "no_provider_session_id"
 	ResumeErrCommandOverride     = "command_override"
 	ResumeErrAdapterChanged      = "adapter_changed"
+	ResumeErrGenerationMismatch  = "generation_mismatch"
 	ResumeErrBeeGone             = "bee_gone"
 )
 
 // resumableSessionAdapters lists providers whose HITL sessions can continue by
 // native provider session id. Cursor uses --resume; OpenCode uses --session.
+// The pinned OpenCode names are included so a colony is not broken by the split.
 var resumableSessionAdapters = map[string]bool{
-	"cursor":   true,
-	"opencode": true,
+	"cursor":     true,
+	"opencode":   true,
+	"opencodev1": true,
+	"opencodev2": true,
 }
 
 // ResumeError is an eligibility failure for Cursor HITL resume.
@@ -154,6 +158,15 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 	if bee.Command.IsSet() {
 		return RunRequest{}, resumeErr(ResumeErrCommandOverride, 400, "source bee uses a command override")
 	}
+	// Cross-major continuation is refused fail-closed: Paseka does not depend on
+	// the provider to fail a V1 id fed to V2 (or the reverse) usefully. A
+	// pre-split session records no generation and stays eligible.
+	if next, err := m.nextImplementation(ctxColony, adapterName, bee); err != nil {
+		return RunRequest{}, err
+	} else if recorded := strings.TrimSpace(source.Implementation); recorded != "" && next != "" && recorded != next {
+		return RunRequest{}, resumeErr(ResumeErrGenerationMismatch, 400,
+			"source session ran on "+recorded+" but this continuation would run on "+next)
+	}
 	busy, err := m.providerSessionBusy(ctxColony, providerID, sessionID)
 	if err != nil {
 		return RunRequest{}, err
@@ -172,6 +185,25 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 	}, nil
 }
 
+// nextImplementation reports the concrete OpenCode implementation a
+// continuation would run on. A pinned name answers itself; the proxy is asked
+// through the same detection path a launch would use.
+func (m *Manager) nextImplementation(ctxColony colony.Context, adapterName string, bee colony.Bee) (string, error) {
+	switch adapterName {
+	case "opencodev1", "opencodev2":
+		return adapterName, nil
+	}
+	m.mu.RLock()
+	adapter := m.adapters[adapterName]
+	m.mu.RUnlock()
+	resolver, ok := adapter.(adapters.ImplementationResolver)
+	if !ok {
+		return "", nil
+	}
+	params := colony.MergeRunParamsLayers(colony.LayerFromBee(bee), colony.AdapterExtraLayer(ctxColony, adapterName))
+	return resolver.ResolveImplementation(params)
+}
+
 func (m *Manager) findSessionMeta(ctxColony colony.Context, sessionID string) (runs.SessionMeta, bool, error) {
 	if entry, ok := m.Get(sessionID); ok {
 		if meta, err := entry.RunDir.ReadSession(); err == nil {
@@ -184,6 +216,7 @@ func (m *Manager) findSessionMeta(ctxColony colony.Context, sessionID string) (r
 			AgentID:           h.AgentID,
 			Bee:               h.Bee,
 			Adapter:           h.Adapter,
+			Implementation:    h.Implementation,
 			Workspace:         h.Workspace,
 			ColonyRoot:        h.ColonyRoot,
 			PID:               h.PID,

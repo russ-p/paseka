@@ -17,6 +17,8 @@ import (
 	"github.com/russ-p/paseka/internal/adapters/claude"
 	"github.com/russ-p/paseka/internal/adapters/cursor"
 	"github.com/russ-p/paseka/internal/adapters/opencode"
+	"github.com/russ-p/paseka/internal/adapters/opencodev1"
+	"github.com/russ-p/paseka/internal/adapters/opencodev2"
 	"github.com/russ-p/paseka/internal/adapters/pi"
 	"github.com/russ-p/paseka/internal/artifacts"
 	"github.com/russ-p/paseka/internal/bus"
@@ -85,6 +87,9 @@ type activeSession struct {
 	hub     *ptyHub
 	cancel  context.CancelFunc
 	done    chan struct{}
+	// cleanup releases resources the adapter started before the PTY, such as a
+	// Paseka-managed OpenCode server. It runs once when the session finishes.
+	cleanup func()
 	// proposal carries what proposal finalization needs: the workspace baseline captured
 	// before the PTY started and the effective bee configuration for this launch. A
 	// resumed provider session still mints a fresh run id and a fresh baseline here, so
@@ -106,10 +111,12 @@ func NewManager() *Manager {
 	return &Manager{
 		sessions: map[string]*activeSession{},
 		adapters: map[string]adapters.SessionAdapter{
-			"cursor":   cursor.NewSession(),
-			"pi":       pi.NewSession(),
-			"claude":   claude.NewSession(),
-			"opencode": opencode.NewSession(),
+			"cursor":     cursor.NewSession(),
+			"pi":         pi.NewSession(),
+			"claude":     claude.NewSession(),
+			"opencode":   opencode.NewSession(),
+			"opencodev1": opencodev1.NewSession(),
+			"opencodev2": opencodev2.NewSession(),
 		},
 	}
 }
@@ -497,6 +504,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Binary:          plan.Binary,
 		Env:             plan.Env,
 		Dir:             plan.Dir,
+		AdapterName:     adapterName,
 		TraceID:         traceID,
 		AgentID:         agentID,
 		TaskID:          req.TaskID,
@@ -511,6 +519,16 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if err != nil {
 		return nil, err
 	}
+	// The adapter may have started resources before the PTY (for example a
+	// Paseka-managed OpenCode server). Until the session is registered they are
+	// this function's responsibility; after that the active session owns them.
+	cleanup := cmd.Cleanup
+	cleanupOwned := false
+	defer func() {
+		if !cleanupOwned && cleanup != nil {
+			cleanup()
+		}
+	}()
 
 	providerSessionID := strings.TrimSpace(cmd.ProviderSessionID)
 	if providerSessionID == "" {
@@ -522,6 +540,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			AgentID:           agentID,
 			Bee:               bee.Role,
 			Adapter:           adapterName,
+			Implementation:    cmd.Implementation,
 			Workspace:         workspace,
 			ProviderSessionID: providerSessionID,
 			ResumedFrom:       req.resumeFrom,
@@ -559,6 +578,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ColonyRoot:        ctxColony.ColonyRoot,
 		Bee:               bee.Role,
 		Adapter:           adapterName,
+		Implementation:    cmd.Implementation,
 		Binary:            cmd.Binary,
 		Env:               plan.Env,
 		Model:             plan.ModelID,
@@ -576,6 +596,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		AgentID:           agentID,
 		Bee:               bee.Role,
 		Adapter:           adapterName,
+		Implementation:    cmd.Implementation,
 		Workspace:         workspace,
 		ColonyRoot:        ctxColony.ColonyRoot,
 		Model:             plan.ModelID,
@@ -615,6 +636,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		process: proc,
 		cancel:  cancel,
 		done:    make(chan struct{}),
+		cleanup: cleanup,
 		proposal: sessionProposal{
 			bee:        bee,
 			baseline:   baseline,
@@ -627,6 +649,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	m.mu.Lock()
 	m.sessions[sessionID] = active
 	m.mu.Unlock()
+	cleanupOwned = true
 
 	if err := homestate.RegisterSession(ctxColony.Slug, homestate.SessionEntry{
 		SessionID: sessionID,
@@ -694,6 +717,11 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 	entry := active.entry
 	m.mu.Unlock()
 
+	if active.cleanup != nil {
+		active.cleanup()
+		active.cleanup = nil
+	}
+
 	finishedAt := time.Now().UTC()
 
 	providerSessionID := entry.Handle.ProviderSessionID
@@ -713,6 +741,7 @@ func (m *Manager) finishSession(sessionID string, state adapters.SessionState, w
 		AgentID:           entry.Handle.AgentID,
 		Bee:               entry.Handle.Bee,
 		Adapter:           entry.Handle.Adapter,
+		Implementation:    entry.Handle.Implementation,
 		Workspace:         entry.Handle.Workspace,
 		ColonyRoot:        entry.Handle.ColonyRoot,
 		Model:             entry.Handle.Model,

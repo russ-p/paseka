@@ -1205,7 +1205,12 @@ export function taskRunMeta(run: TaskRun): string {
  * conversation id, and only these two hand one back.
  */
 export function sessionResumable(session: Session): boolean {
-	return session.adapter === 'cursor' || session.adapter === 'opencode';
+	return (
+		session.adapter === 'cursor' ||
+		session.adapter === 'opencode' ||
+		session.adapter === 'opencodev1' ||
+		session.adapter === 'opencodev2'
+	);
 }
 
 /**

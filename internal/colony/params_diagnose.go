@@ -18,15 +18,19 @@ var ParamDeprecations = map[string]string{
 
 // adapterYoloSupport lists adapters that map params.yolo onto a CLI flag.
 var adapterYoloSupport = map[string]bool{
-	"cursor":   true,
-	"claude":   true,
-	"opencode": true,
+	"cursor":     true,
+	"claude":     true,
+	"opencode":   true,
+	"opencodev1": true,
+	"opencodev2": true,
 }
 
 // adapterReasoningSupport lists adapters that map params.reasoning onto a flag.
 var adapterReasoningSupport = map[string]bool{
-	"pi":       true,
-	"opencode": true,
+	"pi":         true,
+	"opencode":   true,
+	"opencodev1": true,
+	"opencodev2": true,
 }
 
 // AdapterMapsReasoning reports whether the adapter translates params.reasoning

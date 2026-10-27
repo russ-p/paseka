@@ -2,8 +2,10 @@
 
 ## Status
 
-**(Approved)**
+**(Implemented)**
 Three adapters behind one name: today's OpenCode adapter becomes `opencodev1`, a new `opencodev2` adapter covers OpenCode 2, and `adapter: opencode` becomes a thin proxy that dispatches to one of them. Settled with the Beekeeper: run meta keeps the configured adapter name, cross-major Resume is refused as ineligible, cross-major session continuity is neither verified nor promised, and the console shows a single `opencode` adapter row.
+
+Shipped with the `internal/adapters/opencode` proxy, the frozen `internal/adapters/opencodev1` line, the new `internal/adapters/opencodev2` line, shared adapter options and identity fields, generation-aware Resume, and `paseka init` support for the pinned names. Canonical behaviour: [adapter launch resolution](../reference/adapter-launch-resolution.md#opencode-version-proxy), [bee config](../guide/bee-config.md), [interactive sessions](../guide/interactive-sessions.md), [architecture overview](../architecture/overview.md), [colony layout](../guide/colony-layout.md).
 
 ## Problem Statement
 

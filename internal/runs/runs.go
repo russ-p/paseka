@@ -60,6 +60,7 @@ type Meta struct {
 	AgentID           string    `json:"agentId"`
 	Bee               string    `json:"bee"`
 	Adapter           string    `json:"adapter"`
+	Implementation    string    `json:"implementation,omitempty"`
 	Workspace         string    `json:"workspace"`
 	ProviderSessionID string    `json:"providerSessionId,omitempty"`
 	ResumedFrom       string    `json:"resumedFrom,omitempty"`
@@ -270,6 +271,7 @@ type SessionMeta struct {
 	AgentID           string          `json:"agentId"`
 	Bee               string          `json:"bee"`
 	Adapter           string          `json:"adapter"`
+	Implementation    string          `json:"implementation,omitempty"`
 	Workspace         string          `json:"workspace"`
 	ColonyRoot        string          `json:"colonyRoot"`
 	Model             string          `json:"model,omitempty"`

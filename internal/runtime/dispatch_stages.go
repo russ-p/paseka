@@ -357,6 +357,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Binary:       p.plan.Binary,
 		Env:          p.plan.Env,
 		Dir:          p.plan.Dir,
+		AdapterName:  p.adapterName,
 		Raw:          p.plan.Raw,
 		RedactedEnv:  p.plan.RedactedEnv,
 		TraceID:      p.req.TraceID,

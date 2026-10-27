@@ -34,7 +34,7 @@ type LaunchPlan struct {
 | Interactive | `paseka bee chat <role>` → `sessions.Manager.launch` | runtime PTY |
 | Invite / resume | `internal/invites/service.go`, `internal/sessions/resume.go` | runtime PTY |
 
-AFK and interactive both call `launch.ResolveLaunch`; the mode only changes argv mapping and who owns the process. Interactive keeps its extras (cursor `create-chat`, opencode `opencode serve` credential pair) as a post-map hook on the plan, not a second resolution.
+AFK and interactive both call `launch.ResolveLaunch`; the mode only changes argv mapping and who owns the process. Interactive keeps its extras (cursor `create-chat`, OpenCode session creation and its managed server) as a post-map hook on the plan, not a second resolution.
 
 Workspace (cwd) = colony root, or `.paseka/worktrees/<traceId>/` when `worktree: true` (or an isolated `MUTATION` proposal forces it), plus the sector subpath. `.paseka/runs/<traceId>/<agentId>/` IPC always lives under the colony root.
 
@@ -48,7 +48,7 @@ Presence-aware layering: a layer only contributes keys it **actually declares** 
 2. Committed colony config — `colony.yaml` `model_aliases`, `defaults`, `sectors`.
 3. Bee YAML — `params`, `command`, `worktree`, `sector`.
 4. Selected profile — committed `.paseka/profiles/<name>.yaml`, then machine `profiles/<name>/` (`profile_merge.go`). A profile is a process-level switch and stays above the bee; it contributes declared keys only.
-5. Machine-local `adapters/<name>.yaml` — declared keys only, and only as a *fallback* for `binary` (repo wins when set). `api_key_env` is a machine fact and always wins; the key itself is never a launch parameter.
+5. Machine-local `adapters/<name>.yaml` — declared keys only, and only as a *fallback* for `binary` (repo wins when set). `api_key_env` is a machine fact and always wins; the key itself is never a launch parameter. The OpenCode file additionally contributes `version`, `v1_binary`, `v2_binary`, and `detect_timeout` as adapter options (see [OpenCode version proxy](#opencode-version-proxy)).
 6. Model alias resolution — once, after all merging, before argv build (`ApplyModelAliases`).
 7. Process env — `PASEKA_PROFILE`, `PASEKA_NATS_URL`, credential vars.
 
@@ -71,6 +71,7 @@ Bee-visible `params` carry **only colony-level decisions**; vendor flags are the
 | `binary` | string | pin an executable for this bee | wins over machine-local; machine-local stays a fallback |
 | `env` | map | declared pass-through environment | values are literals or `$HOST_VAR` references; declared keys are redacted in logs |
 | `env_mode` | `strict` | deny undeclared environment | child keeps only process essentials, declared `env`, and the injected credential |
+| `options` | map | adapter-specific setting with no shared semantic key | OpenCode family: `version`, `v1_binary`, `v2_binary`, `detect_timeout`; other adapters ignore unknown keys |
 | `timeout` | duration | bound an AFK run | runtime process control, not an adapter flag |
 
 Unknown keys fail at load time with the valid-key list (`ValidateRunParams`), so typos stop being silent no-ops. `LayerFromBee` maps the block and records the declared set so merging and attribution stay tri-state (`yolo` drives the internal `trust`/`force` pair the adapters still take).
@@ -84,7 +85,7 @@ Unknown keys fail at load time with the valid-key list (`ValidateRunParams`), so
 | cursor | `--output-format stream-json` |
 | pi | `--mode json` |
 | claude | `--output-format stream-json --verbose` |
-| opencode | `run --format json` |
+| opencode (v1 and v2) | `run --format json` |
 
 Debugging escape hatch: `paseka bee run --raw` (per invocation, never committed). When `--raw` costs a runtime feature — cursor loses `usage`/`providerSessionId`, session tracking degrades — the run log says so.
 
@@ -107,6 +108,26 @@ Debugging escape hatch: `paseka bee run --raw` (per invocation, never committed)
 - Split rule for the adapter: `vendor/rest` → `--provider <vendor> --model <rest>`, where **rest keeps everything after the first slash** — inner slashes and colon suffixes included. So `openrouter/deepseek/deepseek-r1:free` must arrive as `--provider openrouter --model deepseek/deepseek-r1:free`; stripping to `deepseek-r1:free` loses the vendor path and, with a stale catalog, degrades to a wrong custom model id. A bare id (`composer-2.5`) passes through unchanged.
 - Since Paseka passes `--thinking` explicitly for `reasoning:`, pi's suffix-as-thinking path is never consulted on Paseka launches (the fallback only reads the suffix when `--thinking` is absent).
 - Known limitation: a vendor suffix that happens to equal a valid thinking word (no live example) and is missing from the catalog would be consumed as thinking. Mitigation is catalog freshness (`pi update`), not client-side parsing.
+
+### OpenCode version proxy
+
+OpenCode 1 and OpenCode 2 cannot share the `opencode` command, and their CLIs disagree on flags, session APIs, and accounting. The family therefore registers three names:
+
+| Name | Behavior |
+| ---- | -------- |
+| `opencode` | version proxy: detects the installed major and delegates to `opencodev1` or `opencodev2`; reports its own name as `opencode` |
+| `opencodev1` | frozen OpenCode 1 implementation (AFK `--dir`, TUI control-server kickoff, `GET /session/<id>` usage) |
+| `opencodev2` | OpenCode 2 implementation (cwd-scoped AFK, Paseka-managed `serve` + `/api/session`, session-record accounting) |
+
+All three are valid `adapter:` values in bee YAML and profiles. A pinned name skips detection and sets its `version` option, so pinning is deterministic; the proxy resolves the major from configuration.
+
+**Binary resolution.** `params.binary` (bee) beats machine-local `binary`, which beats the built-in default `opencode`. With `version: auto`, detection runs `<binary> --version`; `v1_binary` and `v2_binary` are not consulted because the major is not yet known. With `version: 1` or `2`, that major's `v1_binary` / `v2_binary` overrides the resolved binary when set, and detection is skipped for dispatch. The proxy passes the resolved binary to the delegate, so post-run accounting talks to the executable that actually ran the agent.
+
+**Detection.** One `--version` call, default timeout `5s` (`detect_timeout`), cached in-process per resolved binary path plus its modification time and size. A burst of dispatches detects once; a replaced binary re-detects. Detection is fail-closed: unparsable, empty, or failed output is an error naming the binary, the raw output, and the `version` pin that bypasses detection. There is no fallback to V1. A set pin is verified cheaply when the binary answers, and a detected major that disagrees with the pin is an explicit mismatch error; if the binary cannot answer, the pin is trusted. A missing binary error names the install route for the selected major (`npm install -g opencode-ai@1` or `@2`).
+
+**Options.** Bee `params.options.<key>` supplies strings and wins over the machine-local defaults in `adapters/opencode.yaml`; the keys are `version` (`auto` \| `1` \| `2`), `v1_binary`, `v2_binary`, and `detect_timeout`. A `version: 1` / `2` pin in the machine file applies to the `opencode` proxy too; the pinned adapter names override it with their own major.
+
+**Identity.** Run meta and `session.json` record the **configured** adapter name (`opencode` for a proxied run) plus an optional `implementation` field naming what executed (`opencodev1` / `opencodev2`). Logs record adapter, implementation, binary, and detected or pinned major.
 
 ---
 
@@ -153,8 +174,9 @@ Logs redact argv and the plan's `RedactedEnv` keys (`adapters/log.go`); the Cons
 | Resolution sites | one `launch.ResolveLaunch` → `LaunchPlan`, shared by AFK and interactive |
 | Adapters | pure argv mappers plus a post-map hook for interactive extras |
 | `binary` precedence | committed bee wins; machine-local fills the gap; adapter default is the floor |
-| Params shape | semantic keys only (`yolo`, `reasoning`, `plan`, `model`, `binary`, `env`, `env_mode`, `timeout`); output format runtime-owned |
+| Params shape | semantic keys only (`yolo`, `reasoning`, `plan`, `model`, `binary`, `env`, `env_mode`, `options`, `timeout`); output format runtime-owned |
 | Provider | vendor lives in the model id (`vendor/model[:suffix]`); pi splits the first `/` (rest keeps suffixes), others pass through |
+| OpenCode majors | `opencode` detects and delegates; `opencodev1` / `opencodev2` pin a major; detection is cached and fail-closed |
 | Booleans | one semantic bool (`yolo`), tri-state across layers |
 | Unknown params | error at load with the valid-key list; legacy keys load with a deprecation warning |
 | `command` + params | error unless params are defaults (timeout exempt) |

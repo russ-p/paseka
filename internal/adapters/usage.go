@@ -14,8 +14,10 @@ func AddUsage(sum, next *protocol.Usage) *protocol.Usage {
 	}
 	sum.InputTokens += next.InputTokens
 	sum.OutputTokens += next.OutputTokens
+	sum.ReasoningTokens += next.ReasoningTokens
 	sum.CacheReadTokens += next.CacheReadTokens
 	sum.CacheWriteTokens += next.CacheWriteTokens
+	sum.CostUSD += next.CostUSD
 	sum.DurationMs += next.DurationMs
 	if sum.Source == "" {
 		sum.Source = next.Source

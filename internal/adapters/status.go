@@ -84,7 +84,7 @@ func RawOutputDegradedFeatures(adapter string) []string {
 		return []string{"stream events", "summary normalization"}
 	case "pi":
 		return []string{"usage", "providerSessionId", "summary normalization"}
-	case "opencode":
+	case "opencode", "opencodev1", "opencodev2":
 		return []string{"usage", "providerSessionId", "summary normalization"}
 	default:
 		return nil

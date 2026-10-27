@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -44,6 +45,13 @@ type RunRequest struct {
 	Binary string
 	Env    []string
 	Dir    string
+	// AdapterName is the configured adapter name to record in run metadata.
+	// Empty means the implementation's own name. A proxy sets it to itself
+	// before delegating, so a delegated run records both names.
+	AdapterName string
+	// Implementation names the concrete implementation executing this run.
+	// Empty means the implementation's own name.
+	Implementation string
 	// RedactedEnv names plan env keys whose values must never appear in logs:
 	// the injected credential and the declared pass-through keys.
 	RedactedEnv []string
@@ -72,6 +80,10 @@ type RunParams struct {
 	// Timeout bounds an AFK run, measured from launch. Zero means unbounded,
 	// which is the default and the only value interactive sessions use.
 	Timeout time.Duration
+	// Options carries adapter-specific settings as generic key/value pairs.
+	// The shared struct deliberately has no OpenCode-shaped fields; an adapter
+	// documents the keys it reads and ignores the rest.
+	Options map[string]string
 }
 
 // EnvModeStrict is the opt-in params.env_mode value: the child receives only the
@@ -113,4 +125,26 @@ type RunResult struct {
 type Adapter interface {
 	Name() string
 	Run(ctx context.Context, req RunRequest) (*RunResult, error)
+}
+
+// ImplementationResolver is an optional capability for a proxy adapter: it
+// reports which concrete implementation the given params would dispatch to,
+// without spawning an agent. Resume uses it to refuse cross-major continuations.
+type ImplementationResolver interface {
+	ResolveImplementation(params RunParams) (string, error)
+}
+
+// AdapterIdentity reports the configured adapter name and implementation name
+// to record for one invocation. An empty configured name falls back to the
+// implementation's own name, and an empty implementation name becomes own.
+func AdapterIdentity(configured, implementation, own string) (string, string) {
+	configured = strings.TrimSpace(configured)
+	implementation = strings.TrimSpace(implementation)
+	if configured == "" {
+		configured = own
+	}
+	if implementation == "" {
+		implementation = own
+	}
+	return configured, implementation
 }

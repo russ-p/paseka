@@ -116,6 +116,8 @@ func TestNormalizeInitAdapter(t *testing.T) {
 		{"PI", "pi"},
 		{"opencode", "opencode"},
 		{" OpenCode ", "opencode"},
+		{"opencodev1", "opencodev1"},
+		{" OpenCodeV2 ", "opencodev2"},
 		{" claude ", "cursor"},
 		{"unknown", "cursor"},
 	}
@@ -227,8 +229,14 @@ func TestInitScaffoldWithOpenCodeAdapter(t *testing.T) {
 	}
 
 	ocYAML := filepath.Join(res.HomeDir, "adapters", "opencode.yaml")
-	if _, err := os.Stat(ocYAML); err != nil {
+	adapterData, err := os.ReadFile(ocYAML)
+	if err != nil {
 		t.Fatalf("missing opencode adapter config: %v", err)
+	}
+	for _, key := range []string{"version:", "v1_binary:", "v2_binary:", "detect_timeout:"} {
+		if !strings.Contains(string(adapterData), key) {
+			t.Fatalf("opencode adapter scaffold should document %s:\n%s", key, adapterData)
+		}
 	}
 
 	cfg, err := os.ReadFile(filepath.Join(res.HomeDir, "config.yaml"))
@@ -241,6 +249,43 @@ func TestInitScaffoldWithOpenCodeAdapter(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "pi.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("pi.yaml should not be scaffolded for opencode init: %v", err)
+	}
+}
+
+func TestInitScaffoldWithPinnedOpenCodeAdapter(t *testing.T) {
+	for _, adapter := range []string{"opencodev1", "opencodev2"} {
+		t.Run(adapter, func(t *testing.T) {
+			repo := initTestRepo(t)
+			home := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", home)
+
+			res, err := colonyinit.Init(colonyinit.InitOptions{StartDir: repo, Adapter: adapter})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Adapter != adapter {
+				t.Fatalf("adapter = %q, want %q", res.Adapter, adapter)
+			}
+			for _, bee := range []string{"scout", "builder", "hivewright"} {
+				data, err := os.ReadFile(filepath.Join(repo, ".paseka", "bees", bee+".yaml"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(data), "adapter: "+adapter) {
+					t.Fatalf("%s bee should be pinned to %s:\n%s", bee, adapter, data)
+				}
+			}
+			cfg, err := os.ReadFile(filepath.Join(res.HomeDir, "config.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(cfg), "opencode: {}") {
+				t.Fatalf("home config should keep the one opencode adapter entry:\n%s", cfg)
+			}
+			if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "opencode.yaml")); err != nil {
+				t.Fatalf("pinned scaffold should still write opencode.yaml: %v", err)
+			}
+		})
 	}
 }
 

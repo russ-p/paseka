@@ -52,7 +52,7 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 ├── system.txt         # optional — rendered system_template (adapter injection)
 ├── summary.md         # runtime log: human-readable summary (not a success contract)
 ├── request.json       # runtime → observers: the resolved launch — adapter, model, profile, launchForm
-├── meta.json          # adapter → observers: bee, adapter, workspace, profile, startedAt, providerSessionId
+├── meta.json          # adapter → observers: bee, adapter, implementation, workspace, profile, startedAt, providerSessionId
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
 ├── session.json       # interactive only: pid, state, session metadata
 └── transcript.ndjson  # interactive only: dialogue audit log
@@ -269,39 +269,55 @@ Go implementation: `internal/adapters/claude/`.
 
 ### Example: OpenCode adapter (CLI)
 
-**Decision:** invoke the **OpenCode CLI** (`opencode`) for bees configured with `adapter: opencode`. AFK runs use `opencode run`; interactive sessions use the OpenCode TUI under a Paseka-owned PTY (see [interactive sessions](../guide/interactive-sessions.md)).
+**Decision:** invoke the **OpenCode CLI** through one of three adapter names. `opencode` is a version proxy; `opencodev1` and `opencodev2` are explicit pins for the two majors. AFK runs use `opencode run`; interactive sessions use the OpenCode TUI under a Paseka-owned PTY (see [interactive sessions](../guide/interactive-sessions.md)).
 
-| Input (bee config + event) | Maps to `opencode` flag |
-| ---------------------------- | ----------------------- |
-| `command` (optional) | full argv; overrides `params` mapping (see [bee config](../guide/bee-config.md)) |
-| `Workspace` | `--dir <path>` (AFK `run`) and process cwd (AFK and HITL) |
-| Prompt + `system_template` | joined into one message (OpenCode has no append-system flag) |
-| `params.model` | `--model <id>` (OpenCode consumes a native `provider/model` id) |
-| `params.yolo` (AFK, unless `params.plan`) | `--auto` |
-| `params.plan` | `--agent plan` (built-in read-only Plan primary; not Paseka `agentId`) |
-| output format (runtime-owned) | AFK `--format json` (`default` only under `bee run --raw`) |
-| `params.reasoning` | `--variant` (reasoning effort) |
-| `params.binary` | CLI binary name (default `opencode`) |
-| Auth | `opencode auth login`, provider env, or project `.env` (no `--api-key`) |
-| `agentId` (AFK) | `--title <agentId>` for later list correlation |
+| Name | Implementation | Behavior |
+| ---- | -------------- | -------- |
+| `opencode` | version proxy | runs `<binary> --version`, selects a major, delegates; reports itself as `opencode` in trails, Console, and status |
+| `opencodev1` | frozen V1 line | OpenCode 1 flags, throwaway-`serve` pre-create, control-server kickoff, `GET /session/<id>` usage |
+| `opencodev2` | new V2 line | cwd-scoped runs, Paseka-owned `/api/session` lifecycle, session-record accounting |
 
-Default non-interactive invocation:
+All three names are valid in bee YAML and profiles. The proxy resolves the major once per binary path (cached by path, mtime, and size) and fails closed on an unparsable `--version`; a pin skips detection. Install the needed major with `npm install -g opencode-ai@1` or `npm install -g opencode-ai@2`; when both coexist, `v1_binary` / `v2_binary` name them. Full resolution rules: [adapter launch resolution](../reference/adapter-launch-resolution.md#opencode-version-proxy).
+
+| Input (bee config + event) | `opencodev1` | `opencodev2` |
+| -------------------------- | ------------ | ------------ |
+| `command` (optional) | full argv; overrides `params` mapping | same |
+| `Workspace` | `--dir <path>` (AFK `run`) and process cwd (AFK and HITL) | process cwd only (V2 removed `--dir`); asserted before dispatch |
+| Prompt + `system_template` | joined into one message | joined into one message |
+| `params.model` | `--model <id>` (native `provider/model`) | `--model provider/model#variant` on AFK; session model object on HITL |
+| `params.yolo` (AFK, unless `params.plan`) | `--auto` | `--auto` |
+| `params.plan` | `--agent plan` | `--agent plan` on AFK; session `agent` on HITL |
+| output format (runtime-owned) | AFK `--format json` (`default` only under `bee run --raw`) | same |
+| `params.reasoning` | `--variant` | folded into the model reference as `#variant`; no separate flag |
+| `params.binary` | CLI binary name (default `opencode`) | same |
+| `params.options` | `version`, `v1_binary`, `v2_binary`, `detect_timeout` | same |
+| Auth | `opencode auth login`, provider env, or project `.env` (no `--api-key`) | same |
+| `agentId` (AFK) | `--title <agentId>` | `--title <agentId>` |
+
+V1 default non-interactive invocation:
 
 ```bash
 opencode run --format json --dir "$WORKSPACE" --auto --title "$AGENT_ID" \
   -- "$PROMPT"
 ```
 
-**Ignored / HITL differences:** Interactive sessions omit `run`, `--dir`, `--format`, `--auto`, and `--title`; workspace is process cwd. Permission prompts stay in the TUI.
+V2 default non-interactive invocation (workspace is the process cwd):
+
+```bash
+cd "$WORKSPACE" && opencode run --format json --auto --title "$AGENT_ID" \
+  --model anthropic/claude-sonnet-4#high -- "$PROMPT"
+```
+
+**Ignored / HITL differences:** interactive sessions omit `run`, `--format`, `--auto`, and `--title`; workspace is process cwd. V1 launches the TUI with `--session` plus its own loopback control server; V2 launches the TUI with `--server`, `--session`, `--prompt`, and `--auto` against a Paseka-managed `opencode serve`, because the V2 TUI rejects `--model`, `--agent`, `--variant`, `--port`, and `--hostname`. Permission prompts stay in the TUI.
 
 **Result collection:**
 
 1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
-2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
+2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`. Both OpenCode lines use the last `text` part as the summary fallback.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
-4. **Git diff** — after `opencode` exits, capture a **baseline-attributed** tracked diff in the **workspace**.
-5. **Stdout** — raw stdout is preserved as an artifact. In JSON format the adapter tolerantly reads `sessionID`, last `text` part for `summary.md`, and last `step_finish` `part.tokens` as optional `usage` (source `opencode.run-json`). The native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. HITL pre-creates the id (`opencode serve` + `POST /session`) and launches the TUI with `--session`, delivering the kickoff through the TUI's own loopback control server (`/session/<id>/prompt_async`) because the TUI ignores `--prompt` with `--session`. Export Agent log is unsupported in this slice (omit quietly).
-6. **Token usage (HITL)** — a TUI has no machine-readable stdout and its control server dies with the process, so after the session exits the adapter starts a throwaway `opencode serve` and reads the session's cumulative `tokens` from `GET /session/<id>` — source `opencode.server-json`, persisted as `usage` on `session.json`. Totals are cumulative for that provider session, so a resumed session includes earlier turns. An answer that reports nothing means no usage, never a failure.
+4. **Git diff** — after `opencode` exits, capture a **baseline-attributed** tracked diff in the **workspace** as a diff artifact.
+5. **Stdout** — raw stdout is preserved as an artifact. In JSON format both lines tolerantly read `sessionID` and the text parts; the native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. V1 reads token usage from `step_finish` parts (source `opencode.run-json`); V2 first reads the run stream (source `opencode.v2-run-stream`) and, when a single-step run emits no token event, falls back to the session record (source `opencode.v2-session-record`). V2 also records reasoning tokens and reported cost, and surfaces a provider outcome of `failed` / `interrupted` as a run warning.
+6. **Token usage (HITL)** — a TUI has no machine-readable stdout. V1 starts a throwaway `opencode serve` after exit and reads the session's cumulative `tokens` from `GET /session/<id>` (source `opencode.server-json`). V2 stops its managed server and starts a throwaway one to read the session record (source `opencode.v2-session-record`), so accounting is independent of the managed server's lifetime. Totals are cumulative for that provider session, so a resumed session includes earlier turns. An answer that reports nothing means no usage, never a failure.
 7. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 **Event publishing boundary:** OpenCode JSON is **not** parsed into domain bus events. Agents must publish via `paseka event emit --stdin`.
@@ -310,22 +326,28 @@ opencode run --format json --dir "$WORKSPACE" --auto --title "$AGENT_ID" \
 
 ```yaml
 binary: opencode
+# version: auto          # auto (default) | 1 | 2
+# v1_binary: opencode-v1 # used when the selected major is 1
+# v2_binary: opencode-v2 # used when the selected major is 2
+# detect_timeout: 5s     # bounds the --version probe
 ```
 
-If the file is missing, default is `binary: opencode`.
+If the file is missing, the default is `binary: opencode` with `version: auto`. `params.options` in a bee wins over these machine defaults, which lets one bee pin a major while the colony stays version-agnostic. The three names share this one file; `opencodev1` / `opencodev2` set the version option themselves.
 
 Example bee config:
 
 ```yaml
 # .paseka/bees/scout.yaml
 role: scout
-adapter: opencode
+adapter: opencode            # or opencodev1 / opencodev2 to pin
 params:
   model: anthropic/claude-sonnet-4
+  options:
+    version: "2"             # optional per-bee override
 prompt_template: scout.md
 ```
 
-Go implementation: `internal/adapters/opencode/`.
+Go implementation: `internal/adapters/opencode/` (proxy), `internal/adapters/opencodev1/`, `internal/adapters/opencodev2/`.
 
 ### Script adapter (bash / python / custom)
 
@@ -396,10 +418,10 @@ For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongsid
 
 | Mode | CLI | Adapter API |
 | ---- | --- | ----------- |
-| AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p`; OpenCode: `opencode run` |
+| AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p`; OpenCode: `opencode run` via the `opencode` proxy or a pinned `opencodev1` / `opencodev2` |
 | Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`; OpenCode: TUI without `run`, PTY-owned by runtime |
 
-Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; OpenCode HITL pre-creates a session (`opencode serve` + `POST /session`, no model turn), launches the TUI with `--session` plus its own loopback control server, and posts the kickoff to `/session/<id>/prompt_async`. **Resume** skips pre-create for both and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta). Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
+Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; OpenCode V1 pre-creates a session (`opencode serve` + `POST /session`, no model turn), launches the TUI with `--session` plus its own loopback control server, and posts the kickoff to `/session/<id>/prompt_async`; OpenCode V2 keeps a Paseka-managed `opencode serve`, creates the session with a caller-supplied id over `/api/session`, and launches the TUI with `--server` + `--session` + `--prompt`. **Resume** skips pre-create/creation for all and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta); a recorded implementation that disagrees with the major that would now run is refused with `generation_mismatch`. Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). The configured adapter name and the concrete `implementation` are recorded together. Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
 
 ---
 
@@ -544,7 +566,7 @@ internal/
   purge/                    # FS + bus purge (runs, worktrees, cache, trace artifacts)
   prompts/                  # load + render .paseka/prompts/*.md templates
   runs/                     # .paseka/runs/<traceId>/ layout: run dirs + meta/status, and the trail record (trail-events.ndjson)
-  adapters/                 # adapter registry + cursor/, pi/, claude/, opencode/, script/
+  adapters/                 # adapter registry + cursor/, pi/, claude/, opencode/ (proxy), opencodev1/, opencodev2/, script/
   sessions/                 # interactive PTY sessions, terminal attach
   gitroot/                  # repo identity, origin, replica fetch/push/ff-only pull, worktree-branch push, branch delete
   forge/                    # exec forge.command (capabilities/upsert/get JSON IPC); not a bee adapter
@@ -574,8 +596,8 @@ internal/
 | Cursor invocation | Cursor Agent CLI (`agent`) — port of `ai-tasks-run.sh` pattern |
 | Pi invocation | Pi CLI (`pi`) — AFK `pi -p`, interactive PTY; see §1 Pi adapter |
 | Claude invocation | Claude Code CLI (`claude`) — AFK `claude -p`, interactive PTY; see §1 Claude adapter |
-| OpenCode invocation | OpenCode CLI (`opencode`) — AFK `opencode run`, interactive TUI; see §1 OpenCode adapter |
-| Supported adapters | `cursor` (default), `pi`, `claude`, `opencode` — selected per bee via `adapter:` in `bees/*.yaml`; a process **profile** may replace LLM adapters |
+| OpenCode invocation | OpenCode CLI — `opencode` version proxy over `opencodev1` / `opencodev2`; AFK `opencode run`, interactive TUI; see §1 OpenCode adapter |
+| Supported adapters | `cursor` (default), `pi`, `claude`, `opencode`, `opencodev1`, `opencodev2`, `script` — selected per bee via `adapter:` in `bees/*.yaml`; a process **profile** may replace LLM adapters |
 | Agent run IPC | `.paseka/runs/<traceId>/<agentId>/` — file-based; entire `runs/` gitignored |
 | Prompt templates | `.paseka/prompts/` — committed; bee YAML references `prompt_template` and optional `system_template` |
 | Commit `.paseka/` | yes by default; `.gitignore` covers `worktrees/`, `runs/`, `*.local.yaml`, `cache/` |

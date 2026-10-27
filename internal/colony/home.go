@@ -79,14 +79,50 @@ type ClaudeAdapterConfig struct {
 func (c ClaudeAdapterConfig) BinaryDeclared() bool { return c.binaryDeclared }
 
 // OpenCodeAdapterConfig is ~/.config/paseka/<slug>/adapters/opencode.yaml.
+//
+// The OpenCode family is one machine-local file: `opencode` is the version
+// proxy, and `opencodev1` / `opencodev2` are explicit pins. version, v1_binary,
+// v2_binary, and detect_timeout are optional; existing files with only binary
+// stay valid.
 type OpenCodeAdapterConfig struct {
-	Binary string `yaml:"binary"`
+	Binary        string `yaml:"binary"`
+	Version       string `yaml:"version"`
+	V1Binary      string `yaml:"v1_binary"`
+	V2Binary      string `yaml:"v2_binary"`
+	DetectTimeout string `yaml:"detect_timeout"`
 
-	binaryDeclared bool
+	binaryDeclared        bool
+	versionDeclared       bool
+	v1BinaryDeclared      bool
+	v2BinaryDeclared      bool
+	detectTimeoutDeclared bool
 }
 
 // BinaryDeclared reports whether the effective config set `binary`.
 func (c OpenCodeAdapterConfig) BinaryDeclared() bool { return c.binaryDeclared }
+
+// Options returns the adapter-specific settings the file actually declared.
+// Only declared keys travel, so a machine file can act as a default without
+// clobbering a bee's params.options.
+func (c OpenCodeAdapterConfig) Options() map[string]string {
+	opts := map[string]string{}
+	if c.versionDeclared {
+		opts["version"] = c.Version
+	}
+	if c.v1BinaryDeclared {
+		opts["v1_binary"] = c.V1Binary
+	}
+	if c.v2BinaryDeclared {
+		opts["v2_binary"] = c.V2Binary
+	}
+	if c.detectTimeoutDeclared {
+		opts["detect_timeout"] = c.DetectTimeout
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts
+}
 
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
@@ -365,8 +401,15 @@ func LoadOpenCodeAdapter(slug string) (OpenCodeAdapterConfig, error) {
 		return OpenCodeAdapterConfig{}, fmt.Errorf("parse opencode adapter config: %w", err)
 	}
 	cfg.binaryDeclared = strings.TrimSpace(cfg.Binary) != ""
+	cfg.versionDeclared = strings.TrimSpace(cfg.Version) != ""
+	cfg.v1BinaryDeclared = strings.TrimSpace(cfg.V1Binary) != ""
+	cfg.v2BinaryDeclared = strings.TrimSpace(cfg.V2Binary) != ""
+	cfg.detectTimeoutDeclared = strings.TrimSpace(cfg.DetectTimeout) != ""
 	if cfg.Binary == "" {
 		cfg.Binary = "opencode"
+	}
+	if cfg.Version == "" {
+		cfg.Version = "auto"
 	}
 	return cfg, nil
 }

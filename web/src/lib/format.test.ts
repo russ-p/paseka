@@ -46,6 +46,7 @@ import {
 	sessionDuration,
 	sessionIdentityRows,
 	sessionRelayBlocker,
+	sessionResumable,
 	sessionResumeBlocker,
 	sessionRowMeta,
 	sessionStateLabel,
@@ -1347,6 +1348,13 @@ describe('session formatting', () => {
 		).toMatch(/never reported a session id/);
 		// Both halves present is the only resumable shape, and then there is nothing to say.
 		expect(sessionResumeBlocker(session({ adapter: 'cursor', providerSessionId: 'prov-1' }))).toBe('');
+	});
+
+	it('accepts every OpenCode name for resume controls', () => {
+		for (const adapter of ['cursor', 'opencode', 'opencodev1', 'opencodev2']) {
+			expect(sessionResumable(session({ adapter }))).toBe(true);
+		}
+		expect(sessionResumable(session({ adapter: 'pi' }))).toBe(false);
 	});
 
 	it('turns a relay refusal into something an operator can act on', () => {

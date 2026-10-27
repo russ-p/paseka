@@ -164,6 +164,22 @@ func overlayOpenCodeAdapter(base OpenCodeAdapterConfig, path string) (OpenCodeAd
 		base.Binary = over.Binary
 		base.binaryDeclared = true
 	}
+	if strings.TrimSpace(over.Version) != "" {
+		base.Version = over.Version
+		base.versionDeclared = true
+	}
+	if strings.TrimSpace(over.V1Binary) != "" {
+		base.V1Binary = over.V1Binary
+		base.v1BinaryDeclared = true
+	}
+	if strings.TrimSpace(over.V2Binary) != "" {
+		base.V2Binary = over.V2Binary
+		base.v2BinaryDeclared = true
+	}
+	if strings.TrimSpace(over.DetectTimeout) != "" {
+		base.DetectTimeout = over.DetectTimeout
+		base.detectTimeoutDeclared = true
+	}
 	return base, nil
 }
 

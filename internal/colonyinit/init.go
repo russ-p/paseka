@@ -853,8 +853,14 @@ publishes:
 # api_key_env: GEMINI_API_KEY   # optional; passed as --api-key when set in env
 `
 	opencodeAdapterYAML = `binary: opencode
+# version: auto   # auto (default) | 1 | 2 — pin the OpenCode major
+# v1_binary: opencode-v1   # optional; the OpenCode 1 executable
+# v2_binary: opencode-v2   # optional; the OpenCode 2 executable
+# detect_timeout: 5s       # optional; bounds the --version probe
 # Auth is via opencode auth login (~/.local/share/opencode/auth.json)
 # and provider environment variables or a project .env.
+# OpenCode 1: npm install -g opencode-ai@1
+# OpenCode 2: npm install -g opencode-ai@2
 `
 	scoutBeeOpenCodeYAML = `role: scout
 adapter: opencode

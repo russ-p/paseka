@@ -65,7 +65,7 @@ type Bee struct {
 | YAML field | Required | Meaning |
 | ---------- | -------- | ------- |
 | `role` | recommended | Role name. If empty, defaults to the filename stem (`builder.yaml` → `builder`). |
-| `adapter` | no | `cursor` (default), `pi`, `claude`, `opencode`, or `script`. Unknown names fail load. A process `--profile` with global `adapter:` **replaces** this for LLM bees that have no `command:`. |
+| `adapter` | no | `cursor` (default), `pi`, `claude`, `opencode`, `opencodev1`, `opencodev2`, or `script`. Unknown names fail load. A process `--profile` with global `adapter:` **replaces** this for LLM bees that have no `command:`. |
 | `prompt_template` | usually | Path relative to `.paseka/prompts/`. User/task turn. Optional for `adapter: script` (no colony default applied when omitted). |
 | `system_template` | no | Path relative to `.paseka/prompts/`. Role / standing instructions injected by the adapter (see [prompt templates](prompt-templates.md)). |
 | `sector` | no | Default sector name from `colony.yaml` `sectors`. Task `sector` wins when set. |
@@ -164,15 +164,19 @@ publishes:
 
 ## 4. Adapters
 
-`ResolveAdapter()` defaults empty `adapter` to `cursor`. Allowed values: `cursor`, `pi`, `claude`, `opencode`, `script`.
+`ResolveAdapter()` defaults empty `adapter` to `cursor`. Allowed values: `cursor`, `pi`, `claude`, `opencode`, `opencodev1`, `opencodev2`, `script`.
 
 | Adapter | Notes |
 | ------- | ----- |
 | `cursor` | Cursor Agent CLI (`agent`). Params map to CLI flags unless `command` is set. With `system_template`, runtime merges system + task into the positional prompt (`$PROMPT`); Pi/Claude use separate append-system flags instead; OpenCode also merges into one message. |
 | `pi` | Pi CLI (`pi`). Params: `model`, `reasoning`, `plan`, `binary` (no `yolo` equivalent; `paseka doctor` warns when set). A `vendor/model[:suffix]` model is split at the first `/` into `--provider <vendor> --model <rest>`; the rest keeps inner slashes and colon suffixes. Output mode is runtime-owned (`--mode json`; `text` only under `bee run --raw`). Reports token `usage` on AFK `result.json` (`--mode json` events, else the run-scoped session file) and on interactive `session.json`. |
 | `claude` | Claude Code CLI; same params plumbing as other LLM adapters. |
-| `opencode` | OpenCode CLI (`opencode`). AFK `opencode run`; HITL TUI. Params: `model` (native `provider/model`), `yolo` → `--auto`, `reasoning` → `--variant`, `plan` → `--agent plan`, `binary`. Output format is runtime-owned (`--format json`; `default` only under `bee run --raw`). Auth via `opencode auth login` / env. Reports token `usage` from `step_finish` parts on AFK `result.json`, and from the provider's session totals on interactive `session.json`. |
+| `opencode` | OpenCode version proxy. Detects the installed major with `opencode --version` and delegates to the `opencodev1` or `opencodev2` implementation, while still reporting itself as `opencode` in trails and Console. Params: `model`, `yolo` → `--auto` (V1 and V2 AFK), `reasoning` (V1 `--variant`; V2 folds it into `provider/model#variant`), `plan` → `--agent plan`, `binary`, and `options` for version pinning. Output format is runtime-owned (`run --format json`; `default` only under `bee run --raw`). Auth via `opencode auth login` / env. |
+| `opencodev1` | Frozen OpenCode 1 line. Same behavior as the pre-split adapter: AFK `opencode run --dir <workspace> --format json`; HITL pre-creates a session through a throwaway `opencode serve` + `POST /session`, launches the TUI with `--session` plus a loopback control server, and reports usage from `GET /session/<id>` (source `opencode.server-json`). Pinning skips detection. |
+| `opencodev2` | OpenCode 2 line. AFK `opencode run` scoped by process cwd (no `--dir`), with the reasoning variant on the model as `provider/model#variant`; usage comes from the session record (source `opencode.v2-session-record`) when the stream emits no token event. HITL runs against a Paseka-managed `opencode serve`: Paseka creates the session with a caller-supplied id over `/api/session`, then launches the TUI with only `--server`, `--session`, `--prompt`, and `--auto`. Pinning skips detection. |
 | `script` | **Requires** `command`. AFK-only (`bee run`); `bee chat` is LLM-only. `params` ignored. `prompt_template` optional. |
+
+The three OpenCode names share one machine-local file, `~/.config/paseka/<slug>/adapters/opencode.yaml`. `opencode` stays version-agnostic; `opencodev1` / `opencodev2` pin a major and prefer `v1_binary` / `v2_binary`. Install the major you need with `npm install -g opencode-ai@1` or `npm install -g opencode-ai@2`; with both installed, point `v1_binary` and `v2_binary` at the two executables. Detection is fail-closed: an unreadable `--version` is an error, not a fallback to V1 flags. See [adapter launch resolution](../reference/adapter-launch-resolution.md#opencode-version-proxy) for the full resolution and caching rules, and [interactive sessions](interactive-sessions.md#10-opencode-adapter-interactive) for the V2 session lifecycle.
 
 Adapter drivers and flag mapping live in [architecture overview](../architecture/overview.md) §1. Machine-local credentials stay in `~/.config/paseka/<slug>/adapters/*.yaml`.
 
@@ -209,7 +213,8 @@ Mapped by `LayerFromBee` (`internal/colony/params.go`). Defaults: `yolo: true`.
 | `yolo` | bool | cursor (`--trust --force`); claude (`bypassPermissions`); opencode AFK (`--auto`); pi has no equivalent (doctor warns) |
 | `plan` | bool | cursor (`--plan`); pi (`--plan`); claude (`plan`); opencode (`--agent plan`). Wins over `yolo`: the read-only plan mode drops trust/force. |
 | `binary` | string | override CLI binary name |
-| `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant`); cursor and claude have no mapping (doctor warns) |
+| `options` | map | adapter-specific settings with no shared semantic key. OpenCode family: `version` (`auto` \| `1` \| `2`), `v1_binary`, `v2_binary`, `detect_timeout` (for example `10s`). Bee values win over the machine-local `adapters/opencode.yaml` defaults; other adapters ignore unknown keys. |
+| `reasoning` | string | `low` \| `medium` \| `high` \| `passthrough` — pi (`--thinking`); opencode (`--variant` on V1, folded into `provider/model#variant` on V2); cursor and claude have no mapping (doctor warns) |
 | `env` | map | declared pass-through environment for the child and its `post_exec` hook. Values are literals or host references (`GITHUB_TOKEN: $HOST_GITHUB_TOKEN`). The declared keys are redacted in adapter logs. |
 | `env_mode` | string | `strict` opts into denying undeclared environment: the child keeps only process essentials (`PATH`, `HOME`, locale, `PASEKA_*`), declared `env`, and the injected credential. Default inherits the whole parent environment. |
 | `timeout` | duration | **AFK only**, opt-in. Bounds the run (e.g. `90s`, `5m`), measured from launch: a timeout is enforced as SIGTERM, then SIGKILL after a short grace, and the run reports `cancelled` with reason `timeout` on `status.json` so a post-mortem can tell slow from stuck. Absent means unbounded (the default). Compatible with `command`: it is process control, not an adapter flag. Interactive `bee chat` sessions ignore it — the human is the timeout. |
