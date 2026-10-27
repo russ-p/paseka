@@ -51,6 +51,12 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	InlinePrompt string
+	// ConfigRef and ConfigRevision are the configuration version the session
+	// must run under. A continuation keeps the version captured when its work
+	// was admitted; an empty ConfigRef resolves the trail's active version, as
+	// legacy sessions do.
+	ConfigRef      string
+	ConfigRevision int
 
 	resumeFrom       string
 	resumeProviderID string
@@ -227,6 +233,16 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	execColony, trailManifest, boundConfig, err := trailconfig.BindNewWork(ctxColony, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: trail config: %w", err)
+	}
+	// A continuation keeps the configuration captured when it was admitted.
+	// Resolving the trail's later active revision here would run new prompts,
+	// tools, and adapters inside an already-open session.
+	if ref := strings.TrimSpace(req.ConfigRef); ref != "" && ref != execColony.ConfigRef {
+		bound, err := trailconfig.BindRef(execColony, traceID, ref, req.ConfigRevision)
+		if err != nil {
+			return nil, fmt.Errorf("sessions: configuration %s revision %d is unavailable: %w", ref, req.ConfigRevision, err)
+		}
+		execColony = bound
 	}
 	if scope.Experimental {
 		if !boundConfig {

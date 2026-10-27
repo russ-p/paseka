@@ -3,12 +3,14 @@ package sessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/homestate"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
 const (
@@ -20,6 +22,7 @@ const (
 	ResumeErrAdapterChanged      = "adapter_changed"
 	ResumeErrGenerationMismatch  = "generation_mismatch"
 	ResumeErrBeeGone             = "bee_gone"
+	ResumeErrConfigUnavailable   = "config_unavailable"
 )
 
 // resumableSessionAdapters lists providers whose HITL sessions can continue by
@@ -141,7 +144,24 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 	if providerID == "" {
 		return RunRequest{}, resumeErr(ResumeErrNoProviderSessionID, 400, "source session has no providerSessionId")
 	}
-	bee, _, err := ctxColony.LoadBee(source.Bee)
+	// A session runs under the configuration captured when its work was
+	// admitted. Binding that exact version keeps later active revisions from
+	// changing the procedure of an already-open session, and makes a renamed or
+	// removed role resolvable from the retained snapshot rather than the live
+	// colony.
+	boundColony := ctxColony
+	sourceConfigRef := strings.TrimSpace(source.ConfigRef)
+	if sourceConfigRef != "" {
+		bound, err := trailconfig.BindRef(ctxColony, source.TraceID, sourceConfigRef, source.ConfigRevision)
+		if err != nil {
+			return RunRequest{}, resumeErr(ResumeErrConfigUnavailable, 409, fmt.Sprintf(
+				"source session configuration %s revision %d is no longer available: %v",
+				sourceConfigRef, source.ConfigRevision, err,
+			))
+		}
+		boundColony = bound
+	}
+	bee, _, err := boundColony.LoadBee(source.Bee)
 	if err != nil {
 		return RunRequest{}, resumeErr(ResumeErrBeeGone, 400, "source bee is gone or unreadable")
 	}
@@ -161,7 +181,7 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 	// Cross-major continuation is refused fail-closed: Paseka does not depend on
 	// the provider to fail a V1 id fed to V2 (or the reverse) usefully. A
 	// pre-split session records no generation and stays eligible.
-	if next, err := m.nextImplementation(ctxColony, adapterName, bee); err != nil {
+	if next, err := m.nextImplementation(boundColony, adapterName, bee); err != nil {
 		return RunRequest{}, err
 	} else if recorded := strings.TrimSpace(source.Implementation); recorded != "" && next != "" && recorded != next {
 		return RunRequest{}, resumeErr(ResumeErrGenerationMismatch, 400,
@@ -180,6 +200,8 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 		Bee:              source.Bee,
 		TraceID:          source.TraceID,
 		Task:             strings.TrimSpace(req.Continue),
+		ConfigRef:        sourceConfigRef,
+		ConfigRevision:   source.ConfigRevision,
 		resumeFrom:       sessionID,
 		resumeProviderID: providerID,
 	}, nil

@@ -139,7 +139,7 @@ func EnsureTaskAttempt(ctx colony.Context, traceID, taskID, sourceEventID string
 				return entries, nil
 			}
 		}
-		entry = newAttempt(m, traceID, taskID, "", AttemptKindTask, sourceEventID, input)
+		entry = newAttempt(ctx, m, traceID, taskID, "", AttemptKindTask, sourceEventID, input)
 		return append(entries, entry), nil
 	})
 	return entry, err
@@ -165,7 +165,7 @@ func AdmitChainAttempt(ctx colony.Context, traceID, chainKey, taskID, sourceEven
 				return entries, nil
 			}
 		}
-		entry = newAttempt(m, traceID, taskID, chainKey, AttemptKindDirect, sourceEventID, nil)
+		entry = newAttempt(ctx, m, traceID, taskID, chainKey, AttemptKindDirect, sourceEventID, nil)
 		created = true
 		return append(entries, entry), nil
 	})
@@ -216,7 +216,7 @@ func EnsureTaskAttemptGated(ctx colony.Context, traceID, taskID, sourceEventID s
 			blocked = true
 			return entries, nil
 		}
-		entry = newAttempt(m, traceID, taskID, "", AttemptKindTask, sourceEventID, input)
+		entry = newAttempt(ctx, m, traceID, taskID, "", AttemptKindTask, sourceEventID, input)
 		return append(entries, entry), nil
 	})
 	return entry, blocked, err
@@ -263,14 +263,24 @@ func AdmitChainAttemptGated(ctx colony.Context, traceID, chainKey, taskID, sourc
 			blocked = true
 			return entries, nil
 		}
-		entry = newAttempt(m, traceID, taskID, chainKey, AttemptKindDirect, sourceEventID, nil)
+		entry = newAttempt(ctx, m, traceID, taskID, chainKey, AttemptKindDirect, sourceEventID, nil)
 		created = true
 		return append(entries, entry), nil
 	})
 	return entry, created, blocked, err
 }
 
-func newAttempt(m Manifest, traceID, taskID, chainKey, kind, sourceEventID string, input *TaskInputEvidence) Attempt {
+// newAttempt records one execution ownership entry. The attempt carries the
+// version it actually runs under: a context bound to a retained snapshot (a
+// pinned session or a fork) records that snapshot, while an unbound context
+// records the manifest's active version.
+func newAttempt(ctx colony.Context, m Manifest, traceID, taskID, chainKey, kind, sourceEventID string, input *TaskInputEvidence) Attempt {
+	configRef := strings.TrimSpace(ctx.ConfigRef)
+	configRevision := ctx.ConfigRevision
+	if configRef == "" {
+		configRef = m.ActiveConfigRef
+		configRevision = m.ConfigRevision
+	}
 	return Attempt{
 		SchemaVersion:        attemptsVersion,
 		AttemptID:            newAttemptID(),
@@ -278,8 +288,8 @@ func newAttempt(m Manifest, traceID, taskID, chainKey, kind, sourceEventID strin
 		TaskID:               taskID,
 		ChainKey:             chainKey,
 		Kind:                 kind,
-		ConfigRef:            m.ActiveConfigRef,
-		ConfigRevision:       m.ConfigRevision,
+		ConfigRef:            configRef,
+		ConfigRevision:       configRevision,
 		InitialCodeBaseSHA:   m.InitialCodeBaseSHA,
 		InitialCodeBaseDirty: m.InitialCodeBaseDirty,
 		TaskInput:            input,
