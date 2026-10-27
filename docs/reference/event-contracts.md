@@ -74,6 +74,10 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `SIGNAL` | `session.invite` | `inviteId`, `bee`, `task`, `status` | auto-invite/operator → gateway |
 | `SIGNAL` | `beekeeper.ready` | invite response fields | beekeeper → interactive session |
 | `SIGNAL` | `artifact.written` | artifact `ref` and kind, singular or `artifacts[]` | bee/Console → trail consumers |
+| `SIGNAL` | `trail.fork` | `requestId`, `sourceTrace`, `delta` (`none` or `patch`), `patch` when `delta` is `patch` | granted bee → pending fork request |
+| `SIGNAL` | `trail.fork.approve` | `requestId` | reserved operator sender → fork creation |
+| `SIGNAL` | `trail.fork.reject` | `requestId` | reserved operator sender → pending request refused |
+| `SIGNAL` | `trail.fork.cancel` | `requestId` | reserved operator sender → pending request cancelled |
 
 Narrative and operational `INSIGHT` kinds are catalogued separately in
 [INSIGHT kinds](insight-kinds.md) (`pr.body` is operational pull-request copy;
@@ -99,6 +103,34 @@ A `code.proposal*` payload is valid with at least one of `diff`, `ref`, or
 An explicitly authored `MUTATION` with an inline `diff` remains valid and is
 passed through unchanged; it gets no automatic patch conversion. See
 [Spec 039](../specs/039-proposal-patch-records.md).
+
+### Fork control requests
+
+`SIGNAL/trail.fork` is admission control, not trail work: the Reactor handles it
+before configuration-dependent routing, so it does not depend on any bee
+subscribing to it, and a refused request leaves no runnable trail behind.
+
+- **Request.** The sender must resolve to a recorded bee run whose canonical bee
+  definition explicitly declares publishing `SIGNAL/trail.fork`. A claimed role,
+  or a declaration added by a candidate configuration, grants nothing. An
+  eligible request is recorded as a durable pending record under the source
+  trail's `fork-requests/` directory; it creates no trail identity, snapshot,
+  worktree, honey reserve, or task plan. `requestId` is the idempotency
+  identity: repeated delivery returns the recorded request, and reusing it with
+  different contents is refused.
+- **Delta.** `delta` is an explicit selection. `none` is a control arm using the
+  source configuration; `patch` requires `patch` to name a recorded proposal
+  patch. `budget` must not be negative and may not exceed the colony ceiling.
+- **Decision.** `approve`, `reject`, and `cancel` are accepted only when
+  `agentId` is the reserved `operator` identity and does not resolve to a
+  recorded run, so an ordinary bee cannot decide its own request. `approve`
+  performs the on-disk creation exactly once and is idempotent; `reject` and
+  `cancel` create nothing. Pending requests are quota-bound and expire.
+- **CLI and Console use the control path directly.** `paseka trail fork` and the
+  Console's approve/reject/cancel actions call the same service as the operator
+  and do not need to publish these kinds.
+
+See [Spec 042](../specs/042-trail-fork.md) §14–15 and [CLI](../guide/cli.md#paseka-trail).
 
 ## Colony-defined kinds
 
@@ -141,13 +173,19 @@ events keep the normal subjects, envelope, and payloads; the only general
 identity that distinguishes a fork is `traceId`. Do not look for a fork-specific
 field, header, or subject prefix in v1.
 
-Built-in work-producing and side-effecting consumers — the Reactor, interactive
-sessions, the Human Gateway notifier, review/delivery, metrics, and audit reads —
-resolve the event's trail lineage through the shared trail read model before
-acting. `trailview.ResolveScope` reads the trail's configuration policy and fork
-lineage and reports `experimental`, its `forkOf` source, and any missing
-evidence. A consumer that cannot resolve scope logs the problem and does not
-guess; it never falls back to treating an experiment as ordinary work.
+The Reactor, interactive sessions, the Human Gateway notifier, and
+`paseka inspect` resolve an event's trail lineage through the shared trail read
+model before acting. `trailview.ResolveScope` reads the trail's configuration
+policy and fork lineage and reports `experimental`, its `forkOf` source,
+admission state, and any missing evidence. A consumer that cannot resolve scope
+logs the problem and does not guess; it never falls back to treating an
+experiment as ordinary work.
+
+Review and delivery do not go through `ResolveScope`. Every merge, branch-push,
+and pull-request entry point calls `review.IsExperimentalTrail`, which treats a
+trail as experimental when its immutable configuration policy is `pinned` or
+when fork lineage exists. A fork therefore stays undeliverable even if its
+binding is unavailable or has been replaced.
 
 The same rule applies in both directions:
 

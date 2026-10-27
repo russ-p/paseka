@@ -43,25 +43,38 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │   ├── feature.yaml
 │   └── hotfix.yaml
 ├── .gitignore           # ignores worktrees/, runs/, cache/, *.local.yaml
-├── runs/                # gitignored — per-agent file IPC and trail comb (architecture overview; purge --runs wipes standing checkpoints)
+├── runs/                # gitignored — per-agent file IPC, trail records, and retained configuration
 │   └── <traceId>/
 │       ├── trail-events.ndjson   # the trail's own record — every domain event the colony published for it
+│       ├── fork.json             # fork lineage, when the trail is an experiment
 │       ├── <agentId>/
 │       │   ├── prompt.txt
 │       │   ├── system.txt   # optional — rendered system_template
 │       │   ├── summary.md
 │       │   ├── meta.json
 │       │   └── status.json
-│       └── tasks/
-│           └── <taskId>/
-│               ├── task.md
-│               └── runs.ndjson
-│       └── proposals/           # proposal patches — runtime-owned code history (not a comb)
-│           ├── <agentId>.patch  # the diff the collector returned at finalization
-│           └── <agentId>.json   # sidecar metadata + publication state
+│       ├── tasks/
+│       │   └── <taskId>/
+│       │       ├── task.md
+│       │       └── runs.ndjson
+│       ├── proposals/           # proposal patches — runtime-owned code history (not a comb)
+│       │   ├── <agentId>.patch  # the diff the collector returned at finalization
+│       │   └── <agentId>.json   # sidecar metadata + publication state
+│       ├── config/              # immutable trail configuration (runtime-owned)
+│       │   ├── manifest.json    # initial/active ConfigRef, revision, policy, history, pending action
+│       │   └── snapshots/
+│       │       └── <ConfigRef>/ # complete inputs, resolved settings, and inventory
+│       └── fork-requests/       # pending and decided fork requests (not a trail)
+│           └── <requestId>.json
 └── worktrees/           # gitignored — isolated mutation workspaces
     └── <traceId>/
 ```
+
+`config/` and `fork.json` are runtime records, not operator-editable overrides: an
+ordinary trail keeps its initial, active, and previously applied snapshots until
+the whole trail is purged, and a fork keeps its own source and candidate copies.
+`fork-requests/` belongs to the source trail and holds requests that have no
+runnable trail yet. See [CLI — `paseka trail`](cli.md#paseka-trail).
 
 **`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`defaults.delivery`** (`local_merge` or `pull_request`; see [pull-request delivery](pull-request-delivery.md)), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), and optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
 

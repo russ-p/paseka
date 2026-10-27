@@ -2,7 +2,7 @@
 
 ## Status
 
-**Approved**
+**Implemented**
 Trail-owned configuration snapshots, explicit application of new revisions during ordinary work, and pinned experimental forks executed by the colony's existing Reactor. Human approval for agent-originated requests and consumer scope are fixed for v1; active-fork cap and spending policy are deferred.
 
 Related: [008 code proposal workspaces](008-code-proposal-workspaces.md),

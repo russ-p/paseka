@@ -995,18 +995,179 @@ paseka proposal discard --trace trace-1 --task _review --reason "Superseded by t
 
 ## `paseka trail`
 
-Inspect flight trails and manage their captured configuration and experiments.
-`trail list`, `trail show`, and `trail config` read the same collection as Queen
-Console; `trail fork` creates an experiment with its own pinned configuration.
+Inspect flight trails, manage their captured configuration, and run experimental
+forks. `trail list`, `trail show`, and the `trail config` group read the same
+trail collection as Queen Console; `trail fork` creates an experiment with its
+own pinned configuration. Every subcommand takes `--path`/`-C` and `--json`.
 
 ```text
 paseka trail list [--forks] [--source <traceId>] [--limit N] [--json]
 paseka trail show <traceId> [--json]
-paseka trail config show <traceId>
+paseka trail config capture <traceId> [--expected-revision N] [--json]
+paseka trail config apply <traceId> (--from-colony | --snapshot <ConfigRef> | --set bee.<role>.<param>=<value>...)
+                      [--reason <text>] [--expected-revision N] [--request-id <id>] [--dry-run] [--json]
+paseka trail config show <traceId> [--json]
+paseka trail config cancel <traceId> [changeId] [--reason <text>] [--json]
+paseka trail fork --source <traceId> (--delta <proposal-patch> | --no-delta)
+                  [--task <taskId>] [--source-run <agentId>] [--base <sha>]
+                  [--honey N] [--title <text>] [--request-id <id>] [--dry-run] [--json]
+paseka trail fork pending [--all] [--json]
+paseka trail fork approve <requestId> [--reason <text>] [--json]
+paseka trail fork reject <requestId> [--reason <text>] [--json]
+paseka trail fork cancel <requestId> [--reason <text>] [--json]
 paseka trail drop <traceId> [--reason <text>] [--dry-run] [--json]
 ```
 
-### `paseka trail drop`
+### `paseka trail list`
+
+List runnable trails with their binding and lineage: trace, admission state,
+active `ConfigRef`, revision, policy, source trail (`FORK OF`), run count, last
+activity, and title.
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--forks` | | List only experimental forks; dropped records stay listed |
+| `--source` | | List forks of one source trail (implies `--forks`) |
+| `--limit` | | Maximum rows to print (0 = all) |
+| `--json` | | Print `{trails, pendingForkRequests}` |
+| `--path` | `-C` | Colony resolution start directory |
+
+Pending fork requests are not trails and do not appear as rows. When any exist,
+the command prints how many and points at `trail fork pending`.
+`--json` includes them under `pendingForkRequests`.
+
+### `paseka trail show <traceId>`
+
+Show one trail's admission state, active configuration, and lineage, then the
+full binding (policy, revision, initial/active `ConfigRef`, config directory, and
+any pending change with its blockers), the fork record (source task and attempt,
+source configuration, base, delta, workspace, branch, budget, state), the change
+history, and a `missing evidence` list.
+
+A trail with configuration but no runnable history still answers from its
+manifest and says so; a trail with neither is an error.
+
+### `paseka trail config capture <traceId>`
+
+Capture the current colony configuration as revision 1 of a trail that predates
+configuration capture. The trail must still be at revision 0, so the command
+establishes a binding for **future** work without claiming a snapshot for runs
+that already happened.
+
+| Flag | Description |
+| ---- | ----------- |
+| `--expected-revision` | Revision the trail must have before capture (default 0) |
+| `--json` | Print the resulting manifest |
+| `--path` | Colony resolution start directory |
+
+### `paseka trail config apply <traceId>`
+
+Preview and apply one new configuration revision to an ordinary trail. Choose
+exactly one source:
+
+- `--from-colony` — capture the colony's current definitions, selected profile,
+  and local contributions.
+- `--snapshot <ConfigRef>` — reactivate a complete version this trail already
+  retains, including a previous one for rollback.
+- `--set bee.<role>.<param>=<value>` — derive a candidate from the active
+  version with validated behavioural overrides (repeatable; never identity,
+  transport, credentials, budget, or delivery policy).
+
+| Flag | Description |
+| ---- | ----------- |
+| `--reason` | Operator reason recorded in the change history |
+| `--expected-revision` | Fail if the active revision differs; when omitted the CLI reads and submits the current revision |
+| `--request-id` | Idempotency identity for retried deliveries |
+| `--dry-run` | Validate and preview without writing anything |
+| `--json` | Print the full result |
+| `--path` | Colony resolution start directory |
+
+The preview reports old and new `ConfigRef`, remaining unstarted work, effective
+and shadowed differences, and any blocking execution scope. Outcomes are
+`applied` (boundary was already safe), `pending` (recorded with its blockers and
+activated when they drain), `unchanged` (the selected content is already active;
+no new revision), or `rejected` (policy, validation, or a stale expected
+revision). A rejected outcome is a non-zero CLI error.
+
+Applying configuration never edits application code, resets task state, creates
+a worktree, replenishes honey, launches an agent, or retries a task. A pinned
+experimental trail refuses the action outright.
+
+### `paseka trail config show <traceId>`
+
+Show policy, revision, initial and active `ConfigRef`, the configuration
+directory, any pending change with its blockers, and the append-only change
+history (revision, outcome, source, actor, old/new refs, expected revision,
+requested and applied times). A trail with no binding is an error.
+
+### `paseka trail config cancel <traceId> [changeId]`
+
+Cancel a pending configuration change without touching the active version. The
+optional `changeId` must match the pending action when given; cancellation
+records the actor and reason. It cannot undo a transition that already applied —
+use `apply --snapshot` to roll forward again instead.
+
+| Flag | Description |
+| ---- | ----------- |
+| `--reason` | Operator reason recorded in history |
+| `--json` | Print the resulting manifest |
+| `--path` | Colony resolution start directory |
+
+### `paseka trail fork`
+
+Preview and create an experimental fork of an existing trail. Choose exactly one
+of `--delta <proposal-patch>` (apply a recorded proposal patch, named by archive
+ref or agent id, to the source snapshot) or `--no-delta` (a control arm using the
+source configuration).
+
+| Flag | Description |
+| ---- | ----------- |
+| `--source` | Source trail id (required) |
+| `--task` | Source task id; defaults to the single unambiguous root task |
+| `--source-run` | Source agent run selecting one recorded attempt when several are eligible |
+| `--base` | Explicit code base commit; recorded as an override and removes the equal-base guarantee |
+| `--honey` | Initial honey reserve; defaults to the colony energy ceiling |
+| `--title` | Fork trail title |
+| `--request-id` | Idempotency identity recorded in lineage |
+| `--dry-run` | Validate and preview without durable changes or agent launch |
+| `--json` | Print the machine-readable plan |
+| `--path` | Colony resolution start directory |
+
+The preview names the selected source task and attempt, source configuration and
+revision, task digest, base, delta (raw, effective, and shadowed differences),
+policy, workspace, branch, budget, and comparison limitations. Creation is an
+operator action: it proceeds in the same invocation unless `--dry-run` is set,
+and it refuses an ambiguous root task, a dependency-bearing or final-review
+task, a dirty or unrecorded source base, or missing source evidence.
+
+### `paseka trail fork pending`
+
+List agent-originated requests awaiting a decision: request id, state, sender
+trail/agent, source trail, sector, title, and expiry.
+
+| Flag | Description |
+| ---- | ----------- |
+| `--all` | Include decided and expired requests |
+| `--json` | Print the request records |
+| `--path` | Colony resolution start directory |
+
+Pending requests hold no trail, snapshot, worktree, honey, or task plan. They
+are quota-bound and expire, and `--json` prints an empty list rather than `null`.
+
+### `paseka trail fork approve|reject|cancel <requestId>`
+
+- `approve` advances a pending request and performs the on-disk creation:
+  source and candidate snapshots, worktree and branch, lineage, honey reserve,
+  task plan, and ready signal. It is idempotent and refuses approval once
+  required source evidence is gone.
+- `reject` records refusal and creates nothing.
+- `cancel` records cancellation of a pending request and creates nothing.
+
+All three take `--reason` and `--json`. The same actions reach the runtime as
+`SIGNAL/trail.fork.approve|reject|cancel`, which are admitted only from the
+reserved operator sender; an ordinary bee cannot decide its own request.
+
+### `paseka trail drop <traceId>`
 
 Stop an experimental fork and remove its execution resources while keeping its
 evidence:
