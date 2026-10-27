@@ -163,54 +163,21 @@ func ValidateForkCandidateTree(baseTree, candidateTree, taskID string, input *Ta
 	if err != nil {
 		return fmt.Errorf("trailconfig: source configuration is unreadable: %w", err)
 	}
-	candidateColony, err := colony.LoadColony(candidateTree)
-	if err != nil {
-		return fmt.Errorf("trailconfig: candidate configuration is invalid: %w", err)
-	}
-	if err := validatePolicyUnchanged(baseColony, candidateColony); err != nil {
-		return err
-	}
 
-	bees, err := colony.LoadAllBees(candidateTree)
-	if err != nil {
-		return fmt.Errorf("trailconfig: candidate bee definitions are invalid: %w", err)
+	var work []ProcedureWork
+	if input != nil {
+		beeRole := colony.EffectiveTaskBee(input.Bee, baseColony.Defaults)
+		work = append(work, ProcedureWork{
+			TaskID: taskID,
+			Title:  input.Title,
+			Body:   input.Body,
+			Bee:    beeRole,
+			Sector: input.Sector,
+			Intent: input.Intent,
+			Review: protocol.TaskReviewPolicy(input.Review),
+		})
 	}
-	if err := validateForkTemplates(candidateTree, candidateColony, bees); err != nil {
-		return err
-	}
-	if err := validateSkillReferences(candidateTree); err != nil {
-		return err
-	}
-
-	if input == nil {
-		return nil
-	}
-	beeRole := colony.EffectiveTaskBee(input.Bee, candidateColony.Defaults)
-	bee, ok := bees[beeRole]
-	if !ok {
-		return fmt.Errorf("trailconfig: candidate has no bee %q for task %s", beeRole, taskID)
-	}
-	if err := bee.ValidateAdapterRequirements(); err != nil {
-		return fmt.Errorf("trailconfig: candidate is invalid for task %s: %w", taskID, err)
-	}
-	if sector := strings.TrimSpace(input.Sector); sector != "" {
-		if _, err := candidateColony.ResolveSector(sector); err != nil {
-			return fmt.Errorf("trailconfig: candidate is invalid for task %s: %w", taskID, err)
-		}
-	}
-	spec := protocol.TaskSpec{
-		TaskID: taskID,
-		Title:  input.Title,
-		Body:   input.Body,
-		Bee:    beeRole,
-		Sector: input.Sector,
-		Intent: input.Intent,
-		Review: protocol.TaskReviewPolicy(input.Review),
-	}
-	if err := colony.ValidateTaskReviewPolicy(spec, bees, candidateColony.Defaults); err != nil {
-		return err
-	}
-	return nil
+	return ValidateProcedure(candidateTree, baseColony, work)
 }
 
 func validatePolicyUnchanged(base, candidate colony.Colony) error {
@@ -225,34 +192,6 @@ func validatePolicyUnchanged(base, candidate colony.Colony) error {
 	}
 	if base.Defaults.ResolvedDelivery() != candidate.Defaults.ResolvedDelivery() {
 		return fmt.Errorf("trailconfig: delta patch cannot change colony delivery policy")
-	}
-	return nil
-}
-
-func validateForkTemplates(root string, manifest colony.Colony, bees map[string]colony.Bee) error {
-	for role, bee := range bees {
-		_, localOverlay, err := colony.LoadBee(root, role)
-		if err != nil {
-			return fmt.Errorf("trailconfig: candidate bee %q is invalid: %w", role, err)
-		}
-		promptTemplate := strings.TrimSpace(localOverlay.PromptTemplate)
-		if promptTemplate == "" {
-			promptTemplate = strings.TrimSpace(bee.PromptTemplate)
-		}
-		if promptTemplate == "" {
-			promptTemplate = strings.TrimSpace(manifest.Defaults.PromptTemplate)
-		}
-		if promptTemplate != "" {
-			if err := validatePromptTemplateFile(root, promptTemplate); err != nil {
-				return fmt.Errorf("trailconfig: candidate bee %q: %w", role, err)
-			}
-		}
-		systemTemplate := colony.ResolvedSystemTemplate(bee, localOverlay, manifest.Defaults)
-		if systemTemplate != "" {
-			if err := validatePromptTemplateFile(root, systemTemplate); err != nil {
-				return fmt.Errorf("trailconfig: candidate bee %q: %w", role, err)
-			}
-		}
 	}
 	return nil
 }

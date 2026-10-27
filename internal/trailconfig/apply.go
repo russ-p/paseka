@@ -189,17 +189,27 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("trailconfig: load remaining tasks: %w", err)
 	}
-	remaining := EvaluateRemaining(candidate.tree, snapshot)
-	if !remaining.Compatible {
-		return ApplyResult{}, fmt.Errorf("%s", strings.Join(remaining.Problems, "; "))
-	}
-
 	baseSnapshotDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), manifest.ActiveConfigRef)
 	baseInventory, err := loadVerifiedSnapshot(baseSnapshotDir, manifest.ActiveConfigRef)
 	if err != nil {
 		return ApplyResult{}, err
 	}
 	baseTree := filepath.Join(baseSnapshotDir, SnapshotTreeDirName)
+	baseColony, err := colony.LoadColony(baseTree)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("trailconfig: active configuration is unreadable: %w", err)
+	}
+	// Preparation validates the complete candidate procedure, not only the
+	// roles needed by remaining work: a missing template, skill, adapter, or
+	// policy mismatch must be refused before anything is recorded or activated.
+	if err := ValidateProcedure(candidate.tree, baseColony, RemainingProcedureWork(snapshot)); err != nil {
+		return ApplyResult{}, err
+	}
+	remaining := EvaluateRemaining(candidate.tree, snapshot)
+	if !remaining.Compatible {
+		return ApplyResult{}, fmt.Errorf("%s", strings.Join(remaining.Problems, "; "))
+	}
+
 	effective, shadowed := previewDiffs(opts, baseInventory, candidate.inventory, baseTree, candidate.tree)
 	result := ApplyResult{
 		Manifest:      manifest,
@@ -418,30 +428,10 @@ func EvaluateRemaining(candidateRoot string, snapshot taskledger.TraceSnapshot) 
 		preview.Problems = problems
 		return preview
 	}
-	for _, task := range snapshot.Tasks {
-		if taskledger.IsFinalReviewTask(task) {
-			continue
-		}
-		switch task.Status {
-		case protocol.TaskStatusPlanned, protocol.TaskStatusReady:
-		default:
-			continue
-		}
-		preview.Checked = append(preview.Checked, task.TaskID)
-		beeRole := colony.EffectiveTaskBee(task.Bee, manifest.Defaults)
-		bee, ok := bees[beeRole]
-		if !ok {
-			fail(fmt.Sprintf("trailconfig: candidate removes bee %q needed by remaining task %s", beeRole, task.TaskID))
-			continue
-		}
-		if err := bee.ValidateAdapterRequirements(); err != nil {
-			fail(fmt.Sprintf("trailconfig: candidate invalid for remaining task %s: %v", task.TaskID, err))
-			continue
-		}
-		if task.Sector != "" {
-			if _, err := manifest.ResolveSector(task.Sector); err != nil {
-				fail(fmt.Sprintf("trailconfig: candidate invalid for remaining task %s: %v", task.TaskID, err))
-			}
+	for _, work := range RemainingProcedureWork(snapshot) {
+		preview.Checked = append(preview.Checked, work.TaskID)
+		if err := validateProcedureWork(manifest, bees, work); err != nil {
+			fail(err.Error())
 		}
 	}
 	preview.Problems = problems
@@ -720,8 +710,19 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 	if err != nil {
 		return Manifest{}, false, err
 	}
+	activeSnapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), manifest.ActiveConfigRef)
+	if _, err := loadVerifiedSnapshot(activeSnapshotDir, manifest.ActiveConfigRef); err != nil {
+		return Manifest{}, false, err
+	}
+	activeColony, err := colony.LoadColony(filepath.Join(activeSnapshotDir, SnapshotTreeDirName))
+	if err != nil {
+		return Manifest{}, false, fmt.Errorf("trailconfig: active configuration is unreadable: %w", err)
+	}
 	tree := filepath.Join(SnapshotDir(colonyRoot, traceID), change.NewConfigRef, SnapshotTreeDirName)
-	if err := ValidateRemaining(tree, snapshot); err != nil {
+	// The prepared content is revalidated in full: a candidate that was valid
+	// when it was captured can lose a template, skill, role, or policy fit while
+	// it waits for a safe boundary.
+	if err := ValidateProcedure(tree, activeColony, RemainingProcedureWork(snapshot)); err != nil {
 		change.Outcome = OutcomeRejected
 		change.Detail = err.Error()
 		manifest.Pending = nil
