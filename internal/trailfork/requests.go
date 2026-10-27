@@ -748,6 +748,7 @@ func forkOptionsFromRequest(req Request, ctxColony colony.Context, actorName str
 		SourceTraceID: req.Evidence.SourceTrace,
 		TaskID:        req.Evidence.SourceTask,
 		SourceRun:     req.Evidence.SourceRun,
+		SourceAttempt: req.Evidence.SourceAttempt,
 		BaseSHA:       req.Evidence.BaseSHA,
 		DeltaForm:     req.Evidence.Delta.Form,
 		DeltaPatch:    req.Evidence.Delta.Patch,

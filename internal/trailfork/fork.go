@@ -139,6 +139,10 @@ type Options struct {
 	SourceTraceID string
 	TaskID        string
 	SourceRun     string
+	// SourceAttempt is the recorded source attempt identity. When set, it pins
+	// selection to exactly that attempt for an already-recorded decision and
+	// never falls back to the latest attempt or to the source run id.
+	SourceAttempt string
 	BaseSHA       string
 	// DeltaForm is DeltaNone (the default) or DeltaPatch.
 	DeltaForm string
@@ -551,7 +555,7 @@ func resolveEvidence(opts Options) (Lineage, sourceEvidence, error) {
 	if err != nil {
 		return Lineage{}, sourceEvidence{}, err
 	}
-	attempt, err := selectAttempt(opts.Context.ColonyRoot, sourceTrace, task, opts.SourceRun)
+	attempt, err := selectAttempt(opts.Context.ColonyRoot, sourceTrace, task, opts.SourceRun, opts.SourceAttempt)
 	if err != nil {
 		return Lineage{}, sourceEvidence{}, err
 	}
@@ -833,7 +837,7 @@ func selectTask(snapshot taskledger.TraceSnapshot, requested string) (taskledger
 	}
 }
 
-func selectAttempt(colonyRoot, traceID string, task taskledger.TaskSnapshot, sourceRun string) (trailconfig.Attempt, error) {
+func selectAttempt(colonyRoot, traceID string, task taskledger.TaskSnapshot, sourceRun, sourceAttempt string) (trailconfig.Attempt, error) {
 	attempts, err := trailconfig.Attempts(colonyRoot, traceID)
 	if err != nil {
 		return trailconfig.Attempt{}, fmt.Errorf("trailfork: load source attempts: %w", err)
@@ -854,8 +858,28 @@ func selectAttempt(colonyRoot, traceID string, task taskledger.TaskSnapshot, sou
 		return trailconfig.Attempt{}, fmt.Errorf("trailfork: source task %s has no recorded attempt evidence", task.TaskID)
 	}
 
+	// A recorded attempt is a decision about one specific execution. It must
+	// survive a source retry and must not follow the latest attempt or the
+	// source run id.
+	pinnedID := strings.TrimSpace(sourceAttempt)
+	var pinned *trailconfig.Attempt
+	if pinnedID != "" {
+		for i := range candidates {
+			if candidates[i].AttemptID == pinnedID {
+				pinned = &candidates[i]
+				break
+			}
+		}
+		if pinned == nil {
+			return trailconfig.Attempt{}, fmt.Errorf("trailfork: source attempt %s for task %s is not recorded", pinnedID, task.TaskID)
+		}
+	}
+
 	run := strings.TrimSpace(sourceRun)
 	if run == "" {
+		if pinned != nil {
+			return *pinned, nil
+		}
 		if len(candidates) > 1 {
 			ids := make([]string, 0, len(candidates))
 			for _, attempt := range candidates {
@@ -869,6 +893,9 @@ func selectAttempt(colonyRoot, traceID string, task taskledger.TaskSnapshot, sou
 	matched, err := attemptForRun(colonyRoot, traceID, task.TaskID, run, attempts)
 	if err != nil {
 		return trailconfig.Attempt{}, err
+	}
+	if pinned != nil && pinned.AttemptID != matched.AttemptID {
+		return trailconfig.Attempt{}, fmt.Errorf("trailfork: source run %s selects attempt %s but the recorded source attempt for task %s is %s", run, matched.AttemptID, task.TaskID, pinned.AttemptID)
 	}
 	return matched, nil
 }

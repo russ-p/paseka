@@ -207,6 +207,138 @@ func TestApproveRequestCreatesForkExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestApproveUsesRecordedAttemptAfterSourceRetry(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+	req := submitRequest(t, ctx, "req-retried", "trace-source", "agent-sender")
+	if req.Evidence.SourceAttempt == "" || req.Evidence.SourceRun != "" {
+		t.Fatalf("recorded evidence = %+v", req.Evidence)
+	}
+	recorded := req.Evidence.SourceAttempt
+
+	// Retry the source task after the request recorded its decision. Two
+	// attempts now exist, so resolving "the latest attempt" would be ambiguous
+	// and must not invalidate the request.
+	if err := trailconfig.CloseTaskAttempts(root, "trace-source", "task-1", "retry"); err != nil {
+		t.Fatal(err)
+	}
+	retryInput := trailconfig.NewTaskInputEvidence("task-1", "retried task", "retried body", "builder", "", "feature", string(protocol.TaskReviewNone))
+	retried, err := trailconfig.EnsureTaskAttempt(ctx, "trace-source", "task-1", "evt-retry", retryInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retried.AttemptID == recorded {
+		t.Fatalf("source retry reused attempt %s", recorded)
+	}
+
+	result, err := trailfork.ApproveRequest(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		RequestID: req.RequestID,
+		Actor:     "alice",
+		Publisher: &capturePublisher{},
+		Ledger:    taskledger.NewMemoryLedger(),
+	})
+	if err != nil {
+		t.Fatalf("approval after source retry: %v", err)
+	}
+	if result.Plan.SourceAttempt != recorded {
+		t.Fatalf("fork inherited attempt %s, want recorded %s", result.Plan.SourceAttempt, recorded)
+	}
+	if result.Plan.SourceRun != "" {
+		t.Fatalf("recorded source run was rewritten to %q", result.Plan.SourceRun)
+	}
+	if result.Plan.Task.Title != "implement task-1" || result.Plan.Task.Body != "body for task-1" {
+		t.Fatalf("fork carried retry evidence: %+v", result.Plan.Task)
+	}
+	if result.Plan.Task.SourceTaskDigest != req.Evidence.Task.SourceTaskDigest {
+		t.Fatalf("fork task digest = %q, want recorded %q", result.Plan.Task.SourceTaskDigest, req.Evidence.Task.SourceTaskDigest)
+	}
+}
+
+func TestApproveRefusesRewrittenSourceAttempt(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	allowForkPublish(t, root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	writeSenderRun(t, root, "trace-source", "agent-sender", "builder")
+	req := submitRequest(t, ctx, "req-rewritten-attempt", "trace-source", "agent-sender")
+
+	// A missing recorded attempt must not silently fall back to the recorded
+	// run or to the only remaining attempt.
+	req.Evidence.SourceAttempt = "attempt-missing"
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(trailfork.RequestPath(root, req.Evidence.SourceTrace, req.RequestID), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = trailfork.ApproveRequest(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		RequestID: req.RequestID,
+		Actor:     "alice",
+		Publisher: &capturePublisher{},
+		Ledger:    taskledger.NewMemoryLedger(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "attempt-missing") || !strings.Contains(err.Error(), "is not recorded") {
+		t.Fatalf("approve rewritten attempt error = %v", err)
+	}
+	stored, err := trailfork.LoadRequest(root, req.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != trailfork.StateRefused {
+		t.Fatalf("state = %s, want refused", stored.State)
+	}
+	if stored.TraceID != "" {
+		t.Fatalf("refused approval minted a fork trace %s", stored.TraceID)
+	}
+}
+
+func TestSourceRunMustAgreeWithRecordedAttempt(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+	first, ok, err := trailconfig.LatestTaskAttempt(root, "trace-source", "task-1")
+	if err != nil || !ok {
+		t.Fatalf("first attempt: %v %v", ok, err)
+	}
+	if err := trailconfig.CloseTaskAttempts(root, "trace-source", "task-1", "retry"); err != nil {
+		t.Fatal(err)
+	}
+	second := addAttempt(t, ctx, "trace-source", "task-1", "evt-2")
+	if err := trailconfig.RecordAttemptAgent(root, "trace-source", second.AttemptID, "agent-second"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = trailfork.Preview(trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		SourceRun:     "agent-second",
+		SourceAttempt: first.AttemptID,
+	})
+	if err == nil || !strings.Contains(err.Error(), "recorded source attempt") {
+		t.Fatalf("disagreeing run/attempt error = %v", err)
+	}
+
+	matched, err := trailfork.Preview(trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		SourceRun:     "agent-second",
+		SourceAttempt: second.AttemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if matched.Plan.SourceAttempt != second.AttemptID || matched.Plan.SourceRun != "agent-second" {
+		t.Fatalf("agreeing selection = %+v", matched.Plan)
+	}
+}
+
 func TestRejectAndCancelLeavePendingOnly(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
