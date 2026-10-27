@@ -28,6 +28,11 @@ func (r *Reactor) tryActivateConfig(ctx context.Context, traceID string, dispatc
 		return false, err
 	}
 	if manifest.Pending == nil {
+		// No transition is in flight, so this boundary can release direct work
+		// that an earlier pending transition held back.
+		if err := r.resumeBarrierHeldDispatches(ctx, traceID); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 	if r.traceKilled(traceID) {
@@ -50,6 +55,11 @@ func (r *Reactor) tryActivateConfig(ctx context.Context, traceID string, dispatc
 		if err := r.dispatchReadyUnderActive(ctx, traceID); err != nil {
 			return true, err
 		}
+	}
+	// The transition is now active. Re-run the direct work it held so that work
+	// executes under the configuration that was just activated.
+	if err := r.resumeBarrierHeldDispatches(ctx, traceID); err != nil {
+		return true, err
 	}
 	return true, nil
 }

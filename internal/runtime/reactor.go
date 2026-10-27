@@ -33,7 +33,8 @@ type Reactor struct {
 	inflight         map[string]context.CancelFunc
 	directInflight   map[string]context.CancelFunc
 	directProcessed  map[string]struct{}
-	recentLocal      map[string]time.Time // fingerprints of events applied before publish
+	barrierHeld      map[string]*barrierHeldState // per-trace bookkeeping for barrier-held direct work
+	recentLocal      map[string]time.Time         // fingerprints of events applied before publish
 	asyncDispatch    bool
 	invitePublisher  bus.Publisher // test override for auto-invite publish
 	autoInvites      []colony.AutoInviteRule
@@ -101,6 +102,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		inflight:         make(map[string]context.CancelFunc),
 		directInflight:   make(map[string]context.CancelFunc),
 		directProcessed:  make(map[string]struct{}),
+		barrierHeld:      make(map[string]*barrierHeldState),
 		recentLocal:      make(map[string]time.Time),
 		asyncDispatch:    true,
 		autoInvites:      manifest.AutoInvites,
@@ -547,6 +549,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		inflight:         make(map[string]context.CancelFunc),
 		directInflight:   make(map[string]context.CancelFunc),
 		directProcessed:  make(map[string]struct{}),
+		barrierHeld:      make(map[string]*barrierHeldState),
 		recentLocal:      make(map[string]time.Time),
 		asyncDispatch:    opts.AsyncDispatch,
 		autoInvites:      autoInvites,
