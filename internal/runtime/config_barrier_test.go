@@ -145,6 +145,99 @@ func TestPendingApplyHoldsNewWorkAndKeepsExistingChains(t *testing.T) {
 	}
 }
 
+// TestIdleDirectChainDoesNotBlockConfigurationCutover is the regression test
+// for direct dispatches that leave their chain attempt open after the run
+// completed. Such an attempt holds no execution, so it must not keep an apply
+// action pending forever. It must also keep routing later events under its
+// recorded configuration.
+func TestIdleDirectChainDoesNotBlockConfigurationCutover(t *testing.T) {
+	root := t.TempDir()
+	bees := map[string]colony.Bee{
+		"guard": {Role: "guard", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "VERIFICATION", Kind: "verification.failed"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	mustWriteTestColony(t, root, bees)
+	promptPath := filepath.Join(root, ".paseka", "prompts", "default.md")
+
+	r, rec := taskAttemptReactor(t, root, bees)
+	traceID := "trace-idle-direct"
+	failure, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationFailed, Summary: "tests failed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), failure); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("direct dispatch calls = %d, want 1", rec.calls)
+	}
+	attempts, err := trailconfig.Attempts(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 1 || attempts[0].Kind != trailconfig.AttemptKindDirect || !attempts[0].Open() {
+		t.Fatalf("chain attempts = %+v", attempts)
+	}
+	chain := attempts[0]
+	if chain.TaskID != "" || chain.DispatchCount != 1 {
+		t.Fatalf("chain attempt = %+v", chain)
+	}
+	writeRunCompleted(t, root, traceID, rec.lastReq.AgentID)
+
+	blockers, err := trailconfig.Blockers(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blockers) != 0 {
+		t.Fatalf("idle chain blocked cutover: %v", blockers)
+	}
+
+	if err := os.WriteFile(promptPath, []byte("NEW {{.Task}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := trailconfig.Load(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := manifest.ConfigRevision
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: colony.Context{ColonyRoot: root, Slug: "test"},
+		TraceID: traceID, Source: trailconfig.SourceColony, Actor: "operator",
+		ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.Change.Outcome != trailconfig.OutcomeApplied || applied.Manifest.ConfigRevision != manifest.ConfigRevision+1 {
+		t.Fatalf("apply after idle chain = %+v", applied.Change)
+	}
+
+	// The idle attempt still owns downstream choreography: an event carrying
+	// its id routes under the configuration the chain was admitted with.
+	downstream, err := protocol.NewEvent(traceID, "runtime", 1, protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationFailed, Summary: "second failure",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	downstream.Provenance = trailconfigAttemptProvenance(chain)
+	if err := r.ProcessEvent(context.Background(), downstream); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 2 {
+		t.Fatalf("downstream calls = %d, want 2", rec.calls)
+	}
+	if rec.lastReq.AttemptID != chain.AttemptID || rec.lastReq.ConfigRevision != chain.ConfigRevision {
+		t.Fatalf("downstream ran under %q rev %d, want %q rev %d", rec.lastReq.AttemptID, rec.lastReq.ConfigRevision, chain.AttemptID, chain.ConfigRevision)
+	}
+	if strings.Contains(rec.lastReq.Prompt, "NEW") {
+		t.Fatalf("idle chain was reinterpreted under the active configuration: %q", rec.lastReq.Prompt)
+	}
+}
+
 func TestKillCancelsPendingConfiguration(t *testing.T) {
 	root := t.TempDir()
 	bees := map[string]colony.Bee{"builder": {Role: "builder"}}

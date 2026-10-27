@@ -863,67 +863,173 @@ func PendingTraceIDs(colonyRoot string) ([]string, error) {
 	return traceIDs, nil
 }
 
-// Blockers reports execution that still needs the old configuration.
-func Blockers(colonyRoot, traceID string) ([]string, error) {
-	var blockers []string
-	if snapshot, err := runs.LoadTraceTasksFromFS(colonyRoot, traceID); err == nil {
-		for _, task := range snapshot.Tasks {
-			switch task.Status {
-			case protocol.TaskStatusRunning, protocol.TaskStatusWaitingReview:
-				blockers = append(blockers, "task "+task.TaskID+" is "+string(task.Status))
-			}
-		}
-	}
-	// An open attempt owns execution even when its task is still ready. The
-	// admission -> running gap, a feedback-driven ready state, and an
-	// energy-blocked ready task all still belong to the old configuration.
-	attempts, err := Attempts(colonyRoot, traceID)
-	if err != nil {
-		return nil, err
-	}
-	for _, attempt := range attempts {
-		if !attempt.Open() {
-			continue
-		}
-		label := "attempt " + attempt.AttemptID
-		if strings.TrimSpace(attempt.TaskID) != "" {
-			label += " for task " + attempt.TaskID
-		} else if strings.TrimSpace(attempt.ChainKey) != "" {
-			label += " for chain " + attempt.ChainKey
-		}
-		blockers = append(blockers, label+" is open")
-	}
+// runEvidence is the durable status of one agent run directory. It is the
+// post-restart substitute for in-memory Reactor state: status.json is the only
+// record that says whether an invocation is still executing.
+type runEvidence struct {
+	agentID   string
+	attemptID string
+	state     string
+	readable  bool
+}
+
+// scanRunEvidence reads every agent run record under the trail. Reserved
+// subdirectories (tasks, artifacts, config, proposals, console, fork requests)
+// are not invocations. A run whose status.json cannot be read stays in the
+// result as unreadable evidence so Blockers can fail closed instead of
+// unlocking cutover on missing data.
+func scanRunEvidence(colonyRoot, traceID string) ([]runEvidence, error) {
 	runsRoot := filepath.Join(colonyRoot, ".paseka", "runs", traceID)
 	entries, err := os.ReadDir(runsRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
+		return nil, fmt.Errorf("trailconfig: read run evidence: %w", err)
+	}
+	evidence := make([]runEvidence, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || runs.IsReservedTraceSubdir(entry.Name()) {
+			continue
+		}
+		record := runEvidence{agentID: entry.Name()}
+		dir := runs.Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: entry.Name()}
+		status, err := dir.ReadStatus()
+		if err != nil {
+			evidence = append(evidence, record)
+			continue
+		}
+		record.attemptID = status.AttemptID
+		record.state = string(status.State)
+		record.readable = true
+		evidence = append(evidence, record)
+	}
+	return evidence, nil
+}
+
+// runTerminal reports whether a recorded run state proves the invocation
+// ended. Anything else — queued, running, suspended, awaiting human input, or a
+// state this build does not know — is treated as live work.
+func runTerminal(state string) bool {
+	switch protocol.RunStatus(state) {
+	case protocol.StatusCompleted, protocol.StatusFailed, protocol.StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Blockers reports execution that still needs the old configuration.
+//
+// Safe cutover means no executing or suspended invocation, live task attempt,
+// outstanding verification, or human review still holds the old context. An
+// open attempt is not by itself execution: direct chain and interactive session
+// attempts stay open after their last run finishes so later events keep routing
+// under the same configuration. Such an attempt therefore blocks only while it
+// was admitted but never dispatched, or while it owns a run whose recorded
+// status is not terminal. The rule reads durable attempt and run records, so it
+// holds across a Reactor restart and never changes attempt state or routing.
+func Blockers(colonyRoot, traceID string) ([]string, error) {
+	var blockers []string
+
+	snapshot, err := runs.LoadTraceTasksFromFS(colonyRoot, traceID)
+	if err != nil {
+		return nil, fmt.Errorf("trailconfig: read task evidence: %w", err)
+	}
+	for _, task := range snapshot.Tasks {
+		switch task.Status {
+		case protocol.TaskStatusRunning, protocol.TaskStatusWaitingReview:
+			blockers = append(blockers, "task "+task.TaskID+" is "+string(task.Status))
+		}
+	}
+
+	attempts, err := Attempts(colonyRoot, traceID)
+	if err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	evidence, err := scanRunEvidence(colonyRoot, traceID)
+	if err != nil {
+		return nil, err
+	}
+	for _, run := range evidence {
+		switch {
+		case !run.readable:
+			blockers = append(blockers, "run "+run.agentID+" has no readable status")
+		case !runTerminal(run.state):
+			blockers = append(blockers, "run "+run.agentID+" is "+run.state)
+		}
+	}
+
+	for _, attempt := range attempts {
+		if !attempt.Open() {
 			continue
 		}
-		switch entry.Name() {
-		case ConfigDirName, "tasks", "artifacts", "proposals", "console":
+		label := blockerLabel(attempt)
+		// Admitted but not dispatched yet: the admission -> launch gap, a
+		// feedback-driven ready state, and an energy-blocked ready task still
+		// belong to the old configuration.
+		if attempt.DispatchCount == 0 {
+			blockers = append(blockers, label+" is open")
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(runsRoot, entry.Name(), runs.StatusFileName))
-		if err != nil {
-			continue
-		}
-		var status struct {
-			State string `json:"state"`
-		}
-		if err := json.Unmarshal(data, &status); err != nil {
-			continue
-		}
-		if status.State == "queued" || status.State == "running" {
-			blockers = append(blockers, "run "+entry.Name()+" is "+status.State)
+		if detail, live := attemptLiveRun(attempt, evidence); live {
+			blockers = append(blockers, label+" "+detail)
 		}
 	}
 	return uniqueBlockers(blockers), nil
+}
+
+func blockerLabel(attempt Attempt) string {
+	label := "attempt " + attempt.AttemptID
+	if strings.TrimSpace(attempt.TaskID) != "" {
+		label += " for task " + attempt.TaskID
+	} else if strings.TrimSpace(attempt.ChainKey) != "" {
+		label += " for chain " + attempt.ChainKey
+	}
+	return label
+}
+
+// attemptLiveRun reports whether an open attempt still owns a non-terminal
+// invocation and describes the first such run in stable agent-id order. Runs
+// are found both through the attempt's recorded agents and through run
+// provenance, so a CLI run that was never linked back to the attempt record
+// still counts.
+func attemptLiveRun(attempt Attempt, evidence []runEvidence) (string, bool) {
+	byAgent := make(map[string]runEvidence, len(evidence))
+	for _, run := range evidence {
+		byAgent[run.agentID] = run
+	}
+	owned := make(map[string]runEvidence, len(attempt.Agents))
+	for _, agentID := range attempt.Agents {
+		if strings.TrimSpace(agentID) == "" {
+			continue
+		}
+		if run, ok := byAgent[agentID]; ok {
+			owned[agentID] = run
+			continue
+		}
+		owned[agentID] = runEvidence{agentID: agentID}
+	}
+	for _, run := range evidence {
+		if run.attemptID == attempt.AttemptID {
+			owned[run.agentID] = run
+		}
+	}
+	agents := make([]string, 0, len(owned))
+	for agentID := range owned {
+		agents = append(agents, agentID)
+	}
+	sort.Strings(agents)
+	for _, agentID := range agents {
+		run := owned[agentID]
+		if !run.readable {
+			return "owns run " + agentID + " with no readable status", true
+		}
+		if !runTerminal(run.state) {
+			return "owns run " + agentID + " which is " + run.state, true
+		}
+	}
+	return "", false
 }
 
 func uniqueBlockers(blockers []string) []string {
