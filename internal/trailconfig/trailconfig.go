@@ -276,6 +276,13 @@ func EnsureInitialExpected(ctx colony.Context, traceID string, expected *int) (M
 	if expected != nil && *expected != 0 {
 		return Manifest{}, false, fmt.Errorf("trailconfig: expected revision %d, but initial capture establishes revision 1 from 0", *expected)
 	}
+	killed, err := TraceKilled(ctx.ColonyRoot, traceID)
+	if err != nil {
+		return Manifest{}, false, err
+	}
+	if killed {
+		return Manifest{}, false, fmt.Errorf("trailconfig: trail %s is killed; configuration capture is refused", traceID)
+	}
 	dir := ConfigDir(ctx.ColonyRoot, traceID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Manifest{}, false, fmt.Errorf("trailconfig: mkdir %s: %w", dir, err)

@@ -122,6 +122,13 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	if err := validateApplySource(opts); err != nil {
 		return ApplyResult{}, err
 	}
+	killed, err := TraceKilled(opts.Context.ColonyRoot, opts.TraceID)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	if killed {
+		return ApplyResult{}, fmt.Errorf("trailconfig: trail %s is killed; configuration application is refused", opts.TraceID)
+	}
 
 	dir := ConfigDir(opts.Context.ColonyRoot, opts.TraceID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
