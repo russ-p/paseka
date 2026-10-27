@@ -270,6 +270,11 @@ func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, erro
 	if scope.AdmissionState == trailfork.StateDropped {
 		return nil, fmt.Errorf("runtime: trail %s was dropped and cannot dispatch", traceID)
 	}
+	// An interrupted creation has durable records but no published initial
+	// task. It must finish creation before admission accepts its work.
+	if scope.AdmissionState == trailfork.StateCreating {
+		return nil, fmt.Errorf("runtime: fork %s is still being created and cannot dispatch", traceID)
+	}
 	bound, manifest, isBound, err := trailconfig.BindNewWork(r.colony, traceID)
 	if err != nil {
 		return nil, err

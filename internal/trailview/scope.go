@@ -39,8 +39,8 @@ type Scope struct {
 	Policy string `json:"policy,omitempty"`
 	// WorkspaceRoot is the experiment's execution checkout when recorded.
 	WorkspaceRoot string `json:"workspaceRoot,omitempty"`
-	// AdmissionState mirrors the shared collection: ordinary, runnable, or
-	// pinned when lineage is missing.
+	// AdmissionState mirrors the shared collection: ordinary, runnable, pinned,
+	// or a fork lineage state such as creating or dropped.
 	AdmissionState string `json:"admissionState"`
 	// Experimental is true for a pinned trail or a trail with fork lineage.
 	// Work-producing and side-effecting built-ins must apply their

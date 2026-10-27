@@ -325,10 +325,11 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 			// An interrupted approval may have written the lineage and binding
 			// before its initial plan reached the ledger. Finish that publication
 			// idempotently instead of leaving a created-but-unrunnable fork.
-			if err := finishInitialPublication(ctx, publisher, ledger, existing, evidence.forkColony.Defaults); err != nil {
+			promoted, err := finishCreation(ctx, publisher, ledger, opts.Context.ColonyRoot, existing, evidence.forkColony.Defaults)
+			if err != nil {
 				return Result{}, err
 			}
-			return resultFromLineage(opts.Context, existing)
+			return resultFromLineage(opts.Context, promoted)
 		}
 	}
 
@@ -398,6 +399,10 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 	plan.Task.AttemptID = attempt.AttemptID
 	plan.Task.TaskInputDigest = inputEvidence.Digest
 
+	// The fork is not dispatchable until its initial task is fully published.
+	// Record creating before any durable publication so a crash cannot leave a
+	// runnable lineage whose task plan never reached the ledger.
+	plan.State = StateCreating
 	if err := writeLineage(opts.Context.ColonyRoot, plan); err != nil {
 		return Result{}, err
 	}
@@ -437,6 +442,14 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 		if err := publisher.PublishEvent(ctx, ev); err != nil {
 			return Result{}, fmt.Errorf("trailfork: publish %s: %w", protocol.PayloadKind(ev.Payload), err)
 		}
+	}
+
+	// Publication completed. Promote the persisted lineage before reporting a
+	// runnable fork; a failed promote leaves the creation resumable instead of
+	// claiming work that admission would not accept.
+	plan.State = StateRunnable
+	if err := writeLineage(opts.Context.ColonyRoot, plan); err != nil {
+		return Result{}, err
 	}
 
 	return Result{
@@ -520,6 +533,30 @@ func finishInitialPublication(ctx context.Context, publisher bus.Publisher, ledg
 		}
 	}
 	return nil
+}
+
+// finishCreation completes an interrupted fork creation: it publishes any
+// missing initial task signal and then promotes the persisted lineage to
+// runnable. Every resume path uses it so a finished creation is always a
+// dispatchable fork, including when finishInitialPublication finds the task
+// already past planned and publishes nothing.
+func finishCreation(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, colonyRoot string, lineage Lineage, defaults colony.Defaults) (Lineage, error) {
+	if err := finishInitialPublication(ctx, publisher, ledger, lineage, defaults); err != nil {
+		return Lineage{}, err
+	}
+	// A dropped fork keeps its terminal state; resuming publication must not
+	// revive it as runnable.
+	if lineage.State == StateDropped {
+		return Lineage{}, fmt.Errorf("trailfork: fork %s was dropped before its creation completed", lineage.TraceID)
+	}
+	if lineage.State == StateRunnable {
+		return lineage, nil
+	}
+	lineage.State = StateRunnable
+	if err := writeLineage(colonyRoot, lineage); err != nil {
+		return Lineage{}, err
+	}
+	return lineage, nil
 }
 
 // resolveEvidence validates the selected source evidence without minting trail

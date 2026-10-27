@@ -73,8 +73,9 @@ type Trail struct {
 	Budget               int                `json:"budget,omitempty"`
 	Branch               string             `json:"branch,omitempty"`
 
-	// AdmissionState is ordinary, runnable, or pinned. Pending fork requests
-	// are counted separately and never become runnable trails.
+	// AdmissionState is ordinary, runnable, pinned, or a recorded fork lineage
+	// state such as creating or dropped. Pending fork requests are counted
+	// separately and never become runnable trails.
 	AdmissionState      string `json:"admissionState"`
 	PendingForkRequests int    `json:"pendingForkRequests,omitempty"`
 

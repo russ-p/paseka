@@ -61,6 +61,11 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if scope.AdmissionState == trailfork.StateDropped {
 		return nil, fmt.Errorf("runtime: trail %s was dropped and cannot dispatch", req.TraceID)
 	}
+	// A fork whose creation is incomplete has no published initial task and is
+	// not yet a runnable trail.
+	if scope.AdmissionState == trailfork.StateCreating {
+		return nil, fmt.Errorf("runtime: fork %s is still being created and cannot dispatch", req.TraceID)
+	}
 	if d.ledger != nil {
 		if snap, snapErr := d.ledger.Snapshot(req.TraceID); snapErr == nil && snap.Killed {
 			return nil, fmt.Errorf("runtime: trail %s was killed and cannot dispatch", req.TraceID)

@@ -212,6 +212,11 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if scope.AdmissionState == trailfork.StateDropped {
 		return nil, fmt.Errorf("sessions: trail %s was dropped and cannot dispatch", traceID)
 	}
+	// A fork whose creation is incomplete has no published initial task and is
+	// not yet a runnable trail.
+	if scope.AdmissionState == trailfork.StateCreating {
+		return nil, fmt.Errorf("sessions: fork %s is still being created and cannot dispatch", traceID)
+	}
 	killed, err := tasks.TraceKilled(ctxColony, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("sessions: inspect trace kill state: %w", err)

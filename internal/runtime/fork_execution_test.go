@@ -353,6 +353,116 @@ func writeRuntimeLineage(t *testing.T, root string, lineage trailfork.Lineage) {
 	}
 }
 
+func TestCreatingForkRefusesDispatchUntilRecoveryCompletes(t *testing.T) {
+	repo := initProposalDispatchRepo(t)
+	bees := map[string]colony.Bee{
+		"builder": {Role: "builder", Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "SIGNAL", Kind: "feature.requested"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	if err := writeProposalDispatchColony(repo, bees); err != nil {
+		t.Fatal(err)
+	}
+	runGitProposal(t, repo, "add", ".")
+	runGitProposal(t, repo, "commit", "-m", "source config")
+
+	ctxColony := colony.Context{ColonyRoot: repo, Slug: "test-colony"}
+	source, err := trailconfig.Ensure(ctxColony, "trace-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forkWorktree, err := worktree.Ensure(worktree.EnsureOptions{ColonyRoot: repo, TraceID: "trace-creating"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trailconfig.CreateForkBinding(trailconfig.ForkBindingOptions{
+		Context:       ctxColony,
+		SourceTraceID: "trace-source",
+		TraceID:       "trace-creating",
+		ConfigRef:     source.ActiveConfigRef,
+		WorkspaceRoot: forkWorktree.Path,
+		RequestID:     "req-creating",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lineage := trailfork.Lineage{
+		Version:         1,
+		ForkID:          "fork-creating",
+		TraceID:         "trace-creating",
+		SourceTrace:     "trace-source",
+		SourceConfigRef: source.ActiveConfigRef,
+		ConfigRef:       source.ActiveConfigRef,
+		Policy:          trailconfig.PolicyPinned,
+		State:           trailfork.StateCreating,
+		Workspace:       forkWorktree.Path,
+		Branch:          forkWorktree.Branch,
+	}
+	writeRuntimeLineage(t, repo, lineage)
+
+	registry := NewBeeRegistryFromBees(bees)
+	d := NewDispatcher()
+	d.SetBeeRegistry(registry)
+	rec := &proposalRecordingAdapter{}
+	d.RegisterAdapter("cursor", rec)
+	r := NewTestReactor(TestReactorOptions{
+		ColonyRoot: repo,
+		Dispatcher: d,
+		Registry:   registry,
+		Ledger:     taskledger.NewMemoryLedger(),
+	})
+
+	ev, err := protocol.NewEvent("trace-creating", "agent-fork", 1, protocol.EventSignal, map[string]any{
+		"kind":  "feature.requested",
+		"title": "creating work",
+		"body":  "creating work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), ev); err == nil || !strings.Contains(err.Error(), "still being created") {
+		t.Fatalf("creating fork dispatch error = %v", err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("creating fork dispatched %d adapter call(s)", rec.calls)
+	}
+
+	// Finishing creation promotes the lineage; the same event now dispatches.
+	lineage.State = trailfork.StateRunnable
+	writeRuntimeLineage(t, repo, lineage)
+	if err := r.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("recovered fork dispatch calls = %d, want 1", rec.calls)
+	}
+	if rec.lastReq.Workspace != forkWorktree.Path {
+		t.Fatalf("recovered fork workspace = %q, want %q", rec.lastReq.Workspace, forkWorktree.Path)
+	}
+}
+
+func TestColonyDispatchRefusesCreatingFork(t *testing.T) {
+	repo := initProposalDispatchRepo(t)
+	writeRuntimeLineage(t, repo, trailfork.Lineage{
+		TraceID:     "trace-creating",
+		SourceTrace: "trace-source",
+		State:       trailfork.StateCreating,
+	})
+	rec := &proposalRecordingAdapter{}
+	d := NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+	_, err := d.DispatchColonyBee(context.Background(), colony.Context{ColonyRoot: repo, Slug: "test-colony"}, ColonyDispatchRequest{
+		Bee:     "builder",
+		TraceID: "trace-creating",
+		Task:    "should not run",
+	}, DispatchModeCLI)
+	if err == nil || !strings.Contains(err.Error(), "still being created") {
+		t.Fatalf("colony dispatch error = %v, want creating refusal", err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("creating fork dispatched %d adapter call(s)", rec.calls)
+	}
+}
+
 func TestDroppedForkRefusesDispatch(t *testing.T) {
 	repo := initProposalDispatchRepo(t)
 	ctxColony := colony.Context{ColonyRoot: repo, Slug: "test-colony"}

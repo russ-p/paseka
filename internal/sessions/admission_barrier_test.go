@@ -66,6 +66,42 @@ func TestSessionHoldsNewWorkWhenConfigurationApplyPending(t *testing.T) {
 	}
 }
 
+func TestSessionRefusesCreatingFork(t *testing.T) {
+	repo := initSessionRepo(t)
+	setupSessionHome(t, repo)
+	traceID := "trace-creating-session"
+	lineage := trailfork.Lineage{TraceID: traceID, SourceTrace: "trace-source", State: trailfork.StateCreating}
+	data, err := json.Marshal(lineage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := trailfork.LineagePath(repo, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := &instantSessionAdapter{}
+	mgr := sessions.NewManager()
+	mgr.RegisterSessionAdapter("cursor", adapter)
+	runCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = mgr.RunInteractive(runCtx, sessions.RunRequest{
+		StartDir: repo,
+		Bee:      "scout",
+		TraceID:  traceID,
+		Task:     "should not launch",
+	})
+	if err == nil || !strings.Contains(err.Error(), "still being created") {
+		t.Fatalf("err = %v, want creating refusal", err)
+	}
+	if adapter.lastReq.Bee != "" {
+		t.Fatalf("adapter launched a session for a creating fork: %+v", adapter.lastReq)
+	}
+}
+
 func TestSessionRefusesDroppedFork(t *testing.T) {
 	repo := initSessionRepo(t)
 	setupSessionHome(t, repo)

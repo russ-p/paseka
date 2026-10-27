@@ -39,7 +39,10 @@ const (
 
 	// Request states. Pending and creating hold no runnable resources; approved
 	// corresponds to a runnable fork trail.
-	StatePending   = "pending"
+	StatePending = "pending"
+	// StateCreating marks a request, or the fork lineage it is creating, whose
+	// on-disk creation has started but not finished. Such a fork has no
+	// published initial task and must not dispatch.
 	StateCreating  = "creating"
 	StateApproved  = "approved"
 	StateRefused   = "refused"
@@ -338,10 +341,11 @@ func approveRequestLocked(ctx context.Context, opts DecisionOptions, req Request
 			if defaultsErr != nil {
 				return recordCreationFailure(path, req, defaultsErr, opts.Now)
 			}
-			if err := finishInitialPublication(ctx, opts.Publisher, opts.Ledger, lineage, defaults); err != nil {
-				return recordCreationFailure(path, req, err, opts.Now)
+			promoted, finishErr := finishCreation(ctx, opts.Publisher, opts.Ledger, root, lineage, defaults)
+			if finishErr != nil {
+				return recordCreationFailure(path, req, finishErr, opts.Now)
 			}
-			result, err := resultFromLineage(opts.Context, lineage)
+			result, err := resultFromLineage(opts.Context, promoted)
 			if err != nil {
 				return recordCreationFailure(path, req, err, opts.Now)
 			}

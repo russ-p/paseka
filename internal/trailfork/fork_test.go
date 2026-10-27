@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,6 +153,9 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if lineage.State != trailfork.StateRunnable {
+		t.Fatalf("lineage state = %q, want runnable", lineage.State)
+	}
 	if lineage.SourceTrace != "trace-source" || lineage.SourceTask != "task-1" ||
 		lineage.SourceAttempt != plan.SourceAttempt || lineage.SourceConfigRef != plan.SourceConfigRef ||
 		lineage.Task.SourceTaskDigest != plan.Task.SourceTaskDigest || lineage.ConfigRef != plan.ConfigRef {
@@ -215,6 +220,124 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 	if _, err := trailconfig.BindRef(ctx, plan.TraceID, plan.ConfigRef, 1); err != nil {
 		t.Fatalf("fork snapshot did not survive source removal: %v", err)
 	}
+}
+
+func TestCreateFailureLeavesCreatingLineageUntilRecovery(t *testing.T) {
+	root, _ := setupGitRepo(t)
+	ctx := testContext(root)
+	writeSource(t, ctx, "trace-source", "task-1", nil)
+
+	ledger := taskledger.NewMemoryLedger()
+	pub := newStagedPublisher(ledger, true)
+	opts := trailfork.Options{
+		Context:       ctx,
+		SourceTraceID: "trace-source",
+		RequestID:     "req-creating-lineage",
+		ForkTraceID:   "trace-creating",
+		ForkTaskID:    "task-creating",
+	}
+	if _, err := trailfork.Create(context.Background(), pub, ledger, opts); err == nil {
+		t.Fatal("expected the task.ready publish to fail")
+	}
+	lineage, err := trailfork.LoadLineage(root, opts.ForkTraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lineage.State != trailfork.StateCreating {
+		t.Fatalf("lineage state after failed creation = %q, want creating", lineage.State)
+	}
+
+	// A crash leaves no recorded failure; clear the error a returned failure
+	// would have written so recovery sees an interrupted creation.
+	req, err := trailfork.LoadRequest(root, opts.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.LastError = ""
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(trailfork.RequestPath(root, req.Evidence.SourceTrace, req.RequestID), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pub.allowPublishing()
+	recovered, err := trailfork.RecoverCreating(context.Background(), trailfork.DecisionOptions{
+		Context:   ctx,
+		Publisher: pub,
+		Ledger:    ledger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Plan.TraceID != opts.ForkTraceID {
+		t.Fatalf("recovered = %+v", recovered)
+	}
+	lineage, err = trailfork.LoadLineage(root, opts.ForkTraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lineage.State != trailfork.StateRunnable {
+		t.Fatalf("lineage state after recovery = %q, want runnable", lineage.State)
+	}
+	if got := pub.count(string(protocol.TaskEventPlan)); got != 1 {
+		t.Fatalf("published %d plan events, want 1", got)
+	}
+	if got := pub.count(string(protocol.TaskEventReady)); got != 1 {
+		t.Fatalf("published %d ready events, want 1", got)
+	}
+	snap, err := ledger.Snapshot(opts.ForkTraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.Tasks[opts.ForkTaskID].Status; got != protocol.TaskStatusReady {
+		t.Fatalf("task status after recovery = %q, want ready", got)
+	}
+}
+
+// stagedPublisher applies what it successfully publishes to the ledger and can
+// fail task.ready on demand, reproducing a crash between task.plan and
+// task.ready while counting what actually reached the bus.
+type stagedPublisher struct {
+	ledger taskledger.Ledger
+
+	mu        sync.Mutex
+	failReady bool
+	kinds     map[string]int
+}
+
+func newStagedPublisher(ledger taskledger.Ledger, failReady bool) *stagedPublisher {
+	return &stagedPublisher{ledger: ledger, failReady: failReady, kinds: map[string]int{}}
+}
+
+func (p *stagedPublisher) PublishEvent(_ context.Context, ev protocol.Event) error {
+	kind := protocol.PayloadKind(ev.Payload)
+	p.mu.Lock()
+	blocked := p.failReady && kind == string(protocol.TaskEventReady)
+	p.mu.Unlock()
+	if blocked {
+		return errors.New("bus unavailable before task.ready")
+	}
+	if _, err := p.ledger.Apply(ev); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	p.kinds[kind]++
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *stagedPublisher) allowPublishing() {
+	p.mu.Lock()
+	p.failReady = false
+	p.mu.Unlock()
+}
+
+func (p *stagedPublisher) count(kind string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.kinds[kind]
 }
 
 func TestCreateRecordsDirectRequestBeforePublishing(t *testing.T) {
