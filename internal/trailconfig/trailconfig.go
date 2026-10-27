@@ -767,19 +767,51 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 	root := ctx.ColonyRoot
 	seen := map[string]struct{}{}
 	var sources []sourceFile
-	addFile := func(logical, path string) {
+	// addFile records one regular file. An optional input that is simply absent
+	// is skipped, but anything that exists and cannot be captured as a regular
+	// file is an error: a snapshot must never look complete while silently
+	// missing content the colony actually sees.
+	addFile := func(logical, path string) error {
 		logical = filepath.ToSlash(logical)
 		if _, ok := seen[logical]; ok {
-			return
+			return nil
 		}
-		info, err := os.Stat(path)
-		if err != nil || info.IsDir() {
-			return
+		info, err := os.Lstat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("trailconfig: inspect %s: %w", logical, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Stat(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("trailconfig: symlink %s has no target", logical)
+				}
+				return fmt.Errorf("trailconfig: resolve symlink %s: %w", logical, err)
+			}
+			if target.IsDir() {
+				return fmt.Errorf("trailconfig: symlink %s points at a directory, want a file", logical)
+			}
+			if !target.Mode().IsRegular() {
+				return fmt.Errorf("trailconfig: symlink %s points at a non-regular file", logical)
+			}
+			info = target
+		} else if !info.Mode().IsRegular() {
+			return fmt.Errorf("trailconfig: %s is not a regular file", logical)
 		}
 		seen[logical] = struct{}{}
 		sources = append(sources, sourceFile{logical: logical, path: path})
+		return nil
 	}
 	addTree := func(logicalRoot, path string, include func(string) bool) error {
+		// skipIrrelevant reports whether an entry that cannot be captured falls
+		// outside the tree filter, so an unrelated stray name does not fail the
+		// capture of a bees/cues/adapters tree.
+		skipIrrelevant := func(name string) bool {
+			return include != nil && !include(name)
+		}
 		// active holds the resolved directories on the current walk stack. A
 		// symlink may point at one of its ancestors; following that would
 		// recurse forever, so the second visit is skipped. Directories
@@ -788,22 +820,36 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 		active := map[string]struct{}{}
 		var walkTree func(logicalDir, physicalDir string) error
 		walkTree = func(logicalDir, physicalDir string) error {
+			logicalDir = filepath.ToSlash(logicalDir)
 			resolved, err := filepath.EvalSymlinks(physicalDir)
 			if err != nil {
 				if os.IsNotExist(err) {
+					// Absent optional roots are normal. A root that exists but
+					// cannot be resolved is a broken link, not an absent input.
+					if _, lerr := os.Lstat(physicalDir); lerr == nil {
+						return fmt.Errorf("trailconfig: symlink %s has no target", logicalDir)
+					}
 					return nil
 				}
-				return fmt.Errorf("trailconfig: resolve %s: %w", physicalDir, err)
+				return fmt.Errorf("trailconfig: resolve %s: %w", logicalDir, err)
 			}
 			resolved, err = filepath.Abs(resolved)
 			if err != nil {
-				return fmt.Errorf("trailconfig: resolve %s: %w", physicalDir, err)
+				return fmt.Errorf("trailconfig: resolve %s: %w", logicalDir, err)
 			}
 			if _, ok := active[resolved]; ok {
 				return nil
 			}
 			active[resolved] = struct{}{}
 			defer delete(active, resolved)
+
+			rootInfo, err := os.Stat(resolved)
+			if err != nil {
+				return fmt.Errorf("trailconfig: inspect %s: %w", logicalDir, err)
+			}
+			if !rootInfo.IsDir() {
+				return fmt.Errorf("trailconfig: %s is not a directory", logicalDir)
+			}
 
 			err = filepath.WalkDir(resolved, func(current string, entry os.DirEntry, walkErr error) error {
 				if walkErr != nil {
@@ -825,36 +871,44 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 				}
 				if entry.Type()&os.ModeSymlink != 0 {
 					info, err := os.Stat(current)
-					if err != nil {
-						if os.IsNotExist(err) {
+					switch {
+					case err != nil && os.IsNotExist(err):
+						if skipIrrelevant(entry.Name()) {
 							return nil
 						}
-						return err
-					}
-					if info.IsDir() {
+						return fmt.Errorf("trailconfig: symlink %s has no target", filepath.ToSlash(logical))
+					case err != nil:
+						return fmt.Errorf("trailconfig: resolve symlink %s: %w", filepath.ToSlash(logical), err)
+					case info.IsDir():
 						return walkTree(logical, current)
-					}
-					if !info.Mode().IsRegular() {
-						return nil
+					case !info.Mode().IsRegular():
+						if skipIrrelevant(entry.Name()) {
+							return nil
+						}
+						return fmt.Errorf("trailconfig: symlink %s points at a non-regular file", filepath.ToSlash(logical))
 					}
 				} else if !entry.Type().IsRegular() {
+					if skipIrrelevant(entry.Name()) {
+						return nil
+					}
+					return fmt.Errorf("trailconfig: %s is not a regular file", filepath.ToSlash(logical))
+				}
+				if skipIrrelevant(entry.Name()) {
 					return nil
 				}
-				if include != nil && !include(entry.Name()) {
-					return nil
-				}
-				addFile(logical, current)
-				return nil
+				return addFile(logical, current)
 			})
 			if err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("trailconfig: walk %s: %w", physicalDir, err)
+				return fmt.Errorf("trailconfig: walk %s: %w", logicalDir, err)
 			}
 			return nil
 		}
 		return walkTree(logicalRoot, path)
 	}
 
-	addFile(".paseka/colony.yaml", colony.PasekaPath(root, "colony.yaml"))
+	if err := addFile(".paseka/colony.yaml", colony.PasekaPath(root, "colony.yaml")); err != nil {
+		return nil, err
+	}
 	if err := addTree(".paseka/bees", colony.PasekaPath(root, "bees"), yamlFile); err != nil {
 		return nil, err
 	}
@@ -873,7 +927,9 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 
 	profile := strings.TrimSpace(ctx.Profile)
 	if profile != "" {
-		addFile(filepath.Join(".paseka", "profiles", profile+".yaml"), colony.PasekaPath(root, "profiles", profile+".yaml"))
+		if err := addFile(filepath.Join(".paseka", "profiles", profile+".yaml"), colony.PasekaPath(root, "profiles", profile+".yaml")); err != nil {
+			return nil, err
+		}
 	}
 
 	if slug := strings.TrimSpace(ctx.Slug); slug != "" {

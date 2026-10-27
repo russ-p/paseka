@@ -3,6 +3,7 @@ package trailconfig_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/russ-p/paseka/internal/trailconfig"
@@ -119,5 +120,88 @@ func TestCaptureTerminatesOnSymlinkCycle(t *testing.T) {
 
 	if _, err := trailconfig.Ensure(testContext(root), "trace-symlink-cycle"); err != nil {
 		t.Fatalf("capture with a symlink cycle failed: %v", err)
+	}
+}
+
+func TestCaptureRefusesUncapturableSymlinks(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, root string)
+		want  string
+	}{
+		{
+			name: "dangling file symlink",
+			setup: func(t *testing.T, root string) {
+				if err := os.Symlink("missing.md", filepath.Join(root, ".paseka", "prompts", "dangling.md")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: ".paseka/prompts/dangling.md",
+		},
+		{
+			name: "dangling tree root",
+			setup: func(t *testing.T, root string) {
+				prompts := filepath.Join(root, ".paseka", "prompts")
+				if err := os.RemoveAll(prompts); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(root, ".paseka", "prompts-gone"), prompts); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: ".paseka/prompts",
+		},
+		{
+			name: "dangling single file input",
+			setup: func(t *testing.T, root string) {
+				manifest := filepath.Join(root, ".paseka", "colony.yaml")
+				if err := os.Remove(manifest); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(root, ".paseka", "colony-missing.yaml"), manifest); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: ".paseka/colony.yaml",
+		},
+		{
+			name: "non-regular target",
+			setup: func(t *testing.T, root string) {
+				if err := os.Symlink(os.DevNull, filepath.Join(root, ".paseka", "prompts", "device.md")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: ".paseka/prompts/device.md",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeColony(t, "slug: test\n")
+			setupHome(t, "test")
+			tc.setup(t, root)
+
+			_, err := trailconfig.Ensure(testContext(root), "trace-uncapturable")
+			if err == nil {
+				t.Fatal("capture accepted a symlink it cannot capture")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want it to name %s", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestCaptureIgnoresBrokenLinkOutsideTreeFilter keeps the stricter symlink rule
+// from failing a capture over a link that the tree filter never selects.
+func TestCaptureIgnoresBrokenLinkOutsideTreeFilter(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+
+	if err := os.Symlink("missing.txt", filepath.Join(root, ".paseka", "bees", "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := trailconfig.Ensure(testContext(root), "trace-irrelevant-link"); err != nil {
+		t.Fatalf("capture failed on an ignored link: %v", err)
 	}
 }
