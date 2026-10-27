@@ -780,33 +780,78 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 		sources = append(sources, sourceFile{logical: logical, path: path})
 	}
 	addTree := func(logicalRoot, path string, include func(string) bool) error {
-		err := filepath.WalkDir(path, func(current string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				if os.IsNotExist(walkErr) {
+		// active holds the resolved directories on the current walk stack. A
+		// symlink may point at one of its ancestors; following that would
+		// recurse forever, so the second visit is skipped. Directories
+		// reachable through two different links are still captured under both
+		// logical paths.
+		active := map[string]struct{}{}
+		var walkTree func(logicalDir, physicalDir string) error
+		walkTree = func(logicalDir, physicalDir string) error {
+			resolved, err := filepath.EvalSymlinks(physicalDir)
+			if err != nil {
+				if os.IsNotExist(err) {
 					return nil
 				}
-				return walkErr
+				return fmt.Errorf("trailconfig: resolve %s: %w", physicalDir, err)
 			}
-			if entry.IsDir() {
-				return nil
-			}
-			if !entry.Type().IsRegular() {
-				return nil
-			}
-			if include != nil && !include(entry.Name()) {
-				return nil
-			}
-			rel, err := filepath.Rel(path, current)
+			resolved, err = filepath.Abs(resolved)
 			if err != nil {
-				return err
+				return fmt.Errorf("trailconfig: resolve %s: %w", physicalDir, err)
 			}
-			addFile(filepath.Join(logicalRoot, rel), current)
+			if _, ok := active[resolved]; ok {
+				return nil
+			}
+			active[resolved] = struct{}{}
+			defer delete(active, resolved)
+
+			err = filepath.WalkDir(resolved, func(current string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					if os.IsNotExist(walkErr) {
+						return nil
+					}
+					return walkErr
+				}
+				rel, err := filepath.Rel(resolved, current)
+				if err != nil {
+					return err
+				}
+				if rel == "." {
+					return nil
+				}
+				logical := filepath.Join(logicalDir, rel)
+				if entry.IsDir() {
+					return nil
+				}
+				if entry.Type()&os.ModeSymlink != 0 {
+					info, err := os.Stat(current)
+					if err != nil {
+						if os.IsNotExist(err) {
+							return nil
+						}
+						return err
+					}
+					if info.IsDir() {
+						return walkTree(logical, current)
+					}
+					if !info.Mode().IsRegular() {
+						return nil
+					}
+				} else if !entry.Type().IsRegular() {
+					return nil
+				}
+				if include != nil && !include(entry.Name()) {
+					return nil
+				}
+				addFile(logical, current)
+				return nil
+			})
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("trailconfig: walk %s: %w", physicalDir, err)
+			}
 			return nil
-		})
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("trailconfig: walk %s: %w", path, err)
 		}
-		return nil
+		return walkTree(logicalRoot, path)
 	}
 
 	addFile(".paseka/colony.yaml", colony.PasekaPath(root, "colony.yaml"))
