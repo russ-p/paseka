@@ -126,9 +126,25 @@ subscribing to it, and a refused request leaves no runnable trail behind.
   recorded run, so an ordinary bee cannot decide its own request. `approve`
   performs the on-disk creation exactly once and is idempotent; `reject` and
   `cancel` create nothing. Pending requests are quota-bound and expire.
+- **Recorded evidence wins.** Approval resolves the attempt recorded on the
+  request, so a source retry between submission and approval neither changes the
+  selected evidence nor refuses an already-recorded decision. An attempt that is
+  no longer readable is refused as changed evidence.
+- **Creating is not runnable.** Approval persists the fork lineage as
+  `creating` before publishing and promotes it to `runnable` only after the
+  initial `task.plan` and `task.ready`. A `creating` fork appears in the
+  operator's pending list with its last error and is refused by the Reactor, the
+  colony dispatcher, and interactive sessions, so an interrupted creation cannot
+  run work that was never published. Duplicate approval waits for the in-flight
+  creation and returns the recorded outcome.
 - **CLI and Console use the control path directly.** `paseka trail fork` and the
   Console's approve/reject/cancel actions call the same service as the operator
   and do not need to publish these kinds.
+
+Configuration application has no equivalent bus contract in v1: `paseka trail
+config apply` and the Console call the configuration service directly, and no
+bee can request or perform a cutover by publishing an event. A
+`SIGNAL/trail.config.apply` control request remains deferred.
 
 See [Spec 042](../specs/042-trail-fork.md) §14–15 and [CLI](../guide/cli.md#paseka-trail).
 

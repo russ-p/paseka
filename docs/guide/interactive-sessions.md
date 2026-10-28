@@ -226,6 +226,8 @@ agent --force \
 
 **Resume** (Queen Console session detail, or `paseka session resume <sessionId>`) is a separate path from a new `bee chat` / `POST /api/sessions`. It is eligible for a finished **Cursor or OpenCode** HITL session with a stored `providerSessionId` and a bee that still resolves to the same adapter without a `command:` override (Pi, Claude, and script sources are not resumable; the API returns `not_resumable`). A registry row whose PID is no longer alive does not block Resume. The continuation is a new Paseka session on the same Flight Trail; `session.json` records `resumedFrom`. Honey is not charged. The Console transcript of the new session starts empty — provider history appears inside the TUI, not as NDJSON.
 
+The continuation also runs under the configuration version recorded by the source session, not the trail's later active revision: bee resolution, the adapter and implementation checks, and the rendered procedure all read that retained snapshot. A version that is no longer retained refuses the resume with `config_unavailable` rather than silently switching the open chat to a newer procedure. Sessions recorded before configuration capture have no version and keep the active-version path.
+
 When `system_template` is set and no task/prompt is given, a **new** session starts without a positional prompt and waits for user input. Resume with no continue line also omits the positional prompt.
 
 Worktrees: if the bee has `worktree: true`, the session cwd is `.paseka/worktrees/<traceId>/` (same as `bee run`). Git branch follows the same ensure/rename rules as AFK: latest `INSIGHT/worktree.branch`, else `paseka/<traceId>`.

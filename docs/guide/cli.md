@@ -277,7 +277,7 @@ Stop a session by id. Tries the in-process manager first, then signals a remote 
 
 ### `paseka session resume <sessionId>`
 
-Continue a **finished Cursor or OpenCode** HITL session: new Paseka `sessionId` / run directory, same provider `providerSessionId`, no `create-chat` / pre-create. Cursor resumes with `--resume`; OpenCode with `--session`. Attaches in the current terminal. Ineligible sources (Pi/Claude/script, missing id, `command:` bee, still active, another live session on the same chat) exit non-zero.
+Continue a **finished Cursor or OpenCode** HITL session: new Paseka `sessionId` / run directory, same provider `providerSessionId`, no `create-chat` / pre-create. Cursor resumes with `--resume`; OpenCode with `--session`. Attaches in the current terminal. The continuation runs under the configuration version recorded by the source session, so a later `trail config apply` does not swap prompts, tools, or adapters inside an open chat; if that version is no longer retained, resume fails with `config_unavailable` instead of falling back to the active version. Ineligible sources (Pi/Claude/script, missing id, `command:` bee, still active, another live session on the same chat) exit non-zero.
 
 | Flag | Short | Description |
 | ---- | ----- | ----------- |
@@ -1089,6 +1089,13 @@ activated when they drain), `unchanged` (the selected content is already active;
 no new revision), or `rejected` (policy, validation, or a stale expected
 revision). A rejected outcome is a non-zero CLI error.
 
+A dry run performs the same validation and preview without durable changes: it
+creates no configuration directory, retains no snapshot, writes no history, and
+leaves no lock file behind. While an action is pending, the running Reactor
+stops admitting new work; a new independent direct reaction is recorded as
+pending dispatch work and resumes when the action is activated or cancelled, and
+ready tasks resume when the boundary clears.
+
 Applying configuration never edits application code, resets task state, creates
 a worktree, replenishes honey, launches an agent, or retries a task. A pinned
 experimental trail refuses the action outright.
@@ -1140,26 +1147,40 @@ operator action: it proceeds in the same invocation unless `--dry-run` is set,
 and it refuses an ambiguous root task, a dependency-bearing or final-review
 task, a dirty or unrecorded source base, or missing source evidence.
 
+The selected attempt — `--source-run`, or the single unambiguous attempt — is
+recorded in the request and lineage, and approval uses that recorded attempt even
+if the source later gains a retry. If creation fails after the request identity
+exists, the error names it so the same identity can be retried with
+`--request-id`; a retry finishes an interrupted publication instead of minting a
+second fork.
+
 ### `paseka trail fork pending`
 
-List agent-originated requests awaiting a decision: request id, state, sender
-trail/agent, source trail, sector, title, and expiry.
+List requests that still need attention: those awaiting a decision and forks whose
+creation has not finished (`creating`, including interrupted or failed creations
+with their last error). Each row shows request id, state, sender trail/agent,
+source trail and task, recorded attempt, delta form, budget, validation status,
+title, and expiry.
 
 | Flag | Description |
 | ---- | ----------- |
-| `--all` | Include decided and expired requests |
+| `--all` | Include decided, expired, refused, and cancelled requests |
 | `--json` | Print the request records |
 | `--path` | Colony resolution start directory |
 
 Pending requests hold no trail, snapshot, worktree, honey, or task plan. They
 are quota-bound and expire, and `--json` prints an empty list rather than `null`.
+A `creating` request has started on-disk creation; its fork is not dispatchable
+until recovery publishes the initial task and records it `runnable`.
 
 ### `paseka trail fork approve|reject|cancel <requestId>`
 
 - `approve` advances a pending request and performs the on-disk creation:
   source and candidate snapshots, worktree and branch, lineage, honey reserve,
-  task plan, and ready signal. It is idempotent and refuses approval once
-  required source evidence is gone.
+  task plan, and ready signal. It is idempotent, uses the attempt recorded when
+  the request was submitted, and refuses approval once required source evidence
+  is gone. A duplicate approval that arrives while the first creation is still
+  running waits for it and returns the recorded outcome.
 - `reject` records refusal and creates nothing.
 - `cancel` records cancellation of a pending request and creates nothing.
 
