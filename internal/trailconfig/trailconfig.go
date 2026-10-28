@@ -797,7 +797,6 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 			if !target.Mode().IsRegular() {
 				return fmt.Errorf("trailconfig: symlink %s points at a non-regular file", logical)
 			}
-			info = target
 		} else if !info.Mode().IsRegular() {
 			return fmt.Errorf("trailconfig: %s is not a regular file", logical)
 		}
