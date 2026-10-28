@@ -24,7 +24,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12
+          version: v2.15
           args: --timeout=5m
 
       # The console preview bundle is not committed, so this job is also the one
