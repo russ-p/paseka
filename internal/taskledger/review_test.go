@@ -330,6 +330,29 @@ func TestLastCompletedIsolatedProposalTaskPicksNewest(t *testing.T) {
 	}
 }
 
+func TestLastCompletedIsolatedProposalTaskExcludesClosing(t *testing.T) {
+	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Hour)
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated, UpdatedAt: older,
+			},
+			"closing-1": {
+				TaskID: "closing-1", Bee: "reviewer", Phase: protocol.TaskPhaseClosing,
+				Status:            protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated, UpdatedAt: newer,
+			},
+		},
+	}
+	got, ok := taskledger.LastCompletedIsolatedProposalTask(trace)
+	if !ok || got.TaskID != "task-1" {
+		t.Fatalf("got %+v ok=%v, want task-1 (closing is never the rework source)", got, ok)
+	}
+}
+
 func TestCanRequestChangesAndInFlightRework(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

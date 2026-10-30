@@ -40,7 +40,7 @@ Bees describe the trail. Runtime pushes git and talks to the forge.
 
 Body fallbacks: HITL `--pr-body` → latest `INSIGHT/pr.body` → `trace.summary` → empty. Title fallbacks: HITL `--pr-title` → `trace.title` → merge-subject style `paseka: merge trace <id>`.
 
-`pr.body` is **prompt-level** on the last AFK work task (`{{.IsLastWorkTask}}` in init `emit-insight`). It is **not** a completion-contract `required` kind. Runtime does not auto-synthesize it. Payload:
+`pr.body` is **prompt-level** on the last AFK work task (`{{.IsLastWorkTask}}` in init `emit-insight`). It is **not** a completion-contract `required` kind. Runtime does not auto-synthesize it. When the trail's pinned closing policy guarantees a closing round, `{{.SuppressPRBody}}` is also `true` and the work task drops only the `pr.body` guidance — the closing task writes the authoritative body instead. `trace.summary` guidance stays on the work task. Payload:
 
 ```json
 {

@@ -158,6 +158,8 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		ArtifactsDir:   artifacts.DirForPrompt(colonyRoot, req.TraceID),
 		Interactive:    false,
 		IsLastWorkTask: req.IsLastWorkTask,
+		SuppressPRBody: req.SuppressPRBody,
+		TrailInventory: req.TrailInventory,
 		Adapter:        adapterName,
 	}, knownIntents, defaultIntent)
 

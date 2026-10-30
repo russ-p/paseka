@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/prompts"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 func writePromptTree(t *testing.T, colonyRoot string) {
@@ -243,6 +245,40 @@ func TestRenderEmitInsightLastWorkTask(t *testing.T) {
 	}
 	if !strings.Contains(got, "no trail summary duty") {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRenderTrailInventoryAndPRBodySuppression(t *testing.T) {
+	root := t.TempDir()
+	writePromptTree(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/builder.md"),
+		[]byte("{{range .TrailInventory.Tasks}}{{.TaskID}}|{{.Phase}}|{{.Status}}|{{.Commit}}|{{.Summary}}\n{{end}}"+
+			"{{if .SuppressPRBody}}closing owns pr.body{{end}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader, err := prompts.NewLoader(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := loader.Render("builder.md", prompts.Context{
+		SuppressPRBody: true,
+		TrailInventory: colony.TrailInventory{Tasks: []colony.TrailTask{
+			{TaskID: "task-1", Phase: protocol.TaskPhaseWork, Status: protocol.TaskStatusCompleted, Commit: "abc123", Summary: "built it"},
+			{TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusRunning},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"task-1|work|completed|abc123|built it",
+		"closing-1|closing|running||",
+		"closing owns pr.body",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rendered prompt missing %q: %q", want, got)
+		}
 	}
 }
 

@@ -115,10 +115,12 @@ func HasIsolatedProposal(trace TraceSnapshot) bool {
 
 // LastCompletedIsolatedProposalTask returns the newest completed non-final task
 // that recorded an isolated code.proposal (the bee that should continue rework).
+// Closing-phase tasks are excluded: a closing round that opens a proposal is
+// recorded but must never become the source of "apply review comments" work.
 func LastCompletedIsolatedProposalTask(trace TraceSnapshot) (TaskSnapshot, bool) {
 	var candidates []TaskSnapshot
 	for _, task := range trace.Tasks {
-		if IsFinalReviewTask(task) {
+		if IsFinalReviewTask(task) || IsClosingTask(task) {
 			continue
 		}
 		if task.Status != protocol.TaskStatusCompleted {

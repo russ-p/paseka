@@ -15,6 +15,7 @@ import (
 
 type recordingAdapter struct {
 	lastReq adapters.RunRequest
+	prompts []string
 	events  []protocol.Event
 	result  *adapters.RunResult
 	runErr  error
@@ -26,6 +27,7 @@ func (r *recordingAdapter) Name() string { return "cursor" }
 func (r *recordingAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	r.calls++
 	r.lastReq = req
+	r.prompts = append(r.prompts, req.Prompt)
 	if r.runErr != nil {
 		return nil, r.runErr
 	}
@@ -186,6 +188,58 @@ func TestDispatchIsLastWorkTaskPromptGating(t *testing.T) {
 	}
 	if strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_TRACE_SUMMARY") {
 		t.Fatalf("prompt must not include last-work-task guidance: %q", rec.lastReq.Prompt)
+	}
+}
+
+func TestDispatchSuppressPRBodyPromptGating(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	emitInsight := `{{if .IsLastWorkTask}}{{if not .SuppressPRBody}}MUST_EMIT_PR_BODY{{end}}MUST_EMIT_TRACE_SUMMARY{{end}}`
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/_partials/emit-insight.md"), []byte(emitInsight), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/builder.md"),
+		[]byte("{{template \"emit-insight\" .}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recordingAdapter{}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", rec)
+
+	_, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot:     root,
+		Bee:            "builder",
+		TraceID:        "trace-abc",
+		TaskID:         "task-1",
+		Task:           "last slice",
+		IsLastWorkTask: true,
+		SuppressPRBody: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_PR_BODY") {
+		t.Fatalf("prompt must keep the pr.body fallback: %q", rec.lastReq.Prompt)
+	}
+
+	_, err = d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot:     root,
+		Bee:            "builder",
+		TraceID:        "trace-abc",
+		TaskID:         "task-1",
+		Task:           "last slice",
+		IsLastWorkTask: true,
+		SuppressPRBody: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_PR_BODY") {
+		t.Fatalf("prompt must hand pr.body to the closing round: %q", rec.lastReq.Prompt)
+	}
+	if !strings.Contains(rec.lastReq.Prompt, "MUST_EMIT_TRACE_SUMMARY") {
+		t.Fatalf("trace.summary guidance must survive suppression: %q", rec.lastReq.Prompt)
 	}
 }
 

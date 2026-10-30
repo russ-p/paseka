@@ -122,7 +122,7 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 		return result, nil
 	}
 
-	inventory := trailInventory(colonyCtx, traceID, snap)
+	inventory := BuildTrailInventory(colonyCtx, traceID, snap)
 	title, err := policies.Merge.ResolvedTitle(inventory)
 	if err != nil {
 		return result, err
@@ -249,6 +249,28 @@ func ensureClosingRound(ctx context.Context, pub bus.Publisher, ledger taskledge
 	return task, true, nil
 }
 
+// ClosingRoundGuaranteed reports whether the pinned policy will seed a closing
+// round once the trail's remaining work completes. It mirrors the seed
+// conditions in ensureClosingRound without mutating the ledger, so the last
+// work task can hand pr.body to the closing round instead of writing it itself.
+// A failed or blocked closing round is not replaced, so it does not count as a
+// guarantee.
+func ClosingRoundGuaranteed(policy colony.ClosingPolicy, trace taskledger.TraceSnapshot) bool {
+	if !policy.Enabled {
+		return false
+	}
+	if taskledger.MergeTaskCompleted(trace) {
+		return false
+	}
+	if !policy.Matches(taskledger.WorkTaskCount(trace), taskledger.HasIsolatedProposal(trace)) {
+		return false
+	}
+	if taskledger.HasUnfinishedClosingTask(trace) {
+		return false
+	}
+	return taskledger.HighestClosingRound(trace)+1 <= policy.ResolvedMaxRounds()
+}
+
 // recordClosingCapNote explains a cap skip instead of creating and cancelling a
 // placeholder task: a cancelled task would block the gate exactly like a
 // planned one, because every non-merge task must complete.
@@ -269,9 +291,10 @@ func recordClosingCapNote(ctx context.Context, pub bus.Publisher, ledger taskled
 	return WriteEvent(ctx, pub, ledger, ev, opts)
 }
 
-// trailInventory builds the structured task list shared by closing prompts and
-// gate copy templates. It is not a transcript.
-func trailInventory(colonyCtx colony.Context, traceID string, snap taskledger.TraceSnapshot) colony.TrailInventory {
+// BuildTrailInventory builds the structured task list shared by closing prompts
+// and gate copy templates. It is not a transcript: one row per task with the
+// fields a Bee needs to review the whole trail.
+func BuildTrailInventory(colonyCtx colony.Context, traceID string, snap taskledger.TraceSnapshot) colony.TrailInventory {
 	inventory := colony.TrailInventory{TraceID: traceID}
 	if title, err := runs.ResolveTraceTitle(colonyCtx.ColonyRoot, traceID); err == nil {
 		inventory.TraceTitle = title

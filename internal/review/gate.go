@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,6 +65,9 @@ func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, l
 	}
 	if !taskledger.IsReviewGate(task) {
 		return ApproveResult{}, fmt.Errorf("task %q is not a review gate task", in.TaskID)
+	}
+	if err := EnsureApprovable(snap, in.TaskID); err != nil {
+		return ApproveResult{}, err
 	}
 
 	bees, err := colonyCtx.LoadAllBees()
@@ -140,6 +144,37 @@ func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, l
 		return ApproveResult{}, err
 	}
 	return result, nil
+}
+
+// EnsureApprovable refuses approval of the merge gate while any other
+// non-merge task is still incomplete, so a change set can never be merged
+// underneath a running closing round or an unfinished rework task. A mid-trail
+// review gate is not a merge task: its downstream work is planned by
+// definition, and approving it is how that work becomes ready.
+func EnsureApprovable(trace taskledger.TraceSnapshot, taskID string) error {
+	task, ok := trace.Tasks[taskID]
+	if !ok || !taskledger.IsMergeTask(task) {
+		return nil
+	}
+	var blockers []string
+	for id, other := range trace.Tasks {
+		if id == taskID || taskledger.IsMergeTask(other) {
+			continue
+		}
+		if other.Status == protocol.TaskStatusCompleted {
+			continue
+		}
+		status := other.Status
+		if status == "" {
+			status = protocol.TaskStatusPlanned
+		}
+		blockers = append(blockers, fmt.Sprintf("%s (%s)", id, status))
+	}
+	if len(blockers) == 0 {
+		return nil
+	}
+	sort.Strings(blockers)
+	return fmt.Errorf("cannot approve merge gate %q: %d unfinished task(s): %s", taskID, len(blockers), strings.Join(blockers, ", "))
 }
 
 // RejectInput describes a human rejection of a review-gated task.

@@ -1040,6 +1040,10 @@ func writeReviewError(w http.ResponseWriter, err error) {
 		status = http.StatusServiceUnavailable
 	} else if strings.Contains(msg, "not found") {
 		status = http.StatusNotFound
+	} else if strings.Contains(msg, "cannot approve") {
+		// The merge gate is closed while another task is unfinished; the
+		// request is valid but the trail is not ready for it.
+		status = http.StatusConflict
 	} else if strings.Contains(msg, "required") || strings.Contains(msg, "expected") || strings.Contains(msg, "not a review") {
 		status = http.StatusBadRequest
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ closing:
   max_rounds: 3
 `
 
-func newClosingTestReactor(t *testing.T, colonyYAML string, bees map[string]colony.Bee) (*runtime.Reactor, *recordingPublisher) {
+func newClosingTestReactor(t *testing.T, colonyYAML string, bees map[string]colony.Bee) (*runtime.Reactor, *recordingPublisher, *recordingAdapter) {
 	t.Helper()
 	root := t.TempDir()
 	mustWriteTestColony(t, root, bees)
@@ -38,7 +39,8 @@ func newClosingTestReactor(t *testing.T, colonyYAML string, bees map[string]colo
 	d := runtime.NewDispatcher()
 	reg := runtime.NewBeeRegistryFromBees(bees)
 	d.SetBeeRegistry(reg)
-	d.RegisterAdapter("cursor", &recordingAdapter{})
+	adapter := &recordingAdapter{}
+	d.RegisterAdapter("cursor", adapter)
 	pub := &recordingPublisher{}
 	d.SetPublisher(pub, false)
 	return runtime.NewTestReactor(runtime.TestReactorOptions{
@@ -47,11 +49,11 @@ func newClosingTestReactor(t *testing.T, colonyYAML string, bees map[string]colo
 		Registry:   reg,
 		Ledger:     taskledger.NewMemoryLedger(),
 		Publisher:  pub,
-	}), pub
+	}), pub, adapter
 }
 
 func TestReactorClosingLifecycleEndToEnd(t *testing.T) {
-	r, pub := newClosingTestReactor(t, closingLifecycleColony, map[string]colony.Bee{
+	r, pub, _ := newClosingTestReactor(t, closingLifecycleColony, map[string]colony.Bee{
 		"builder": {Role: "builder"},
 		"reviewer": {Role: "reviewer", Publishes: []colony.PublicationRule{{
 			EventRule: colony.EventRule{Type: string(protocol.EventVerification), Kind: string(protocol.TaskEventCompleted)},
@@ -216,7 +218,7 @@ closing:
     review: required
   max_rounds: 2
 `
-	r, _ := newClosingTestReactor(t, colonyYAML, map[string]colony.Bee{
+	r, _, _ := newClosingTestReactor(t, colonyYAML, map[string]colony.Bee{
 		"builder":  {Role: "builder"},
 		"reviewer": {Role: "reviewer"},
 	})
@@ -273,6 +275,157 @@ closing:
 	}
 	if snap.Tasks[taskledger.FinalReviewTaskID].Status != protocol.TaskStatusWaitingReview {
 		t.Fatalf("merge gate status = %q, want waiting_review after the predicate skipped closing", snap.Tasks[taskledger.FinalReviewTaskID].Status)
+	}
+}
+
+func TestClosingPromptReceivesTrailInventory(t *testing.T) {
+	const closingYAML = `defaults:
+  prompt_template: default.md
+closing:
+  enabled: true
+  when:
+    min_work_tasks: 1
+  task:
+    bee: reviewer
+  max_rounds: 1
+`
+	r, _, adapter := newClosingTestReactor(t, closingYAML, map[string]colony.Bee{
+		"builder":  {Role: "builder"},
+		"reviewer": {Role: "reviewer"},
+	})
+	inventoryPrompt := "{{range .TrailInventory.Tasks}}{{.TaskID}}|{{.Phase}}|{{.Status}}|{{.Commit}}|{{.Title}}\n{{end}}"
+	promptsDir := filepath.Join(r.ColonyRoot(), ".paseka", "prompts")
+	if err := os.WriteFile(filepath.Join(promptsDir, "default.md"), []byte(inventoryPrompt), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	traceID := "trace-closing-inventory"
+	plan := func(spec protocol.TaskSpec) {
+		t.Helper()
+		ev, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+			Kind:  protocol.TaskEventPlan,
+			Tasks: []protocol.TaskSpec{spec},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.ProcessEvent(context.Background(), ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan(protocol.TaskSpec{TaskID: "task-1", Title: "First slice", Bee: "builder"})
+	completed, err := protocol.NewEvent(traceID, "builder-agent", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusCompleted,
+		Commit: "abc123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), completed); err != nil {
+		t.Fatal(err)
+	}
+
+	var closingPrompt string
+	for _, prompt := range adapter.prompts {
+		if strings.Contains(prompt, "closing-1|closing|") {
+			closingPrompt = prompt
+			break
+		}
+	}
+	if closingPrompt == "" {
+		t.Fatalf("no closing prompt with an inventory: %q", adapter.prompts)
+	}
+	for _, want := range []string{
+		"task-1|work|completed|abc123|First slice",
+		"closing-1|closing|running||Review the trail and prepare the pull request",
+	} {
+		if !strings.Contains(closingPrompt, want) {
+			t.Fatalf("closing prompt missing %q: %q", want, closingPrompt)
+		}
+	}
+}
+
+func TestLastWorkTaskPRBodySuppressionFollowsPinnedPolicy(t *testing.T) {
+	const (
+		emitPrompt = `{{if .IsLastWorkTask}}{{if not .SuppressPRBody}}PR_BODY{{end}}TRACE_SUMMARY{{end}}`
+		noClosing  = `defaults:
+  prompt_template: default.md
+`
+		closingEnabled = `defaults:
+  prompt_template: default.md
+closing:
+  enabled: true
+  when:
+    min_work_tasks: 1
+  task:
+    bee: reviewer
+  max_rounds: 1
+`
+		predicateMisses = `defaults:
+  prompt_template: default.md
+closing:
+  enabled: true
+  when:
+    min_work_tasks: 3
+  task:
+    bee: reviewer
+  max_rounds: 1
+`
+	)
+	for _, tc := range []struct {
+		name       string
+		colonyYAML string
+		wantPRBody bool
+	}{
+		{name: "guaranteed closing round", colonyYAML: closingEnabled, wantPRBody: false},
+		{name: "no closing policy", colonyYAML: noClosing, wantPRBody: true},
+		{name: "predicate misses", colonyYAML: predicateMisses, wantPRBody: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, _, adapter := newClosingTestReactor(t, tc.colonyYAML, map[string]colony.Bee{
+				"builder":  {Role: "builder"},
+				"reviewer": {Role: "reviewer"},
+			})
+			promptsDir := filepath.Join(r.ColonyRoot(), ".paseka", "prompts")
+			if err := os.WriteFile(filepath.Join(promptsDir, "default.md"), []byte(emitPrompt), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			traceID := "trace-last-work-pr-body"
+			plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+				Kind:  protocol.TaskEventPlan,
+				Tasks: []protocol.TaskSpec{{TaskID: "task-1", Title: "Only slice", Bee: "builder"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.ProcessEvent(context.Background(), plan); err != nil {
+				t.Fatal(err)
+			}
+			ready, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventSignal, protocol.TaskReadyPayload{
+				Kind:   protocol.TaskEventReady,
+				TaskID: "task-1",
+				Title:  "Only slice",
+				Bee:    "builder",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.ProcessEvent(context.Background(), ready); err != nil {
+				t.Fatal(err)
+			}
+			if len(adapter.prompts) == 0 {
+				t.Fatal("the last work task was not dispatched")
+			}
+			lastWorkPrompt := adapter.prompts[0]
+			if !strings.Contains(lastWorkPrompt, "TRACE_SUMMARY") {
+				t.Fatalf("last work task lost trace.summary guidance: %q", lastWorkPrompt)
+			}
+			if got := strings.Contains(lastWorkPrompt, "PR_BODY"); got != tc.wantPRBody {
+				t.Fatalf("pr.body guidance present = %v, want %v: %q", got, tc.wantPRBody, lastWorkPrompt)
+			}
+		})
 	}
 }
 

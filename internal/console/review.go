@@ -168,6 +168,15 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 	if session.Publisher == nil || session.Ledger == nil {
 		return ApproveTaskResponse{}, fmt.Errorf("nats url not configured")
 	}
+	// Refuse the merge gate while any other non-merge task is unfinished: the
+	// console must not present a change set for delivery before it is complete.
+	snap, err := validateReviewTaskTarget(colonyCtx, session, traceID, taskID)
+	if err != nil {
+		return ApproveTaskResponse{}, err
+	}
+	if err := review.EnsureApprovable(snap, taskID); err != nil {
+		return ApproveTaskResponse{}, err
+	}
 
 	approveRes, err := review.Approve(ctx, colonyCtx, session.Publisher, session.Ledger, review.ApproveInput{
 		TraceID:      traceID,
@@ -184,7 +193,7 @@ func ApproveTask(ctx context.Context, colonyCtx colony.Context, traceID, taskID 
 		return ApproveTaskResponse{}, err
 	}
 
-	snap, _, err := tasks.LoadTrace(colonyCtx, session.Ledger, traceID)
+	snap, _, err = tasks.LoadTrace(colonyCtx, session.Ledger, traceID)
 	if err != nil {
 		return ApproveTaskResponse{}, err
 	}
