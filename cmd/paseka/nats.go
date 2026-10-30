@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/cues"
 	"github.com/russ-p/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +44,12 @@ func newDoctorCmd() *cobra.Command {
 			report.Warnings = append(report.Warnings, standing.Warnings...)
 			report.Warnings = append(report.Warnings, colony.DiagnoseBeeParams(bees)...)
 			report.Warnings = append(report.Warnings, colony.DiagnoseAdapterCredentials(ctxColony)...)
+			// The ledger check runs only when the bus answered: a planned task
+			// with a broken dependency is invisible on the filesystem and is the
+			// one doctor finding that silently holds a trail's final gate shut.
+			if report.KVOK {
+				report.Warnings = append(report.Warnings, tasks.DiagnoseDependencies(ctxColony)...)
+			}
 			profileView, profileErr := ctxColony.DoctorProfileView()
 			if profileErr != nil {
 				report.Errors = append(report.Errors, profileErr.Error())

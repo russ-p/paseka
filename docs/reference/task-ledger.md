@@ -114,6 +114,12 @@ Retry transitions `failed` or `running` → `ready` via `task.ready`, then the r
 
 When more than one planned task is eligible in the same tick, the **oldest `createdAt` runs first**; the task id breaks ties ([spec 031](../specs/031-task-scheduler.md)). A task with no `createdAt` — a trail planned before the ledger stamped one — sorts **last**, so an unstamped task never displaces one whose wait is actually measured. Ordering is by plan time, not by id: `task-10` planned before `task-2` runs first.
 
+### Dependency validation
+
+`dependsOn` is checked on the producer side. `paseka task create` (and the Console create route that shares it) refuses an id no task in the trace carries, a self dependency, an empty entry, and a cycle, so a typo fails the create while the operator is still looking at it. The check reads the ledger snapshot plus the spec being published, so a plan may depend on a sibling registered by the same `task.plan`. The reducer stays tolerant — replaying an older trail never fails — and a re-plan for an id that already has a status is judged by the stored edges, because the reducer would ignore the new ones.
+
+`paseka doctor` scans every trail in the ledger for the same defects plus a planned task whose dependency is `cancelled` or `blocked`. The final gate opens only when every task except the merge gate has completed ([`AllAFKTasksCompleted`]), so a planned task with an unsatisfiable dependency closes the trail for good; doctor names the trace and the task instead of leaving it silent.
+
 ### `task.status` — SIGNAL
 
 Runtime publishes intermediate task transitions (`running`, `waiting_review`, `ready`, `failed`). The `summary` field on `task.status` replaces the previous task summary (omit or empty clears it — used when unblocking honey-exhausted tasks or clearing a failure reason on retry).

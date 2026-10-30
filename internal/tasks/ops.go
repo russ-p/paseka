@@ -196,6 +196,18 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 	if err := colony.ValidateTaskReviewPolicy(spec, bees, manifest.Defaults); err != nil {
 		return CreateResult{}, err
 	}
+	// A typo in --depends-on used to be published as-is: the task then waited on
+	// an id that never completes, so it stayed planned and the final gate never
+	// opened. Refuse the create while the operator is still looking at it.
+	if session.Ledger != nil {
+		snap, err := session.Ledger.Snapshot(traceID)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		if err := taskledger.ValidateDependencies(snap, spec); err != nil {
+			return CreateResult{}, fmt.Errorf("task %s: invalid depends-on: %w", taskID, err)
+		}
+	}
 	planEv, err := PlanEvent(traceID, agentID, spec)
 	if err != nil {
 		return CreateResult{}, err

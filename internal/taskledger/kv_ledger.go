@@ -21,6 +21,19 @@ func NewKVLedger(kv nats.KeyValue) *KVLedger {
 	return &KVLedger{kv: kv}
 }
 
+// TraceIDs lists the traces present in the bucket, so a diagnostic can walk
+// every trail instead of only the one an operator already suspects.
+func (l *KVLedger) TraceIDs() ([]string, error) {
+	keys, err := l.kv.Keys()
+	if err != nil {
+		if errors.Is(err, nats.ErrNoKeysFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("taskledger: kv keys: %w", err)
+	}
+	return keys, nil
+}
+
 // Snapshot returns the current task ledger for a trace.
 func (l *KVLedger) Snapshot(traceID string) (TraceSnapshot, error) {
 	if traceID == "" {

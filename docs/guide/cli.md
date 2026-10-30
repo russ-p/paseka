@@ -347,6 +347,8 @@ paseka task create --file task.md --bee builder --autorun
 
 On success prints `trace`, `task`, suggested `paseka task start` / `paseka task show` commands, and whether `task.ready` was published.
 
+`--depends-on` is validated before `task.plan` is published: an unknown task id, a self dependency, an empty entry, or a cycle fails the create instead of publishing a task that would stay `planned` forever. Create the dependency first, or depend on a sibling planned in the same batch.
+
 ### `paseka task list`
 
 List tasks for one flight trail.
@@ -489,7 +491,7 @@ Check NATS connectivity, JetStream resources, and colony bee wiring for the colo
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning).
+**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning); **task dependencies** (warnings for a trail with a planned task whose `dependsOn` names an unknown, cancelled, or blocked task, or forms a cycle — the state that keeps the final gate closed).
 
 Exits with an error if any check fails.
 

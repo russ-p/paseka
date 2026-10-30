@@ -2,6 +2,16 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A typo in `dependsOn` can no longer close a trail
+
+A dependency is an id, and an id typed wrong used to be published as-is. The task it belonged to then waited on something that would never complete: it stayed `planned` forever, and because the final gate opens only when every task but the merge gate has completed, the trail's review gate could never open — silently, with no event and no way to repair the task in place.
+
+- **The producer refuses it.** `paseka task create` — and the Console create route that shares it — validates `dependsOn` before publishing: an unknown task id, a self dependency, an empty entry, or a cycle fails the create with the offending ids named. A plan may still depend on a sibling registered in the same `task.plan`, and a re-plan for an id that already has a status is judged by the stored edges, because the reducer would ignore the new ones.
+- **The reducer stays tolerant.** Replaying an older trail still never fails on a dependency it cannot resolve; validation belongs to whoever is about to publish, not to the event log.
+- **`paseka doctor` finds the trails that are already stuck.** It scans every trace in the task ledger and warns on a planned task whose dependency is unknown, cancelled, or blocked, or on a dependency cycle — naming the trace and the task, instead of leaving an operator to wonder why the gate never opened.
+
+- Canonical: [task ledger](../reference/task-ledger.md), [CLI](../guide/cli.md)
+
 ## 2026-10 — A trail remembers the procedure it ran, and a fork tries another one
 
 Every trail used to run whatever `.paseka/` happened to say at dispatch time. Editing a prompt, a bee definition, a skill list, or a model alias silently changed the next task, and afterwards no record could say which procedure an earlier run actually used — the files had already moved on. Testing a different procedure meant a second colony checkout with its own Reactor, home, and bus, whose results were hard to place beside the original. A trail now captures its configuration as an immutable, content-addressed snapshot, applies later versions only on an explicit operator action at a safe boundary, and can start a pinned experimental fork that inherits one source task attempt's evidence and changes nothing else.
