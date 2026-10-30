@@ -35,6 +35,12 @@
 	 */
 	const isPR = $derived(task.delivery === 'pull_request');
 	const isFinal = $derived(task.isFinal);
+	/**
+	 * The server's own refusal reason, while a non-merge task is still incomplete.
+	 * Approve is disabled rather than offered and then answered with a 409: the
+	 * operator reads why before deciding, not after.
+	 */
+	const approveBlockedReason = $derived(task.approveBlockedReason?.trim() ?? '');
 	/** A non-final review merges nothing, so it has no commit message to set. */
 	const showMergeFields = $derived(isFinal && !isPR);
 	const showPrFields = $derived(isFinal && isPR);
@@ -54,7 +60,10 @@
 		showPrFields ? (prUrl ? 'Update PR' : 'Open PR') : 'Approve'
 	);
 	const approveReady = $derived(
-		submitting === null && summary.trim() !== '' && (showPrFields === false || prTitle.trim() !== '')
+		approveBlockedReason === '' &&
+			submitting === null &&
+			summary.trim() !== '' &&
+			(showPrFields === false || prTitle.trim() !== '')
 	);
 	const rejectReady = $derived(submitting === null && feedback.trim() !== '');
 	/** Discard needs no field: the confirmation is the click, the reason is optional. */
@@ -158,6 +167,7 @@
 		type="button"
 		class="btn btn-success btn-sm"
 		aria-expanded={open === 'approve'}
+		disabled={approveBlockedReason !== ''}
 		onclick={() => {
 			open = open === 'approve' ? null : 'approve';
 			error = '';
@@ -192,6 +202,14 @@
 		</button>
 	{/if}
 </div>
+
+{#if approveBlockedReason}
+	<!-- Disabled, and told why: the ledger refuses the merge while another
+	     task is open, so the reason is the server's, not a guess. -->
+	<p class="mt-2 text-xs text-base-content/60" role="status" data-approve-blocked>
+		Approve is unavailable — {approveBlockedReason}.
+	</p>
+{/if}
 
 {#if open === 'approve'}
 	<form

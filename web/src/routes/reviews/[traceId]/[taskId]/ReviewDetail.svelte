@@ -45,6 +45,12 @@
 	const diff = $derived(store.diff);
 	/** Parsed only to decide whether a preview is worth linking to. */
 	const files = $derived(diff ? buildMergeDiffFiles(diff) : []);
+	/**
+	 * The final gate is the merge phase. `review: final` is how it is planned, but
+	 * the phase is the semantic, and it is what separates it from a mid-trail
+	 * `review: required` stop that delivers nothing.
+	 */
+	const isMergeGate = $derived(item?.phase === 'merge');
 	const canAct = $derived(item?.canApprove === true && item?.canReject === true);
 	const prUrl = $derived(item?.pullRequest?.url);
 
@@ -72,12 +78,8 @@
 		if (current.bee) rows.push({ label: 'Bee', value: current.bee, mono: true });
 		if (current.sector) rows.push({ label: 'Sector', value: current.sector, mono: true });
 		rows.push({ label: 'Review', value: taskReviewLabel(current.review) });
-		if (current.isFinal) {
-			rows.push({
-				label: 'Gate',
-				value: 'final merge gate',
-				hint: ['The last work to leave this trail needs your sign-off, and the trail waits on it.']
-			});
+		if (isMergeGate) {
+			rows.push({ label: 'Gate', value: 'final merge gate' });
 			rows.push({ label: 'Delivery', value: deliveryOf(current) });
 		}
 		if (current.runCount > 0) rows.push({ label: 'Runs', value: String(current.runCount) });
@@ -169,6 +171,16 @@
 			{/if}
 		</Section>
 
+		<!-- The gate body is the copy the colony authored for this merge, rendered
+		     against the trail's task inventory. It replaces the fixed sentence the
+		     review screen used to print: the reviewer reads what the trail did
+		     before approving it. -->
+		{#if isMergeGate && item.body}
+			<Section id="review-gate-copy" title="Merge gate" note="as the colony configured it">
+				<p class="text-sm whitespace-pre-wrap">{item.body}</p>
+			</Section>
+		{/if}
+
 		{#if item.summary}
 			<Section id="review-summary" title="Summary" note="as the bee wrote it" collapsible open>
 				<pre
@@ -179,7 +191,7 @@
 
 		<!-- The trail summary is the merge commit body the bee would have written, so
 		     a reviewer reads it before approving rather than discovering it afterwards. -->
-		{#if item.isFinal && item.traceSummary}
+		{#if isMergeGate && item.traceSummary}
 			<Section
 				id="review-trail-summary"
 				title="Trail summary"
@@ -189,7 +201,7 @@
 			</Section>
 		{/if}
 
-		{#if item.isFinal}
+		{#if isMergeGate}
 			<Section
 				id="review-diff"
 				title="Changes"

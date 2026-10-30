@@ -37,6 +37,64 @@ func NormalizeTaskReviewPolicy(p TaskReviewPolicy) TaskReviewPolicy {
 	}
 }
 
+// TaskPhase is the ledger phase of one task within a trace. The vocabulary is
+// closed: a colony cannot name phases of its own, because eligibility must not
+// depend on configuration at replay time.
+type TaskPhase string
+
+const (
+	// TaskPhaseWork is the default phase: ordinary trail work a bee or operator
+	// may plan. An empty phase reads as work.
+	TaskPhaseWork TaskPhase = "work"
+	// TaskPhaseClosing marks the runtime-seeded trail wrap-up round. Only the
+	// runtime may publish it; every other publisher is coerced to work.
+	TaskPhaseClosing TaskPhase = "closing"
+	// TaskPhaseMerge marks the trace-level merge gate. It is derived from
+	// review: final and is never dispatched.
+	TaskPhaseMerge TaskPhase = "merge"
+)
+
+// RuntimeAgentID is the reserved agent id the platform runtime publishes under.
+// A task.plan carrying it is the only plan honoured as phase closing.
+const RuntimeAgentID = "runtime"
+
+// IsKnownTaskPhase reports whether p is part of the closed phase vocabulary.
+// The empty value is accepted and means the default, work.
+func IsKnownTaskPhase(p TaskPhase) bool {
+	switch p {
+	case "", TaskPhaseWork, TaskPhaseClosing, TaskPhaseMerge:
+		return true
+	default:
+		return false
+	}
+}
+
+// NormalizeTaskPhase returns a known phase, defaulting to TaskPhaseWork. An
+// empty phase is the default and an unknown name is not a phase.
+func NormalizeTaskPhase(p TaskPhase) TaskPhase {
+	switch p {
+	case TaskPhaseClosing, TaskPhaseMerge:
+		return p
+	default:
+		return TaskPhaseWork
+	}
+}
+
+// DeriveTaskPhase resolves the phase of a recorded task: review: final always
+// reads as merge, and merge without that policy falls back to work. It also
+// covers snapshots written before phase existed, where the recorded phase is
+// empty and the review policy is the only evidence.
+func DeriveTaskPhase(phase TaskPhase, review TaskReviewPolicy) TaskPhase {
+	if NormalizeTaskReviewPolicy(review) == TaskReviewFinal {
+		return TaskPhaseMerge
+	}
+	p := NormalizeTaskPhase(phase)
+	if p == TaskPhaseMerge {
+		return TaskPhaseWork
+	}
+	return p
+}
+
 // TaskStatus is the lifecycle state of one task within a trace.
 type TaskStatus string
 
@@ -60,6 +118,7 @@ type TaskSpec struct {
 	Sector    string           `json:"sector,omitempty"`
 	Intent    string           `json:"intent,omitempty"`
 	Review    TaskReviewPolicy `json:"review,omitempty"`
+	Phase     TaskPhase        `json:"phase,omitempty"`
 	DependsOn []string         `json:"dependsOn,omitempty"`
 	CueID     string           `json:"cueId,omitempty"`
 }

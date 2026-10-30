@@ -30,14 +30,20 @@ func comparePlanned(a, b TaskSnapshot) int {
 }
 
 // EligiblePlanned returns planned tasks whose dependencies are all completed.
+// The merge gate is never eligible: it is never dispatched. A closing round is
+// eligible only once every work-phase task has completed, so the wrap-up cannot
+// start underneath unfinished work.
 func EligiblePlanned(trace TraceSnapshot) []TaskSnapshot {
 	var out []TaskSnapshot
-	afkDone := AllAFKTasksCompleted(trace)
+	workDone := AllWorkCompleted(trace)
 	for _, task := range trace.Tasks {
 		if task.Status != protocol.TaskStatusPlanned {
 			continue
 		}
-		if IsFinalReviewTask(task) && !afkDone {
+		if IsMergeTask(task) {
+			continue
+		}
+		if IsClosingTask(task) && !workDone {
 			continue
 		}
 		if !allDepsCompleted(trace, task.DependsOn) {

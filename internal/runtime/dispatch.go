@@ -39,8 +39,14 @@ type DispatchRequest struct {
 	AdapterExtra         adapters.RunParamsLayer
 	ModelAliases         map[string]string
 	IsLastWorkTask       bool // set by AFK ledger task dispatch only
-	Profile              string
-	ProfileApply         func(colony.Bee) (colony.Bee, error)
+	// SuppressPRBody drops the pr.body must-emit guidance when a closing round
+	// is guaranteed to own the pull-request description.
+	SuppressPRBody bool
+	// TrailInventory is the structured task list of the trail, set for a
+	// closing-phase dispatch.
+	TrailInventory colony.TrailInventory
+	Profile        string
+	ProfileApply   func(colony.Bee) (colony.Bee, error)
 	// Registry is the trail-scoped bee registry, when the caller has one.
 	Registry *BeeRegistry
 	// Raw requests plain-text adapter output for this run only (CLI --raw).

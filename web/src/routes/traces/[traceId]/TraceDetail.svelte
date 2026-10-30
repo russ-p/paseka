@@ -23,12 +23,15 @@
 		runMeta,
 		runStateLabel,
 		taskMeta,
+		taskPhaseLabel,
 		taskPrimaryLabel,
+		taskStatusLabel,
 		traceBees,
 		traceFlags,
 		tracePrimaryLabel,
 		traceState,
 		traceStateLabel,
+		trailStageLabel,
 		usageRows
 	} from '$lib/format';
 	import type { MetaRow } from '$lib/format';
@@ -178,6 +181,17 @@
 						{#if detail.hasActive || detail.hasFailures}
 							<StatusBadge status={traceState(detail)} label={traceState(detail)} />
 						{/if}
+						<!-- The stage is the ledger's phase machine, not a run state: `closing`
+						     can sit beside `active`, and `gate` appears precisely when nothing is
+						     running. Quiet, because the flag beside it is the loud one. -->
+						{#if trailStageLabel(detail.stage)}
+							<span
+								class="badge badge-ghost badge-sm badge-outline"
+								data-trail-stage={detail.stage}
+							>
+								{trailStageLabel(detail.stage)}
+							</span>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -295,7 +309,12 @@
 							dataKey={task.taskId}
 						>
 							{#snippet side()}
-								<StatusBadge status={task.status} label={task.status} />
+								<!-- The same label the board uses, so `waiting_review` stops being the
+								     one status that prints with an underscore on this page. -->
+								<StatusBadge status={task.status} label={taskStatusLabel(task.status)} />
+								{#if taskPhaseLabel(task.phase)}
+									<span class="badge badge-ghost badge-sm badge-outline">{taskPhaseLabel(task.phase)}</span>
+								{/if}
 							{/snippet}
 						</DetailRow>
 					{/each}

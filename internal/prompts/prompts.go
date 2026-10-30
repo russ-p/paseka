@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/russ-p/paseka/internal/colony"
 )
 
 const promptsSubdir = ".paseka/prompts"
@@ -31,6 +33,13 @@ type Context struct {
 	ArtifactsDir   string // absolute path to trail comb (.paseka/runs/<traceId>/artifacts/)
 	Interactive    bool   // true for paseka bee chat / session runs
 	IsLastWorkTask bool   // true at AFK ledger dispatch when sole incomplete non-final task
+	// SuppressPRBody is true when a closing round is guaranteed to write the
+	// pull-request description, so the last work task no longer carries the
+	// pr.body must-emit guidance. trace.summary guidance is unaffected.
+	SuppressPRBody bool
+	// TrailInventory is the structured task list of the trail. It is set for a
+	// closing-phase dispatch and is the same inventory gate copy renders with.
+	TrailInventory colony.TrailInventory
 	Adapter        string // resolved adapter name (cursor, pi, claude, script)
 }
 

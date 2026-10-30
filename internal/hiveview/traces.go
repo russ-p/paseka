@@ -127,6 +127,11 @@ type TaskSummaryView struct {
 	TaskID string `json:"taskId"`
 	Title  string `json:"title"`
 	Status string `json:"status"`
+	// Phase is the ledger phase (work, closing, merge), a separate axis from
+	// status. Review is the normalized review policy, so the row can draw the
+	// phase tag without a second read.
+	Phase  string `json:"phase"`
+	Review string `json:"review,omitempty"`
 	Bee    string `json:"bee,omitempty"`
 }
 
@@ -142,7 +147,11 @@ type WorktreeView struct {
 // TraceDetailView aggregates one trace for inspection UIs and export.
 type TraceDetailView struct {
 	TraceSummaryView
-	Tasks        []TaskSummaryView     `json:"tasks"`
+	Tasks []TaskSummaryView `json:"tasks"`
+	// Stage is the ledger's phase machine projected onto the trail: work,
+	// closing, gate, or delivered. It is computed here, never in the client —
+	// the phase lives in a ledger the browser cannot read.
+	Stage        string                `json:"stage"`
 	Runs         []RunView             `json:"runs"`
 	Worktree     *WorktreeView         `json:"worktree,omitempty"`
 	PullRequest  *PullRequestView      `json:"pullRequest,omitempty"`
@@ -413,11 +422,16 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 			TaskID: task.TaskID,
 			Title:  title,
 			Status: string(task.Status),
+			Phase:  string(taskledger.TaskPhaseOf(task)),
+			Review: string(protocol.NormalizeTaskReviewPolicy(task.Review)),
 			Bee:    task.Bee,
 		})
 	}
 	// Align summary count with the tasks actually rendered (KV may be newer than FS scan).
 	view.TaskCount = len(view.Tasks)
+	// The stage is a ledger projection, not a run-derived state: a trail at the
+	// merge gate has no active run and still reads `gate`.
+	view.Stage = string(taskledger.DeriveTrailStage(taskSnap))
 
 	runMetas, err := runs.ListRunsForTrace(ctx.ColonyRoot, traceID)
 	if err != nil {

@@ -39,30 +39,36 @@ type TaskRunView struct {
 
 // TaskListItem is one task row on the board.
 type TaskListItem struct {
-	TraceID           string           `json:"traceId"`
-	TaskID            string           `json:"taskId"`
-	Title             string           `json:"title"`
-	Status            string           `json:"status"`
-	Review            string           `json:"review,omitempty"`
-	Bee               string           `json:"bee,omitempty"`
-	Sector            string           `json:"sector,omitempty"`
-	DependsOn         []string         `json:"dependsOn,omitempty"`
-	RunCount          int              `json:"runCount"`
-	CanStart          bool             `json:"canStart"`
-	CanRetry          bool             `json:"canRetry"`
-	CanApprove        bool             `json:"canApprove"`
-	CanReject         bool             `json:"canReject"`
-	CanDiscard        bool             `json:"canDiscard"`
-	CanRequestChanges bool             `json:"canRequestChanges,omitempty"`
-	ReworkTaskID      string           `json:"reworkTaskId,omitempty"`
-	ReworkStatus      string           `json:"reworkStatus,omitempty"`
-	IsFinal           bool             `json:"isFinal"`
-	ProposalWorkspace string           `json:"proposalWorkspace,omitempty"`
-	UpdatedAt         time.Time        `json:"updatedAt,omitempty"`
-	Delivery          string           `json:"delivery,omitempty"`
-	PRTitle           string           `json:"prTitle,omitempty"`
-	PRBody            string           `json:"prBody,omitempty"`
-	PullRequest       *PullRequestView `json:"pullRequest,omitempty"`
+	TraceID string `json:"traceId"`
+	TaskID  string `json:"taskId"`
+	Title   string `json:"title"`
+	Status  string `json:"status"`
+	// Phase is the ledger phase (work, closing, merge), a separate axis from
+	// status: a closing card is still planned, running, or failed.
+	Phase  string `json:"phase"`
+	Review string `json:"review,omitempty"`
+	Bee    string `json:"bee,omitempty"`
+	Sector string `json:"sector,omitempty"`
+	// ApproveBlockedReason is why the merge gate cannot be approved yet, when a
+	// non-merge task is still incomplete. Empty means approve is available.
+	ApproveBlockedReason string           `json:"approveBlockedReason,omitempty"`
+	DependsOn            []string         `json:"dependsOn,omitempty"`
+	RunCount             int              `json:"runCount"`
+	CanStart             bool             `json:"canStart"`
+	CanRetry             bool             `json:"canRetry"`
+	CanApprove           bool             `json:"canApprove"`
+	CanReject            bool             `json:"canReject"`
+	CanDiscard           bool             `json:"canDiscard"`
+	CanRequestChanges    bool             `json:"canRequestChanges,omitempty"`
+	ReworkTaskID         string           `json:"reworkTaskId,omitempty"`
+	ReworkStatus         string           `json:"reworkStatus,omitempty"`
+	IsFinal              bool             `json:"isFinal"`
+	ProposalWorkspace    string           `json:"proposalWorkspace,omitempty"`
+	UpdatedAt            time.Time        `json:"updatedAt,omitempty"`
+	Delivery             string           `json:"delivery,omitempty"`
+	PRTitle              string           `json:"prTitle,omitempty"`
+	PRBody               string           `json:"prBody,omitempty"`
+	PullRequest          *PullRequestView `json:"pullRequest,omitempty"`
 }
 
 // TaskStatusGroup groups tasks by lifecycle status.
@@ -211,23 +217,25 @@ func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 	canDiscard := canReject
 	proposalWorkspace := string(task.ProposalWorkspace)
 	item := TaskListItem{
-		TraceID:           traceID,
-		TaskID:            task.TaskID,
-		Title:             title,
-		Status:            status,
-		Review:            reviewPolicy,
-		Bee:               task.Bee,
-		Sector:            task.Sector,
-		DependsOn:         append([]string(nil), task.DependsOn...),
-		RunCount:          runCount,
-		CanStart:          tasks.CanStartTask(snap, task.TaskID),
-		CanRetry:          tasks.CanRetryTask(snap, task.TaskID),
-		CanApprove:        canApprove,
-		CanReject:         canReject,
-		CanDiscard:        canDiscard,
-		IsFinal:           taskledger.IsFinalReviewTask(task),
-		ProposalWorkspace: proposalWorkspace,
-		UpdatedAt:         task.UpdatedAt,
+		TraceID:              traceID,
+		TaskID:               task.TaskID,
+		Title:                title,
+		Status:               status,
+		Phase:                string(taskledger.TaskPhaseOf(task)),
+		Review:               reviewPolicy,
+		Bee:                  task.Bee,
+		Sector:               task.Sector,
+		ApproveBlockedReason: review.ApproveBlockedReason(snap, task.TaskID),
+		DependsOn:            append([]string(nil), task.DependsOn...),
+		RunCount:             runCount,
+		CanStart:             tasks.CanStartTask(snap, task.TaskID),
+		CanRetry:             tasks.CanRetryTask(snap, task.TaskID),
+		CanApprove:           canApprove,
+		CanReject:            canReject,
+		CanDiscard:           canDiscard,
+		IsFinal:              taskledger.IsFinalReviewTask(task),
+		ProposalWorkspace:    proposalWorkspace,
+		UpdatedAt:            task.UpdatedAt,
 	}
 	if item.IsFinal {
 		item.CanRequestChanges = taskledger.CanRequestChanges(snap, task)

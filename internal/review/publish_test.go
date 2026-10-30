@@ -280,6 +280,7 @@ func finalIsolatedLedger(t *testing.T, traceID string) taskledger.Ledger {
 	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
 		Kind: protocol.TaskEventPlan,
 		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Work", Review: protocol.TaskReviewRequired},
 			{TaskID: taskledger.FinalReviewTaskID, Title: "Final", Review: protocol.TaskReviewFinal},
 		},
 	})
@@ -299,6 +300,19 @@ func finalIsolatedLedger(t *testing.T, traceID string) taskledger.Ledger {
 		t.Fatal(err)
 	}
 	if _, err := ledger.Apply(mutation); err != nil {
+		t.Fatal(err)
+	}
+	// The gate opens only over a finished trail: the work task must be
+	// completed before the merge gate is approvable.
+	completed, err := protocol.NewEvent(traceID, protocol.RuntimeAgentID, 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(completed); err != nil {
 		t.Fatal(err)
 	}
 	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{

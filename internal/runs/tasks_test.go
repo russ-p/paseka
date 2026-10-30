@@ -248,3 +248,106 @@ func TestTaskProjectionFromLedgerEvents(t *testing.T) {
 		t.Fatalf("task = %+v", task)
 	}
 }
+
+func TestTaskMarkdownRoundTripPhase(t *testing.T) {
+	for _, want := range []protocol.TaskPhase{
+		protocol.TaskPhaseWork,
+		protocol.TaskPhaseClosing,
+		protocol.TaskPhaseMerge,
+	} {
+		fm := runs.TaskFrontmatter{
+			TraceID: "trace-1",
+			TaskID:  "task-1",
+			Title:   "Task",
+			Phase:   want,
+			Status:  protocol.TaskStatusPlanned,
+		}
+		got, _, err := runs.ParseTaskMarkdown(runs.MarshalTaskMarkdown(fm, "body"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Phase != want {
+			t.Fatalf("phase = %q, want %q", got.Phase, want)
+		}
+	}
+}
+
+func TestWriteTaskSnapshotProjectsPhase(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-1"
+	tasks := map[string]taskledger.TaskSnapshot{
+		"closing-1": {
+			TaskID: "closing-1",
+			Title:  "Review the trail",
+			Phase:  protocol.TaskPhaseClosing,
+			Status: protocol.TaskStatusPlanned,
+		},
+		"_review": {
+			TaskID: "_review",
+			Title:  "Human review and merge",
+			Review: protocol.TaskReviewFinal,
+			Status: protocol.TaskStatusWaitingReview,
+		},
+	}
+	for _, task := range tasks {
+		if err := runs.WriteTaskSnapshot(root, traceID, task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for taskID, want := range map[string]protocol.TaskPhase{
+		"closing-1": protocol.TaskPhaseClosing,
+		"_review":   protocol.TaskPhaseMerge,
+	} {
+		d, err := runs.NewTaskDir(root, traceID, taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fm, _, err := d.ReadTask()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fm.Phase != want {
+			t.Fatalf("%s phase = %q, want %q", taskID, fm.Phase, want)
+		}
+	}
+}
+
+func TestLoadTraceTasksFromFSPhaseCompatibility(t *testing.T) {
+	cases := []struct {
+		name   string
+		review protocol.TaskReviewPolicy
+		want   protocol.TaskPhase
+	}{
+		{name: "legacy final review reads as merge", review: protocol.TaskReviewFinal, want: protocol.TaskPhaseMerge},
+		{name: "legacy without final review reads as work", review: protocol.TaskReviewNone, want: protocol.TaskPhaseWork},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			traceID := "trace-1"
+			d, err := runs.NewTaskDir(root, traceID, "task-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// An older projection: the frontmatter carries no phase field.
+			if err := d.WriteTask(runs.TaskFrontmatter{
+				TraceID: traceID,
+				TaskID:  "task-1",
+				Title:   "Legacy",
+				Review:  tc.review,
+				Status:  protocol.TaskStatusPlanned,
+			}, "body"); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := runs.LoadTraceTasksFromFS(root, traceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Tasks["task-1"].Phase != tc.want {
+				t.Fatalf("phase = %q, want %q", got.Tasks["task-1"].Phase, tc.want)
+			}
+		})
+	}
+}

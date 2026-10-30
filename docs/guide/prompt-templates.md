@@ -83,15 +83,19 @@ The runtime passes a single context object (`prompts.Context`) to every template
 | `{{.ResultFile}}` | `string` | Absolute path to the human-readable `summary.md` log for this run under `.paseka/runs/<traceId>/<agentId>/`. |
 | `{{.ArtifactsDir}}` | `string` | Absolute path to the trail comb for handoff files: `.paseka/runs/<traceId>/artifacts/`. Runtime announces this run's comb delta on successful exit; write files here during the run. Beekeeper annotated review packets use `review-comments.md` under this directory (see partial `artifacts-review-comments`). Standing procedure memory uses `checkpoint.json` and optional `journal/` here (see partial `standing-checkpoint`). |
 | `{{.Interactive}}` | `bool` | `true` for interactive `paseka bee chat` sessions; `false` for AFK dispatch. |
-| `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` and `pr.body` guidance in emit partials. |
+| `{{.IsLastWorkTask}}` | `bool` | `true` at AFK ledger task dispatch when the current task is the sole incomplete non-final work task; `false` for chat, ad-hoc `bee run`, and all other paths. Gates must-emit `trace.summary` guidance in emit partials. |
+| `{{.SuppressPRBody}}` | `bool` | `true` on the last work task when the trail's pinned closing policy guarantees a closing round, which owns `pr.body`. Only the `pr.body` must-emit guidance is dropped; `trace.summary` guidance stays. |
+| `{{.TrailInventory}}` | `colony.TrailInventory` | Structured task list of the whole trail, set for a closing-phase dispatch. `{{.TrailInventory.TraceTitle}}` plus `{{range .TrailInventory.Tasks}}` rows of `TaskID`, `Title`, `Phase`, `Intent`, `Status`, `Commit`, `Summary`, and `DependsOn`. The merge gate copy template renders the same inventory. |
 | `{{.Adapter}}` | `string` | Resolved adapter name (`cursor`, `pi`, `claude`, `opencode`, `opencodev1`, `opencodev2`, `script`). |
 
 ### Field sources (MVP)
 
 | Variable | Set by |
 | -------- | ------ |
-| `Bee`, `TraceID`, `TraceTitle`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile`, `ArtifactsDir`, `Interactive`, `IsLastWorkTask`, `Adapter` | `internal/runtime.Dispatcher` at dispatch time; `Interactive` is `true` in `internal/sessions` for chat |
+| `Bee`, `TraceID`, `TraceTitle`, `AgentID`, `TaskID`, `ColonyRoot`, `Workspace`, `Task`, `Intent`, `IntentRaw`, `Insights`, `ResultFile`, `ArtifactsDir`, `Interactive`, `IsLastWorkTask`, `SuppressPRBody`, `TrailInventory`, `Adapter` | `internal/runtime.Dispatcher` at dispatch time; `Interactive` is `true` in `internal/sessions` for chat |
 | `IsLastWorkTask` | `taskledger.IsLastWorkTask` at AFK ledger task dispatch (`DispatchModeTask`) only; always `false` for CLI `bee run`, direct signal dispatch, and chat |
+| `SuppressPRBody` | `review.ClosingRoundGuaranteed` over the pinned closing policy and ledger snapshot, only when `IsLastWorkTask` is true |
+| `TrailInventory` | `review.BuildTrailInventory` for a closing-phase dispatch; empty for other tasks |
 | `TraceTitle` | `runs.ResolveTraceTitle` from prior trace events and task projections |
 | `Task` | `paseka bee run --body` (required unless using inline prompt) |
 | `Intent` / `IntentRaw` | `paseka bee run --intent`, `paseka task create --intent`, or `intent` on `task.plan` / `task.ready` payloads |

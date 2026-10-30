@@ -1074,6 +1074,27 @@ export function taskStatusLabel(status: string): string {
 	return status === 'waiting_review' ? 'waiting review' : status || 'unknown';
 }
 
+/**
+ * The phase tag on a card or header, or the empty string for `work`. Phase is a
+ * second axis beside the lifecycle status, so the tag is a separate quiet badge:
+ * a closing card still reads `running` in its status, and the tag says what that
+ * run is. `work` needs no badge — it is the normal state of nearly every row.
+ */
+export function taskPhaseLabel(phase: string | undefined): string {
+	if (!phase || phase === 'work') return '';
+	return phase;
+}
+
+/**
+ * The trail's derived stage, or the empty string for `work`. The stage is the
+ * ledger's phase machine projected onto a whole trail, so `closing` can sit
+ * beside an `active` flag and `gate` appears when nothing is running at all.
+ */
+export function trailStageLabel(stage: string | undefined): string {
+	if (!stage || stage === 'work') return '';
+	return stage;
+}
+
 export function taskReviewLabel(review: string | undefined): string {
 	if (!review || review === 'none') return 'not gated';
 	return review === 'final' ? 'final gate' : review;

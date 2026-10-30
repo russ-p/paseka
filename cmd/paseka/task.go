@@ -49,18 +49,7 @@ func newTaskListCmd() *cobra.Command {
 				fmt.Printf("No tasks found for trace %s (%s)\n", traceID, source)
 				return nil
 			}
-			ids := sortedTaskIDs(snap)
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintf(w, "TASK\tSTATUS\tBEE\tSECTOR\tTITLE\n")
-			for _, id := range ids {
-				task := snap.Tasks[id]
-				title := task.Title
-				if title == "" {
-					title = task.TaskID
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", task.TaskID, task.Status, task.Bee, task.Sector, title)
-			}
-			_ = w.Flush()
+			writeTaskList(os.Stdout, snap)
 			fmt.Printf("\nSource: %s (%s)\n", source, ctxColony.ColonyRoot)
 			return nil
 		},
@@ -69,6 +58,23 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().String("trace", "", "flight trail id")
 	_ = cmd.MarkFlagRequired("trace")
 	return cmd
+}
+
+// writeTaskList prints one row per task. Phase is its own column beside the
+// status: a closing round is still planned, running, or failed, and folding the
+// two into one word would lose whichever the operator was reading for.
+func writeTaskList(w io.Writer, snap taskledger.TraceSnapshot) {
+	tab := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(tab, "TASK\tSTATUS\tPHASE\tBEE\tSECTOR\tTITLE\n")
+	for _, id := range sortedTaskIDs(snap) {
+		task := snap.Tasks[id]
+		title := task.Title
+		if title == "" {
+			title = task.TaskID
+		}
+		fmt.Fprintf(tab, "%s\t%s\t%s\t%s\t%s\t%s\n", task.TaskID, task.Status, taskledger.TaskPhaseOf(task), task.Bee, task.Sector, title)
+	}
+	_ = tab.Flush()
 }
 
 func newTaskShowCmd() *cobra.Command {
@@ -99,6 +105,7 @@ func newTaskShowCmd() *cobra.Command {
 
 			fmt.Printf("Task %s on trace %s\n", taskID, traceID)
 			fmt.Printf("  status:    %s\n", task.Status)
+			fmt.Printf("  phase:     %s\n", taskledger.TaskPhaseOf(task))
 			if task.Bee != "" {
 				fmt.Printf("  bee:       %s\n", task.Bee)
 			}

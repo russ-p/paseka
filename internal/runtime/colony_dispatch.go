@@ -35,6 +35,11 @@ type ColonyDispatchRequest struct {
 	Insights       []string
 	InlinePrompt   string
 	IsLastWorkTask bool // AFK ledger task dispatch only; ignored for CLI/direct
+	// SuppressPRBody is honoured on AFK ledger task dispatch only.
+	SuppressPRBody bool
+	// TrailInventory is the structured task list of the trail, set for a
+	// closing-phase dispatch.
+	TrailInventory colony.TrailInventory
 	// ProposalKind, when set, resolves adapter cwd from the proposal MUTATION kind
 	// (isolated/alias → trace worktree; root → colony root) instead of bee.Worktree.
 	ProposalKind string
@@ -169,8 +174,10 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 
 	isLastWorkTask := false
+	suppressPRBody := false
 	if mode == DispatchModeTask {
 		isLastWorkTask = req.IsLastWorkTask
+		suppressPRBody = req.SuppressPRBody
 	}
 
 	var profileApply func(colony.Bee) (colony.Bee, error)
@@ -203,6 +210,8 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		AdapterExtra:         adapterExtra,
 		ModelAliases:         aliases,
 		IsLastWorkTask:       isLastWorkTask,
+		SuppressPRBody:       suppressPRBody,
+		TrailInventory:       req.TrailInventory,
 		Profile:              execColony.Profile,
 		Raw:                  req.Raw,
 		ProfileApply:         profileApply,

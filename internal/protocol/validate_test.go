@@ -248,3 +248,27 @@ func TestEventCLIResultJSON(t *testing.T) {
 		t.Fatalf("invalid json: %s", data)
 	}
 }
+
+func TestValidateTaskPlanPhaseVocabulary(t *testing.T) {
+	valid := []string{"", "work", "closing", "merge"}
+	for _, phase := range valid {
+		raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"T","phase":"` + phase + `"}]}}`)
+		in, err := ParseEventInput(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if details := in.Validate(); len(details) != 0 {
+			t.Fatalf("phase %q details = %#v", phase, details)
+		}
+	}
+
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"task-1","title":"T","phase":"deploy"}]}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in.Validate()
+	if len(details) != 1 || details[0].Path != "payload.tasks[0].phase" {
+		t.Fatalf("details = %#v", details)
+	}
+}

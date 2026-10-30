@@ -172,6 +172,8 @@ func CreateForkBinding(opts ForkBindingOptions) (Manifest, error) {
 		WorkspaceRoot:             workspaceRoot,
 		CreatedAt:                 now,
 		UpdatedAt:                 now,
+		Closing:                   candidateInventory.Resolved.Closing,
+		Merge:                     candidateInventory.Resolved.Merge,
 		Snapshots:                 snapshots,
 		History: []Revision{{
 			Revision:         1,

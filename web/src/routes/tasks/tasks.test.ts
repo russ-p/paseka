@@ -52,6 +52,48 @@ describe('tasks board', () => {
 		expect(screen.queryByText('waiting_review')).not.toBeInTheDocument();
 	});
 
+	it('tags a closing card with its phase without touching the status column', async () => {
+		// A closing card is still planned/running/blocked/failed: the phase is a
+		// second badge, not a composite status word.
+		const { store } = harness(
+			taskBoard({
+				groups: [
+					{
+						status: 'running',
+						tasks: [
+							taskListItem({
+								taskId: 'closing-1',
+								title: 'Review the trail',
+								status: 'running',
+								phase: 'closing',
+								canStart: false
+							})
+						]
+					}
+				],
+				taskCounts: { running: 1 }
+			})
+		);
+		render(Tasks, { store });
+		await waitFor(() => expect(screen.getByLabelText('running tasks')).toBeInTheDocument());
+
+		const column = screen.getByLabelText('running tasks');
+		const tag = within(column).getByText('closing');
+		expect(tag.className).toContain('badge-ghost');
+		// The status word still names the column; the tag sits below it on the card.
+		expect(within(column).getByText('running')).toBeInTheDocument();
+	});
+
+	it('leaves a work card untagged, because work is every ordinary row', async () => {
+		const { store } = harness(
+			taskBoard({ groups: [taskBoard().groups[0]], taskCounts: { ready: 1 } })
+		);
+		render(Tasks, { store });
+		await waitFor(() => expect(screen.getByLabelText('ready tasks')).toBeInTheDocument());
+
+		expect(within(screen.getByLabelText('ready tasks')).queryByText('work')).not.toBeInTheDocument();
+	});
+
 	it('names each column in the topbar\'s panel style and badges the count', async () => {
 		const { store } = harness();
 		render(Tasks, { store });
@@ -401,6 +443,16 @@ describe('task detail', () => {
 			await screen.findByRole('heading', { name: 'Wire the export format flag' })
 		).toBeInTheDocument();
 		expect(screen.getByText('ready')).toBeInTheDocument();
+	});
+
+	it('tags a merge task with its phase beside the status', async () => {
+		// The phase rides on the polled board row, and the status word stays the badge
+		// that says where the task sits.
+		await openTask('trace-01a0bd6963faa14f', 'task-02');
+
+		expect(await screen.findByText('waiting review')).toBeInTheDocument();
+		const tag = screen.getByText('merge');
+		expect(tag.className).toContain('badge-ghost');
 	});
 
 	it('links back to the board and out to the trail', async () => {

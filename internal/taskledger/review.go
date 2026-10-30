@@ -9,24 +9,63 @@ import (
 // FinalReviewTaskID is the synthetic task id when no explicit final review task was planned.
 const FinalReviewTaskID = "_review"
 
-// IsReviewGate reports whether a task requires human review before completion.
-func IsReviewGate(task TaskSnapshot) bool {
-	p := protocol.NormalizeTaskReviewPolicy(task.Review)
-	return p == protocol.TaskReviewRequired || p == protocol.TaskReviewFinal
+// TaskPhaseOf resolves a snapshot's ledger phase. A snapshot written before
+// phase existed carries an empty phase and is read through its review policy:
+// review: final is merge, anything else is work.
+func TaskPhaseOf(task TaskSnapshot) protocol.TaskPhase {
+	return protocol.DeriveTaskPhase(task.Phase, task.Review)
 }
 
-// IsFinalReviewTask reports whether a task is the trace-level merge gate.
+// IsMergeTask reports whether a task is the trace-level merge gate. Merge tasks
+// are never dispatched and never open the gate early.
+func IsMergeTask(task TaskSnapshot) bool {
+	return TaskPhaseOf(task) == protocol.TaskPhaseMerge
+}
+
+// IsClosingTask reports whether a task is a runtime-seeded closing round.
+func IsClosingTask(task TaskSnapshot) bool {
+	return TaskPhaseOf(task) == protocol.TaskPhaseClosing
+}
+
+// IsReviewGate reports whether a task requires human review before completion.
+func IsReviewGate(task TaskSnapshot) bool {
+	if IsMergeTask(task) {
+		return true
+	}
+	return protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewRequired
+}
+
+// IsFinalReviewTask reports whether a task carries review: final. After reduce
+// coercion that is exactly the merge phase; kept as the review-policy view for
+// callers that reason about the policy rather than the phase.
 func IsFinalReviewTask(task TaskSnapshot) bool {
 	return protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewFinal
 }
 
-// AllAFKTasksCompleted reports whether every task except review: final gates has completed.
-func AllAFKTasksCompleted(trace TraceSnapshot) bool {
+// AllWorkCompleted reports whether every work-phase task has completed. It is
+// the closing trigger: a closing round becomes eligible only once this holds.
+func AllWorkCompleted(trace TraceSnapshot) bool {
+	sawWork := false
+	for _, task := range trace.Tasks {
+		if TaskPhaseOf(task) != protocol.TaskPhaseWork {
+			continue
+		}
+		sawWork = true
+		if task.Status != protocol.TaskStatusCompleted {
+			return false
+		}
+	}
+	return sawWork
+}
+
+// AllPreMergeCompleted reports whether every non-merge task — work and closing
+// alike — has completed. It is the final-gate condition.
+func AllPreMergeCompleted(trace TraceSnapshot) bool {
 	if len(trace.Tasks) == 0 {
 		return false
 	}
 	for _, task := range trace.Tasks {
-		if IsFinalReviewTask(task) {
+		if IsMergeTask(task) {
 			continue
 		}
 		if task.Status != protocol.TaskStatusCompleted {
@@ -76,10 +115,12 @@ func HasIsolatedProposal(trace TraceSnapshot) bool {
 
 // LastCompletedIsolatedProposalTask returns the newest completed non-final task
 // that recorded an isolated code.proposal (the bee that should continue rework).
+// Closing-phase tasks are excluded: a closing round that opens a proposal is
+// recorded but must never become the source of "apply review comments" work.
 func LastCompletedIsolatedProposalTask(trace TraceSnapshot) (TaskSnapshot, bool) {
 	var candidates []TaskSnapshot
 	for _, task := range trace.Tasks {
-		if IsFinalReviewTask(task) {
+		if IsFinalReviewTask(task) || IsClosingTask(task) {
 			continue
 		}
 		if task.Status != protocol.TaskStatusCompleted {
@@ -148,6 +189,7 @@ func CanRequestChanges(trace TraceSnapshot, task TaskSnapshot) bool {
 }
 
 // ShouldSkipDispatch reports whether a ready task should bypass AFK dispatch.
+// A merge task is presented to a human instead of being run.
 func ShouldSkipDispatch(task TaskSnapshot) bool {
-	return IsFinalReviewTask(task)
+	return IsMergeTask(task)
 }

@@ -251,7 +251,7 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		return err
 	}
 	if ev.Type == protocol.EventVerification && protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventCompleted) {
-		return r.maybeActivateFinalReview(ctx, ev.TraceID)
+		return r.maybeActivateFinalReview(ctx, ev.TraceID, execCtx)
 	}
 	return nil
 }
@@ -525,6 +525,7 @@ type TestReactorOptions struct {
 	Dispatcher    *Dispatcher
 	Registry      *BeeRegistry
 	Ledger        taskledger.Ledger
+	Publisher     bus.Publisher
 	Replayer      bus.TraceReplayer
 	AutoInvites   []colony.AutoInviteRule
 	AsyncDispatch bool
@@ -542,6 +543,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 	}
 	return &Reactor{
 		colony:           colony.Context{ColonyRoot: opts.ColonyRoot},
+		publisher:        opts.Publisher,
 		dispatcher:       opts.Dispatcher,
 		ledger:           opts.Ledger,
 		registry:         opts.Registry,

@@ -4,13 +4,14 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { createTaskStore, type TaskStore } from '$lib/stores/task.svelte';
 	import {
-	formatTimestamp,
-	taskCardShowsId,
-	taskMeta,
-	taskRowMeta,
-	taskStatusLabel,
-	taskTitle
-} from '$lib/format';
+		formatTimestamp,
+		taskCardShowsId,
+		taskMeta,
+		taskPhaseLabel,
+		taskRowMeta,
+		taskStatusLabel,
+		taskTitle
+	} from '$lib/format';
 	import { taskDetailPath } from '$lib/navigation';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import TaskCreateDrawer from './TaskCreateDrawer.svelte';
@@ -142,6 +143,11 @@
 									<span class="flex flex-wrap items-center gap-1 pt-1 text-xs text-base-content/50">
 										{#if task.sector}
 											<span class="badge badge-ghost badge-sm">{task.sector}</span>
+										{/if}
+										{#if taskPhaseLabel(task.phase)}
+											<!-- Phase is a second axis, never folded into the status word: the
+											     column still says where the task sits, this says it is the wrap-up. -->
+											<span class="badge badge-ghost badge-sm badge-outline">{taskPhaseLabel(task.phase)}</span>
 										{/if}
 										{#if task.review && task.review !== 'none'}
 											<span class="badge badge-ghost badge-sm">{task.review} review</span>

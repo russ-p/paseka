@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -9,6 +10,40 @@ import (
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/tasks"
 )
+
+func TestTaskListPrintsPhaseBesideStatus(t *testing.T) {
+	snap := taskledger.TraceSnapshot{TraceID: "trace-cli-phase", Tasks: map[string]taskledger.TaskSnapshot{
+		"task-1":    {TaskID: "task-1", Title: "Work", Bee: "scout", Status: protocol.TaskStatusCompleted},
+		"closing-1": {TaskID: "closing-1", Title: "Review the trail", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusRunning, Bee: "scout"},
+	}}
+
+	var out bytes.Buffer
+	writeTaskList(&out, snap)
+	got := out.String()
+	if !strings.Contains(got, "STATUS") || !strings.Contains(got, "PHASE") {
+		t.Fatalf("header missing status/phase:\n%s", got)
+	}
+	for _, want := range []string{"running    closing", "completed  work"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("row missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestTaskCreateCannotSetPhase(t *testing.T) {
+	root := newRoot()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"task", "create", "--title", "Smuggled phase", "--phase", "merge"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("task create accepted --phase:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --phase") {
+		t.Fatalf("error = %v, want unknown flag", err)
+	}
+}
 
 func TestResolveTaskCreateBodyPrecedence(t *testing.T) {
 	_, err := resolveTaskCreateBody("inline", "file.txt", true, strings.NewReader("stdin"))

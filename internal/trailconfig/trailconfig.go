@@ -74,6 +74,11 @@ type Resolved struct {
 	Profile       string            `json:"profile,omitempty"`
 	ProfileLayers ProfileLayers     `json:"profileLayers,omitempty"`
 	ModelAliases  map[string]string `json:"modelAliases,omitempty"`
+	// Closing and Merge are the colony policies resolved when this snapshot was
+	// captured. They are nil when the colony authored no such block, so a
+	// snapshot captured before these policies existed keeps its content identity.
+	Closing *colony.ClosingPolicy `json:"closing,omitempty"`
+	Merge   *colony.MergePolicy   `json:"merge,omitempty"`
 }
 
 // Entry is one captured file.
@@ -165,10 +170,33 @@ type Manifest struct {
 	CreatedAt     time.Time  `json:"createdAt,omitempty"`
 	UpdatedAt     time.Time  `json:"updatedAt,omitempty"`
 	Snapshots     []Snapshot `json:"snapshots"`
+	// Closing and Merge mirror the policies pinned in the active snapshot so a
+	// running trail can read them without reloading the captured tree. They do
+	// not change until the existing safe configuration cutover activates a new
+	// snapshot.
+	Closing *colony.ClosingPolicy `json:"closing,omitempty"`
+	Merge   *colony.MergePolicy   `json:"merge,omitempty"`
 	// Pending holds the only in-flight configuration action, when a caller
 	// prepared a candidate that cannot activate at the current safe boundary.
 	Pending *Change    `json:"pending,omitempty"`
 	History []Revision `json:"history"`
+}
+
+// ClosingPolicy returns the closing policy pinned at trail start. A manifest
+// captured before the block existed reads as the default-disabled policy.
+func (m Manifest) ClosingPolicy() colony.ClosingPolicy {
+	if m.Closing == nil {
+		return colony.ClosingPolicy{}
+	}
+	return *m.Closing
+}
+
+// MergePolicy returns the merge gate copy pinned at trail start.
+func (m Manifest) MergePolicy() colony.MergePolicy {
+	if m.Merge == nil {
+		return colony.MergePolicy{}
+	}
+	return *m.Merge
 }
 
 // Binding is the minimal read surface for a trail's configuration.
@@ -349,6 +377,8 @@ func captureInitialLocked(ctx colony.Context, traceID, dir string) (Manifest, er
 		InitialCodeBaseCapturedAt: now,
 		CreatedAt:                 now,
 		UpdatedAt:                 now,
+		Closing:                   resolved.Closing,
+		Merge:                     resolved.Merge,
 		Snapshots: []Snapshot{{
 			ConfigRef: ref,
 			Path:      filepath.ToSlash(filepath.Join(SnapshotsDirName, ref)),
@@ -700,6 +730,12 @@ func capture(ctx colony.Context) ([]capturedFile, Resolved, error) {
 	}
 	sort.Slice(contents, func(i, j int) bool { return contents[i].path < contents[j].path })
 
+	manifest, err := colony.LoadColony(ctx.ColonyRoot)
+	if err != nil {
+		return nil, Resolved{}, fmt.Errorf("trailconfig: resolve colony policy: %w", err)
+	}
+	closing, merge := pinnedPolicies(manifest)
+
 	resolved := Resolved{
 		Version: inventoryVersion,
 		Profile: strings.TrimSpace(ctx.Profile),
@@ -708,8 +744,26 @@ func capture(ctx colony.Context) ([]capturedFile, Resolved, error) {
 			Home:   ctx.ProfileLayers.Home,
 		},
 		ModelAliases: normalizedAliases(ctx.ModelAliases),
+		Closing:      closing,
+		Merge:        merge,
 	}
 	return contents, resolved, nil
+}
+
+// pinnedPolicies copies the authored policy blocks so a snapshot owns them
+// independently of later edits to the live colony manifest.
+func pinnedPolicies(c colony.Colony) (*colony.ClosingPolicy, *colony.MergePolicy) {
+	var closing *colony.ClosingPolicy
+	if c.Closing.Configured() {
+		copied := c.Closing.Resolved(c.Defaults)
+		closing = &copied
+	}
+	var merge *colony.MergePolicy
+	if c.Merge.Configured() {
+		copied := c.Merge
+		merge = &copied
+	}
+	return closing, merge
 }
 
 // materializeEffectiveBees replaces the committed bee definitions with the

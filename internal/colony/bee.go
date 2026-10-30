@@ -20,6 +20,8 @@ type Colony struct {
 	NATS         ColonyNATS        `yaml:"nats"`
 	Sectors      map[string]Sector `yaml:"sectors,omitempty"`
 	AutoInvites  []AutoInviteRule  `yaml:"auto_invites,omitempty"`
+	Closing      ClosingPolicy     `yaml:"closing,omitempty"`
+	Merge        MergePolicy       `yaml:"merge,omitempty"`
 }
 
 // ColonyNATS holds project-local NATS overrides.
@@ -117,6 +119,9 @@ func LoadColony(colonyRoot string) (Colony, error) {
 		return Colony{}, err
 	}
 	if err := ValidateDelivery(c.Defaults.Delivery); err != nil {
+		return Colony{}, err
+	}
+	if err := c.ValidatePolicies(colonyRoot); err != nil {
 		return Colony{}, err
 	}
 	return c, nil

@@ -215,17 +215,38 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 			return err
 		}
 	}
-	return r.maybeActivateFinalReview(ctx, traceID)
+	return r.maybeActivateFinalReview(ctx, traceID, nil)
 }
 
-func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string) error {
-	if err := review.ActivateFinalReviewGate(ctx, r.publisher, r.ledger, r.colony, traceID, review.WriteOptions{
-		AfterApply: r.rememberLocalEvent,
-	}); err != nil {
-		return err
-	}
+// maybeActivateFinalReview is the single gate boundary: it ensures the closing
+// round first and then the one merge task. The downstream dispatch of a seeded
+// closing round goes through the ordinary AFK scheduler.
+func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string, execCtx *trailExecutionContext) error {
 	if traceID == "" {
 		return nil
+	}
+	if execCtx == nil {
+		if resolved, err := r.executionContext(traceID); err == nil {
+			execCtx = resolved
+		}
+	}
+	policies := review.GatePolicies{}
+	if execCtx != nil {
+		policies = review.GatePolicies{
+			Closing: execCtx.Manifest.Closing,
+			Merge:   execCtx.Manifest.Merge,
+		}
+	}
+	res, err := review.EnsureTrailPhases(ctx, r.publisher, r.ledger, r.colony, traceID, policies, review.WriteOptions{
+		AfterApply: r.rememberLocalEvent,
+	})
+	if err != nil {
+		return err
+	}
+	if res.ClosingSeeded != nil {
+		if err := r.dispatchReady(ctx, traceID, *res.ClosingSeeded, execCtx, "closing-seed"); err != nil {
+			return err
+		}
 	}
 	snap, err := r.ledger.Snapshot(traceID)
 	if err != nil {

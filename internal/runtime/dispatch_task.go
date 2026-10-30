@@ -9,6 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/review"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
@@ -89,6 +90,24 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return err
 	}
 
+	// A guaranteed closing round owns pr.body, so the last work task stops
+	// carrying the must-emit guidance. Without a guarantee the existing
+	// fallback stays: a small trail still produces a description.
+	isLastWorkTask := taskledger.IsLastWorkTask(snap, task.TaskID)
+	suppressPRBody := isLastWorkTask && review.ClosingRoundGuaranteed(execCtx.Manifest.Closing, snap)
+
+	// The closing round reviews the whole trail, so it receives the same
+	// structured inventory gate copy renders with. Re-snapshot so its own row
+	// reads running instead of ready.
+	inventory := colony.TrailInventory{}
+	if taskledger.IsClosingTask(task) {
+		latest := snap
+		if refreshed, snapErr := r.ledger.Snapshot(traceID); snapErr == nil {
+			latest = refreshed
+		}
+		inventory = review.BuildTrailInventory(execCtx.Colony, traceID, latest)
+	}
+
 	body := task.Body
 	if body == "" {
 		body = task.Title
@@ -105,7 +124,9 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		Task:           body,
 		Sector:         task.Sector,
 		Intent:         task.Intent,
-		IsLastWorkTask: taskledger.IsLastWorkTask(snap, task.TaskID),
+		IsLastWorkTask: isLastWorkTask,
+		SuppressPRBody: suppressPRBody,
+		TrailInventory: inventory,
 		Provenance:     attemptProvenance(attempt),
 	}, DispatchModeTask)
 	if err != nil {

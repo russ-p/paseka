@@ -152,9 +152,10 @@ export function traceDetail(overrides: Partial<TraceDetail> = {}): TraceDetail {
 			energyRemaining: 8,
 			energyAllocated: 12
 		}),
+		stage: 'work',
 		tasks: [
-			{ taskId: 'task-a1', title: 'Introduce the Adapter interface', status: 'completed', bee: 'builder' },
-			{ taskId: 'task-b2', title: 'Guard the seam', status: 'waiting_review', bee: 'guard' }
+			{ taskId: 'task-a1', title: 'Introduce the Adapter interface', status: 'completed', phase: 'work', bee: 'builder' },
+			{ taskId: 'task-b2', title: 'Guard the seam', status: 'waiting_review', phase: 'work', bee: 'guard' }
 		],
 		runs: [
 			runSummary({ agentId: 'run-04', bee: 'builder', state: 'running' }),
@@ -652,6 +653,7 @@ export function taskListItem(overrides: Partial<TaskListItem> = {}): TaskListIte
 		taskId: 'task-01',
 		title: 'Wire the export format flag',
 		status: 'ready',
+		phase: 'work',
 		review: 'none',
 		bee: 'builder',
 		sector: 'api',
@@ -687,6 +689,7 @@ export function taskBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
 						taskId: 'task-02',
 						title: 'Add the retry backoff',
 						status: 'waiting_review',
+						phase: 'merge',
 						review: 'final',
 						canStart: false,
 						canApprove: true,
@@ -720,7 +723,7 @@ export function taskBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
 
 /** A detail: the board row plus body, summary, and the runs the task produced. */
 export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
-	return {
+	const detail: TaskDetail = {
 		...taskListItem(),
 		body: 'Add an --format flag to `paseka export`.',
 		intent: 'implementation',
@@ -737,6 +740,10 @@ export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
 		],
 		...overrides
 	};
+	// The server derives `merge` from `review: final`; a fixture that hard-codes one
+	// must derive the other, or a final gate is drawn as a mid-trail review.
+	if (overrides.phase === undefined && detail.isFinal) detail.phase = 'merge';
+	return detail;
 }
 
 /** The interactive bees, which is what `GET /api/bees` returns without a scope. */
@@ -820,10 +827,11 @@ export function beeRoster(): Bee[] {
 
 /** One row of the review queue. */
 export function reviewQueueItem(overrides: Partial<ReviewQueueItem> = {}): ReviewQueueItem {
-	return {
+	const item: ReviewQueueItem = {
 		traceId: 'trace-01a0bd6963faa14f',
 		taskId: '002-merge-body-compose',
 		title: 'Merge body compose + approve preview',
+		phase: 'work',
 		review: 'required',
 		summary: 'Composed the merge body from the trail summary.',
 		bee: 'builder',
@@ -836,6 +844,9 @@ export function reviewQueueItem(overrides: Partial<ReviewQueueItem> = {}): Revie
 		canDiscard: true,
 		...overrides
 	};
+	// Same derivation as the server: a final review task is the merge phase.
+	if (overrides.phase === undefined && item.isFinal) item.phase = 'merge';
+	return item;
 }
 
 /** A queue with a mid-trail review and a final gate, which are the two shapes. */
@@ -846,6 +857,7 @@ export function reviewQueue(overrides: Partial<ReviewQueue> = {}): ReviewQueue {
 			reviewQueueItem({
 				taskId: '_review',
 				title: 'Human review and merge',
+				phase: 'merge',
 				review: 'final',
 				summary: 'Ready for a human to merge the trail.',
 				isFinal: true,

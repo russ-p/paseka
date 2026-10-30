@@ -87,7 +87,7 @@ func TestApplyEventTaskPlanPreservesReview(t *testing.T) {
 	}
 }
 
-func TestAllAFKTasksCompletedRequiresReviewRequiredDone(t *testing.T) {
+func TestAllPreMergeCompletedRequiresReviewRequiredDone(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",
 		Tasks: map[string]taskledger.TaskSnapshot{
@@ -95,16 +95,16 @@ func TestAllAFKTasksCompletedRequiresReviewRequiredDone(t *testing.T) {
 			"task-2": {TaskID: "task-2", Review: protocol.TaskReviewRequired, Status: protocol.TaskStatusWaitingReview},
 		},
 	}
-	if taskledger.AllAFKTasksCompleted(trace) {
+	if taskledger.AllPreMergeCompleted(trace) {
 		t.Fatal("expected false while review: required task is not completed")
 	}
 	trace.Tasks["task-2"] = taskledger.TaskSnapshot{TaskID: "task-2", Review: protocol.TaskReviewRequired, Status: protocol.TaskStatusCompleted}
-	if !taskledger.AllAFKTasksCompleted(trace) {
-		t.Fatal("expected true when all non-final tasks are completed")
+	if !taskledger.AllPreMergeCompleted(trace) {
+		t.Fatal("expected true when all non-merge tasks are completed")
 	}
 }
 
-func TestAllAFKTasksCompletedIgnoresReviewGate(t *testing.T) {
+func TestAllPreMergeCompletedIgnoresMergeTask(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",
 		Tasks: map[string]taskledger.TaskSnapshot{
@@ -112,12 +112,15 @@ func TestAllAFKTasksCompletedIgnoresReviewGate(t *testing.T) {
 			"review": {TaskID: "review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusPlanned},
 		},
 	}
-	if !taskledger.AllAFKTasksCompleted(trace) {
-		t.Fatal("expected AFK tasks completed")
+	if !taskledger.AllPreMergeCompleted(trace) {
+		t.Fatal("expected pre-merge tasks completed")
+	}
+	if taskledger.IsMergeTask(trace.Tasks["review"]) != true {
+		t.Fatal("review: final must read as the merge phase")
 	}
 }
 
-func TestEligiblePlannedSkipsFinalUntilAFKDone(t *testing.T) {
+func TestEligiblePlannedNeverIncludesMergeTask(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",
 		Tasks: map[string]taskledger.TaskSnapshot{
@@ -125,13 +128,157 @@ func TestEligiblePlannedSkipsFinalUntilAFKDone(t *testing.T) {
 			"review": {TaskID: "review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusPlanned},
 		},
 	}
-	if len(taskledger.EligiblePlanned(trace)) != 1 {
-		t.Fatalf("eligible = %d, want 1 non-final task", len(taskledger.EligiblePlanned(trace)))
+	if got := taskledger.EligiblePlanned(trace); len(got) != 1 || got[0].TaskID != "task-1" {
+		t.Fatalf("eligible = %+v, want only the work task", got)
 	}
 	trace.Tasks["task-1"] = taskledger.TaskSnapshot{TaskID: "task-1", Status: protocol.TaskStatusCompleted}
-	eligible := taskledger.EligiblePlanned(trace)
-	if len(eligible) != 1 || eligible[0].TaskID != "review" {
-		t.Fatalf("eligible = %+v, want final review task", eligible)
+	if got := taskledger.EligiblePlanned(trace); len(got) != 0 {
+		t.Fatalf("eligible = %+v, want no merge task", got)
+	}
+	if _, ok := taskledger.FirstEligiblePlanned(trace); ok {
+		t.Fatal("a merge task must never be dispatched")
+	}
+}
+
+func TestTaskPhaseOf(t *testing.T) {
+	cases := []struct {
+		name string
+		task taskledger.TaskSnapshot
+		want protocol.TaskPhase
+	}{
+		{
+			name: "nothing recorded reads as work",
+			task: taskledger.TaskSnapshot{TaskID: "task-1"},
+			want: protocol.TaskPhaseWork,
+		},
+		{
+			name: "legacy final review reads as merge",
+			task: taskledger.TaskSnapshot{TaskID: "_review", Review: protocol.TaskReviewFinal},
+			want: protocol.TaskPhaseMerge,
+		},
+		{
+			name: "recorded closing reads as closing",
+			task: taskledger.TaskSnapshot{TaskID: "closing-1", Phase: protocol.TaskPhaseClosing},
+			want: protocol.TaskPhaseClosing,
+		},
+		{
+			name: "merge without final review falls back to work",
+			task: taskledger.TaskSnapshot{TaskID: "task-1", Phase: protocol.TaskPhaseMerge, Review: protocol.TaskReviewNone},
+			want: protocol.TaskPhaseWork,
+		},
+		{
+			name: "merge with final review stays merge",
+			task: taskledger.TaskSnapshot{TaskID: "_review", Phase: protocol.TaskPhaseMerge, Review: protocol.TaskReviewFinal},
+			want: protocol.TaskPhaseMerge,
+		},
+		{
+			name: "unknown phase reads as work",
+			task: taskledger.TaskSnapshot{TaskID: "task-1", Phase: protocol.TaskPhase("deploy")},
+			want: protocol.TaskPhaseWork,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := taskledger.TaskPhaseOf(tc.task); got != tc.want {
+				t.Fatalf("phase = %q, want %q", got, tc.want)
+			}
+			if got, want := taskledger.IsMergeTask(tc.task), tc.want == protocol.TaskPhaseMerge; got != want {
+				t.Fatalf("IsMergeTask = %v, want %v", got, want)
+			}
+			if got, want := taskledger.IsClosingTask(tc.task), tc.want == protocol.TaskPhaseClosing; got != want {
+				t.Fatalf("IsClosingTask = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestAllWorkCompletedAndAllPreMergeCompleted(t *testing.T) {
+	cases := []struct {
+		name        string
+		tasks       map[string]taskledger.TaskSnapshot
+		allWork     bool
+		allPreMerge bool
+	}{
+		{
+			name: "work complete with closing planned",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+				"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusPlanned},
+			},
+			allWork:     true,
+			allPreMerge: false,
+		},
+		{
+			name: "work and closing complete",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+				"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusCompleted},
+			},
+			allWork:     true,
+			allPreMerge: true,
+		},
+		{
+			name: "work still running with closing planned",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusRunning},
+				"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusPlanned},
+			},
+			allWork:     false,
+			allPreMerge: false,
+		},
+		{
+			name: "merge task is ignored by both",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+				"_review": {
+					TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview,
+				},
+			},
+			allWork:     true,
+			allPreMerge: true,
+		},
+		{
+			name: "legacy closing round is pre-merge but not work",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+				"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusFailed},
+			},
+			allWork:     true,
+			allPreMerge: false,
+		},
+		{
+			name: "failed work keeps both false",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1": {TaskID: "task-1", Status: protocol.TaskStatusFailed},
+			},
+			allWork:     false,
+			allPreMerge: false,
+		},
+		{
+			name:        "empty trace",
+			tasks:       map[string]taskledger.TaskSnapshot{},
+			allWork:     false,
+			allPreMerge: false,
+		},
+		{
+			name: "merge only trace has no work to complete",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"_review": {TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusPlanned},
+			},
+			allWork:     false,
+			allPreMerge: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			trace := taskledger.TraceSnapshot{TraceID: "trace-1", Tasks: tc.tasks}
+			if got := taskledger.AllWorkCompleted(trace); got != tc.allWork {
+				t.Fatalf("AllWorkCompleted = %v, want %v", got, tc.allWork)
+			}
+			if got := taskledger.AllPreMergeCompleted(trace); got != tc.allPreMerge {
+				t.Fatalf("AllPreMergeCompleted = %v, want %v", got, tc.allPreMerge)
+			}
+		})
 	}
 }
 
@@ -180,6 +327,29 @@ func TestLastCompletedIsolatedProposalTaskPicksNewest(t *testing.T) {
 	got, ok := taskledger.LastCompletedIsolatedProposalTask(trace)
 	if !ok || got.TaskID != "task-2" {
 		t.Fatalf("got %+v ok=%v, want task-2", got, ok)
+	}
+}
+
+func TestLastCompletedIsolatedProposalTaskExcludesClosing(t *testing.T) {
+	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Hour)
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated, UpdatedAt: older,
+			},
+			"closing-1": {
+				TaskID: "closing-1", Bee: "reviewer", Phase: protocol.TaskPhaseClosing,
+				Status:            protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated, UpdatedAt: newer,
+			},
+		},
+	}
+	got, ok := taskledger.LastCompletedIsolatedProposalTask(trace)
+	if !ok || got.TaskID != "task-1" {
+		t.Fatalf("got %+v ok=%v, want task-1 (closing is never the rework source)", got, ok)
 	}
 }
 

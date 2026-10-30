@@ -288,6 +288,12 @@ func validateTaskPlan(payload json.RawMessage) []ValidationDetail {
 				Message: "required",
 			})
 		}
+		if !IsKnownTaskPhase(task.Phase) {
+			details = append(details, ValidationDetail{
+				Path:    fmt.Sprintf("payload.tasks[%d].phase", i),
+				Message: "must be one of work, closing, merge",
+			})
+		}
 	}
 	return details
 }
