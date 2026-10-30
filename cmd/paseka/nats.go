@@ -49,6 +49,7 @@ func newDoctorCmd() *cobra.Command {
 			// one doctor finding that silently holds a trail's final gate shut.
 			if report.KVOK {
 				report.Warnings = append(report.Warnings, tasks.DiagnoseDependencies(ctxColony)...)
+				report.Warnings = append(report.Warnings, tasks.DiagnoseClosings(ctxColony)...)
 			}
 			profileView, profileErr := ctxColony.DoctorProfileView()
 			if profileErr != nil {

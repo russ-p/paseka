@@ -301,6 +301,8 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	}
 
 	activate(&manifest, &change)
+	manifest.Closing = candidate.inventory.Resolved.Closing
+	manifest.Merge = candidate.inventory.Resolved.Merge
 	if err := writeManifest(dir, manifest); err != nil {
 		return ApplyResult{}, err
 	}
@@ -759,8 +761,17 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 		}
 		return manifest, false, nil
 	}
+	candidateInventory, err := loadVerifiedSnapshot(
+		filepath.Join(SnapshotDir(colonyRoot, traceID), change.NewConfigRef),
+		change.NewConfigRef,
+	)
+	if err != nil {
+		return Manifest{}, false, err
+	}
 	manifest.Pending = nil
 	activate(&manifest, &change)
+	manifest.Closing = candidateInventory.Resolved.Closing
+	manifest.Merge = candidateInventory.Resolved.Merge
 	if err := writeManifest(dir, manifest); err != nil {
 		return Manifest{}, false, err
 	}

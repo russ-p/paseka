@@ -851,6 +851,9 @@ func selectTask(snapshot taskledger.TraceSnapshot, requested string) (taskledger
 		if taskledger.IsFinalReviewTask(task) {
 			return taskledger.TaskSnapshot{}, fmt.Errorf("trailfork: task %s is a final-review task and cannot be forked", requested)
 		}
+		if taskledger.IsClosingTask(task) {
+			return taskledger.TaskSnapshot{}, fmt.Errorf("trailfork: task %s is a closing-phase task and cannot be forked", requested)
+		}
 		if len(task.DependsOn) > 0 {
 			return taskledger.TaskSnapshot{}, fmt.Errorf("trailfork: task %s depends on %s; dependent tasks cannot be forked in v1", requested, strings.Join(task.DependsOn, ", "))
 		}
@@ -859,7 +862,7 @@ func selectTask(snapshot taskledger.TraceSnapshot, requested string) (taskledger
 
 	var roots []taskledger.TaskSnapshot
 	for _, task := range snapshot.Tasks {
-		if taskledger.IsFinalReviewTask(task) || len(task.DependsOn) > 0 {
+		if taskledger.IsFinalReviewTask(task) || taskledger.IsClosingTask(task) || len(task.DependsOn) > 0 {
 			continue
 		}
 		roots = append(roots, task)
@@ -872,6 +875,9 @@ func selectTask(snapshot taskledger.TraceSnapshot, requested string) (taskledger
 		for _, task := range snapshot.Tasks {
 			if taskledger.IsFinalReviewTask(task) {
 				return taskledger.TaskSnapshot{}, fmt.Errorf("trailfork: source has no root task; final-review tasks cannot be forked")
+			}
+			if taskledger.IsClosingTask(task) {
+				return taskledger.TaskSnapshot{}, fmt.Errorf("trailfork: source has no root task; closing-phase tasks cannot be forked")
 			}
 		}
 		return taskledger.TaskSnapshot{}, fmt.Errorf("trailfork: source has no root task to fork")
