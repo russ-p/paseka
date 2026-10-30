@@ -29,6 +29,7 @@ type TaskFrontmatter struct {
 	Intent    string                    `yaml:"intent,omitempty"`
 	CueID     string                    `yaml:"cueId,omitempty"`
 	Review    protocol.TaskReviewPolicy `yaml:"review,omitempty"`
+	Phase     protocol.TaskPhase        `yaml:"phase,omitempty"`
 	Status    protocol.TaskStatus       `yaml:"status"`
 	DependsOn []string                  `yaml:"dependsOn,omitempty"`
 	Summary   string                    `yaml:"summary,omitempty"`
@@ -98,6 +99,7 @@ func WriteTaskSnapshot(colonyRoot string, traceID string, task taskledger.TaskSn
 		Intent:    task.Intent,
 		CueID:     task.CueID,
 		Review:    task.Review,
+		Phase:     protocol.DeriveTaskPhase(task.Phase, task.Review),
 		Status:    task.Status,
 		DependsOn: append([]string(nil), task.DependsOn...),
 		Summary:   task.Summary,
@@ -278,6 +280,7 @@ func LoadTraceTasksFromFS(colonyRoot, traceID string) (taskledger.TraceSnapshot,
 			Intent:    fm.Intent,
 			CueID:     fm.CueID,
 			Review:    fm.Review,
+			Phase:     protocol.DeriveTaskPhase(fm.Phase, fm.Review),
 			Status:    fm.Status,
 			DependsOn: append([]string(nil), fm.DependsOn...),
 			Summary:   fm.Summary,

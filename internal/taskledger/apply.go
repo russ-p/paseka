@@ -3,6 +3,7 @@ package taskledger
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -118,6 +119,19 @@ func signalKind(event protocol.Event) string {
 	return meta.Kind
 }
 
+// plannedTaskPhase derives the phase a task.plan earns at reduce time. closing
+// is a runtime-only capability: a plan from any other publisher — planner,
+// builder, reviewer, console, CLI — is coerced to work. merge is derived from
+// review: final and is never authored directly, so a plan carrying merge with
+// any other review policy reads as work.
+func plannedTaskPhase(spec protocol.TaskSpec, publisher string) protocol.TaskPhase {
+	phase := protocol.DeriveTaskPhase(spec.Phase, spec.Review)
+	if phase == protocol.TaskPhaseClosing && strings.TrimSpace(publisher) != protocol.RuntimeAgentID {
+		return protocol.TaskPhaseWork
+	}
+	return phase
+}
+
 // taskOrNew returns the ledger task for taskID, or a bare snapshot when the id
 // first shows up on an event other than task.plan.
 func taskOrNew(trace TraceSnapshot, taskID string) TaskSnapshot {
@@ -160,6 +174,7 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 			Intent:    spec.Intent,
 			CueID:     spec.CueID,
 			Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
+			Phase:     plannedTaskPhase(spec, event.AgentID),
 			Status:    protocol.TaskStatusPlanned,
 			DependsOn: append([]string(nil), spec.DependsOn...),
 			CreatedAt: now,

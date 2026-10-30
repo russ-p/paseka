@@ -16,6 +16,7 @@ type TaskSnapshot struct {
 	Intent            string                     `json:"intent,omitempty"`
 	CueID             string                     `json:"cueId,omitempty"`
 	Review            protocol.TaskReviewPolicy  `json:"review,omitempty"`
+	Phase             protocol.TaskPhase         `json:"phase,omitempty"`
 	Status            protocol.TaskStatus        `json:"status"`
 	DependsOn         []string                   `json:"dependsOn,omitempty"`
 	Summary           string                     `json:"summary,omitempty"`

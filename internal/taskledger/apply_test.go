@@ -29,6 +29,100 @@ func TestApplyEventTaskPlanPreservesSector(t *testing.T) {
 	}
 }
 
+func TestApplyEventTaskPlanPhase(t *testing.T) {
+	cases := []struct {
+		name      string
+		publisher string
+		spec      protocol.TaskSpec
+		want      protocol.TaskPhase
+	}{
+		{
+			name:      "non-runtime closing coerces to work",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhaseClosing},
+			want:      protocol.TaskPhaseWork,
+		},
+		{
+			name:      "planner closing coerces to work",
+			publisher: "planner",
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhaseClosing},
+			want:      protocol.TaskPhaseWork,
+		},
+		{
+			name:      "runtime closing is honoured",
+			publisher: protocol.RuntimeAgentID,
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhaseClosing},
+			want:      protocol.TaskPhaseClosing,
+		},
+		{
+			name:      "review final derives merge",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{Review: protocol.TaskReviewFinal},
+			want:      protocol.TaskPhaseMerge,
+		},
+		{
+			name:      "runtime review final derives merge",
+			publisher: protocol.RuntimeAgentID,
+			spec:      protocol.TaskSpec{Review: protocol.TaskReviewFinal},
+			want:      protocol.TaskPhaseMerge,
+		},
+		{
+			name:      "merge with review none coerces to work",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhaseMerge, Review: protocol.TaskReviewNone},
+			want:      protocol.TaskPhaseWork,
+		},
+		{
+			name:      "merge with review required coerces to work",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhaseMerge, Review: protocol.TaskReviewRequired},
+			want:      protocol.TaskPhaseWork,
+		},
+		{
+			name:      "merge with review final stays merge",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhaseMerge, Review: protocol.TaskReviewFinal},
+			want:      protocol.TaskPhaseMerge,
+		},
+		{
+			name:      "empty phase is work",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{},
+			want:      protocol.TaskPhaseWork,
+		},
+		{
+			name:      "unknown phase is not a phase",
+			publisher: "builder",
+			spec:      protocol.TaskSpec{Phase: protocol.TaskPhase("deploy")},
+			want:      protocol.TaskPhaseWork,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := tc.spec
+			spec.TaskID = "task-1"
+			spec.Title = "Task"
+			ev, err := protocol.NewEvent("trace-1", tc.publisher, 1, protocol.EventInsight, protocol.TaskPlanPayload{
+				Kind:  protocol.TaskEventPlan,
+				Tasks: []protocol.TaskSpec{spec},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := taskledger.ApplyEvent(taskledger.TraceSnapshot{TraceID: "trace-1"}, ev)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := res.Trace.Tasks["task-1"].Phase; got != tc.want {
+				t.Fatalf("phase = %q, want %q", got, tc.want)
+			}
+			if got := res.Trace.Tasks["task-1"].Review; got != protocol.NormalizeTaskReviewPolicy(spec.Review) {
+				t.Fatalf("review = %q, want %q", got, protocol.NormalizeTaskReviewPolicy(spec.Review))
+			}
+		})
+	}
+}
+
 func TestApplyEventTaskReadyUpdatesSector(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

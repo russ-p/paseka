@@ -11,8 +11,8 @@ import (
 )
 
 // DiagnoseDependencies scans every trail in the task ledger for planned tasks
-// that can never become eligible. The final gate opens only when every task but
-// the merge gate has completed, so each finding is a trail that is closed for
+// that can never become eligible. The final gate opens only when every non-merge
+// task has completed, so each finding is a trail that is closed for
 // good until an operator repairs it.
 func DiagnoseDependencies(ctx colony.Context) []string {
 	session, err := OpenLedger(ctx)
@@ -51,7 +51,7 @@ func DiagnoseDependencies(ctx colony.Context) []string {
 // already completed, failed, or are in flight keep their status but drop their
 // edges, so a healthy finished task with a stale dependency is not reported.
 func DiagnoseTraceDependencies(trace taskledger.TraceSnapshot) []string {
-	if trace.Killed || !hasPlannedTask(trace) || taskledger.AllAFKTasksCompleted(trace) {
+	if trace.Killed || !hasPlannedTask(trace) || taskledger.AllPreMergeCompleted(trace) {
 		return nil
 	}
 

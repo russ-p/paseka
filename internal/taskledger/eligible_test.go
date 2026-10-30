@@ -120,6 +120,46 @@ func TestEligiblePlanned(t *testing.T) {
 	}
 }
 
+func TestEligiblePlannedClosingWaitsForWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusPlanned},
+			"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusPlanned},
+		},
+	}
+	if got := taskledger.EligiblePlanned(trace); len(got) != 1 || got[0].TaskID != "task-1" {
+		t.Fatalf("eligible = %v, want only unfinished work", ids(got))
+	}
+
+	trace.Tasks["task-1"] = taskledger.TaskSnapshot{TaskID: "task-1", Status: protocol.TaskStatusCompleted}
+	if got := taskledger.EligiblePlanned(trace); len(got) != 1 || got[0].TaskID != "closing-1" {
+		t.Fatalf("eligible = %v, want the closing round", ids(got))
+	}
+}
+
+func TestEligiblePlannedClosingWaitsForFollowUpWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+			"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusCompleted},
+			"fix-1":     {TaskID: "fix-1", Status: protocol.TaskStatusPlanned, DependsOn: []string{"closing-1"}},
+			"closing-2": {TaskID: "closing-2", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusPlanned},
+		},
+	}
+	// The first closing round filed follow-up work: no second round may start
+	// underneath it.
+	if got := taskledger.EligiblePlanned(trace); len(got) != 1 || got[0].TaskID != "fix-1" {
+		t.Fatalf("eligible = %v, want only the follow-up work", ids(got))
+	}
+
+	trace.Tasks["fix-1"] = taskledger.TaskSnapshot{TaskID: "fix-1", Status: protocol.TaskStatusCompleted, DependsOn: []string{"closing-1"}}
+	if got := taskledger.EligiblePlanned(trace); len(got) != 1 || got[0].TaskID != "closing-2" {
+		t.Fatalf("eligible = %v, want the second closing round", ids(got))
+	}
+}
+
 func TestCanStart(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

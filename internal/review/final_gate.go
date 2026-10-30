@@ -11,9 +11,9 @@ import (
 	"github.com/russ-p/paseka/internal/worktree"
 )
 
-// ActivateFinalReviewGate opens the trace-level merge gate when every task except
-// review: final entries has reached completed and there is something to merge
-// (an isolated code.proposal and/or a non-empty worktree merge diff).
+// ActivateFinalReviewGate opens the trace-level merge gate when every non-merge
+// task — work and closing alike — has reached completed and there is something
+// to merge (an isolated code.proposal and/or a non-empty worktree merge diff).
 // When AFK work is done but there is nothing to merge, any planned/ready/waiting
 // final-review task is auto-completed instead of leaving a hollow HITL gate.
 func ActivateFinalReviewGate(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, colonyCtx colony.Context, traceID string, opts WriteOptions) error {
@@ -24,7 +24,7 @@ func ActivateFinalReviewGate(ctx context.Context, pub bus.Publisher, ledger task
 	if err != nil {
 		return err
 	}
-	if !taskledger.AllAFKTasksCompleted(snap) {
+	if !taskledger.AllPreMergeCompleted(snap) {
 		return nil
 	}
 
