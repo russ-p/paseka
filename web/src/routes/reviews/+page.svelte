@@ -34,8 +34,11 @@
 			key: 'gate',
 			label: 'Gate',
 			text: (item) => taskReviewLabel(item.review),
+			// The final gate is the merge phase, not `review: final` read as one:
+			// a mid-trail `review: required` stop delivers nothing and is a different
+			// decision, so it keeps its policy word.
 			badge: (item) =>
-				item.isFinal
+				item.phase === 'merge'
 					? { status: 'waiting_review', label: 'final gate' }
 					: { status: 'waiting_review', label: taskReviewLabel(item.review) }
 		},

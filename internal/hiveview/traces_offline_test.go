@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,6 +135,131 @@ func TestGetTraceAlignsTaskCountWithLoadedTasks(t *testing.T) {
 	}
 	if view.TaskCount != len(view.Tasks) {
 		t.Fatalf("TaskCount=%d len(Tasks)=%d", view.TaskCount, len(view.Tasks))
+	}
+}
+
+func TestTaskItemExposesPhaseAndApproveBlockedReason(t *testing.T) {
+	ctx := colony.Context{ColonyRoot: t.TempDir(), Slug: "test"}
+	snap := taskledger.TraceSnapshot{TraceID: "trace-item", Tasks: map[string]taskledger.TaskSnapshot{
+		"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusRunning},
+		"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusRunning},
+		"_review":   {TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview},
+	}}
+
+	closing := TaskItemFromSnapshot(ctx, "trace-item", snap, snap.Tasks["closing-1"])
+	if closing.Phase != string(protocol.TaskPhaseClosing) {
+		t.Fatalf("closing phase = %q, want closing", closing.Phase)
+	}
+	if closing.Status != string(protocol.TaskStatusRunning) {
+		t.Fatalf("closing status = %q, want the lifecycle status, not the phase", closing.Status)
+	}
+
+	merge := TaskItemFromSnapshot(ctx, "trace-item", snap, snap.Tasks["_review"])
+	if merge.Phase != string(protocol.TaskPhaseMerge) {
+		t.Fatalf("merge phase = %q, want merge", merge.Phase)
+	}
+	if merge.ApproveBlockedReason == "" {
+		t.Fatal("merge gate with unfinished task-1 should report why approve is blocked")
+	}
+	if !strings.Contains(merge.ApproveBlockedReason, "task-1") {
+		t.Fatalf("reason = %q, want the unfinished task named", merge.ApproveBlockedReason)
+	}
+
+	// A mid-trail review is never blocked by the merge-gate guard.
+	snap.Tasks["review-1"] = taskledger.TaskSnapshot{TaskID: "review-1", Review: protocol.TaskReviewRequired, Status: protocol.TaskStatusWaitingReview}
+	required := TaskItemFromSnapshot(ctx, "trace-item", snap, snap.Tasks["review-1"])
+	if required.ApproveBlockedReason != "" {
+		t.Fatalf("mid-trail review blocked: %q", required.ApproveBlockedReason)
+	}
+}
+
+func TestGetTraceExposesTaskPhaseAndStage(t *testing.T) {
+	repo := t.TempDir()
+	slug := "trace-stage"
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	homeDir := filepath.Join(home, "paseka", slug)
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte("colony_root: "+repo+"\nslug: "+slug+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, "state.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	traceID := "trace-gate"
+	started := time.Now().UTC().Add(-time.Minute)
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         "agent-1",
+		Bee:             "builder",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A finished run is what makes the trail idle: the gate is a ledger fact,
+	// not something a run is doing.
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusCompleted,
+		StartedAt:       started,
+		FinishedAt:      started.Add(time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, fm := range []runs.TaskFrontmatter{
+		{TaskID: "task-1", Title: "Work", Bee: "builder", Status: protocol.TaskStatusCompleted},
+		{TaskID: "closing-1", Title: "Review the trail", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusCompleted},
+		{TaskID: "_review", Title: "Human review and merge", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview},
+	} {
+		fm.TraceID = traceID
+		taskDir, err := runs.NewTaskDir(repo, traceID, fm.TaskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := taskDir.WriteTask(fm, "body"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	view, ok, err := GetTrace(ctx, traceID)
+	if err != nil || !ok {
+		t.Fatalf("GetTrace() = ok=%v err=%v", ok, err)
+	}
+	if view.Stage != string(taskledger.TrailStageGate) {
+		t.Fatalf("stage = %q, want gate", view.Stage)
+	}
+	if view.HasActive {
+		t.Fatal("a trail at the merge gate has no active run")
+	}
+
+	rows := map[string]TaskSummaryView{}
+	for _, row := range view.Tasks {
+		rows[row.TaskID] = row
+	}
+	if rows["task-1"].Phase != string(protocol.TaskPhaseWork) {
+		t.Fatalf("task-1 phase = %q, want work", rows["task-1"].Phase)
+	}
+	if rows["closing-1"].Phase != string(protocol.TaskPhaseClosing) {
+		t.Fatalf("closing-1 phase = %q, want closing", rows["closing-1"].Phase)
+	}
+	if rows["_review"].Phase != string(protocol.TaskPhaseMerge) {
+		t.Fatalf("_review phase = %q, want merge", rows["_review"].Phase)
+	}
+	if rows["_review"].Review != string(protocol.TaskReviewFinal) {
+		t.Fatalf("_review review = %q, want final", rows["_review"].Review)
 	}
 }
 

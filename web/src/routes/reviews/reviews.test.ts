@@ -12,7 +12,7 @@ import type { MergeDiff, ReviewQueue, TaskDetail } from '$lib/api/types';
 function harness(
 	queue: ReviewQueue = reviewQueue(),
 	diff: MergeDiff = mergeDiff(),
-	details: TaskDetail[] = [taskDetail({ taskId: '_review', isFinal: true })]
+	details: TaskDetail[] = [taskDetail({ taskId: '_review', isFinal: true, phase: 'merge' })]
 ) {
 	const listReviews = vi.fn(async () => queue);
 	const getTask = vi.fn(async (traceId: string, taskId: string) => {
@@ -61,6 +61,27 @@ describe('reviews queue', () => {
 		const table = screen.getByLabelText('Review queue');
 		expect(within(table).getByText('final gate')).toBeInTheDocument();
 		expect(within(table).getByText('required')).toBeInTheDocument();
+	});
+
+	it('derives the final gate from the merge phase, not from the review policy alone', async () => {
+		// A mid-trail `review: required` stop delivers nothing, and a merge-phase row
+		// is the gate whatever its policy word says. The phase is the semantic.
+		const { store } = harness(
+			reviewQueue({
+				items: [
+					reviewQueueItem({ taskId: 'closing-1', title: 'Review the trail', phase: 'closing', review: 'required' }),
+					reviewQueueItem({ taskId: '_review', title: 'Trail merge gate', phase: 'merge', review: 'final', isFinal: false })
+				],
+				count: 2
+			})
+		);
+		render(Reviews, { store });
+		await waitFor(() => expect(screen.getByLabelText('Review queue')).toBeInTheDocument());
+
+		const table = screen.getByLabelText('Review queue');
+		expect(within(table).getByText('final gate')).toBeInTheDocument();
+		const closingRow = within(table).getByText('Review the trail').closest('tr') as HTMLElement;
+		expect(within(closingRow).queryByText('final gate')).not.toBeInTheDocument();
 	});
 
 	it('says what approving will do, which a merge commit and a PR are not the same', async () => {
@@ -160,6 +181,74 @@ describe('review detail', () => {
 		const identity = await screen.findByLabelText('Proposal identity');
 		expect(within(identity).getByText('final merge gate')).toBeInTheDocument();
 		expect(within(identity).getByText('local merge')).toBeInTheDocument();
+	});
+
+	it('renders the configured gate copy in place of the fixed sentence', async () => {
+		const gateBody = '## What this trail did\n- task-1 (feature) — wired the flag';
+		const h = harness(
+			reviewQueue({
+				items: [
+					reviewQueueItem({
+						taskId: '_review',
+						title: 'Review and merge: Add export',
+						phase: 'merge',
+						review: 'final',
+						isFinal: true,
+						body: gateBody
+					})
+				],
+				count: 1
+			}),
+			mergeDiff(),
+			[taskDetail({ taskId: '_review', isFinal: true, phase: 'merge', body: gateBody })]
+		);
+		render(ReviewDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: '_review',
+			toasts: h.toasts
+		});
+		await waitFor(() => expect(h.listReviews).toHaveBeenCalled());
+
+		const gate = await screen.findByText(/What this trail did/);
+		expect(gate).toBeInTheDocument();
+		expect(screen.getByText(/wired the flag/)).toBeInTheDocument();
+		// The old fixed sentence is gone: the colony's copy is what the reviewer reads.
+		expect(screen.queryByText(/The last work to leave this trail needs your sign-off/)).not.toBeInTheDocument();
+	});
+
+	it('disables approve with the ledger reason while another task is unfinished', async () => {
+		const reason = '1 unfinished task(s): closing-1 (running)';
+		const h = harness(
+			reviewQueue({
+				items: [
+					reviewQueueItem({
+						taskId: '_review',
+						title: 'Human review and merge',
+						phase: 'merge',
+						review: 'final',
+						isFinal: true,
+						approveBlockedReason: reason
+					})
+				],
+				count: 1
+			}),
+			mergeDiff(),
+			[taskDetail({ taskId: '_review', isFinal: true, phase: 'merge', approveBlockedReason: reason })]
+		);
+		render(ReviewDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: '_review',
+			toasts: h.toasts
+		});
+		await waitFor(() => expect(h.listReviews).toHaveBeenCalled());
+
+		const approve = await screen.findByRole('button', { name: 'Approve…' });
+		expect(approve).toBeDisabled();
+		expect(screen.getByRole('status')).toHaveTextContent(reason);
+		// Reject is still available: a gate can be answered without merging.
+		expect(screen.getByRole('button', { name: 'Reject…' })).toBeEnabled();
 	});
 
 	it('shows the trail summary as the merge commit body the reviewer is approving', async () => {

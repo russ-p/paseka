@@ -29,28 +29,35 @@ type PullRequestView struct {
 
 // ReviewQueueItem is one task awaiting human review.
 type ReviewQueueItem struct {
-	TraceID           string           `json:"traceId"`
-	TaskID            string           `json:"taskId"`
-	Title             string           `json:"title"`
-	Review            string           `json:"review"`
-	Summary           string           `json:"summary,omitempty"`
-	TraceSummary      string           `json:"traceSummary,omitempty"`
-	Bee               string           `json:"bee,omitempty"`
-	Sector            string           `json:"sector,omitempty"`
-	RunCount          int              `json:"runCount"`
-	UpdatedAt         time.Time        `json:"updatedAt,omitempty"`
-	IsFinal           bool             `json:"isFinal"`
-	ProposalWorkspace string           `json:"proposalWorkspace,omitempty"`
-	Delivery          string           `json:"delivery,omitempty"`
-	PRTitle           string           `json:"prTitle,omitempty"`
-	PRBody            string           `json:"prBody,omitempty"`
-	PullRequest       *PullRequestView `json:"pullRequest,omitempty"`
-	CanApprove        bool             `json:"canApprove"`
-	CanReject         bool             `json:"canReject"`
-	CanDiscard        bool             `json:"canDiscard"`
-	CanRequestChanges bool             `json:"canRequestChanges,omitempty"`
-	ReworkTaskID      string           `json:"reworkTaskId,omitempty"`
-	ReworkStatus      string           `json:"reworkStatus,omitempty"`
+	TraceID string `json:"traceId"`
+	TaskID  string `json:"taskId"`
+	Title   string `json:"title"`
+	// Phase is the ledger phase: `merge` is the final gate, `closing` a wrap-up
+	// round, `work` an ordinary task that stopped at a review gate.
+	Phase  string `json:"phase"`
+	Review string `json:"review"`
+	// Body is the task body the gate was planned with — the configured merge
+	// copy, so the review screen says what the trail did.
+	Body                 string           `json:"body,omitempty"`
+	Summary              string           `json:"summary,omitempty"`
+	TraceSummary         string           `json:"traceSummary,omitempty"`
+	Bee                  string           `json:"bee,omitempty"`
+	Sector               string           `json:"sector,omitempty"`
+	RunCount             int              `json:"runCount"`
+	UpdatedAt            time.Time        `json:"updatedAt,omitempty"`
+	IsFinal              bool             `json:"isFinal"`
+	ApproveBlockedReason string           `json:"approveBlockedReason,omitempty"`
+	ProposalWorkspace    string           `json:"proposalWorkspace,omitempty"`
+	Delivery             string           `json:"delivery,omitempty"`
+	PRTitle              string           `json:"prTitle,omitempty"`
+	PRBody               string           `json:"prBody,omitempty"`
+	PullRequest          *PullRequestView `json:"pullRequest,omitempty"`
+	CanApprove           bool             `json:"canApprove"`
+	CanReject            bool             `json:"canReject"`
+	CanDiscard           bool             `json:"canDiscard"`
+	CanRequestChanges    bool             `json:"canRequestChanges,omitempty"`
+	ReworkTaskID         string           `json:"reworkTaskId,omitempty"`
+	ReworkStatus         string           `json:"reworkStatus,omitempty"`
 }
 
 // ReviewQueueView is the colony-wide review queue projection.
@@ -145,7 +152,10 @@ func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
 			item := hiveview.TaskItemFromSnapshot(ctx, trace.TraceID, snap, task)
 			qi := reviewQueueItemFromTask(item)
 			qi.Summary = task.Summary
-			if taskledger.IsFinalReviewTask(task) {
+			if taskledger.IsMergeTask(task) {
+				// The planned body is the rendered gate copy: the review screen
+				// shows what the colony authored instead of a fixed sentence.
+				qi.Body = task.Body
 				if traceSummary, err := runs.ResolveTraceSummary(ctx.ColonyRoot, trace.TraceID); err == nil {
 					qi.TraceSummary = traceSummary
 				}
@@ -324,22 +334,24 @@ func reviewCommentsFromInput(in []ReviewCommentInput) []review.ReviewComment {
 
 func reviewQueueItemFromTask(item hiveview.TaskListItem) ReviewQueueItem {
 	return ReviewQueueItem{
-		TraceID:           item.TraceID,
-		TaskID:            item.TaskID,
-		Title:             item.Title,
-		Review:            item.Review,
-		Bee:               item.Bee,
-		Sector:            item.Sector,
-		RunCount:          item.RunCount,
-		UpdatedAt:         item.UpdatedAt,
-		IsFinal:           item.IsFinal,
-		ProposalWorkspace: item.ProposalWorkspace,
-		CanApprove:        item.CanApprove,
-		CanReject:         item.CanReject,
-		CanDiscard:        item.CanDiscard,
-		CanRequestChanges: item.CanRequestChanges,
-		ReworkTaskID:      item.ReworkTaskID,
-		ReworkStatus:      item.ReworkStatus,
+		TraceID:              item.TraceID,
+		TaskID:               item.TaskID,
+		Title:                item.Title,
+		Phase:                item.Phase,
+		Review:               item.Review,
+		Bee:                  item.Bee,
+		Sector:               item.Sector,
+		RunCount:             item.RunCount,
+		UpdatedAt:            item.UpdatedAt,
+		IsFinal:              item.IsFinal,
+		ApproveBlockedReason: item.ApproveBlockedReason,
+		ProposalWorkspace:    item.ProposalWorkspace,
+		CanApprove:           item.CanApprove,
+		CanReject:            item.CanReject,
+		CanDiscard:           item.CanDiscard,
+		CanRequestChanges:    item.CanRequestChanges,
+		ReworkTaskID:         item.ReworkTaskID,
+		ReworkStatus:         item.ReworkStatus,
 	}
 }
 

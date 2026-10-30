@@ -64,11 +64,13 @@ import {
 	runtimeStateNote,
 	taskCardShowsId,
 	taskIdentityRows,
+	taskPhaseLabel,
 	taskReviewLabel,
 	taskRowMeta,
 	taskRunMeta,
 	taskStatusLabel,
 	taskTitle,
+	trailStageLabel,
 	formatBytes,
 	formatClock,
 	formatFetchAge,
@@ -1199,6 +1201,23 @@ describe('task formatters', () => {
 		expect(taskStatusLabel('waiting_review')).toBe('waiting review');
 		expect(taskStatusLabel('ready')).toBe('ready');
 		expect(taskStatusLabel('')).toBe('unknown');
+	});
+
+	it('tags a phase only when it is not work, because work is every row', () => {
+		expect(taskPhaseLabel('work')).toBe('');
+		expect(taskPhaseLabel(undefined)).toBe('');
+		expect(taskPhaseLabel('closing')).toBe('closing');
+		expect(taskPhaseLabel('merge')).toBe('merge');
+	});
+
+	it('labels a trail stage only when it is not work', () => {
+		expect(trailStageLabel('work')).toBe('');
+		expect(trailStageLabel('')).toBe('');
+		expect(trailStageLabel('closing')).toBe('closing');
+		// The gate has no active run, so the stage is the only badge that says why
+		// the trail still matters.
+		expect(trailStageLabel('gate')).toBe('gate');
+		expect(trailStageLabel('delivered')).toBe('delivered');
 	});
 
 	it('says what a review policy means rather than printing the enum', () => {

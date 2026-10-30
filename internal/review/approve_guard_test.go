@@ -79,6 +79,26 @@ func TestApproveMergeGateAllowedWhenEveryNonMergeTaskCompleted(t *testing.T) {
 	}
 }
 
+func TestApproveBlockedReasonMatchesTheRefusal(t *testing.T) {
+	snap := taskledger.TraceSnapshot{TraceID: "trace-reason", Tasks: map[string]taskledger.TaskSnapshot{
+		"task-1": {TaskID: "task-1", Status: protocol.TaskStatusRunning},
+		"merge":  {TaskID: "merge", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview},
+	}}
+	reason := review.ApproveBlockedReason(snap, "merge")
+	if !strings.Contains(reason, "task-1 (running)") {
+		t.Fatalf("reason = %q, want the unfinished task and its status", reason)
+	}
+	err := review.EnsureApprovable(snap, "merge")
+	if err == nil || !strings.Contains(err.Error(), reason) {
+		t.Fatalf("EnsureApprovable = %v, want it to carry %q", err, reason)
+	}
+
+	snap.Tasks["task-1"] = taskledger.TaskSnapshot{TaskID: "task-1", Status: protocol.TaskStatusCompleted}
+	if reason := review.ApproveBlockedReason(snap, "merge"); reason != "" {
+		t.Fatalf("reason = %q, want none once the other task completed", reason)
+	}
+}
+
 func TestApproveMidTrailReviewGateIgnoresPlannedDownstreamWork(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	traceID := "trace-approve-midtrail"

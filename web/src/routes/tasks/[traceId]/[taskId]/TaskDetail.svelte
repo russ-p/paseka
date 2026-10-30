@@ -9,6 +9,7 @@
 		formatTimestamp,
 		runStateLabel,
 		taskIdentityRows,
+		taskPhaseLabel,
 		taskRunMeta,
 		taskStatusLabel,
 		taskTitle
@@ -71,6 +72,11 @@
 	 * stayed open — the badge would disagree with the board it links back to.
 	 */
 	const status = $derived(row?.status ?? task?.status ?? '');
+	/**
+	 * The phase comes from the row for the same reason: it is the ledger's answer
+	 * on the polled board, and the tag never replaces the status word beside it.
+	 */
+	const phase = $derived(row?.phase ?? task?.phase ?? '');
 	/**
 	 * The board row's answer when there is one — it is the thing the board itself
 	 * renders, so a task approved in another tab stops offering the decision the
@@ -160,6 +166,9 @@
 			<h1 class="text-2xl font-bold">{task ? taskTitle(task) : taskId || 'Task'}</h1>
 			{#if task}
 				<StatusBadge status={status} label={taskStatusLabel(status)} />
+				{#if taskPhaseLabel(phase)}
+					<span class="badge badge-ghost badge-sm badge-outline">{taskPhaseLabel(phase)}</span>
+				{/if}
 				{#if row?.review && row.review !== 'none'}
 					<span class="badge badge-ghost badge-sm">{row.review} review</span>
 				{/if}

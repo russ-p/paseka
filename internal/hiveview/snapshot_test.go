@@ -248,6 +248,30 @@ func TestFormatColonySnapshotHoneyUsesAllocated(t *testing.T) {
 	}
 }
 
+func TestFormatColonySnapshotAttentionShowsTaskPhase(t *testing.T) {
+	text := hiveview.FormatColonySnapshot(hiveview.ColonySnapshot{
+		Slug:    "demo",
+		Runtime: hiveview.SnapshotRuntime{Status: runtime.RuntimeStatusStopped},
+		Agents:  hiveview.AgentsView{},
+		Energy:  hiveview.SnapshotEnergy{Traces: []hiveview.SnapshotEnergyTrace{}},
+		Attention: hiveview.SnapshotAttention{
+			WaitingReview: []hiveview.SnapshotAttentionTask{
+				{TraceID: "trace-gate", TaskID: "_review", Phase: string(protocol.TaskPhaseMerge)},
+				{TraceID: "trace-work", TaskID: "task-1", Phase: string(protocol.TaskPhaseWork)},
+			},
+			FailedTasks:     []hiveview.SnapshotAttentionTask{},
+			PendingInvites:  []hiveview.SnapshotAttentionInvite{},
+			LowEnergyTraces: []hiveview.SnapshotLowEnergy{},
+		},
+	})
+	if !contains(text, "trace-gate/_review · merge") {
+		t.Fatalf("merge gate phase missing beside the status:\n%s", text)
+	}
+	if contains(text, "trace-work/task-1 · work") {
+		t.Fatalf("a work phase should not be printed:\n%s", text)
+	}
+}
+
 func TestFormatColonySnapshotStandingBadge(t *testing.T) {
 	text := hiveview.FormatColonySnapshot(hiveview.ColonySnapshot{
 		Slug:    "demo",

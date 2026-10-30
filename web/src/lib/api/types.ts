@@ -452,6 +452,10 @@ export interface TaskSummary {
 	taskId: string;
 	title: string;
 	status: string;
+	/** The ledger phase — `work`, `closing`, or `merge` — a separate axis from status. */
+	phase?: string;
+	/** The normalized review policy, so a row can draw its gate without a second read. */
+	review?: string;
 	bee?: string;
 }
 
@@ -478,10 +482,18 @@ export interface TaskListItem {
 	taskId: string;
 	title: string;
 	status: string;
+	/**
+	 * The ledger phase: `work`, `closing`, or `merge`. Separate from `status` — a
+	 * closing card is still planned, running, or failed — and read from the polled
+	 * board row like every other badge.
+	 */
+	phase?: string;
 	/** Normalized, so `none` rather than empty. */
 	review?: string;
 	bee?: string;
 	sector?: string;
+	/** Why the merge gate cannot be approved yet, while a non-merge task is open. */
+	approveBlockedReason?: string;
 	dependsOn?: string[];
 	runCount: number;
 	canStart: boolean;
@@ -676,7 +688,11 @@ export interface ReviewQueueItem {
 	traceId: string;
 	taskId: string;
 	title: string;
+	/** The ledger phase; `merge` is the final gate, not `review: final` read as one. */
+	phase?: string;
 	review: string;
+	/** The task body the gate was planned with — the configured merge copy. */
+	body?: string;
 	summary?: string;
 	/** The trail's prose, on a final gate only; also the merge commit body. */
 	traceSummary?: string;
@@ -685,6 +701,8 @@ export interface ReviewQueueItem {
 	runCount: number;
 	updatedAt?: string;
 	isFinal: boolean;
+	/** Why approve is disabled: a non-merge task is still incomplete. */
+	approveBlockedReason?: string;
 	proposalWorkspace?: string;
 	/** `local_merge` or `pull_request`; decides whether approving merges or publishes. */
 	delivery?: string;
@@ -995,6 +1013,12 @@ export interface EventFilters {
  */
 export interface TraceDetail extends TraceSummary {
 	tasks: TaskSummary[] | null;
+	/**
+	 * The ledger's phase machine projected onto the trail: `work`, `closing`,
+	 * `gate`, or `delivered`. Computed on the server — the browser cannot read the
+	 * ledger — and shown beside the run-derived attention flags.
+	 */
+	stage: string;
 	runs: RunSummary[] | null;
 	worktree?: Worktree;
 	pullRequest?: PullRequest;

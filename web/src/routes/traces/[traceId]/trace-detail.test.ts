@@ -304,11 +304,44 @@ describe('trace detail', () => {
 		expect(within(tasks).getByText('Introduce the Adapter interface')).toBeInTheDocument();
 		expect(within(tasks).getByText('task-a1 · builder')).toBeInTheDocument();
 		expect(within(tasks).getByText('completed')).toBeInTheDocument();
-		expect(within(tasks).getByText('waiting_review')).toBeInTheDocument();
+		// The row speaks the board's words: `waiting_review` is a wire value, not a label.
+		expect(within(tasks).getByText('waiting review')).toBeInTheDocument();
+		expect(within(tasks).queryByText('waiting_review')).not.toBeInTheDocument();
 
 		const runs = await section('trace-runs');
 		expect(within(runs).getByText('run-04 · task-01')).toBeInTheDocument();
 		expect(within(runs).getByText(/1\.2k in · 340 out · 800 cache/)).toBeInTheDocument();
+	});
+
+	it('tags a non-work task with its phase and leaves a work row untagged', async () => {
+		// Phase is a second axis: the status stays the lifecycle word and the tag
+		// beside it says the row is the wrap-up or the merge gate.
+		renderDetail({
+			detail: async () =>
+				traceDetail({
+					stage: 'closing',
+					tasks: [
+						{ taskId: 'task-a1', title: 'Introduce the Adapter interface', status: 'completed', phase: 'work', bee: 'builder' },
+						{ taskId: 'closing-1', title: 'Review the trail', status: 'running', phase: 'closing', bee: 'builder' }
+					]
+				})
+		});
+
+		const tasks = await section('trace-tasks');
+		expect(within(tasks).getByText('closing')).toBeInTheDocument();
+		expect(within(tasks).queryByText('work')).not.toBeInTheDocument();
+		// The status is still rendered for the closing row.
+		expect(within(tasks).getByText('running')).toBeInTheDocument();
+	});
+
+	it('shows the derived stage beside the attention flags', async () => {
+		// A trail at the gate has no active run, so the only badge that says why it
+		// is still worth opening is the stage.
+		renderDetail({ detail: async () => traceDetail({ hasActive: false, hasFailures: false, stage: 'gate' }) });
+
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		const stage = within(header()).getByText('gate');
+		expect(stage).toHaveAttribute('data-trail-stage', 'gate');
 	});
 
 	it('links every task and run row to its own page', async () => {

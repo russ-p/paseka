@@ -115,6 +115,56 @@ func LatestClosingTask(trace TraceSnapshot) (TaskSnapshot, bool) {
 	return latest, found
 }
 
+// TrailStage is the phase machine projected onto a whole trail. It is not a
+// task phase and not a run status: a trail at the merge gate is `gate` even
+// though nothing is running, which a run-derived state cannot express.
+type TrailStage string
+
+const (
+	// TrailStageWork is the default: ordinary trail work is still open, or the
+	// trail never entered a closing or merge phase.
+	TrailStageWork TrailStage = "work"
+	// TrailStageClosing means a closing round exists and has not completed.
+	TrailStageClosing TrailStage = "closing"
+	// TrailStageGate means the merge task waits for a human and every non-merge
+	// task is completed.
+	TrailStageGate TrailStage = "gate"
+	// TrailStageDelivered means the merge task completed and the trail was
+	// delivered.
+	TrailStageDelivered TrailStage = "delivered"
+)
+
+// DeriveTrailStage projects the ledger's phase machine onto a trail using the
+// same predicates the runtime uses. It is computed server-side so the client
+// never has to reason about a ledger it cannot read.
+func DeriveTrailStage(trace TraceSnapshot) TrailStage {
+	if MergeTaskCompleted(trace) {
+		return TrailStageDelivered
+	}
+	if MergeGateWaiting(trace) {
+		return TrailStageGate
+	}
+	if HasUnfinishedClosingTask(trace) {
+		return TrailStageClosing
+	}
+	return TrailStageWork
+}
+
+// MergeGateWaiting reports whether the trail is waiting on a human at the merge
+// gate: a merge task sits at waiting_review and every non-merge task is
+// completed, so nothing else is open.
+func MergeGateWaiting(trace TraceSnapshot) bool {
+	if !AllPreMergeCompleted(trace) {
+		return false
+	}
+	for _, task := range trace.Tasks {
+		if IsMergeTask(task) && task.Status == protocol.TaskStatusWaitingReview {
+			return true
+		}
+	}
+	return false
+}
+
 // WorkTaskCount counts work-phase tasks in the trail regardless of status. It
 // backs the min_work_tasks predicate.
 func WorkTaskCount(trace TraceSnapshot) int {

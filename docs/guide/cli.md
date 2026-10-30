@@ -349,6 +349,8 @@ On success prints `trace`, `task`, suggested `paseka task start` / `paseka task 
 
 `--depends-on` is validated before `task.plan` is published: an unknown task id, a self dependency, an empty entry, or a cycle fails the create instead of publishing a task that would stay `planned` forever. Create the dependency first, or depend on a sibling planned in the same batch.
 
+`phase` is runtime-owned: `task create` has no flag for it. A `--review final` task is recorded as the `merge` phase; the runtime seeds `closing` rounds. A Bee or operator cannot author either phase.
+
 ### `paseka task list`
 
 List tasks for one flight trail.
@@ -358,6 +360,8 @@ List tasks for one flight trail.
 | `--trace` | | yes | Flight trail id |
 | `--path` | `-C` | | Colony resolution start directory |
 
+The table prints `status` and, beside it, the ledger `phase` (`work`, `closing`, or `merge`) — a closing round is still `planned`, `running`, or `failed` in its status.
+
 Reads JetStream KV when NATS is configured; otherwise falls back to `.paseka/runs/<traceId>/tasks/*/task.md`.
 
 ```bash
@@ -366,7 +370,7 @@ paseka task list --trace trace-1
 
 ### `paseka task show`
 
-Show one task, its markdown description, and linked agent runs.
+Show one task, its ledger phase, its markdown description, and linked agent runs.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
@@ -422,6 +426,8 @@ paseka task retry --trace trace-1 --task task-1
 Read-only colony snapshot: hive runtime, live bees (AFK + interactive), task counts, honey for recent Flight Trails, attention items, and a short recent-trace list. Observe-only — does not start the runtime, dispatch work, or mutate colony state.
 
 Trails declared by a standing Forage Cue are marked `· standing` in the honey, low-honey, and recent-trace lines; JSON adds `standing: true` on those rows. The marker follows `.paseka/cues/*.yaml`, so removing the cue makes the trail read as an ordinary trail.
+
+Attention task rows carry the task's ledger phase beside the status the section already names (`trace/task · merge`); `work` is omitted, because it is the ordinary case. JSON adds `phase` to `waitingReview` and `failedTasks` rows.
 
 | Flag | Short | Description |
 | ---- | ----- | ----------- |

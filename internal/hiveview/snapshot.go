@@ -87,6 +87,9 @@ type SnapshotAttentionTask struct {
 	TaskID  string `json:"taskId"`
 	Title   string `json:"title,omitempty"`
 	Review  string `json:"review,omitempty"`
+	// Phase is the ledger phase (work, closing, merge), so a row that needs
+	// attention says whether it is the wrap-up or the merge gate.
+	Phase string `json:"phase,omitempty"`
 }
 
 // SnapshotAttentionInvite is a pending Human Gateway invite.
@@ -348,6 +351,7 @@ func snapshotAttentionTaskFromItem(task TaskListItem) SnapshotAttentionTask {
 		TaskID:  task.TaskID,
 		Title:   task.Title,
 		Review:  task.Review,
+		Phase:   task.Phase,
 	}
 }
 
@@ -430,7 +434,7 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 		if len(s.Attention.WaitingReview) > 0 {
 			lines = append(lines, fmt.Sprintf("  waiting review: %d", len(s.Attention.WaitingReview)))
 			for _, task := range s.Attention.WaitingReview {
-				lines = append(lines, fmt.Sprintf("    %s/%s", task.TraceID, task.TaskID))
+				lines = append(lines, formatAttentionTask(task))
 			}
 		}
 		if len(s.Attention.PendingInvites) > 0 {
@@ -442,7 +446,7 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 		if len(s.Attention.FailedTasks) > 0 {
 			lines = append(lines, fmt.Sprintf("  failed tasks: %d", len(s.Attention.FailedTasks)))
 			for _, task := range s.Attention.FailedTasks {
-				lines = append(lines, fmt.Sprintf("    %s/%s", task.TraceID, task.TaskID))
+				lines = append(lines, formatAttentionTask(task))
 			}
 		}
 		if len(s.Attention.LowEnergyTraces) > 0 {
@@ -474,6 +478,17 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// formatAttentionTask prints one attention row. The phase rides beside the
+// status the section already names, and only when it is not `work`, so an
+// ordinary task does not carry a word that says nothing.
+func formatAttentionTask(task SnapshotAttentionTask) string {
+	line := fmt.Sprintf("    %s/%s", task.TraceID, task.TaskID)
+	if phase := protocol.TaskPhase(task.Phase); phase != "" && phase != protocol.TaskPhaseWork {
+		line += fmt.Sprintf(" · %s", phase)
+	}
+	return line
 }
 
 func formatLiveBeeLine(item AgentItem) string {
