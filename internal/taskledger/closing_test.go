@@ -59,3 +59,28 @@ func TestMergeGateWaitingRequiresEveryOtherTaskCompleted(t *testing.T) {
 		t.Fatal("gate must not read as waiting without a merge task")
 	}
 }
+
+// A taken `closing-N` id must never be reused: the seeding write would be a
+// no-op and the round would disappear, leaving the trail to stall with no
+// closing task and no error.
+func TestNextClosingTaskIDSkipsTakenIDs(t *testing.T) {
+	trace := TraceSnapshot{TraceID: "trace-ids", Tasks: map[string]TaskSnapshot{
+		"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+	}}
+	if got := NextClosingTaskID(trace); got != "closing-1" {
+		t.Fatalf("next id = %q, want closing-1", got)
+	}
+
+	// closing-1 is an operator task, not a closing-phase round, so the highest
+	// round is still 0 and the derived id collides.
+	trace.Tasks["closing-1"] = TaskSnapshot{TaskID: "closing-1", Status: protocol.TaskStatusCompleted}
+	if got := NextClosingTaskID(trace); got != "closing-2" {
+		t.Fatalf("next id = %q, want closing-2 past the taken id", got)
+	}
+
+	// A closing round recorded at closing-2 advances the base past it.
+	trace.Tasks["closing-2"] = TaskSnapshot{TaskID: "closing-2", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusCompleted}
+	if got := NextClosingTaskID(trace); got != "closing-3" {
+		t.Fatalf("next id = %q, want closing-3", got)
+	}
+}

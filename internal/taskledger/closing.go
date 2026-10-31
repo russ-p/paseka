@@ -43,10 +43,20 @@ func HighestClosingRound(trace TraceSnapshot) int {
 }
 
 // NextClosingTaskID derives the next stable closing task id from the highest
-// existing round. It is safe to call repeatedly: the same ledger yields the
-// same id until a new round is recorded.
+// existing round, skipping ids the ledger already uses. It is safe to call
+// repeatedly: the same ledger yields the same id until a new round is recorded.
+// Skipping a taken id keeps a stray `closing-N` task (an operator's own, or a
+// hand-written plan) from silently stalling the round, because seeding an
+// existing id is a no-op the runtime would never notice.
 func NextClosingTaskID(trace TraceSnapshot) string {
-	return ClosingTaskIDPrefix + strconv.Itoa(HighestClosingRound(trace)+1)
+	round := HighestClosingRound(trace) + 1
+	for {
+		id := ClosingTaskIDPrefix + strconv.Itoa(round)
+		if _, taken := trace.Tasks[id]; !taken {
+			return id
+		}
+		round++
+	}
 }
 
 // ClosingInFlight returns a closing task that is occupying the trail: planned,
