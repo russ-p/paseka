@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Approved)**
-Runtime-owned `closing` and `merge` ledger phases, colony-declared closing policy, configurable merge-gate copy, and a guaranteed AFK wrap-up task that sees the whole trail before the final review gate. The `dependsOn` validation and doctor warnings from §10 have already landed; the phases, the closing policy, and the gate copy are not implemented.
+**(Implemented)**
+Runtime-owned `closing` and `merge` ledger phases, colony-declared closing policy, configurable merge-gate copy, and a guaranteed AFK wrap-up task that sees the whole trail before the final review gate.
 
 ## Problem Statement
 
@@ -99,7 +99,7 @@ work* → closing* → merge → (request changes) → work* → closing* → me
 
 ### 4. Predicates and gate activation
 
-- `AllWorkCompleted` — every `work`-phase task is `completed`. This is the closing trigger.
+- `AllWorkCompleted` — at least one `work`-phase task exists and every `work`-phase task is `completed`. This is the closing trigger; a trail with no work task has nothing to wrap up.
 - `AllPreMergeCompleted` — every non-merge task, `work` and `closing`, is `completed`. This is the final-gate condition; it replaces `AllAFKTasksCompleted`, whose name no longer describes what it tests.
 - `IsMergeTask` — `phase == merge` (which implies `review: final`). `IsReviewGate` stays "merge task or `review: required`" for the approve/reject/discard guards.
 - Closing tasks become eligible only when `AllWorkCompleted` holds; the general "oldest eligible planned task, one slot at a time" rule is unchanged.
@@ -129,6 +129,7 @@ closing:
 
 - `when` uses named predicates evaluated by the runtime over the ledger snapshot, in the style of `auto_invites.match`. v1 predicates: `min_work_tasks` (counts `work`-phase tasks in the trail regardless of status) and `has_isolated_proposal`. Expressions are out of scope.
 - `task` is a template, not a ledger task. `review: final` and `phase` are rejected in the template; the Bee must exist and be a valid task target.
+- `task.params` are ordinary run params validated at load and applied to the closing dispatch on top of the closing Bee's committed params, so a stronger model or reasoning budget reaches only the wrap-up and never the bees that built the trail.
 - `max_rounds` bounds the number of closing rounds; default 2 (one review plus one verification round). `1` means a single pass with no re-review after follow-up work.
 - A closing task that ends `failed` or `blocked` keeps the final gate closed, exactly as any other non-completed task does today. There is no advisory mode in v1.
 - The policy is resolved at trail start and pinned into the trail's immutable configuration snapshot; a later `colony.yaml` edit reaches running trails only through the existing safe configuration cutover, never mid-round.
@@ -154,9 +155,9 @@ merge:
 ### 7. Runtime ensures the merge task and the closing seed
 
 - On the same event boundaries where the final gate is evaluated, and before it, the runtime ensures the current closing round exists.
-- Idempotency is by stable task id: `closing-1`, `closing-2`, … derived from the highest existing closing round, not from a random id and not from a count. Re-application, restart, and event echo are no-ops because the reducer ignores a `task.plan` for an id that already has a status.
+- Idempotency is by stable task id: `closing-1`, `closing-2`, … derived from the highest existing closing round, not from a random id and not from a count. An id the ledger already uses is skipped so a coincidental task cannot swallow the round. Re-application, restart, and event echo are no-ops because the reducer ignores a `task.plan` for an id that already has a status.
 - A closing round is seeded only when: the policy is enabled, `when` predicates hold, `AllWorkCompleted` holds, no closing task is in flight, no merge task is `completed`, and either no closing round exists or new work completed after the last closing round completed. When `trail.work.completed` from spec 043 lands, its revision/`completionId` replaces the "new work completed after" comparison.
-- When the cap is reached, the runtime does not seed another round and records an operational note explaining the skip. No task is created and cancelled — a cancelled task would block the gate just like a planned one, because the predicate requires `completed`.
+- When the cap is reached, the runtime does not seed another round and records an operational note explaining the skip. A skip caused by an unmatched predicate is explained the same way. Either note is written once, on the boundary that opens the merge gate, so a replay or a human approval does not repeat it. No task is created and cancelled — a cancelled task would block the gate just like a planned one, because the predicate requires `completed`.
 - The existing `_review` synthesis becomes the ensure path for the merge task: a stable id (`_review` is kept for continuity with recorded trails, console routes, and docs), `phase: merge`, `review: final`, and the configured copy. An explicit final gate planned by a Bee or operator still wins; the runtime does not add a second one.
 
 ### 8. The closing round is a normal AFK dispatch

@@ -42,8 +42,10 @@ func IsFinalReviewTask(task TaskSnapshot) bool {
 	return protocol.NormalizeTaskReviewPolicy(task.Review) == protocol.TaskReviewFinal
 }
 
-// AllWorkCompleted reports whether every work-phase task has completed. It is
-// the closing trigger: a closing round becomes eligible only once this holds.
+// AllWorkCompleted reports whether the trail has work and all of it completed.
+// It is the closing trigger: a closing round becomes eligible only once this
+// holds, and a trail with no work-phase task (a merge-only or closing-only
+// record) must not seed a wrap-up of nothing.
 func AllWorkCompleted(trace TraceSnapshot) bool {
 	sawWork := false
 	for _, task := range trace.Tasks {

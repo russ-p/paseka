@@ -2,6 +2,22 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-10 — A trail now closes itself before the merge gate
+
+A trail used to end with its last work task and a generic `_review` gate. The pull-request description was written by whichever task happened to be last, so a multi-task trail shipped a body describing one slice; nothing ever looked at the accumulated diff; and `review: final` had to mean both "this is the end" and "a human must approve it".
+
+- **Two new ledger phases, runtime-owned.** `closing` and `merge` join the default `work`. Phase is recorded on `task.plan` and persisted, so replay, fork, `paseka verify`, and the Console read it from the ledger instead of colony configuration. A `closing` plan is honoured only from the reserved runtime agent; `merge` is derived from `review: final`; anything else a Bee or operator writes is `work`.
+- **The wrap-up is guaranteed and bounded.** When every work task is completed and the colony's pinned `closing` policy matches, the runtime seeds exactly one AFK closing round (`closing-1`, `closing-2`, …) and kicks it through the ordinary scheduler. The closing Bee receives the whole trail — id, title, phase, intent, status, commit, summary, dependencies per task — writes the authoritative `pr.body` and `trace.summary`, and may plan follow-up work on the same trail. When that work completes the runtime reviews again, up to `max_rounds`.
+- **Policy is authored once and pinned.** `closing.enabled`, `when.min_work_tasks`, `when.has_isolated_proposal`, `closing.task` (bee, intent, title, review, params), and `max_rounds` are validated at colony load and frozen into the trail's configuration snapshot at start. `task.params` overlay the closing Bee's params at dispatch, so a stronger model reviews large change sets without changing the bees that built them. Editing `colony.yaml` mid-trail changes nothing.
+- **Silence is explained, and only once.** A round skipped by the predicates or by the cap writes a single `context.note`, on the boundary that opens the merge gate, instead of repeating on every approval or replayed completion. A closing task that ends failed or blocked keeps the gate closed and is never silently replaced.
+- **The gate is a phase with authorable copy.** The runtime ensures exactly one `_review` task as `phase: merge`, rendered from `merge.task.title` / `merge.task.body` with the same trail inventory. An explicit `review: final` gate still wins and no second one is created. Approval is refused while any other work or closing task is incomplete, so a change set cannot be merged underneath a running round or unfinished rework. A delivered trail seeds no further rounds.
+- **The truth is visible.** Cards and the detail header carry a quiet `closing` / `merge` tag beside the status, the trail detail gains a derived stage (`work` / `closing` / `gate` / `delivered`) computed server-side, `task.md` carries `phase`, the CLI prints it beside the status, and `paseka doctor` reports a closing seed that cannot be built, a stuck closing round, a cap reached with follow-up work, or a duplicate merge gate.
+
+- Spec: [045-trail-closing-phase](../specs/045-trail-closing-phase.md)
+- Canonical: [task ledger](../reference/task-ledger.md#task-phase-phase), [event contracts](../reference/event-contracts.md#task-plan-phases), [colony layout](../guide/colony-layout.md), [CLI](../guide/cli.md#paseka-task)
+
+Not in this ship: publishing the pull request, any merge behaviour beyond copy (automatic approval, delivery-mode changes), colony-defined phase names, per-severity model routing, multiple closing Bees per trail, closing on standing trails, and the `trail.work.completed` trigger from [spec 043](../specs/043-trail-observability.md) — the v1 "new work completed after the last round" comparison stands in for it.
+
 ## 2026-10 — A typo in `dependsOn` can no longer close a trail
 
 A dependency is an id, and an id typed wrong used to be published as-is. The task it belonged to then waited on something that would never complete: it stayed `planned` forever, and because the final gate opens only when every task but the merge gate has completed, the trail's review gate could never open — silently, with no event and no way to repair the task in place.
