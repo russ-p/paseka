@@ -251,6 +251,20 @@ func RunParamsFromBee(b Bee) adapters.RunParams {
 	return LayerFromBee(b).Params
 }
 
+// WithParams returns a copy of the bee with params overlaid key by key. It is
+// the seam a runtime-owned policy uses to hand an existing bee additional run
+// params — the pinned closing policy's `task.params` — without inventing a
+// second dispatch layer: the overlay only sets the keys it names, so the
+// committed bee definition stays the base and every unspecified param keeps
+// its value.
+func WithParams(bee Bee, overlay map[string]any) Bee {
+	if len(overlay) == 0 {
+		return bee
+	}
+	bee.Params = mergeParamMaps(bee.Params, overlay)
+	return bee
+}
+
 // LayerFromBee maps bee YAML params and records which keys the bee declared.
 // The declared set lets a higher layer merge tri-state: a bee that never set
 // `yolo` still floats the autonomous default, while a profile that sets

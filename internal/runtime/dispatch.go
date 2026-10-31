@@ -45,8 +45,12 @@ type DispatchRequest struct {
 	// TrailInventory is the structured task list of the trail, set for a
 	// closing-phase dispatch.
 	TrailInventory colony.TrailInventory
-	Profile        string
-	ProfileApply   func(colony.Bee) (colony.Bee, error)
+	// PolicyParams are the run params pinned by a runtime-owned policy, set for
+	// a closing-phase dispatch. They overlay the bee's committed params, so a
+	// closing round can name a stronger model without a second bee definition.
+	PolicyParams map[string]any
+	Profile      string
+	ProfileApply func(colony.Bee) (colony.Bee, error)
 	// Registry is the trail-scoped bee registry, when the caller has one.
 	Registry *BeeRegistry
 	// Raw requests plain-text adapter output for this run only (CLI --raw).

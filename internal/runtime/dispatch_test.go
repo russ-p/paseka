@@ -14,12 +14,13 @@ import (
 )
 
 type recordingAdapter struct {
-	lastReq adapters.RunRequest
-	prompts []string
-	events  []protocol.Event
-	result  *adapters.RunResult
-	runErr  error
-	calls   int
+	lastReq  adapters.RunRequest
+	requests []adapters.RunRequest
+	prompts  []string
+	events   []protocol.Event
+	result   *adapters.RunResult
+	runErr   error
+	calls    int
 }
 
 func (r *recordingAdapter) Name() string { return "cursor" }
@@ -27,6 +28,7 @@ func (r *recordingAdapter) Name() string { return "cursor" }
 func (r *recordingAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	r.calls++
 	r.lastReq = req
+	r.requests = append(r.requests, req)
 	r.prompts = append(r.prompts, req.Prompt)
 	if r.runErr != nil {
 		return nil, r.runErr

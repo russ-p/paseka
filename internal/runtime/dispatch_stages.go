@@ -86,6 +86,13 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 			return nil, err
 		}
 	}
+	// A runtime-owned policy may pin run params for its own task — the closing
+	// round's `task.params`. It overlays the committed bee, so the closing Bee
+	// can stay cheap by default while the wrap-up names a stronger model. The
+	// params were validated with the colony at load and pinned with the trail.
+	if len(req.PolicyParams) > 0 {
+		bee = colony.WithParams(bee, req.PolicyParams)
+	}
 	if err := bee.ValidateAdapterRequirements(); err != nil {
 		return nil, err
 	}

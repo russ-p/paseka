@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runtime"
@@ -344,6 +345,72 @@ closing:
 		if !strings.Contains(closingPrompt, want) {
 			t.Fatalf("closing prompt missing %q: %q", want, closingPrompt)
 		}
+	}
+}
+
+func TestClosingRoundDispatchesWithPinnedPolicyParams(t *testing.T) {
+	const closingParamsYAML = `defaults:
+  prompt_template: default.md
+model_aliases:
+  strong: vendor/strong-1
+closing:
+  enabled: true
+  when:
+    min_work_tasks: 1
+  task:
+    bee: reviewer
+    params:
+      model: strong
+  max_rounds: 1
+`
+	r, _, adapter := newClosingTestReactor(t, closingParamsYAML, map[string]colony.Bee{
+		"builder":  {Role: "builder"},
+		"reviewer": {Role: "reviewer"},
+	})
+	if err := os.WriteFile(
+		filepath.Join(r.ColonyRoot(), ".paseka", "prompts", "default.md"),
+		[]byte("{{.TaskID}}"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	traceID := "trace-closing-params"
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind:  protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{TaskID: "task-1", Title: "Only slice", Bee: "builder"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := protocol.NewEvent(traceID, "builder-agent", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), completed); err != nil {
+		t.Fatal(err)
+	}
+
+	var closingReq *adapters.RunRequest
+	for i := range adapter.requests {
+		if adapter.requests[i].TaskID == "closing-1" {
+			closingReq = &adapter.requests[i]
+		}
+	}
+	if closingReq == nil {
+		t.Fatalf("the closing round was not dispatched: %+v", adapter.requests)
+	}
+	// The pinned `task.params` overlay the bee's committed params, and the model
+	// alias resolves exactly as it would for any other dispatch.
+	if got := closingReq.Params.Model; got != "vendor/strong-1" {
+		t.Fatalf("closing model = %q, want the pinned policy param resolved through the alias", got)
 	}
 }
 

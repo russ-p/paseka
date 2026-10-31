@@ -791,3 +791,29 @@ func TestCommandBeeMayCarryTimeout(t *testing.T) {
 		t.Fatal("expected command to be set")
 	}
 }
+
+// WithParams is the seam a runtime-owned policy uses to hand a bee its own run
+// params — the closing round's pinned `task.params`. It overlays only the keys
+// it names, and it never mutates the committed bee definition.
+func TestWithParamsOverlaysOnlyDeclaredKeys(t *testing.T) {
+	bee := colony.Bee{
+		Role:   "reviewer",
+		Params: map[string]any{"model": "cheap", "reasoning": "low"},
+	}
+
+	got := colony.WithParams(bee, map[string]any{"model": "strong"})
+	if got.Params["model"] != "strong" {
+		t.Fatalf("model = %v, want the overlay to win", got.Params["model"])
+	}
+	if got.Params["reasoning"] != "low" {
+		t.Fatalf("reasoning = %v, want the committed value kept", got.Params["reasoning"])
+	}
+	if bee.Params["model"] != "cheap" {
+		t.Fatalf("committed bee was mutated: %v", bee.Params)
+	}
+
+	empty := colony.WithParams(bee, nil)
+	if empty.Params["model"] != "cheap" {
+		t.Fatalf("empty overlay changed the bee: %v", empty.Params)
+	}
+}

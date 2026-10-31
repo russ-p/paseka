@@ -40,6 +40,9 @@ type ColonyDispatchRequest struct {
 	// TrailInventory is the structured task list of the trail, set for a
 	// closing-phase dispatch.
 	TrailInventory colony.TrailInventory
+	// PolicyParams are the run params of a runtime-owned policy, set for a
+	// closing-phase dispatch. They overlay the bee's committed params.
+	PolicyParams map[string]any
 	// ProposalKind, when set, resolves adapter cwd from the proposal MUTATION kind
 	// (isolated/alias → trace worktree; root → colony root) instead of bee.Worktree.
 	ProposalKind string
@@ -212,6 +215,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		IsLastWorkTask:       isLastWorkTask,
 		SuppressPRBody:       suppressPRBody,
 		TrailInventory:       req.TrailInventory,
+		PolicyParams:         req.PolicyParams,
 		Profile:              execColony.Profile,
 		Raw:                  req.Raw,
 		ProfileApply:         profileApply,

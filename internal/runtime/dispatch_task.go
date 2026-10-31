@@ -100,12 +100,16 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	// structured inventory gate copy renders with. Re-snapshot so its own row
 	// reads running instead of ready.
 	inventory := colony.TrailInventory{}
+	var policyParams map[string]any
 	if taskledger.IsClosingTask(task) {
 		latest := snap
 		if refreshed, snapErr := r.ledger.Snapshot(traceID); snapErr == nil {
 			latest = refreshed
 		}
 		inventory = review.BuildTrailInventory(execCtx.Colony, traceID, latest)
+		// The pinned policy's params are what make the wrap-up a stronger
+		// reviewer than the bees that built the trail.
+		policyParams = execCtx.Manifest.Closing.Task.Params
 	}
 
 	body := task.Body
@@ -127,6 +131,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		IsLastWorkTask: isLastWorkTask,
 		SuppressPRBody: suppressPRBody,
 		TrailInventory: inventory,
+		PolicyParams:   policyParams,
 		Provenance:     attemptProvenance(attempt),
 	}, DispatchModeTask)
 	if err != nil {
