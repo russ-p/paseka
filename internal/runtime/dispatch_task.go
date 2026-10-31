@@ -184,7 +184,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, summary)
 	}
 	if ev, ok := runEmittedTaskCompleted(res.Result, task.TaskID); ok {
-		return r.applyTaskCompletedEvent(dispatchCtx, traceID, ev)
+		return r.applyTaskCompletedEvent(dispatchCtx, traceID, ev, execCtx)
 	}
 	if shouldDeferAFKCompletion(execCtx.Registry, bee, res.Result) {
 		afkSummary := summary
@@ -193,7 +193,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		}
 		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, afkSummary)
 	}
-	return r.completeTask(dispatchCtx, traceID, task.TaskID, summary, "")
+	return r.completeTask(dispatchCtx, traceID, task.TaskID, summary, "", execCtx)
 }
 
 func taskDispatchFailureSummary(res *BeeRunResult, dispatchErr error) string {

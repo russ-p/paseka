@@ -167,7 +167,10 @@ func terminalTaskStatus(status protocol.TaskStatus) bool {
 	}
 }
 
-func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, commit string) error {
+// completeTask finishes a task and hands the trail's execution context to the
+// gate boundary, so the boundary decides with the configuration this dispatch
+// already resolved instead of re-reading it.
+func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, commit string, execCtx *trailExecutionContext) error {
 	completed, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
 		Kind:        protocol.TaskEventCompleted,
 		TaskID:      taskID,
@@ -179,10 +182,10 @@ func (r *Reactor) completeTask(ctx context.Context, traceID, taskID, summary, co
 	if err != nil {
 		return err
 	}
-	return r.applyTaskCompletedEvent(ctx, traceID, completed)
+	return r.applyTaskCompletedEvent(ctx, traceID, completed, execCtx)
 }
 
-func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, completed protocol.Event) error {
+func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, completed protocol.Event, execCtx *trailExecutionContext) error {
 	r.stampRuntimeProvenance(&completed)
 	stale, err := r.staleTaskCompletion(completed)
 	if err != nil {
@@ -215,7 +218,7 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 			return err
 		}
 	}
-	return r.maybeActivateFinalReview(ctx, traceID, nil)
+	return r.maybeActivateFinalReview(ctx, traceID, execCtx)
 }
 
 // maybeActivateFinalReview is the single gate boundary: it ensures the closing
@@ -226,16 +229,19 @@ func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string, 
 		return nil
 	}
 	if execCtx == nil {
-		if resolved, err := r.executionContext(traceID); err == nil {
-			execCtx = resolved
+		// The pinned closing and merge policies decide what this boundary may
+		// do, so an unreadable binding is an error, not a default: falling back
+		// here would silently disable a wrap-up the trail pinned at start and
+		// open the gate over work nobody reviewed.
+		resolved, err := r.executionContext(traceID)
+		if err != nil {
+			return fmt.Errorf("runtime: trail config: %w", err)
 		}
+		execCtx = resolved
 	}
-	policies := review.GatePolicies{}
-	if execCtx != nil {
-		policies = review.GatePolicies{
-			Closing: execCtx.Manifest.Closing,
-			Merge:   execCtx.Manifest.Merge,
-		}
+	policies := review.GatePolicies{
+		Closing: execCtx.Manifest.Closing,
+		Merge:   execCtx.Manifest.Merge,
 	}
 	res, err := review.EnsureTrailPhases(ctx, r.publisher, r.ledger, r.colony, traceID, policies, review.WriteOptions{
 		AfterApply: r.rememberLocalEvent,
