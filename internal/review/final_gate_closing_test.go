@@ -188,6 +188,7 @@ func TestClosingStopsAtMaxRoundsWithOperationalNote(t *testing.T) {
 	traceID := "trace-closing-cap"
 	base := time.Now().UTC().Add(-time.Hour)
 	applyPlanAt(t, ledger, traceID, "scout", base, protocol.TaskSpec{TaskID: "task-1", Title: "Build"})
+	applyIsolatedProposal(t, ledger, traceID, "task-1")
 	completeTaskAt(t, ledger, traceID, "task-1", base.Add(time.Minute))
 	applyPlanAt(t, ledger, traceID, protocol.RuntimeAgentID, base.Add(2*time.Minute), protocol.TaskSpec{TaskID: "closing-1", Title: "Round one", Phase: protocol.TaskPhaseClosing})
 	completeTaskAt(t, ledger, traceID, "closing-1", base.Add(3*time.Minute))
@@ -195,12 +196,16 @@ func TestClosingStopsAtMaxRoundsWithOperationalNote(t *testing.T) {
 	completeTaskAt(t, ledger, traceID, "fix-1", base.Add(5*time.Minute))
 
 	policies := review.GatePolicies{Closing: colony.ClosingPolicy{Enabled: true, MaxRounds: intPtr(1)}}
-	res, err := review.EnsureTrailPhases(context.Background(), pub, ledger, colony.Context{}, traceID, policies, review.WriteOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.ClosingSeeded != nil {
-		t.Fatalf("seeded %q past max_rounds", res.ClosingSeeded.TaskID)
+	// The gate boundary runs again on every later completion or approval; the
+	// cap is explained once, not once per boundary.
+	for i := 0; i < 3; i++ {
+		res, err := review.EnsureTrailPhases(context.Background(), pub, ledger, colony.Context{}, traceID, policies, review.WriteOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.ClosingSeeded != nil {
+			t.Fatalf("seeded %q past max_rounds", res.ClosingSeeded.TaskID)
+		}
 	}
 	snap, err := ledger.Snapshot(traceID)
 	if err != nil {
@@ -209,17 +214,60 @@ func TestClosingStopsAtMaxRoundsWithOperationalNote(t *testing.T) {
 	if _, ok := snap.Tasks["closing-2"]; ok {
 		t.Fatal("created a second closing round past max_rounds")
 	}
-	var note string
+	if !taskledger.MergeGateWaiting(snap) {
+		t.Fatal("the merge gate did not open after the cap skip")
+	}
+	var notes []string
 	for _, ev := range pub.events {
 		if protocol.PayloadKind(ev.Payload) != string(protocol.InsightContextNote) {
 			continue
 		}
 		var payload protocol.NarrativeInsightPayload
 		decode(t, ev, &payload)
-		note = payload.Summary
+		notes = append(notes, payload.Summary)
 	}
-	if !strings.Contains(note, "max_rounds") && !strings.Contains(note, "allows 1 round") {
-		t.Fatalf("operational note = %q, want the cap explained", note)
+	if len(notes) != 1 {
+		t.Fatalf("operational notes = %q, want the cap explained exactly once", notes)
+	}
+	if !strings.Contains(notes[0], "allows 1 round") {
+		t.Fatalf("operational note = %q, want the cap explained", notes[0])
+	}
+}
+
+func TestPredicateSkipIsExplainedOnceAtTheGate(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	pub := &recordingPublisher{}
+	traceID := "trace-closing-predicate-note"
+	base := time.Now().UTC().Add(-time.Hour)
+	applyPlanAt(t, ledger, traceID, "scout", base, protocol.TaskSpec{TaskID: "task-1", Title: "Build"})
+	applyIsolatedProposal(t, ledger, traceID, "task-1")
+	completeTaskAt(t, ledger, traceID, "task-1", base.Add(time.Minute))
+
+	policies := review.GatePolicies{Closing: colony.ClosingPolicy{
+		Enabled:   true,
+		When:      colony.ClosingWhen{MinWorkTasks: 2},
+		MaxRounds: intPtr(2),
+	}}
+	for i := 0; i < 3; i++ {
+		if _, err := review.EnsureTrailPhases(context.Background(), pub, ledger, colony.Context{}, traceID, policies, review.WriteOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var notes []string
+	for _, ev := range pub.events {
+		if protocol.PayloadKind(ev.Payload) != string(protocol.InsightContextNote) {
+			continue
+		}
+		var payload protocol.NarrativeInsightPayload
+		decode(t, ev, &payload)
+		notes = append(notes, payload.Summary)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("operational notes = %q, want the predicate explained exactly once", notes)
+	}
+	if !strings.Contains(notes[0], "at least 2 work task") || !strings.Contains(notes[0], "has 1") {
+		t.Fatalf("operational note = %q, want the unmatched predicate named", notes[0])
 	}
 }
 
@@ -451,3 +499,33 @@ func decode(t *testing.T, ev protocol.Event, out any) {
 }
 
 func intPtr(v int) *int { return &v }
+
+// A trail that already uses the derived `closing-N` id for its own task must
+// still get its closing round under the next free id, instead of a silent stall
+// where the seed write was a no-op.
+func TestClosingRoundSkipsAnAlreadyUsedTaskID(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-closing-id-collision"
+	base := time.Now().UTC().Add(-time.Hour)
+	applyPlanAt(t, ledger, traceID, "scout", base, protocol.TaskSpec{TaskID: "closing-1", Title: "Operator's own task"})
+	completeTaskAt(t, ledger, traceID, "closing-1", base.Add(time.Minute))
+
+	policies := review.GatePolicies{Closing: colony.ClosingPolicy{Enabled: true, MaxRounds: intPtr(3)}}
+	res, err := review.EnsureTrailPhases(context.Background(), nil, ledger, colony.Context{}, traceID, policies, review.WriteOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ClosingSeeded == nil {
+		t.Fatal("the closing round stalled on an id the trail already uses")
+	}
+	if res.ClosingSeeded.TaskID != "closing-2" {
+		t.Fatalf("seeded = %q, want closing-2 past the taken id", res.ClosingSeeded.TaskID)
+	}
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if taskledger.TaskPhaseOf(snap.Tasks["closing-1"]) == protocol.TaskPhaseClosing {
+		t.Fatal("the operator's task was overwritten with a closing round")
+	}
+}

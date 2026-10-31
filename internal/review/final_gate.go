@@ -83,7 +83,7 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 		return result, err
 	}
 
-	seeded, ok, err := ensureClosingRound(ctx, pub, ledger, traceID, snap, policies.Closing, opts)
+	seeded, ok, skipNote, err := ensureClosingRound(ctx, pub, ledger, traceID, snap, policies.Closing, opts)
 	if err != nil {
 		return result, err
 	}
@@ -99,9 +99,24 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 		return result, nil
 	}
 
+	// A skipped round is reported once, together with the gate it makes way
+	// for. Every later boundary finds the gate already open and returns
+	// earlier, so the operator reads the reason once instead of on each
+	// approval or replayed completion.
+	noteSkip := func() error {
+		return recordClosingSkipNote(ctx, pub, ledger, traceID, skipNote, opts)
+	}
+
 	needsMerge := needsIsolatedMerge(snap, colonyCtx, traceID)
 	if final, ok := taskledger.FindFinalReviewTask(snap); ok {
 		if !needsMerge {
+			switch final.Status {
+			case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusBlocked:
+				return result, nil
+			}
+			if err := noteSkip(); err != nil {
+				return result, err
+			}
 			return result, completeEmptyFinalGate(ctx, pub, ledger, traceID, final, opts)
 		}
 		if taskledger.HasWaitingReview(snap) && final.Status != protocol.TaskStatusWaitingReview {
@@ -109,6 +124,9 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 		}
 		switch final.Status {
 		case protocol.TaskStatusPlanned, protocol.TaskStatusReady:
+			if err := noteSkip(); err != nil {
+				return result, err
+			}
 			ev, err := statusEvent(traceID, final.TaskID, protocol.TaskStatusWaitingReview, "All tasks completed — awaiting human review and merge")
 			if err != nil {
 				return result, err
@@ -129,6 +147,9 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 	}
 	body, err := policies.Merge.ResolvedBody(inventory)
 	if err != nil {
+		return result, err
+	}
+	if err := noteSkip(); err != nil {
 		return result, err
 	}
 	planEv, err := protocol.NewEvent(traceID, protocol.RuntimeAgentID, 0, protocol.EventInsight, protocol.TaskPlanPayload{
@@ -160,40 +181,46 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 // only when every work task is complete, no closing round is in flight or
 // unfinished, no merge task is completed, the predicates hold, and the latest
 // closing round does not already cover the latest completed work.
-func ensureClosingRound(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, traceID string, snap taskledger.TraceSnapshot, policy colony.ClosingPolicy, opts WriteOptions) (taskledger.TaskSnapshot, bool, error) {
+//
+// skipNote explains the two decisions an operator cannot read off the ledger —
+// the predicates did not match, or the round cap is spent — and is empty when
+// the policy simply had nothing to do yet. The caller records it once, at the
+// boundary that opens the merge gate.
+func ensureClosingRound(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, traceID string, snap taskledger.TraceSnapshot, policy colony.ClosingPolicy, opts WriteOptions) (taskledger.TaskSnapshot, bool, string, error) {
 	if !policy.Enabled {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, "", nil
 	}
 	if taskledger.MergeTaskCompleted(snap) {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, "", nil
 	}
 	if !taskledger.AllWorkCompleted(snap) {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, "", nil
 	}
 	if !policy.Matches(taskledger.WorkTaskCount(snap), taskledger.HasIsolatedProposal(snap)) {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, predicateSkipNote(policy, snap), nil
 	}
 	if _, ok := taskledger.ClosingInFlight(snap); ok {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, "", nil
 	}
 	if taskledger.HasUnfinishedClosingTask(snap) {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, "", nil
 	}
 	if taskledger.ClosingCoversLatestWork(snap) {
-		return taskledger.TaskSnapshot{}, false, nil
+		return taskledger.TaskSnapshot{}, false, "", nil
 	}
 
 	round := taskledger.HighestClosingRound(snap) + 1
 	maxRounds := policy.ResolvedMaxRounds()
 	if round > maxRounds {
-		return taskledger.TaskSnapshot{}, false, recordClosingCapNote(ctx, pub, ledger, traceID, snap, maxRounds, opts)
+		return taskledger.TaskSnapshot{}, false, capSkipNote(snap, maxRounds), nil
 	}
 
+	// The id is the round number; it skips ids the ledger already uses, so the
+	// body must name the round the id actually carries.
 	taskID := taskledger.NextClosingTaskID(snap)
-	if existing, ok := snap.Tasks[taskID]; ok && existing.Status != "" {
-		return taskledger.TaskSnapshot{}, false, nil
+	if idRound, ok := taskledger.ClosingRoundNumber(taskID); ok {
+		round = idRound
 	}
-
 	title := strings.TrimSpace(policy.Task.Title)
 	if title == "" {
 		title = defaultClosingTaskTitle
@@ -214,10 +241,10 @@ func ensureClosingRound(ctx context.Context, pub bus.Publisher, ledger taskledge
 		Tasks: []protocol.TaskSpec{spec},
 	})
 	if err != nil {
-		return taskledger.TaskSnapshot{}, false, err
+		return taskledger.TaskSnapshot{}, false, "", err
 	}
 	if err := WriteEvent(ctx, pub, ledger, planEv, opts); err != nil {
-		return taskledger.TaskSnapshot{}, false, err
+		return taskledger.TaskSnapshot{}, false, "", err
 	}
 
 	// Apply the standard task.ready kick so the existing scheduler dispatches
@@ -232,21 +259,21 @@ func ensureClosingRound(ctx context.Context, pub bus.Publisher, ledger taskledge
 		Intent: spec.Intent,
 	})
 	if err != nil {
-		return taskledger.TaskSnapshot{}, false, err
+		return taskledger.TaskSnapshot{}, false, "", err
 	}
 	if err := WriteEvent(ctx, pub, ledger, readyEv, opts); err != nil {
-		return taskledger.TaskSnapshot{}, false, err
+		return taskledger.TaskSnapshot{}, false, "", err
 	}
 
 	updated, err := ledger.Snapshot(traceID)
 	if err != nil {
-		return taskledger.TaskSnapshot{}, false, err
+		return taskledger.TaskSnapshot{}, false, "", err
 	}
 	task, ok := updated.Tasks[taskID]
 	if !ok {
-		return taskledger.TaskSnapshot{}, false, fmt.Errorf("review: closing task %q was not recorded", taskID)
+		return taskledger.TaskSnapshot{}, false, "", fmt.Errorf("review: closing task %q was not recorded", taskID)
 	}
-	return task, true, nil
+	return task, true, "", nil
 }
 
 // ClosingRoundGuaranteed reports whether the pinned policy will seed a closing
@@ -271,16 +298,38 @@ func ClosingRoundGuaranteed(policy colony.ClosingPolicy, trace taskledger.TraceS
 	return taskledger.HighestClosingRound(trace)+1 <= policy.ResolvedMaxRounds()
 }
 
-// recordClosingCapNote explains a cap skip instead of creating and cancelling a
+// predicateSkipNote explains a trail that finished work the pinned predicates
+// exclude, so the operator sees why no closing round was seeded instead of a
+// trail that jumps from work straight to the merge gate.
+func predicateSkipNote(policy colony.ClosingPolicy, snap taskledger.TraceSnapshot) string {
+	work := taskledger.WorkTaskCount(snap)
+	if policy.When.MinWorkTasks > 0 && work < policy.When.MinWorkTasks {
+		return fmt.Sprintf("Closing round skipped: the pinned policy requires at least %d work task(s) and this trail has %d. No closing round will be seeded.", policy.When.MinWorkTasks, work)
+	}
+	if policy.When.HasIsolatedProposal && !taskledger.HasIsolatedProposal(snap) {
+		return "Closing round skipped: the pinned policy requires an isolated code change and this trail has none. No closing round will be seeded."
+	}
+	return ""
+}
+
+// capSkipNote explains a cap skip instead of creating and cancelling a
 // placeholder task: a cancelled task would block the gate exactly like a
 // planned one, because every non-merge task must complete.
-func recordClosingCapNote(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, traceID string, snap taskledger.TraceSnapshot, maxRounds int, opts WriteOptions) error {
+func capSkipNote(snap taskledger.TraceSnapshot, maxRounds int) string {
 	last, ok := taskledger.LatestClosingTask(snap)
 	lastID := "the previous closing round"
 	if ok {
 		lastID = fmt.Sprintf("%q", last.TaskID)
 	}
-	summary := fmt.Sprintf("Closing round skipped: the pinned policy allows %d round(s) and follow-up work completed after %s. No further review round will be seeded.", maxRounds, lastID)
+	return fmt.Sprintf("Closing round skipped: the pinned policy allows %d round(s) and follow-up work completed after %s. No further review round will be seeded.", maxRounds, lastID)
+}
+
+// recordClosingSkipNote records the reason a closing round was skipped. An
+// empty summary means the policy had nothing to report.
+func recordClosingSkipNote(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, traceID, summary string, opts WriteOptions) error {
+	if strings.TrimSpace(summary) == "" {
+		return nil
+	}
 	ev, err := protocol.NewEvent(traceID, protocol.RuntimeAgentID, 0, protocol.EventInsight, protocol.NarrativeInsightPayload{
 		Kind:    protocol.InsightContextNote,
 		Summary: summary,
