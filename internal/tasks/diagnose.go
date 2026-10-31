@@ -197,7 +197,7 @@ func DiagnoseTraceClosing(in ClosingDiagnosisInput) []string {
 	maxRounds := in.Policy.ResolvedMaxRounds()
 	if len(closingIDs) >= maxRounds {
 		if hasClosing && workCompletedAfter(trace, lastClosing) {
-			warnings = append(warnings, fmt.Sprintf("trace %s: closing reached the cap of %d round(s) with follow-up work completed after %q; the final gate stays closed until a human adds a round or repairs the trail", trace.TraceID, maxRounds, lastClosing.TaskID))
+			warnings = append(warnings, fmt.Sprintf("trace %s: closing reached the cap of %d round(s) with follow-up work completed after %q; no further review round is seeded and the final gate opens over that work", trace.TraceID, maxRounds, lastClosing.TaskID))
 		}
 		return warnings
 	}

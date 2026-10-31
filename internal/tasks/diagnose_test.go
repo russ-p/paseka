@@ -215,10 +215,13 @@ func TestDiagnoseTraceClosingReportsCapWithFollowUpWork(t *testing.T) {
 	if len(warnings) != 1 {
 		t.Fatalf("warnings = %v", warnings)
 	}
-	for _, want := range []string{"cap of 1 round", "closing-1", "follow-up work"} {
+	for _, want := range []string{"cap of 1 round", "closing-1", "follow-up work", "no further review round is seeded", "final gate opens"} {
 		if !strings.Contains(warnings[0], want) {
 			t.Fatalf("warning %q missing %q", warnings[0], want)
 		}
+	}
+	if strings.Contains(warnings[0], "stays closed") {
+		t.Fatalf("warning %q claims the gate stays closed, but a capped round lets the gate open", warnings[0])
 	}
 }
 
