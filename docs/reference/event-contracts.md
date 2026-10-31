@@ -58,7 +58,7 @@ These kinds have stable type and payload validation in `internal/protocol`.
 
 | Type | `payload.kind` | Required payload | Main producer / consumer |
 | ---- | -------------- | ---------------- | ------------------------ |
-| `INSIGHT` | `task.plan` | non-empty `tasks[]`; each task has `taskId`, `title` | planner → task ledger |
+| `INSIGHT` | `task.plan` | non-empty `tasks[]`; each task has `taskId`, `title`, optional `phase` | planner → task ledger |
 | `SIGNAL` | `task.ready` | `taskId` | CLI/reactor → task dispatcher |
 | `SIGNAL` | `task.status` | `taskId`, `status` | runtime → task ledger |
 | `VERIFICATION` | `task.completed` | `taskId` | runtime/reviewer → task ledger |
@@ -82,6 +82,17 @@ These kinds have stable type and payload validation in `internal/protocol`.
 Narrative and operational `INSIGHT` kinds are catalogued separately in
 [INSIGHT kinds](insight-kinds.md) (`pr.body` is operational pull-request copy;
 see [pull-request delivery](../guide/pull-request-delivery.md)).
+
+### Task plan phases
+
+`phase` is optional and defaults to `work`, the only value a Bee, prompt, or
+operator can create directly. The reducer owns the other two: a plan published
+under the reserved runtime agent id may say `closing`, and any plan carrying
+`review: final` is recorded as `merge` regardless of who published it. A plan
+that writes `phase: merge` without `review: final`, or `closing` from a
+non-runtime publisher, is coerced to `work`. The phase is persisted with the
+task, so replay, fork, `paseka verify`, and every Console read derive ordering
+from the event log alone. See [task ledger](task-ledger.md#task-phase-phase).
 
 ### `MUTATION` refs
 

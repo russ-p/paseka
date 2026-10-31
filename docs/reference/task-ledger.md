@@ -55,6 +55,22 @@ flowchart LR
 
 Task lifecycle events use `payload.kind` inside existing top-level event types — no new `EventType` values.
 
+### Task phase (`phase`)
+
+Status answers *where a task is*; phase answers *what the task is for*. The two are separate axes: a closing card is still `planned`, `running`, `blocked`, or `failed`.
+
+| `phase` | Created by | Meaning |
+| ------- | ---------- | ------- |
+| `work` (default) | Any planner | Ordinary trail work. An empty phase is `work`. |
+| `closing` | The runtime only | A wrap-up round that reviews the whole trail before the gate. Seeded as `closing-1`, `closing-2`, … |
+| `merge` | Derived from `review: final` | The trace-level gate. Never dispatched; presented at `waiting_review`, or auto-completed when there is nothing to merge. |
+
+The phase is written into `task.plan` and persisted, so the ledger stays self-describing and replay, fork, `verify`, and the Console never consult colony configuration to read it. A `task.plan` published by anyone but the runtime is coerced to `work`; a plan with `review: final` is recorded as `merge`, and `phase: merge` with any other review policy is coerced back to `work`. A task record with `review: final` and no phase reads as `merge`; one with neither reads as `work`.
+
+Closing rounds come from the colony's pinned `closing` policy, not from a Bee. When every `work` task is completed and the policy predicates match, the runtime seeds exactly one closing round under the next free `closing-N` id and kicks it with the ordinary `task.ready` scheduler. Follow-up work planned by the closing Bee runs as `work`, and once it completes the runtime seeds the next round, up to `max_rounds`. A trail with no `work` task, an in-flight or unfinished round, or an already delivered (`merge` completed) trail seeds nothing.
+
+A round skipped by the predicates or by the round cap is explained with one `INSIGHT` / `context.note`, written once on the boundary that opens the merge gate. A closing task that ends `failed`, `blocked`, or `cancelled` keeps the gate closed: nothing seeds a replacement, and the trail waits for a human.
+
 ### Honey reserve (`energyToken`)
 
 Each trace carries a shared honey reserve on the task ledger snapshot:
@@ -81,7 +97,7 @@ Each task may declare an optional `review` field in `task.plan`:
 | -------- | -------- |
 | `none` (default) | No human mid-task review. Runtime auto-completes on adapter success **unless** a colony bee explicitly declares `publishes: VERIFICATION/task.completed` and the run opened an **isolated** `code.proposal` gate (builder with diff); then status stays `waiting_review` until that publisher emits `task.completed`. Scout and other no-proposal bees still auto-complete. Root proposals (`code.proposal.root`) do **not** open this AFK commit-gate defer. |
 | `required` | After a successful bee run, task moves to `waiting_review` until human approval. For **isolated** proposals this follows guard verification and may include receiver defer semantics. For **root** proposals (`hivewright` → `main-guard`), `waiting_review` is a **soft ack (R1)** only — no worktree merge implied. |
-| `final` | Trace-level **isolated** merge gate — activates when all other tasks complete; no AFK dispatch. **Forbidden** when the task's bee publishes `code.proposal.root` (doctor / `task.plan` load error). |
+| `final` | Trace-level **isolated** merge gate (`phase: merge`) — activates when every other task completes; no AFK dispatch. **Forbidden** when the task's bee publishes `code.proposal.root` (doctor / `task.plan` load error). |
 
 When a `MUTATION/code.proposal.*` event arrives, the ledger records `proposalWorkspace` on the task (`isolated` or `root`) from the mutation payload. Queen Console shows workspace tags on review tasks.
 
@@ -94,7 +110,9 @@ When a `MUTATION/code.proposal.*` event arrives, the ledger records `proposalWor
 | `paseka proposal approve` | Merges the trace worktree on isolated `review: final` / `_review` when `defaults.delivery` is `local_merge`; **publishes a PR** (no local merge) when delivery is `pull_request` | **R1:** records ack + `task.completed`; **no** merge, **no** PR, **no** auto-commit |
 | Beekeeper commit | Via merge approve on final gate | Manual git on colony root |
 
-When no `review: final` task is planned, the runtime synthesizes task `_review` after the last AFK task completes **only if** the trace has an isolated merge candidate: at least one task recorded `proposalWorkspace: isolated` (from `MUTATION/code.proposal.isolated`), or the trace worktree branch has a non-empty merge diff vs the default branch. Scout-only / no-diff runs do **not** open a hollow merge gate. An explicit `review: final` task with nothing to merge is auto-completed (`Nothing to merge — skipped final review gate`) instead of entering `waiting_review`.
+The merge gate is ensured, not synthesized ad hoc. On the boundary where every `work` and `closing` task has completed, the runtime ensures exactly one merge task — stable id `_review` for continuity with recorded trails and console routes, `phase: merge`, `review: final`, with the colony's configured copy — **only if** the trace has an isolated merge candidate: at least one task recorded `proposalWorkspace: isolated` (from `MUTATION/code.proposal.isolated`), or the trace worktree branch has a non-empty merge diff vs the default branch. Scout-only / no-diff runs do **not** open a hollow merge gate. An explicit `review: final` task authored by a Bee or operator wins, and the runtime adds no second one. An explicit `review: final` task with nothing to merge is auto-completed (`Nothing to merge — skipped final review gate`) instead of entering `waiting_review`.
+
+Approval is refused while any other non-merge task — work or closing — is still incomplete, so a change set can never be merged underneath a running closing round or an unfinished rework task.
 
 Human actions (CLI and Queen Console Reviews use the same domain flows):
 
@@ -118,7 +136,7 @@ When more than one planned task is eligible in the same tick, the **oldest `crea
 
 `dependsOn` is checked on the producer side. `paseka task create` (and the Console create route that shares it) refuses an id no task in the trace carries, a self dependency, an empty entry, and a cycle, so a typo fails the create while the operator is still looking at it. The check reads the ledger snapshot plus the spec being published, so a plan may depend on a sibling registered by the same `task.plan`. The reducer stays tolerant — replaying an older trail never fails — and a re-plan for an id that already has a status is judged by the stored edges, because the reducer would ignore the new ones.
 
-`paseka doctor` scans every trail in the ledger for the same defects plus a planned task whose dependency is `cancelled` or `blocked`. The final gate opens only when every task except the merge gate has completed ([`AllAFKTasksCompleted`]), so a planned task with an unsatisfiable dependency closes the trail for good; doctor names the trace and the task instead of leaving it silent.
+`paseka doctor` scans every trail in the ledger for the same defects plus a planned task whose dependency is `cancelled` or `blocked`. The final gate opens only when every task except the merge gate has completed (`AllPreMergeCompleted`), so a planned task with an unsatisfiable dependency closes the trail for good; doctor names the trace and the task instead of leaving it silent.
 
 ### `task.status` — SIGNAL
 
@@ -255,7 +273,8 @@ PRD (SIGNAL: feature.requested)
   → Builder run (traceId + taskId)
   → AFK tasks auto-complete when no colony commit-gate publisher opened an isolated code.proposal; otherwise wait for receiver task.completed
   → Review-marked tasks (`review: required`) enter waiting_review — isolated (guard/receiver) or root soft ack (main-guard)
-  → All AFK tasks done → final review gate when isolated merge candidate exists (planned or synthesized `_review`); otherwise skip / auto-complete empty final
+  → All AFK tasks done → closing round (closing-1) when the pinned policy says so, re-run after follow-up work up to max_rounds
+  → All work and closing tasks done → merge gate when an isolated merge candidate exists (planned or ensured `_review`); otherwise skip / auto-complete empty final
   → Human approve → merge worktree → VERIFICATION task.completed
   → Task Reactor: next task.ready (if any)
   → … repeat …
@@ -309,7 +328,7 @@ The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/
       runs.ndjson    # agent run history for this task
 ```
 
-`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `createdAt`, `updatedAt`). The markdown body stores the human-readable task description (`body`).
+`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `phase`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `createdAt`, `updatedAt`). `phase` is omitted for `work`, so an older file without it still reads as work (or as `merge` when its `review` is `final`). The markdown body stores the human-readable task description (`body`).
 
 `createdAt` is stamped **once**, when the ledger first sees the task (normally on `task.plan`; a task first seen through `task.status`, `task.completed`, or `code.proposal` gets the same stamp at that point) and never moves afterwards, while `updatedAt` moves on every status write. Wait time is therefore `updatedAt - createdAt` read straight from the file, with no bus. `createdAt` is omitted when unknown, so trails written before it existed still parse — treat a missing `createdAt` as unknown rather than zero.
 
