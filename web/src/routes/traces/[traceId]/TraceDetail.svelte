@@ -12,6 +12,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TrailConfigPanel from './TrailConfigPanel.svelte';
 	import TrailForkPanel from './TrailForkPanel.svelte';
+	import TrailConfigHistory from './TrailConfigHistory.svelte';
 	import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import { consolePath, runDetailPath, taskDetailPath, traceTimelinePath } from '$lib/navigation';
@@ -260,6 +261,12 @@
 			</Section>
 		</div>
 
+		{#if usage.length > 0}
+			<Section id="trace-usage" title="LLM usage" note={`${detail.usage?.runCountWithUsage ?? 0} runs reported`} collapsible open={false}>
+				<MetaList rows={usage} label="LLM usage" />
+			</Section>
+		{/if}
+
 		<TrailConfigPanel {store} />
 		<TrailForkPanel {store} />
 
@@ -353,12 +360,6 @@
 			</Section>
 		{/if}
 
-		{#if usage.length > 0}
-			<Section id="trace-usage" title="LLM usage" note={`${detail.usage?.runCountWithUsage ?? 0} runs reported`} collapsible>
-				<MetaList rows={usage} label="LLM usage" />
-			</Section>
-		{/if}
-
 		<Section
 			id="trace-events"
 			title="Recent events"
@@ -381,6 +382,8 @@
 				{/if}
 			{/if}
 		</Section>
+
+		<TrailConfigHistory {store} />
 	{/if}
 </div>
 

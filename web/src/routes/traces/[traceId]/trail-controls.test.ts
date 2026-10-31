@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TrailConfigPanel from './TrailConfigPanel.svelte';
 import TrailForkPanel from './TrailForkPanel.svelte';
+import TrailConfigHistory from './TrailConfigHistory.svelte';
 import { createTraceStore, type TraceStore } from '$lib/stores/trace.svelte';
 import {
 	configManifest,
@@ -46,6 +47,15 @@ async function loadedStore(options: Parameters<typeof traceStore>[0]): Promise<T
 	return store;
 }
 
+/** The panel's collapsed `Configuration` section, asserted before and after the fold. */
+function configFold(): HTMLElement {
+	const fold = document.querySelector('#trace-config');
+	if (fold === null) {
+		throw new Error('Expected a collapsible trail configuration section');
+	}
+	return fold as HTMLElement;
+}
+
 afterEach(() => {
 	vi.restoreAllMocks();
 });
@@ -68,6 +78,10 @@ describe('trail configuration panel', () => {
 		render(TrailConfigPanel, { store });
 
 		await waitFor(() => expect(screen.getByText('revision 2')).toBeInTheDocument());
+		const fold = configFold();
+		expect(fold).not.toHaveAttribute('open');
+		await user.click(fold.querySelector('summary') as HTMLElement);
+		expect(fold).toHaveAttribute('open');
 		await user.type(screen.getByPlaceholderText('why this version'), 'adopt it');
 		await user.click(screen.getByRole('button', { name: 'Preview change' }));
 
@@ -87,6 +101,7 @@ describe('trail configuration panel', () => {
 	});
 
 	it('refuses to build a form that would apply on a pinned trail', async () => {
+		const user = userEvent.setup();
 		const store = await loadedStore({
 			detail: traceDetail({
 				configBound: true,
@@ -96,6 +111,11 @@ describe('trail configuration panel', () => {
 			})
 		});
 		render(TrailConfigPanel, { store });
+
+		const fold = configFold();
+		expect(fold).not.toHaveAttribute('open');
+		await user.click(fold.querySelector('summary') as HTMLElement);
+		expect(fold).toHaveAttribute('open');
 
 		expect(await screen.findByText(/This trail is pinned to its initial configuration/)).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: 'Preview change' })).toBeDisabled();
@@ -129,6 +149,11 @@ describe('trail configuration panel', () => {
 			cancelConfig
 		});
 		render(TrailConfigPanel, { store });
+
+		const fold = configFold();
+		expect(fold).not.toHaveAttribute('open');
+		await user.click(fold.querySelector('summary') as HTMLElement);
+		expect(fold).toHaveAttribute('open');
 
 		expect(await screen.findByText('task task-1 is running')).toBeInTheDocument();
 		await user.click(screen.getByRole('button', { name: 'Cancel pending change' }));
@@ -195,5 +220,48 @@ describe('trail fork panel', () => {
 		await user.type(screen.getByPlaceholderText('Decision reason (recorded)'), 'too broad');
 		await user.click(screen.getByRole('button', { name: 'Reject' }));
 		expect(decideFork).toHaveBeenCalledWith(request.requestId, 'reject', 'too broad');
+	});
+});
+
+describe('trail configuration history section', () => {
+	it('renders a collapsed section listing recorded changes newest first', async () => {
+		const store = await loadedStore({
+			detail: traceDetail({
+				configBound: true,
+				config: configManifest(),
+			}),
+		});
+		render(TrailConfigHistory, { store });
+
+		const history = document.querySelector('#trace-config-history');
+		if (history === null) {
+			throw new Error('Expected a trail configuration history section');
+		}
+
+		expect(history).not.toHaveAttribute('open');
+
+		const entries = history.querySelectorAll('li[data-config-change]');
+		expect(entries).toHaveLength(2);
+		if (entries.length === 2) {
+			expect(entries[0].getAttribute('data-config-change')).toEqual('change-second');
+			expect(entries[1].getAttribute('data-config-change')).toEqual('change-initial');
+		}
+	});
+
+	it('shows the empty copy when no changes are recorded', async () => {
+		const store = await loadedStore({
+			detail: traceDetail({
+				configBound: true,
+				config: configManifest({ history: [] }),
+			}),
+		});
+		render(TrailConfigHistory, { store });
+
+		const history = document.querySelector('#trace-config-history');
+		if (history === null) {
+			throw new Error('Expected a trail configuration history section');
+		}
+
+		expect(history.textContent).toContain('No configuration changes recorded.');
 	});
 });
