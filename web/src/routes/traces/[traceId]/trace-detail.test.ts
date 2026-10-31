@@ -384,14 +384,84 @@ describe('trace detail', () => {
 		expect(screen.queryByRole('heading', { name: 'LLM usage' })).not.toBeInTheDocument();
 	});
 
-	it('collapses the worktree and the event feed by default', async () => {
-		renderDetail();
+	it('collapses the worktree, usage, configuration, history, and the event feed by default', async () => {
+		renderDetail({
+			detail: async () => traceDetail({
+				usage: {
+					inputTokens: 5000,
+					outputTokens: 800,
+					cacheReadTokens: 12000,
+					cacheWriteTokens: 0,
+					runCountWithUsage: 3
+				}
+			})
+		});
 
 		await screen.findByText('8 / 12');
 		const worktree = screen.getByText('Worktree').closest('details');
 		const events = screen.getByText(/Recent events/).closest('details');
 		expect(worktree).not.toHaveAttribute('open');
 		expect(events).not.toHaveAttribute('open');
+		expect(await section('trace-usage')).not.toHaveAttribute('open');
+		expect(await section('trace-config')).not.toHaveAttribute('open');
+		expect(await section('trace-config-history')).not.toHaveAttribute('open');
+	});
+
+	it('orders the detail around what the operator opened the trail for', async () => {
+		renderDetail({
+			detail: async () => traceDetail({
+				usage: {
+					inputTokens: 5000,
+					outputTokens: 800,
+					cacheReadTokens: 12000,
+					cacheWriteTokens: 0,
+					runCountWithUsage: 3
+				}
+			})
+		});
+		await screen.findByText('8 / 12');
+
+		const trail = await section('trace-trail');
+		const usage = await section('trace-usage');
+		expect(usage.previousElementSibling).toBe(trail.parentElement);
+
+		const config = await section('trace-config');
+		expect(config.previousElementSibling).toBe(usage);
+
+		const artifacts = await section('trace-artifacts');
+		expect(artifacts.previousElementSibling).toBe(config);
+
+		const tasks = await section('trace-tasks');
+		expect(tasks.previousElementSibling).toBe(artifacts);
+
+		const runs = await section('trace-runs');
+		expect(runs.previousElementSibling).toBe(tasks);
+
+		const worktree = await section('trace-worktree');
+		expect(worktree.previousElementSibling).toBe(runs);
+
+		const events = await section('trace-events');
+		expect(events.previousElementSibling).toBe(worktree);
+
+		const history = await section('trace-config-history');
+		expect(history.previousElementSibling).toBe(events);
+		expect(history.nextElementSibling).toBeNull();
+	});
+
+	it('places the fork panel between configuration and artifacts when the trail forks', async () => {
+		renderDetail({
+			detail: async () => traceDetail({
+				forkOf: 'trace-01a0bd6963faa14f',
+				forkId: 'trace-01a0bd6963faa150'
+			})
+		});
+		await screen.findByText('8 / 12');
+
+		const config = await section('trace-config');
+		const fork = await section('trace-fork');
+		const artifacts = await section('trace-artifacts');
+		expect(fork.previousElementSibling).toBe(config);
+		expect(artifacts.previousElementSibling).toBe(fork);
 	});
 
 	it('previews the event feed and points the rest at the timeline', async () => {
