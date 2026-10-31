@@ -1,0 +1,20 @@
+adapter: opencode
+model_aliases:
+  builder: strata/qwen38-flash-next
+  classifier: deepseek/deepseek-flash
+  reviewer: deepseek/deepseek-flash
+  thinker: deepseek/deepseek-flash
+
+bees:
+  guard:
+    params:
+      model: reviewer
+      reasoning: max
+  receiver:
+    params:
+      model: builder
+      reasoning: low
+  scout:
+    params:
+      model: thinker
+      reasoning: low

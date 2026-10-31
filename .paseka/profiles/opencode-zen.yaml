@@ -1,0 +1,16 @@
+adapter: opencode
+model_aliases:
+  builder: opencode/deepseek-v4.1-flash
+  classifier: opencode/deepseek-v4.1-flash
+  reviewer: opencode/glm-5.3-flash
+  thinker: deepseek/deepseek-flash
+
+bees:
+  guard:
+    params:
+      model: reviewer
+      reasoning: max
+  receiver:
+    params:
+      model: builder
+      reasoning: low
