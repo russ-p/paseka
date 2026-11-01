@@ -302,6 +302,32 @@ The gate inherits the environment the runtime was started in, so the declared
 toolchain must be installed on that host: a missing binary fails the gate rather
 than silently skipping it.
 
+### Running a committed script from the trusted tree
+
+A gate may be a script committed to the repository, provided the command points
+at the **colony checkout** rather than at the workspace:
+
+```yaml
+checks:
+  command: ["sh", "$COLONY_ROOT/scripts/checks.sh"]
+```
+
+`$COLONY_ROOT` is substituted at dispatch with the absolute colony root, so the
+script body comes from the tree a human merged, while the working directory
+stays the dispatch workspace, so the checks apply to the diff under review. A
+diff that edits the script has no effect on the gate that judges it. The
+resolved path is recorded in the gate result, so the run record says which file
+executed.
+
+Root proposals (`worktree: false`) are the exception: there the colony checkout
+*is* the tree under review, so the trusted-copy property does not hold.
+
+Scoping belongs to the script, not to the runtime: the runtime never infers
+which paths a gate should cover. `scripts/checks.sh` in this repository reads
+`git status` and adds the console checks when the diff touches `web/`, and runs
+them unconditionally when the changed paths cannot be determined — an unscoped
+gate runs more, never less.
+
 A rejection sets the run to `failed` with reason `checks_failed` and suppresses
 the proposal through the existing completion contract. With a task, the runtime
 emits a `VERIFICATION/verification.failed` authored by the runtime (reason

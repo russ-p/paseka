@@ -47,14 +47,17 @@ Read these before making architectural or naming decisions:
 After editing Go code, run formatting, lint, and a full build before finishing:
 
 ```bash
-gofmt -w .
+gofmt -l $(git ls-files -co --exclude-standard '*.go')   # empty = everything formatted
+gofmt -w $(git ls-files -co --exclude-standard '*.go')   # apply formatting
 golangci-lint run
 go build -o paseka ./cmd/paseka
 ```
 
+Format the repository's Go files rather than running `gofmt -w .`: the root holds gitignored `.tmp/` (caches, including `.tmp/gomodcache`) and `.paseka/worktrees/`, and a full-tree walk picks up third-party files and fails on them.
+
 Config: [`.golangci.yml`](.golangci.yml) (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`). Fix compilation errors from `go build` and issues reported by `golangci-lint`.
 
-The AFK builder's runtime gate (`checks:` in [`.paseka/bees/builder.yaml`](.paseka/bees/builder.yaml)) runs the same class of checks after every run — formatting, lint, module build, module tests. When these commands change, update the bee's gate too; otherwise the gate and this section drift.
+The AFK builder's runtime gate ([`.paseka/bees/builder.yaml`](.paseka/bees/builder.yaml) → [`scripts/checks.sh`](scripts/checks.sh)) runs the same checks after every run — formatting, lint, module build, module tests, plus the console checks when the diff touches `web/`. When these commands change, update that script; it is the single source both this section and the gate read.
 
 ## After frontend changes
 
@@ -68,4 +71,6 @@ go build -o paseka ./cmd/paseka
 ```
 
 A source-only `go build` still compiles and serves `internal/console/next/fallback.html` at `/next/`. Release archives (GoReleaser `before.hooks`) and `docker/dev/Dockerfile` (`web-builder` stage) run the frontend build themselves, so CI and the image never need a committed bundle. `go install` therefore does not carry the redesign and is not a supported path for it.
+
+`scripts/checks.sh` runs these three plus the Go checks, and decides from `git status` whether the UI half applies; `sh scripts/checks.sh` from any checkout checks that checkout. This is the same script the AFK gate runs.
 

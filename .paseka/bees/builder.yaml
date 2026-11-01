@@ -5,20 +5,15 @@ params:
   model: builder
   yolo: true
 worktree: true
-# Runtime-owned mechanical gate (spec 046). Inline on purpose: a script living in
-# the workspace would be editable by the diff it judges.
+# Runtime-owned mechanical gate (spec 046). The script is executed from the colony
+# checkout, not from the worktree under review, so a diff cannot weaken the gate
+# that judges it; the working directory stays the worktree, so the checks apply
+# to the diff.
 checks:
   command:
     - sh
-    - -c
-    - |-
-      command -v gofmt >/dev/null && command -v golangci-lint >/dev/null || { echo "checks: gofmt and golangci-lint must be installed"; exit 1; }
-      unformatted=$(gofmt -l .) || { echo "checks: gofmt failed"; exit 1; }
-      if [ -n "$unformatted" ]; then printf "gofmt needs formatting:\n%s\n" "$unformatted"; exit 1; fi
-      golangci-lint run --timeout 10m || exit 1
-      go build ./... || exit 1
-      go test ./... || exit 1
-  timeout: 20m
+    - $COLONY_ROOT/scripts/checks.sh
+  timeout: 30m
 subscribes:
   - type: SIGNAL
     kind: task.ready

@@ -338,15 +338,15 @@ Leftovers from [008-code-proposal-workspaces](../specs/008-code-proposal-workspa
 
 Follow-ups from [046-bee-check-gate](../specs/046-bee-check-gate.md), shipped as the runtime stage plus the reference-colony rollout.
 
-#### `web/` checks are outside the gate
+#### The gate script's identity is not recorded in the gate result
 
 - **Kind:** follow-up
 - **Source:** [046-bee-check-gate](../specs/046-bee-check-gate.md) rollout
-- **Summary:** The builder's gate covers Go only (`gofmt`, `golangci-lint`, `go build ./...`, `go test ./...`). A trace worktree is created by `git worktree add`, so it carries no `web/node_modules` and `pnpm --dir web check` / `pnpm --dir web test` cannot run there. The guard prompt therefore keeps an explicit frontend check for diffs that touch `web/`.
-- **Why deferred:** Provisioning installed dependencies into every worktree is a worktree-lifecycle change (symlink, shared cache, or an install step), not a gate change, and it would slow every trail that never touches the frontend.
-- **Revisit when:** Frontend tasks become common in AFK trails, or a `web/` defect passes a green gate.
+- **Summary:** The gate runs `$COLONY_ROOT/scripts/checks.sh`, so the configured command is pinned by the resolved colony snapshot while the script *body* is not: editing the script on the colony root changes gate behaviour mid-trail, and nothing in the trail record says which version ran. The script prints its own `sha256sum "$0"` and the colony `HEAD` into `checks.log`, which makes the evidence available but unparsed.
+- **Why deferred:** A digest on `GateResult` (path + content hash + colony revision) is a record-shape change, and the log line already answers the question for a human reading the run.
+- **Revisit when:** A gate verdict has to be explained after the script changed, or a trail is audited for "what exactly judged this proposal".
 
-#### Gate verdict is not yet visible in the Console or in `doctor`
+#### Console attribution and `doctor` findings for the gate
 
 - **Kind:** follow-up
 - **Source:** [046-bee-check-gate](../specs/046-bee-check-gate.md) — the two gaps named in its status note

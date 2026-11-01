@@ -32,7 +32,7 @@ Stage the changes, DON'T commit them yet.
 
 ## Mechanical gate
 
-The runtime runs this Bee's `checks` gate after you exit (declared in `.paseka/bees/builder.yaml`): Go formatting, lint, the module build, and the module test suite. Run the same commands yourself before you finish. A failing gate rejects the proposal and sends it straight back to you with the failing output — that round trip costs more than running the checks now.
+The runtime runs `scripts/checks.sh` after you exit — the same script you can run yourself, from the repository checkout, so a diff cannot weaken it: Go formatting, lint, the module build, the module tests, and the console UI checks when your change touches `web/`. Run it before you finish. A failing gate rejects the proposal and sends it straight back to you with the failing output — that round trip costs more than running the checks now.
 
 Success criteria (must confirm all):
 - All acceptance criteria in the task are met
