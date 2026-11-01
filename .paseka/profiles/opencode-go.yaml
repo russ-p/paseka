@@ -3,12 +3,12 @@ model_aliases:
   builder: opencode-go/deepseek-v4.1-flash
   classifier: opencode-go/deepseek-v4.1-flash
   reviewer: opencode-go/glm-5.3-flash
-  thinker: opencode-go/deepseek-v4-pro
+  thinker: opencode-go/deepseek-v4.1-flash
 
 bees:
-  guard:
+  drone:
     params:
-      model: reviewer
+      model: thinker
       reasoning: max
   receiver:
     params:
