@@ -36,6 +36,7 @@ func (d *Dispatcher) proposalArchiveRequestFromRun(
 		AutoPublish: shouldAutoPublishMutation(req.Registry, bee),
 		Completed:   result.Status == string(protocol.StatusCompleted),
 		Explicit:    explicit,
+		Gate:        result.Gate,
 	}
 }
 

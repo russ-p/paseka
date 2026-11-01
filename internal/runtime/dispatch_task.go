@@ -161,6 +161,17 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		if r.traceKilled(traceID) {
 			return nil
 		}
+		// A gate rejection is a proposal rejection, not a task lifecycle
+		// transition: it already published a platform-authored
+		// verification.failed that drives a direct builder rework, so the task
+		// keeps the status its dispatch had (typically running). The generic
+		// non-completed branch would fail the task and swallow the repair loop.
+		if gate := failedCheckGate(res.Result); gate != nil {
+			if res.Result.GateReworkSuppressed {
+				return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, gate.Summary)
+			}
+			return nil
+		}
 		if setErr := r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusFailed, taskDispatchFailureSummary(res, nil)); setErr != nil {
 			return setErr
 		}

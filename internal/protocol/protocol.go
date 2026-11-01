@@ -43,6 +43,8 @@ const (
 // reason.
 const (
 	ReasonTimeout = "timeout"
+	// ReasonChecksFailed classifies a run the runtime-owned check gate rejected.
+	ReasonChecksFailed = "checks_failed"
 )
 
 // Provenance identifies the durable execution ownership and configuration a
@@ -143,16 +145,22 @@ type Usage struct {
 
 // Result is the final envelope written to result.json.
 type Result struct {
-	ProtocolVersion   string        `json:"protocolVersion"`
-	TraceID           string        `json:"traceId"`
-	AgentID           string        `json:"agentId"`
-	Status            RunStatus     `json:"status"`
+	ProtocolVersion string    `json:"protocolVersion"`
+	TraceID         string    `json:"traceId"`
+	AgentID         string    `json:"agentId"`
+	Status          RunStatus `json:"status"`
+	// Reason is a machine-readable classifier for a terminal state, e.g.
+	// "checks_failed" for a run the runtime-owned gate rejected.
+	Reason            string        `json:"reason,omitempty"`
 	Summary           string        `json:"summary"`
 	Artifacts         []ArtifactRef `json:"artifacts,omitempty"`
 	Diagnostics       Diagnostics   `json:"diagnostics"`
 	Usage             *Usage        `json:"usage,omitempty"`
 	ProviderSessionID string        `json:"providerSessionId,omitempty"`
 	FinishedAt        time.Time     `json:"finishedAt"`
+	// Gate is the runtime-owned mechanical check verdict, absent when the bee
+	// declares no gate or the gate did not run.
+	Gate *GateResult `json:"gate,omitempty"`
 	Provenance
 }
 
@@ -168,6 +176,9 @@ type StatusSnapshot struct {
 	StartedAt  time.Time `json:"startedAt,omitempty"`
 	FinishedAt time.Time `json:"finishedAt,omitempty"`
 	Error      string    `json:"error,omitempty"`
+	// Gate is the runtime-owned mechanical check verdict, absent when the bee
+	// declares no gate or the gate did not run.
+	Gate *GateResult `json:"gate,omitempty"`
 	Provenance
 }
 

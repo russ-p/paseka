@@ -186,6 +186,10 @@ func formatVerificationFailedTask(p protocol.VerificationPayload) string {
 		b.WriteString(": ")
 		b.WriteString(p.Summary)
 	}
+	if strings.TrimSpace(p.Details) != "" {
+		b.WriteString("\nFull details: ")
+		b.WriteString(strings.TrimSpace(p.Details))
+	}
 	return b.String()
 }
 

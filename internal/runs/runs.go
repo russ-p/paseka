@@ -78,7 +78,7 @@ func (d Dir) Prepare() error {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return fmt.Errorf("runs: mkdir %s: %w", root, err)
 	}
-	for _, path := range []string{d.ResultPath(), d.legacyResultPath(), d.ResultJSONPath(), d.EventsPath()} {
+	for _, path := range []string{d.ResultPath(), d.legacyResultPath(), d.ResultJSONPath(), d.EventsPath(), d.CheckLogPath()} {
 		_ = os.Remove(path)
 	}
 	return nil

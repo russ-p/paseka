@@ -31,17 +31,21 @@ type Record struct {
 	// Kind is the normalized proposal kind the run was allowed to auto-publish.
 	Kind string `json:"kind,omitempty"`
 	// Workspace is the proposal workspace the run used: "isolated" or "root".
-	Workspace    string     `json:"workspace,omitempty"`
-	WorktreePath string     `json:"worktreePath,omitempty"`
-	BaseSha      string     `json:"baseSha,omitempty"`
-	Summary      string     `json:"summary,omitempty"`
-	Sector       string     `json:"sector,omitempty"`
-	Bytes        int64      `json:"bytes"`
-	FileCount    *int       `json:"fileCount,omitempty"`
-	CapturedAt   time.Time  `json:"capturedAt"`
-	Publication  string     `json:"publication"`
-	PublishedAt  *time.Time `json:"publishedAt,omitempty"`
-	PublishError string     `json:"publishError,omitempty"`
+	Workspace    string    `json:"workspace,omitempty"`
+	WorktreePath string    `json:"worktreePath,omitempty"`
+	BaseSha      string    `json:"baseSha,omitempty"`
+	Summary      string    `json:"summary,omitempty"`
+	Sector       string    `json:"sector,omitempty"`
+	Bytes        int64     `json:"bytes"`
+	FileCount    *int      `json:"fileCount,omitempty"`
+	CapturedAt   time.Time `json:"capturedAt"`
+	// Gate is the runtime-owned check verdict that let this proposal leave the
+	// run. It is copied onto the record so an audit of an old proposal still
+	// says what passed after the run directory is gone.
+	Gate         *protocol.GateResult `json:"gate,omitempty"`
+	Publication  string               `json:"publication"`
+	PublishedAt  *time.Time           `json:"publishedAt,omitempty"`
+	PublishError string               `json:"publishError,omitempty"`
 	// Event is the synthesized MUTATION envelope, retained so the record is
 	// self-describing on its own after a bus purge. It is not merged into event feeds
 	// and no surface should consult it for ordering, attribution, or completeness.

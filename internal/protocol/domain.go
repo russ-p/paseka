@@ -87,6 +87,13 @@ type VerificationPayload struct {
 	Kind    VerificationKind `json:"kind,omitempty"`
 	TaskID  string           `json:"taskId,omitempty"`
 	Summary string           `json:"summary,omitempty"`
+	// Reason is an open string naming the cause. The runtime-owned check gate
+	// uses "checks_failed" so a mechanical rejection is distinguishable from a
+	// review rejection.
+	Reason string `json:"reason,omitempty"`
+	// Details is an optional colony-root-relative path to evidence the
+	// rejection refers to, such as the captured gate log.
+	Details string `json:"details,omitempty"`
 }
 
 // InsightKindForEventType returns the expected top-level event type for an insight kind string.
