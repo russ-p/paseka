@@ -3,7 +3,7 @@
 ## Status
 
 **(Implemented)**
-The runtime stage shipped. A Bee's `checks:` block (`command`, `timeout`, `rejection_cap`) is validated at colony load and read from the resolved configuration snapshot; the runtime runs it after the adapter exits and before the deferred-event flush, fail-closed on non-zero exit, signal, timeout, or exec failure. A rejection marks the run `checks_failed`, writes `checks.log`, suppresses the proposal through the existing completion contract, records the gate result on the run and proposal archive records, and publishes a runtime-authored `verification.failed` that redispatches the builder on the same attempt and worktree; at the consecutive rejection cap the task fails with the gate summary. Queen Console run-page attribution of the gate result and the `paseka doctor` gate findings are not shipped yet.
+The runtime stage shipped. A Bee's `checks:` block (`command`, `timeout`, `rejection_cap`) is validated at colony load and read from the resolved configuration snapshot; the runtime runs it after the adapter exits and before the deferred-event flush, fail-closed on non-zero exit, signal, timeout, or exec failure. A rejection marks the run `checks_failed`, writes `checks.log`, suppresses the proposal through the existing completion contract, records the gate result on the run and proposal archive records, and publishes a runtime-authored `verification.failed` that redispatches the builder on the same attempt and worktree; at the consecutive rejection cap the task fails with the gate summary. The reference colony now rolls this out: the builder declares a Go formatting/lint/build/test gate, and the guard audits the recorded verdict instead of re-running those checks. Queen Console run-page attribution of the gate result and the `paseka doctor` gate findings are not shipped yet.
 
 ## Problem Statement
 
@@ -84,7 +84,7 @@ What the colony actually wants is a division that matches the work: the builder 
 12. The command runs with the dispatch workspace as its working directory, with the launch plan's assembled environment plus the `PASEKA_*` run identity variables already provided to script Bees, so both declared `params.env` and injected credentials reach it.
 13. The runtime runs the command directly by argv, without an intervening shell, exactly as it already runs an adapter command; a colony that wants a pipeline declares a shell as its command.
 14. The exit status of the check process is the verdict, read directly by the runtime because the runtime owns the process. Nothing is inferred from the check's stdout or stderr, and the check command publishes no events — unlike a script Bee, where the runtime cannot know what "pass" means and the script must emit its own verification. Zero is pass; any non-zero code is fail; a process killed by a signal is fail with a signal reason; a command that cannot be started at all is fail with an exec reason.
-15. Output is captured without a shell-level pipe that can swallow the exit code. The full captured output is written to the run's record under a hard size cap with an explicit truncation marker; the summary and the rejection event carry a smaller, separately capped head of the same output, so rework prompts stay readable.
+15. Output is captured without a shell-level pipe that can swallow the exit code. The full captured output is written to the run's record under a hard size cap with an explicit truncation marker; a separately capped head of the output is appended to the run's error note and a one-line verdict goes to the rejection event, so rework prompts stay readable without turning a task summary into a log.
 16. The gate is not run when the run has not reached `completed` for other reasons: a cancelled, timed-out, or contract-downgraded adapter run keeps its existing outcome and needs no mechanical verdict.
 17. The gate does not consume additional honey: it is part of a dispatch already paid for, which is the point of putting it in the runtime rather than in a separate Bee.
 
@@ -117,7 +117,7 @@ What the colony actually wants is a division that matches the work: the builder 
 ### 6. Validation and colony rollout
 
 34. `paseka doctor` reports a gate whose command cannot be resolved on the host, and warns when a Bee declares a gate but publishes no code proposal.
-35. The reference colony's builder gains a gate covering formatting, lint, and build for its stack; the guard prompt drops its mechanical step and gains the audit step instead. This rollout is configuration and prompt work, not runtime work, and it is the payoff the runtime stage exists for.
+35. The reference colony's builder declares a gate covering Go formatting, lint, the module build, and the module tests, inline in the Bee config so the diff it judges cannot weaken it; the guard prompt drops the re-run and gains the audit step instead. Frontend checks stay outside the gate because a trace worktree carries no installed dependencies, so the guard runs them itself when the diff touches the web tree.
 36. The guard prompt's success criteria change from "linting passes" to "the producing run's gate result is present and passing, or its absence is called out".
 
 ## Testing Decisions

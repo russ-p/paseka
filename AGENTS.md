@@ -54,6 +54,8 @@ go build -o paseka ./cmd/paseka
 
 Config: [`.golangci.yml`](.golangci.yml) (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`). Fix compilation errors from `go build` and issues reported by `golangci-lint`.
 
+The AFK builder's runtime gate (`checks:` in [`.paseka/bees/builder.yaml`](.paseka/bees/builder.yaml)) runs the same class of checks after every run — formatting, lint, module build, module tests. When these commands change, update the bee's gate too; otherwise the gate and this section drift.
+
 ## After frontend changes
 
 The Queen Console Next bundle (`web/`) is a build artifact and is **not committed**: `pnpm --dir web build` writes it to `internal/console/next/dist/`, which the Go binary embeds at compile time. After changing anything under `web/`:

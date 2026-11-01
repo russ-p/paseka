@@ -30,11 +30,14 @@ Requested intent: {{.IntentRaw}}{{end}}
 
 Stage the changes, DON'T commit them yet.
 
+## Mechanical gate
+
+The runtime runs this Bee's `checks` gate after you exit (declared in `.paseka/bees/builder.yaml`): Go formatting, lint, the module build, and the module test suite. Run the same commands yourself before you finish. A failing gate rejects the proposal and sends it straight back to you with the failing output — that round trip costs more than running the checks now.
+
 Success criteria (must confirm all):
 - All acceptance criteria in the task are met
-- Build passes (module-level build succeeds)
+- The gate commands pass when you run them yourself
 - No new compiler errors or warnings that are not explicitly accepted
-- Related tests (if any) pass
 
 {{template "emit-howto" .}}
 {{template "builder-emit-insight" .}}

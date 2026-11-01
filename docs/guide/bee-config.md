@@ -298,6 +298,10 @@ written under a hard size cap with a truncation marker to the run's `checks.log`
 the verdict is recorded on the run record and on the proposal archive record,
 with a bounded output head appended to the run's error note.
 
+The gate inherits the environment the runtime was started in, so the declared
+toolchain must be installed on that host: a missing binary fails the gate rather
+than silently skipping it.
+
 A rejection sets the run to `failed` with reason `checks_failed` and suppresses
 the proposal through the existing completion contract. With a task, the runtime
 emits a `VERIFICATION/verification.failed` authored by the runtime (reason

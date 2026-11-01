@@ -334,6 +334,26 @@ Leftovers from [008-code-proposal-workspaces](../specs/008-code-proposal-workspa
 - **Why deferred:** Alias keeps older colonies working while `.isolated` / `.root` settle.
 - **Revisit when:** Docs and colonies have moved to explicit kinds and the alias is a liability.
 
+### Runtime check gate
+
+Follow-ups from [046-bee-check-gate](../specs/046-bee-check-gate.md), shipped as the runtime stage plus the reference-colony rollout.
+
+#### `web/` checks are outside the gate
+
+- **Kind:** follow-up
+- **Source:** [046-bee-check-gate](../specs/046-bee-check-gate.md) rollout
+- **Summary:** The builder's gate covers Go only (`gofmt`, `golangci-lint`, `go build ./...`, `go test ./...`). A trace worktree is created by `git worktree add`, so it carries no `web/node_modules` and `pnpm --dir web check` / `pnpm --dir web test` cannot run there. The guard prompt therefore keeps an explicit frontend check for diffs that touch `web/`.
+- **Why deferred:** Provisioning installed dependencies into every worktree is a worktree-lifecycle change (symlink, shared cache, or an install step), not a gate change, and it would slow every trail that never touches the frontend.
+- **Revisit when:** Frontend tasks become common in AFK trails, or a `web/` defect passes a green gate.
+
+#### Gate verdict is not yet visible in the Console or in `doctor`
+
+- **Kind:** follow-up
+- **Source:** [046-bee-check-gate](../specs/046-bee-check-gate.md) — the two gaps named in its status note
+- **Summary:** The `GateResult` is written on the run record and the proposal archive record, but the Queen Console run page does not show it, so explaining a rejected proposal means opening `status.json`. `paseka doctor` also reports neither a gate command that cannot resolve on the host nor a gate declared by a Bee that publishes no code.
+- **Why deferred:** The runtime stage and the colony rollout came first; both remaining pieces are read-only surfaces.
+- **Revisit when:** An operator has to read `runs/<agentId>/status.json` to say why a proposal never appeared, or a colony ships a gate command that is missing on the runtime host.
+
 ### Releases
 
 #### Windows release builds
