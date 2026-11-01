@@ -92,7 +92,7 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 
 ### Energy and honey
 
-MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion: task dispatches use `blocked`, while direct reactions are deferred without touching task status. The full admission/pending separation is [spec 044](../specs/044-energy-admission-and-pending-dispatch.md). These remaining items need separate design or evidence before expanding the MVP.
+MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion: task dispatches use `blocked`, while direct reactions are deferred without touching task status. The full admission/pending separation is [spec 044a](../specs/044a-direct-pending-dispatch.md) (direct) and [spec 044b](../specs/044b-standing-supersession-and-energy-observations.md) (task and standing). These remaining items need separate design or evidence before expanding the MVP.
 
 #### `confidence` (Pollen Quality)
 
@@ -416,5 +416,5 @@ Tier B in that repo already covers cases `01`–`14` (scripted loop, energy bloc
 - **`paseka event emit` can fail after a successful bus publish** — if audit log append to `.paseka/runs/<traceId>/<agentId>/events.ndjson` fails, emit exits non-zero and the adapter run is marked failed. Normal adapter runs have a run dir; ad-hoc manual emits need a matching run dir.
 - **Fixed `trace` + JetStream state accumulates** — reusing case traces leaves ledger KV, depleted honey, and replay history. Stop `paseka run` first, then `paseka purge --bus --trace <case-trace> --reseed-energy` (eval `reset.sh` does this; cue-ingress cases omit `--reseed-energy`). See [CLI](../guide/cli.md) § `paseka purge`.
 - **Only one `paseka run` consumer per colony subject prefix** — a second reactor logs `consumer is already bound to a subscription`. Stop the previous runtime before `run-case.sh` starts another.
-- **Builder rework is async** — `verification.failed` → builder fix-up via direct dispatch can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop. A direct dispatch deferred by exhausted honey is recorded as pending work and resumes on `energy.add`; task-dispatch status is still `blocked` until [spec 044](../specs/044-energy-admission-and-pending-dispatch.md) lands.
+- **Builder rework is async** — `verification.failed` → builder fix-up via direct dispatch can continue while the task is `waiting_review` or after `completed` (e.g. honey exhausted). Allow time for the guard→builder loop. A direct dispatch deferred by exhausted honey is recorded as pending work and resumes on `energy.add`; task-dispatch status is still `blocked` until [spec 044b](../specs/044b-standing-supersession-and-energy-observations.md) lands.
 - **Oracle scope** — `go test ./...` in the worktree also picks up packages under `cases/…/expect/`. Prefer a narrow path (e.g. `go test ./pkg/...`) in `case.yaml` `oracle.command` and in script-guard bees.
