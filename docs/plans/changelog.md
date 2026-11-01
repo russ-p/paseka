@@ -15,7 +15,7 @@ A direct reaction — a guard on a proposal, a receiver on a review, a fix-up on
 - Spec: [044a-direct-pending-dispatch](../specs/044a-direct-pending-dispatch.md)
 - Canonical: [task ledger](../reference/task-ledger.md#honey-reserve-energytoken), [CLI](../guide/cli.md#paseka-energy)
 
-Not in this ship: task-dispatch deferral, `skipped`, the standing overlap predicate, and `energy.paused` / `energy.resumed` — [044b](044b-standing-supersession-and-energy-observations.md) owns them.
+Not in this ship: task-dispatch deferral, `skipped`, the standing overlap predicate, and `energy.paused` / `energy.resumed` — [spec 044b](../specs/044b-standing-supersession-and-energy-observations.md) owns them.
 
 ## 2026-11 — A diff that does not build is rejected before a model reviews it
 
@@ -102,7 +102,7 @@ When honey ran out while a guard, receiver, or fix-up Bee was reacting to an eve
 
 - **Direct reactions defer without touching the task.** The runtime records a durable pending direct dispatch and leaves `task.status` unchanged.
 - **Top-up resumes the same reaction.** `energy.add` recovers the source event by identity and drains pending direct work in creation order, without re-applying the event to the ledger.
-- **The queue survives restart.** Pending work lives in the trail ledger, not in the in-memory dispatch maps.
+- **The queue is durable.** Pending work lives in the trail ledger, not in the in-memory dispatch maps. Resuming add-approved work after a restart, and the closed `abandoned` / `unresolved` statuses, landed with [spec 044a](../specs/044a-direct-pending-dispatch.md).
 - **Task dispatches keep the old path for now.** A deferred task dispatch still uses `blocked` and the existing unblock path until [spec 044b](../specs/044b-standing-supersession-and-energy-observations.md) completes the task-dispatch half; [spec 044a](../specs/044a-direct-pending-dispatch.md) already covers direct reactions.
 
 - Canonical: [Task ledger](../reference/task-ledger.md), [CLI](../guide/cli.md), [Forage Cues](../guide/cues.md)
