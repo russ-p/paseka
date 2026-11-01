@@ -26,6 +26,17 @@ Write and maintain feature specs under `docs/specs/`. Specs are design records i
 
 Examples: `002-queen-console-mvp.md`, `006-human-gateway-invites.md`.
 
+### Splitting a spec
+
+Split an existing spec when its parts have different definitions of done, different risk or reviewers, or one part is blocked on another surface. Split by independently shippable behavior, not by implementation layer, and do not create a seam that removes a behavior before its replacement exists.
+
+When a split is needed and the next sequential numbers are already taken, keep the original number and add a letter suffix:
+
+- `044a-direct-pending-dispatch.md` → `# Spec 044a: Direct pending dispatch`
+- `044b-standing-supersession-and-energy-observations.md` → `# Spec 044b: Standing supersession and energy observations`
+
+Letter suffixes are reserved for splitting an existing spec; unrelated new specs still use the next unused `NNN`. Each part names its dependency on the other in Status or Further Notes. Replace the original file with the parts and update every reference in the same change: `docs/plans/specs-index.md`, backlog, changelog, and cross-spec links.
+
 **Do not** rename or renumber existing specs without an explicit user request.
 
 ## Status values
@@ -136,6 +147,7 @@ Any further notes about the feature.
 ## Checklist (create or major update)
 
 - [ ] Path is `docs/specs/<NNN>-<slug>.md` with correct next `NNN` and stable slug
+- [ ] Split specs use `NNNa`/`NNNb`, name their dependency, and leave no references to the old path
 - [ ] H1 matches `# Spec <NNN>: …`
 - [ ] Status is one of Draft / Approved / Implemented / Deprecated plus a short note
 - [ ] All template sections present
@@ -152,3 +164,5 @@ Any further notes about the feature.
 - Thin user-story lists that only restate the Solution
 - Encoding decisions only as code paths that will rot
 - Renaming existing `NNN-slug` files casually
+- Using a letter suffix for an unrelated new spec instead of the next unused `NNN`
+- Splitting by implementation layer, or splitting a behavior from the change that replaces its user-facing signal
