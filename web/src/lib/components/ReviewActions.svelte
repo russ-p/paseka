@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { approveTask, discardTask, rejectTask } from '$lib/api/client';
 	import type { PullRequest, ReviewQueueItem, TaskDetail } from '$lib/api/types';
+	import { reviewPreviewPath } from '$lib/navigation';
 
 	let {
 		task,
@@ -68,6 +70,25 @@
 	const rejectReady = $derived(submitting === null && feedback.trim() !== '');
 	/** Discard needs no field: the confirmation is the click, the reason is optional. */
 	const discardReady = $derived(submitting === null);
+
+	/**
+	 * What rejecting will actually do, which differs by gate. A mid-trail
+	 * `review: required` task goes back to `ready` and runs again on the same
+	 * worktree; a final gate keeps waiting and only Request changes — beside the
+	 * diff, where the lines are — starts a rework task. Saying either one for both
+	 * gates is a lie the operator only discovers after they have rejected.
+	 */
+	const reworkInFlight = $derived(task.reworkTaskId?.trim() ?? '');
+	const canRequestChanges = $derived(isFinal && task.canRequestChanges === true);
+	const rejectNote = $derived(
+		!isFinal
+			? 'Publishes your feedback and sends this task back to ready for another pass on the same worktree.'
+			: canRequestChanges
+				? 'Publishes your feedback only. It does not start a rework task.'
+				: reworkInFlight !== ''
+					? `Publishes your feedback only. Request changes is unavailable — rework ${reworkInFlight} is still in flight.`
+					: 'Publishes your feedback only. Request changes is unavailable — this proposal has no isolated branch to rework.'
+	);
 
 	/** What approving will actually do, said before the operator commits to it. */
 	const approveNote = $derived(
@@ -293,8 +314,9 @@
 {:else if open === 'reject'}
 	<!-- Reject stays minimal: a line of feedback the bee gets as rework input.
 	     Everything else the operator might want to say belongs in the PR or the
-	     commit, not in a second copy of the task body. Request changes, which does
-	     start a rework task and carries an annotated packet, lives with the diff. -->
+	     commit, not in a second copy of the task body. What rejecting does differs
+	     by gate, so the hint under the field says which, and points at Request
+	     changes when that is the only path that starts a rework task. -->
 	<form
 		id="task-reject-form"
 		class="mt-3 space-y-3 rounded-box border border-base-300 bg-base-200/40 p-3"
@@ -316,8 +338,12 @@
 				bind:value={feedback}
 			></textarea>
 			<span class="fieldset-label">
-				Publishes your feedback only. It does not start a rework task — for that, use Request
-				changes on the merge preview.
+				{rejectNote}
+				{#if canRequestChanges}
+					<a class="link" href={reviewPreviewPath(base, task.traceId, task.taskId)}>
+						Request changes instead →
+					</a>
+				{/if}
 			</span>
 		</div>
 

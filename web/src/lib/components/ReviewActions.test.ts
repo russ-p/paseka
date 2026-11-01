@@ -381,15 +381,61 @@ describe('ReviewActions', () => {
 	});
 
 	describe('rejecting', () => {
-		it('is one box, and says the feedback does not start a rework task', async () => {
-			mount();
+		it('is one box, and on a final gate says the feedback starts no rework', async () => {
+			mount(reviewQueueItem({ taskId: '_review', isFinal: true, canRequestChanges: true }));
 
 			await userEvent.click(screen.getByRole('button', { name: 'Reject…' }));
 
 			// Request changes, which does start a rework task and carries an annotated
-			// packet, lives with the diff — not duplicated here.
+			// packet, lives with the diff — not duplicated here. The link is the way
+			// there, so the hint does not send the operator looking through the menu.
 			expect(screen.getByText(/It does not start a rework task/)).toBeInTheDocument();
+			expect(screen.getByRole('link', { name: 'Request changes instead →' })).toHaveAttribute(
+				'href',
+				'/next/reviews/trace-01a0bd6963faa14f/_review/preview'
+			);
 			expect(screen.queryByLabelText('PR body')).not.toBeInTheDocument();
+		});
+
+		it('says Request changes is unavailable, and why, when the final gate cannot rework', async () => {
+			mount(
+				reviewQueueItem({
+					taskId: '_review',
+					isFinal: true,
+					canRequestChanges: false,
+					reworkTaskId: 'task-09',
+					reworkStatus: 'running'
+				})
+			);
+
+			await userEvent.click(screen.getByRole('button', { name: 'Reject…' }));
+
+			// Pointing at a disabled action is worse than saying it is disabled.
+			expect(screen.getByText(/rework task-09 is still in flight/)).toBeInTheDocument();
+			expect(screen.queryByRole('link', { name: /Request changes instead/ })).not.toBeInTheDocument();
+		});
+
+		it('names the missing isolated branch when no rework can be planned at all', async () => {
+			mount(reviewQueueItem({ taskId: '_review', isFinal: true, canRequestChanges: false }));
+
+			await userEvent.click(screen.getByRole('button', { name: 'Reject…' }));
+
+			expect(
+				screen.getByText(/this proposal has no isolated branch to rework/)
+			).toBeInTheDocument();
+		});
+
+		it('on a mid-trail review says the task returns to ready, because it does', async () => {
+			mount(reviewQueueItem({ isFinal: false }));
+
+			await userEvent.click(screen.getByRole('button', { name: 'Reject…' }));
+
+			// The runtime requeues this task on human feedback; there is no new task
+			// and no merge preview to send the reviewer to.
+			expect(
+				screen.getByText(/sends this task back to ready for another pass/)
+			).toBeInTheDocument();
+			expect(screen.queryByRole('link', { name: /Request changes instead/ })).not.toBeInTheDocument();
 		});
 
 		it('needs feedback, because a rejection with nothing said is a shrug', async () => {

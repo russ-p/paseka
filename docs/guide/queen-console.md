@@ -207,9 +207,8 @@ with per-file diffs and line-anchored comments.
 - When delivery is `pull_request`, the same control is **Open PR** / **Update PR**
   (title, body, draft). The gate stays `waiting_review` until the host reports
   merged. See [pull-request delivery](pull-request-delivery.md).
-- **Request changes** writes `review-comments.md` to the trail comb, publishes
-  `INSIGHT/human.feedback`, and plans rework on the same trail.
-- Plain reject records feedback without merging.
+- **Request changes** (final gate, on the merge preview) writes `review-comments.md` to the trail comb, publishes `INSIGHT/human.feedback`, and plans rework on the same trail.
+- **Reject** publishes `INSIGHT/human.feedback`. On a mid-trail `review: required` gate the runtime returns that task to `ready` for another pass on the same worktree; on a final gate it records feedback only and the merge gate stays `waiting_review`, so use **Request changes** there to start rework.
 - **Discard** closes the task terminally — "not doing this" — with an optional
   reason. It merges nothing, publishes nothing, sends no feedback, and plans no
   rework; the worktree is left in place so the result can be revived later.
