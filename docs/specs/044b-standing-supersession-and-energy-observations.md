@@ -83,7 +83,7 @@ This spec builds on the `PendingDispatch` record, statuses, compare-and-set writ
 1. Only an `energy.add` increase makes pending task work runnable, including an increase applied to the ledger while the reactor was down. `energy.stipend` supersedes task pending work instead of draining it.
 2. Task pending work resumes through the normal task dispatch path with its in-flight, attempt, configuration, and kill guards intact.
 3. If a task has closed or changed to a terminal state while pending, the entry becomes `abandoned` rather than dispatching stale work.
-4. A successful resume marks the entry `consumed`. At-least-once recovery is acceptable only when the normal task dedupe cannot prove completion; the runtime must not create duplicate live dispatches in the same process.
+4. An admitted dispatch marks the entry `consumed` in the same mutation that moves the task to `running`, whichever trigger admitted it — `task.ready`, review rework, a closing seed, configuration release, legacy unblock, or the energy drain. At-least-once recovery is acceptable only when the normal task dedupe cannot prove completion; the runtime must not create duplicate live dispatches in the same process.
 5. A dispatch that re-defers because the reserve ran out during the drain leaves the entry pending. The drain does not report a false resume.
 6. `system.kill` abandons pending task work for the trail in the same ledger mutation that marks the trail killed. A later top-up cannot revive it.
 7. The startup condition and trail enumeration from 044a apply to task entries unchanged: an active entry plus a positive reserve is resumable, and killed or zero-reserve trails are skipped.

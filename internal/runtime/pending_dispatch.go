@@ -454,7 +454,10 @@ func pendingResumeKey(traceID, dispatchID string) string {
 }
 
 // claimPendingResume marks a pending entry as being resumed by this process, so
-// two close energy events cannot both start a live dispatch for it.
+// two close energy events cannot both start a live dispatch for it. The claim is
+// process-local and held for the whole synchronous adapter run, so cross-process
+// duplicate protection rests on the one-consumer-per-subject-prefix invariant
+// documented in docs/reference/task-ledger.md § Honey reserve (`energyToken`).
 func (r *Reactor) claimPendingResume(traceID, dispatchID string) bool {
 	key := pendingResumeKey(traceID, dispatchID)
 	r.mu.Lock()

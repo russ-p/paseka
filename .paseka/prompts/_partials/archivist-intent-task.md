@@ -7,7 +7,7 @@ Audit one task of this trail for work that was promised, attempted, and left beh
 3. Cross-read `DEFERRED-IN-SPEC` for the task — phrases like `out of scope`, `next slice`, `separate task` in the spec itself are scope the plan carved off before any bee ran. Those are decisions, not failures; report them as such, but they are exactly what a Beekeeper forgets.
 4. Cross-read `REVIEW-NOTES` for the task. A reviewer note that names a fix and does not say it was applied is **deferred work with an author's name on it** — the highest-value finding this bee produces. The medium and low notes are not optional observations; they were written and never resolved.
 5. Check `VERDICTS` for the task. `verification.failed` followed later by `verification.success` is a resolved Return Flight, not a problem. A `verification.failed` with no later success is unfinished work.
-6. Check `TASKS.commit`. If the task is `completed` with no commit and `lag_merge_after_completed_s` is large, the work was never merged — say so plainly, and name how long it sat.
+6. Check `TASKS.commit`. If the task is `completed` with no commit and `lag_merge_after_completed_s` reads `unmerged`, the work was never merged — say so plainly, and name how long it has sat. A numeric value is a duration; a label is not.
 7. Cross-check the documentation obligation: if the task body required doc updates, verify the cited doc files were touched in the delivered diff. A spec that requires a doc change and gets a code-only diff is a silent scope failure.
 
 ### Judging
