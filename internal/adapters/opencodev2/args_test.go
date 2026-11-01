@@ -80,7 +80,7 @@ func TestModelReferenceAndSessionModel(t *testing.T) {
 	}
 
 	model := sessionModelFor("provider/model", "high")
-	if model == nil || model.ProviderID != "provider" || model.ModelID != "model" || model.Variant != "high" {
+	if model == nil || model.ProviderID != "provider" || model.ID != "model" || model.Variant != "high" {
 		t.Fatalf("session model = %+v", model)
 	}
 	if got := sessionModelFor("", ""); got != nil {

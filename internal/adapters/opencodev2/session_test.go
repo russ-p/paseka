@@ -51,7 +51,7 @@ func TestSessionCommandCreatesProviderSession(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&created); err != nil {
 			t.Errorf("decode body: %v", err)
 		}
-		_, _ = io.WriteString(w, `{"data":{"id":"`+created.ID+`","location":"`+created.Location+`"}}`)
+		_, _ = io.WriteString(w, `{"data":{"id":"`+created.ID+`","location":{"directory":"`+created.Location.Directory+`"}}}`)
 	}))
 	defer server.Close()
 
@@ -79,10 +79,10 @@ func TestSessionCommandCreatesProviderSession(t *testing.T) {
 	if !strings.HasPrefix(created.ID, sessionIDPrefix) || len(created.ID) != len(sessionIDPrefix)+sessionIDLength {
 		t.Fatalf("caller session id = %q", created.ID)
 	}
-	if created.Location != cmd.Dir || created.Title != "agent-1" || created.Agent != "plan" {
+	if created.Location == nil || created.Location.Directory != cmd.Dir || created.Title != "agent-1" || created.Agent != "plan" {
 		t.Fatalf("create body = %+v", created)
 	}
-	if created.Model == nil || created.Model.ProviderID != "anthropic" || created.Model.ModelID != "claude-sonnet-4" || created.Model.Variant != "high" {
+	if created.Model == nil || created.Model.ProviderID != "anthropic" || created.Model.ID != "claude-sonnet-4" || created.Model.Variant != "high" {
 		t.Fatalf("model = %+v", created.Model)
 	}
 	if cmd.ProviderSessionID != created.ID {

@@ -24,16 +24,16 @@ func TestAPIClientCreateSession(t *testing.T) {
 			t.Errorf("decode body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"data":{"id":"ses_abc","location":"/workspace","title":"agent-1","outcome":"completed"}}`)
+		_, _ = io.WriteString(w, `{"data":{"id":"ses_abc","location":{"directory":"/workspace"},"title":"agent-1","outcome":"succeeded"}}`)
 	}))
 	defer server.Close()
 
 	rec, err := testAPIClient(server).CreateSession(context.Background(), createSessionBody{
 		ID:       "ses_abc",
-		Location: "/workspace",
+		Location: &locationRef{Directory: "/workspace"},
 		Title:    "agent-1",
 		Agent:    "plan",
-		Model:    &sessionModel{ProviderID: "anthropic", ModelID: "claude", Variant: "high"},
+		Model:    &sessionModel{ProviderID: "anthropic", ID: "claude", Variant: "high"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -44,14 +44,56 @@ func TestAPIClientCreateSession(t *testing.T) {
 	if gotUser != apiUsername || gotPass != "secret" {
 		t.Fatalf("basic auth = %q/%q", gotUser, gotPass)
 	}
-	if gotBody.ID != "ses_abc" || gotBody.Location != "/workspace" || gotBody.Title != "agent-1" || gotBody.Agent != "plan" {
+	if gotBody.ID != "ses_abc" || gotBody.Location == nil || gotBody.Location.Directory != "/workspace" || gotBody.Title != "agent-1" || gotBody.Agent != "plan" {
 		t.Fatalf("body = %+v", gotBody)
 	}
-	if gotBody.Model == nil || gotBody.Model.ProviderID != "anthropic" || gotBody.Model.ModelID != "claude" || gotBody.Model.Variant != "high" {
+	if gotBody.Model == nil || gotBody.Model.ProviderID != "anthropic" || gotBody.Model.ID != "claude" || gotBody.Model.Variant != "high" {
 		t.Fatalf("model = %+v", gotBody.Model)
 	}
-	if rec.ID != "ses_abc" || rec.Location != "/workspace" {
+	if rec.ID != "ses_abc" || rec.Location.Directory != "/workspace" {
 		t.Fatalf("record = %+v", rec)
+	}
+}
+
+// TestCreateSessionBodyMatchesV2Schema pins the wire shape the server validates:
+// model uses `id` (not `modelID`) and location is a `{"directory": ...}` object.
+func TestCreateSessionBodyMatchesV2Schema(t *testing.T) {
+	body := createSessionBody{
+		ID:       "ses_abc",
+		Location: &locationRef{Directory: "/workspace"},
+		Model:    sessionModelFor("anthropic/claude", "high"),
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Location map[string]string `json:"location"`
+		Model    map[string]string `json:"model"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw.Location["directory"] != "/workspace" {
+		t.Fatalf("location = %v in %s", raw.Location, data)
+	}
+	if raw.Model["id"] != "claude" || raw.Model["providerID"] != "anthropic" || raw.Model["variant"] != "high" {
+		t.Fatalf("model = %v in %s", raw.Model, data)
+	}
+	if _, ok := raw.Model["modelID"]; ok {
+		t.Fatalf("model must not carry modelID: %s", data)
+	}
+}
+
+// TestSessionRecordAcceptsLegacyStringLocation keeps reads working against a 2.x
+// server that answered with a bare path instead of the location object.
+func TestSessionRecordAcceptsLegacyStringLocation(t *testing.T) {
+	var rec sessionRecord
+	if err := decodeEnvelope([]byte(`{"data":{"id":"ses_abc","location":"/workspace"}}`), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Location.Directory != "/workspace" {
+		t.Fatalf("location = %+v", rec.Location)
 	}
 }
 

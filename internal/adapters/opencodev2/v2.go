@@ -156,9 +156,10 @@ func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.R
 		if ctx.Err() == nil {
 			if record, recErr := readSessionRecord(req, parsed.SessionID); recErr == nil {
 				parsed.Usage = mergeUsageRecord(parsed.Usage, usageFromRecord(record))
-				if !samePath(record.Location, req.Workspace) && strings.TrimSpace(record.Location) != "" {
+				location := record.Location.Directory
+				if !samePath(location, req.Workspace) && strings.TrimSpace(location) != "" {
 					warnings = append(warnings, fmt.Sprintf(
-						"opencodev2: session location %q does not match workspace %q", record.Location, req.Workspace))
+						"opencodev2: session location %q does not match workspace %q", location, req.Workspace))
 				}
 				// A provider-reported failure or interruption is worth surfacing
 				// even when the CLI exited zero: a zero-token run must not read as

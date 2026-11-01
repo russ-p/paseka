@@ -105,7 +105,7 @@ func sessionModelFor(model, variant string) *sessionModel {
 	if provider == "" && id == "" && variant == "" {
 		return nil
 	}
-	return &sessionModel{ProviderID: provider, ModelID: id, Variant: variant}
+	return &sessionModel{ID: id, ProviderID: provider, Variant: variant}
 }
 
 // firstFlagValue returns the first value found for any of the given flags.

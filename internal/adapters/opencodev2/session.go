@@ -88,7 +88,7 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		}
 		rec, err := createSessionOnServer(srv, createSessionBody{
 			ID:       id,
-			Location: req.Workspace,
+			Location: &locationRef{Directory: req.Workspace},
 			Title:    sessionTitle(req),
 			Agent:    sessionAgent(req),
 			Model:    sessionModelFor(req.Params.Model, req.Params.Reasoning),

@@ -243,15 +243,40 @@ func decodeEnvelope(data []byte, out any) error {
 	return json.Unmarshal(data, out)
 }
 
+// sessionModel is the V2 model reference. `id` and `providerID` are both
+// required by the schema; `variant` is optional and defaults server-side.
 type sessionModel struct {
-	ProviderID string `json:"providerID,omitempty"`
-	ModelID    string `json:"modelID,omitempty"`
+	ID         string `json:"id"`
+	ProviderID string `json:"providerID"`
 	Variant    string `json:"variant,omitempty"`
+}
+
+// locationRef is the V2 location reference, a `{"directory": ...}` object on the
+// wire. Decoding also accepts a bare path because earlier 2.x servers answered
+// with a plain string.
+type locationRef struct {
+	Directory string `json:"directory"`
+}
+
+func (l *locationRef) UnmarshalJSON(data []byte) error {
+	var path string
+	if err := json.Unmarshal(data, &path); err == nil {
+		l.Directory = path
+		return nil
+	}
+	var obj struct {
+		Directory string `json:"directory"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	l.Directory = obj.Directory
+	return nil
 }
 
 type createSessionBody struct {
 	ID       string        `json:"id,omitempty"`
-	Location string        `json:"location,omitempty"`
+	Location *locationRef  `json:"location,omitempty"`
 	Title    string        `json:"title,omitempty"`
 	Agent    string        `json:"agent,omitempty"`
 	Model    *sessionModel `json:"model,omitempty"`
@@ -259,7 +284,7 @@ type createSessionBody struct {
 
 type sessionRecord struct {
 	ID       string                     `json:"id"`
-	Location string                     `json:"location"`
+	Location locationRef                `json:"location"`
 	Title    string                     `json:"title"`
 	Tokens   map[string]json.RawMessage `json:"tokens"`
 	Cost     float64                    `json:"cost"`
