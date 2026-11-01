@@ -83,7 +83,7 @@ func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, b
 		return true, nil
 	}
 	if taskID != "" {
-		if err := r.deferTaskDispatch(traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary); err != nil {
+		if err := r.deferTaskDispatch(ctx, traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary); err != nil {
 			return false, err
 		}
 	}

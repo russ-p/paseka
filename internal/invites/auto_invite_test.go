@@ -40,6 +40,40 @@ func TestMatchAutoInviteDecision(t *testing.T) {
 	}
 }
 
+// Energy pause/resume observations describe admission; a rule that names them
+// must still never turn one into an invite.
+func TestMatchAutoInviteRejectsEnergyObservations(t *testing.T) {
+	rule := colony.AutoInviteRule{
+		When: colony.EventRule{Type: "SIGNAL", Kind: "energy.paused"},
+		Invite: colony.AutoInviteInviteSpec{
+			Bee:  colony.InviteStringField{Default: "drone"},
+			Task: colony.InviteTaskField{Default: "Review energy pause"},
+		},
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"kind":         "energy.paused",
+		"episodeId":    "pause-1",
+		"remaining":    0,
+		"pendingCount": 1,
+	})
+	ev := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
+	if MatchAutoInvite(ev, rule) {
+		t.Fatal("energy.paused must not match an auto-invite rule")
+	}
+
+	resumedRule := rule
+	resumedRule.When = colony.EventRule{Type: "SIGNAL", Kind: "energy.resumed"}
+	raw, _ = json.Marshal(map[string]any{
+		"kind":      "energy.resumed",
+		"episodeId": "pause-1",
+		"source":    "energy.add",
+	})
+	resumed := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
+	if MatchAutoInvite(resumed, resumedRule) {
+		t.Fatal("energy.resumed must not match an auto-invite rule")
+	}
+}
+
 func TestBuildInviteTaskFromTrace(t *testing.T) {
 	reqRaw, _ := json.Marshal(map[string]any{
 		"kind":  "review.requested",

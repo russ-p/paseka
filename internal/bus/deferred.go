@@ -19,6 +19,8 @@ var deferredDenyKinds = map[string]struct{}{
 	"energy.add":      {},
 	"energy.consume":  {},
 	"energy.stipend":  {},
+	"energy.paused":   {},
+	"energy.resumed":  {},
 	"session.invite":  {},
 	"beekeeper.ready": {},
 	"task.status":     {},

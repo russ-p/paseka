@@ -251,7 +251,7 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 			return err
 		}
 	}
-	if err := r.handlePostApplySideEffects(ctx, ev, execCtx); err != nil {
+	if err := r.handlePostApplySideEffects(ctx, ev, execCtx, res); err != nil {
 		return err
 	}
 	if err := r.executeDispatches(ctx, ev, ready, execCtx); err != nil {
@@ -453,12 +453,16 @@ func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
+func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext, res taskledger.ApplyResult) error {
 	if energyAddDetected(ev) {
-		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
+		if err := r.afterEnergyAdd(ctx, ev.TraceID); err != nil {
 			return err
 		}
-		if err := r.resumePendingDispatches(ctx, ev.TraceID); err != nil {
+	}
+	// A reduction that closed a pause episode cleared the field inside its own
+	// mutation, so this is the one place its resumed observation can be sent.
+	if res.PauseClose != nil {
+		if err := r.publishResumeObservation(ctx, ev.TraceID, *res.PauseClose); err != nil {
 			return err
 		}
 	}

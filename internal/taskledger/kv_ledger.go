@@ -109,6 +109,45 @@ func (l *KVLedger) MarkPendingDispatchUnresolved(traceID, dispatchID, diagnostic
 	return err
 }
 
+// ClaimEnergyPausePublished marks the open pause episode published. The
+// compare-and-set write is the claim: only the caller that wins it may send the
+// paused observation.
+func (l *KVLedger) ClaimEnergyPausePublished(traceID string) (EnergyPauseSnapshot, bool, error) {
+	if traceID == "" {
+		return EnergyPauseSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	var pause EnergyPauseSnapshot
+	claimed := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, episode, ok := ClaimEnergyPausePublished(trace)
+		pause, claimed = episode, ok
+		return updated, ApplyResult{Trace: updated, Changed: ok}, nil
+	})
+	if err != nil {
+		return EnergyPauseSnapshot{}, false, err
+	}
+	return pause, claimed, nil
+}
+
+// ClearEnergyPause closes the open pause episode in the same compare-and-set
+// path, so the runtime sends at most one resumed observation per episode.
+func (l *KVLedger) ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, error) {
+	if traceID == "" {
+		return EnergyPauseSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	var pause EnergyPauseSnapshot
+	closed := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, episode, ok := CloseEnergyPause(trace)
+		pause, closed = episode, ok
+		return updated, ApplyResult{Trace: updated, Changed: ok}, nil
+	})
+	if err != nil {
+		return EnergyPauseSnapshot{}, false, err
+	}
+	return pause, closed, nil
+}
+
 func (l *KVLedger) loadTrace(traceID string) (TraceSnapshot, uint64, error) {
 	entry, err := l.kv.Get(traceID)
 	if err != nil {

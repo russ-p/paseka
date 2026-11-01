@@ -11,8 +11,13 @@ import (
 )
 
 // MatchAutoInvite reports whether ev matches the colony auto-invite rule.
+// Energy pause/resume observations are never work, even if a rule names them:
+// they exist to tell an operator about admission, not to wake a Bee.
 func MatchAutoInvite(ev protocol.Event, rule colony.AutoInviteRule) bool {
 	kind := protocol.PayloadKind(ev.Payload)
+	if protocol.IsEnergyObservation(kind) {
+		return false
+	}
 	if !rule.When.Matches(ev.Type, kind) {
 		return false
 	}

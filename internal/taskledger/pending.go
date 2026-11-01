@@ -110,6 +110,12 @@ func DeferPendingDispatch(trace TraceSnapshot, dispatch PendingDispatch) (TraceS
 		}
 	}
 	trace.PendingDispatches = append(trace.PendingDispatches, dispatch)
+	// The first energy-caused deferral opens the pause episode in this same
+	// mutation. Admission is still derived from the reserve; the episode exists
+	// only so the pause and resume observations are exactly-once.
+	if requiresEnergyDeferralReason(dispatch.Reason) && trace.EnergyRemaining <= 0 {
+		trace, _ = OpenEnergyPause(trace, dispatch.Reason, now)
+	}
 	return trace, true
 }
 
