@@ -2,6 +2,7 @@ package taskledger
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -16,6 +17,19 @@ type MemoryLedger struct {
 // NewMemoryLedger creates an empty in-memory ledger.
 func NewMemoryLedger() *MemoryLedger {
 	return &MemoryLedger{traces: make(map[string]TraceSnapshot)}
+}
+
+// TraceIDs lists the trails the ledger holds, so a reactor restart can find
+// work deferred while no reactor was running.
+func (l *MemoryLedger) TraceIDs() ([]string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ids := make([]string, 0, len(l.traces))
+	for traceID := range l.traces {
+		ids = append(ids, traceID)
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 // Snapshot returns the current task ledger for a trace.

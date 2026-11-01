@@ -3,6 +3,7 @@ package taskledger_test
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -114,7 +115,19 @@ func (f *fakeKV) WatchAll(...nats.WatchOpt) (nats.KeyWatcher, error) {
 func (f *fakeKV) WatchFiltered([]string, ...nats.WatchOpt) (nats.KeyWatcher, error) {
 	return nil, errors.New("not implemented")
 }
-func (f *fakeKV) Keys(...nats.WatchOpt) ([]string, error) { return nil, errors.New("not implemented") }
+func (f *fakeKV) Keys(...nats.WatchOpt) ([]string, error) {
+	f.store.mu.Lock()
+	defer f.store.mu.Unlock()
+	if len(f.store.items) == 0 {
+		return nil, nats.ErrNoKeysFound
+	}
+	keys := make([]string, 0, len(f.store.items))
+	for key := range f.store.items {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
 func (f *fakeKV) ListKeys(...nats.WatchOpt) (nats.KeyLister, error) {
 	return nil, errors.New("not implemented")
 }
@@ -253,6 +266,47 @@ func TestApplyEventEnergyAddBeforeSeedLeavesBudgetUnset(t *testing.T) {
 	}
 	if res.Trace.EnergyBudget != 0 {
 		t.Fatalf("budget = %d, want 0 so SeedEnergy can apply colony defaults", res.Trace.EnergyBudget)
+	}
+}
+
+func TestKVLedgerTraceIDsListsEveryTrail(t *testing.T) {
+	kv := newFakeKV()
+	ledger := taskledger.NewKVLedger(kv)
+	for _, traceID := range []string{"trace-b", "trace-a"} {
+		seed, err := json.Marshal(taskledger.TraceSnapshot{
+			TraceID: traceID,
+			Tasks:   map[string]taskledger.TaskSnapshot{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := kv.Create(traceID, seed); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ids, err := ledger.TraceIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"trace-a", "trace-b"}
+	if len(ids) != len(want) {
+		t.Fatalf("trace ids = %v, want %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("trace ids = %v, want %v", ids, want)
+		}
+	}
+}
+
+func TestKVLedgerTraceIDsEmptyBucket(t *testing.T) {
+	ids, err := taskledger.NewKVLedger(newFakeKV()).TraceIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("trace ids = %v, want empty", ids)
 	}
 }
 

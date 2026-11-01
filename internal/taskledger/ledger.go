@@ -110,6 +110,14 @@ type ApplyResult struct {
 	Changed bool
 }
 
+// TraceLister is implemented by ledgers that can enumerate the trails they
+// hold. Reactor startup uses it to find deferred work that a top-up approved
+// while no reactor was running.
+type TraceLister interface {
+	// TraceIDs lists the trail ids present in the ledger.
+	TraceIDs() ([]string, error)
+}
+
 // Ledger persists and projects task state for one or more traces.
 // Implementations may use NATS KV, local files, or in-memory storage.
 type Ledger interface {

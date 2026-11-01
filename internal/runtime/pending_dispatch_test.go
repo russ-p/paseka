@@ -105,23 +105,24 @@ func TestReactorDefersDirectDispatchWithoutTouchingTaskStatus(t *testing.T) {
 
 func seedWaitingReviewTask(t *testing.T, ledger *taskledger.MemoryLedger, taskID string) {
 	t.Helper()
-	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
-		Kind: protocol.TaskEventPlan,
-		Tasks: []protocol.TaskSpec{{
+	seedWaitingReviewTasks(t, ledger, "trace-1", taskID)
+}
+
+func seedWaitingReviewTasks(t *testing.T, ledger *taskledger.MemoryLedger, traceID string, taskIDs ...string) {
+	t.Helper()
+	specs := make([]protocol.TaskSpec, 0, len(taskIDs))
+	for _, taskID := range taskIDs {
+		specs = append(specs, protocol.TaskSpec{
 			TaskID: taskID,
 			Title:  "implement",
 			Body:   "do work",
 			Bee:    "builder",
 			Review: protocol.TaskReviewRequired,
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
+		})
 	}
-	status, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
-		Kind:   protocol.TaskEventStatus,
-		TaskID: taskID,
-		Status: protocol.TaskStatusWaitingReview,
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind:  protocol.TaskEventPlan,
+		Tasks: specs,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -129,17 +130,32 @@ func seedWaitingReviewTask(t *testing.T, ledger *taskledger.MemoryLedger, taskID
 	if _, err := ledger.Apply(plan); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ledger.Apply(status); err != nil {
-		t.Fatal(err)
+	for _, taskID := range taskIDs {
+		status, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+			Kind:   protocol.TaskEventStatus,
+			TaskID: taskID,
+			Status: protocol.TaskStatusWaitingReview,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.Apply(status); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
 func exhaustEnergy(t *testing.T, ledger *taskledger.MemoryLedger) {
 	t.Helper()
-	if err := ledger.SeedEnergy("trace-1", 1); err != nil {
+	exhaustEnergyIn(t, ledger, "trace-1")
+}
+
+func exhaustEnergyIn(t *testing.T, ledger *taskledger.MemoryLedger, traceID string) {
+	t.Helper()
+	if err := ledger.SeedEnergy(traceID, 1); err != nil {
 		t.Fatal(err)
 	}
-	consume, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
+	consume, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
 		Kind:   protocol.SignalEnergyConsume,
 		Amount: 1,
 		Reason: "test",

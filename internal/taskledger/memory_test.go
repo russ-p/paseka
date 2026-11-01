@@ -42,6 +42,33 @@ func TestMemoryLedgerApplyTaskPlanAndReady(t *testing.T) {
 	}
 }
 
+func TestMemoryLedgerTraceIDsListsEveryTrail(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	for _, traceID := range []string{"trace-b", "trace-a"} {
+		plan := mustEvent(t, traceID, protocol.EventInsight, protocol.TaskPlanPayload{
+			Kind:  protocol.TaskEventPlan,
+			Tasks: []protocol.TaskSpec{{TaskID: "task-1", Title: "Build"}},
+		})
+		if _, err := ledger.Apply(plan); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ids, err := ledger.TraceIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"trace-a", "trace-b"}
+	if len(ids) != len(want) {
+		t.Fatalf("trace ids = %v, want %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("trace ids = %v, want %v", ids, want)
+		}
+	}
+}
+
 func mustEvent(t *testing.T, traceID string, typ protocol.EventType, payload any) protocol.Event {
 	t.Helper()
 	raw, err := json.Marshal(payload)

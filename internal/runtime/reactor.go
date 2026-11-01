@@ -137,6 +137,11 @@ func (r *Reactor) Run(ctx context.Context) error {
 	// An interrupted fork approval resumes under its recorded request identity
 	// before any new event can plan the same initial task again.
 	r.recoverInterruptedForkCreations(ctx)
+	// A top-up applied while the reactor was down approved direct work that
+	// nothing had a chance to run. Resume it before new events arrive.
+	if err := r.RecoverPendingDispatches(ctx); err != nil {
+		runtimeLog.Warn("recover pending direct dispatches failed", logging.F("error", err.Error()))
+	}
 
 	go r.runPullRequestReconcile(ctx)
 
