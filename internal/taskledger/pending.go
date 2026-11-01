@@ -177,6 +177,34 @@ func MarkPendingDispatchUnresolved(trace TraceSnapshot, dispatchID, diagnostic s
 	return trace, false
 }
 
+// ConsumeTaskPendingDispatches closes every active task entry for one task. It
+// runs inside the mutation that moves the task to running, so admission and the
+// record of the deferral can never disagree. The entry key carries the Bee that
+// was effective when the dispatch was denied, but a configuration revision can
+// change that Bee before admission; matching on kind and task id therefore
+// consumes a drifted key too. Direct work, configuration-barrier holds, and
+// entries for other tasks keep their own status.
+func ConsumeTaskPendingDispatches(trace TraceSnapshot, taskID string, now time.Time) (TraceSnapshot, bool) {
+	if taskID == "" {
+		return trace, false
+	}
+	changed := false
+	for i := range trace.PendingDispatches {
+		entry := &trace.PendingDispatches[i]
+		if entry.Kind != PendingDispatchTask || entry.TaskID != taskID || !entry.Status.Active() {
+			continue
+		}
+		if entry.Reason == protocol.ConfigBarrierHoldReason {
+			// A configuration barrier owns its hold, not the energy gate.
+			continue
+		}
+		entry.Status = PendingDispatchConsumed
+		entry.UpdatedAt = now
+		changed = true
+	}
+	return trace, changed
+}
+
 // AbandonPendingDispatches closes every active deferred item without dispatching
 // it. A hard stop calls this inside the mutation that owns the decision, so the
 // abandoned queue is never revived by a later top-up or a restart. Closed

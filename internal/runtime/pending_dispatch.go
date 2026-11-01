@@ -237,8 +237,10 @@ func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) (
 // resumeTaskPendingDispatch resumes one deferred task dispatch. The pending
 // entry is only a marker: the ledger's current task snapshot is authoritative,
 // so a task that closed or turned terminal while waiting is abandoned instead
-// of replaying stale work. A dispatch that re-defers because the reserve ran out
-// again leaves the entry pending, so the drain never claims a false resume.
+// of replaying stale work. Admission itself consumes the entry in the mutation
+// that starts the task, so this reports the resulting status: consumed counts as
+// one dispatch, while a re-deferral or pre-admission skip leaves it active and
+// the drain never claims a false resume.
 func (r *Reactor) resumeTaskPendingDispatch(ctx context.Context, traceID string, item taskledger.PendingDispatch) (bool, error) {
 	// One process must not start two live dispatches for the same entry. Two
 	// energy events can arrive close enough together that both see the entry
@@ -278,18 +280,13 @@ func (r *Reactor) resumeTaskPendingDispatch(ctx context.Context, traceID string,
 	if err != nil {
 		return false, err
 	}
+	// The admission mutation consumes the entry when the task moves to running.
+	// Read the resulting status instead of treating "no longer active" as "not
+	// dispatched": a re-deferred dispatch or a pre-admission skip leaves the
+	// entry active, while an admitted one is consumed. An entry another mutation
+	// abandoned is not a dispatch of this drain either.
 	entry = findPendingDispatch(after, item.ID)
-	if entry == nil || !entry.Status.Active() {
-		// The dispatch (or a concurrent guard) closed the entry.
-		return false, nil
-	}
-	if moved, ok := after.Tasks[item.TaskID]; !ok || moved.Status == protocol.TaskStatusReady {
-		// The dispatch was not admitted: it re-deferred because the reserve ran
-		// out, awaited a configuration boundary, or a guard skipped it. The
-		// entry stays pending for the next top-up.
-		return false, nil
-	}
-	return true, r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchConsumed)
+	return entry != nil && entry.Status == taskledger.PendingDispatchConsumed, nil
 }
 
 // taskPendingClosed reports why a deferred task dispatch can no longer run, or

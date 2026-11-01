@@ -834,3 +834,165 @@ func TestApplyEventTaskPlanOverwritesGhostTask(t *testing.T) {
 		t.Fatalf("title = %q", res.Trace.Tasks["task-1"].Title)
 	}
 }
+
+// Admission closes the deferral record in the same mutation that starts the
+// task. Every task entry for the task is consumed even when its key still names
+// the Bee from before a configuration revision, while direct work, a
+// configuration hold, and other tasks keep their own status.
+func TestApplyEventTaskRunningConsumesTaskPendingDispatches(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusReady},
+			"task-2": {TaskID: "task-2", Status: protocol.TaskStatusReady},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Bee: "builder", Status: taskledger.PendingDispatchPending},
+			{ID: "task:task-1:reviewer", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Bee: "reviewer", Status: taskledger.PendingDispatchPending},
+			{ID: "direct-task-1", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
+			{ID: "task:task-1:held", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Reason: protocol.ConfigBarrierHoldReason, Status: taskledger.PendingDispatchPending},
+			{ID: "task:task-2:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-2", Status: taskledger.PendingDispatchPending},
+			{ID: "task:task-1:abandoned", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Status: taskledger.PendingDispatchAbandoned},
+		},
+	}
+	running, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:   protocol.TaskEventStatus,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, running)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.Tasks["task-1"].Status; got != protocol.TaskStatusRunning {
+		t.Fatalf("task status = %q, want running", got)
+	}
+	statuses := map[string]taskledger.PendingDispatchStatus{}
+	for _, item := range res.Trace.PendingDispatches {
+		statuses[item.ID] = item.Status
+	}
+	for _, id := range []string{"task:task-1:builder", "task:task-1:reviewer"} {
+		if got := statuses[id]; got != taskledger.PendingDispatchConsumed {
+			t.Fatalf("%s status = %q, want consumed", id, got)
+		}
+	}
+	for id, want := range map[string]taskledger.PendingDispatchStatus{
+		"direct-task-1":         taskledger.PendingDispatchPending,
+		"task:task-1:held":      taskledger.PendingDispatchPending,
+		"task:task-2:builder":   taskledger.PendingDispatchPending,
+		"task:task-1:abandoned": taskledger.PendingDispatchAbandoned,
+	} {
+		if got := statuses[id]; got != want {
+			t.Fatalf("%s status = %q, want %q", id, got, want)
+		}
+	}
+
+	// A replay of the same transition finds nothing active and keeps the first
+	// outcome instead of resurrecting or re-closing an entry.
+	replay, err := taskledger.ApplyEvent(res.Trace, running)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range replay.Trace.PendingDispatches {
+		if item.ID == "task:task-1:builder" && item.Status != taskledger.PendingDispatchConsumed {
+			t.Fatalf("replayed entry status = %q, want consumed", item.Status)
+		}
+	}
+}
+
+// A failed status write never closes the entry: the reducer rejects the event
+// before mutating anything, so the task cannot look running while the deferral
+// is gone.
+func TestApplyEventTaskRunningRequiresStatusBeforeConsuming(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusReady},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
+		},
+	}
+	broken, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventSignal, map[string]any{
+		"kind":   protocol.TaskEventStatus,
+		"taskId": "task-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := taskledger.ApplyEvent(trace, broken); err == nil {
+		t.Fatal("expected a status-less task.status to fail")
+	}
+	// Applying the broken event through a caller cannot reach the trace; the
+	// original snapshot still carries the ready task and its active entry.
+	if got := trace.Tasks["task-1"].Status; got != protocol.TaskStatusReady {
+		t.Fatalf("task status = %q, want ready", got)
+	}
+	if got := trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchPending {
+		t.Fatalf("entry status = %q, want pending", got)
+	}
+}
+
+// A killed trail owns the entry's outcome. A late running transition is skipped
+// by the sticky kill, and a stipend-abandoned entry is never rewritten as
+// consumed by a later admission.
+func TestApplyEventTaskRunningDoesNotOverrideTerminalEntry(t *testing.T) {
+	killed := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Killed:  true,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCancelled},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
+		},
+	}
+	running, err := protocol.NewEvent("trace-1", "runtime", 1, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:   protocol.TaskEventStatus,
+		TaskID: "task-1",
+		Status: protocol.TaskStatusRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(killed, running)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchPending {
+		t.Fatalf("killed entry status = %q, want pending", got)
+	}
+	if got := res.Trace.Tasks["task-1"].Status; got != protocol.TaskStatusCancelled {
+		t.Fatalf("killed task status = %q, want cancelled", got)
+	}
+
+	superseded := taskledger.TraceSnapshot{
+		TraceID:         "trace-2",
+		EnergyBudget:    4,
+		EnergyRemaining: 0,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-2": {TaskID: "task-2", Status: protocol.TaskStatusReady},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-2:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-2", Status: taskledger.PendingDispatchAbandoned},
+		},
+	}
+	sameTask, err := protocol.NewEvent("trace-2", "runtime", 1, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:   protocol.TaskEventStatus,
+		TaskID: "task-2",
+		Status: protocol.TaskStatusRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(superseded, sameTask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("superseded entry status = %q, want abandoned", got)
+	}
+}

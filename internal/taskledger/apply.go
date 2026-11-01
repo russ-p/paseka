@@ -409,6 +409,15 @@ func reduceTaskStatus(trace TraceSnapshot, event protocol.Event, now time.Time) 
 	task.Summary = payload.Summary
 	task.UpdatedAt = now
 	trace.Tasks[payload.TaskID] = task
+	// Admission and the deferral record close in this same mutation. A task that
+	// starts running is no longer waiting for dispatch, whichever trigger admitted
+	// it (task.ready, review rework, closing seed, configuration release, or the
+	// legacy energy unblock). Matching every task entry for the task, not the
+	// current task:<taskId>:<bee> key, also closes an entry whose Bee drifted
+	// across configuration revisions.
+	if payload.Status == protocol.TaskStatusRunning {
+		trace, _ = ConsumeTaskPendingDispatches(trace, payload.TaskID, now)
+	}
 	return reduceStep{trace: trace, changed: true}, nil
 }
 
