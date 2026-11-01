@@ -94,3 +94,14 @@ func taskNotifyKey(traceID, taskID, status string) string {
 func taskCompletedNotifyKey(traceID, taskID string) string {
 	return fmt.Sprintf("task:%s:%s:completed", traceID, taskID)
 }
+
+// energyPauseNotifyKey and energyResumeNotifyKey dedupe the admission cards by
+// episode identity. The episode id is durable in the ledger snapshot, so a gate
+// restart that replays the observation still matches the delivered key.
+func energyPauseNotifyKey(traceID, episodeID string) string {
+	return fmt.Sprintf("energy:pause:%s:%s", traceID, episodeID)
+}
+
+func energyResumeNotifyKey(traceID, episodeID string) string {
+	return fmt.Sprintf("energy:resume:%s:%s", traceID, episodeID)
+}

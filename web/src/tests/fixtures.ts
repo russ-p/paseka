@@ -977,11 +977,12 @@ export function configAdapters(): ConfigAdapter[] {
 	];
 }
 
-/** The seven canonical push categories, in the order the config file declares them. */
+/** The eight canonical push categories, in the order the config file declares them. */
 export function configNotify(): ColonyConfig['telegram']['notify'] {
 	return [
 		{ category: 'invites', mode: 'sound' },
 		{ category: 'blocked', mode: 'sound' },
+		{ category: 'energy', mode: 'sound' },
 		{ category: 'failed', mode: 'sound' },
 		{ category: 'review_required', mode: 'silent' },
 		{ category: 'review_final', mode: 'silent' },

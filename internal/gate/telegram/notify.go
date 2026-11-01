@@ -198,6 +198,8 @@ func (n *Notifier) handleEvent(ev protocol.Event) error {
 	switch {
 	case ev.Type == protocol.EventSignal && kind == string(protocol.SignalSessionInvite):
 		return n.handleInviteEvent(ev)
+	case ev.Type == protocol.EventSignal && protocol.IsEnergyObservation(kind):
+		return n.handleEnergyObservationEvent(ev)
 	case ev.Type == protocol.EventSignal && kind == string(protocol.TaskEventStatus):
 		return n.handleTaskStatusEvent(ev)
 	case ev.Type == protocol.EventVerification && kind == string(protocol.TaskEventCompleted):
@@ -364,8 +366,6 @@ func (n *Notifier) pushTaskStatus(ctx context.Context, traceID string, task task
 	switch {
 	case status == protocol.TaskStatusWaitingReview && taskledger.IsReviewGate(task):
 		keyboard = proposalKeyboardForTask(traceID, task)
-	case status == protocol.TaskStatusBlocked && taskledger.IsEnergyBlockedTask(task):
-		keyboard = energyTopUpKeyboard(traceID)
 	}
 	return n.broadcast(text, keyboard, key, mode.Silent())
 }

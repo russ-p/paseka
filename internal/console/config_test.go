@@ -296,8 +296,8 @@ func TestConfigAPIReportsTheTelegramGateWithoutValidatingIt(t *testing.T) {
 	if byCategory["commit_gate"] != "off" {
 		t.Fatalf("commit_gate = %q, want the default off", byCategory["commit_gate"])
 	}
-	if len(byCategory) != 7 {
-		t.Fatalf("categories = %v, want the seven canonical ones", byCategory)
+	if len(byCategory) != 8 {
+		t.Fatalf("categories = %v, want the eight canonical ones", byCategory)
 	}
 }
 

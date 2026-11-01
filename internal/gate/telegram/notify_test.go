@@ -20,6 +20,7 @@ import (
 type recordingBot struct {
 	messages            []string
 	disableNotification []bool
+	keyboards           []tgbotapi.InlineKeyboardMarkup
 }
 
 func (b *recordingBot) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
@@ -27,6 +28,11 @@ func (b *recordingBot) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
 	case tgbotapi.MessageConfig:
 		b.messages = append(b.messages, v.Text)
 		b.disableNotification = append(b.disableNotification, v.DisableNotification)
+		if keyboard, ok := v.ReplyMarkup.(tgbotapi.InlineKeyboardMarkup); ok {
+			b.keyboards = append(b.keyboards, keyboard)
+		} else {
+			b.keyboards = append(b.keyboards, tgbotapi.InlineKeyboardMarkup{})
+		}
 	case tgbotapi.EditMessageTextConfig:
 		b.messages = append(b.messages, v.Text)
 	}
