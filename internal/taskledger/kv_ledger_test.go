@@ -255,3 +255,25 @@ func TestApplyEventEnergyAddBeforeSeedLeavesBudgetUnset(t *testing.T) {
 		t.Fatalf("budget = %d, want 0 so SeedEnergy can apply colony defaults", res.Trace.EnergyBudget)
 	}
 }
+
+func TestKVLedgerDecodesSnapshotWithoutPendingFields(t *testing.T) {
+	kv := newFakeKV()
+	legacy := []byte(`{"traceId":"trace-1","energyBudget":4,"energyRemaining":2,"tasks":{"task-1":{"taskId":"task-1","status":"waiting_review"}}}`)
+	if _, err := kv.Create("trace-1", legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := taskledger.NewKVLedger(kv).Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.PendingDispatches) != 0 {
+		t.Fatalf("pending dispatches = %d, want empty", len(snap.PendingDispatches))
+	}
+	if snap.EnergyRemaining != 2 {
+		t.Fatalf("remaining = %d, want 2", snap.EnergyRemaining)
+	}
+	if got := snap.Tasks["task-1"].Status; got != protocol.TaskStatusWaitingReview {
+		t.Fatalf("task status = %q, want waiting_review", got)
+	}
+}

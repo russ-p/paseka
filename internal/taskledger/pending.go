@@ -103,7 +103,7 @@ func DeferPendingDispatch(trace TraceSnapshot, dispatch PendingDispatch) (TraceS
 		dispatch.Status = PendingDispatchPending
 	}
 	for _, existing := range trace.PendingDispatches {
-		if existing.ID == dispatch.ID && existing.Status == PendingDispatchPending {
+		if existing.ID == dispatch.ID && existing.Status.Active() {
 			return trace, false
 		}
 	}
@@ -133,12 +133,35 @@ func ResolvePendingDispatch(trace TraceSnapshot, dispatchID string, status Pendi
 	return trace, false
 }
 
+// MarkPendingDispatchUnresolved closes a deferred item whose source event can
+// no longer be recovered. The entry stays in the ledger so missing evidence is
+// visible; it is never drained as runnable work.
+func MarkPendingDispatchUnresolved(trace TraceSnapshot, dispatchID, diagnostic string) (TraceSnapshot, bool) {
+	if dispatchID == "" {
+		return trace, false
+	}
+	for i := range trace.PendingDispatches {
+		entry := &trace.PendingDispatches[i]
+		if entry.ID != dispatchID {
+			continue
+		}
+		if entry.Status == PendingDispatchUnresolved && entry.Diagnostic == diagnostic {
+			return trace, false
+		}
+		entry.Status = PendingDispatchUnresolved
+		entry.Diagnostic = diagnostic
+		entry.UpdatedAt = time.Now().UTC()
+		return trace, true
+	}
+	return trace, false
+}
+
 // ActivePendingDispatches returns pending work in creation order: oldest first,
 // with the id breaking ties.
 func ActivePendingDispatches(trace TraceSnapshot) []PendingDispatch {
 	var pending []PendingDispatch
 	for _, dispatch := range trace.PendingDispatches {
-		if dispatch.Status == PendingDispatchPending {
+		if dispatch.Status.Active() {
 			pending = append(pending, dispatch)
 		}
 	}

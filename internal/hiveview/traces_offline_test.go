@@ -36,6 +36,10 @@ func (failingLedger) ResolvePendingDispatch(string, string, taskledger.PendingDi
 	return fmt.Errorf("kv unavailable")
 }
 
+func (failingLedger) MarkPendingDispatchUnresolved(string, string, string) error {
+	return fmt.Errorf("kv unavailable")
+}
+
 func TestResolveTraceTasksFallsBackOnLoadTraceError(t *testing.T) {
 	repo := t.TempDir()
 	traceID := "trace-kv-fail"

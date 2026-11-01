@@ -94,6 +94,25 @@ func (l *MemoryLedger) ResolvePendingDispatch(traceID, dispatchID string, status
 	return nil
 }
 
+// MarkPendingDispatchUnresolved keeps deferred work visible when its source
+// event is gone.
+func (l *MemoryLedger) MarkPendingDispatchUnresolved(traceID, dispatchID, diagnostic string) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		return nil
+	}
+	updated, changed := MarkPendingDispatchUnresolved(trace, dispatchID, diagnostic)
+	if changed {
+		l.traces[traceID] = updated
+	}
+	return nil
+}
+
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
 	if traceID == "" {

@@ -195,3 +195,70 @@ func assertPendingDirect(t *testing.T, ledger taskledger.Ledger, want taskledger
 	}
 	t.Fatal("direct pending dispatch not found")
 }
+
+func TestResumeMarksMissingSourceEventUnresolved(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "builder-1", 1, protocol.EventMutation, protocol.MutationPayload{
+		Kind:   protocol.MutationCodeProposal,
+		TaskID: "task-1",
+		Diff:   "+func Login() {}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewMemoryLedger()
+	seedWaitingReviewTask(t, ledger, "task-1")
+	exhaustEnergy(t, ledger)
+
+	bees := map[string]colony.Bee{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	first := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	first.Dispatcher().RegisterAdapter("cursor", &recordingAdapter{})
+	if err := first.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchPending)
+
+	// The replayer no longer holds the source event: the entry must become
+	// visible unresolved work instead of being dispatched or dropped.
+	second := newPendingDispatchReactor(t, ledger, fakeReplayer{}, bees)
+	rec := &recordingAdapter{}
+	second.Dispatcher().RegisterAdapter("cursor", rec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":2}`)
+	if err := second.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d, want 0 for missing source event", rec.calls)
+	}
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.PendingDispatches) != 1 {
+		t.Fatalf("pending entries = %d, want the unresolved entry to stay visible", len(snap.PendingDispatches))
+	}
+	item := snap.PendingDispatches[0]
+	if item.Status != taskledger.PendingDispatchUnresolved {
+		t.Fatalf("status = %q, want unresolved", item.Status)
+	}
+	if item.Diagnostic == "" {
+		t.Fatal("unresolved entry must carry a diagnostic")
+	}
+	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusWaitingReview)
+
+	// A later top-up must not retry work whose evidence is gone, even when the
+	// event is recoverable again.
+	third := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	retryRec := &recordingAdapter{}
+	third.Dispatcher().RegisterAdapter("cursor", retryRec)
+	if err := third.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if retryRec.calls != 0 {
+		t.Fatalf("adapter calls = %d after top-up, want unresolved work to stay unretried", retryRec.calls)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchUnresolved)
+}

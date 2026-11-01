@@ -96,12 +96,9 @@ func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) e
 		}
 		ev, ok := byID[item.SourceEventID]
 		if !ok {
-			runtimeLog.Warn("pending direct dispatch source event missing",
-				logging.F("trace", traceID),
-				logging.F("task", item.TaskID),
-				logging.F("bee", item.Bee),
-				logging.F("sourceEvent", item.SourceEventID),
-			)
+			if err := r.markPendingUnresolved(traceID, item); err != nil {
+				return err
+			}
 			continue
 		}
 		r.stampIncomingProvenance(&ev)
@@ -178,13 +175,9 @@ func (r *Reactor) resumeBarrierHeldDispatches(ctx context.Context, traceID strin
 	for _, item := range pending {
 		ev, ok := byID[item.SourceEventID]
 		if !ok {
-			unresolved++
-			runtimeLog.Warn("barrier-held direct dispatch source event missing",
-				logging.F("trace", traceID),
-				logging.F("task", item.TaskID),
-				logging.F("bee", item.Bee),
-				logging.F("sourceEvent", item.SourceEventID),
-			)
+			if err := r.markPendingUnresolved(traceID, item); err != nil {
+				return err
+			}
 			continue
 		}
 		r.stampIncomingProvenance(&ev)
@@ -201,6 +194,20 @@ func (r *Reactor) resumeBarrierHeldDispatches(ctx context.Context, traceID strin
 	}
 	remaining = unresolved > 0
 	return nil
+}
+
+// markPendingUnresolved keeps a deferred direct dispatch in the ledger when the
+// source event it reacted to can no longer be recovered. The entry becomes
+// unresolved: visible as missing evidence, never drained as runnable work.
+func (r *Reactor) markPendingUnresolved(traceID string, item taskledger.PendingDispatch) error {
+	runtimeLog.Warn("pending direct dispatch source event missing",
+		logging.F("trace", traceID),
+		logging.F("task", item.TaskID),
+		logging.F("bee", item.Bee),
+		logging.F("sourceEvent", item.SourceEventID),
+	)
+	diagnostic := fmt.Sprintf("source event %q not found in trace replay", item.SourceEventID)
+	return r.ledger.MarkPendingDispatchUnresolved(traceID, item.ID, diagnostic)
 }
 
 func hasPendingDirect(pending []taskledger.PendingDispatch) bool {
