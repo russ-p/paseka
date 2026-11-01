@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/protocol"
@@ -449,4 +450,83 @@ func TestResumeMarksMissingSourceEventUnresolved(t *testing.T) {
 		t.Fatalf("adapter calls = %d after top-up, want unresolved work to stay unretried", retryRec.calls)
 	}
 	assertPendingDirect(t, ledger, taskledger.PendingDispatchUnresolved)
+}
+
+// Once the reserve cannot admit anything else, the drain stops instead of
+// re-deferring the rest of the queue. A legacy-format entry keeps its own id,
+// so no second entry for the same reaction appears behind it.
+func TestResumeStopsWhenTheReserveRunsOut(t *testing.T) {
+	evA := mustCodeProposal(t, "trace-1", "task-a", 1, "+func A() {}")
+	evB := mustCodeProposal(t, "trace-1", "task-b", 2, "+func B() {}")
+	ledger := taskledger.NewMemoryLedger()
+	seedWaitingReviewTasks(t, ledger, "trace-1", "task-a", "task-b")
+	if err := ledger.SeedEnergy("trace-1", 2); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		consume, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
+			Kind:   protocol.SignalEnergyConsume,
+			Amount: 1,
+			Reason: "test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.Apply(consume); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base := time.Now().UTC()
+	mustDeferDirect(t, ledger, "trace-1", taskledger.PendingDispatch{
+		ID: "first", TaskID: "task-a", Bee: "guard", SourceEventID: evA.ID, CreatedAt: base,
+	})
+	mustDeferDirect(t, ledger, "trace-1", taskledger.PendingDispatch{
+		ID: "legacy-b", TaskID: "task-b", Bee: "guard", SourceEventID: evB.ID, CreatedAt: base.Add(time.Second),
+	})
+
+	r := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{evA, evB}}, directGuardBees())
+	rec := &recordingAdapter{}
+	r.Dispatcher().RegisterAdapter("cursor", rec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":1}`)
+	if err := r.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("adapter calls = %d after one honey, want only the first entry", rec.calls)
+	}
+	snap := mustSnapshot(t, ledger, "trace-1")
+	if len(snap.PendingDispatches) != 2 {
+		t.Fatalf("pending entries = %d, want 2 (no second entry for the denied reaction)", len(snap.PendingDispatches))
+	}
+	if got := pendingStatusesByTask(t, ledger, "trace-1")["task-a"]; got != taskledger.PendingDispatchConsumed {
+		t.Fatalf("task-a status = %q, want consumed", got)
+	}
+	if got := pendingStatusesByTask(t, ledger, "trace-1")["task-b"]; got != taskledger.PendingDispatchPending {
+		t.Fatalf("task-b status = %q, want pending", got)
+	}
+}
+
+func mustSnapshot(t *testing.T, ledger taskledger.Ledger, traceID string) taskledger.TraceSnapshot {
+	t.Helper()
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap
+}
+
+func pendingStatusesByTask(t *testing.T, ledger taskledger.Ledger, traceID string) map[string]taskledger.PendingDispatchStatus {
+	t.Helper()
+	statuses := map[string]taskledger.PendingDispatchStatus{}
+	for _, item := range mustSnapshot(t, ledger, traceID).PendingDispatches {
+		if item.Kind == taskledger.PendingDispatchDirect {
+			statuses[item.TaskID] = item.Status
+		}
+	}
+	return statuses
+}
+
+func remainingHoney(t *testing.T, ledger taskledger.Ledger, traceID string) int {
+	t.Helper()
+	return mustSnapshot(t, ledger, traceID).EnergyRemaining
 }

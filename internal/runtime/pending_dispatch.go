@@ -97,7 +97,8 @@ func (r *Reactor) RecoverPendingDispatches(ctx context.Context) error {
 
 // resumePendingDispatches drains deferred work after energy.add. It resumes only
 // direct dispatches in this slice; task dispatch unblocking stays in the
-// existing task-status path.
+// existing task-status path. Entries drain oldest-first and the drain stops once
+// the reserve is exhausted, so the rest stays pending for the next top-up.
 //
 // Barrier-held items are never drained here: they must wait for the
 // configuration boundary and are resumed by resumeBarrierHeldDispatches.
@@ -149,6 +150,16 @@ func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) e
 			if err := r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchConsumed); err != nil {
 				return err
 			}
+		}
+		// Every admitted dispatch costs one honey. Once the reserve is gone,
+		// nothing behind this entry can start, so stop instead of walking — and
+		// re-deferring — the rest of the queue.
+		left, err := r.ledger.Snapshot(traceID)
+		if err != nil {
+			return err
+		}
+		if left.EnergyRemaining <= 0 {
+			break
 		}
 	}
 	return nil
