@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Draft)**
-Adapter package, registration, init scaffolding, and docs are in the tree. Status stays Draft until the feature ships (then Implemented).
+**(Implemented)**
+OpenCode is a first-class adapter for AFK (`paseka bee run`) and interactive (`paseka bee chat`) modes: the adapter package, dispatcher and session registration, `paseka init --adapter opencode` scaffolding, and the config/docs surfaces all shipped. The launch contract recorded below is the original OpenCode 1 behavior; [030-opencode-session-resume](030-opencode-session-resume.md) added HITL session pre-create and resume, and [037-opencode-v2-proxy](037-opencode-v2-proxy.md) turned the `opencode` name into a version-detecting proxy over the frozen `opencodev1` line and the new `opencodev2` line.
 
 ## Problem Statement
 
