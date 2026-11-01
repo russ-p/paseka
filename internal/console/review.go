@@ -145,11 +145,14 @@ func ListReviewQueue(ctx colony.Context) (ReviewQueueView, error) {
 		if err != nil {
 			continue
 		}
+		// One pending set per trace snapshot, shared by every review row: the
+		// queue can span several traces, but the set is never rebuilt per task.
+		pending := taskledger.PendingTaskIDs(snap)
 		for _, task := range snap.Tasks {
 			if task.Status != protocol.TaskStatusWaitingReview || !taskledger.IsReviewGate(task) {
 				continue
 			}
-			item := hiveview.TaskItemFromSnapshot(ctx, trace.TraceID, snap, task)
+			item := hiveview.TaskItemFromSnapshotWithPending(ctx, trace.TraceID, snap, task, pending)
 			qi := reviewQueueItemFromTask(item)
 			qi.Summary = task.Summary
 			if taskledger.IsMergeTask(task) {

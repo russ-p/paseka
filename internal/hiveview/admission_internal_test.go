@@ -114,3 +114,34 @@ func TestTaskItemMarksPendingDispatchWithoutChangingStatus(t *testing.T) {
 		t.Fatal("expected pendingDispatch on the held task")
 	}
 }
+
+// A bulk projection derives the pending set once per snapshot and passes it in;
+// the row must match the single-row wrapper, and a nil set must read as "no
+// pending task" rather than panic.
+func TestTaskItemFromSnapshotWithPendingSet(t *testing.T) {
+	ctx := colony.Context{ColonyRoot: t.TempDir(), Slug: "test"}
+	task := taskledger.TaskSnapshot{TaskID: "task-1", Title: "Held work", Status: protocol.TaskStatusReady}
+	snap := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks:   map[string]taskledger.TaskSnapshot{"task-1": task},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
+		},
+	}
+
+	hoisted := TaskItemFromSnapshotWithPending(ctx, "trace-1", snap, task, taskledger.PendingTaskIDs(snap))
+	if !hoisted.PendingDispatch {
+		t.Fatal("expected pendingDispatch from the precomputed set")
+	}
+	if single := TaskItemFromSnapshot(ctx, "trace-1", snap, task); single.PendingDispatch != hoisted.PendingDispatch {
+		t.Fatalf("hoisted row pendingDispatch = %t, single-row = %t", hoisted.PendingDispatch, single.PendingDispatch)
+	}
+
+	empty := TaskItemFromSnapshotWithPending(ctx, "trace-1", snap, task, nil)
+	if empty.PendingDispatch {
+		t.Fatal("a nil pending set must read as no pending task")
+	}
+	if empty.Status != string(protocol.TaskStatusReady) {
+		t.Fatalf("status = %q, nil set must not alter the row", empty.Status)
+	}
+}

@@ -205,8 +205,17 @@ func GetTask(ctx colony.Context, traceID, taskID string) (TaskDetailView, bool, 
 	return view, true, nil
 }
 
-// TaskItemFromSnapshot builds one task list row from ledger state.
+// TaskItemFromSnapshot builds one task list row from ledger state. It derives
+// the pending-task set for a single-row caller; bulk projections derive the set
+// once per snapshot and call TaskItemFromSnapshotWithPending instead.
 func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.TraceSnapshot, task taskledger.TaskSnapshot) TaskListItem {
+	return TaskItemFromSnapshotWithPending(ctx, traceID, snap, task, taskledger.PendingTaskIDs(snap))
+}
+
+// TaskItemFromSnapshotWithPending builds one task list row using a pending-task
+// set already derived from the same snapshot. A nil or empty set reads as "no
+// pending task", so an older snapshot needs no migration.
+func TaskItemFromSnapshotWithPending(ctx colony.Context, traceID string, snap taskledger.TraceSnapshot, task taskledger.TaskSnapshot, pending map[string]bool) TaskListItem {
 	title := task.Title
 	if title == "" {
 		title = task.TaskID
@@ -236,7 +245,7 @@ func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 		Review:               reviewPolicy,
 		Bee:                  task.Bee,
 		Sector:               task.Sector,
-		PendingDispatch:      taskledger.PendingTaskIDs(snap)[task.TaskID],
+		PendingDispatch:      pending[task.TaskID],
 		ApproveBlockedReason: review.ApproveBlockedReason(snap, task.TaskID),
 		DependsOn:            append([]string(nil), task.DependsOn...),
 		RunCount:             runCount,
@@ -340,9 +349,11 @@ func taskItemsFromSnapshot(ctx colony.Context, traceID string, snap taskledger.T
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	// One pending set per trace snapshot, shared by every row in this projection.
+	pending := taskledger.PendingTaskIDs(snap)
 	out := make([]TaskListItem, 0, len(ids))
 	for _, id := range ids {
-		out = append(out, TaskItemFromSnapshot(ctx, traceID, snap, snap.Tasks[id]))
+		out = append(out, TaskItemFromSnapshotWithPending(ctx, traceID, snap, snap.Tasks[id], pending))
 	}
 	return out
 }
