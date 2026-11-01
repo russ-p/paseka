@@ -179,21 +179,52 @@ func AbandonPendingDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot
 	return abandonPendingDispatches(trace, now, func(PendingDispatch) bool { return true })
 }
 
-// AbandonEnergyDeferredDispatches closes active direct work that a new honey
+// SupersedeEnergyDeferredDispatches closes active work that a new honey
 // allocation supersedes: entries that waited on an exhausted reserve, including
 // legacy entries with no reason. Configuration-barrier work is not energy
 // waiting — it belongs to a pending configuration transition, which releases or
 // cancels it at its own safe boundary — so this path leaves it active.
 //
-// Deferred task work is deliberately not closed here yet: superseding a task
-// must also mark it skipped in the same mutation, so the task never becomes an
-// invisible ready row with no pending record. That pairing lands with the
-// standing-tick slice.
-func AbandonEnergyDeferredDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot, bool) {
-	return abandonPendingDispatches(trace, now, func(dispatch PendingDispatch) bool {
-		return dispatch.Kind == PendingDispatchDirect &&
-			dispatch.Reason != protocol.ConfigBarrierHoldReason
-	})
+// A superseded task entry is closed together with its task, in this same
+// mutation: the task becomes skipped with the summary naming the new allocation.
+// Pairing the two is what keeps a superseded tick from surfacing as a ready row
+// with no pending record, and a duplicate stipend finds nothing left to abandon.
+// Existing blocked tasks are never rewritten: legacy honey-blocked work has no
+// pending entry and keeps its own unblock-on-energy.add path.
+func SupersedeEnergyDeferredDispatches(trace TraceSnapshot, now time.Time, summary string) (TraceSnapshot, bool) {
+	changed := false
+	for i := range trace.PendingDispatches {
+		entry := &trace.PendingDispatches[i]
+		if !entry.Status.Active() || entry.Reason == protocol.ConfigBarrierHoldReason {
+			continue
+		}
+		switch entry.Kind {
+		case PendingDispatchTask:
+			entry.Status = PendingDispatchAbandoned
+			entry.UpdatedAt = now
+			changed = true
+			task, ok := trace.Tasks[entry.TaskID]
+			if !ok || !supersedableTaskStatus(task) {
+				continue
+			}
+			task.Status = protocol.TaskStatusSkipped
+			task.Summary = summary
+			task.UpdatedAt = now
+			trace.Tasks[task.TaskID] = task
+		case PendingDispatchDirect:
+			entry.Status = PendingDispatchAbandoned
+			entry.UpdatedAt = now
+			changed = true
+		}
+	}
+	return trace, changed
+}
+
+// supersedableTaskStatus reports whether a new allocation may mark this task
+// skipped. Only a ready task is deferred energy work: anything else already has
+// an owner or an outcome, and a legacy honey-blocked task is never rewritten.
+func supersedableTaskStatus(task TaskSnapshot) bool {
+	return task.Status == protocol.TaskStatusReady
 }
 
 func abandonPendingDispatches(trace TraceSnapshot, now time.Time, abandon func(PendingDispatch) bool) (TraceSnapshot, bool) {

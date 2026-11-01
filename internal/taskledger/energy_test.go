@@ -249,6 +249,182 @@ func TestApplyEventEnergyStipendAbandonsEnergyDeferredDispatches(t *testing.T) {
 	}
 }
 
+// A stipend starts a new allocation. Task entries that waited on the previous
+// reserve are abandoned together with their tasks, in the same mutation: the
+// task becomes skipped with the summary naming the replacement, so the old tick
+// neither survives as a resumable entry nor looks like completed work.
+func TestApplyEventEnergyStipendSupersedesEnergyDeferredTaskWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    10,
+		EnergyRemaining: 0,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1":  {TaskID: "task-1", Status: protocol.TaskStatusReady},
+			"task-2":  {TaskID: "task-2", Status: protocol.TaskStatusReady},
+			"held":    {TaskID: "held", Status: protocol.TaskStatusReady},
+			"running": {TaskID: "running", Status: protocol.TaskStatusRunning},
+			"legacy":  {TaskID: "legacy", Status: protocol.TaskStatusBlocked, Summary: protocol.HoneyReserveExhaustedSummary},
+			"done":    {TaskID: "done", Status: protocol.TaskStatusCompleted},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+			{ID: "task:task-2:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-2", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+			{ID: "task:held:builder", Kind: taskledger.PendingDispatchTask, TaskID: "held", Reason: protocol.ConfigBarrierHoldReason, Status: taskledger.PendingDispatchPending},
+			{ID: "task:running:builder", Kind: taskledger.PendingDispatchTask, TaskID: "running", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+			{ID: "direct", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+			{ID: "direct-held", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Reason: protocol.ConfigBarrierHoldReason, Status: taskledger.PendingDispatchPending},
+			{ID: "done", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchConsumed},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Changed {
+		t.Fatal("stipend must persist its supersession")
+	}
+	wantSummary := protocol.SupersededByStipendSummary(4)
+	for _, taskID := range []string{"task-1", "task-2"} {
+		task := res.Trace.Tasks[taskID]
+		if task.Status != protocol.TaskStatusSkipped {
+			t.Fatalf("%s status = %q, want skipped", taskID, task.Status)
+		}
+		if task.Summary != wantSummary {
+			t.Fatalf("%s summary = %q, want %q", taskID, task.Summary, wantSummary)
+		}
+	}
+	// A configuration-held task entry is not energy waiting; a running task and
+	// a legacy honey-blocked task keep their status, and a completed task is
+	// never rewritten.
+	if got := res.Trace.Tasks["held"].Status; got != protocol.TaskStatusReady {
+		t.Fatalf("held status = %q, want ready", got)
+	}
+	if got := res.Trace.Tasks["running"].Status; got != protocol.TaskStatusRunning {
+		t.Fatalf("running status = %q, want running", got)
+	}
+	if got := res.Trace.Tasks["legacy"]; got.Status != protocol.TaskStatusBlocked || got.Summary != protocol.HoneyReserveExhaustedSummary {
+		t.Fatalf("legacy task = %+v, want untouched blocked", got)
+	}
+	if got := res.Trace.Tasks["done"].Status; got != protocol.TaskStatusCompleted {
+		t.Fatalf("completed status = %q, want completed", got)
+	}
+	statuses := map[string]taskledger.PendingDispatchStatus{}
+	for _, item := range res.Trace.PendingDispatches {
+		statuses[item.ID] = item.Status
+	}
+	for _, id := range []string{"task:task-1:builder", "task:task-2:builder", "task:running:builder", "direct"} {
+		if got := statuses[id]; got != taskledger.PendingDispatchAbandoned {
+			t.Fatalf("%s status = %q, want abandoned", id, got)
+		}
+	}
+	if got := statuses["task:held:builder"]; got != taskledger.PendingDispatchPending {
+		t.Fatalf("held task entry = %q, want pending", got)
+	}
+	if got := statuses["direct-held"]; got != taskledger.PendingDispatchPending {
+		t.Fatalf("held direct entry = %q, want pending", got)
+	}
+	if got := statuses["done"]; got != taskledger.PendingDispatchConsumed {
+		t.Fatalf("consumed entry = %q, want consumed", got)
+	}
+}
+
+// A duplicate stipend finds nothing left to abandon: the abandoned entries and
+// skipped tasks stay exactly as the first stipend recorded them.
+func TestApplyEventEnergyStipendSupersessionIsIdempotent(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    10,
+		EnergyRemaining: 0,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusReady},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+			{ID: "direct", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+		},
+	}
+	stipend, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := taskledger.ApplyEvent(trace, stipend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := taskledger.ApplyEvent(first.Trace, stipend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active := taskledger.ActivePendingDispatches(second.Trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want nothing left to abandon", active)
+	}
+	if got := second.Trace.Tasks["task-1"].Status; got != protocol.TaskStatusSkipped {
+		t.Fatalf("status = %q, want skipped", got)
+	}
+	if got := second.Trace.Tasks["task-1"].Summary; got != protocol.SupersededByStipendSummary(4) {
+		t.Fatalf("summary = %q, want the first supersession summary", got)
+	}
+	for _, item := range second.Trace.PendingDispatches {
+		if item.Status != taskledger.PendingDispatchAbandoned {
+			t.Fatalf("%s status = %q, want abandoned", item.ID, item.Status)
+		}
+	}
+}
+
+// A top-up after a stipend cannot revive superseded task work: the entry is
+// abandoned and the task is skipped, so the drain has nothing to resume.
+func TestEnergyAddDoesNotReviveSupersededTaskWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    10,
+		EnergyRemaining: 0,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusReady},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Reason: protocol.HoneyReserveExhaustedSummary, Status: taskledger.PendingDispatchPending},
+		},
+	}
+	stipend, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, stipend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add, err := protocol.NewEvent("trace-1", "cli", 2, protocol.EventSignal, protocol.EnergyAddPayload{
+		Kind:   protocol.SignalEnergyAdd,
+		Amount: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, add)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.Tasks["task-1"].Status; got != protocol.TaskStatusSkipped {
+		t.Fatalf("status after top-up = %q, want skipped", got)
+	}
+	if active := taskledger.ActivePendingDispatches(res.Trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want none revived", active)
+	}
+}
+
 func TestApplyEventEnergyAddDoesNotReviveStipendAbandonedWork(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID:         "trace-1",

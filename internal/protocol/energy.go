@@ -1,5 +1,7 @@
 package protocol
 
+import "fmt"
+
 // EnergyEventKind identifies honey-reserve payloads inside SIGNAL events.
 type EnergyEventKind string
 
@@ -25,6 +27,13 @@ const (
 	// energy paths: neither a top-up nor a stipend owns it.
 	ConfigBarrierHoldReason = "configuration change pending"
 )
+
+// SupersededByStipendSummary names the new allocation that replaced deferred
+// task work. A skipped task records why it never ran instead of hiding the
+// previous tick behind a bare terminal status.
+func SupersededByStipendSummary(amount int) string {
+	return fmt.Sprintf("Superseded by a new standing allocation of %d honey", amount)
+}
 
 // EnergyAddPayload is emitted as SIGNAL with payload.kind=energy.add.
 type EnergyAddPayload struct {

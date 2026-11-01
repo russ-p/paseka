@@ -219,14 +219,40 @@ func TestReactorDoesNotDispatchDeferredTaskAfterEnergyStipend(t *testing.T) {
 	if snap.EnergyRemaining != 4 {
 		t.Fatalf("remaining = %d, want 4", snap.EnergyRemaining)
 	}
-	// A stipend starts a new allocation; it never resumes the previous tick's
-	// deferred task work. Superseding that work lands with the skipped task
-	// status, so for now the entry stays pending and no adapter starts.
-	if snap.Tasks["task-1"].Status != protocol.TaskStatusReady {
-		t.Fatalf("status = %q, want ready", snap.Tasks["task-1"].Status)
+	// A stipend starts a new allocation; it supersedes the previous tick's
+	// deferred task work instead of resuming it. The entry and the task are
+	// closed in the same mutation, so the task cannot look resumable.
+	if snap.Tasks["task-1"].Status != protocol.TaskStatusSkipped {
+		t.Fatalf("status = %q, want skipped", snap.Tasks["task-1"].Status)
 	}
-	if pending := pendingTaskDispatches(snap); len(pending) != 1 || pending[0].Status != taskledger.PendingDispatchPending {
-		t.Fatalf("pending task entries = %+v, want one still pending", pending)
+	if got, want := snap.Tasks["task-1"].Summary, protocol.SupersededByStipendSummary(4); got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+	pending := pendingTaskDispatches(snap)
+	if len(pending) != 1 || pending[0].Status != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("pending task entries = %+v, want one abandoned", pending)
+	}
+	if active := taskledger.ActivePendingDispatches(snap); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want nothing left to resume", active)
+	}
+
+	// A later top-up cannot revive superseded work, even on a fresh reactor.
+	fresh := newPendingDispatchReactor(t, ledger, fakeReplayer{}, taskDispatchBees())
+	freshRec := &recordingAdapter{}
+	fresh.Dispatcher().RegisterAdapter("cursor", freshRec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":2}`)
+	if err := fresh.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if freshRec.calls != 0 {
+		t.Fatalf("adapter calls = %d after top-up, want superseded work to stay closed", freshRec.calls)
+	}
+	snap, err = ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Tasks["task-1"].Status != protocol.TaskStatusSkipped {
+		t.Fatalf("status after top-up = %q, want skipped", snap.Tasks["task-1"].Status)
 	}
 }
 

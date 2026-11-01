@@ -262,11 +262,12 @@ func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string, now ti
 		}
 		trace.EnergyRemaining = payload.Amount
 		// A stipend starts a new allocation: close the previous allocation's
-		// energy-waited direct reactions in this same mutation so a later
-		// energy.add cannot resurrect a guard or receiver from the tick that
-		// just ended. Configuration-held work is not energy waiting and keeps
-		// waiting for its own transition.
-		trace, _ = AbandonEnergyDeferredDispatches(trace, now)
+		// energy-waited task and direct work in this same mutation so a later
+		// energy.add cannot resurrect a task, guard, or receiver from the tick
+		// that just ended. A superseded task becomes skipped with the summary
+		// naming the replacement allocation. Configuration-held work is not
+		// energy waiting and keeps waiting for its own transition.
+		trace, _ = SupersedeEnergyDeferredDispatches(trace, now, protocol.SupersededByStipendSummary(payload.Amount))
 		return reduceStep{trace: trace, changed: true}, nil
 
 	default:

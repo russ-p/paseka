@@ -111,7 +111,8 @@ func EnsureTrailPhases(ctx context.Context, pub bus.Publisher, ledger taskledger
 	if final, ok := taskledger.FindFinalReviewTask(snap); ok {
 		if !needsMerge {
 			switch final.Status {
-			case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusBlocked:
+			case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusBlocked,
+				protocol.TaskStatusSkipped:
 				return result, nil
 			}
 			if err := noteSkip(); err != nil {
@@ -390,7 +391,8 @@ func needsIsolatedMerge(snap taskledger.TraceSnapshot, colonyCtx colony.Context,
 
 func completeEmptyFinalGate(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, traceID string, final taskledger.TaskSnapshot, opts WriteOptions) error {
 	switch final.Status {
-	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusBlocked:
+	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusBlocked,
+		protocol.TaskStatusSkipped:
 		return nil
 	}
 	completed, err := protocol.NewEvent(traceID, protocol.RuntimeAgentID, 0, protocol.EventVerification, protocol.TaskCompletedPayload{

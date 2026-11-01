@@ -107,6 +107,10 @@ const (
 	TaskStatusFailed        TaskStatus = "failed"
 	TaskStatusBlocked       TaskStatus = "blocked"
 	TaskStatusCancelled     TaskStatus = "cancelled"
+	// TaskStatusSkipped marks eligible work a new allocation deliberately
+	// superseded before it ran. It is terminal, but it is not completed work, a
+	// failure, a cancellation, or an execution.
+	TaskStatusSkipped TaskStatus = "skipped"
 )
 
 // TaskSpec describes one planned task inside a trace.

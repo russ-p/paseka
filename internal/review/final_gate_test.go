@@ -142,6 +142,61 @@ func TestActivateFinalReviewGateAutoCompletesEmptyExplicitFinal(t *testing.T) {
 	}
 }
 
+// A superseded final gate is skipped, not completed: the gate stays closed and
+// the operator still reads that this allocation never reached a merge.
+func TestActivateFinalReviewGateLeavesSkippedFinalClosed(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-1"
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Docs"},
+			{TaskID: "merge", Title: "Merge", Review: protocol.TaskReviewFinal},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind: protocol.TaskEventCompleted, TaskID: "task-1", Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(completed); err != nil {
+		t.Fatal(err)
+	}
+	skipped, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: "merge", Status: protocol.TaskStatusSkipped,
+		Summary: protocol.SupersededByStipendSummary(4),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(skipped); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := review.ActivateFinalReviewGate(context.Background(), nil, ledger, colony.Context{}, traceID, review.WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := ledger.Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final := snap.Tasks["merge"]
+	if final.Status != protocol.TaskStatusSkipped {
+		t.Fatalf("explicit final status = %q, want skipped", final.Status)
+	}
+	if final.Summary != protocol.SupersededByStipendSummary(4) {
+		t.Fatalf("summary = %q, want the supersession summary", final.Summary)
+	}
+}
+
 func TestActivateFinalReviewGateAutoCompletesHollowWaitingReview(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	traceID := "trace-1"
