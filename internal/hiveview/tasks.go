@@ -23,6 +23,7 @@ var taskStatusOrder = []string{
 	string(protocol.TaskStatusWaitingReview),
 	string(protocol.TaskStatusPlanned),
 	string(protocol.TaskStatusBlocked),
+	string(protocol.TaskStatusSkipped),
 	string(protocol.TaskStatusFailed),
 	string(protocol.TaskStatusCompleted),
 }
@@ -49,6 +50,10 @@ type TaskListItem struct {
 	Review string `json:"review,omitempty"`
 	Bee    string `json:"bee,omitempty"`
 	Sector string `json:"sector,omitempty"`
+	// PendingDispatch marks a task whose dispatch waits in the trail's
+	// admission queue. It is not a lifecycle status: Status stays what the task
+	// actually is (usually ready), and this is the admission axis beside it.
+	PendingDispatch bool `json:"pendingDispatch,omitempty"`
 	// ApproveBlockedReason is why the merge gate cannot be approved yet, when a
 	// non-merge task is still incomplete. Empty means approve is available.
 	ApproveBlockedReason string           `json:"approveBlockedReason,omitempty"`
@@ -81,6 +86,10 @@ type TaskStatusGroup struct {
 type TaskBoardView struct {
 	Groups     []TaskStatusGroup `json:"groups"`
 	TaskCounts map[string]int    `json:"taskCounts"`
+	// PendingDispatches counts deferred dispatches awaiting admission across
+	// the scanned trails. It is deliberately not a task status: taskCounts
+	// stays status-based, and a pending task keeps the status it really has.
+	PendingDispatches int `json:"pendingDispatches"`
 }
 
 // TaskDetailView is a full task inspection view.
@@ -97,11 +106,13 @@ type TaskDetailView struct {
 
 // ListTaskBoard returns tasks grouped by status across recent traces.
 func ListTaskBoard(ctx colony.Context) (TaskBoardView, error) {
-	items, err := collectRecentTaskItems(ctx)
+	items, pending, err := collectRecentTaskItems(ctx)
 	if err != nil {
 		return TaskBoardView{}, err
 	}
-	return buildTaskBoard(items), nil
+	view := buildTaskBoard(items)
+	view.PendingDispatches = pending
+	return view, nil
 }
 
 // ListTraceTasks returns tasks for one trace.
@@ -225,6 +236,7 @@ func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 		Review:               reviewPolicy,
 		Bee:                  task.Bee,
 		Sector:               task.Sector,
+		PendingDispatch:      taskledger.PendingTaskIDs(snap)[task.TaskID],
 		ApproveBlockedReason: review.ApproveBlockedReason(snap, task.TaskID),
 		DependsOn:            append([]string(nil), task.DependsOn...),
 		RunCount:             runCount,
@@ -247,27 +259,29 @@ func TaskItemFromSnapshot(ctx colony.Context, traceID string, snap taskledger.Tr
 	return item
 }
 
-func collectRecentTaskItems(ctx colony.Context) ([]TaskListItem, error) {
+func collectRecentTaskItems(ctx colony.Context) ([]TaskListItem, int, error) {
 	traceSummaries, err := runs.ScanRecentTraces(ctx.ColonyRoot, TaskBoardTraceLimit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	session, err := tasks.OpenLedger(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer session.Close()
 
 	var items []TaskListItem
+	pending := 0
 	for _, trace := range traceSummaries {
 		snap, _, err := tasks.LoadTrace(ctx, session.Ledger, trace.TraceID)
 		if err != nil {
 			continue
 		}
+		pending += taskledger.ActivePendingCount(snap)
 		items = append(items, taskItemsFromSnapshot(ctx, trace.TraceID, snap)...)
 	}
-	return items, nil
+	return items, pending, nil
 }
 
 func buildTaskBoard(items []TaskListItem) TaskBoardView {

@@ -91,7 +91,10 @@ func printHoneyReserve(snap taskledger.TraceSnapshot) {
 	for _, line := range taskledger.FormatHoneyReport(snap.EnergyRemaining, snap.EnergyBudget, snap.EnergyAdded) {
 		fmt.Printf("  %s\n", line)
 	}
-	for _, line := range taskledger.FormatPendingReport(len(taskledger.ActivePendingDispatches(snap))) {
+	// The reserve alone cannot explain why a ready task has not started: the
+	// admission state says whether dispatch is paused, why, and how much work
+	// waits behind the pause.
+	for _, line := range taskledger.FormatAdmissionReport(taskledger.AdmissionOf(snap)) {
 		fmt.Printf("  %s\n", line)
 	}
 }

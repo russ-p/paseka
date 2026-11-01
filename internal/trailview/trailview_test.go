@@ -11,6 +11,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/taskledger"
 	"github.com/russ-p/paseka/internal/trailconfig"
 	"github.com/russ-p/paseka/internal/trailfork"
 	"github.com/russ-p/paseka/internal/trailview"
@@ -250,6 +251,44 @@ func writePending(t *testing.T, root, source, requestID string) {
 	}
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The trail row is the shared operator projection: admission is a second axis
+// beside fork admission, and a snapshot written before the pause fields existed
+// still reads as admitting with an empty queue.
+func TestTrailProjectionCarriesEnergyAdmission(t *testing.T) {
+	trail := trailview.Trail{TraceID: "trace-1", AdmissionState: trailview.AdmissionOrdinary}
+	trail.ApplyAdmission(taskledger.AdmissionOf(taskledger.TraceSnapshot{TraceID: "trace-1"}))
+	if trail.Paused || trail.PauseReason != "" || trail.PendingCount != 0 {
+		t.Fatalf("legacy admission = %+v", trail)
+	}
+	if trail.AdmissionState != trailview.AdmissionOrdinary {
+		t.Fatalf("fork admission changed: %q", trail.AdmissionState)
+	}
+
+	paused := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		EnergyPause: &taskledger.EnergyPauseSnapshot{
+			EpisodeID: "pause-1",
+			Reason:    protocol.HoneyReserveExhaustedSummary,
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "task:task-1:builder", Kind: taskledger.PendingDispatchTask, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
+		},
+	}
+	trail.ApplyAdmission(taskledger.AdmissionOf(paused))
+	if !trail.Paused {
+		t.Fatal("expected the trail row to carry the pause")
+	}
+	if trail.PauseReason != protocol.HoneyReserveExhaustedSummary {
+		t.Fatalf("reason = %q", trail.PauseReason)
+	}
+	if trail.PendingCount != 1 {
+		t.Fatalf("pending = %d", trail.PendingCount)
+	}
+	if trail.AdmissionState != trailview.AdmissionOrdinary {
+		t.Fatalf("fork admission changed: %q", trail.AdmissionState)
 	}
 }
 

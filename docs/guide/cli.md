@@ -429,6 +429,8 @@ Trails declared by a standing Forage Cue are marked `· standing` in the honey, 
 
 Attention task rows carry the task's ledger phase beside the status the section already names (`trace/task · merge`); `work` is omitted, because it is the ordinary case. JSON adds `phase` to `waitingReview` and `failedTasks` rows.
 
+A trail whose honey reserve paused dispatch is listed under `paused trails` with its reason and pending count (`trace (2 pending) · Honey reserve exhausted`). The row comes from the shared trail admission projection, so `paseka energy show`, `paseka trail`, and Queen Console read the same pause; JSON adds `pausedTraces` to `attention`.
+
 | Flag | Short | Description |
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
@@ -458,6 +460,7 @@ Minimal schema shape:
     "waitingReview": [],
     "pendingInvites": [],
     "failedTasks": [],
+    "pausedTraces": [],
     "lowEnergyTraces": []
   },
   "recentTraces": []
@@ -742,7 +745,7 @@ paseka inspect usage --trace trace-1 --agent agent-abc
 
 ## `paseka energy`
 
-Manage per-trace honey reserve (`energyToken`). `paseka energy show` prints `budget:` (seed) and `remaining:`. After a post-seed top-up it also prints `added:` and remaining / allocated (`energyBudget + energyAdded`). Unseeded traces print remaining without a `/ 0` denominator. Low-energy in Queen Console is remaining vs seed — see [Task ledger](../reference/task-ledger.md) § Honey reserve.
+Manage per-trace honey reserve (`energyToken`). `paseka energy show` prints `budget:` (seed) and `remaining:`. After a post-seed top-up it also prints `added:` and remaining / allocated (`energyBudget + energyAdded`). Unseeded traces print remaining without a `/ 0` denominator. Admission is printed beside the reserve: `paused:` (always), `reason:` when an episode is open, and `pending:` for the deferred dispatches waiting behind it. Low-energy in Queen Console is remaining vs seed — see [Task ledger](../reference/task-ledger.md) § Honey reserve.
 
 ### `paseka energy show`
 
