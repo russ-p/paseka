@@ -3,7 +3,7 @@
 ## Status
 
 **(Implemented)**
-The direct admission half shipped: pending direct dispatches now carry `abandoned` and `unresolved` alongside `pending` and `consumed`, a missing source event becomes visibly `unresolved` instead of retrying, `system.kill` and `energy.stipend` abandon active pending direct work in the same ledger mutation that applies them, and reactor startup enumerates trails from the ledger and resumes work an `energy.add` already approved. Task dispatch and the standing tick lifecycle stay on the legacy `blocked` path; [044b](044b-standing-supersession-and-energy-observations.md) owns that half.
+The direct admission half shipped: pending direct dispatches now carry `abandoned` and `unresolved` alongside `pending` and `consumed`, a missing source event becomes visibly `unresolved` instead of retrying, `system.kill` abandons active pending direct work and `energy.stipend` abandons the energy-deferred part of it, each in the same ledger mutation that applies them, and reactor startup enumerates trails from the ledger and resumes work an `energy.add` already approved. Task dispatch and the standing tick lifecycle stay on the legacy `blocked` path; [044b](044b-standing-supersession-and-energy-observations.md) owns that half.
 
 ## Problem Statement
 
@@ -24,7 +24,7 @@ Task dispatch and the standing tick lifecycle still use the legacy `blocked` pat
 2. **The trail owns deferred direct work.** `energy.add` drains pending direct dispatches in creation order, oldest first.
 3. **Top-up and restart drain the queue.** A top-up applied while the reactor was down is resumed on the next reactor start; deferred work survives a restart.
 4. **Missing evidence is visible.** A pending direct dispatch whose source event cannot be recovered becomes `unresolved`; it is not silently deleted and not retried as if it were runnable.
-5. **Stipend and kill close the queue.** `energy.stipend` abandons active direct pending work because it starts a new allocation; `system.kill` abandons it because kill is a hard stop. Neither a later top-up nor a restart revives it.
+5. **Stipend and kill close the queue.** `energy.stipend` abandons active energy-deferred direct pending work because it starts a new allocation; `system.kill` abandons all active direct pending work because kill is a hard stop. Neither a later top-up nor a restart revives it. Configuration-held work belongs to its pending transition, not to an allocation, so a stipend leaves it alone.
 6. **Legacy stays readable.** Existing honey-blocked tasks keep their current unblock-on-`energy.add` behavior until purge. This slice does not change task dispatch.
 
 ## User Stories
@@ -77,21 +77,21 @@ Task dispatch and the standing tick lifecycle still use the legacy `blocked` pat
 
 1. The direct admission gate consumes one honey per admitted dispatch and never lets energy write a task status.
 2. When direct admission fails for energy, the runtime records a pending entry and returns without starting the adapter.
-3. When admission fails for a different reason, the runtime does not record pending energy work. Configuration admission, attempt closure, kill, duplicate dispatch, and publisher-is-same-Bee checks retain their existing outcomes. A configuration-barrier hold keeps its existing distinct reason and is never drained by the energy path.
+3. When admission fails for a different reason, the runtime does not record pending energy work. Configuration admission, attempt closure, kill, duplicate dispatch, and publisher-is-same-Bee checks retain their existing outcomes. A configuration-barrier hold keeps its existing distinct reason and is never drained or abandoned by the energy path: the pending configuration transition owns it.
 4. A direct deferral records the event identity returned by the existing event identity helper, so restart can find the exact source event.
 5. A killed trail records no new pending work.
 
 ### 4. Resume
 
-1. Only an `energy.add` increase makes pending direct work runnable. Startup resume drains work whose `energy.add` was already applied to the ledger while the reactor was down. `energy.stipend` never drains direct pending work; it abandons it as a new allocation.
+1. Only an `energy.add` increase makes pending direct work runnable. Startup resume drains work whose `energy.add` was already applied to the ledger while the reactor was down. `energy.stipend` never drains direct pending work; it abandons the energy-deferred part as a new allocation.
 2. The runtime drains pending direct work oldest-first until the reserve is exhausted or the queue is empty. Each admitted dispatch consumes one honey through the existing energy-consume path.
 3. Direct pending work recovers the source event by identity and runs the normal direct dispatch path. The event must not be replayed through the general event processor, because it was already applied and some reducers are not idempotent.
 4. If the source event is missing, the entry becomes `unresolved` with a diagnostic; it is not silently deleted and not retried forever.
 5. A dispatch that re-defers because the reserve ran out during the drain leaves the entry pending. The drain does not report a false resume.
 6. A successful resume marks the entry `consumed`. At-least-once recovery is acceptable only when the normal direct dedupe cannot prove completion; the runtime must not create duplicate live dispatches in the same process.
-7. An active entry with a positive reserve is resumable. Stipend abandons active entries atomically, so anything still pending belongs to the current allocation. On reactor startup the runtime enumerates trails from the ledger, skips killed trails and trails without reserve, and drains active work. Stipend-superseded work is already abandoned and never resumes.
+7. An active energy-deferred entry with a positive reserve is resumable. Stipend abandons energy-deferred entries atomically, so anything still awaiting energy belongs to the current allocation; configuration-held entries are outside any allocation and stay with their transition. On reactor startup the runtime enumerates trails from the ledger, skips killed trails and trails without reserve, and drains active work. Stipend-superseded work is already abandoned and never resumes.
 8. `system.kill` abandons pending direct work for the trail in the same ledger mutation that marks the trail killed. A later top-up cannot revive it.
-9. `energy.stipend` abandons active direct pending work in the same ledger mutation (the stipend reducer) that applies the stipend. A later `energy.add` cannot resurrect the previous allocation's reactions.
+9. `energy.stipend` abandons active energy-deferred direct pending work in the same ledger mutation (the stipend reducer) that applies the stipend. A later `energy.add` cannot resurrect the previous allocation's reactions. Configuration-held work is not energy waiting, so a stipend leaves it active for its own transition to release or cancel.
 
 ### 5. Compatibility and rollout
 
@@ -104,7 +104,7 @@ Task dispatch and the standing tick lifecycle still use the legacy `blocked` pat
 ### 6. Resolved implementation decisions
 
 1. **Startup resume.** The reactor enumerates trail ids from the ledger, skips killed trails and trails with no reserve, and drains active entries. An active entry plus a positive reserve is the resumability condition because stipend abandonment is atomic.
-2. **Stipend and kill.** Both abandon active direct pending work in the same ledger mutation that applies their event. Neither resumes it.
+2. **Stipend and kill.** Kill abandons every active direct pending entry; a stipend abandons the energy-deferred ones. Both do it in the same ledger mutation that applies their event, and neither resumes the work.
 3. **Unresolved.** A missing source event becomes a visible `unresolved` entry with a diagnostic; it is never treated as runnable.
 4. **Identity.** The direct dispatch key is the dedupe key; the source event identity is stored only for recovery.
 5. **Deferred scope.** Task resume identity, standing overlap, `skipped`, and pause/resume observations belong to 044b.
@@ -121,7 +121,7 @@ Tests assert external behavior, persisted ledger state, and adapter calls. They 
 - **Partial top-up:** enough honey for one entry resumes one and leaves the rest pending.
 - **Missing source event:** a direct pending entry whose event is absent becomes `unresolved` and remains visible; it is neither dispatched nor deleted.
 - **Kill:** `system.kill` abandons pending direct work; later `energy.add` does not dispatch it.
-- **Stipend:** `energy.stipend` abandons pending direct work; later `energy.add` does not resurrect it.
+- **Stipend:** `energy.stipend` abandons energy-deferred pending direct work; later `energy.add` does not resurrect it. A configuration-barrier hold survives the stipend and still resumes when its pending change resolves.
 - **Dedupe:** repeated deferral creates no duplicate; a repeated `energy.add` does not dispatch the same entry twice.
 - **Legacy:** an old `blocked` + `Honey reserve exhausted` task still unblocks on `energy.add`; no new direct path writes `blocked`.
 - **Compatibility:** a snapshot without pending fields decodes as an empty queue.
