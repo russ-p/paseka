@@ -24,6 +24,10 @@ type NotifyCategory int
 const (
 	NotifyCategoryInvites NotifyCategory = iota
 	NotifyCategoryBlocked
+	// NotifyCategoryEnergy carries the trail admission observations
+	// (energy.paused / energy.resumed). It is separate from Blocked because a
+	// shared honey reserve is a trail condition, not a task defect.
+	NotifyCategoryEnergy
 	NotifyCategoryFailed
 	NotifyCategoryReviewRequired
 	NotifyCategoryReviewFinal
@@ -71,6 +75,7 @@ func (m NotifyMode) Silent() bool {
 var OrderedNotifyCategories = []NotifyCategory{
 	NotifyCategoryInvites,
 	NotifyCategoryBlocked,
+	NotifyCategoryEnergy,
 	NotifyCategoryFailed,
 	NotifyCategoryReviewRequired,
 	NotifyCategoryReviewFinal,
@@ -87,6 +92,8 @@ func CategoryKey(cat NotifyCategory) string {
 		return "invites"
 	case NotifyCategoryBlocked:
 		return "blocked"
+	case NotifyCategoryEnergy:
+		return "energy"
 	case NotifyCategoryFailed:
 		return "failed"
 	case NotifyCategoryReviewRequired:
@@ -108,6 +115,8 @@ func (n NotifyConfig) Mode(cat NotifyCategory) NotifyMode {
 		return n.modeOrDefault(n.Invites, NotifySound)
 	case NotifyCategoryBlocked:
 		return n.modeOrDefault(n.Blocked, NotifySound)
+	case NotifyCategoryEnergy:
+		return n.modeOrDefault(n.Energy, NotifySound)
 	case NotifyCategoryFailed:
 		return n.modeOrDefault(n.Failed, NotifySound)
 	case NotifyCategoryReviewRequired:

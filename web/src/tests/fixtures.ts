@@ -51,6 +51,10 @@ export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummar
 		bees: ['builder'],
 		hasFailures: false,
 		hasActive: true,
+		// A trail that is admitting work with an empty queue: the defaults every
+		// fixture starts from, so a test opts into a pause explicitly.
+		paused: false,
+		pendingCount: 0,
 		...overrides
 	};
 }
@@ -717,6 +721,7 @@ export function taskBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
 			}
 		],
 		taskCounts: { ready: 1, waiting_review: 1, failed: 1 },
+		pendingDispatches: 0,
 		...overrides
 	};
 }
@@ -972,11 +977,12 @@ export function configAdapters(): ConfigAdapter[] {
 	];
 }
 
-/** The seven canonical push categories, in the order the config file declares them. */
+/** The eight canonical push categories, in the order the config file declares them. */
 export function configNotify(): ColonyConfig['telegram']['notify'] {
 	return [
 		{ category: 'invites', mode: 'sound' },
 		{ category: 'blocked', mode: 'sound' },
+		{ category: 'energy', mode: 'sound' },
 		{ category: 'failed', mode: 'sound' },
 		{ category: 'review_required', mode: 'silent' },
 		{ category: 'review_final', mode: 'silent' },

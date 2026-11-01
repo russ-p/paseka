@@ -212,8 +212,9 @@
 						]}
 					/>
 					<h3 class="mt-4 mb-1 text-xs text-base-content/60">Push modes</h3>
-					<!-- The seven categories are the config file's own, minus the legacy
-					     `waiting_review` the server folds into the two review modes. -->
+					<!-- The categories are the config file's own ordered notify list,
+					     minus the legacy `waiting_review` the server folds into the
+					     two review modes. -->
 					<ul class="divide-y divide-base-200">
 						{#each config.telegram.notify as entry (entry.category)}
 							<DetailRow title={entry.category}>

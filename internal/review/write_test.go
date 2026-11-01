@@ -47,6 +47,14 @@ func (f failingLedger) MarkPendingDispatchUnresolved(string, string, string) err
 	return f.err
 }
 
+func (f failingLedger) ClaimEnergyPausePublished(string) (taskledger.EnergyPauseSnapshot, bool, error) {
+	return taskledger.EnergyPauseSnapshot{}, false, f.err
+}
+
+func (f failingLedger) ClearEnergyPause(string) (taskledger.EnergyPauseSnapshot, bool, error) {
+	return taskledger.EnergyPauseSnapshot{}, false, f.err
+}
+
 func TestWriteEventApplyBeforePublish(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	pub := &recordingPublisher{}

@@ -1486,6 +1486,7 @@ func TestRunStandingRefusesOpenTick(t *testing.T) {
 func TestRunStandingAllowsBlockedOrFinishedTick(t *testing.T) {
 	for _, status := range []protocol.TaskStatus{
 		protocol.TaskStatusBlocked,
+		protocol.TaskStatusSkipped,
 		protocol.TaskStatusCompleted,
 		protocol.TaskStatusFailed,
 		protocol.TaskStatusCancelled,
@@ -1519,6 +1520,113 @@ func TestRunStandingAllowsBlockedOrFinishedTick(t *testing.T) {
 				t.Fatalf("first kind = %q", protocol.PayloadKind(pub.events[0].Payload))
 			}
 		})
+	}
+}
+
+// A previous tick whose task only waited for honey does not refuse the next
+// tick: the overlap check ignores energy-deferred work and the stipend
+// supersedes it, marking the old task skipped in the same allocation change.
+func TestRunStandingSupersedesEnergyDeferredTick(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeColonyManifest(t, root, 12)
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+		t.Fatal(err)
+	}
+	mustApplyStandingTask(t, ledger, "task-tick", protocol.TaskStatusReady)
+	if added, err := ledger.DeferPendingDispatch("trail-daily-triage", taskledger.PendingDispatch{
+		ID:     "task:task-tick:watch",
+		Kind:   taskledger.PendingDispatchTask,
+		TaskID: "task-tick",
+		Bee:    "watch",
+		Reason: protocol.HoneyReserveExhaustedSummary,
+		Status: taskledger.PendingDispatchPending,
+	}); err != nil {
+		t.Fatal(err)
+	} else if !added {
+		t.Fatal("expected the deferred tick entry to be recorded")
+	}
+
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pub.events) != 2 {
+		t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+	}
+	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergyStipend) {
+		t.Fatalf("first kind = %q, want energy.stipend", protocol.PayloadKind(pub.events[0].Payload))
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.Tasks["task-tick"].Status; got != protocol.TaskStatusSkipped {
+		t.Fatalf("task status = %q, want skipped", got)
+	}
+	if got, want := snap.Tasks["task-tick"].Summary, protocol.SupersededByStipendSummary(4); got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+	if active := taskledger.ActivePendingDispatches(snap); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want the previous tick abandoned", active)
+	}
+}
+
+// Configuration-barrier work still owns its task, so the next tick is refused
+// even though a pending entry names that task.
+func TestRunStandingRefusesConfigurationHeldTick(t *testing.T) {
+	root := t.TempDir()
+	writeCueFile(t, root, "daily-triage.yaml", standingSignalYAML)
+	ledger := taskledger.NewMemoryLedger()
+	if err := ledger.SeedEnergy("trail-daily-triage", 4); err != nil {
+		t.Fatal(err)
+	}
+	mustApplyStandingTask(t, ledger, "task-held", protocol.TaskStatusReady)
+	if added, err := ledger.DeferPendingDispatch("trail-daily-triage", taskledger.PendingDispatch{
+		ID:     "direct-held",
+		Kind:   taskledger.PendingDispatchDirect,
+		TaskID: "task-held",
+		Bee:    "watch",
+		Reason: protocol.ConfigBarrierHoldReason,
+		Status: taskledger.PendingDispatchPending,
+	}); err != nil {
+		t.Fatal(err)
+	} else if !added {
+		t.Fatal("expected the held entry to be recorded")
+	}
+
+	pub := &recordingPublisher{}
+	_, err := cues.Run(context.Background(), pub, ledger, cues.RunInput{
+		ColonyRoot: root,
+		CueID:      "daily-triage",
+		Text:       "tick",
+		Source:     "cli",
+		AgentID:    "cli",
+	})
+	if err == nil || !strings.Contains(err.Error(), "is busy") || !strings.Contains(err.Error(), "task-held") {
+		t.Fatalf("err = %v, want a busy refusal for the held task", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("published = %+v, want none", pub.events)
+	}
+	snap, err := ledger.Snapshot("trail-daily-triage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want the stipend not applied", snap.EnergyRemaining)
+	}
+	if got := snap.Tasks["task-held"].Status; got != protocol.TaskStatusReady {
+		t.Fatalf("task status = %q, want ready", got)
 	}
 }
 

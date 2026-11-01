@@ -63,6 +63,7 @@ import {
 	runtimeDetail,
 	runtimeStateNote,
 	taskCardShowsId,
+	taskDispatchPendingLabel,
 	taskIdentityRows,
 	taskPhaseLabel,
 	taskReviewLabel,
@@ -70,6 +71,7 @@ import {
 	taskRunMeta,
 	taskStatusLabel,
 	taskTitle,
+	pendingDispatchCountLabel,
 	trailStageLabel,
 	formatBytes,
 	formatClock,
@@ -115,6 +117,8 @@ import {
 	hostMeta,
 	runtimeMeta,
 	taskCountEntries,
+	traceAdmissionLabel,
+	tracePendingLabel,
 	traceMeta,
 	tracePrimaryLabel,
 	traceState,
@@ -404,6 +408,24 @@ describe('dashboard projections', () => {
 			/^4 runs · 2 tasks · \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
 		);
 		expect(traceMeta(traceSummary({ runCount: 1, taskCount: 1, lastActivityAt: '' }))).toBe('1 run · 1 task');
+	});
+
+	it('says a trail\'s admission as its own axis, apart from any task status', () => {
+		expect(traceAdmissionLabel(traceSummary())).toBe('admitting');
+		expect(traceAdmissionLabel(traceSummary({ paused: true }))).toBe('paused');
+		expect(
+			traceAdmissionLabel(
+				traceSummary({
+					paused: true,
+					pauseReason: 'Honey reserve exhausted',
+					pendingCount: 2
+				})
+			)
+		).toBe('paused — Honey reserve exhausted · 2 pending');
+		// A partial top-up can leave work waiting after the pause itself cleared.
+		expect(traceAdmissionLabel(traceSummary({ pendingCount: 3 }))).toBe('3 pending');
+		expect(tracePendingLabel(traceSummary())).toBeNull();
+		expect(tracePendingLabel(traceSummary({ pendingCount: 1 }))).toBe('1 pending');
 	});
 
 	it('keeps only the runs that need attention on the dashboard', () => {
@@ -1200,7 +1222,18 @@ describe('task formatters', () => {
 		// spells it; every other status is already one word and is passed through.
 		expect(taskStatusLabel('waiting_review')).toBe('waiting review');
 		expect(taskStatusLabel('ready')).toBe('ready');
+		// A skipped task is its own neutral word: not `failed`, `cancelled`, or
+		// `completed` wearing another label.
+		expect(taskStatusLabel('skipped')).toBe('skipped');
 		expect(taskStatusLabel('')).toBe('unknown');
+	});
+
+	it('marks a deferred dispatch beside a true task status', () => {
+		expect(taskDispatchPendingLabel(true)).toBe('dispatch pending');
+		expect(taskDispatchPendingLabel(false)).toBeNull();
+		expect(taskDispatchPendingLabel(undefined)).toBeNull();
+		expect(pendingDispatchCountLabel(1)).toBe('1 dispatch pending');
+		expect(pendingDispatchCountLabel(3)).toBe('3 dispatches pending');
 	});
 
 	it('tags a phase only when it is not work, because work is every row', () => {

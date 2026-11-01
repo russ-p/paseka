@@ -54,6 +54,7 @@ type htmlPageData struct {
 	WorktreeCreated    string
 	HasWorktree        bool
 	UsageAggregateLine string
+	AdmissionLine      string
 	AdmissionState     string
 	HasConfig          bool
 	ConfigPolicy       string
@@ -104,6 +105,7 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		RunCount:         data.Trace.RunCount,
 		TaskCount:        data.Trace.TaskCount,
 		Bees:             strings.Join(data.Trace.Bees, ", "),
+		AdmissionLine:    formatAdmissionLine(data.Trace.TraceSummaryView),
 		AdmissionState:   data.Trace.AdmissionState,
 		ConfigPolicy:     data.Trace.ConfigPolicy,
 		ConfigRevision:   data.Trace.ConfigRevision,
@@ -494,6 +496,7 @@ code { font-family: var(--mono); font-size: 0.85em; }
 <header>
   <h1>Paseka export 🐝</h1>
   <p class="subtitle">Flight trail <span class="bee">{{ .TraceID }}</span> · project <span class="bee">{{ .Slug }}</span></p>
+  <p class="subtitle">{{ .AdmissionLine }}</p>
   <p class="subtitle">Exported {{ .ExportedAt }}</p>
 </header>
 <main class="layout">
@@ -579,7 +582,7 @@ code { font-family: var(--mono); font-size: 0.85em; }
           <span class="bee">{{ if .Title }}{{ .Title }}{{ else }}{{ .TaskID }}{{ end }}</span>
           <span class="badge {{ badgeClass .Status }}">{{ .Status }}</span>
         </div>
-        <div class="id">{{ .TaskID }}{{ if .Bee }} · {{ .Bee }}{{ end }}</div>
+        <div class="id">{{ .TaskID }}{{ if .Bee }} · {{ .Bee }}{{ end }}{{ if .Pending }} · pending dispatch{{ end }}</div>
       </li>
       {{ end }}
     </ul>

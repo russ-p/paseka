@@ -160,7 +160,8 @@ func (r *Reactor) setTaskStatus(ctx context.Context, traceID, taskID string, sta
 
 func terminalTaskStatus(status protocol.TaskStatus) bool {
 	switch status {
-	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled:
+	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled,
+		protocol.TaskStatusSkipped:
 		return true
 	default:
 		return false

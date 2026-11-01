@@ -52,6 +52,7 @@ chat_ids:
 notify:
   invites: sound
   blocked: sound
+  energy: sound            # trail admission: energy.paused / energy.resumed cards
   failed: sound
   review_required: sound   # waiting_review + review: required (soft HITL)
   review_final: sound      # waiting_review + review: final / _review (merge gate)
@@ -170,8 +171,12 @@ Allowlisted `chat_ids` receive short cards (with buttons where applicable) when:
 | --------- | --------------- |
 | Pending `session.invite` | Accept / Reject / Defer |
 | Task → `waiting_review` | Reject; Approve if not final-merge |
-| Task → `blocked` (incl. honey exhausted) | Energy `+1` / `+5` / `+12` when energy-blocked |
+| Trail → `energy.paused` | Energy `+1` / `+5` / `+12` |
+| Trail → `energy.resumed` | none (closing card with source and counts) |
+| Task → `blocked` (legacy) | Summary and honey line; no top-up buttons |
 | Task → `failed` | Summary only |
+
+Energy cards follow the trail's admission observations, not a task status: one pause card per episode (with top-up buttons) and one closing card carrying the resume source (`energy.add` / `energy.stipend`) and pending/dispatched/abandoned counts. Both are deduped by episode id, so a gate restart does not repeat them. A legacy honey-blocked task still renders as a `blocked` card, but it no longer stands in for the trail's pause alert.
 
 On startup the gate **reconciles** pending invites and `waiting_review` / `blocked` / `failed` tasks, using machine-local dedup so restart does not spam.
 

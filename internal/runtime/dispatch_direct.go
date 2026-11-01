@@ -62,7 +62,7 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 	if held, err := r.directAdmissionHeld(ev, beeRole, taskID); err != nil {
 		return err
 	} else if held {
-		if err := r.deferDirectDispatch(ev, beeRole, taskID, protocol.ConfigBarrierHoldReason); err != nil {
+		if err := r.deferDirectDispatch(dispatchCtx, ev, beeRole, taskID, protocol.ConfigBarrierHoldReason); err != nil {
 			return err
 		}
 		r.markBarrierHeldDeferral(ev.TraceID)
@@ -75,7 +75,7 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return err
 	}
 	if !ok {
-		if err := r.deferDirectDispatch(ev, beeRole, taskID, protocol.HoneyReserveExhaustedSummary); err != nil {
+		if err := r.deferDirectDispatch(dispatchCtx, ev, beeRole, taskID, protocol.HoneyReserveExhaustedSummary); err != nil {
 			return err
 		}
 		logDispatchSkip("honey reserve exhausted — direct dispatch deferred", ev.TraceID, taskID, beeRole)

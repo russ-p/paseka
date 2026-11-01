@@ -16,6 +16,7 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 	traceID := data.Trace.TraceID
 	fmt.Fprintf(&buf, "# Paseka export — %s\n\n", traceID)
 	fmt.Fprintf(&buf, "Flight trail **%s** · project **%s**\n\n", traceID, data.Slug)
+	fmt.Fprintf(&buf, "%s\n\n", formatAdmissionLine(data.Trace.TraceSummaryView))
 	fmt.Fprintf(&buf, "Exported %s\n\n", formatTime(data.ExportedAt))
 
 	writeMarkdownOverview(&buf, data)
@@ -136,6 +137,9 @@ func writeMarkdownTasks(buf *bytes.Buffer, tasks []hiveview.TaskSummaryView) {
 			line += fmt.Sprintf(" · %s", task.Bee)
 		}
 		line += fmt.Sprintf(" — %s", task.Status)
+		if task.Pending {
+			line += " · pending dispatch"
+		}
 		buf.WriteString(line + "\n")
 	}
 	buf.WriteString("\n")

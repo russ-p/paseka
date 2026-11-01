@@ -145,3 +145,37 @@ func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
 	l.traces[traceID] = updated
 	return nil
 }
+
+// ClaimEnergyPausePublished marks the open pause episode published, so only one
+// caller sends the paused observation.
+func (l *MemoryLedger) ClaimEnergyPausePublished(traceID string) (EnergyPauseSnapshot, bool, error) {
+	if traceID == "" {
+		return EnergyPauseSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace := l.traces[traceID]
+	updated, pause, ok := ClaimEnergyPausePublished(trace)
+	if !ok {
+		return EnergyPauseSnapshot{}, false, nil
+	}
+	l.traces[traceID] = updated
+	return pause, true, nil
+}
+
+// ClearEnergyPause closes the open pause episode, so only one resumed
+// observation is sent for it.
+func (l *MemoryLedger) ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, error) {
+	if traceID == "" {
+		return EnergyPauseSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace := l.traces[traceID]
+	updated, pause, ok := CloseEnergyPause(trace)
+	if !ok {
+		return EnergyPauseSnapshot{}, false, nil
+	}
+	l.traces[traceID] = updated
+	return pause, true, nil
+}

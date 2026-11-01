@@ -17,6 +17,8 @@ import (
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/taskledger"
+	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/russ-p/paseka/internal/trailconfig"
 	"github.com/russ-p/paseka/internal/trailfork"
 )
@@ -79,6 +81,15 @@ type Trail struct {
 	AdmissionState      string `json:"admissionState"`
 	PendingForkRequests int    `json:"pendingForkRequests,omitempty"`
 
+	// Energy admission is a second, orthogonal axis: a trail pauses when its
+	// shared honey reserve cannot admit a dispatch. Paused and PauseReason say
+	// whether an episode is open and why; PendingCount is the deferred work
+	// waiting behind it. A snapshot written before these fields existed reads
+	// as admitting with an empty queue.
+	Paused       bool   `json:"paused"`
+	PauseReason  string `json:"pauseReason,omitempty"`
+	PendingCount int    `json:"pendingCount"`
+
 	// Evidence lists missing or inconsistent evidence honestly. An empty list
 	// means the read model found no gap; it does not prove an external effect
 	// happened.
@@ -121,14 +132,56 @@ func LoadSummaries(ctx colony.Context, summaries []runs.TraceSummary) ([]Trail, 
 	}
 	bySource := pendingBySource(pending)
 	trails := make([]Trail, 0, len(summaries))
+	traceIDs := make([]string, 0, len(summaries))
 	for _, summary := range summaries {
 		trail := TrailFromSummary(ctx, summary, bySource[summary.TraceID])
 		trails = append(trails, trail)
+		traceIDs = append(traceIDs, summary.TraceID)
+	}
+	admissions := loadAdmissions(ctx, traceIDs)
+	for i := range trails {
+		trails[i].ApplyAdmission(admissions[trails[i].TraceID])
 	}
 	if pending == nil {
 		pending = []trailfork.Request{}
 	}
 	return trails, pending, nil
+}
+
+// ApplyAdmission copies the ledger admission projection onto this row. It is a
+// second axis beside fork admission: a trail can be an ordinary runnable trail
+// and still be paused because its honey reserve cannot admit a dispatch.
+func (t *Trail) ApplyAdmission(admission taskledger.Admission) {
+	t.Paused = admission.Paused
+	t.PauseReason = admission.PauseReason
+	t.PendingCount = admission.PendingCount
+}
+
+// loadAdmissions reads the ledger's admission projection for the given trails.
+// The ledger is optional: a colony without NATS, or one whose KV cannot be read,
+// leaves every trail admitting with an empty queue — the same reading an older
+// snapshot gets — instead of failing the whole collection.
+func loadAdmissions(ctx colony.Context, traceIDs []string) map[string]taskledger.Admission {
+	out := make(map[string]taskledger.Admission, len(traceIDs))
+	if len(traceIDs) == 0 {
+		return out
+	}
+	session, err := tasks.OpenLedger(ctx)
+	if err != nil {
+		return out
+	}
+	defer session.Close()
+	if session.Ledger == nil {
+		return out
+	}
+	for _, traceID := range traceIDs {
+		snap, err := session.Ledger.Snapshot(traceID)
+		if err != nil {
+			continue
+		}
+		out[traceID] = taskledger.AdmissionOf(snap)
+	}
+	return out
 }
 
 // LoadTrail reads one trail's summary and evidence without returning the rest
@@ -148,7 +201,9 @@ func LoadTrail(ctx colony.Context, traceID string) (Trail, bool, error) {
 	if err != nil {
 		return Trail{}, false, err
 	}
-	return TrailFromSummary(ctx, summary, pendingBySource(pending)[traceID]), true, nil
+	trail := TrailFromSummary(ctx, summary, pendingBySource(pending)[traceID])
+	trail.ApplyAdmission(loadAdmissions(ctx, []string{traceID})[traceID])
+	return trail, true, nil
 }
 
 // TrailFromSummary enriches one raw run summary with configuration and fork

@@ -71,11 +71,10 @@ func (r *Reactor) unblockEnergyBlockedTasks(ctx context.Context, traceID string)
 	return nil
 }
 
-func (r *Reactor) blockTaskForEnergy(ctx context.Context, traceID, taskID string) error {
-	return r.setTaskStatus(ctx, traceID, taskID, protocol.TaskStatusBlocked, protocol.HoneyReserveExhaustedSummary)
-}
-
-func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, reason string) (bool, error) {
+// gateTaskDispatchEnergy never writes a task status. A denied task dispatch is
+// recorded as deferred trail work and keeps its lifecycle state, so `ready`
+// still means eligible and a waiting_review task never becomes blocked.
+func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string) (bool, error) {
 	ok, err := r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
 	if err != nil {
 		return false, err
@@ -84,7 +83,7 @@ func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, r
 		return true, nil
 	}
 	if taskID != "" {
-		if err := r.blockTaskForEnergy(ctx, traceID, taskID); err != nil {
+		if err := r.deferTaskDispatch(ctx, traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary); err != nil {
 			return false, err
 		}
 	}

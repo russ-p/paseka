@@ -7,6 +7,69 @@ import (
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
+// IsKillableTaskStatus is the guard that keeps superseded work from being
+// rewritten as a cancellation on kill. The table lists every current status
+// explicitly: Go has no exhaustive enum switch, so a new status has to show up
+// here in review rather than silently inheriting the default.
+func TestIsKillableTaskStatus(t *testing.T) {
+	cases := []struct {
+		status protocol.TaskStatus
+		want   bool
+	}{
+		{protocol.TaskStatusPlanned, true},
+		{protocol.TaskStatusReady, true},
+		{protocol.TaskStatusRunning, true},
+		{protocol.TaskStatusWaitingReview, true},
+		{protocol.TaskStatusBlocked, true},
+		{protocol.TaskStatusCompleted, false},
+		{protocol.TaskStatusFailed, false},
+		{protocol.TaskStatusCancelled, false},
+		{protocol.TaskStatusSkipped, false},
+	}
+	for _, tc := range cases {
+		if got := taskledger.IsKillableTaskStatus(tc.status); got != tc.want {
+			t.Errorf("IsKillableTaskStatus(%q) = %t, want %t", tc.status, got, tc.want)
+		}
+	}
+}
+
+// A task superseded before the kill was never work in flight, so kill must leave
+// it skipped with its supersession summary while a non-terminal task is the one
+// that becomes cancelled.
+func TestApplyEventSystemKillKeepsSkippedTask(t *testing.T) {
+	superseded := protocol.SupersededByStipendSummary(4)
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"skipped": {TaskID: "skipped", Status: protocol.TaskStatusSkipped, Summary: superseded},
+			"running": {TaskID: "running", Status: protocol.TaskStatusRunning},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind:   protocol.SignalSystemKill,
+		Reason: "stop",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.Tasks["skipped"].Status; got != protocol.TaskStatusSkipped {
+		t.Fatalf("skipped task status = %q, want skipped", got)
+	}
+	if got := res.Trace.Tasks["skipped"].Summary; got != superseded {
+		t.Fatalf("skipped task summary = %q, want the supersession summary kept", got)
+	}
+	if got := res.Trace.Tasks["running"].Status; got != protocol.TaskStatusCancelled {
+		t.Fatalf("running task status = %q, want cancelled", got)
+	}
+	if got := res.Trace.Tasks["running"].Summary; got != "stop" {
+		t.Fatalf("running task summary = %q, want the kill reason", got)
+	}
+}
+
 func TestApplyEventSystemKill(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

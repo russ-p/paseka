@@ -33,6 +33,7 @@ type Reactor struct {
 	inflight         map[string]context.CancelFunc
 	directInflight   map[string]context.CancelFunc
 	directProcessed  map[string]struct{}
+	pendingResume    map[string]struct{}          // pending entries this process is currently resuming
 	barrierHeld      map[string]*barrierHeldState // per-trace bookkeeping for barrier-held direct work
 	recentLocal      map[string]time.Time         // fingerprints of events applied before publish
 	asyncDispatch    bool
@@ -102,6 +103,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		inflight:         make(map[string]context.CancelFunc),
 		directInflight:   make(map[string]context.CancelFunc),
 		directProcessed:  make(map[string]struct{}),
+		pendingResume:    make(map[string]struct{}),
 		barrierHeld:      make(map[string]*barrierHeldState),
 		recentLocal:      make(map[string]time.Time),
 		asyncDispatch:    true,
@@ -249,7 +251,7 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 			return err
 		}
 	}
-	if err := r.handlePostApplySideEffects(ctx, ev, execCtx); err != nil {
+	if err := r.handlePostApplySideEffects(ctx, ev, execCtx, res); err != nil {
 		return err
 	}
 	if err := r.executeDispatches(ctx, ev, ready, execCtx); err != nil {
@@ -451,12 +453,16 @@ func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext) error {
+func (r *Reactor) handlePostApplySideEffects(ctx context.Context, ev protocol.Event, execCtx *trailExecutionContext, res taskledger.ApplyResult) error {
 	if energyAddDetected(ev) {
-		if err := r.unblockEnergyBlockedTasks(ctx, ev.TraceID); err != nil {
+		if err := r.afterEnergyAdd(ctx, ev.TraceID); err != nil {
 			return err
 		}
-		if err := r.resumePendingDispatches(ctx, ev.TraceID); err != nil {
+	}
+	// A reduction that closed a pause episode cleared the field inside its own
+	// mutation, so this is the one place its resumed observation can be sent.
+	if res.PauseClose != nil {
+		if err := r.publishResumeObservation(ctx, ev.TraceID, *res.PauseClose); err != nil {
 			return err
 		}
 	}
@@ -556,6 +562,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		inflight:         make(map[string]context.CancelFunc),
 		directInflight:   make(map[string]context.CancelFunc),
 		directProcessed:  make(map[string]struct{}),
+		pendingResume:    make(map[string]struct{}),
 		barrierHeld:      make(map[string]*barrierHeldState),
 		recentLocal:      make(map[string]time.Time),
 		asyncDispatch:    opts.AsyncDispatch,

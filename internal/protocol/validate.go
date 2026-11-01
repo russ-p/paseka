@@ -142,6 +142,10 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateEnergyConsume(payload)
 	case SignalEnergyStipend:
 		return validateEnergyStipend(payload)
+	case SignalEnergyPaused:
+		return validateEnergyPaused(payload)
+	case SignalEnergyResumed:
+		return validateEnergyResumed(payload)
 	}
 
 	switch SystemEventKind(kind) {
@@ -206,7 +210,7 @@ func expectedEventType(kind string) EventType {
 		return EventVerification
 	}
 	switch EnergyEventKind(kind) {
-	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend:
+	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend, SignalEnergyPaused, SignalEnergyResumed:
 		return EventSignal
 	}
 	switch SystemEventKind(kind) {
@@ -522,6 +526,50 @@ func validateEnergyStipend(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
 	}
 	return nil
+}
+
+func validateEnergyPaused(payload json.RawMessage) []ValidationDetail {
+	var p EnergyPausedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.paused payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.EpisodeID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.episodeId", Message: "required"})
+	}
+	if p.Remaining < 0 {
+		details = append(details, ValidationDetail{Path: "payload.remaining", Message: "must not be negative"})
+	}
+	if p.PendingCount < 0 {
+		details = append(details, ValidationDetail{Path: "payload.pendingCount", Message: "must not be negative"})
+	}
+	return details
+}
+
+func validateEnergyResumed(payload json.RawMessage) []ValidationDetail {
+	var p EnergyResumedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.resumed payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.EpisodeID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.episodeId", Message: "required"})
+	}
+	if !p.Source.Known() {
+		details = append(details, ValidationDetail{Path: "payload.source", Message: "must be one of energy.add, energy.stipend"})
+	}
+	for path, value := range map[string]int{
+		"payload.remaining":     p.Remaining,
+		"payload.pendingBefore": p.PendingBefore,
+		"payload.pendingAfter":  p.PendingAfter,
+		"payload.dispatched":    p.Dispatched,
+		"payload.abandoned":     p.Abandoned,
+	} {
+		if value < 0 {
+			details = append(details, ValidationDetail{Path: path, Message: "must not be negative"})
+		}
+	}
+	return details
 }
 
 func validateSystemKill(payload json.RawMessage) []ValidationDetail {

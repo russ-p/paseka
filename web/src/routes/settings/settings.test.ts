@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import Settings from './+page.svelte';
 import { createSettingsStore } from '$lib/stores/settings.svelte';
-import { colonyConfig, configAdapters, configAdapter } from '../../tests/fixtures';
+import { colonyConfig, configAdapters, configAdapter, configNotify } from '../../tests/fixtures';
 import type { ColonyConfig } from '$lib/api/types';
 
 function harness(config: ColonyConfig = colonyConfig()) {
@@ -147,19 +147,45 @@ describe('settings route', () => {
 		expect(cellNamed('opencode', 'Key')).toHaveTextContent('');
 	});
 
-	it('lists the seven push categories, with off as a mode rather than silence', async () => {
+	it('lists the eight push categories, with off as a mode rather than silence', async () => {
 		const { store } = harness();
 		render(Settings, { store });
 
 		await waitFor(() => expect(screen.getByText('commit_gate')).toBeInTheDocument());
-		for (const category of ['invites', 'blocked', 'failed', 'review_required', 'review_final', 'commit_gate', 'completed']) {
+		for (const category of ['invites', 'blocked', 'energy', 'failed', 'review_required', 'review_final', 'commit_gate', 'completed']) {
 			expect(screen.getByText(category)).toBeInTheDocument();
 		}
+		// The note is the rendered list's own length, so a stale count here is the
+		// drift the docs used to carry.
+		expect(screen.getByText('8 categories')).toBeInTheDocument();
 		// The legacy `waiting_review` is folded into the two review modes server-side,
 		// so the page must not offer it as a category of its own.
 		expect(screen.queryByText('waiting_review')).not.toBeInTheDocument();
 		// An off category is a fact, not an absence — the badge says it.
 		expect(screen.getByText('commit_gate').closest('li')).toHaveTextContent('off');
+	});
+
+	it('counts the notify list it renders rather than a number of its own', async () => {
+		const { store } = harness(
+			colonyConfig({
+				telegram: {
+					present: true,
+					enabled: true,
+					mode: { value: 'longpoll', source: 'config.yaml' },
+					botTokenSet: true,
+					botTokenEnv: 'PASEKA_TELEGRAM_BOT_TOKEN',
+					allowFrom: [7],
+					chatIds: [7],
+					notify: configNotify().slice(0, 3)
+				}
+			})
+		);
+		render(Settings, { store });
+
+		// The server's list decides the count, so a category added to the gate
+		// needs no console change and a short list is not reported as eight.
+		await waitFor(() => expect(screen.getByText('3 categories')).toBeInTheDocument());
+		expect(screen.queryByText('8 categories')).not.toBeInTheDocument();
 	});
 
 	it('explains a colony with no gate rather than reporting a failure', async () => {

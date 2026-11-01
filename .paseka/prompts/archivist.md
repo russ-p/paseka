@@ -66,8 +66,34 @@ cat "$R"/*/events.ndjson 2>/dev/null | jq -r 'select(.payload.kind=="review.note
 echo; echo "## TIMELINE   key value"
 mc=$(git -C "{{.ColonyRoot}}" log --format=%ct --grep="merge trace {{.TraceID}}" 2>/dev/null | head -1)
 dc=$(cat "$R"/*/events.ndjson 2>/dev/null | jq -rs '[.[]|select(.payload.kind=="task.completed")|.createdAt]|max // ""' | tr -d '"')
-de=$(printf '%s' "$dc" | jq -R 'sub("\\.[0-9]+";"")|fromdateiso8601? // 0')
-printf 'last_task_completed\t%s\nmerge_commit_epoch\t%s\nlag_merge_after_completed_s\t%s\n' "$dc" "${mc:-none}" "$(( ${mc:-0} - ${de:-0} ))"
+de=""
+if [ -n "$dc" ]; then
+  de=$(printf '%s' "$dc" | jq -R 'sub("\\.[0-9]+";"")|fromdateiso8601? // empty')
+fi
+branch=$(cat "$R"/*/events.ndjson "$R"/trail-events.ndjson 2>/dev/null \
+  | jq -r 'select(.payload.kind=="worktree.branch")|.payload.branch // empty' | head -1)
+[ -n "$branch" ] || branch="paseka/{{.TraceID}}"
+tip=$(git -C "{{.ColonyRoot}}" rev-parse --verify --quiet "refs/heads/$branch" 2>/dev/null)
+base=absent
+if [ -n "$tip" ]; then
+  if git -C "{{.ColonyRoot}}" merge-base --is-ancestor "$tip" HEAD 2>/dev/null; then
+    base=ancestor
+  else
+    base=diverged
+  fi
+fi
+if [ -z "$dc" ]; then
+  lag=no-completed-task
+elif [ -n "$mc" ] && [ -n "$de" ]; then
+  lag=$(( mc - de ))
+elif [ -z "$mc" ] && [ "$base" = ancestor ]; then
+  lag=merged
+elif [ -z "$mc" ]; then
+  lag=unmerged
+else
+  lag=unknown
+fi
+printf 'last_task_completed\t%s\nmerge_commit_epoch\t%s\nmerge_base_check\t%s\nlag_merge_after_completed_s\t%s\n' "$dc" "${mc:-none}" "$base" "$lag"
 ```
 
 Then read the prose the numbers cannot give you, in this order:
@@ -81,8 +107,8 @@ for f in "{{.ColonyRoot}}/.paseka/runs/{{.TraceID}}"/*/summary.md; do echo "=== 
 
 - `FLIGHTS` — one row per agent run, oldest first. `dur_s` is wall clock, not honey. `task` is `-` for trail-level runs (scout, intake).
 - **`mutation` is `-` for every run, and that is a blind spot, not a finding.** The runtime publishes `MUTATION/code.proposal.isolated` to the bus but never writes it to `events.ndjson`, so "did this flight change anything" is **unanswerable offline**. State this in your report. Do not infer from `mutation == -` that a run was wasted.
-- `TASKS.commit` is empty for tasks that were never merged through a `_review` task. A `completed` task with no commit and a large `lag_merge_after_completed_s` means the work sat unmerged while the board read clean.
-- `lag_merge_after_completed_s` is measured from the last `task.completed` event to the `paseka: merge trace` commit. It is the single most load-bearing number here.
+- `TASKS.commit` is empty for tasks that were never merged through a `_review` task. A `completed` task with no commit and `lag_merge_after_completed_s` reading `unmerged` means the work sat unmerged while the board read clean.
+- `lag_merge_after_completed_s` is measured from the last `task.completed` event to the `paseka: merge trace` commit, and is the single most load-bearing number here. When no such commit exists it is a label, never epoch arithmetic: `unmerged` (no merge commit; branch tip absent or not contained in `HEAD`), `merged` (no matching subject, but `merge_base_check` says the branch tip is an ancestor of `HEAD`), `unknown` (a merge commit exists but the completion timestamp is unreadable), or `no-completed-task` (nothing to measure from). `merge_base_check` is `ancestor`, `diverged`, or `absent` for the trail's recorded `worktree.branch` (default `paseka/<traceId>`). A squash or rebase merge keeps neither the tip ancestry nor the subject, so `unmerged` can be a false negative — read the branch state before calling work lost.
 - `TASKS.createdAt` is stamped **once** per task and never moves, so `updatedAt - createdAt` is how long that task sat in one state. A blank `createdAt` means the trail predates the field: read it as unknown, never as zero, and fall back to the completion-to-merge lag alone.
 - A run's `taskId` exists **only** in `request.json`. `tasks/<id>/runs.ndjson` is not a complete join — rework and inspection runs are missing from it.
 

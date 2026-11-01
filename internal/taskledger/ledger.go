@@ -86,10 +86,28 @@ type TraceSnapshot struct {
 	EnergyBudget      int                     `json:"energyBudget,omitempty"`
 	EnergyRemaining   int                     `json:"energyRemaining,omitempty"`
 	EnergyAdded       int                     `json:"energyAdded,omitempty"`
+	EnergyPause       *EnergyPauseSnapshot    `json:"energyPause,omitempty"`
 	Killed            bool                    `json:"killed,omitempty"`
 	PendingReady      *PendingReadySnapshot   `json:"pendingReady,omitempty"`
 	PendingDispatches []PendingDispatch       `json:"pendingDispatches,omitempty"`
 	Tasks             map[string]TaskSnapshot `json:"tasks"`
+}
+
+// EnergyPauseSnapshot is the durable identity of one pause episode: the interval
+// in which the trail's shared reserve could not admit a dispatch. It exists only
+// to make the pause and resume observations exactly-once; admission itself is
+// always derived from EnergyRemaining.
+type EnergyPauseSnapshot struct {
+	EpisodeID string    `json:"episodeId"`
+	Reason    string    `json:"reason,omitempty"`
+	StartedAt time.Time `json:"startedAt,omitempty"`
+	Remaining int       `json:"remaining"`
+	Budget    int       `json:"budget,omitempty"`
+	Pending   int       `json:"pending"`
+	// Published records that the paused observation was claimed for sending.
+	// It is marked before the send, so a crash loses at most one notification
+	// and a restart never duplicates one.
+	Published bool `json:"published,omitempty"`
 }
 
 // PendingReadySnapshot parks a task.ready kick until the matching task.plan registers the task.
@@ -108,6 +126,26 @@ type ApplyResult struct {
 	Trace   TraceSnapshot
 	Ready   []TaskSnapshot // tasks that became ready after this event
 	Changed bool
+
+	// PauseClose is set when this reduction closed a pause episode. The field is
+	// already gone from Trace, so the runtime publishes the resumed observation
+	// exactly once for the episode reported here.
+	PauseClose *EnergyPauseClose
+}
+
+// EnergyPauseClose records the episode a reduction closed and the counts its
+// resumed observation must carry. A stipend closes the episode while it
+// supersedes work, so the observation reports that through Source and Abandoned
+// instead of pretending the previous allocation resumed.
+type EnergyPauseClose struct {
+	Episode       EnergyPauseSnapshot
+	Source        protocol.EnergyResumeSource
+	Remaining     int
+	Budget        int
+	PendingBefore int
+	PendingAfter  int
+	Dispatched    int
+	Abandoned     int
 }
 
 // TraceLister is implemented by ledgers that can enumerate the trails they
@@ -141,4 +179,14 @@ type Ledger interface {
 	// MarkPendingDispatchUnresolved keeps deferred work visible when its source
 	// event can no longer be recovered. The entry is never drained again.
 	MarkPendingDispatchUnresolved(traceID, dispatchID, diagnostic string) error
+
+	// ClaimEnergyPausePublished marks the open pause episode published and
+	// returns it exactly once. The runtime sends the paused observation after
+	// this claim, so replay and restart cannot duplicate it.
+	ClaimEnergyPausePublished(traceID string) (EnergyPauseSnapshot, bool, error)
+
+	// ClearEnergyPause closes the open pause episode and returns the episode it
+	// cleared, so the runtime sends at most one resumed observation after the
+	// field is gone.
+	ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, error)
 }

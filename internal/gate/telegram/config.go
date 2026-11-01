@@ -67,6 +67,7 @@ type NotifyConfig struct {
 	Invites        *NotifyMode `yaml:"invites"`
 	WaitingReview  *NotifyMode `yaml:"waiting_review"` // legacy: maps to review_required + review_final
 	Blocked        *NotifyMode `yaml:"blocked"`
+	Energy         *NotifyMode `yaml:"energy"`
 	Failed         *NotifyMode `yaml:"failed"`
 	ReviewRequired *NotifyMode `yaml:"review_required"`
 	ReviewFinal    *NotifyMode `yaml:"review_final"`

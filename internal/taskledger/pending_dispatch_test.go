@@ -106,6 +106,80 @@ func TestMarkPendingDispatchUnresolvedLeavesClosedEntries(t *testing.T) {
 	}
 }
 
+// Task entries dedupe on task:<taskId>:<bee> while active. Re-deferring the
+// same task reaction must keep the first source event identity: it is the
+// attempt dispatch marker a later resume uses, and the newer kick is not a new
+// attempt.
+func TestDeferTaskPendingDispatchKeepsFirstSourceEventIdentity(t *testing.T) {
+	trace := taskledger.TraceSnapshot{}
+	first := taskledger.PendingDispatch{
+		ID:            "task:task-1:builder",
+		Kind:          taskledger.PendingDispatchTask,
+		TaskID:        "task-1",
+		Bee:           "builder",
+		SourceEventID: "event-first",
+		Status:        taskledger.PendingDispatchPending,
+	}
+	trace, added := taskledger.DeferPendingDispatch(trace, first)
+	if !added {
+		t.Fatal("expected the first task deferral to add")
+	}
+	second := first
+	second.SourceEventID = "event-second"
+	trace, added = taskledger.DeferPendingDispatch(trace, second)
+	if added {
+		t.Fatal("expected an active task duplicate to be ignored")
+	}
+	if len(trace.PendingDispatches) != 1 {
+		t.Fatalf("pending entries = %d, want one", len(trace.PendingDispatches))
+	}
+	if got := trace.PendingDispatches[0].SourceEventID; got != "event-first" {
+		t.Fatalf("source event = %q, want the first kick", got)
+	}
+}
+
+// Kill is the hard stop. A deferral racing the kill must not leave runnable
+// task work behind, even if the caller reached the ledger after the kill.
+func TestKilledTraceRecordsNoNewPendingTaskWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1", Killed: true}
+	trace, added := taskledger.DeferPendingDispatch(trace, taskledger.PendingDispatch{
+		ID:     "task:task-1:builder",
+		Kind:   taskledger.PendingDispatchTask,
+		TaskID: "task-1",
+		Bee:    "builder",
+	})
+	if added {
+		t.Fatal("a killed trail must not record new pending work")
+	}
+	if len(trace.PendingDispatches) != 0 {
+		t.Fatalf("pending entries = %d, want none", len(trace.PendingDispatches))
+	}
+}
+
+// Task and direct entries share one queue. Insertion order is not the drain
+// order: the oldest entry goes first and the id breaks ties stably.
+func TestActivePendingDispatchesOrdersTaskAndDirectTogether(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "direct-later", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchPending, CreatedAt: time.Unix(3, 0)},
+			{ID: "task-second", Kind: taskledger.PendingDispatchTask, Status: taskledger.PendingDispatchPending, CreatedAt: time.Unix(2, 0)},
+			{ID: "task-first", Kind: taskledger.PendingDispatchTask, Status: taskledger.PendingDispatchPending, CreatedAt: time.Unix(1, 0)},
+			{ID: "direct-tie-b", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchPending, CreatedAt: time.Unix(2, 0)},
+			{ID: "direct-tie-a", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchPending, CreatedAt: time.Unix(2, 0)},
+		},
+	}
+	got := taskledger.ActivePendingDispatches(trace)
+	want := []string{"task-first", "direct-tie-a", "direct-tie-b", "task-second", "direct-later"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].ID != want[i] {
+			t.Fatalf("pending[%d] = %q, want %q", i, got[i].ID, want[i])
+		}
+	}
+}
+
 func TestPendingDispatchStatusVocabulary(t *testing.T) {
 	if got := string(taskledger.PendingDispatchUnresolved); got != "unresolved" {
 		t.Fatalf("unresolved status = %q, want unresolved", got)

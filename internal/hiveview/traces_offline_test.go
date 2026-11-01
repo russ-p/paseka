@@ -40,6 +40,14 @@ func (failingLedger) MarkPendingDispatchUnresolved(string, string, string) error
 	return fmt.Errorf("kv unavailable")
 }
 
+func (failingLedger) ClaimEnergyPausePublished(string) (taskledger.EnergyPauseSnapshot, bool, error) {
+	return taskledger.EnergyPauseSnapshot{}, false, fmt.Errorf("kv unavailable")
+}
+
+func (failingLedger) ClearEnergyPause(string) (taskledger.EnergyPauseSnapshot, bool, error) {
+	return taskledger.EnergyPauseSnapshot{}, false, fmt.Errorf("kv unavailable")
+}
+
 func TestResolveTraceTasksFallsBackOnLoadTraceError(t *testing.T) {
 	repo := t.TempDir()
 	traceID := "trace-kv-fail"

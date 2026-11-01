@@ -182,6 +182,11 @@ the raw envelope already arrives with the row.
 Trails bound to a standing Forage Cue carry a **standing** badge, and their
 honey reads `remaining / stipend` — see [Forage Cues](cues.md).
 
+A trail that has stopped admitting dispatch carries a **paused** badge and its
+deferred count beside the state, from the same admission projection `paseka
+energy show` prints. A paused trail still shows each task's real lifecycle
+status; honey is a trail condition and never appears as a task `blocked`.
+
 The list shows the most recent trails and stops at what the server sends; **Load
 older trails** pulls the next page when there is more history. A trail with
 something to say — running now, or carrying failures — is badged in the State
@@ -256,11 +261,16 @@ close with an optional reason that merges nothing and plans no rework.
 
 The **task board** groups every task the colony's ledger knows into one column
 per lifecycle status, in the order the pipeline runs — ready, running, waiting
-review, planned, blocked, failed, completed. A card says what it is, who takes
+review, planned, blocked, skipped, failed, completed. A card says what it is, who takes
 it, how many runs it has made, what it waits on, and whether the ledger says it
 is startable or retryable right now. Each column scrolls on its own, because a
 colony is mostly completed history and the work should not be buried under it. A
 status the colony has no task in is left out rather than shown empty.
+
+A task deferred by exhausted honey stays in its own column with a quiet
+**pending** badge; the paused trail and its queue are shown on the trail, not as
+a task status. `skipped` is its own neutral column: terminal work a new standing
+allocation superseded, and not a failure, a cancellation, or a completion.
 
 **New task** opens a form from the side. Pick the bee and the intents narrow to
 the prompt templates that bee actually declares. Leave the trail id empty for a
@@ -514,8 +524,8 @@ changes the file and watches nothing happen needs to be told why.
   reads its API key from, whether that variable resolves, and whether the value
   came from `adapters/<name>.yaml` or was inferred from a default.
 - **Human gateway** — whether the Telegram gate is configured and switched on,
-  whether a bot token resolves, and the push mode of each of the seven
-  categories.
+  whether a bot token resolves, and one row per notify category for its push
+  mode.
 - **Colony** — the slug, the checkout root, the selected profile, and the
   terminal a session attaches with.
 - **Appearance** — the theme picker, the one setting the console keeps itself.

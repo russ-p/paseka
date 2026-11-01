@@ -39,6 +39,9 @@ const statusTones: Record<string, StatusTone> = {
 	pending: 'warning',
 	reconnecting: 'warning',
 	low: 'warning',
+	// A trail that cannot admit a dispatch right now. Honey is a shared-reserve
+	// condition, so it is a warning about admission, not a task error.
+	paused: 'warning',
 	// A checkout with uncommitted changes, and a branch nothing claims any more, both want a sweep.
 	dirty: 'warning',
 	leftover: 'warning',
@@ -57,6 +60,10 @@ const statusTones: Record<string, StatusTone> = {
 	planned: 'neutral',
 	standing: 'neutral',
 	staged: 'neutral',
+	// A superseded allocation, not a failure, a cancellation, or a completion.
+	// It stays quiet beside `planned` rather than borrowing `failed`, `cancelled`,
+	// or `completed`, because it is none of them.
+	skipped: 'neutral',
 	unknown: 'neutral',
 	// A Telegram push mode, read as "will this interrupt me": sound is the only
 	// mode that alerts, silent delivers without noise, and off is the absence of

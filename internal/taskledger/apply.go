@@ -35,9 +35,10 @@ func ApplyEvent(trace TraceSnapshot, event protocol.Event) (ApplyResult, error) 
 		step.changed = true
 	}
 	return ApplyResult{
-		Trace:   trace,
-		Ready:   step.ready,
-		Changed: step.changed,
+		Trace:      trace,
+		Ready:      step.ready,
+		Changed:    step.changed,
+		PauseClose: step.pauseClose,
 	}, nil
 }
 
@@ -63,6 +64,10 @@ type reduceStep struct {
 	trace   TraceSnapshot
 	ready   []TaskSnapshot
 	changed bool
+
+	// pauseClose records the pause episode this reduction closed, if any, so the
+	// runtime can publish the resumed observation after the field is cleared.
+	pauseClose *EnergyPauseClose
 
 	// skipped marks a payload this ledger does not own: the trace is returned as
 	// it was and the trailing housekeeping is bypassed.
@@ -260,14 +265,34 @@ func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string, now ti
 		if payload.Amount <= 0 {
 			return reduceStep{}, fmt.Errorf("taskledger: energy.stipend amount must be positive")
 		}
+		pendingBefore := ActivePendingCount(trace)
 		trace.EnergyRemaining = payload.Amount
 		// A stipend starts a new allocation: close the previous allocation's
-		// energy-waited direct reactions in this same mutation so a later
-		// energy.add cannot resurrect a guard or receiver from the tick that
-		// just ended. Configuration-held work is not energy waiting and keeps
-		// waiting for its own transition.
-		trace, _ = AbandonEnergyDeferredDispatches(trace, now)
-		return reduceStep{trace: trace, changed: true}, nil
+		// energy-waited task and direct work in this same mutation so a later
+		// energy.add cannot resurrect a task, guard, or receiver from the tick
+		// that just ended. A superseded task becomes skipped with the summary
+		// naming the replacement allocation. Configuration-held work is not
+		// energy waiting and keeps waiting for its own transition.
+		trace, _ = SupersedeEnergyDeferredDispatches(trace, now, protocol.SupersededByStipendSummary(payload.Amount))
+		step := reduceStep{trace: trace, changed: true}
+		// The stipend closes the pause episode in this same mutation. The
+		// runtime then publishes the resumed observation, which says through its
+		// source and abandoned count that the new allocation superseded the
+		// previous work instead of resuming it.
+		if closed, pause, ok := CloseEnergyPause(trace); ok {
+			step.trace = closed
+			pendingAfter := ActivePendingCount(closed)
+			step.pauseClose = &EnergyPauseClose{
+				Episode:       pause,
+				Source:        protocol.EnergyResumeSourceStipend,
+				Remaining:     closed.EnergyRemaining,
+				Budget:        Allocated(closed.EnergyBudget, closed.EnergyAdded),
+				PendingBefore: pendingBefore,
+				PendingAfter:  pendingAfter,
+				Abandoned:     pendingBefore - pendingAfter,
+			}
+		}
+		return step, nil
 
 	default:
 		// A SIGNAL kind this ledger does not own is skipped, but a payload that
@@ -384,6 +409,15 @@ func reduceTaskStatus(trace TraceSnapshot, event protocol.Event, now time.Time) 
 	task.Summary = payload.Summary
 	task.UpdatedAt = now
 	trace.Tasks[payload.TaskID] = task
+	// Admission and the deferral record close in this same mutation. A task that
+	// starts running is no longer waiting for dispatch, whichever trigger admitted
+	// it (task.ready, review rework, closing seed, configuration release, or the
+	// legacy energy unblock). Matching every task entry for the task, not the
+	// current task:<taskId>:<bee> key, also closes an entry whose Bee drifted
+	// across configuration revisions.
+	if payload.Status == protocol.TaskStatusRunning {
+		trace, _ = ConsumeTaskPendingDispatches(trace, payload.TaskID, now)
+	}
 	return reduceStep{trace: trace, changed: true}, nil
 }
 

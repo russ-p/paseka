@@ -1,7 +1,13 @@
 <script lang="ts">
 	import Hint from '$lib/components/Hint.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { traceMeta, tracePrimaryLabel, traceState, traceStateLabel } from '$lib/format';
+	import {
+		traceMeta,
+		tracePendingLabel,
+		tracePrimaryLabel,
+		traceState,
+		traceStateLabel
+	} from '$lib/format';
 	import type { TraceSummary } from '$lib/api/types';
 
 	let {
@@ -17,6 +23,7 @@
 
 	const state = $derived(traceState(trace));
 	const meta = $derived(traceMeta(trace));
+	const pending = $derived(tracePendingLabel(trace));
 </script>
 
 <li
@@ -38,6 +45,15 @@
 		<div class="flex shrink-0 items-center gap-1">
 			{#if trace.standing}
 				<StatusBadge status="standing" label="standing" />
+			{/if}
+			<!-- Admission belongs to the trail, beside it, never to a task row. A paused
+			     trail still shows its run-derived state on the right, because a running
+			     run and an exhausted reserve are different facts. -->
+			{#if trace.paused}
+				<StatusBadge status="paused" label="paused" />
+			{/if}
+			{#if pending}
+				<StatusBadge status="pending" label={pending} />
 			{/if}
 			<StatusBadge status={state} label={traceStateLabel(trace)} />
 		</div>

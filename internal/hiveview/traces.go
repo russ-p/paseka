@@ -96,6 +96,13 @@ type TraceSummaryView struct {
 	Standing        bool                 `json:"standing,omitempty"`
 	Usage           *runs.UsageAggregate `json:"usage,omitempty"`
 
+	// Energy admission comes from the shared trail collection: a trail pauses
+	// when its reserve cannot admit a dispatch, and PendingCount names the
+	// deferred work. It is a trail-level axis, never a task status.
+	Paused       bool   `json:"paused"`
+	PauseReason  string `json:"pauseReason,omitempty"`
+	PendingCount int    `json:"pendingCount"`
+
 	// Trail collection evidence. ConfigRef is the active retained
 	// configuration; ForkOf is the source trail for an experiment.
 	ConfigBound          bool                `json:"configBound"`
@@ -133,6 +140,10 @@ type TaskSummaryView struct {
 	Phase  string `json:"phase"`
 	Review string `json:"review,omitempty"`
 	Bee    string `json:"bee,omitempty"`
+	// Pending marks a task whose dispatch waits in the trail's admission queue.
+	// Status stays the true lifecycle state (usually ready); this is the
+	// admission axis beside it, not a replacement for it.
+	Pending bool `json:"pending,omitempty"`
 }
 
 // WorktreeView exposes one active worktree entry.
@@ -336,6 +347,9 @@ func applyTrailView(view *TraceSummaryView, trail trailview.Trail) {
 	view.PendingConfig = trail.PendingConfig
 	view.PendingForkRequests = trail.PendingForkRequests
 	view.Evidence = trail.Evidence
+	view.Paused = trail.Paused
+	view.PauseReason = trail.PauseReason
+	view.PendingCount = trail.PendingCount
 }
 
 // ListTraces returns recent trace summaries.
@@ -412,6 +426,7 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	pendingTasks := taskledger.PendingTaskIDs(taskSnap)
 	for _, id := range ids {
 		task := taskSnap.Tasks[id]
 		title := task.Title
@@ -419,12 +434,13 @@ func GetTrace(ctx colony.Context, traceID string) (TraceDetailView, bool, error)
 			title = task.TaskID
 		}
 		view.Tasks = append(view.Tasks, TaskSummaryView{
-			TaskID: task.TaskID,
-			Title:  title,
-			Status: string(task.Status),
-			Phase:  string(taskledger.TaskPhaseOf(task)),
-			Review: string(protocol.NormalizeTaskReviewPolicy(task.Review)),
-			Bee:    task.Bee,
+			TaskID:  task.TaskID,
+			Title:   title,
+			Status:  string(task.Status),
+			Phase:   string(taskledger.TaskPhaseOf(task)),
+			Review:  string(protocol.NormalizeTaskReviewPolicy(task.Review)),
+			Bee:     task.Bee,
+			Pending: pendingTasks[task.TaskID],
 		})
 	}
 	// Align summary count with the tasks actually rendered (KV may be newer than FS scan).

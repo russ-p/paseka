@@ -255,6 +255,23 @@ func TestAllWorkCompletedAndAllPreMergeCompleted(t *testing.T) {
 			allPreMerge: false,
 		},
 		{
+			name: "skipped work is not completed work",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1": {TaskID: "task-1", Status: protocol.TaskStatusSkipped},
+			},
+			allWork:     false,
+			allPreMerge: false,
+		},
+		{
+			name: "a skipped closing round still keeps the gate closed",
+			tasks: map[string]taskledger.TaskSnapshot{
+				"task-1":    {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+				"closing-1": {TaskID: "closing-1", Phase: protocol.TaskPhaseClosing, Status: protocol.TaskStatusSkipped},
+			},
+			allWork:     true,
+			allPreMerge: false,
+		},
+		{
 			name:        "empty trace",
 			tasks:       map[string]taskledger.TaskSnapshot{},
 			allWork:     false,
@@ -377,5 +394,32 @@ func TestCanRequestChangesAndInFlightRework(t *testing.T) {
 	}
 	if taskledger.CanRequestChanges(trace, trace.Tasks["_review"]) {
 		t.Fatal("expected request changes disabled while rework running")
+	}
+}
+
+// A skipped task is terminal but not in-flight work: it never blocks a review
+// action, is not counted as a retry, and is not an execution.
+func TestSkippedTaskIsNotInFlightRework(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated,
+			},
+			"task-skipped": {TaskID: "task-skipped", Status: protocol.TaskStatusSkipped},
+			"_review": {
+				TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusWaitingReview,
+			},
+		},
+	}
+	if inflight, ok := taskledger.InFlightRework(trace); ok {
+		t.Fatalf("in-flight rework = %+v, want skipped work excluded", inflight)
+	}
+	if !taskledger.CanRequestChanges(trace, trace.Tasks["_review"]) {
+		t.Fatal("a skipped task must not block request-changes eligibility")
+	}
+	if _, err := taskledger.CanRetry(trace, "task-skipped"); err == nil {
+		t.Fatal("skipped work must not be retryable")
 	}
 }

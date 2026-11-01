@@ -313,6 +313,69 @@ describe('trace detail', () => {
 		expect(within(runs).getByText(/1\.2k in · 340 out · 800 cache/)).toBeInTheDocument();
 	});
 
+	it('keeps a paused trail\'s task statuses true, and badges skipped beside blocked', async () => {
+		renderDetail({
+			detail: async () =>
+				traceDetail({
+					hasActive: false,
+					paused: true,
+					pauseReason: 'Honey reserve exhausted',
+					pendingCount: 2,
+					tasks: [
+						{
+							taskId: 'ready-1',
+							title: 'Wait for honey',
+							status: 'ready',
+							phase: 'work',
+							bee: 'builder',
+							pending: true
+						},
+						{
+							taskId: 'review-1',
+							title: 'Review the seam',
+							status: 'waiting_review',
+							phase: 'work',
+							bee: 'guard'
+						},
+						{
+							taskId: 'skipped-1',
+							title: 'Superseded tick',
+							status: 'skipped',
+							phase: 'work',
+							bee: 'builder'
+						},
+						{
+							taskId: 'blocked-1',
+							title: 'Legacy honey block',
+							status: 'blocked',
+							phase: 'work',
+							bee: 'builder'
+						}
+					]
+				})
+		});
+
+		// The pause and the queue belong to the trail, so they sit in its header.
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		expect(within(header()).getByText('paused')).toHaveClass('badge-warning');
+		expect(within(header()).getByText('2 pending')).toBeInTheDocument();
+
+		const tasks = await section('trace-tasks');
+		const row = (taskId: string) =>
+			tasks.querySelector(`[data-key="${taskId}"]`) as HTMLElement;
+
+		// A deferred dispatch does not rewrite the task: `ready` stays ready, with the
+		// admission marker beside it rather than in place of it.
+		expect(within(row('ready-1')).getByText('ready')).toHaveClass('badge-success');
+		expect(within(row('ready-1')).getByText('dispatch pending')).toBeInTheDocument();
+		// Energy exhaustion never hides a task that is waiting on a human.
+		expect(within(row('review-1')).getByText('waiting review')).toHaveClass('badge-warning');
+		// `skipped` is its own quiet status, not an error and not a completion.
+		expect(within(row('skipped-1')).getByText('skipped')).toHaveClass('badge-neutral');
+		// Legacy honey-blocked rows keep their old meaning and still render.
+		expect(within(row('blocked-1')).getByText('blocked')).toHaveClass('badge-error');
+	});
+
 	it('tags a non-work task with its phase and leaves a work row untagged', async () => {
 		// Phase is a second axis: the status stays the lifecycle word and the tag
 		// beside it says the row is the wrap-up or the merge gate.

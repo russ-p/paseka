@@ -66,6 +66,34 @@ describe('traces route', () => {
 		expect(cells[1]).toBeEmptyDOMElement();
 	});
 
+	it('badges a trail\'s pause and its pending count in the trail\'s dispatch column', async () => {
+		const store = createTracesStore({
+			loadTraces: async () => [
+				traceSummary({
+					traceId: 'trace-paused',
+					title: 'Paused',
+					hasActive: false,
+					paused: true,
+					pauseReason: 'Honey reserve exhausted',
+					pendingCount: 2
+				}),
+				traceSummary({ traceId: 'trace-admitting', title: 'Admitting', hasActive: false })
+			],
+			pageSize: 50,
+			pollIntervalMs: 0
+		});
+		render(Traces, harness(store));
+		await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+
+		const paused = screen.getByRole('link', { name: 'Paused' }).closest('tr') as HTMLElement;
+		expect(within(paused).getByText('paused')).toHaveClass('badge-warning');
+		expect(within(paused).getByText('2 pending')).toBeInTheDocument();
+
+		// An admitting trail with an empty queue has nothing to say in that column.
+		const admitting = screen.getByRole('link', { name: 'Admitting' }).closest('tr') as HTMLElement;
+		expect(within(admitting).queryByText(/paused|pending/)).not.toBeInTheDocument();
+	});
+
 	it('filters the table by title, id, or bee', async () => {
 		const user = userEvent.setup();
 		const store = createTracesStore({

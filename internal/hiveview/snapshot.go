@@ -61,14 +61,19 @@ type SnapshotEnergy struct {
 	Traces    []SnapshotEnergyTrace `json:"traces"`
 }
 
-// SnapshotEnergyTrace is remaining/seed/top-up for one trace in the energy window.
+// SnapshotEnergyTrace is remaining/seed/top-up for one trace in the energy
+// window, together with the shared admission projection: the trail may be
+// paused with work waiting even though the reserve is fully reported.
 type SnapshotEnergyTrace struct {
-	TraceID   string `json:"traceId"`
-	Remaining int    `json:"remaining"`
-	Budget    int    `json:"budget"`
-	Added     int    `json:"added,omitempty"`
-	Allocated int    `json:"allocated,omitempty"`
-	Standing  bool   `json:"standing,omitempty"`
+	TraceID      string `json:"traceId"`
+	Remaining    int    `json:"remaining"`
+	Budget       int    `json:"budget"`
+	Added        int    `json:"added,omitempty"`
+	Allocated    int    `json:"allocated,omitempty"`
+	Standing     bool   `json:"standing,omitempty"`
+	Paused       bool   `json:"paused"`
+	PauseReason  string `json:"pauseReason,omitempty"`
+	PendingCount int    `json:"pendingCount"`
 }
 
 // SnapshotAttention lists items that may need Beekeeper or interface-bee action.
@@ -78,6 +83,7 @@ type SnapshotAttention struct {
 	WaitingReview   []SnapshotAttentionTask   `json:"waitingReview"`
 	PendingInvites  []SnapshotAttentionInvite `json:"pendingInvites"`
 	FailedTasks     []SnapshotAttentionTask   `json:"failedTasks"`
+	PausedTraces    []SnapshotPausedTrace     `json:"pausedTraces"`
 	LowEnergyTraces []SnapshotLowEnergy       `json:"lowEnergyTraces"`
 }
 
@@ -97,6 +103,14 @@ type SnapshotAttentionInvite struct {
 	InviteID string `json:"inviteId"`
 	TraceID  string `json:"traceId"`
 	Bee      string `json:"bee"`
+}
+
+// SnapshotPausedTrace is a trail whose honey reserve paused dispatch, with the
+// reason the episode recorded and the work waiting behind it.
+type SnapshotPausedTrace struct {
+	TraceID      string `json:"traceId"`
+	Reason       string `json:"reason,omitempty"`
+	PendingCount int    `json:"pendingCount"`
 }
 
 // SnapshotLowEnergy is a trace with exhausted honey in the recent window.
@@ -140,6 +154,7 @@ func BuildColonySnapshot(ctx colony.Context, sup *runtime.Supervisor, mgr *sessi
 			WaitingReview:   []SnapshotAttentionTask{},
 			PendingInvites:  []SnapshotAttentionInvite{},
 			FailedTasks:     []SnapshotAttentionTask{},
+			PausedTraces:    []SnapshotPausedTrace{},
 			LowEnergyTraces: []SnapshotLowEnergy{},
 		},
 		RecentTraces: []SnapshotRecentTrace{},
@@ -276,12 +291,15 @@ func collectSnapshotEnergy(ctx colony.Context, traces []TraceSummaryView) Snapsh
 		}
 		out.Available = true
 		out.Traces = append(out.Traces, SnapshotEnergyTrace{
-			TraceID:   tr.TraceID,
-			Remaining: ledgerSnap.EnergyRemaining,
-			Budget:    ledgerSnap.EnergyBudget,
-			Added:     ledgerSnap.EnergyAdded,
-			Allocated: taskledger.Allocated(ledgerSnap.EnergyBudget, ledgerSnap.EnergyAdded),
-			Standing:  tr.Standing,
+			TraceID:      tr.TraceID,
+			Remaining:    ledgerSnap.EnergyRemaining,
+			Budget:       ledgerSnap.EnergyBudget,
+			Added:        ledgerSnap.EnergyAdded,
+			Allocated:    taskledger.Allocated(ledgerSnap.EnergyBudget, ledgerSnap.EnergyAdded),
+			Standing:     tr.Standing,
+			Paused:       tr.Paused,
+			PauseReason:  tr.PauseReason,
+			PendingCount: tr.PendingCount,
 		})
 	}
 	return out
@@ -300,6 +318,7 @@ func buildSnapshotAttention(
 		WaitingReview:   []SnapshotAttentionTask{},
 		PendingInvites:  []SnapshotAttentionInvite{},
 		FailedTasks:     []SnapshotAttentionTask{},
+		PausedTraces:    []SnapshotPausedTrace{},
 		LowEnergyTraces: []SnapshotLowEnergy{},
 	}
 
@@ -338,8 +357,32 @@ func buildSnapshotAttention(
 			if len(att.LowEnergyTraces) >= snapshotAttentionLimit {
 				break
 			}
-			att.LowEnergyTraces = append(att.LowEnergyTraces, SnapshotLowEnergy(tr))
+			att.LowEnergyTraces = append(att.LowEnergyTraces, SnapshotLowEnergy{
+				TraceID:   tr.TraceID,
+				Remaining: tr.Remaining,
+				Budget:    tr.Budget,
+				Added:     tr.Added,
+				Allocated: tr.Allocated,
+				Standing:  tr.Standing,
+			})
 		}
+	}
+
+	// A paused trail is the admission fact behind an exhausted reserve: the
+	// reserve alone says "low energy", while the pause says dispatch stopped
+	// and how much work is waiting.
+	for _, tr := range energy.Traces {
+		if !tr.Paused {
+			continue
+		}
+		if len(att.PausedTraces) >= snapshotAttentionLimit {
+			break
+		}
+		att.PausedTraces = append(att.PausedTraces, SnapshotPausedTrace{
+			TraceID:      tr.TraceID,
+			Reason:       tr.PauseReason,
+			PendingCount: tr.PendingCount,
+		})
 	}
 
 	return att
@@ -401,10 +444,12 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("Tasks: running=%d waiting_review=%d failed=%d",
+	lines = append(lines, fmt.Sprintf("Tasks: running=%d waiting_review=%d failed=%d skipped=%d blocked=%d",
 		s.TaskCounts[string(protocol.TaskStatusRunning)],
 		s.TaskCounts[string(protocol.TaskStatusWaitingReview)],
 		s.TaskCounts[string(protocol.TaskStatusFailed)],
+		s.TaskCounts[string(protocol.TaskStatusSkipped)],
+		s.TaskCounts[string(protocol.TaskStatusBlocked)],
 	))
 
 	if s.Energy.Available && len(s.Energy.Traces) > 0 {
@@ -447,6 +492,16 @@ func FormatColonySnapshot(s ColonySnapshot) string {
 			lines = append(lines, fmt.Sprintf("  failed tasks: %d", len(s.Attention.FailedTasks)))
 			for _, task := range s.Attention.FailedTasks {
 				lines = append(lines, formatAttentionTask(task))
+			}
+		}
+		if len(s.Attention.PausedTraces) > 0 {
+			lines = append(lines, fmt.Sprintf("  paused trails: %d", len(s.Attention.PausedTraces)))
+			for _, tr := range s.Attention.PausedTraces {
+				line := fmt.Sprintf("    %s (%d pending)", tr.TraceID, tr.PendingCount)
+				if tr.Reason != "" {
+					line += " · " + tr.Reason
+				}
+				lines = append(lines, line)
 			}
 		}
 		if len(s.Attention.LowEnergyTraces) > 0 {
@@ -504,5 +559,6 @@ func formatLiveBeeLine(item AgentItem) string {
 func attentionHasItems(att SnapshotAttention) bool {
 	return att.RuntimeStale || att.NatsDown ||
 		len(att.WaitingReview) > 0 || len(att.PendingInvites) > 0 ||
-		len(att.FailedTasks) > 0 || len(att.LowEnergyTraces) > 0
+		len(att.FailedTasks) > 0 || len(att.PausedTraces) > 0 ||
+		len(att.LowEnergyTraces) > 0
 }

@@ -1116,3 +1116,61 @@ func TestExportConfigIncludeOmitsPrivateInputsAndReportsThem(t *testing.T) {
 		t.Fatalf("default export carried configuration contents:\n%s", plainBody)
 	}
 }
+
+// The export header carries the shared admission projection, and the task rows
+// distinguish a pending dispatch, a skipped task, and a legacy blocked task
+// without rewriting the lifecycle status.
+func TestExportHeaderCarriesAdmissionAndPending(t *testing.T) {
+	data := TraceExportData{
+		Slug:       "demo",
+		ColonyRoot: "/tmp/colony",
+		ExportedAt: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC),
+		Trace: hiveview.TraceDetailView{
+			TraceSummaryView: hiveview.TraceSummaryView{
+				TraceID:      "trace-1",
+				Paused:       true,
+				PauseReason:  "Honey reserve exhausted",
+				PendingCount: 2,
+			},
+			Tasks: []hiveview.TaskSummaryView{
+				{TaskID: "task-1", Title: "Held work", Status: "ready", Pending: true},
+				{TaskID: "task-2", Title: "Superseded work", Status: "skipped"},
+				{TaskID: "task-3", Title: "Legacy work", Status: "blocked"},
+			},
+		},
+	}
+
+	md, err := RenderMarkdown(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mdBody := string(md)
+	for _, want := range []string{
+		"Dispatch admission: paused — Honey reserve exhausted · 2 pending",
+		"ready · pending dispatch",
+		"— skipped",
+		"— blocked",
+	} {
+		if !strings.Contains(mdBody, want) {
+			t.Fatalf("markdown export missing %q:\n%s", want, mdBody)
+		}
+	}
+
+	htmlDoc, err := RenderHTML(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	htmlBody := string(htmlDoc)
+	for _, want := range []string{
+		"Dispatch admission: paused",
+		"Honey reserve exhausted",
+		"2 pending",
+		"pending dispatch",
+		"skipped",
+		"blocked",
+	} {
+		if !strings.Contains(htmlBody, want) {
+			t.Fatalf("html export missing %q", want)
+		}
+	}
+}

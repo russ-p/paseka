@@ -10,6 +10,7 @@ describe('statusTone', () => {
 		['approved', 'success'],
 		['waiting_review', 'warning'],
 		['reconnecting', 'warning'],
+		['paused', 'warning'],
 		['failed', 'error'],
 		['disconnected', 'error'],
 		['idle', 'neutral'],
@@ -41,7 +42,9 @@ describe('domain statuses the trace surfaces introduced', () => {
 		['cancelled', 'error'],
 		['planned', 'neutral'],
 		['standing', 'neutral'],
-		['staged', 'neutral']
+		['staged', 'neutral'],
+		// A superseded allocation is quiet: not an error and not a success.
+		['skipped', 'neutral']
 	])('maps %s to %s', (status, expected) => {
 		expect(statusTone(status)).toBe(expected);
 	});

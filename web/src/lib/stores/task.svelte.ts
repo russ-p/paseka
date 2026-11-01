@@ -21,7 +21,7 @@ export function createTaskStore(options: TaskStoreOptions = {}) {
 	const readTask = options.getTask ?? requestTask;
 	const pollIntervalMs = options.pollIntervalMs ?? 5000;
 
-	let board = $state<TaskBoard>({ groups: [], taskCounts: {} });
+	let board = $state<TaskBoard>({ groups: [], taskCounts: {}, pendingDispatches: 0 });
 	let selectedTraceId = $state('');
 	let selectedTaskId = $state('');
 	let detail = $state<TaskDetail | null>(null);
@@ -59,6 +59,15 @@ export function createTaskStore(options: TaskStoreOptions = {}) {
 	 */
 	function counts(): Record<string, number> {
 		return board.taskCounts ?? {};
+	}
+
+	/**
+	 * Deferred dispatches across the scanned trails. A trail-level count, so it sits
+	 * beside the board rather than in any one column: a pending task still belongs to
+	 * the column of the status it really has.
+	 */
+	function pendingDispatches(): number {
+		return board.pendingDispatches ?? 0;
 	}
 
 	function find(traceId: string, taskId: string): TaskListItem | null {
@@ -130,6 +139,9 @@ export function createTaskStore(options: TaskStoreOptions = {}) {
 		},
 		get counts(): Record<string, number> {
 			return counts();
+		},
+		get pendingDispatches(): number {
+			return pendingDispatches();
 		},
 		get tasks(): TaskListItem[] {
 			return board.groups.flatMap((group) => group.tasks);

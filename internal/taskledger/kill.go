@@ -9,7 +9,8 @@ import (
 // IsKillableTaskStatus reports whether a task should transition to cancelled on system.kill.
 func IsKillableTaskStatus(status protocol.TaskStatus) bool {
 	switch status {
-	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled:
+	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled,
+		protocol.TaskStatusSkipped:
 		return false
 	default:
 		return true

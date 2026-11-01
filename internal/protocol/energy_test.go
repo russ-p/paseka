@@ -60,3 +60,55 @@ func TestValidateEnergyStipendRequiresPositiveAmount(t *testing.T) {
 		t.Fatalf("details = %#v", details)
 	}
 }
+
+func TestValidateEnergyPaused(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"energy.paused","episodeId":"pause-1","reason":"Honey reserve exhausted","remaining":0,"budget":12,"pendingCount":2}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+	if !IsEnergyObservation("energy.paused") {
+		t.Fatal("energy.paused must read as an observation")
+	}
+}
+
+func TestValidateEnergyPausedRequiresEpisode(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"energy.paused","remaining":0,"pendingCount":1}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in.Validate()
+	if len(details) != 1 || details[0].Path != "payload.episodeId" {
+		t.Fatalf("details = %#v", details)
+	}
+}
+
+func TestValidateEnergyResumed(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"energy.resumed","episodeId":"pause-1","source":"energy.stipend","remaining":4,"budget":12,"pendingBefore":2,"pendingAfter":0,"dispatched":0,"abandoned":2}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+	if !IsEnergyObservation("energy.resumed") {
+		t.Fatal("energy.resumed must read as an observation")
+	}
+}
+
+func TestValidateEnergyResumedRequiresKnownSource(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"energy.resumed","episodeId":"pause-1","source":"timer","remaining":4}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in.Validate()
+	if len(details) != 1 || details[0].Path != "payload.source" {
+		t.Fatalf("details = %#v", details)
+	}
+}

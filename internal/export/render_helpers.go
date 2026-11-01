@@ -10,6 +10,21 @@ import (
 	"github.com/russ-p/paseka/internal/runs"
 )
 
+// formatAdmissionLine reads the shared trail admission projection for the
+// report header. A paused trail names the recorded reason and the work waiting;
+// an admitting trail still prints its pending count, so an empty queue is
+// evidence rather than an omission. The header never rewrites a task status.
+func formatAdmissionLine(trace hiveview.TraceSummaryView) string {
+	state := "admitting"
+	if trace.Paused {
+		state = "paused"
+		if reason := strings.TrimSpace(trace.PauseReason); reason != "" {
+			state = "paused — " + reason
+		}
+	}
+	return fmt.Sprintf("Dispatch admission: %s · %d pending", state, trace.PendingCount)
+}
+
 func formatUsageAggregate(u *runs.UsageAggregate) string {
 	if u == nil || u.RunCountWithUsage == 0 {
 		return ""

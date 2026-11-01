@@ -59,6 +59,9 @@ func TestNotifyConfigDefaults(t *testing.T) {
 	if !cfg.Mode(tggate.NotifyCategoryBlocked).Enabled() {
 		t.Fatal("blocked should default to sound")
 	}
+	if !cfg.Mode(tggate.NotifyCategoryEnergy).Enabled() || cfg.Mode(tggate.NotifyCategoryEnergy).Silent() {
+		t.Fatal("energy should default to sound (enabled, not silent)")
+	}
 	if !cfg.Mode(tggate.NotifyCategoryReviewRequired).Enabled() {
 		t.Fatal("review_required should default to sound")
 	}
