@@ -92,17 +92,17 @@ func (r *Reactor) deferDirectDispatch(ev protocol.Event, beeRole, taskID, reason
 	return nil
 }
 
-// RecoverPendingDispatches drains direct work that a top-up approved while the
-// reactor was down. The ledger is the only authority here: an `energy.add`
-// applied by `paseka energy add` or another process has already raised the
-// reserve, so startup resumes whatever that top-up made runnable.
+// RecoverPendingDispatches drains work that a top-up approved while the reactor
+// was down. The ledger is the only authority here: an `energy.add` applied by
+// `paseka energy add` or another process has already raised the reserve, so
+// startup resumes whatever that top-up made runnable.
 //
 // Kill and allocation boundaries are already durable in the ledger, so the
 // drain inherits them: a killed trail is skipped and stipend-abandoned entries
 // are not active. A trail without reserve cannot admit anything and is skipped
-// too. Each trail drains oldest-first through the same resume path an
-// `energy.add` uses, and a missing source event becomes unresolved there
-// instead of blocking the rest of the queue.
+// too. Each trail drains task and direct work in one creation-order queue
+// through the same resume path an `energy.add` uses, and a missing direct source
+// event becomes unresolved there instead of blocking the rest of the queue.
 func (r *Reactor) RecoverPendingDispatches(ctx context.Context) error {
 	if r.ledger == nil {
 		return nil
@@ -119,7 +119,7 @@ func (r *Reactor) RecoverPendingDispatches(ctx context.Context) error {
 	for _, traceID := range traceIDs {
 		if err := r.resumePendingDispatches(ctx, traceID); err != nil {
 			// One unreadable trail must not stop the others from resuming.
-			runtimeLog.Warn("resume pending direct dispatches after restart failed",
+			runtimeLog.Warn("resume pending dispatches after restart failed",
 				logging.F("trace", traceID),
 				logging.F("error", err.Error()),
 			)
@@ -128,15 +128,17 @@ func (r *Reactor) RecoverPendingDispatches(ctx context.Context) error {
 	return nil
 }
 
-// resumePendingDispatches drains deferred work after energy.add. It resumes only
-// direct dispatches in this slice; deferred task work is recorded here but
-// resumes through the task dispatch path in the follow-up slice, and legacy
-// honey-blocked tasks keep the existing task-status unblock. Entries drain
-// oldest-first and the drain stops once the reserve is exhausted, so the rest
-// stays pending for the next top-up.
+// resumePendingDispatches drains deferred work after energy.add. Task and direct
+// entries share one creation-order queue: the oldest entry is considered first,
+// with the id breaking ties. A task entry resumes through the normal task
+// dispatch path from the current task snapshot, so its in-flight, attempt,
+// configuration, and kill guards still decide; the stored source event identity
+// only marks the attempt the resumed dispatch belongs to, it is never replayed.
 //
-// Barrier-held items are never drained here: they must wait for the
-// configuration boundary and are resumed by resumeBarrierHeldDispatches.
+// Entries drain until the reserve is exhausted, so a partial top-up runs what it
+// can and leaves the rest pending for the next one. Barrier-held items are never
+// drained here: they must wait for the configuration boundary and are resumed by
+// resumeBarrierHeldDispatches.
 func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) error {
 	snap, err := r.ledger.Snapshot(traceID)
 	if err != nil {
@@ -146,45 +148,44 @@ func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) e
 		return nil
 	}
 	pending := taskledger.ActivePendingDispatches(snap)
-	if !hasPendingDirect(pending) {
+	if !hasResumablePending(pending) {
 		return nil
 	}
-	if !bus.ReplayerAvailable(r.replayer) {
-		runtimeLog.Warn("pending direct dispatch cannot resume without an event replayer",
-			logging.F("trace", traceID),
-		)
-		return nil
-	}
-	events, err := r.replayer.ReplayTrace(traceID)
-	if err != nil {
-		return fmt.Errorf("runtime: replay pending direct dispatches: %w", err)
-	}
-	byID := make(map[string]protocol.Event, len(events))
-	for _, ev := range events {
-		byID[eventIdentity(ev)] = ev
+
+	// Direct work needs its source event to rerun the same reaction. Task work
+	// does not: its current snapshot is the work to resume.
+	var byID map[string]protocol.Event
+	if hasPendingDirect(pending) {
+		if !bus.ReplayerAvailable(r.replayer) {
+			runtimeLog.Warn("pending direct dispatch cannot resume without an event replayer",
+				logging.F("trace", traceID),
+			)
+		} else {
+			events, err := r.replayer.ReplayTrace(traceID)
+			if err != nil {
+				return fmt.Errorf("runtime: replay pending direct dispatches: %w", err)
+			}
+			byID = make(map[string]protocol.Event, len(events))
+			for _, ev := range events {
+				byID[eventIdentity(ev)] = ev
+			}
+		}
 	}
 	for _, item := range pending {
-		if !resumableDirectDispatch(item) {
-			continue
-		}
-		ev, ok := byID[item.SourceEventID]
-		if !ok {
-			if err := r.markPendingUnresolved(traceID, item); err != nil {
+		switch item.Kind {
+		case taskledger.PendingDispatchTask:
+			if err := r.resumeTaskPendingDispatch(ctx, traceID, item); err != nil {
 				return err
 			}
-			continue
-		}
-		r.stampIncomingProvenance(&ev)
-		if err := r.dispatchDirect(ctx, ev, item.Bee, nil); err != nil {
-			return err
-		}
-		// Resolve against the dispatch the event actually produces, not the
-		// stored id: a legacy entry may carry an id from an older key format,
-		// and only a dispatch that really ran should be marked consumed.
-		if r.directProcessedRecorded(directDispatchKey(ev, item.Bee)) {
-			if err := r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchConsumed); err != nil {
+		case taskledger.PendingDispatchDirect:
+			if !resumableDirectDispatch(item) || byID == nil {
+				continue
+			}
+			if err := r.resumeDirectPendingDispatch(ctx, traceID, item, byID); err != nil {
 				return err
 			}
+		default:
+			continue
 		}
 		// Every admitted dispatch costs one honey. Once the reserve is gone,
 		// nothing behind this entry can start, so stop instead of walking — and
@@ -196,6 +197,98 @@ func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) e
 		if left.EnergyRemaining <= 0 {
 			break
 		}
+	}
+	return nil
+}
+
+// resumeTaskPendingDispatch resumes one deferred task dispatch. The pending
+// entry is only a marker: the ledger's current task snapshot is authoritative,
+// so a task that closed or turned terminal while waiting is abandoned instead
+// of replaying stale work. A dispatch that re-defers because the reserve ran out
+// again leaves the entry pending, so the drain never claims a false resume.
+func (r *Reactor) resumeTaskPendingDispatch(ctx context.Context, traceID string, item taskledger.PendingDispatch) error {
+	// One process must not start two live dispatches for the same entry. Two
+	// energy events can arrive close enough together that both see the entry
+	// active; the claim lets only the first one dispatch.
+	if !r.claimPendingResume(traceID, item.ID) {
+		return nil
+	}
+	defer r.releasePendingResume(traceID, item.ID)
+
+	snap, err := r.ledger.Snapshot(traceID)
+	if err != nil {
+		return err
+	}
+	if snap.Killed {
+		return nil
+	}
+	entry := findPendingDispatch(snap, item.ID)
+	if entry == nil || !entry.Status.Active() {
+		// Another mutation already closed the entry.
+		return nil
+	}
+	task, ok := snap.Tasks[item.TaskID]
+	if closed := taskPendingClosed(task, ok); closed != "" {
+		runtimeLog.Info("pending task dispatch abandoned",
+			logging.F("trace", traceID),
+			logging.F("task", item.TaskID),
+			logging.F("bee", item.Bee),
+			logging.F("reason", closed),
+		)
+		return r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchAbandoned)
+	}
+
+	if err := r.dispatchReady(ctx, traceID, task, nil, item.SourceEventID); err != nil {
+		return err
+	}
+	after, err := r.ledger.Snapshot(traceID)
+	if err != nil {
+		return err
+	}
+	entry = findPendingDispatch(after, item.ID)
+	if entry == nil || !entry.Status.Active() {
+		// The dispatch (or a concurrent guard) closed the entry.
+		return nil
+	}
+	if moved, ok := after.Tasks[item.TaskID]; !ok || moved.Status == protocol.TaskStatusReady {
+		// The dispatch was not admitted: it re-deferred because the reserve ran
+		// out, awaited a configuration boundary, or a guard skipped it. The
+		// entry stays pending for the next top-up.
+		return nil
+	}
+	return r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchConsumed)
+}
+
+// taskPendingClosed reports why a deferred task dispatch can no longer run, or
+// an empty string when the task is still `ready` and dispatchable. A task that
+// moved past ready already has an owner or outcome; replaying it would duplicate
+// or override that work.
+func taskPendingClosed(task taskledger.TaskSnapshot, ok bool) string {
+	if !ok || task.TaskID == "" {
+		return "task no longer exists"
+	}
+	if task.Status == protocol.TaskStatusReady {
+		return ""
+	}
+	return fmt.Sprintf("task is %q, not ready", task.Status)
+}
+
+// resumeDirectPendingDispatch resumes one deferred direct reaction through the
+// same dispatch path its original event used.
+func (r *Reactor) resumeDirectPendingDispatch(ctx context.Context, traceID string, item taskledger.PendingDispatch, byID map[string]protocol.Event) error {
+	ev, ok := byID[item.SourceEventID]
+	if !ok {
+		return r.markPendingUnresolved(traceID, item)
+	}
+	r.stampIncomingProvenance(&ev)
+	if err := r.dispatchDirect(ctx, ev, item.Bee, nil); err != nil {
+		return err
+	}
+	// Resolve against the dispatch the event actually produces, not the stored
+	// id: a legacy entry may carry an id from an older key format, and only a
+	// dispatch that really ran should be marked consumed.
+	if r.directProcessedRecorded(directDispatchKey(ev, item.Bee)) {
+		return r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchConsumed)
 	}
 	return nil
 }
@@ -303,6 +396,54 @@ func hasPendingDirect(pending []taskledger.PendingDispatch) bool {
 		}
 	}
 	return false
+}
+
+// hasResumablePending reports whether the drain has work it may consider. Task
+// entries and energy-deferred direct entries share the queue; configuration-held
+// direct work is owned by its transition, not by an energy increase.
+func hasResumablePending(pending []taskledger.PendingDispatch) bool {
+	for _, item := range pending {
+		if item.Kind == taskledger.PendingDispatchTask || resumableDirectDispatch(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func findPendingDispatch(snap taskledger.TraceSnapshot, dispatchID string) *taskledger.PendingDispatch {
+	for i := range snap.PendingDispatches {
+		if snap.PendingDispatches[i].ID == dispatchID {
+			return &snap.PendingDispatches[i]
+		}
+	}
+	return nil
+}
+
+func pendingResumeKey(traceID, dispatchID string) string {
+	return traceID + "\x00" + dispatchID
+}
+
+// claimPendingResume marks a pending entry as being resumed by this process, so
+// two close energy events cannot both start a live dispatch for it.
+func (r *Reactor) claimPendingResume(traceID, dispatchID string) bool {
+	key := pendingResumeKey(traceID, dispatchID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.pendingResume == nil {
+		r.pendingResume = make(map[string]struct{})
+	}
+	if _, ok := r.pendingResume[key]; ok {
+		return false
+	}
+	r.pendingResume[key] = struct{}{}
+	return true
+}
+
+func (r *Reactor) releasePendingResume(traceID, dispatchID string) {
+	key := pendingResumeKey(traceID, dispatchID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.pendingResume, key)
 }
 
 // resumableDirectDispatch reports whether the energy drain may run this entry.
