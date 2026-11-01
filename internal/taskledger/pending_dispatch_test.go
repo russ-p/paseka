@@ -48,6 +48,64 @@ func TestDeferPendingDispatchDedupesActiveEntry(t *testing.T) {
 	}
 }
 
+// A reaction can be deferred again after an earlier entry was consumed, so two
+// entries can share the dispatch key. The active one is the one to close: a
+// stale replay must not resolve the consumed entry and leave runnable work.
+func TestResolvePendingDispatchTargetsActiveDuplicate(t *testing.T) {
+	trace := taskledger.TraceSnapshot{}
+	trace, _ = taskledger.DeferPendingDispatch(trace, taskledger.PendingDispatch{ID: "same"})
+	trace, _ = taskledger.ResolvePendingDispatch(trace, "same", taskledger.PendingDispatchConsumed)
+	trace, added := taskledger.DeferPendingDispatch(trace, taskledger.PendingDispatch{ID: "same"})
+	if !added {
+		t.Fatal("expected the second deferral to append")
+	}
+
+	trace, changed := taskledger.ResolvePendingDispatch(trace, "same", taskledger.PendingDispatchConsumed)
+	if !changed {
+		t.Fatal("expected resolve to close the active duplicate")
+	}
+	for i, item := range trace.PendingDispatches {
+		if item.Status != taskledger.PendingDispatchConsumed {
+			t.Fatalf("entry[%d] status = %q, want consumed", i, item.Status)
+		}
+	}
+	if active := taskledger.ActivePendingDispatches(trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want none", active)
+	}
+}
+
+// A closed entry is final evidence. A late missing-source diagnostic must not
+// overwrite a consumed or abandoned outcome.
+func TestMarkPendingDispatchUnresolvedLeavesClosedEntries(t *testing.T) {
+	trace := taskledger.TraceSnapshot{}
+	trace, _ = taskledger.DeferPendingDispatch(trace, taskledger.PendingDispatch{ID: "closed"})
+	trace, _ = taskledger.ResolvePendingDispatch(trace, "closed", taskledger.PendingDispatchConsumed)
+
+	trace, changed := taskledger.MarkPendingDispatchUnresolved(trace, "closed", "source event missing")
+	if changed {
+		t.Fatal("a late diagnostic must not reopen or rewrite a closed entry")
+	}
+	if got := trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchConsumed {
+		t.Fatalf("status = %q, want consumed", got)
+	}
+	if trace.PendingDispatches[0].Diagnostic != "" {
+		t.Fatalf("diagnostic = %q, want none on a consumed entry", trace.PendingDispatches[0].Diagnostic)
+	}
+
+	// The active duplicate is still the entry the diagnostic belongs to.
+	trace, _ = taskledger.DeferPendingDispatch(trace, taskledger.PendingDispatch{ID: "closed"})
+	trace, changed = taskledger.MarkPendingDispatchUnresolved(trace, "closed", "source event missing")
+	if !changed {
+		t.Fatal("expected the active duplicate to become unresolved")
+	}
+	if got := trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchConsumed {
+		t.Fatalf("closed entry status = %q, want consumed", got)
+	}
+	if got := trace.PendingDispatches[1].Status; got != taskledger.PendingDispatchUnresolved {
+		t.Fatalf("active entry status = %q, want unresolved", got)
+	}
+}
+
 func TestPendingDispatchStatusVocabulary(t *testing.T) {
 	if got := string(taskledger.PendingDispatchUnresolved); got != "unresolved" {
 		t.Fatalf("unresolved status = %q, want unresolved", got)

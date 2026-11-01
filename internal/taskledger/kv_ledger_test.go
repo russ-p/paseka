@@ -331,3 +331,42 @@ func TestKVLedgerDecodesSnapshotWithoutPendingFields(t *testing.T) {
 		t.Fatalf("task status = %q, want waiting_review", got)
 	}
 }
+
+// A repeated deferral after a resume can append a second entry with the same
+// dispatch key. The KV path must close the active one, not the stale consumed
+// entry, or the durable queue never drains again.
+func TestKVLedgerResolvesActiveDuplicatePendingDispatch(t *testing.T) {
+	kv := newFakeKV()
+	ledger := taskledger.NewKVLedger(kv)
+	if _, err := ledger.DeferPendingDispatch("trace-1", taskledger.PendingDispatch{
+		ID:   "same",
+		Kind: taskledger.PendingDispatchDirect,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.ResolvePendingDispatch("trace-1", "same", taskledger.PendingDispatchConsumed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.DeferPendingDispatch("trace-1", taskledger.PendingDispatch{
+		ID:   "same",
+		Kind: taskledger.PendingDispatchDirect,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ledger.ResolvePendingDispatch("trace-1", "same", taskledger.PendingDispatchConsumed); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.PendingDispatches) != 2 {
+		t.Fatalf("pending entries = %d, want 2", len(snap.PendingDispatches))
+	}
+	for i, item := range snap.PendingDispatches {
+		if item.Status != taskledger.PendingDispatchConsumed {
+			t.Fatalf("entry[%d] status = %q, want consumed", i, item.Status)
+		}
+	}
+}

@@ -114,6 +114,11 @@ func DeferPendingDispatch(trace TraceSnapshot, dispatch PendingDispatch) (TraceS
 }
 
 // ResolvePendingDispatch closes one deferred item without touching task state.
+// The same dispatch key can appear more than once: an earlier entry keeps its
+// evidence when the reaction is deferred again after a resume. The active entry
+// is the one to close, because closing the stale entry would leave runnable
+// work behind. A closed entry is targeted only when no active duplicate exists,
+// so the legacy states stay addressable.
 func ResolvePendingDispatch(trace TraceSnapshot, dispatchID string, status PendingDispatchStatus) (TraceSnapshot, bool) {
 	if dispatchID == "" {
 		return trace, false
@@ -121,34 +126,42 @@ func ResolvePendingDispatch(trace TraceSnapshot, dispatchID string, status Pendi
 	if status == "" {
 		status = PendingDispatchConsumed
 	}
+	target := -1
 	for i := range trace.PendingDispatches {
-		if trace.PendingDispatches[i].ID != dispatchID {
-			continue
+		if trace.PendingDispatches[i].ID == dispatchID && trace.PendingDispatches[i].Status.Active() {
+			target = i
+			break
 		}
-		if trace.PendingDispatches[i].Status == status {
-			return trace, false
-		}
-		trace.PendingDispatches[i].Status = status
-		trace.PendingDispatches[i].UpdatedAt = time.Now().UTC()
-		return trace, true
 	}
-	return trace, false
+	if target == -1 {
+		for i := len(trace.PendingDispatches) - 1; i >= 0; i-- {
+			if trace.PendingDispatches[i].ID == dispatchID {
+				target = i
+				break
+			}
+		}
+	}
+	if target == -1 || trace.PendingDispatches[target].Status == status {
+		return trace, false
+	}
+	trace.PendingDispatches[target].Status = status
+	trace.PendingDispatches[target].UpdatedAt = time.Now().UTC()
+	return trace, true
 }
 
 // MarkPendingDispatchUnresolved closes a deferred item whose source event can
 // no longer be recovered. The entry stays in the ledger so missing evidence is
-// visible; it is never drained as runnable work.
+// visible; it is never drained as runnable work. Only active work can become
+// unresolved: a late diagnostic must not overwrite a consumed or abandoned
+// outcome that another mutation already recorded.
 func MarkPendingDispatchUnresolved(trace TraceSnapshot, dispatchID, diagnostic string) (TraceSnapshot, bool) {
 	if dispatchID == "" {
 		return trace, false
 	}
 	for i := range trace.PendingDispatches {
 		entry := &trace.PendingDispatches[i]
-		if entry.ID != dispatchID {
+		if entry.ID != dispatchID || !entry.Status.Active() {
 			continue
-		}
-		if entry.Status == PendingDispatchUnresolved && entry.Diagnostic == diagnostic {
-			return trace, false
 		}
 		entry.Status = PendingDispatchUnresolved
 		entry.Diagnostic = diagnostic
