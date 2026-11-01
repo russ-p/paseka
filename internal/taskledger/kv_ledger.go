@@ -96,6 +96,19 @@ func (l *KVLedger) ResolvePendingDispatch(traceID, dispatchID string, status Pen
 	return err
 }
 
+// MarkPendingDispatchUnresolved keeps deferred work visible when its source
+// event is gone.
+func (l *KVLedger) MarkPendingDispatchUnresolved(traceID, dispatchID, diagnostic string) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, changed := MarkPendingDispatchUnresolved(trace, dispatchID, diagnostic)
+		return updated, ApplyResult{Trace: updated, Changed: changed}, nil
+	})
+	return err
+}
+
 func (l *KVLedger) loadTrace(traceID string) (TraceSnapshot, uint64, error) {
 	entry, err := l.kv.Get(traceID)
 	if err != nil {

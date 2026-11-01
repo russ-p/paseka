@@ -203,7 +203,7 @@ func reduceSignal(trace TraceSnapshot, event protocol.Event, now time.Time) (red
 	case string(protocol.TaskEventReady):
 		return reduceTaskReady(trace, event, now)
 	default:
-		return reduceEnergy(trace, event, kind)
+		return reduceEnergy(trace, event, kind, now)
 	}
 }
 
@@ -220,7 +220,7 @@ func reduceSystemKill(trace TraceSnapshot, event protocol.Event, now time.Time) 
 	return reduceStep{trace: trace, changed: !killed}, nil
 }
 
-func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string) (reduceStep, error) {
+func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string, now time.Time) (reduceStep, error) {
 	switch protocol.EnergyEventKind(kind) {
 	case protocol.SignalEnergyAdd:
 		payload, err := decodePayload[protocol.EnergyAddPayload](event, "energy.add")
@@ -261,6 +261,10 @@ func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string) (reduc
 			return reduceStep{}, fmt.Errorf("taskledger: energy.stipend amount must be positive")
 		}
 		trace.EnergyRemaining = payload.Amount
+		// A stipend starts a new allocation: close the previous allocation's
+		// direct reactions in this same mutation so a later energy.add cannot
+		// resurrect a guard or receiver from the tick that just ended.
+		trace, _ = AbandonPendingDispatches(trace, now)
 		return reduceStep{trace: trace, changed: true}, nil
 
 	default:

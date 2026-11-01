@@ -2,6 +2,7 @@ package taskledger
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -16,6 +17,19 @@ type MemoryLedger struct {
 // NewMemoryLedger creates an empty in-memory ledger.
 func NewMemoryLedger() *MemoryLedger {
 	return &MemoryLedger{traces: make(map[string]TraceSnapshot)}
+}
+
+// TraceIDs lists the trails the ledger holds, so a reactor restart can find
+// work deferred while no reactor was running.
+func (l *MemoryLedger) TraceIDs() ([]string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ids := make([]string, 0, len(l.traces))
+	for traceID := range l.traces {
+		ids = append(ids, traceID)
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 // Snapshot returns the current task ledger for a trace.
@@ -88,6 +102,25 @@ func (l *MemoryLedger) ResolvePendingDispatch(traceID, dispatchID string, status
 		return nil
 	}
 	updated, changed := ResolvePendingDispatch(trace, dispatchID, status)
+	if changed {
+		l.traces[traceID] = updated
+	}
+	return nil
+}
+
+// MarkPendingDispatchUnresolved keeps deferred work visible when its source
+// event is gone.
+func (l *MemoryLedger) MarkPendingDispatchUnresolved(traceID, dispatchID, diagnostic string) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		return nil
+	}
+	updated, changed := MarkPendingDispatchUnresolved(trace, dispatchID, diagnostic)
 	if changed {
 		l.traces[traceID] = updated
 	}

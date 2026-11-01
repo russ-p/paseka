@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/russ-p/paseka/internal/bus"
@@ -58,6 +59,42 @@ func (r *Reactor) deferDirectDispatch(ev protocol.Event, beeRole, taskID, reason
 	return nil
 }
 
+// RecoverPendingDispatches drains direct work that a top-up approved while the
+// reactor was down. The ledger is the only authority here: an `energy.add`
+// applied by `paseka energy add` or another process has already raised the
+// reserve, so startup resumes whatever that top-up made runnable.
+//
+// Kill and allocation boundaries are already durable in the ledger, so the
+// drain inherits them: a killed trail is skipped and stipend-abandoned entries
+// are not active. A trail without reserve cannot admit anything and is skipped
+// too. Each trail drains oldest-first through the same resume path an
+// `energy.add` uses, and a missing source event becomes unresolved there
+// instead of blocking the rest of the queue.
+func (r *Reactor) RecoverPendingDispatches(ctx context.Context) error {
+	if r.ledger == nil {
+		return nil
+	}
+	lister, ok := r.ledger.(taskledger.TraceLister)
+	if !ok {
+		return nil
+	}
+	traceIDs, err := lister.TraceIDs()
+	if err != nil {
+		return fmt.Errorf("runtime: list trails for pending dispatch recovery: %w", err)
+	}
+	sort.Strings(traceIDs)
+	for _, traceID := range traceIDs {
+		if err := r.resumePendingDispatches(ctx, traceID); err != nil {
+			// One unreadable trail must not stop the others from resuming.
+			runtimeLog.Warn("resume pending direct dispatches after restart failed",
+				logging.F("trace", traceID),
+				logging.F("error", err.Error()),
+			)
+		}
+	}
+	return nil
+}
+
 // resumePendingDispatches drains deferred work after energy.add. It resumes only
 // direct dispatches in this slice; task dispatch unblocking stays in the
 // existing task-status path.
@@ -96,19 +133,19 @@ func (r *Reactor) resumePendingDispatches(ctx context.Context, traceID string) e
 		}
 		ev, ok := byID[item.SourceEventID]
 		if !ok {
-			runtimeLog.Warn("pending direct dispatch source event missing",
-				logging.F("trace", traceID),
-				logging.F("task", item.TaskID),
-				logging.F("bee", item.Bee),
-				logging.F("sourceEvent", item.SourceEventID),
-			)
+			if err := r.markPendingUnresolved(traceID, item); err != nil {
+				return err
+			}
 			continue
 		}
 		r.stampIncomingProvenance(&ev)
 		if err := r.dispatchDirect(ctx, ev, item.Bee, nil); err != nil {
 			return err
 		}
-		if r.directProcessedRecorded(item.ID) {
+		// Resolve against the dispatch the event actually produces, not the
+		// stored id: a legacy entry may carry an id from an older key format,
+		// and only a dispatch that really ran should be marked consumed.
+		if r.directProcessedRecorded(directDispatchKey(ev, item.Bee)) {
 			if err := r.ledger.ResolvePendingDispatch(traceID, item.ID, taskledger.PendingDispatchConsumed); err != nil {
 				return err
 			}
@@ -178,20 +215,16 @@ func (r *Reactor) resumeBarrierHeldDispatches(ctx context.Context, traceID strin
 	for _, item := range pending {
 		ev, ok := byID[item.SourceEventID]
 		if !ok {
-			unresolved++
-			runtimeLog.Warn("barrier-held direct dispatch source event missing",
-				logging.F("trace", traceID),
-				logging.F("task", item.TaskID),
-				logging.F("bee", item.Bee),
-				logging.F("sourceEvent", item.SourceEventID),
-			)
+			if err := r.markPendingUnresolved(traceID, item); err != nil {
+				return err
+			}
 			continue
 		}
 		r.stampIncomingProvenance(&ev)
 		if err := r.dispatchDirect(ctx, ev, item.Bee, nil); err != nil {
 			return err
 		}
-		if !r.directProcessedRecorded(item.ID) {
+		if !r.directProcessedRecorded(directDispatchKey(ev, item.Bee)) {
 			unresolved++
 			continue
 		}
@@ -201,6 +234,20 @@ func (r *Reactor) resumeBarrierHeldDispatches(ctx context.Context, traceID strin
 	}
 	remaining = unresolved > 0
 	return nil
+}
+
+// markPendingUnresolved keeps a deferred direct dispatch in the ledger when the
+// source event it reacted to can no longer be recovered. The entry becomes
+// unresolved: visible as missing evidence, never drained as runnable work.
+func (r *Reactor) markPendingUnresolved(traceID string, item taskledger.PendingDispatch) error {
+	runtimeLog.Warn("pending direct dispatch source event missing",
+		logging.F("trace", traceID),
+		logging.F("task", item.TaskID),
+		logging.F("bee", item.Bee),
+		logging.F("sourceEvent", item.SourceEventID),
+	)
+	diagnostic := fmt.Sprintf("source event %q not found in trace replay", item.SourceEventID)
+	return r.ledger.MarkPendingDispatchUnresolved(traceID, item.ID, diagnostic)
 }
 
 func hasPendingDirect(pending []taskledger.PendingDispatch) bool {

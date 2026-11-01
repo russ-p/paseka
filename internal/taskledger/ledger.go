@@ -50,7 +50,19 @@ type PendingDispatchStatus string
 const (
 	PendingDispatchPending  PendingDispatchStatus = "pending"
 	PendingDispatchConsumed PendingDispatchStatus = "consumed"
+	// PendingDispatchAbandoned marks work a later allocation deliberately gave
+	// up: a stipend or a kill closed it. It is never resumed.
+	PendingDispatchAbandoned PendingDispatchStatus = "abandoned"
+	// PendingDispatchUnresolved marks work whose source event could no longer
+	// be recovered. It stays visible as evidence and is never treated as
+	// runnable.
+	PendingDispatchUnresolved PendingDispatchStatus = "unresolved"
 )
+
+// Active reports whether deferred work still awaits admission.
+func (s PendingDispatchStatus) Active() bool {
+	return s == PendingDispatchPending
+}
 
 // PendingDispatch is work a trail admitted but could not start because the
 // honey reserve was exhausted. The dispatch path owns the context needed to
@@ -63,6 +75,7 @@ type PendingDispatch struct {
 	SourceEventID string                `json:"sourceEventId,omitempty"`
 	Reason        string                `json:"reason,omitempty"`
 	Status        PendingDispatchStatus `json:"status"`
+	Diagnostic    string                `json:"diagnostic,omitempty"`
 	CreatedAt     time.Time             `json:"createdAt,omitempty"`
 	UpdatedAt     time.Time             `json:"updatedAt,omitempty"`
 }
@@ -97,6 +110,14 @@ type ApplyResult struct {
 	Changed bool
 }
 
+// TraceLister is implemented by ledgers that can enumerate the trails they
+// hold. Reactor startup uses it to find deferred work that a top-up approved
+// while no reactor was running.
+type TraceLister interface {
+	// TraceIDs lists the trail ids present in the ledger.
+	TraceIDs() ([]string, error)
+}
+
 // Ledger persists and projects task state for one or more traces.
 // Implementations may use NATS KV, local files, or in-memory storage.
 type Ledger interface {
@@ -116,4 +137,8 @@ type Ledger interface {
 
 	// ResolvePendingDispatch closes deferred work with the given status.
 	ResolvePendingDispatch(traceID, dispatchID string, status PendingDispatchStatus) error
+
+	// MarkPendingDispatchUnresolved keeps deferred work visible when its source
+	// event can no longer be recovered. The entry is never drained again.
+	MarkPendingDispatchUnresolved(traceID, dispatchID, diagnostic string) error
 }

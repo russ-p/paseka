@@ -90,8 +90,10 @@ func dropStalePendingReady(trace TraceSnapshot) (TraceSnapshot, bool) {
 }
 
 // DeferPendingDispatch appends deferred work unless the same id is still pending.
+// A killed trail records no new pending work: kill is the hard stop, so a
+// deferral racing the kill must not leave runnable work behind.
 func DeferPendingDispatch(trace TraceSnapshot, dispatch PendingDispatch) (TraceSnapshot, bool) {
-	if dispatch.ID == "" {
+	if dispatch.ID == "" || trace.Killed {
 		return trace, false
 	}
 	now := time.Now().UTC()
@@ -103,7 +105,7 @@ func DeferPendingDispatch(trace TraceSnapshot, dispatch PendingDispatch) (TraceS
 		dispatch.Status = PendingDispatchPending
 	}
 	for _, existing := range trace.PendingDispatches {
-		if existing.ID == dispatch.ID && existing.Status == PendingDispatchPending {
+		if existing.ID == dispatch.ID && existing.Status.Active() {
 			return trace, false
 		}
 	}
@@ -133,12 +135,53 @@ func ResolvePendingDispatch(trace TraceSnapshot, dispatchID string, status Pendi
 	return trace, false
 }
 
+// MarkPendingDispatchUnresolved closes a deferred item whose source event can
+// no longer be recovered. The entry stays in the ledger so missing evidence is
+// visible; it is never drained as runnable work.
+func MarkPendingDispatchUnresolved(trace TraceSnapshot, dispatchID, diagnostic string) (TraceSnapshot, bool) {
+	if dispatchID == "" {
+		return trace, false
+	}
+	for i := range trace.PendingDispatches {
+		entry := &trace.PendingDispatches[i]
+		if entry.ID != dispatchID {
+			continue
+		}
+		if entry.Status == PendingDispatchUnresolved && entry.Diagnostic == diagnostic {
+			return trace, false
+		}
+		entry.Status = PendingDispatchUnresolved
+		entry.Diagnostic = diagnostic
+		entry.UpdatedAt = time.Now().UTC()
+		return trace, true
+	}
+	return trace, false
+}
+
+// AbandonPendingDispatches closes every active deferred item without dispatching
+// it. A hard stop or a new allocation calls this inside the mutation that owns
+// the decision, so the abandoned queue is never revived by a later top-up or a
+// restart. Closed entries keep their own status: only active work is abandoned.
+func AbandonPendingDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot, bool) {
+	changed := false
+	for i := range trace.PendingDispatches {
+		entry := &trace.PendingDispatches[i]
+		if !entry.Status.Active() {
+			continue
+		}
+		entry.Status = PendingDispatchAbandoned
+		entry.UpdatedAt = now
+		changed = true
+	}
+	return trace, changed
+}
+
 // ActivePendingDispatches returns pending work in creation order: oldest first,
 // with the id breaking ties.
 func ActivePendingDispatches(trace TraceSnapshot) []PendingDispatch {
 	var pending []PendingDispatch
 	for _, dispatch := range trace.PendingDispatches {
-		if dispatch.Status == PendingDispatchPending {
+		if dispatch.Status.Active() {
 			pending = append(pending, dispatch)
 		}
 	}

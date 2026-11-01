@@ -300,7 +300,9 @@ func TestBarrierHoldKeepsWorkDurableWhenTraceIsKilled(t *testing.T) {
 	if h.rec.calls != 1 {
 		t.Fatalf("killed trace dispatched held work: calls = %d", h.rec.calls)
 	}
-	assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchPending)
+	// Kill is a hard stop: the held entry stays in the ledger as evidence but is
+	// abandoned in the kill mutation, so nothing can resume it.
+	assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchAbandoned)
 
 	manifest, err := trailconfig.Load(h.root, h.traceID)
 	if err != nil {
@@ -310,13 +312,13 @@ func TestBarrierHoldKeepsWorkDurableWhenTraceIsKilled(t *testing.T) {
 		t.Fatalf("kill did not cancel the pending change: %+v", manifest.Pending)
 	}
 
-	// A restart must not resume or consume held work on a killed trail either.
+	// A restart must not resume or consume abandoned work on a killed trail.
 	restarted, rec := h.newReactor(t)
 	mustProcess(t, restarted, mustEvent(t, h.traceID, "cli", protocol.EventSignal, `{"kind":"system.note","note":"tick"}`))
 	if rec.calls != 0 {
 		t.Fatalf("killed trace resumed held work after restart: calls = %d", rec.calls)
 	}
-	assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchPending)
+	assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchAbandoned)
 }
 
 func assertBarrierHoldStatus(t *testing.T, ledger taskledger.Ledger, traceID string, want taskledger.PendingDispatchStatus) taskledger.PendingDispatch {

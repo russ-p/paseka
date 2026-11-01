@@ -43,6 +43,10 @@ func (f failingLedger) ResolvePendingDispatch(string, string, taskledger.Pending
 	return f.err
 }
 
+func (f failingLedger) MarkPendingDispatchUnresolved(string, string, string) error {
+	return f.err
+}
+
 func TestWriteEventApplyBeforePublish(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	pub := &recordingPublisher{}
