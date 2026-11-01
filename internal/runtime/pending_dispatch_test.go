@@ -291,6 +291,57 @@ func TestResumeDrainSkipsAbandonedPendingDirectDispatch(t *testing.T) {
 	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusWaitingReview)
 }
 
+func TestStipendAbandonsPendingDirectDispatchAndTopUpDoesNotRevive(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "builder-1", 1, protocol.EventMutation, protocol.MutationPayload{
+		Kind:   protocol.MutationCodeProposal,
+		TaskID: "task-1",
+		Diff:   "+func Login() {}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewMemoryLedger()
+	seedWaitingReviewTask(t, ledger, "task-1")
+	exhaustEnergy(t, ledger)
+
+	bees := map[string]colony.Bee{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	first := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	first.Dispatcher().RegisterAdapter("cursor", &recordingAdapter{})
+	if err := first.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchPending)
+
+	// A stipend starts a new allocation, so it closes the previous one's
+	// pending direct reactions in the same reduction that sets the reserve.
+	stipend := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.stipend","amount":4}`)
+	if err := first.ProcessEvent(context.Background(), stipend); err != nil {
+		t.Fatal(err)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchAbandoned)
+	assertPendingDirectCount(t, ledger, 1)
+	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusWaitingReview)
+
+	// A top-up on a fresh reactor over the same ledger must not resurrect the
+	// work the stipend closed, even though the source event is still replayable.
+	second := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	rec := &recordingAdapter{}
+	second.Dispatcher().RegisterAdapter("cursor", rec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":2}`)
+	if err := second.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d after top-up, want stipend-abandoned work to stay closed", rec.calls)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchAbandoned)
+	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusWaitingReview)
+}
+
 func pendingDirectID(t *testing.T, ledger taskledger.Ledger) string {
 	t.Helper()
 	snap, err := ledger.Snapshot("trace-1")

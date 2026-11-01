@@ -187,6 +187,108 @@ func TestApplyEventEnergyStipendRequiresPositiveAmount(t *testing.T) {
 	}
 }
 
+func TestApplyEventEnergyStipendAbandonsActivePendingDispatches(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    10,
+		EnergyRemaining: 0,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusWaitingReview},
+		},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "active", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
+			{ID: "done", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchConsumed},
+			{ID: "gone", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchUnresolved, Diagnostic: "source event missing"},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Changed {
+		t.Fatal("stipend must report a change so the ledger persists the abandonment")
+	}
+	if res.Trace.EnergyRemaining != 4 {
+		t.Fatalf("remaining = %d, want 4", res.Trace.EnergyRemaining)
+	}
+	if got := res.Trace.Tasks["task-1"].Status; got != protocol.TaskStatusWaitingReview {
+		t.Fatalf("task status = %q, want waiting_review", got)
+	}
+	statuses := map[string]taskledger.PendingDispatchStatus{}
+	for _, item := range res.Trace.PendingDispatches {
+		statuses[item.ID] = item.Status
+	}
+	if got := statuses["active"]; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("active entry status = %q, want abandoned", got)
+	}
+	if got := statuses["done"]; got != taskledger.PendingDispatchConsumed {
+		t.Fatalf("consumed entry status = %q, want consumed", got)
+	}
+	if got := statuses["gone"]; got != taskledger.PendingDispatchUnresolved {
+		t.Fatalf("unresolved entry status = %q, want unresolved", got)
+	}
+	if active := taskledger.ActivePendingDispatches(res.Trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want none after stipend", active)
+	}
+	if len(res.Trace.PendingDispatches) != 3 {
+		t.Fatalf("pending entries = %d, want 3 kept as evidence", len(res.Trace.PendingDispatches))
+	}
+}
+
+func TestApplyEventEnergyAddDoesNotReviveStipendAbandonedWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID:         "trace-1",
+		EnergyBudget:    10,
+		EnergyRemaining: 0,
+		Tasks:           map[string]taskledger.TaskSnapshot{},
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "active", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchPending},
+		},
+	}
+	stipend, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, stipend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("status after stipend = %q, want abandoned", got)
+	}
+
+	add, err := protocol.NewEvent("trace-1", "cli", 2, protocol.EventSignal, protocol.EnergyAddPayload{
+		Kind:   protocol.SignalEnergyAdd,
+		Amount: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, add)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.EnergyRemaining != 7 {
+		t.Fatalf("remaining = %d, want 7", res.Trace.EnergyRemaining)
+	}
+	if got := res.Trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("status after energy.add = %q, want abandoned", got)
+	}
+	if active := taskledger.ActivePendingDispatches(res.Trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want none revived by energy.add", active)
+	}
+}
+
 func TestApplyEventEnergyConsumeInsufficient(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID:         "trace-1",
