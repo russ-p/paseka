@@ -32,6 +32,9 @@ type RunMeta struct {
 	FinishedAt        time.Time       `json:"finishedAt,omitempty"`
 	HasEvents         bool            `json:"hasEvents"`
 	HasSession        bool            `json:"hasSession"`
+	// Gate is the runtime-owned mechanical check verdict, absent when the bee
+	// declares no gate or the gate did not run.
+	Gate *protocol.GateResult `json:"gate,omitempty"`
 	protocol.Provenance
 }
 
@@ -75,6 +78,7 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		if !snap.FinishedAt.IsZero() {
 			meta.FinishedAt = snap.FinishedAt
 		}
+		meta.Gate = snap.Gate
 	}
 
 	if res, err := d.ReadResultJSON(); err == nil {

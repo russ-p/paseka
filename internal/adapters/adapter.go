@@ -119,6 +119,16 @@ type RunResult struct {
 	ExitCode          int
 	Err               error
 	Warnings          []string // advisory runtime notices (e.g. undeclared publishes)
+	// Reason is a machine-readable classifier for a runtime-owned terminal
+	// outcome, e.g. "checks_failed" when the check gate rejected the run.
+	Reason string
+	// Gate is the runtime-owned check gate verdict for this run. It is nil for
+	// an un-gated bee and for a run that never reached a proposal attempt.
+	Gate *protocol.GateResult
+	// GateReworkSuppressed reports that the gate rejected the run but the
+	// configured consecutive-rejection cap stopped the runtime from signalling
+	// rework, so the task is failed instead.
+	GateReworkSuppressed bool
 }
 
 // Adapter launches an external agent and returns normalized results.

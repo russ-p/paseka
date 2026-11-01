@@ -52,6 +52,7 @@ type Bee struct {
     DefaultIntent      string
     Command            Command
     PostExec           Command
+    Checks             *Checks
     Params             map[string]any
     Subscribes         []SubscriptionRule
     Publishes          []PublicationRule
@@ -75,6 +76,7 @@ type Bee struct {
 | `params` | no | Adapter flag map (`model`, `yolo`, `plan`, `reasoning`, …). Mutually exclusive with `command`: a bee that sets `command` may only carry params that equal the adapter defaults; any non-default param fails load. |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |
+| `checks` | no | Runtime-owned mechanical gate for AFK proposals: `command`, optional `timeout` (default `10m`), optional `rejection_cap` (default `2`, `0` = no cap). A failure fails the run with reason `checks_failed`, suppresses the proposal, and emits a platform-authored `verification.failed` that drives builder rework. See §6. |
 | `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [bee routing](../reference/bee-routing.md). |
 | `publishes` | no | Advisory expected outputs; undeclared domain publishes warn only (MVP). |
 | `completion_contract` | no | Hard post-run event requirements; violation fails the run. |
@@ -269,6 +271,42 @@ Supports `$NAME` and `${NAME}`:
 | `$RESULT` / `${RESULT}` | post_exec only | human-readable run summary text |
 | `$META` / `${META}` | post_exec only | path to `meta.json` |
 | `${<NAME>}` | command dispatch | any name in the launch plan's assembled environment, so custom argv shares the child's conventions (e.g. `PASEKA_RESULT_FILE`, `PASEKA_RUN_DIR` for `script`, the injected credential for LLM adapters). A fixed variable of the same name above wins. |
+
+### `checks` — the runtime-owned gate
+
+`checks` declares a mechanical verification the **runtime** runs, not a Bee. It
+is colony configuration and is read from the resolved configuration snapshot,
+never from the workspace under review, so a proposal cannot weaken the gate that
+judges it.
+
+```yaml
+checks:
+  command: ["go", "test", "./..."]   # same string/list syntax as command/post_exec
+  timeout: 10m                        # optional; absent = 10m; zero or negative is a load error
+  rejection_cap: 2                    # optional; absent = 2; 0 = no cap
+```
+
+The stage runs after the adapter exits and before any deferred proposal can
+leave the run, in the dispatch workspace (the trace worktree for isolated
+proposals, the colony checkout for root proposals), with the launch plan's
+environment plus the `PASEKA_*` identity variables. It runs by argv without an
+intervening shell; declare a shell as the command if you need a pipeline.
+
+The process exit status is the verdict. Zero passes; any non-zero exit, a signal
+kill, a timeout, or a command that cannot start fails closed. Captured output is
+written under a hard size cap with a truncation marker to the run's `checks.log`;
+the verdict is recorded on the run record and on the proposal archive record,
+with a bounded output head appended to the run's error note.
+
+A rejection sets the run to `failed` with reason `checks_failed` and suppresses
+the proposal through the existing completion contract. With a task, the runtime
+emits a `VERIFICATION/verification.failed` authored by the runtime (reason
+`checks_failed`, one-line summary, colony-root-relative log path in `details`),
+and the builder is redispatched through the normal rework loop with the same
+attempt and worktree. After `rejection_cap` consecutive rejections for one
+attempt the runtime stops signalling, fails the task with the gate summary, and
+dispatches nothing further; a pass clears the count. A taskless run fails
+quietly. Interactive sessions are not gated.
 
 ---
 

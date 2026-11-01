@@ -70,7 +70,7 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `MUTATION` | `code.proposal.root` | proposal metadata; root workspace | hivewright → main guard |
 | `MUTATION` | `code.proposal` | legacy alias of isolated proposal | legacy colony configs |
 | `VERIFICATION` | `verification.success` | optional `taskId`, `summary` | guard → ledger/receiver |
-| `VERIFICATION` | `verification.failed` | optional `taskId`, `summary` | guard → rework dispatch |
+| `VERIFICATION` | `verification.failed` | optional `taskId`, `summary`; gate rejections add `reason: checks_failed` and an optional colony-root-relative `details` log path | guard or runtime check gate → rework dispatch |
 | `SIGNAL` | `session.invite` | `inviteId`, `bee`, `task`, `status` | auto-invite/operator → gateway |
 | `SIGNAL` | `beekeeper.ready` | invite response fields | beekeeper → interactive session |
 | `SIGNAL` | `artifact.written` | artifact `ref` and kind, singular or `artifacts[]` | bee/Console → trail consumers |

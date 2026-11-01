@@ -46,6 +46,9 @@ type ArchiveRequest struct {
 	// Such a run is passed through unchanged and gets no automatic patch conversion, so a
 	// Guard is never dispatched twice for one proposal.
 	Explicit bool
+	// Gate is the runtime-owned check verdict that let the run publish. It is copied
+	// onto the archive record so the proposal keeps its mechanical evidence.
+	Gate *protocol.GateResult
 }
 
 // ArchiveResult reports what proposal finalization did.
@@ -164,6 +167,7 @@ func Archive(ctx context.Context, pub bus.Publisher, req ArchiveRequest) (Archiv
 		Sector:       payload.Sector,
 		FileCount:    patches.FileCountFromDiff(diff),
 		CapturedAt:   time.Now().UTC(),
+		Gate:         req.Gate,
 		Publication:  patches.PublicationUnpublished,
 		Event:        &ev,
 	}, []byte(diff))

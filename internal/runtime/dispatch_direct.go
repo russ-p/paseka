@@ -119,6 +119,18 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		status = res.Result.Status
 	}
 	logDispatchDone(DispatchModeDirect, beeRole, ev.TraceID, taskID, res.AgentID, status)
+	// A gate rejection on a rework pass follows the same rule as any other
+	// non-completed run: the task keeps its status and the next rejection event
+	// drives the next repair turn. Only an exhausted rejection cap fails the
+	// task, with the gate's one-line verdict and no further dispatch.
+	if gate := failedCheckGate(res.Result); gate != nil && res.Result.GateReworkSuppressed && taskID != "" {
+		if r.traceKilled(ev.TraceID) {
+			return nil
+		}
+		if err := r.setTaskStatus(dispatchCtx, ev.TraceID, taskID, protocol.TaskStatusFailed, gate.Summary); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -580,6 +580,7 @@ func beeSettingDiffs(role string, before, after colony.Bee) []string {
 	add("intents", strings.Join(before.Intents, ","), strings.Join(after.Intents, ","))
 	add("command", strings.Join(before.Command.Argv(), " "), strings.Join(after.Command.Argv(), " "))
 	add("post_exec", strings.Join(before.PostExec.Argv(), " "), strings.Join(after.PostExec.Argv(), " "))
+	add("checks", checksSetting(before.Checks), checksSetting(after.Checks))
 	add("subscribes", settingJSON(before.Subscribes), settingJSON(after.Subscribes))
 	add("publishes", settingJSON(before.Publishes), settingJSON(after.Publishes))
 	add("completion_contract", settingJSON(before.CompletionContract), settingJSON(after.CompletionContract))
@@ -607,6 +608,21 @@ func beeSettingDiffs(role string, before, after colony.Bee) []string {
 		}
 	}
 	return out
+}
+
+func checksSetting(checks *colony.Checks) string {
+	if checks == nil {
+		return ""
+	}
+	capValue := "default"
+	if checks.RejectionCap != nil {
+		capValue = strconv.Itoa(*checks.RejectionCap)
+	}
+	timeout := "default"
+	if checks.Timeout != nil {
+		timeout = *checks.Timeout
+	}
+	return strings.Join(checks.Command.Argv(), " ") + " timeout=" + timeout + " cap=" + capValue
 }
 
 func shadowedOverrides(opts ApplyOptions, baseBees, candidateBees map[string]colony.Bee) []string {

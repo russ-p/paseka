@@ -40,7 +40,11 @@ func (d *Dispatcher) publishRunOutcome(
 			}
 		}
 		for _, ev := range synthesized {
-			advisePublish(req.Registry, req.Bee, ev, result)
+			// Runtime-authored events are not the producing bee's declared
+			// outputs, so the bee's publish rules do not apply to them.
+			if ev.AgentID != protocol.RuntimeAgentID {
+				advisePublish(req.Registry, req.Bee, ev, result)
+			}
 			if err := d.publisher.PublishEvent(ctx, ev); err != nil {
 				return err
 			}

@@ -385,6 +385,13 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 		_ = p.runDir.WriteResultText(summary)
 	}
 
+	// The mechanical gate decides before anything leaves the run: it runs after
+	// the adapter exits and before the deferred-event flush, so a queued proposal
+	// cannot reach the bus ahead of a rejection. It also runs before run-summary
+	// synthesis and completion-contract evaluation, so both see the gate verdict
+	// rather than a stale completed status.
+	gateRejection := d.runCheckGate(ctx, p, result)
+
 	if result.Status == string(protocol.StatusCompleted) {
 		if err := d.flushDeferredEvents(ctx, p.colonyRoot, p.req.TraceID, p.agentID); err != nil {
 			msg := "runtime: flush deferred events: " + err.Error()
@@ -422,6 +429,12 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 	runEvents = updatedEvents
 	if synthesizedEvent != nil {
 		synthesized = append(synthesized, *synthesizedEvent)
+	}
+	// The rejection rides the same synthesized-event list as the run summary, so
+	// the existing publication pass publishes it, records it in the run's event
+	// log, and the trail log attributes it to the runtime.
+	if gateRejection != nil {
+		synthesized = append(synthesized, *gateRejection)
 	}
 
 	d.enforceRunSummaryRequired(p.bee, p.agentID, result, runEvents)

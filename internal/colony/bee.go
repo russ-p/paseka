@@ -87,6 +87,7 @@ type Bee struct {
 	DefaultIntent      string             `yaml:"default_intent,omitempty"`
 	Command            Command            `yaml:"command,omitempty"`
 	PostExec           Command            `yaml:"post_exec,omitempty"`
+	Checks             *Checks            `yaml:"checks,omitempty"`
 	Params             map[string]any     `yaml:"params"`
 	Subscribes         []SubscriptionRule `yaml:"subscribes,omitempty"`
 	Publishes          []PublicationRule  `yaml:"publishes,omitempty"`
@@ -215,6 +216,9 @@ func loadBee(colonyRoot, role string, mode beeLoadMode) (Bee, BeeLocalOverlay, e
 		return Bee{}, BeeLocalOverlay{}, err
 	}
 	if err := bee.ValidateRunSummaryPolicy(); err != nil {
+		return Bee{}, BeeLocalOverlay{}, err
+	}
+	if err := bee.ValidateChecks(); err != nil {
 		return Bee{}, BeeLocalOverlay{}, err
 	}
 	if err := bee.ValidateAdapterRequirements(); err != nil {
