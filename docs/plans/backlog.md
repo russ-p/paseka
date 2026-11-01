@@ -158,6 +158,14 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Cursor's TUI keeps no provider-side token store to read after exit, so it needs its own capture approach rather than the post-exit accounting the other adapters use.
 - **Revisit when:** Console/CLI need Cursor session token usage, or billing/observability work starts.
 
+#### Barrier-held direct work is not resumed at startup
+
+- **Kind:** bug
+- **Source:** [044a-direct-pending-dispatch](../specs/044a-direct-pending-dispatch.md) review, follow-up to its startup resume
+- **Summary:** A direct reaction held by a pending configuration change is deliberately excluded from the energy drain (`resumableDirectDispatch`) and is released only by `tryActivateConfig` → `resumeBarrierHeldDispatches`, which runs when an event reaches that trail. `RecoverPendingConfigs` on startup walks only manifests that still have a pending change, so when the change is activated or cancelled while the reactor is down, the held entry has no drainer: it stays `pending` until the trail's next event, and a trail that goes quiet never runs it. The entry stays visible in the ledger, so nothing is lost silently, but a restart alone does not resume it.
+- **Why deferred:** Not part of 044a's direct-energy scope, and the barrier path already resumes on the next event, so it is a quiet-trail startup gap rather than a lost-ship defect. Closing it needs a startup enumeration of barrier-held work plus a decision on what a cancelled change does with it after a restart.
+- **Revisit when:** A resolved configuration change on a quiet trail leaves a guard or receiver unrun, or reactor restarts become routine (homelab redeploy, laptop sleep) while operators apply configuration mid-trail.
+
 ### Queen Console
 
 API fields for energy and merge-diff exist; per-run proposal preview is still thin.
