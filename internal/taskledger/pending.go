@@ -172,14 +172,29 @@ func MarkPendingDispatchUnresolved(trace TraceSnapshot, dispatchID, diagnostic s
 }
 
 // AbandonPendingDispatches closes every active deferred item without dispatching
-// it. A hard stop or a new allocation calls this inside the mutation that owns
-// the decision, so the abandoned queue is never revived by a later top-up or a
-// restart. Closed entries keep their own status: only active work is abandoned.
+// it. A hard stop calls this inside the mutation that owns the decision, so the
+// abandoned queue is never revived by a later top-up or a restart. Closed
+// entries keep their own status: only active work is abandoned.
 func AbandonPendingDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot, bool) {
+	return abandonPendingDispatches(trace, now, func(PendingDispatch) bool { return true })
+}
+
+// AbandonEnergyDeferredDispatches closes active work that a new honey
+// allocation supersedes: entries that waited on an exhausted reserve, including
+// legacy entries with no reason. Configuration-barrier work is not energy
+// waiting — it belongs to a pending configuration transition, which releases or
+// cancels it at its own safe boundary — so this path leaves it active.
+func AbandonEnergyDeferredDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot, bool) {
+	return abandonPendingDispatches(trace, now, func(dispatch PendingDispatch) bool {
+		return dispatch.Reason != protocol.ConfigBarrierHoldReason
+	})
+}
+
+func abandonPendingDispatches(trace TraceSnapshot, now time.Time, abandon func(PendingDispatch) bool) (TraceSnapshot, bool) {
 	changed := false
 	for i := range trace.PendingDispatches {
 		entry := &trace.PendingDispatches[i]
-		if !entry.Status.Active() {
+		if !entry.Status.Active() || !abandon(*entry) {
 			continue
 		}
 		entry.Status = PendingDispatchAbandoned

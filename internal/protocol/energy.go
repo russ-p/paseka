@@ -16,6 +16,12 @@ const (
 
 	// HoneyReserveExhaustedSummary is published on task.status when a task dispatch is blocked.
 	HoneyReserveExhaustedSummary = "Honey reserve exhausted"
+
+	// ConfigBarrierHoldReason is recorded on a pending dispatch that a pending
+	// configuration transition held instead of dropping. It is persisted in the
+	// ledger snapshot, and the ledger reads it to keep that work out of the
+	// energy paths: neither a top-up nor a stipend owns it.
+	ConfigBarrierHoldReason = "configuration change pending"
 )
 
 // EnergyAddPayload is emitted as SIGNAL with payload.kind=energy.add.

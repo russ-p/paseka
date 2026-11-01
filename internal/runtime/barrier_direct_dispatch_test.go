@@ -346,3 +346,39 @@ func mustProcess(t *testing.T, r *runtime.Reactor, ev protocol.Event) {
 		t.Fatal(err)
 	}
 }
+
+// A standing tick's stipend is a new honey allocation, not a configuration
+// boundary. It must not close direct work that the pending change owns, and the
+// held reaction must still run when that change activates.
+func TestBarrierHoldSurvivesStipendAndResumesOnActivation(t *testing.T) {
+	h := newBarrierDirectHarness(t, "trace-barrier-stipend")
+	h.applyPending(t)
+	h.holdDirect(t)
+
+	mustProcess(t, h.r, mustEvent(t, h.traceID, "cli", protocol.EventSignal, `{"kind":"energy.stipend","amount":4}`))
+	if h.rec.calls != 1 {
+		t.Fatalf("stipend dispatched held work: calls = %d", h.rec.calls)
+	}
+	held := assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchPending)
+	if held.Reason != barrierHoldReason {
+		t.Fatalf("held reason after stipend = %q, want %q", held.Reason, barrierHoldReason)
+	}
+
+	// A top-up in the same pending window must not drain or abandon it either.
+	mustProcess(t, h.r, mustEvent(t, h.traceID, "cli", protocol.EventSignal, `{"kind":"energy.add","amount":2}`))
+	if h.rec.calls != 1 {
+		t.Fatalf("energy.add released held work: calls = %d", h.rec.calls)
+	}
+	assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchPending)
+
+	// Finishing the blocker activates the change, which releases the held
+	// reaction under the configuration that just became active.
+	h.clearBlocker(t)
+	if h.rec.calls != 2 {
+		t.Fatalf("held work calls = %d after activation, want 2", h.rec.calls)
+	}
+	if h.rec.lastReq.Bee != "guard" {
+		t.Fatalf("resumed bee = %q, want guard", h.rec.lastReq.Bee)
+	}
+	assertBarrierHoldStatus(t, h.ledger, h.traceID, taskledger.PendingDispatchConsumed)
+}

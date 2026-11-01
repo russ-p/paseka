@@ -187,7 +187,7 @@ func TestApplyEventEnergyStipendRequiresPositiveAmount(t *testing.T) {
 	}
 }
 
-func TestApplyEventEnergyStipendAbandonsActivePendingDispatches(t *testing.T) {
+func TestApplyEventEnergyStipendAbandonsEnergyDeferredDispatches(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID:         "trace-1",
 		EnergyBudget:    10,
@@ -199,6 +199,7 @@ func TestApplyEventEnergyStipendAbandonsActivePendingDispatches(t *testing.T) {
 			{ID: "active", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchPending},
 			{ID: "done", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchConsumed},
 			{ID: "gone", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Status: taskledger.PendingDispatchUnresolved, Diagnostic: "source event missing"},
+			{ID: "held", Kind: taskledger.PendingDispatchDirect, TaskID: "task-1", Reason: protocol.ConfigBarrierHoldReason, Status: taskledger.PendingDispatchPending},
 		},
 	}
 	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.EnergyStipendPayload{
@@ -226,7 +227,7 @@ func TestApplyEventEnergyStipendAbandonsActivePendingDispatches(t *testing.T) {
 		statuses[item.ID] = item.Status
 	}
 	if got := statuses["active"]; got != taskledger.PendingDispatchAbandoned {
-		t.Fatalf("active entry status = %q, want abandoned", got)
+		t.Fatalf("energy-waited entry status = %q, want abandoned", got)
 	}
 	if got := statuses["done"]; got != taskledger.PendingDispatchConsumed {
 		t.Fatalf("consumed entry status = %q, want consumed", got)
@@ -234,11 +235,17 @@ func TestApplyEventEnergyStipendAbandonsActivePendingDispatches(t *testing.T) {
 	if got := statuses["gone"]; got != taskledger.PendingDispatchUnresolved {
 		t.Fatalf("unresolved entry status = %q, want unresolved", got)
 	}
-	if active := taskledger.ActivePendingDispatches(res.Trace); len(active) != 0 {
-		t.Fatalf("active pending = %+v, want none after stipend", active)
+	// A stipend is a new honey allocation, not a configuration boundary: the
+	// held reaction still belongs to the pending change and must stay runnable.
+	if got := statuses["held"]; got != taskledger.PendingDispatchPending {
+		t.Fatalf("configuration-held entry status = %q, want pending", got)
 	}
-	if len(res.Trace.PendingDispatches) != 3 {
-		t.Fatalf("pending entries = %d, want 3 kept as evidence", len(res.Trace.PendingDispatches))
+	active := taskledger.ActivePendingDispatches(res.Trace)
+	if len(active) != 1 || active[0].ID != "held" {
+		t.Fatalf("active pending = %+v, want only the configuration-held entry", active)
+	}
+	if len(res.Trace.PendingDispatches) != 4 {
+		t.Fatalf("pending entries = %d, want 4 kept as evidence", len(res.Trace.PendingDispatches))
 	}
 }
 

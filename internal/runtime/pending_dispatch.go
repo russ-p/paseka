@@ -13,11 +13,6 @@ import (
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
-// configBarrierHoldReason marks direct work that was recorded instead of
-// dropped because a pending Apply configuration had not reached its safe
-// boundary yet. The item is drained only after that boundary is resolved.
-const configBarrierHoldReason = "configuration change pending"
-
 // barrierHeldState tracks, per trail and per process, whether this reactor has
 // already looked for barrier-held work. The probe is deliberately cheap: a
 // trail is read from the ledger once, unless a deferral happened in this
@@ -270,14 +265,17 @@ func hasPendingDirect(pending []taskledger.PendingDispatch) bool {
 	return false
 }
 
+// resumableDirectDispatch reports whether the energy drain may run this entry.
+// Configuration-barrier work is not energy waiting: a pending configuration
+// transition owns it and releases it at its own safe boundary.
 func resumableDirectDispatch(item taskledger.PendingDispatch) bool {
-	return item.Kind == taskledger.PendingDispatchDirect && item.Reason != configBarrierHoldReason
+	return item.Kind == taskledger.PendingDispatchDirect && item.Reason != protocol.ConfigBarrierHoldReason
 }
 
 func barrierHeldDispatches(snap taskledger.TraceSnapshot) []taskledger.PendingDispatch {
 	var held []taskledger.PendingDispatch
 	for _, item := range taskledger.ActivePendingDispatches(snap) {
-		if item.Kind == taskledger.PendingDispatchDirect && item.Reason == configBarrierHoldReason {
+		if item.Kind == taskledger.PendingDispatchDirect && item.Reason == protocol.ConfigBarrierHoldReason {
 			held = append(held, item)
 		}
 	}

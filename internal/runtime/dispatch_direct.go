@@ -62,7 +62,7 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 	if held, err := r.directAdmissionHeld(ev, beeRole, taskID); err != nil {
 		return err
 	} else if held {
-		if err := r.deferDirectDispatch(ev, beeRole, taskID, configBarrierHoldReason); err != nil {
+		if err := r.deferDirectDispatch(ev, beeRole, taskID, protocol.ConfigBarrierHoldReason); err != nil {
 			return err
 		}
 		r.markBarrierHeldDeferral(ev.TraceID)
