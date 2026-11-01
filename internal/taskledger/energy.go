@@ -87,6 +87,13 @@ func FormatHoneyReport(remaining, budget, added int) []string {
 	return lines
 }
 
+// FormatPendingReport reports how many deferred dispatches still await
+// admission. The count is always printed so an empty queue reads as an explicit
+// zero rather than a missing field.
+func FormatPendingReport(active int) []string {
+	return []string{fmt.Sprintf("pending:   %d", active)}
+}
+
 // HasEnergy reports whether the trace has enough honey reserve for one dispatch.
 func HasEnergy(trace TraceSnapshot, amount int) bool {
 	if amount <= 0 {

@@ -405,3 +405,12 @@ func TestFormatHoney(t *testing.T) {
 		t.Fatalf("plain report = %#v", plain)
 	}
 }
+
+func TestFormatPendingReport(t *testing.T) {
+	if got := taskledger.FormatPendingReport(0); len(got) != 1 || got[0] != "pending:   0" {
+		t.Fatalf("empty pending report = %#v", got)
+	}
+	if got := taskledger.FormatPendingReport(2); len(got) != 1 || got[0] != "pending:   2" {
+		t.Fatalf("pending report = %#v", got)
+	}
+}

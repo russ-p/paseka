@@ -179,14 +179,20 @@ func AbandonPendingDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot
 	return abandonPendingDispatches(trace, now, func(PendingDispatch) bool { return true })
 }
 
-// AbandonEnergyDeferredDispatches closes active work that a new honey
+// AbandonEnergyDeferredDispatches closes active direct work that a new honey
 // allocation supersedes: entries that waited on an exhausted reserve, including
 // legacy entries with no reason. Configuration-barrier work is not energy
 // waiting — it belongs to a pending configuration transition, which releases or
 // cancels it at its own safe boundary — so this path leaves it active.
+//
+// Deferred task work is deliberately not closed here yet: superseding a task
+// must also mark it skipped in the same mutation, so the task never becomes an
+// invisible ready row with no pending record. That pairing lands with the
+// standing-tick slice.
 func AbandonEnergyDeferredDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot, bool) {
 	return abandonPendingDispatches(trace, now, func(dispatch PendingDispatch) bool {
-		return dispatch.Reason != protocol.ConfigBarrierHoldReason
+		return dispatch.Kind == PendingDispatchDirect &&
+			dispatch.Reason != protocol.ConfigBarrierHoldReason
 	})
 }
 

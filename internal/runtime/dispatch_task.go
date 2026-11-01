@@ -66,12 +66,12 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
-	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, "task.dispatch")
+	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, bee, sourceEventID, "task.dispatch")
 	if err != nil {
 		return err
 	}
 	if !ok {
-		logDispatchSkip("honey reserve exhausted", traceID, task.TaskID, bee)
+		logDispatchSkip("honey reserve exhausted — task dispatch deferred", traceID, task.TaskID, bee)
 		return nil
 	}
 

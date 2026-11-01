@@ -9,7 +9,7 @@ import (
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
-func TestReactorBlocksDispatchWhenEnergyExhausted(t *testing.T) {
+func TestReactorDefersTaskDispatchWhenEnergyExhausted(t *testing.T) {
 	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
 		Kind: protocol.TaskEventPlan,
 		Tasks: []protocol.TaskSpec{{
@@ -59,12 +59,40 @@ func TestReactorBlocksDispatchWhenEnergyExhausted(t *testing.T) {
 		t.Fatal(err)
 	}
 	task := snap.Tasks["task-1"]
-	if task.Status != protocol.TaskStatusBlocked {
-		t.Fatalf("status = %q, want blocked", task.Status)
+	if task.Status != protocol.TaskStatusReady {
+		t.Fatalf("status = %q, want ready (energy must not write a task status)", task.Status)
+	}
+	if task.Summary == protocol.HoneyReserveExhaustedSummary {
+		t.Fatal("energy exhaustion must not be written into the task summary")
+	}
+	pending := pendingTaskDispatches(snap)
+	if len(pending) != 1 {
+		t.Fatalf("pending task entries = %d, want exactly one", len(pending))
+	}
+	entry := pending[0]
+	if entry.ID != "task:task-1:builder" {
+		t.Fatalf("pending id = %q, want task:task-1:builder", entry.ID)
+	}
+	if entry.Kind != taskledger.PendingDispatchTask {
+		t.Fatalf("pending kind = %q, want task", entry.Kind)
+	}
+	if entry.TaskID != "task-1" || entry.Bee != "builder" {
+		t.Fatalf("pending entry = %+v, want task-1/builder", entry)
+	}
+	if entry.SourceEventID != ready.ID {
+		t.Fatalf("source event = %q, want %q", entry.SourceEventID, ready.ID)
+	}
+	if entry.Reason != protocol.HoneyReserveExhaustedSummary {
+		t.Fatalf("reason = %q, want %q", entry.Reason, protocol.HoneyReserveExhaustedSummary)
+	}
+	if entry.Status != taskledger.PendingDispatchPending {
+		t.Fatalf("status = %q, want pending", entry.Status)
 	}
 }
 
-func TestReactorUnblocksAfterEnergyAdd(t *testing.T) {
+// A legacy honey-blocked task keeps its old meaning: energy.add still unblocks
+// it and dispatches the task. New deferrals never create this state.
+func TestReactorUnblocksLegacyEnergyBlockedTask(t *testing.T) {
 	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
 		Kind: protocol.TaskEventPlan,
 		Tasks: []protocol.TaskSpec{{
@@ -76,10 +104,11 @@ func TestReactorUnblocksAfterEnergyAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ready, err := protocol.NewEvent("trace-1", "reactor", 0, protocol.EventSignal, protocol.TaskReadyPayload{
-		Kind:   protocol.TaskEventReady,
-		TaskID: "task-1",
-		Bee:    "builder",
+	blocked, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind:    protocol.TaskEventStatus,
+		TaskID:  "task-1",
+		Status:  protocol.TaskStatusBlocked,
+		Summary: protocol.HoneyReserveExhaustedSummary,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -102,24 +131,20 @@ func TestReactorUnblocksAfterEnergyAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustConsumeEnergy(t, ledger, "trace-1", 1)
+	for _, ev := range []protocol.Event{plan, blocked} {
+		if _, err := ledger.Apply(ev); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	rec := &recordingAdapter{}
 	r.Dispatcher().RegisterAdapter("cursor", rec)
 
-	if err := r.ProcessEvent(context.Background(), plan); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.ProcessEvent(context.Background(), ready); err != nil {
-		t.Fatal(err)
-	}
-	if rec.calls != 0 {
-		t.Fatalf("adapter calls = %d before add, want 0", rec.calls)
-	}
 	if err := r.ProcessEvent(context.Background(), add); err != nil {
 		t.Fatal(err)
 	}
 	if rec.calls == 0 {
-		t.Fatal("expected dispatch after energy.add")
+		t.Fatal("expected legacy blocked task to dispatch after energy.add")
 	}
 	snap, err := ledger.Snapshot("trace-1")
 	if err != nil {
@@ -130,7 +155,7 @@ func TestReactorUnblocksAfterEnergyAdd(t *testing.T) {
 	}
 }
 
-func TestReactorDoesNotUnblockAfterEnergyStipend(t *testing.T) {
+func TestReactorDoesNotDispatchDeferredTaskAfterEnergyStipend(t *testing.T) {
 	plan, err := protocol.NewEvent("trace-1", "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
 		Kind: protocol.TaskEventPlan,
 		Tasks: []protocol.TaskSpec{{
@@ -194,8 +219,14 @@ func TestReactorDoesNotUnblockAfterEnergyStipend(t *testing.T) {
 	if snap.EnergyRemaining != 4 {
 		t.Fatalf("remaining = %d, want 4", snap.EnergyRemaining)
 	}
-	if snap.Tasks["task-1"].Status != protocol.TaskStatusBlocked {
-		t.Fatalf("status = %q, want blocked", snap.Tasks["task-1"].Status)
+	// A stipend starts a new allocation; it never resumes the previous tick's
+	// deferred task work. Superseding that work lands with the skipped task
+	// status, so for now the entry stays pending and no adapter starts.
+	if snap.Tasks["task-1"].Status != protocol.TaskStatusReady {
+		t.Fatalf("status = %q, want ready", snap.Tasks["task-1"].Status)
+	}
+	if pending := pendingTaskDispatches(snap); len(pending) != 1 || pending[0].Status != taskledger.PendingDispatchPending {
+		t.Fatalf("pending task entries = %+v, want one still pending", pending)
 	}
 }
 

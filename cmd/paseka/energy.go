@@ -91,4 +91,7 @@ func printHoneyReserve(snap taskledger.TraceSnapshot) {
 	for _, line := range taskledger.FormatHoneyReport(snap.EnergyRemaining, snap.EnergyBudget, snap.EnergyAdded) {
 		fmt.Printf("  %s\n", line)
 	}
+	for _, line := range taskledger.FormatPendingReport(len(taskledger.ActivePendingDispatches(snap))) {
+		fmt.Printf("  %s\n", line)
+	}
 }

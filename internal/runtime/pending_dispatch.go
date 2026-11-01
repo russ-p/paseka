@@ -25,6 +25,44 @@ type barrierHeldState struct {
 	drainMark uint64 // deferrals counter when the running drain began
 }
 
+// taskDispatchKey deduplicates deferred task work while it is active. A task
+// dispatch is identified by the task and the Bee that would run it, not by the
+// event that kicked it: a duplicate task.ready while the entry is pending adds
+// no second entry and keeps the first source identity.
+func taskDispatchKey(taskID, beeRole string) string {
+	return fmt.Sprintf("task:%s:%s", taskID, beeRole)
+}
+
+// deferTaskDispatch records a task dispatch that could not start because the
+// trail's honey reserve is exhausted. The task keeps its lifecycle status:
+// honey belongs to the trail, not to one unit of work, so a deferral must not
+// turn ready into blocked.
+func (r *Reactor) deferTaskDispatch(traceID, taskID, beeRole, sourceEventID, reason string) error {
+	dispatch := taskledger.PendingDispatch{
+		ID:            taskDispatchKey(taskID, beeRole),
+		Kind:          taskledger.PendingDispatchTask,
+		TaskID:        taskID,
+		Bee:           beeRole,
+		SourceEventID: sourceEventID,
+		Reason:        reason,
+		Status:        taskledger.PendingDispatchPending,
+		CreatedAt:     time.Now().UTC(),
+	}
+	added, err := r.ledger.DeferPendingDispatch(traceID, dispatch)
+	if err != nil {
+		return err
+	}
+	if added {
+		runtimeLog.Info("task dispatch deferred",
+			logging.F("trace", traceID),
+			logging.F("task", taskID),
+			logging.F("bee", beeRole),
+			logging.F("reason", reason),
+		)
+	}
+	return nil
+}
+
 // deferDirectDispatch records a direct reaction that could not start yet. The
 // task lifecycle status is untouched: the reaction belongs to an event, not to
 // the task's next state.
@@ -91,9 +129,11 @@ func (r *Reactor) RecoverPendingDispatches(ctx context.Context) error {
 }
 
 // resumePendingDispatches drains deferred work after energy.add. It resumes only
-// direct dispatches in this slice; task dispatch unblocking stays in the
-// existing task-status path. Entries drain oldest-first and the drain stops once
-// the reserve is exhausted, so the rest stays pending for the next top-up.
+// direct dispatches in this slice; deferred task work is recorded here but
+// resumes through the task dispatch path in the follow-up slice, and legacy
+// honey-blocked tasks keep the existing task-status unblock. Entries drain
+// oldest-first and the drain stops once the reserve is exhausted, so the rest
+// stays pending for the next top-up.
 //
 // Barrier-held items are never drained here: they must wait for the
 // configuration boundary and are resumed by resumeBarrierHeldDispatches.

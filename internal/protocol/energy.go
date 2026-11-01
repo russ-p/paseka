@@ -14,7 +14,9 @@ const (
 	// DefaultBee is the task role when colony.yaml omits defaults.default_bee and task.bee is empty.
 	DefaultBee = "builder"
 
-	// HoneyReserveExhaustedSummary is published on task.status when a task dispatch is blocked.
+	// HoneyReserveExhaustedSummary marks legacy task.status=blocked rows written
+	// before energy deferral moved to the pending queue. New runtime code never
+	// writes it into a task status; it stays readable for old ledgers.
 	HoneyReserveExhaustedSummary = "Honey reserve exhausted"
 
 	// ConfigBarrierHoldReason is recorded on a pending dispatch that a pending
