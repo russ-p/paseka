@@ -16,7 +16,9 @@ func IsKillableTaskStatus(status protocol.TaskStatus) bool {
 	}
 }
 
-// applySystemKill marks a trace killed and cancels non-terminal tasks.
+// applySystemKill marks a trace killed and cancels non-terminal tasks. Kill is a
+// hard stop for deferred work too: active pending dispatches are abandoned in
+// this same mutation, so a later energy.add cannot revive them.
 func applySystemKill(trace TraceSnapshot, reason string, now time.Time) TraceSnapshot {
 	if trace.Killed {
 		return trace
@@ -30,6 +32,7 @@ func applySystemKill(trace TraceSnapshot, reason string, now time.Time) TraceSna
 	}
 	trace.Killed = true
 	trace.PendingReady = nil
+	trace, _ = AbandonPendingDispatches(trace, now)
 	for id, task := range trace.Tasks {
 		if !IsKillableTaskStatus(task.Status) {
 			continue

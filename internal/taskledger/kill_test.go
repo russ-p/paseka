@@ -74,6 +74,174 @@ func TestApplyEventSystemKillIdempotent(t *testing.T) {
 	}
 }
 
+func TestApplyEventSystemKillAbandonsActivePendingDispatches(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "active", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchPending},
+			{ID: "done", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchConsumed},
+			{ID: "gone", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchUnresolved, Diagnostic: "source event missing"},
+		},
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusWaitingReview},
+		},
+	}
+	ev, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind:   protocol.SignalSystemKill,
+		Reason: "stop",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Changed {
+		t.Fatal("kill must report a change so the ledger persists the abandonment")
+	}
+	if !res.Trace.Killed {
+		t.Fatal("expected trace killed")
+	}
+	if got := res.Trace.Tasks["task-1"].Status; got != protocol.TaskStatusCancelled {
+		t.Fatalf("task status = %q, want cancelled", got)
+	}
+	statuses := map[string]taskledger.PendingDispatchStatus{}
+	for _, item := range res.Trace.PendingDispatches {
+		statuses[item.ID] = item.Status
+	}
+	if got := statuses["active"]; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("active entry status = %q, want abandoned", got)
+	}
+	if got := statuses["done"]; got != taskledger.PendingDispatchConsumed {
+		t.Fatalf("consumed entry status = %q, want consumed", got)
+	}
+	if got := statuses["gone"]; got != taskledger.PendingDispatchUnresolved {
+		t.Fatalf("unresolved entry status = %q, want unresolved", got)
+	}
+	if active := taskledger.ActivePendingDispatches(res.Trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want none after kill", active)
+	}
+	if len(res.Trace.PendingDispatches) != 3 {
+		t.Fatalf("pending entries = %d, want 3 kept as evidence", len(res.Trace.PendingDispatches))
+	}
+}
+
+func TestApplyEventEnergyAddDoesNotReviveKillAbandonedWork(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		PendingDispatches: []taskledger.PendingDispatch{
+			{ID: "active", Kind: taskledger.PendingDispatchDirect, Status: taskledger.PendingDispatchPending},
+		},
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusWaitingReview},
+		},
+	}
+	kill, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind: protocol.SignalSystemKill,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, kill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("status after kill = %q, want abandoned", got)
+	}
+
+	add, err := protocol.NewEvent("trace-1", "cli", 2, protocol.EventSignal, protocol.EnergyAddPayload{
+		Kind:   protocol.SignalEnergyAdd,
+		Amount: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, add)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.EnergyRemaining != 5 {
+		t.Fatalf("remaining = %d, want 5", res.Trace.EnergyRemaining)
+	}
+	if got := res.Trace.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("status after energy.add = %q, want abandoned", got)
+	}
+	if active := taskledger.ActivePendingDispatches(res.Trace); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want abandoned work to stay unrunnable", active)
+	}
+}
+
+func TestDeferPendingDispatchRefusesKilledTrace(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1", Killed: true}
+	updated, added := taskledger.DeferPendingDispatch(trace, taskledger.PendingDispatch{
+		ID:     "late",
+		Kind:   taskledger.PendingDispatchDirect,
+		Status: taskledger.PendingDispatchPending,
+	})
+	if added {
+		t.Fatal("a killed trace must not record new pending work")
+	}
+	if len(updated.PendingDispatches) != 0 {
+		t.Fatalf("pending entries = %d, want none", len(updated.PendingDispatches))
+	}
+}
+
+func TestKVLedgerKillAbandonsPendingDispatchInSameMutation(t *testing.T) {
+	kv := newFakeKV()
+	ledger := taskledger.NewKVLedger(kv)
+	if _, err := ledger.DeferPendingDispatch("trace-1", taskledger.PendingDispatch{
+		ID:   "direct-key",
+		Kind: taskledger.PendingDispatchDirect,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	kill, err := protocol.NewEvent("trace-1", "cli", 1, protocol.EventSignal, protocol.SystemKillPayload{
+		Kind:   protocol.SignalSystemKill,
+		Reason: "stop",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(kill); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !snap.Killed {
+		t.Fatal("expected killed snapshot")
+	}
+	if len(snap.PendingDispatches) != 1 {
+		t.Fatalf("pending entries = %d, want 1", len(snap.PendingDispatches))
+	}
+	if got := snap.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("status = %q, want abandoned persisted by the kill mutation", got)
+	}
+
+	add, err := protocol.NewEvent("trace-1", "cli", 2, protocol.EventSignal, protocol.EnergyAddPayload{
+		Kind:   protocol.SignalEnergyAdd,
+		Amount: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(add); err != nil {
+		t.Fatal(err)
+	}
+	snap, err = ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.PendingDispatches[0].Status; got != taskledger.PendingDispatchAbandoned {
+		t.Fatalf("status after top-up = %q, want abandoned", got)
+	}
+}
+
 func TestApplyEventTaskReadyIgnoredWhenKilled(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID: "trace-1",

@@ -90,8 +90,10 @@ func dropStalePendingReady(trace TraceSnapshot) (TraceSnapshot, bool) {
 }
 
 // DeferPendingDispatch appends deferred work unless the same id is still pending.
+// A killed trail records no new pending work: kill is the hard stop, so a
+// deferral racing the kill must not leave runnable work behind.
 func DeferPendingDispatch(trace TraceSnapshot, dispatch PendingDispatch) (TraceSnapshot, bool) {
-	if dispatch.ID == "" {
+	if dispatch.ID == "" || trace.Killed {
 		return trace, false
 	}
 	now := time.Now().UTC()
@@ -154,6 +156,24 @@ func MarkPendingDispatchUnresolved(trace TraceSnapshot, dispatchID, diagnostic s
 		return trace, true
 	}
 	return trace, false
+}
+
+// AbandonPendingDispatches closes every active deferred item without dispatching
+// it. A hard stop or a new allocation calls this inside the mutation that owns
+// the decision, so the abandoned queue is never revived by a later top-up or a
+// restart. Closed entries keep their own status: only active work is abandoned.
+func AbandonPendingDispatches(trace TraceSnapshot, now time.Time) (TraceSnapshot, bool) {
+	changed := false
+	for i := range trace.PendingDispatches {
+		entry := &trace.PendingDispatches[i]
+		if !entry.Status.Active() {
+			continue
+		}
+		entry.Status = PendingDispatchAbandoned
+		entry.UpdatedAt = now
+		changed = true
+	}
+	return trace, changed
 }
 
 // ActivePendingDispatches returns pending work in creation order: oldest first,

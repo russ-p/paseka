@@ -196,6 +196,127 @@ func assertPendingDirect(t *testing.T, ledger taskledger.Ledger, want taskledger
 	t.Fatal("direct pending dispatch not found")
 }
 
+func TestKillAbandonsPendingDirectDispatchAndTopUpDoesNotRevive(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "builder-1", 1, protocol.EventMutation, protocol.MutationPayload{
+		Kind:   protocol.MutationCodeProposal,
+		TaskID: "task-1",
+		Diff:   "+func Login() {}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewMemoryLedger()
+	seedWaitingReviewTask(t, ledger, "task-1")
+	exhaustEnergy(t, ledger)
+
+	bees := map[string]colony.Bee{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	first := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	first.Dispatcher().RegisterAdapter("cursor", &recordingAdapter{})
+	if err := first.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchPending)
+
+	kill := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"system.kill","reason":"stop"}`)
+	if err := first.ProcessEvent(context.Background(), kill); err != nil {
+		t.Fatal(err)
+	}
+	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusCancelled)
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchAbandoned)
+	assertPendingDirectCount(t, ledger, 1)
+
+	// A top-up on a fresh reactor over the same ledger must not revive the
+	// work the kill closed, even though the source event is still replayable.
+	second := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	rec := &recordingAdapter{}
+	second.Dispatcher().RegisterAdapter("cursor", rec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":2}`)
+	if err := second.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d after top-up, want killed work to stay abandoned", rec.calls)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchAbandoned)
+	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusCancelled)
+}
+
+func TestResumeDrainSkipsAbandonedPendingDirectDispatch(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "builder-1", 1, protocol.EventMutation, protocol.MutationPayload{
+		Kind:   protocol.MutationCodeProposal,
+		TaskID: "task-1",
+		Diff:   "+func Login() {}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewMemoryLedger()
+	seedWaitingReviewTask(t, ledger, "task-1")
+	exhaustEnergy(t, ledger)
+
+	bees := map[string]colony.Bee{
+		"guard": {Role: "guard", Worktree: true, Subscribes: []colony.SubscriptionRule{
+			{EventRule: colony.EventRule{Type: "MUTATION", Kind: "code.proposal"}, Dispatch: colony.DispatchDirect},
+		}},
+	}
+	first := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	first.Dispatcher().RegisterAdapter("cursor", &recordingAdapter{})
+	if err := first.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	dispatchID := pendingDirectID(t, ledger)
+
+	// Abandon the entry directly, as stipend supersession does: the trail is
+	// still alive and has a reserve after the top-up below, so only the drain's
+	// status check can keep this work from being dispatched.
+	if err := ledger.ResolvePendingDispatch("trace-1", dispatchID, taskledger.PendingDispatchAbandoned); err != nil {
+		t.Fatal(err)
+	}
+
+	second := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, bees)
+	rec := &recordingAdapter{}
+	second.Dispatcher().RegisterAdapter("cursor", rec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":2}`)
+	if err := second.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 0 {
+		t.Fatalf("adapter calls = %d after top-up, want abandoned entry skipped", rec.calls)
+	}
+	assertPendingDirect(t, ledger, taskledger.PendingDispatchAbandoned)
+	assertTaskStatus(t, ledger, "task-1", protocol.TaskStatusWaitingReview)
+}
+
+func pendingDirectID(t *testing.T, ledger taskledger.Ledger) string {
+	t.Helper()
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range snap.PendingDispatches {
+		if item.Kind == taskledger.PendingDispatchDirect {
+			return item.ID
+		}
+	}
+	t.Fatal("direct pending dispatch not found")
+	return ""
+}
+
+func assertPendingDirectCount(t *testing.T, ledger taskledger.Ledger, want int) {
+	t.Helper()
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(snap.PendingDispatches); got != want {
+		t.Fatalf("pending entries = %d, want %d", got, want)
+	}
+}
+
 func TestResumeMarksMissingSourceEventUnresolved(t *testing.T) {
 	ev, err := protocol.NewEvent("trace-1", "builder-1", 1, protocol.EventMutation, protocol.MutationPayload{
 		Kind:   protocol.MutationCodeProposal,
