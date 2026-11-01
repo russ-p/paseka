@@ -2,6 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — Blocked direct work survives a restart instead of vanishing
+
+A direct reaction — a guard on a proposal, a receiver on a review, a fix-up on a failed verification — could not run when the trail's honey was gone. The ledger already recorded it as pending, but nothing ever closed or resumed that queue: a killed trail still looked merely idle, a standing stipend could let a later top-up run the previous tick's guard, and a top-up applied while the reactor was down was simply forgotten.
+
+- **Missing evidence is visible, not retried.** A pending direct dispatch whose source event can no longer be recovered becomes `unresolved` with a diagnostic. It stays in the ledger, is never dispatched as if it were runnable, and does not block the entries behind it.
+- **Kill closes the queue.** `system.kill` abandons active pending direct work in the same ledger mutation that marks the trail killed, so a later `energy.add` cannot revive a reaction from a stopped trail.
+- **A stipend closes the queue.** `energy.stipend` abandons the previous allocation's active pending direct work in the same reduction that applies the stipend, so a new tick cannot accidentally run an old guard or receiver and a later top-up cannot resurrect it.
+- **Restart resumes what was already approved.** On startup the runtime enumerates trails from the ledger, skips killed trails and trails with no reserve, and drains each trail's active pending direct dispatches oldest-first through the normal direct dispatch path. An `energy.add` applied while the reactor was down therefore still reaches the Bee it was meant to unblock.
+- **The task half is unchanged.** Task dispatch still writes `blocked` when honey runs out, and an existing honey-blocked task still unblocks on `energy.add`.
+
+- Spec: [044a-direct-pending-dispatch](../specs/044a-direct-pending-dispatch.md)
+- Canonical: [task ledger](../reference/task-ledger.md#honey-reserve-energytoken), [CLI](../guide/cli.md#paseka-energy)
+
+Not in this ship: task-dispatch deferral, `skipped`, the standing overlap predicate, and `energy.paused` / `energy.resumed` — [044b](044b-standing-supersession-and-energy-observations.md) owns them.
+
 ## 2026-11 — A diff that does not build is rejected before a model reviews it
 
 A builder's mechanical mistakes — a stray unused import, one failing assertion — used to be found by the Guard Bee, the most expensive actor in the colony, in a full review turn that was then thrown away. The builder's own "build passes" was not evidence either: the same model wrote the diff and the verdict. Now the mechanic runs in the runtime, and the guard spends its turn on semantics.

@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Approved)**
-Implementation-ready. The direct-deferral path exists — a durable `PendingDispatch`, compare-and-set writes, and a creation-order drain — but it lacks the `abandoned` and `unresolved` statuses, kill abandonment, and startup resume. This slice completes it. Task dispatch and the standing tick lifecycle stay on the legacy `blocked` path until [044b](044b-standing-supersession-and-energy-observations.md).
+**(Implemented)**
+The direct admission half shipped: pending direct dispatches now carry `abandoned` and `unresolved` alongside `pending` and `consumed`, a missing source event becomes visibly `unresolved` instead of retrying, `system.kill` and `energy.stipend` abandon active pending direct work in the same ledger mutation that applies them, and reactor startup enumerates trails from the ledger and resumes work an `energy.add` already approved. Task dispatch and the standing tick lifecycle stay on the legacy `blocked` path; [044b](044b-standing-supersession-and-energy-observations.md) owns that half.
 
 ## Problem Statement
 
