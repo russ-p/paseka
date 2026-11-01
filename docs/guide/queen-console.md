@@ -524,8 +524,8 @@ changes the file and watches nothing happen needs to be told why.
   reads its API key from, whether that variable resolves, and whether the value
   came from `adapters/<name>.yaml` or was inferred from a default.
 - **Human gateway** — whether the Telegram gate is configured and switched on,
-  whether a bot token resolves, and the push mode of each of the seven
-  categories.
+  whether a bot token resolves, and one row per notify category for its push
+  mode.
 - **Colony** — the slug, the checkout root, the selected profile, and the
   terminal a session attaches with.
 - **Appearance** — the theme picker, the one setting the console keeps itself.
