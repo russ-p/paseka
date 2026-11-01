@@ -166,6 +166,14 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Not part of 044a's direct-energy scope, and the barrier path already resumes on the next event, so it is a quiet-trail startup gap rather than a lost-ship defect. Closing it needs a startup enumeration of barrier-held work plus a decision on what a cancelled change does with it after a restart.
 - **Revisit when:** A resolved configuration change on a quiet trail leaves a guard or receiver unrun, or reactor restarts become routine (homelab redeploy, laptop sleep) while operators apply configuration mid-trail.
 
+#### `energy.resumed` can be lost after the pause episode closes
+
+- **Kind:** bug
+- **Source:** Trail audit `trace-01a1982659da17c2`, finding 7; guard `01a19857812aacf6` `summary.md` (task 004); [044b](../specs/044b-standing-supersession-and-energy-observations.md) §6.6
+- **Summary:** A crash between closing a pause episode and publishing `energy.resumed` leaves no durable record of the close. The stipend reducer clears `EnergyPause` in the same mutation, and startup settlement only closes an episode that is still open. The audit described this as source misattribution (`energy.add` instead of `energy.stipend`) with exactly one card still delivered, but reading the reducer suggests the observation is **lost** instead. First write a characterization test that applies a stipend and dies before the publish, then observes what startup actually delivers. If loss is confirmed, persist a pending resume record (episode, source, remaining/budget, pending before/after, dispatched, abandoned, claimed flag) in the same mutation that closes the episode; startup claims and publishes it with the original source, keeping the same at-most-once trade-off as the paused observation.
+- **Why deferred:** Low severity: one notification can be lost, the episode still closes, and no work is stranded. The existing design deliberately trades at most one notification for no duplicates; changing that needs a durable outbox and a test that pins the actual behavior, which is not merge-critical for 044b.
+- **Revisit when:** A restart between a stipend or `energy.add` close and its resume publish is observed, or an operator relies on the resume card's source/`abandoned` count to account for a standing tick's work; or the platform moves from at-most-once to at-least-once notifications.
+
 ### Queen Console
 
 API fields for energy and merge-diff exist; per-run proposal preview is still thin.
