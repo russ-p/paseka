@@ -270,3 +270,57 @@ func pendingDirectIDFor(t *testing.T, ledger taskledger.Ledger, traceID string) 
 	t.Fatalf("direct pending dispatch not found in trace %s", traceID)
 	return ""
 }
+
+// A redelivered source event can defer the same reaction again after its entry
+// was consumed, appending a second entry with the same dispatch key. The next
+// top-up must close that active duplicate, not the stale consumed one.
+func TestResumeClosesDuplicateDispatchEntryAfterRestart(t *testing.T) {
+	ev := mustCodeProposal(t, "trace-1", "task-1", 1, "+func Login() {}")
+	ledger := taskledger.NewMemoryLedger()
+	seedWaitingReviewTask(t, ledger, "task-1")
+	exhaustEnergy(t, ledger)
+
+	first := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, directGuardBees())
+	first.Dispatcher().RegisterAdapter("cursor", &recordingAdapter{})
+	if err := first.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	dispatchID := pendingDirectIDFor(t, ledger, "trace-1")
+
+	// The resume ran while the reactor was up: the entry is consumed, but the
+	// process that would remember the dispatch is gone.
+	if err := ledger.ResolvePendingDispatch("trace-1", dispatchID, taskledger.PendingDispatchConsumed); err != nil {
+		t.Fatal(err)
+	}
+
+	// A fresh reactor sees the same source event redelivered with no reserve,
+	// so it defers the reaction again under the same dispatch key.
+	second := newPendingDispatchReactor(t, ledger, fakeReplayer{events: []protocol.Event{ev}}, directGuardBees())
+	second.Dispatcher().RegisterAdapter("cursor", &recordingAdapter{})
+	if err := second.ProcessEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	snap := mustSnapshot(t, ledger, "trace-1")
+	if len(snap.PendingDispatches) != 2 {
+		t.Fatalf("pending entries = %d, want the duplicate to be recorded", len(snap.PendingDispatches))
+	}
+
+	rec := &recordingAdapter{}
+	second.Dispatcher().RegisterAdapter("cursor", rec)
+	add := mustEvent(t, "trace-1", "cli", protocol.EventSignal, `{"kind":"energy.add","amount":1}`)
+	if err := second.ProcessEvent(context.Background(), add); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("adapter calls = %d, want the duplicate to run once", rec.calls)
+	}
+	snap = mustSnapshot(t, ledger, "trace-1")
+	for i, item := range snap.PendingDispatches {
+		if item.Status != taskledger.PendingDispatchConsumed {
+			t.Fatalf("entry[%d] status = %q, want consumed", i, item.Status)
+		}
+	}
+	if active := taskledger.ActivePendingDispatches(snap); len(active) != 0 {
+		t.Fatalf("active pending = %+v, want none", active)
+	}
+}
