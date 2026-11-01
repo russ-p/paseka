@@ -8,6 +8,7 @@
 	import {
 		formatTimestamp,
 		runStateLabel,
+		taskDispatchPendingLabel,
 		taskIdentityRows,
 		taskPhaseLabel,
 		taskRunMeta,
@@ -77,6 +78,13 @@
 	 * on the polled board, and the tag never replaces the status word beside it.
 	 */
 	const phase = $derived(row?.phase ?? task?.phase ?? '');
+	/**
+	 * The admission marker comes from the row for the same reason the status does:
+	 * the board is what polls, and a task deferred by a trail's exhausted reserve
+	 * still shows the lifecycle status it really has.
+	 */
+	const pendingDispatch = $derived(row?.pendingDispatch ?? task?.pendingDispatch ?? false);
+	const pendingLabel = $derived(taskDispatchPendingLabel(pendingDispatch));
 	/**
 	 * The board row's answer when there is one — it is the thing the board itself
 	 * renders, so a task approved in another tab stops offering the decision the
@@ -166,6 +174,11 @@
 			<h1 class="text-2xl font-bold">{task ? taskTitle(task) : taskId || 'Task'}</h1>
 			{#if task}
 				<StatusBadge status={status} label={taskStatusLabel(status)} />
+				{#if pendingLabel}
+					<span class="badge badge-ghost badge-sm badge-outline">
+						{pendingLabel}
+					</span>
+				{/if}
 				{#if taskPhaseLabel(phase)}
 					<span class="badge badge-ghost badge-sm badge-outline">{taskPhaseLabel(phase)}</span>
 				{/if}

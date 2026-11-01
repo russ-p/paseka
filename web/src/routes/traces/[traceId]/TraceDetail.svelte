@@ -23,12 +23,15 @@
 		formatTimestamp,
 		runMeta,
 		runStateLabel,
+		taskDispatchPendingLabel,
 		taskMeta,
 		taskPhaseLabel,
 		taskPrimaryLabel,
 		taskStatusLabel,
+		traceAdmissionLabel,
 		traceBees,
 		traceFlags,
+		tracePendingLabel,
 		tracePrimaryLabel,
 		traceState,
 		traceStateLabel,
@@ -82,6 +85,8 @@
 	const pullRequest = $derived(detail?.pullRequest ?? null);
 	const usage = $derived(usageRows(detail?.usage));
 	const flags = $derived(detail ? traceFlags(detail) : []);
+	/** Work waiting behind the trail's pause: a label, not a task status. */
+	const pending = $derived(detail ? tracePendingLabel(detail) : null);
 	/** The collapsed block is a preview; the timeline is the full feed. */
 	const previewEvents = $derived(events.slice(0, 8));
 	const hiddenEvents = $derived(Math.max(0, events.length - previewEvents.length));
@@ -101,6 +106,10 @@
 					{ label: 'Runs', value: String(detail.runCount) },
 					{ label: 'Tasks', value: String(detail.taskCount) },
 					{ label: 'Bees', value: traceBees(detail) },
+					// The admission axis in words, beside the flags. A paused trail with a
+					// waiting queue says both, because one is the reason and the other is
+					// what it costs.
+					{ label: 'Dispatch', value: traceAdmissionLabel(detail) },
 					{ label: 'Flags', value: flags.length > 0 ? flags.join(', ') : '—' }
 				]
 			: []
@@ -178,6 +187,15 @@
 						{/if}
 						{#if detail.configPolicy === 'pinned'}
 							<StatusBadge status="pinned" label="pinned" />
+						{/if}
+						<!-- The energy pause belongs to the whole trail, so it is badged here and
+						     never written onto a task. The pending count is the work waiting
+						     behind that pause. -->
+						{#if detail.paused}
+							<StatusBadge status="paused" label="paused" />
+						{/if}
+						{#if pending}
+							<StatusBadge status="pending" label={pending} />
 						{/if}
 						{#if detail.hasActive || detail.hasFailures}
 							<StatusBadge status={traceState(detail)} label={traceState(detail)} />
@@ -309,6 +327,7 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each tasks as task (task.taskId)}
+						{@const taskPending = taskDispatchPendingLabel(task.pending)}
 						<DetailRow
 							title={taskPrimaryLabel(task)}
 							meta={taskMeta(task)}
@@ -317,8 +336,14 @@
 						>
 							{#snippet side()}
 								<!-- The same label the board uses, so `waiting_review` stops being the
-								     one status that prints with an underscore on this page. -->
+								     one status that prints with an underscore on this page. The status
+								     stays true even while the trail has not admitted the dispatch. -->
 								<StatusBadge status={task.status} label={taskStatusLabel(task.status)} />
+								{#if taskPending}
+									<span class="badge badge-ghost badge-sm badge-outline">
+										{taskPending}
+									</span>
+								{/if}
 								{#if taskPhaseLabel(task.phase)}
 									<span class="badge badge-ghost badge-sm badge-outline">{taskPhaseLabel(task.phase)}</span>
 								{/if}

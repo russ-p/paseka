@@ -7,6 +7,7 @@
 	import {
 		formatTimestamp,
 		traceBees,
+		tracePendingLabel,
 		tracePrimaryLabel,
 		traceState,
 		traceStateLabel
@@ -43,6 +44,21 @@
 				trace.hasActive || trace.hasFailures
 					? { status: traceState(trace), label: traceState(trace) }
 					: null
+		},
+		{
+			// Energy admission is the trail's axis, so it sits beside the trail and never
+			// inside a task row. The paused badge and the count travel together: a pause
+			// with nothing waiting is still worth saying, and waiting work outlives a
+			// partially drained queue after a top-up.
+			key: 'dispatch',
+			label: 'Dispatch',
+			text: (trace) => tracePendingLabel(trace) ?? '',
+			searchText: (trace) =>
+				[trace.paused ? 'paused' : '', trace.pauseReason ?? '']
+					.filter(Boolean)
+					.join(' '),
+			badge: (trace) => (trace.paused ? { status: 'paused', label: 'paused' } : null),
+			badgeWithText: true
 		},
 		{ key: 'runs', label: 'Runs', text: (trace) => String(trace.runCount), align: 'right' },
 		{ key: 'tasks', label: 'Tasks', text: (trace) => String(trace.taskCount), align: 'right' },

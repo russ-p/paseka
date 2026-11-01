@@ -21,6 +21,12 @@
 		href?: (row: T) => string | null;
 		/** Render the cell as a `StatusBadge`, or nothing when the row returns `null`. */
 		badge?: (row: T) => { status: string; label: string } | null;
+		/**
+		 * Render the cell's text beside its badge instead of the badge alone. A state
+		 * cell usually says one thing — a quiet row shows nothing — while an admission
+		 * cell pairs the paused badge with the count of work waiting behind it.
+		 */
+		badgeWithText?: boolean;
 		/** Render the cell's text in a monospace face: refs, SHAs, paths. */
 		mono?: boolean;
 		align?: 'left' | 'right';
@@ -269,20 +275,32 @@
 									{@const cellBadge = column.badge?.(row) ?? null}
 									{@const cellHref = column.href?.(row) ?? null}
 									{@const cellAction = column.action?.(row) ?? null}
+									{@const cellText = column.text(row)}
 									<td class={cellClass(column, cellAction !== null)}>
 										{#if cellHref}
 											<div class="flex min-w-0 flex-wrap items-center gap-2">
 												<a class="link {column.grow ? 'truncate' : ''} {column.mono ? 'font-mono' : ''}" href={cellHref}
-													>{column.text(row)}</a
+													>{cellText}</a
 												>
 												{#if cellBadge}
 													<StatusBadge status={cellBadge.status} label={cellBadge.label} />
 												{/if}
 											</div>
 										{:else if cellBadge}
-											<StatusBadge status={cellBadge.status} label={cellBadge.label} />
-										{:else if !column.badge}
-											<span class={textClass(column)}>{column.text(row)}</span>
+											{#if column.badgeWithText}
+												<div class="flex items-center gap-2">
+													<StatusBadge status={cellBadge.status} label={cellBadge.label} />
+													{#if cellText}
+														<span class={textClass(column)}>{cellText}</span>
+													{/if}
+												</div>
+											{:else}
+												<StatusBadge status={cellBadge.status} label={cellBadge.label} />
+											{/if}
+										{:else if !column.badge || column.badgeWithText}
+											{#if cellText}
+												<span class={textClass(column)}>{cellText}</span>
+											{/if}
 										{/if}{#if cellAction}
 											<!-- `aria-label` names the row, because "Delete" alone in a
 											     table of branches is a control nobody can act on. The block

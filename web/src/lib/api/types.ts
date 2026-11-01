@@ -387,6 +387,16 @@ export interface TraceSummary extends HoneyReserve {
 	hasActive: boolean;
 	usage?: UsageAggregate;
 
+	/**
+	 * The trail's energy admission, a trail-level axis that is never a task status.
+	 * A paused trail cannot admit a dispatch right now; `pendingCount` is the
+	 * deferred work waiting in its queue. Older snapshots read as admitting with an
+	 * empty queue.
+	 */
+	paused: boolean;
+	pauseReason?: string;
+	pendingCount: number;
+
 	/** Shared trail evidence: configuration binding and fork lineage. */
 	configBound?: boolean;
 	configRef?: string;
@@ -457,6 +467,12 @@ export interface TaskSummary {
 	/** The normalized review policy, so a row can draw its gate without a second read. */
 	review?: string;
 	bee?: string;
+	/**
+	 * The task's dispatch waits in the trail's admission queue. It is not a
+	 * lifecycle status: `status` stays the true state (usually `ready`), and this
+	 * marks the admission axis beside it.
+	 */
+	pending?: boolean;
 }
 
 /** Mirrors `hiveview.TaskRunView`: one adapter run a task produced. */
@@ -492,6 +508,11 @@ export interface TaskListItem {
 	review?: string;
 	bee?: string;
 	sector?: string;
+	/**
+	 * The task's dispatch waits in the trail's admission queue. The board group
+	 * still comes from `status`, so a deferred task stays in its real column.
+	 */
+	pendingDispatch?: boolean;
 	/** Why the merge gate cannot be approved yet, while a non-merge task is open. */
 	approveBlockedReason?: string;
 	dependsOn?: string[];
@@ -548,6 +569,12 @@ export interface TaskBoard {
 	groups: { status: string; tasks: TaskListItem[] }[];
 	/** `null` for a colony with no tasks at all, for the same nil-map reason as above. */
 	taskCounts: Record<string, number> | null;
+	/**
+	 * Deferred dispatches awaiting admission across the scanned trails. A trail-level
+	 * count, deliberately not folded into `taskCounts`: a pending task keeps the
+	 * status it really has.
+	 */
+	pendingDispatches: number;
 }
 
 /** Mirrors `console.CreateTaskRequest`, the body of `POST /api/tasks`. */

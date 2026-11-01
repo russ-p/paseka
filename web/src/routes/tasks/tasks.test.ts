@@ -152,6 +152,74 @@ describe('tasks board', () => {
 		expect(within(column).getByText('after task-01')).toBeInTheDocument();
 	});
 
+	it('keeps a deferred task in its true column and gives skipped its own quiet column', async () => {
+		const { store } = harness(
+			taskBoard({
+				groups: [
+					{
+						status: 'ready',
+						tasks: [
+							taskListItem({
+								taskId: 'ready-1',
+								title: 'Wait for honey',
+								status: 'ready',
+								pendingDispatch: true
+							})
+						]
+					},
+					{
+						status: 'waiting_review',
+						tasks: [
+							taskListItem({
+								taskId: 'review-1',
+								title: 'Review the seam',
+								status: 'waiting_review',
+								phase: 'merge',
+								review: 'final',
+								pendingDispatch: true,
+								canStart: false,
+								canApprove: true,
+								canReject: true,
+								canDiscard: true
+							})
+						]
+					},
+					{
+						status: 'skipped',
+						tasks: [
+							taskListItem({
+								taskId: 'skipped-1',
+								title: 'Superseded tick',
+								status: 'skipped',
+								canStart: false
+							})
+						]
+					}
+				],
+				taskCounts: { ready: 1, waiting_review: 1, skipped: 1 },
+				pendingDispatches: 2
+			})
+		);
+		render(Tasks, { store });
+		await waitFor(() => expect(screen.getByLabelText('skipped tasks')).toBeInTheDocument());
+
+		// The queue belongs to the trails, so it is stated once above the columns
+		// instead of becoming a task status or a column of its own.
+		expect(screen.getByText('2 dispatches pending')).toBeInTheDocument();
+
+		// A deferred task keeps the column its true status puts it in, with the
+		// admission marker as a quiet aside.
+		const ready = screen.getByLabelText('ready tasks');
+		expect(within(ready).getByText('Wait for honey')).toBeInTheDocument();
+		expect(within(ready).getByText('dispatch pending')).toBeInTheDocument();
+		expect(within(screen.getByLabelText('waiting review tasks')).getByText('dispatch pending')).toBeInTheDocument();
+
+		// `skipped` is neither a failure nor a completion: its column is neutral.
+		const skipped = screen.getByLabelText('skipped tasks');
+		expect(within(skipped).getByText('Superseded tick')).toBeInTheDocument();
+		expect(within(skipped).getByText('1').className).toContain('badge-neutral');
+	});
+
 	it('does not repeat the id on a card whose title already is its id', async () => {
 		const { store } = harness(
 			taskBoard({
@@ -443,6 +511,31 @@ describe('task detail', () => {
 			await screen.findByRole('heading', { name: 'Wire the export format flag' })
 		).toBeInTheDocument();
 		expect(screen.getByText('ready')).toBeInTheDocument();
+	});
+
+	it('marks a deferred dispatch beside the status instead of replacing it', async () => {
+		const h = harness(
+			taskBoard({
+				groups: [
+					{
+						status: 'ready',
+						tasks: [taskListItem({ pendingDispatch: true })]
+					}
+				],
+				taskCounts: { ready: 1 },
+				pendingDispatches: 1
+			}),
+			[taskDetail({ pendingDispatch: true })]
+		);
+		render(TaskDetail, {
+			store: h.store,
+			traceId: 'trace-01a0bd6963faa14f',
+			taskId: 'task-01',
+			toasts: h.toasts
+		});
+
+		expect(await screen.findByText('ready')).toHaveClass('badge-success');
+		expect(screen.getByText('dispatch pending')).toBeInTheDocument();
 	});
 
 	it('tags a merge task with its phase beside the status', async () => {

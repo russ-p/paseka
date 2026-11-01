@@ -324,6 +324,39 @@ describe('DataTable cell intents', () => {
 		expect(cells[1]).toBeEmptyDOMElement();
 	});
 
+	it('pairs a badge with its text when the column asks for both', () => {
+		// The admission column says two things at once — "paused" and how much waits —
+		// so its text must not be swallowed by the badge, and a row whose badge
+		// declines must still show its own count.
+		const dispatchColumns: DataColumn<TraceSummary>[] = [
+			{
+				key: 'dispatch',
+				label: 'Dispatch',
+				text: (trace) => (trace.pendingCount > 0 ? `${trace.pendingCount} pending` : ''),
+				badge: (trace) => (trace.paused ? { status: 'paused', label: 'paused' } : null),
+				badgeWithText: true
+			}
+		];
+
+		render(TraceTable, {
+			columns: dispatchColumns,
+			rows: [
+				traceSummary({ traceId: 'trace-paused', paused: true, pendingCount: 2 }),
+				traceSummary({ traceId: 'trace-waiting', paused: false, pendingCount: 3 }),
+				traceSummary({ traceId: 'trace-clear', paused: false, pendingCount: 0 })
+			],
+			rowKey: (trace: TraceSummary) => trace.traceId,
+			label: 'Traces'
+		});
+
+		expect(screen.getByText('paused')).toBeInTheDocument();
+		expect(screen.getByText('2 pending')).toBeInTheDocument();
+		expect(screen.getByText('3 pending')).toBeInTheDocument();
+
+		const clear = screen.getAllByRole('row')[3];
+		expect((within(clear).getAllByRole('cell')[0] as HTMLElement).textContent).toBe('');
+	});
+
 	it('matches the filter against terms the cell does not show', async () => {
 		const user = userEvent.setup();
 		renderTraces();

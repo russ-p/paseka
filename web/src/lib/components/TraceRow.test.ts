@@ -36,6 +36,30 @@ describe('TraceRow', () => {
 		expect(screen.getByText('2 runs')).toHaveClass('badge-neutral');
 	});
 
+	it('badges the trail\'s pause and pending count beside the trail, not as a run state', () => {
+		render(TraceRow, {
+			trace: traceSummary({
+				hasActive: true,
+				paused: true,
+				pauseReason: 'Honey reserve exhausted',
+				pendingCount: 2
+			})
+		});
+
+		// The admission badges sit beside the trail, and the run-derived state keeps
+		// its own word: a running run and an exhausted reserve are different facts.
+		expect(screen.getByText('paused')).toHaveClass('badge-warning');
+		expect(screen.getByText('2 pending')).toHaveClass('badge-warning');
+		expect(screen.getByText('active')).toHaveClass('badge-info');
+	});
+
+	it('leaves a trail that is admitting work quiet', () => {
+		render(TraceRow, { trace: traceSummary({ paused: false, pendingCount: 0 }) });
+
+		expect(screen.queryByText('paused')).not.toBeInTheDocument();
+		expect(screen.queryByText(/pending/)).not.toBeInTheDocument();
+	});
+
 	it('links the title to a detail route only when one is given', () => {
 		const { unmount } = render(TraceRow, { trace: traceSummary(), href: '/next/traces/x' });
 		expect(screen.getByRole('link', { name: 'Refactor the adapter seam' })).toHaveAttribute(

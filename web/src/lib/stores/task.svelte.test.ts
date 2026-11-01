@@ -164,6 +164,15 @@ describe('createTaskStore', () => {
 		expect(store.counts).toEqual({});
 	});
 
+	it('keeps the trail-level pending dispatch count out of the status counts', async () => {
+		const { store } = harness(taskBoard({ pendingDispatches: 2, taskCounts: { ready: 1 } }));
+		await store.start();
+
+		expect(store.pendingDispatches).toBe(2);
+		// A deferred task is still ready, so the status counts do not gain a queue.
+		expect(store.counts).toEqual({ ready: 1 });
+	});
+
 	it('keeps two trails\' identically named tasks apart', async () => {
 		// `_review` is the default id for a rework task, so a colony with five trails
 		// that have each been reviewed has five tasks with the same name. The board

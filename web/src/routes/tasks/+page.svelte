@@ -5,7 +5,9 @@
 	import { createTaskStore, type TaskStore } from '$lib/stores/task.svelte';
 	import {
 		formatTimestamp,
+		pendingDispatchCountLabel,
 		taskCardShowsId,
+		taskDispatchPendingLabel,
 		taskMeta,
 		taskPhaseLabel,
 		taskRowMeta,
@@ -39,7 +41,8 @@
 	 * lifecycle statuses side by side would put the last two off the right edge on
 	 * a laptop and entirely out of reach on a phone. Wrapping keeps every column
 	 * reachable, and the server's group order — ready, running, waiting_review,
-	 * planned, blocked, failed, completed — is the pipeline read left to right.
+	 * planned, blocked, skipped, failed, completed — is the pipeline read left to
+	 * right. `skipped` is its own quiet column, not a failure or a completion.
 	 */
 	const visibleGroups = $derived(store.groups.filter((group) => group.tasks.length > 0));
 
@@ -74,6 +77,15 @@
 			New task
 		</button>
 	</header>
+
+	<!-- Admission is the trails' axis, so it is stated once above the status columns
+	     instead of being folded into a task's column or status word. -->
+	{#if store.pendingDispatches > 0}
+		<p class="flex items-center gap-2 text-sm text-base-content/70" data-pending-dispatches>
+			<StatusBadge status="pending" label={pendingDispatchCountLabel(store.pendingDispatches)} />
+			<span>Deferred until a trail's honey reserve admits work again.</span>
+		</p>
+	{/if}
 
 	{#if store.lastError}
 		<div class="alert alert-error" role="alert"><span>{store.lastError}</span></div>
@@ -128,6 +140,7 @@
 						     on the task id alone the board threw `each_key_duplicate` and
 						     rendered nothing at all. -->
 						{#each group.tasks as task (`${task.traceId}/${task.taskId}`)}
+							{@const pendingLabel = taskDispatchPendingLabel(task.pendingDispatch)}
 							<li>
 								<a
 									class="block space-y-1 rounded-box bg-base-100 p-3 shadow-sm transition-colors hover:bg-base-200"
@@ -151,6 +164,13 @@
 										{/if}
 										{#if task.review && task.review !== 'none'}
 											<span class="badge badge-ghost badge-sm">{task.review} review</span>
+										{/if}
+										{#if pendingLabel}
+											<!-- Admission beside the column's status, never a different column:
+											     a deferred `ready` task is still ready. -->
+											<span class="badge badge-ghost badge-sm badge-outline">
+												{pendingLabel}
+											</span>
 										{/if}
 										{#if task.dependsOn?.length}
 											<span class="badge badge-ghost badge-sm" title={`Depends on ${task.dependsOn.join(', ')}`}>

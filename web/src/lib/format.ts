@@ -546,6 +546,25 @@ export function traceMeta(trace: TraceSummary): string {
 	return parts.join(' · ');
 }
 
+/**
+ * The trail's dispatch admission in one line: whether it can admit work, why it
+ * cannot, and how much waits. This is the trail-level axis the header and the
+ * Trail block show — it never replaces a task's own lifecycle status.
+ */
+export function traceAdmissionLabel(
+	trace: Pick<TraceSummary, 'paused' | 'pauseReason' | 'pendingCount'>
+): string {
+	const pending = trace.pendingCount > 0 ? `${trace.pendingCount} pending` : '';
+	if (!trace.paused) return pending || 'admitting';
+	const paused = trace.pauseReason ? `paused — ${trace.pauseReason}` : 'paused';
+	return pending ? `${paused} · ${pending}` : paused;
+}
+
+/** The badge label for a trail's deferred work, or `null` when nothing waits. */
+export function tracePendingLabel(trace: Pick<TraceSummary, 'pendingCount'>): string | null {
+	return trace.pendingCount > 0 ? `${trace.pendingCount} pending` : null;
+}
+
 export function runStateLabel(state: string): string {
 	return state || 'unknown';
 }
@@ -1071,7 +1090,30 @@ export function runUsageRows(usage: Usage | undefined): MetaRow[] {
  * the spelling.
  */
 export function taskStatusLabel(status: string): string {
-	return status === 'waiting_review' ? 'waiting review' : status || 'unknown';
+	switch (status) {
+		case 'waiting_review':
+			return 'waiting review';
+		case 'skipped':
+			// A superseded allocation reads as its own word, not as `failed`,
+			// `cancelled`, or `completed` with a different label.
+			return 'skipped';
+		default:
+			return status || 'unknown';
+	}
+}
+
+/**
+ * The quiet admission marker beside a task's true status. A deferred dispatch is
+ * not a task state: the row keeps its real status, and this says the trail has not
+ * admitted the work yet.
+ */
+export function taskDispatchPendingLabel(pending: boolean | undefined): string | null {
+	return pending ? 'dispatch pending' : null;
+}
+
+/** The board's trail-level queue in words, with the singular spelled out. */
+export function pendingDispatchCountLabel(count: number): string {
+	return `${count} ${count === 1 ? 'dispatch' : 'dispatches'} pending`;
 }
 
 /**

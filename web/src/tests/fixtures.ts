@@ -51,6 +51,10 @@ export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummar
 		bees: ['builder'],
 		hasFailures: false,
 		hasActive: true,
+		// A trail that is admitting work with an empty queue: the defaults every
+		// fixture starts from, so a test opts into a pause explicitly.
+		paused: false,
+		pendingCount: 0,
 		...overrides
 	};
 }
@@ -717,6 +721,7 @@ export function taskBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
 			}
 		],
 		taskCounts: { ready: 1, waiting_review: 1, failed: 1 },
+		pendingDispatches: 0,
 		...overrides
 	};
 }
