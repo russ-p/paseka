@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Approved)**
-Depends on [044a](044a-direct-pending-dispatch.md). Task dispatch leaves `blocked`, `skipped` lands, standing supersession becomes atomic, and `energy.paused` / `energy.resumed` replace the fake task-blocked alert.
+**(Implemented)**
+Task dispatch now leaves `blocked`: a honey-denied task dispatch records a durable pending entry and keeps its lifecycle status, `energy.add` drains task and direct work oldest-first, an `energy.stipend` atomically supersedes the previous tick's energy-deferred work as `skipped`/`abandoned`, the standing overlap check ignores a task with an active energy-deferred entry, and one `SIGNAL` / `energy.paused` / `energy.resumed` pair per episode replaces the fake task-blocked alert. Legacy honey-blocked tasks stay readable until purged. Builds on [044a](044a-direct-pending-dispatch.md).
 
 ## Problem Statement
 

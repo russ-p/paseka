@@ -66,7 +66,7 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `SIGNAL` | `energy.consume` | positive `amount` | runtime → honey reserve |
 | `SIGNAL` | `energy.stipend` | positive `amount` | standing cue runtime → honey remaining (set, not add) |
 | `SIGNAL` | `energy.paused` | `episodeId`, `remaining`, `pendingCount`; optional `reason`, `budget` | runtime → trail admission observation |
-| `SIGNAL` | `energy.resumed` | `episodeId`, `source` (`energy.add` or `energy.stipend`), `remaining`, `pendingBefore`, `pendingAfter`, `dispatched`; `abandoned` when a stipend superseded work | runtime → trail admission observation |
+| `SIGNAL` | `energy.resumed` | `episodeId`, `source` (`energy.add` or `energy.stipend`), `remaining`, `pendingBefore`, `pendingAfter`, `dispatched`; optional `budget`, `abandoned` when a stipend superseded work | runtime → trail admission observation |
 | `SIGNAL` | `system.kill` | optional `reason` | beekeeper → reactor/tasks |
 | `MUTATION` | `code.proposal.isolated` | proposal metadata; isolated workspace | builder → guard/review gate |
 | `MUTATION` | `code.proposal.root` | proposal metadata; root workspace | hivewright → main guard |

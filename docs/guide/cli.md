@@ -631,7 +631,7 @@ By default, `emit` publishes to JetStream immediately. With **`--defer`**, the e
 
 Trail comb artifacts ([014](../specs/014-artifacts-protocol.md)) use runtime scan flush on success and do **not** depend on this buffer. See [015](../specs/015-deferred-event-emit.md) for the general deferred-emit contract.
 
-**Live-only kinds** (CLI rejects `--defer`): `system.kill`, `energy.add`, `energy.consume`, `energy.stipend`, `session.invite`, `beekeeper.ready`, `task.status`.
+**Live-only kinds** (CLI rejects `--defer`): `system.kill`, `energy.add`, `energy.consume`, `energy.stipend`, `energy.paused`, `energy.resumed`, `session.invite`, `beekeeper.ready`, `task.status`. The two observations are also excluded from direct dispatch and auto-invite matching, so receiving one never wakes a Bee.
 
 ### `paseka event emit`
 
@@ -758,7 +758,7 @@ Manage per-trace honey reserve (`energyToken`). `paseka energy show` prints `bud
 
 Inject honey into a trace (`SIGNAL` / `energy.add`). When `paseka run` is active, the command publishes only and the reactor projects the ledger update (avoids double-counting). When the reactor is stopped, the CLI applies the event locally after publish so `energy show` reflects the top-up immediately.
 
-Blocked task dispatches with exhausted reserve are unblocked, and deferred direct dispatches are resumed, when the reactor is running.
+Deferred task and direct dispatches resume in creation order when the reactor is running, and the trail closes its pause episode with one `SIGNAL` / `energy.resumed`. A standing `energy.stipend` never drains this queue: it supersedes the previous tick's energy-deferred work as `skipped`/`abandoned` — see [Task ledger](../reference/task-ledger.md) § Honey reserve.
 
 | Flag | Short | Required | Description |
 | ---- | ----- | -------- | ----------- |
