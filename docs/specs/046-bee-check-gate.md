@@ -2,8 +2,8 @@
 
 ## Status
 
-**(Approved)**
-Implementation-ready. Outcome semantics are settled: the run fails with `checks_failed`, the proposal is suppressed by the existing completion contract, and a platform-authored `verification.failed` drives the existing rework loop, with a rejection cap so an unsatisfiable gate fails the task instead of draining honey. One constraint must be honoured exactly as written — §4.25, a gate rejection must not take the generic non-completed-run task-failure branch.
+**(Implemented)**
+The runtime stage shipped. A Bee's `checks:` block (`command`, `timeout`, `rejection_cap`) is validated at colony load and read from the resolved configuration snapshot; the runtime runs it after the adapter exits and before the deferred-event flush, fail-closed on non-zero exit, signal, timeout, or exec failure. A rejection marks the run `checks_failed`, writes `checks.log`, suppresses the proposal through the existing completion contract, records the gate result on the run and proposal archive records, and publishes a runtime-authored `verification.failed` that redispatches the builder on the same attempt and worktree; at the consecutive rejection cap the task fails with the gate summary. Queen Console run-page attribution of the gate result and the `paseka doctor` gate findings are not shipped yet.
 
 ## Problem Statement
 

@@ -2,6 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — A diff that does not build is rejected before a model reviews it
+
+A builder's mechanical mistakes — a stray unused import, one failing assertion — used to be found by the Guard Bee, the most expensive actor in the colony, in a full review turn that was then thrown away. The builder's own "build passes" was not evidence either: the same model wrote the diff and the verdict. Now the mechanic runs in the runtime, and the guard spends its turn on semantics.
+
+- **The gate is configuration, not a prompt step.** A Bee may declare `checks:` with a `command` (string or argv list, the same syntax as adapter `command` and `post_exec`), an optional `timeout` (default 10m; zero or negative is a load error), and an optional `rejection_cap` (default 2, `0` means no cap, negative is a load error). The runtime reads it from the resolved configuration snapshot, never from the workspace under review, so a builder cannot weaken the gate in the diff it is judged on.
+- **The runtime runs it, once, before any proposal leaves the run.** After the adapter exits and before the deferred-event flush, run-summary synthesis, and completion contract, the command runs by argv in the dispatch workspace with the launch plan's environment plus the `PASEKA_*` identity variables. The exit status is the verdict; a non-zero exit, a signal kill, a timeout, or a command that cannot start all fail closed.
+- **Failure is a rejection, not a task failure.** The run becomes `failed` with reason `checks_failed`, the captured output lands in the run's `checks.log` under a hard size cap with a truncation marker, and the proposal is suppressed by the existing completion contract — no new event kinds, no routing change. The gate result is recorded on the run record and on the proposal archive record, so mechanical evidence outlives run pruning.
+- **The builder is redispatched, and the loop is capped.** The runtime publishes the existing `verification.failed` under its own identity (a builder-authored rejection would be suppressed by role-based direct dispatch) with `reason: checks_failed`, a one-line summary, and the colony-root-relative log path in `details`, so the repair turn starts from the real failing output on the same attempt and worktree. After `rejection_cap` consecutive rejections the task fails with the gate summary instead of draining honey. A taskless run fails quietly; interactive sessions are not gated.
+- **Un-gated Bees are unchanged.** No `checks` block means no gate result anywhere, so absence stays distinguishable from a pass.
+
+- Spec: [046-bee-check-gate](../specs/046-bee-check-gate.md)
+- Canonical: [bee config](../guide/bee-config.md#checks--the-runtime-owned-gate), [event contracts](../reference/event-contracts.md)
+
+Not in this ship: Queen Console run-page attribution of the gate result and the `paseka doctor` gate findings.
+
 ## 2026-10 — A trail now closes itself before the merge gate
 
 A trail used to end with its last work task and a generic `_review` gate. The pull-request description was written by whichever task happened to be last, so a multi-task trail shipped a body describing one slice; nothing ever looked at the accumulated diff; and `review: final` had to mean both "this is the end" and "a human must approve it".
