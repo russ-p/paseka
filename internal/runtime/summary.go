@@ -73,19 +73,35 @@ func (d *Dispatcher) synthesizeRunSummary(
 	return runEvents, &ev, nil
 }
 
-func (d *Dispatcher) enforceRunSummaryRequired(bee colony.Bee, agentID string, result *adapters.RunResult, runEvents []protocol.Event) {
+// enforceRunSummaryRequired applies the bee's required run.summary policy.
+//
+// A required summary is a runtime check in its own right, separate from any
+// declared completion contract: a missing summary fails the run with reason
+// run_summary_missing and never with reason completion_contract. Only an
+// otherwise completed run is downgraded; a run the adapter, the check gate, or
+// another runtime check already failed keeps its own status and reason, and the
+// missing summary is recorded only as a warning.
+//
+// It returns the message and true when the missing summary downgraded the run,
+// so finalization can persist the correction on both outcome records.
+func (d *Dispatcher) enforceRunSummaryRequired(bee colony.Bee, agentID string, result *adapters.RunResult, runEvents []protocol.Event) (string, bool) {
 	if result == nil || bee.ResolvedRunSummaryPolicy() != colony.RunSummaryRequired {
-		return
+		return "", false
 	}
 	if hasInsightKind(runEvents, agentID, protocol.InsightRunSummary) {
-		return
+		return "", false
 	}
 	msg := "runtime: required INSIGHT/run.summary missing"
 	result.Warnings = append(result.Warnings, msg)
+	if result.Status != string(protocol.StatusCompleted) {
+		return "", false
+	}
 	result.Status = string(protocol.StatusFailed)
+	result.Reason = protocol.ReasonRunSummaryMissing
 	if result.Err == nil {
 		result.Err = fmt.Errorf("%s", msg)
 	}
+	return msg, true
 }
 
 func shouldAutoPublishRunSummary(registry *BeeRegistry, beeRole string) bool {

@@ -259,6 +259,7 @@ func Reject(ctx context.Context, pub bus.Publisher, ledger taskledger.Ledger, in
 		Kind:    protocol.InsightHumanFeedback,
 		TaskID:  in.TaskID,
 		Message: feedback,
+		Verdict: protocol.FeedbackVerdictNegative,
 	}
 	if ref := strings.TrimSpace(in.Ref); ref != "" {
 		payload.Ref = ref

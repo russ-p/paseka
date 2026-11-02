@@ -247,6 +247,17 @@ func writeBeeRun(t *testing.T, repo, traceID, agentID, bee string, state protoco
 	if err := d.WriteStatus(state, "", 0, startedAt, finished, ""); err != nil {
 		t.Fatal(err)
 	}
+	// A modern run writes both outcome records; the projection reports a
+	// terminal status without its partner as incomplete.
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Status:          state,
+		FinishedAt:      finished,
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRuntimeAPIHandlers(t *testing.T) {

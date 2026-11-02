@@ -183,7 +183,7 @@ After an adapter run, `Dispatcher.publishRunOutcome` compares emitted domain eve
 
 Auto-generated `MUTATION/code.proposal.isolated` or `code.proposal.root` from workspace diffs is published **only** when the bee declares the matching kind in `publishes` and `worktree` matches the kind (see [bee config](../guide/bee-config.md) § worktree invariants). Runtime captures a **baseline-attributed** tracked diff (MVP: tracked changes only). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
 
-Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present.
+Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present. A missing required summary is a runtime check in its own right and writes reason `run_summary_missing`; it is never reported as a completion-contract failure, and a bee with no declared contract gains no contract field because of it.
 
 ```yaml
 # .paseka/bees/builder.yaml
@@ -209,6 +209,43 @@ completion_contract:
 ```
 
 Narrative `INSIGHT` events are optional and do not satisfy completion contracts. See [insight kinds](insight-kinds.md).
+
+### Recorded verdict
+
+Finalization persists the verdict before a successful outcome is exposed or published. A bee that declares a contract carries an additive `contract` record on `result.json`:
+
+```json
+{
+  "contract": {
+    "status": "failed",
+    "rules": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "count": 1}],
+    "observations": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "want": 1, "got": 0, "satisfied": false}],
+    "error": "runtime: completion contract: expected at least 1 VERIFICATION event(s) with kind in [verification.success verification.failed], got 0"
+  }
+}
+```
+
+- `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`. A run already failed by the adapter, the gate, or another runtime check keeps its own reason and still records the verdict.
+  - `error` carries the contract's own message: the evaluation error when the verdict is `unavailable`, and the violated-rule message when it is `failed`. This is where the contract's reason stays visible when an earlier primary failure owns the run's error text.
+- `rules` are the effective declared rules (a missing `count` is recorded as `1`); `observations` carry the measured `got` per rule when the contract was evaluated.
+- A bee without a contract omits the field entirely, so "no declared contract" stays distinguishable from "contract passed". Legacy records without it read as unknown.
+- Only events the run's own bee emitted count; runtime-authored events, including the check gate's rejection, never satisfy a contract.
+- A missing required `run.summary` is a separate runtime check: it fails the run with reason `run_summary_missing`, never `completion_contract`.
+
+A contract that changes an otherwise completed run to failed writes `state=failed` with reason `completion_contract` to `status.json`, and `status=failed` with the message in `diagnostics.error` to `result.json`, preserving usage, provider session identity, process exit code, timestamps, artifacts, and the rest of diagnostics.
+
+Primary failures outrank the contract verdict, and precedence lives in the shared record reconciliation both writers use. A run the gate rejected keeps `failed` with reason `checks_failed` on both records while `contract.status=failed` is still recorded; adapter failure, timeout, and cancellation likewise keep their own status and reason. A suppressed verdict never rewrites the primary error text and never counts as a second rejection: the gate verdict stays on the record as the single rejection for that run.
+
+### Reading the pair
+
+The run projection (`RunMeta`, served by `paseka inspect` / Queen Console) reads the two outcome records honestly instead of letting one overwrite the other:
+
+- `contract` is always present on the projection. It carries the persisted verdict, `rules`, and `observations` or `error`; a record without the field projects `status: "unknown"`. An absent contract — a bee that declared none, an interactive session, or an older run — is never assumed to have passed.
+- `records.status` is `conflict` when `status.json` and `result.json` both carry terminal states that disagree. The projected state is never `completed`: a stale `completed` result cannot mask a recorded failure.
+- `records.status` is `incomplete` when one terminal outcome record exists while its partner is missing or still non-terminal. A run still in flight, with no terminal result yet, is not flagged. Interactive sessions write no `result.json`, and legacy text-only records (`summary.md` / `result.txt`) keep their readable shape; neither is mislabelled as an interruption.
+- The trail summary counts a conflicting or incomplete run as a failure, so a scan does not overstate a trail's success. A contract-downgraded run scans as failed through the same projection.
+
+Interactive sessions stay ungated and carry no contract record.
 
 ---
 

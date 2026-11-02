@@ -2,12 +2,55 @@ package runs
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
 )
+
+// Projected contract verdicts. ContractUnknown is not a protocol contract
+// status: it is the reader's word for a record that carries no contract field,
+// which covers a bee that declared no contract, an interactive session, and an
+// older run. It is never folded into a pass.
+const ContractUnknown = "unknown"
+
+// Outcome record integrity markers. Records is nil when the two outcome records
+// agree or when the run is still in flight, and carries one of these when a
+// reader cannot prove one coherent outcome.
+const (
+	// RecordConflict means status.json and result.json both carry a terminal
+	// state and the states disagree. The projected state is never completed:
+	// a stale completed value must not mask a recorded failure.
+	RecordConflict = "conflict"
+	// RecordIncomplete means one terminal outcome record exists while its
+	// partner is missing or still non-terminal. An in-flight run with no
+	// terminal result is not incomplete.
+	RecordIncomplete = "incomplete"
+)
+
+// ContractEvidence is the run projection's read of result.json's contract
+// record: the verdict, the effective declared rules, and the observations or
+// the evaluation error.
+//
+// A record without the field projects as ContractUnknown with no rules or
+// observations. The reader does not assume a contract passed because it cannot
+// see one, and it does not rewrite the record to add the field.
+type ContractEvidence struct {
+	Status       string                         `json:"status"`
+	Rules        []protocol.ContractRule        `json:"rules,omitempty"`
+	Observations []protocol.ContractObservation `json:"observations,omitempty"`
+	Error        string                         `json:"error,omitempty"`
+}
+
+// RecordIntegrity reports a status.json/result.json pair that cannot be read as
+// one outcome. Detail names what disagreed or what was missing, so an operator
+// sees the interruption rather than a friendlier value.
+type RecordIntegrity struct {
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
 
 // RunMeta is a read-only projection of one headless adapter run directory.
 type RunMeta struct {
@@ -35,6 +78,12 @@ type RunMeta struct {
 	// Gate is the runtime-owned mechanical check verdict, absent when the bee
 	// declares no gate or the gate did not run.
 	Gate *protocol.GateResult `json:"gate,omitempty"`
+	// Contract is the completion-contract evidence, always present as a
+	// projection so an absent record reads as unknown rather than as a pass.
+	Contract ContractEvidence `json:"contract"`
+	// Records marks a conflicting or incomplete outcome-record pair and is
+	// absent when the pair agrees or the run is still in flight.
+	Records *RecordIntegrity `json:"records,omitempty"`
 	protocol.Provenance
 }
 
@@ -68,12 +117,15 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		},
 	}
 
-	if snap, err := d.ReadStatus(); err == nil {
+	meta.Contract = ContractEvidence{Status: ContractUnknown}
+
+	var snap protocol.StatusSnapshot
+	haveStatus := false
+	if got, err := d.ReadStatus(); err == nil {
+		haveStatus = true
+		snap = got
 		if !snap.StartedAt.IsZero() {
 			meta.StartedAt = snap.StartedAt
-		}
-		if snap.State != "" {
-			meta.State = string(snap.State)
 		}
 		if !snap.FinishedAt.IsZero() {
 			meta.FinishedAt = snap.FinishedAt
@@ -81,10 +133,12 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		meta.Gate = snap.Gate
 	}
 
-	if res, err := d.ReadResultJSON(); err == nil {
-		if res.Status != "" {
-			meta.State = string(res.Status)
-		}
+	var res protocol.Result
+	haveResult := false
+	legacyResultText := false
+	if got, err := d.ReadResultJSON(); err == nil {
+		haveResult = true
+		res = got
 		if res.Summary != "" {
 			meta.Summary = res.Summary
 		}
@@ -97,9 +151,35 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		if !res.FinishedAt.IsZero() {
 			meta.FinishedAt = res.FinishedAt
 		}
+		if res.Contract != nil && res.Contract.Status != "" {
+			meta.Contract = ContractEvidence{
+				Status:       res.Contract.Status,
+				Rules:        res.Contract.Rules,
+				Observations: res.Contract.Observations,
+				Error:        res.Contract.Error,
+			}
+		}
 	} else if summary, err := d.ReadResult(); err == nil {
+		// A human-readable result without result.json is the legacy shape and
+		// is read exactly as before. It is not an interrupted pair merely for
+		// being old.
+		legacyResultText = true
 		meta.Summary = summary
 	}
+
+	meta.HasEvents = fileExists(d.EventsPath())
+	meta.HasSession = fileExists(d.SessionPath())
+
+	meta.State, meta.Records = projectRunOutcome(outcomeRecords{
+		HaveStatus:       haveStatus,
+		Status:           snap.State,
+		HaveResult:       haveResult,
+		Result:           res.Status,
+		LegacyResultText: legacyResultText,
+		// An interactive session writes no result.json; it is not an AFK
+		// outcome pair, so absence is expected rather than an interruption.
+		Session: meta.HasSession,
+	})
 
 	// Interactive sessions write no result.json; their provider accounting lands
 	// in session.json instead.
@@ -130,9 +210,129 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		}
 	}
 
-	meta.HasEvents = fileExists(d.EventsPath())
-	meta.HasSession = fileExists(d.SessionPath())
 	return meta, nil
+}
+
+// outcomeRecords is the raw material of one run's persisted outcome: the two
+// records if they exist, plus the facts that tell an expected absence from an
+// interrupted one.
+type outcomeRecords struct {
+	HaveStatus       bool
+	Status           protocol.RunStatus
+	HaveResult       bool
+	Result           protocol.RunStatus
+	LegacyResultText bool
+	Session          bool
+}
+
+// projectRunOutcome decides the state a reader may report and, when the two
+// records cannot be read as one outcome, the explicit marker saying why.
+//
+// The rules are deliberately fail-closed:
+//   - Two terminal records that agree are the outcome.
+//   - Two terminal records that disagree are a conflict and never project as
+//     completed, even when one of them is completed.
+//   - A terminal record whose partner is missing or still non-terminal is
+//     incomplete; a completed record projects as failed because the other half
+//     could have been the failure.
+//   - An in-flight run with no terminal record is not flagged.
+//   - An interactive session and a legacy text-only result are readable shapes,
+//     not interruptions.
+func projectRunOutcome(rec outcomeRecords) (string, *RecordIntegrity) {
+	statusTerminal := isTerminalRunStatus(rec.Status)
+	resultTerminal := isTerminalRunStatus(rec.Result)
+
+	if rec.HaveStatus && rec.HaveResult {
+		switch {
+		case statusTerminal && resultTerminal && rec.Status == rec.Result:
+			return string(rec.Status), nil
+		case statusTerminal && resultTerminal:
+			return string(conflictRunState(rec.Status, rec.Result)), &RecordIntegrity{
+				Status: RecordConflict,
+				Detail: fmt.Sprintf("status.json says %s but result.json says %s", rec.Status, rec.Result),
+			}
+		case statusTerminal:
+			return string(failClosedRunState(rec.Status)), &RecordIntegrity{
+				Status: RecordIncomplete,
+				Detail: fmt.Sprintf("result.json is %s for a %s run", describeNonTerminal(rec.Result), rec.Status),
+			}
+		case resultTerminal:
+			return string(failClosedRunState(rec.Result)), &RecordIntegrity{
+				Status: RecordIncomplete,
+				Detail: fmt.Sprintf("status.json is %s for a %s result", describeNonTerminal(rec.Status), rec.Result),
+			}
+		default:
+			// Both records exist and neither is terminal: the run is in flight.
+			if rec.Result != "" {
+				return string(rec.Result), nil
+			}
+			return string(rec.Status), nil
+		}
+	}
+
+	if rec.HaveStatus {
+		if !statusTerminal {
+			return string(rec.Status), nil
+		}
+		if rec.Session || rec.LegacyResultText {
+			return string(rec.Status), nil
+		}
+		return string(failClosedRunState(rec.Status)), &RecordIntegrity{
+			Status: RecordIncomplete,
+			Detail: fmt.Sprintf("result.json is missing for a %s run", rec.Status),
+		}
+	}
+
+	if rec.HaveResult {
+		if !resultTerminal {
+			return string(rec.Result), nil
+		}
+		return string(failClosedRunState(rec.Result)), &RecordIntegrity{
+			Status: RecordIncomplete,
+			Detail: fmt.Sprintf("status.json is missing for a %s result", rec.Result),
+		}
+	}
+
+	// No outcome record at all: a legacy run or an untouched run directory.
+	// Its current readable shape is preserved.
+	return "", nil
+}
+
+func isTerminalRunStatus(state protocol.RunStatus) bool {
+	switch state {
+	case protocol.StatusCompleted, protocol.StatusFailed, protocol.StatusCancelled:
+		return true
+	}
+	return false
+}
+
+// conflictRunState picks a state that is never the friendlier completed value.
+// A failed record wins, then a cancelled one; two different non-completed
+// terminal records still report a conflict.
+func conflictRunState(a, b protocol.RunStatus) protocol.RunStatus {
+	if a == protocol.StatusFailed || b == protocol.StatusFailed {
+		return protocol.StatusFailed
+	}
+	if a == protocol.StatusCancelled || b == protocol.StatusCancelled {
+		return protocol.StatusCancelled
+	}
+	return protocol.StatusFailed
+}
+
+// failClosedRunState refuses to report a completed run whose partner outcome
+// record cannot prove completion.
+func failClosedRunState(state protocol.RunStatus) protocol.RunStatus {
+	if state == protocol.StatusCompleted {
+		return protocol.StatusFailed
+	}
+	return state
+}
+
+func describeNonTerminal(state protocol.RunStatus) string {
+	if state == "" {
+		return "missing"
+	}
+	return string(state)
 }
 
 // FindRun loads one run by trace and agent identifiers.

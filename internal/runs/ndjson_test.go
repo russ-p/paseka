@@ -167,3 +167,45 @@ func TestReadEventsRejectsLinePastMaxLineBytes(t *testing.T) {
 		t.Fatal("ReadEvents accepted a line past maxLineBytes, want an error")
 	}
 }
+
+// A damaged line is skipped by the lenient reader but must make the strict
+// reader fail: contract evaluation cannot treat a corrupt record as a shorter
+// one, because the lost line may be the event the contract requires.
+func TestReadEventsStrictReportsDamagedLog(t *testing.T) {
+	root := t.TempDir()
+	d := Dir{ColonyRoot: root, TraceID: "trace-damaged", AgentID: "builder-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := protocol.NewEvent("trace-damaged", "builder-1", 0, protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationSuccess, Summary: "ok",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendEvent(ev); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(d.EventsPath(), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{not json\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	lenient, err := d.ReadEvents()
+	if err != nil {
+		t.Fatalf("ReadEvents error = %v, want the good line", err)
+	}
+	if len(lenient) != 1 {
+		t.Fatalf("ReadEvents events = %d, want 1", len(lenient))
+	}
+	if _, err := d.ReadEventsStrict(); err == nil {
+		t.Fatal("ReadEventsStrict accepted a damaged log, want an error")
+	}
+}

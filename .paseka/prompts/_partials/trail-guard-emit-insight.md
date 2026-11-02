@@ -61,8 +61,9 @@ EOF
 ### `context.note` and `review.note` — trace-scoped observations
 
 Omit `taskId` so the note reaches the next closing round. Use `context.note` for a fact the next
-round must know, `review.note` for a non-blocking observation about the change set with a
-`severity` of `low`, `medium`, or `high`.
+round must know, `review.note` for a non-blocking observation about the change set. A review note's
+`severity` is optional and, when present, must be one of `info`, `low`, `medium`, `high`, or
+`critical` (trimmed and lowercased before it is stored).
 
 ```bash
 paseka event emit --defer --stdin <<'EOF'

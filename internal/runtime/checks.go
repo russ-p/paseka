@@ -66,11 +66,12 @@ func (b *cappedBuffer) String() string { return b.buf.String() }
 // pass. A bee without a gate records nothing at all.
 //
 // It returns the synthesized VERIFICATION/verification.failed rejection when a
-// failing gate should drive rework, nil otherwise.
-func (d *Dispatcher) runCheckGate(ctx context.Context, p *preparedDispatch, result *adapters.RunResult) *protocol.Event {
+// failing gate should drive rework, nil otherwise, and a finalization error when
+// the corrected run records could not be written.
+func (d *Dispatcher) runCheckGate(ctx context.Context, p *preparedDispatch, result *adapters.RunResult) (*protocol.Event, error) {
 	gate := p.bee.CheckGate()
 	if gate == nil || result == nil || result.Status != string(protocol.StatusCompleted) {
-		return nil
+		return nil, nil
 	}
 
 	timeout, err := gate.TimeoutDuration()
@@ -144,15 +145,10 @@ func (d *Dispatcher) runCheckGate(ctx context.Context, p *preparedDispatch, resu
 
 	if gateResult.Passed {
 		if err := p.runDir.WriteGateRecord(gateResult, protocol.StatusCompleted, "", ""); err != nil {
-			runtimeLog.Warn("check gate record failed",
-				logging.F("bee", p.bee.Role),
-				logging.F("trace", p.req.TraceID),
-				logging.F("agent", p.agentID),
-				logging.F("error", err.Error()),
-			)
+			return nil, fmt.Errorf("runtime: check gate record: %w", err)
 		}
 		result.Gate = &gateResult
-		return nil
+		return nil, nil
 	}
 
 	return d.applyCheckFailure(p, result, gateResult, gateHead(output.String()))
@@ -161,7 +157,7 @@ func (d *Dispatcher) runCheckGate(ctx context.Context, p *preparedDispatch, resu
 // applyCheckFailure marks the run failed with reason checks_failed, records the
 // gate verdict, and decides whether a platform-authored rejection should drive
 // rework.
-func (d *Dispatcher) applyCheckFailure(p *preparedDispatch, result *adapters.RunResult, gateResult protocol.GateResult, outputHead string) *protocol.Event {
+func (d *Dispatcher) applyCheckFailure(p *preparedDispatch, result *adapters.RunResult, gateResult protocol.GateResult, outputHead string) (*protocol.Event, error) {
 	result.Status = string(protocol.StatusFailed)
 	result.Reason = protocol.ReasonChecksFailed
 	result.Gate = &gateResult
@@ -174,12 +170,7 @@ func (d *Dispatcher) applyCheckFailure(p *preparedDispatch, result *adapters.Run
 		note += "\n" + head
 	}
 	if err := p.runDir.WriteGateRecord(gateResult, protocol.StatusFailed, protocol.ReasonChecksFailed, note); err != nil {
-		runtimeLog.Warn("check gate record failed",
-			logging.F("bee", p.bee.Role),
-			logging.F("trace", p.req.TraceID),
-			logging.F("agent", p.agentID),
-			logging.F("error", err.Error()),
-		)
+		return nil, fmt.Errorf("runtime: check gate record: %w", err)
 	}
 
 	runtimeLog.Warn("check gate failed",
@@ -194,7 +185,7 @@ func (d *Dispatcher) applyCheckFailure(p *preparedDispatch, result *adapters.Run
 	// A taskless run fails quietly: signalling a taskless builder would loop it
 	// against itself.
 	if strings.TrimSpace(p.req.TaskID) == "" {
-		return nil
+		return nil, nil
 	}
 
 	// The cap is derived from recorded gate results, not an in-memory counter,
@@ -209,7 +200,7 @@ func (d *Dispatcher) applyCheckFailure(p *preparedDispatch, result *adapters.Run
 				logging.F("task", p.req.TaskID),
 				logging.F("cap", fmt.Sprintf("%d", cap)),
 			)
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -222,12 +213,12 @@ func (d *Dispatcher) applyCheckFailure(p *preparedDispatch, result *adapters.Run
 	})
 	if err != nil {
 		runtimeLog.Warn("check gate rejection event failed", logging.F("error", err.Error()))
-		return nil
+		return nil, nil
 	}
 	if err := p.runDir.AppendEvent(ev); err != nil {
 		runtimeLog.Warn("check gate rejection record failed", logging.F("error", err.Error()))
 	}
-	return &ev
+	return &ev, nil
 }
 
 // consecutiveCheckRejections counts trailing gate rejections for one task

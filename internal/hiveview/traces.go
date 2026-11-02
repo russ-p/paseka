@@ -809,11 +809,16 @@ func eventSeverity(ev protocol.Event) string {
 	if ev.Type != protocol.EventInsight {
 		return ""
 	}
+	if protocol.InsightKind(protocol.PayloadKind(ev.Payload)) != protocol.InsightReviewNote {
+		return ""
+	}
 	var p protocol.NarrativeInsightPayload
 	if err := json.Unmarshal(ev.Payload, &p); err != nil {
 		return ""
 	}
-	return strings.TrimSpace(p.Severity)
+	// An absent severity is reported as unspecified and a historical value
+	// outside the vocabulary as unknown; the stored payload is left as written.
+	return protocol.ClassifyReviewSeverity(p.Severity)
 }
 
 // RenderEventSummary returns a human-readable summary for known event kinds.

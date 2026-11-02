@@ -154,7 +154,7 @@ agent -p --trust --force \
 
 **Result collection:**
 
-1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
+1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via a declared `completion_contract` and per-bee `run_summary` policy. A declared contract records its verdict on `result.json`, and a contract-caused downgrade writes reason `completion_contract` to both `status.json` and `result.json`. A missing required `run.summary` is a runtime check of its own and writes reason `run_summary_missing`, never `completion_contract`.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `agent` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root). Pre-existing dirty files are not attributed to the run.
@@ -198,7 +198,7 @@ pi -p --mode json \
 
 **Result collection:**
 
-1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
+1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via a declared `completion_contract` and per-bee `run_summary` policy. A declared contract records its verdict on `result.json`, and a contract-caused downgrade writes reason `completion_contract` to both `status.json` and `result.json`. A missing required `run.summary` is a runtime check of its own and writes reason `run_summary_missing`, never `completion_contract`.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `pi` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root).
@@ -312,7 +312,7 @@ cd "$WORKSPACE" && opencode run --format json --auto --title "$AGENT_ID" \
 
 **Result collection:**
 
-1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via `completion_contract` and per-bee `run_summary` policy.
+1. **Process outcome** — adapter reports exit/cancel status; runtime may downgrade via a declared `completion_contract` and per-bee `run_summary` policy. A declared contract records its verdict on `result.json`, and a contract-caused downgrade writes reason `completion_contract` to both `status.json` and `result.json`. A missing required `run.summary` is a runtime check of its own and writes reason `run_summary_missing`, never `completion_contract`.
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`. Both OpenCode lines use the last `text` part as the summary fallback.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `opencode` exits, capture a **baseline-attributed** tracked diff in the **workspace** as a diff artifact.

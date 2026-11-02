@@ -92,6 +92,17 @@ func TestInitScaffold(t *testing.T) {
 	if !strings.Contains(string(emitInsight), "pr.body") {
 		t.Fatal("init emit-insight partial must document pr.body")
 	}
+	for _, partial := range []string{"emit-howto.md", "emit-insight.md"} {
+		data, err := os.ReadFile(filepath.Join(repo, ".paseka", "prompts", "_partials", partial))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"info, low, medium, high, or critical", "positive, negative, or neutral"} {
+			if !strings.Contains(string(data), want) {
+				t.Fatalf("%s must name %q", partial, want)
+			}
+		}
+	}
 
 	if _, err := os.Stat(filepath.Join(res.HomeDir, "adapters", "opencode.yaml")); err != nil {
 		t.Fatalf("default init should write opencode.yaml: %v", err)

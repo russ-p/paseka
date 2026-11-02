@@ -2,6 +2,7 @@ package review_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -220,6 +221,53 @@ func TestRejectRequiresWaitingReviewGate(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("Reject missing task err = %v", err)
+	}
+}
+
+func TestRejectPublishesNegativeVerdict(t *testing.T) {
+	ledger := taskledger.NewMemoryLedger()
+	traceID := "trace-1"
+	pub := &recordingPublisher{}
+
+	plan, err := protocol.NewEvent(traceID, "scout", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{
+			{TaskID: "task-1", Title: "Work", Review: protocol.TaskReviewRequired},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(plan); err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.TaskStatusPayload{
+		Kind: protocol.TaskEventStatus, TaskID: "task-1", Status: protocol.TaskStatusWaitingReview,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.Apply(waiting); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := review.Reject(context.Background(), pub, ledger, review.RejectInput{
+		TraceID:  traceID,
+		TaskID:   "task-1",
+		Feedback: "try again",
+		AgentID:  "console",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d, want 1 feedback", len(pub.events))
+	}
+	var feedback protocol.HumanFeedbackPayload
+	if err := json.Unmarshal(pub.events[0].Payload, &feedback); err != nil {
+		t.Fatal(err)
+	}
+	if feedback.Verdict != protocol.FeedbackVerdictNegative {
+		t.Fatalf("verdict = %q, want %q", feedback.Verdict, protocol.FeedbackVerdictNegative)
 	}
 }
 

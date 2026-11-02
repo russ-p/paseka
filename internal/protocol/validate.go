@@ -164,8 +164,10 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 	}
 
 	switch InsightKind(kind) {
-	case InsightRunSummary, InsightReviewNote, InsightContextNote:
+	case InsightRunSummary, InsightContextNote:
 		return validateNarrativeInsight(payload)
+	case InsightReviewNote:
+		return validateReviewNote(payload)
 	case InsightHumanFeedback:
 		return validateHumanFeedback(payload)
 	case InsightTraceTitle:
@@ -427,6 +429,28 @@ func validateNarrativeInsight(payload json.RawMessage) []ValidationDetail {
 	return nil
 }
 
+// validateReviewNote closes the review.note severity vocabulary. Only this
+// insight kind is constrained: other narrative kinds keep their free text.
+func validateReviewNote(payload json.RawMessage) []ValidationDetail {
+	var p NarrativeInsightPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid review.note payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.Summary) == "" {
+		details = append(details, ValidationDetail{Path: "payload.summary", Message: "required"})
+	}
+	if strings.TrimSpace(p.Severity) != "" {
+		if _, ok := NormalizeReviewSeverity(p.Severity); !ok {
+			details = append(details, ValidationDetail{
+				Path:    "payload.severity",
+				Message: fmt.Sprintf("must be one of %s", ReviewSeverityAllowedValues),
+			})
+		}
+	}
+	return details
+}
+
 func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
 	var p HumanFeedbackPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
@@ -438,6 +462,14 @@ func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
 	}
 	if strings.TrimSpace(p.Message) == "" {
 		details = append(details, ValidationDetail{Path: "payload.message", Message: "required"})
+	}
+	if strings.TrimSpace(p.Verdict) != "" {
+		if _, ok := NormalizeFeedbackVerdict(p.Verdict); !ok {
+			details = append(details, ValidationDetail{
+				Path:    "payload.verdict",
+				Message: fmt.Sprintf("must be one of %s", FeedbackVerdictAllowedValues),
+			})
+		}
 	}
 	return details
 }
@@ -688,6 +720,12 @@ func (in EventInput) ToEvent(defaultAgentID string) (Event, error) {
 	var payload any
 	if err := json.Unmarshal(in.Payload, &payload); err != nil {
 		return Event{}, fmt.Errorf("protocol: unmarshal payload: %w", err)
+	}
+	switch InsightKind(PayloadKind(in.Payload)) {
+	case InsightReviewNote:
+		payload = NormalizeReviewNotePayload(payload)
+	case InsightHumanFeedback:
+		payload = NormalizeHumanFeedbackPayload(payload)
 	}
 	return NewEvent(in.TraceID, agentID, 0, in.Type, payload)
 }

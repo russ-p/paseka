@@ -144,6 +144,9 @@ func TestSubmitAnnotatedReviewWritesCombAndPublishes(t *testing.T) {
 	if feedback.Message != "Needs work" || feedback.Ref != ref {
 		t.Fatalf("feedback = %+v", feedback)
 	}
+	if feedback.Verdict != protocol.FeedbackVerdictNegative {
+		t.Fatalf("verdict = %q, want %q", feedback.Verdict, protocol.FeedbackVerdictNegative)
+	}
 }
 
 func TestSubmitAnnotatedReviewFailClosedWhenTaskNotWaiting(t *testing.T) {

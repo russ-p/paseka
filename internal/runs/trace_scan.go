@@ -349,10 +349,18 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 		if activityAt.After(summary.LastActivityAt) {
 			summary.LastActivityAt = activityAt
 		}
-		switch meta.State {
-		case string(protocol.StatusFailed), string(protocol.StatusCancelled):
+		// A conflicting or incomplete pair cannot prove one outcome, so the
+		// trail reports it as a failure rather than trusting whichever record
+		// happened to read as completed. A failing contract is likewise a
+		// failure even if an earlier verdict already owns the primary reason.
+		switch {
+		case meta.Records != nil:
 			summary.HasFailures = true
-		case string(protocol.StatusRunning), string(protocol.StatusQueued):
+		case meta.State == string(protocol.StatusFailed) || meta.State == string(protocol.StatusCancelled):
+			summary.HasFailures = true
+		case meta.Contract.Status == protocol.ContractFailed || meta.Contract.Status == protocol.ContractUnavailable:
+			summary.HasFailures = true
+		case meta.State == string(protocol.StatusRunning) || meta.State == string(protocol.StatusQueued):
 			summary.HasActive = true
 		}
 	}

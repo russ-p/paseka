@@ -127,11 +127,11 @@ func (d Dir) WriteStatusSnapshot(snap protocol.StatusSnapshot) error {
 	if snap.ProtocolVersion == "" {
 		snap.ProtocolVersion = protocol.Version
 	}
-	data, err := json.MarshalIndent(snap, "", "  ")
+	data, err := marshalRecord(snap)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(d.StatusPath(), data, 0o644)
+	return writeFileAtomic(d.StatusPath(), data, 0o644)
 }
 
 // WriteStatus is a convenience wrapper for the final completed/failed snapshot.
@@ -216,15 +216,27 @@ func (d Dir) ReadEvents() ([]protocol.Event, error) {
 	return readEventsFile(d.EventsPath())
 }
 
+// ReadEventsStrict reads the run's own event log and reports a damaged record
+// as an error instead of skipping the lines it cannot parse.
+//
+// Finalization uses it for contract evaluation: the contract is evaluated
+// against this record, so a line lost to corruption may be the event the
+// contract requires. Skipping it would silently downgrade "record unreadable"
+// to "contract failed", and a partially damaged log must never be read as a
+// complete one.
+func (d Dir) ReadEventsStrict() ([]protocol.Event, error) {
+	return readEventsFileStrict(d.EventsPath())
+}
+
 func (d Dir) WriteResult(res protocol.Result) error {
 	if res.ProtocolVersion == "" {
 		res.ProtocolVersion = protocol.Version
 	}
-	data, err := json.MarshalIndent(res, "", "  ")
+	data, err := marshalRecord(res)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(d.ResultJSONPath(), data, 0o644)
+	return writeFileAtomic(d.ResultJSONPath(), data, 0o644)
 }
 
 func (d Dir) ReadResultJSON() (protocol.Result, error) {

@@ -1,0 +1,816 @@
+package runtime_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/runtime"
+)
+
+const contractBeeYAML = `role: builder
+adapter: cursor
+prompt_template: builder.md
+run_summary: disabled
+params:
+  model: composer-2.5
+  yolo: true
+completion_contract:
+  required:
+    - type: VERIFICATION
+      kind_one_of:
+        - verification.success
+        - verification.failed
+      count: 1
+`
+
+const plainBeeYAML = `role: builder
+adapter: cursor
+prompt_template: builder.md
+run_summary: disabled
+params:
+  model: composer-2.5
+  yolo: true
+`
+
+var (
+	contractRunStart = time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC)
+	contractRunEnd   = time.Date(2026, 2, 1, 10, 5, 0, 0, time.UTC)
+)
+
+// recordWritingAdapter behaves like a real adapter: it appends the events it
+// "emitted" and persists both outcome records before returning. Finalization is
+// then correcting records that already exist, not fabricating them.
+type recordWritingAdapter struct {
+	status protocol.RunStatus
+	// reason and errText let a test record the primary outcome a real adapter
+	// writes: "timeout" for a deadline, the process error for a failure, and no
+	// reason for a plain cancel.
+	reason  string
+	errText string
+	events  []protocol.Event
+	// unreadableEvents replaces events.ndjson with a directory after the
+	// adapter returns, which makes the run's event record unreadable.
+	unreadableEvents bool
+	// emptySummary omits the adapter summary, so run-summary synthesis has
+	// nothing to publish and a required-summary check sees a miss.
+	emptySummary bool
+	// corruptEvents appends an unparseable line to events.ndjson after the
+	// adapter returns, so the log is readable but its record is damaged.
+	corruptEvents bool
+}
+
+func (a *recordWritingAdapter) Name() string { return "cursor" }
+
+func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
+	dir := runs.Dir{ColonyRoot: req.ColonyRoot, TraceID: req.TraceID, AgentID: req.AgentID}
+
+	summary := "adapter summary"
+	if a.emptySummary {
+		summary = ""
+	}
+
+	events := make([]protocol.Event, 0, len(a.events))
+	for _, ev := range a.events {
+		ev.TraceID = req.TraceID
+		ev.AgentID = req.AgentID
+		if err := dir.AppendEvent(ev); err != nil {
+			return nil, err
+		}
+		events = append(events, ev)
+	}
+
+	result := protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         req.TraceID,
+		AgentID:         req.AgentID,
+		Status:          a.status,
+		Reason:          a.reason,
+		Summary:         summary,
+		Artifacts:       []protocol.ArtifactRef{{Kind: "diff", Path: ".paseka/runs/x/diff.patch"}},
+		Diagnostics: protocol.Diagnostics{
+			ExitCode: 0,
+			Error:    a.errText,
+			Stderr:   "adapter stderr kept",
+		},
+		Usage: &protocol.Usage{
+			InputTokens:  123,
+			OutputTokens: 45,
+			Source:       protocol.UsageSourceCursorStreamJSON,
+		},
+		ProviderSessionID: "provider-session-42",
+		FinishedAt:        contractRunEnd,
+		Provenance: protocol.Provenance{
+			AttemptID:          "attempt-1",
+			ConfigRef:          "config-ref",
+			ConfigRevision:     7,
+			InitialCodeBaseSHA: "abc123",
+		},
+	}
+	if err := dir.WriteResult(result); err != nil {
+		return nil, err
+	}
+	if err := dir.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           a.status,
+		Reason:          a.reason,
+		ExitCode:        0,
+		StartedAt:       contractRunStart,
+		FinishedAt:      contractRunEnd,
+		Error:           a.errText,
+		Provenance:      result.Provenance,
+	}); err != nil {
+		return nil, err
+	}
+	if a.unreadableEvents {
+		if err := os.Remove(dir.EventsPath()); err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		if err := os.Mkdir(dir.EventsPath(), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	if a.corruptEvents {
+		f, err := os.OpenFile(dir.EventsPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := f.WriteString("{not json\n"); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
+	}
+
+	return &adapters.RunResult{
+		Status:            string(a.status),
+		Reason:            a.reason,
+		Summary:           result.Summary,
+		Output:            result.Summary,
+		Artifacts:         []adapters.Artifact{{Kind: "diff", Path: ".paseka/runs/x/diff.patch", Content: "diff"}},
+		Usage:             result.Usage,
+		ProviderSessionID: result.ProviderSessionID,
+		Events:            events,
+	}, nil
+}
+
+func dispatchContractRun(t *testing.T, traceID, beeYAML string, adapter *recordWritingAdapter) (runs.Dir, *adapters.RunResult) {
+	t.Helper()
+	root := t.TempDir()
+	writeColony(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(beeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", adapter)
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+
+	result, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    traceID,
+		TaskID:     "task-1",
+		Task:       "do the work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return onlyRunDir(t, root, traceID), result
+}
+
+func TestFinalizationContractMissFailsBothRecords(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-contract-miss", contractBeeYAML, &recordWritingAdapter{
+		status: protocol.StatusCompleted,
+	})
+
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonCompletionContract)
+	}
+	if !strings.Contains(snap.Error, "completion contract") {
+		t.Fatalf("status error = %q, want contract message", snap.Error)
+	}
+	if snap.ExitCode != 0 || !snap.StartedAt.Equal(contractRunStart) || !snap.FinishedAt.Equal(contractRunEnd) {
+		t.Fatalf("status record lost adapter evidence: %+v", snap)
+	}
+	if snap.AttemptID != "attempt-1" || snap.ConfigRevision != 7 {
+		t.Fatalf("status provenance = %+v", snap.Provenance)
+	}
+
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonCompletionContract)
+	}
+	if !strings.Contains(res.Diagnostics.Error, "completion contract") {
+		t.Fatalf("result diagnostics.error = %q, want contract message", res.Diagnostics.Error)
+	}
+	if res.Diagnostics.ExitCode != 0 || res.Diagnostics.Stderr != "adapter stderr kept" {
+		t.Fatalf("result diagnostics lost adapter evidence: %+v", res.Diagnostics)
+	}
+	if res.Usage == nil || res.Usage.InputTokens != 123 || res.Usage.OutputTokens != 45 {
+		t.Fatalf("result usage = %+v, want preserved", res.Usage)
+	}
+	if res.ProviderSessionID != "provider-session-42" {
+		t.Fatalf("provider session = %q, want preserved", res.ProviderSessionID)
+	}
+	if len(res.Artifacts) != 1 || res.Artifacts[0].Kind != "diff" {
+		t.Fatalf("artifacts = %+v, want preserved", res.Artifacts)
+	}
+	if !res.FinishedAt.Equal(contractRunEnd) {
+		t.Fatalf("finishedAt = %s, want preserved %s", res.FinishedAt, contractRunEnd)
+	}
+	if res.InitialCodeBaseSHA != "abc123" {
+		t.Fatalf("result provenance = %+v", res.Provenance)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
+		t.Fatalf("contract record = %+v, want failed", res.Contract)
+	}
+	if len(res.Contract.Rules) != 1 || res.Contract.Rules[0].Type != "VERIFICATION" || res.Contract.Rules[0].Count != 1 {
+		t.Fatalf("contract rules = %+v, want effective declared rule", res.Contract.Rules)
+	}
+	if len(res.Contract.Observations) != 1 {
+		t.Fatalf("observations = %+v, want one", res.Contract.Observations)
+	}
+	obs := res.Contract.Observations[0]
+	if obs.Want != 1 || obs.Got != 0 || obs.Satisfied {
+		t.Fatalf("observation = %+v, want want=1 got=0 unsatisfied", obs)
+	}
+
+	summary, err := runs.LoadTraceSummary(dir.ColonyRoot, "trace-contract-miss")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !summary.HasFailures {
+		t.Fatalf("trail scan = %+v, want failure", summary)
+	}
+}
+
+func TestFinalizationContractPassStaysCompleted(t *testing.T) {
+	success, err := protocol.NewEvent("", "", 1, protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationSuccess, Summary: "ok",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, result := dispatchContractRun(t, "trace-contract-pass", contractBeeYAML, &recordWritingAdapter{
+		status: protocol.StatusCompleted,
+		events: []protocol.Event{success},
+	})
+
+	if result.Status != string(protocol.StatusCompleted) || result.Reason != "" {
+		t.Fatalf("result = %s/%s, want completed with no reason", result.Status, result.Reason)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusCompleted || res.Reason != "" {
+		t.Fatalf("result record = %s/%s, want completed", res.Status, res.Reason)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractPassed {
+		t.Fatalf("contract record = %+v, want passed", res.Contract)
+	}
+	if len(res.Contract.Observations) != 1 || !res.Contract.Observations[0].Satisfied || res.Contract.Observations[0].Got != 1 {
+		t.Fatalf("observations = %+v, want satisfied got=1", res.Contract.Observations)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusCompleted {
+		t.Fatalf("status record = %s, want completed", snap.State)
+	}
+}
+
+func TestFinalizationWithoutContractOmitsField(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-no-contract", plainBeeYAML, &recordWritingAdapter{
+		status: protocol.StatusCompleted,
+	})
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("result = %s, want completed", result.Status)
+	}
+	if result.Contract != nil {
+		t.Fatalf("result contract = %+v, want nil", result.Contract)
+	}
+	raw, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"contract"`) {
+		t.Fatalf("result.json carries a contract field without a declared contract: %s", raw)
+	}
+
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Contract != nil {
+		t.Fatalf("decoded contract = %+v, want nil", res.Contract)
+	}
+}
+
+func TestFinalizationUnreadableEventsRecordsUnavailable(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-contract-unreadable", contractBeeYAML, &recordWritingAdapter{
+		status:           protocol.StatusCompleted,
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable {
+		t.Fatalf("contract record = %+v, want unavailable", res.Contract)
+	}
+	if res.Contract.Error == "" {
+		t.Fatal("unavailable contract carries no evaluation error")
+	}
+	if res.Contract.Status == protocol.ContractPassed {
+		t.Fatal("unreadable event record was presented as a pass")
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonCompletionContract)
+	}
+	// Both records must agree: an unreadable contract fails the run, and the
+	// run directory cannot keep saying completed.
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonCompletionContract)
+	}
+	if !strings.Contains(snap.Error, "completion contract unavailable") {
+		t.Fatalf("status error = %q, want the evaluation error", snap.Error)
+	}
+}
+
+func TestFinalizationCorruptEventsRecordsUnavailable(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-contract-corrupt", contractBeeYAML, &recordWritingAdapter{
+		status:        protocol.StatusCompleted,
+		corruptEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
+		t.Fatalf("contract record = %+v, want unavailable with the evaluation error", res.Contract)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonCompletionContract)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonCompletionContract)
+	}
+}
+
+func TestFinalizationUnreadableEventsKeepsPrimaryFailureReason(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-unreadable-primary-failure", contractBeeYAML, &recordWritingAdapter{
+		status:           protocol.StatusFailed,
+		errText:          "adapter crashed",
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) {
+		t.Fatalf("result status = %q, want failed", result.Status)
+	}
+	if result.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("an unavailable contract relabelled an adapter failure as a contract miss")
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("result record was relabelled as a contract miss")
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
+		t.Fatalf("contract record = %+v, want unavailable with error", res.Contract)
+	}
+	if res.Diagnostics.Error != "adapter crashed" {
+		t.Fatalf("result diagnostics.error = %q, want the adapter error untouched", res.Diagnostics.Error)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason == protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed with the adapter's own reason", snap.State, snap.Reason)
+	}
+	if snap.Error != "adapter crashed" {
+		t.Fatalf("status error = %q, want the adapter error untouched", snap.Error)
+	}
+}
+
+func TestFinalizationPrimaryFailureOutranksFailingContract(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  protocol.RunStatus
+		reason  string
+		errText string
+	}{
+		{
+			name:    "adapter failure",
+			status:  protocol.StatusFailed,
+			errText: "cursor: agent run failed (exit 1)",
+		},
+		{
+			name:    "timeout",
+			status:  protocol.StatusCancelled,
+			reason:  protocol.ReasonTimeout,
+			errText: "run exceeded params.timeout",
+		},
+		{
+			name:    "cancellation",
+			status:  protocol.StatusCancelled,
+			errText: "context canceled",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			traceID := "trace-primary-" + strings.ReplaceAll(tc.name, " ", "-")
+			dir, result := dispatchContractRun(t, traceID, contractBeeYAML, &recordWritingAdapter{
+				status:  tc.status,
+				reason:  tc.reason,
+				errText: tc.errText,
+			})
+
+			// The in-memory outcome the caller sees keeps the primary failure.
+			if result.Status != string(tc.status) || result.Reason != tc.reason {
+				t.Fatalf("result = %s/%s, want %s/%s", result.Status, result.Reason, tc.status, tc.reason)
+			}
+			if result.Contract == nil || result.Contract.Status != protocol.ContractFailed {
+				t.Fatalf("result contract = %+v, want failed recorded", result.Contract)
+			}
+
+			res, err := dir.ReadResultJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Status != tc.status || res.Reason != tc.reason {
+				t.Fatalf("result record = %s/%s, want %s/%s", res.Status, res.Reason, tc.status, tc.reason)
+			}
+			if res.Diagnostics.Error != tc.errText {
+				t.Fatalf("result diagnostics.error = %q, want %q untouched", res.Diagnostics.Error, tc.errText)
+			}
+			if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
+				t.Fatalf("contract record = %+v, want failed recorded", res.Contract)
+			}
+			if len(res.Contract.Observations) != 1 || res.Contract.Observations[0].Satisfied {
+				t.Fatalf("observations = %+v, want the unsatisfied rule", res.Contract.Observations)
+			}
+			if !strings.Contains(res.Contract.Error, "completion contract") {
+				t.Fatalf("contract error = %q, want the contract's own message", res.Contract.Error)
+			}
+
+			snap, err := dir.ReadStatus()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snap.State != tc.status || snap.Reason != tc.reason {
+				t.Fatalf("status record = %s/%s, want %s/%s", snap.State, snap.Reason, tc.status, tc.reason)
+			}
+			if snap.Error != tc.errText {
+				t.Fatalf("status error = %q, want %q untouched", snap.Error, tc.errText)
+			}
+		})
+	}
+}
+
+func TestFinalizationMissingRequiredSummaryIsNotContractFailure(t *testing.T) {
+	beeYAML := strings.Replace(contractBeeYAML, "run_summary: disabled", "run_summary: required", 1)
+	dir, result := dispatchContractRun(t, "trace-required-summary", beeYAML, &recordWritingAdapter{
+		status:       protocol.StatusCompleted,
+		emptySummary: true,
+	})
+	if result.Status != string(protocol.StatusFailed) {
+		t.Fatalf("result status = %q, want failed", result.Status)
+	}
+	if result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result reason = %q, want %q (never completion_contract)", result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if res.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("a missing required run.summary was reported as a completion-contract failure")
+	}
+	if res.Contract == nil {
+		t.Fatal("declared contract has no verdict; the summary check must not suppress it")
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonRunSummaryMissing)
+	}
+}
+
+func TestFinalizationMissingSummaryWithUnreadableEventsIsNotContractMiss(t *testing.T) {
+	beeYAML := strings.Replace(contractBeeYAML, "run_summary: disabled", "run_summary: required", 1)
+	dir, result := dispatchContractRun(t, "trace-summary-unreadable", beeYAML, &recordWritingAdapter{
+		status:           protocol.StatusCompleted,
+		emptySummary:     true,
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result reason = %q, want %q", res.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
+		t.Fatalf("contract record = %+v, want unavailable with error", res.Contract)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("status reason = %q, want %q", snap.Reason, protocol.ReasonRunSummaryMissing)
+	}
+}
+
+func TestFinalizationMissingRequiredSummaryWithoutContractOmitsContract(t *testing.T) {
+	beeYAML := strings.Replace(plainBeeYAML, "run_summary: disabled", "run_summary: required", 1)
+	dir, result := dispatchContractRun(t, "trace-required-summary-no-contract", beeYAML, &recordWritingAdapter{
+		status:       protocol.StatusCompleted,
+		emptySummary: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if result.Contract != nil {
+		t.Fatalf("result contract = %+v, want nil", result.Contract)
+	}
+	raw, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"contract"`) {
+		t.Fatalf("run.summary miss manufactured a contract verdict: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"run_summary_missing"`) {
+		t.Fatalf("result record = %s, want reason run_summary_missing", raw)
+	}
+}
+
+func TestFinalizationUnreadableEventsWithoutContractOmitsContract(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-unreadable-no-contract", plainBeeYAML, &recordWritingAdapter{
+		status:           protocol.StatusCompleted,
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("result = %s, want completed", result.Status)
+	}
+	if result.Contract != nil {
+		t.Fatalf("result contract = %+v, want nil", result.Contract)
+	}
+	raw, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"contract"`) {
+		t.Fatalf("event record unreadable manufactured a contract verdict: %s", raw)
+	}
+}
+
+func TestFinalizationGateRejectionKeepsChecksFailedWithFailedContract(t *testing.T) {
+	gateBee := contractBeeYAML + `checks:
+  command: ["sh", "-c", "exit 1"]
+`
+	dir, result := dispatchContractRun(t, "trace-gate-contract", gateBee, &recordWritingAdapter{
+		status: protocol.StatusCompleted,
+	})
+	if result.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("result reason = %q, want %q", result.Reason, protocol.ReasonChecksFailed)
+	}
+	if result.Gate == nil || result.Gate.Passed {
+		t.Fatalf("result gate = %+v, want the recorded rejection", result.Gate)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonChecksFailed)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
+		t.Fatalf("contract record = %+v, want failed observation recorded", res.Contract)
+	}
+	if res.Contract.Error == "" {
+		t.Fatal("a failed contract carries no message; the gate owns the primary error text, so the contract's own reason has nowhere else to live")
+	}
+	if res.Gate == nil || res.Gate.Passed {
+		t.Fatalf("result gate = %+v, want the rejection preserved", res.Gate)
+	}
+	if strings.Contains(res.Diagnostics.Error, "completion contract") {
+		t.Fatalf("result diagnostics.error = %q, want only the gate message", res.Diagnostics.Error)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonChecksFailed)
+	}
+	if snap.Gate == nil || snap.Gate.Passed {
+		t.Fatalf("status gate = %+v, want the rejection preserved", snap.Gate)
+	}
+	if strings.Contains(snap.Error, "completion contract") {
+		t.Fatalf("status error = %q, want only the gate message", snap.Error)
+	}
+
+	// One gate verdict, one rejection record: the contract pass records its own
+	// verdict and must not invent a second gate rejection for the same run.
+	events, err := dir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejections := 0
+	for _, ev := range events {
+		if ev.AgentID != protocol.RuntimeAgentID {
+			continue
+		}
+		if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.VerificationFailed) {
+			continue
+		}
+		rejections++
+	}
+	if rejections != 1 {
+		t.Fatalf("gate rejections = %d, want exactly 1", rejections)
+	}
+	recorded, err := runs.RecordedGateRuns(dir.ColonyRoot, dir.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].Gate.Passed {
+		t.Fatalf("recorded gate runs = %+v, want exactly one rejection", recorded)
+	}
+}
+
+func TestFinalizationContractFailurePreservesPassingGateEvidence(t *testing.T) {
+	gateBee := contractBeeYAML + `checks:
+  command: ["sh", "-c", "exit 0"]
+`
+	dir, result := dispatchContractRun(t, "trace-pass-gate-fail-contract", gateBee, &recordWritingAdapter{
+		status: protocol.StatusCompleted,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Gate == nil || !res.Gate.Passed {
+		t.Fatalf("result gate = %+v, want preserved pass", res.Gate)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
+		t.Fatalf("contract record = %+v, want failed", res.Contract)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Gate == nil || !snap.Gate.Passed {
+		t.Fatalf("status gate = %+v, want preserved pass", snap.Gate)
+	}
+	if snap.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("status reason = %q, want %q", snap.Reason, protocol.ReasonCompletionContract)
+	}
+}
+
+func TestFinalizationReconciliationIsIdempotent(t *testing.T) {
+	dir, _ := dispatchContractRun(t, "trace-contract-idempotent", contractBeeYAML, &recordWritingAdapter{
+		status: protocol.StatusCompleted,
+	})
+
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusBefore, err := os.ReadFile(dir.StatusPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultBefore, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	update := runs.RunRecordReconciliation{
+		State:    protocol.StatusFailed,
+		Reason:   protocol.ReasonCompletionContract,
+		Note:     snap.Error,
+		Contract: res.Contract,
+	}
+	if err := dir.ReconcileRunRecords(update); err != nil {
+		t.Fatal(err)
+	}
+	if err := dir.ReconcileRunRecords(update); err != nil {
+		t.Fatal(err)
+	}
+
+	statusAfter, err := os.ReadFile(dir.StatusPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultAfter, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(statusBefore) != string(statusAfter) {
+		t.Fatalf("repeated reconciliation changed status.json:\nbefore:\n%s\nafter:\n%s", statusBefore, statusAfter)
+	}
+	if string(resultBefore) != string(resultAfter) {
+		t.Fatalf("repeated reconciliation changed result.json:\nbefore:\n%s\nafter:\n%s", resultBefore, resultAfter)
+	}
+}
+
+func TestFinalizationSynthesizesMissingResultRecord(t *testing.T) {
+	root := t.TempDir()
+	writeColony(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/bees/builder.yaml"), []byte(contractBeeYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := runtime.NewDispatcher()
+	// A fake adapter that persists no records at all: finalization still owns
+	// the outcome and must find a file to correct.
+	d.RegisterAdapter("cursor", &mutatingAdapter{})
+	reg, err := runtime.BuildBeeRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetBeeRegistry(reg)
+
+	result, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-synthesized-result",
+		TaskID:     "task-1",
+		Task:       "do the work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusFailed) {
+		t.Fatalf("result = %s, want failed", result.Status)
+	}
+	dir := onlyRunDir(t, root, "trace-synthesized-result")
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonCompletionContract)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
+		t.Fatalf("contract record = %+v, want failed", res.Contract)
+	}
+}

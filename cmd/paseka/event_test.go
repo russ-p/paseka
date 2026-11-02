@@ -95,6 +95,125 @@ func TestEventEmitRecordsWithNoBroker(t *testing.T) {
 	}
 }
 
+// TestEventEmitNormalizesReviewNoteSeverity exercises the CLI seam: the value a
+// Bee writes is trimmed and lowercased before either store sees it.
+func TestEventEmitNormalizesReviewNoteSeverity(t *testing.T) {
+	repo := initTopologyFixtureRepoCLI(t)
+	setupCLIHome(t, repo)
+
+	const traceID = "trace-review-note"
+	runDir := prepareCLIRun(t, repo, traceID, "agent-1")
+
+	emit := `{"traceId":"` + traceID + `","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":" Medium "}}`
+	restoreIn := swapStdin(t, emit)
+	defer restoreIn()
+	restoreOut, capture := captureStdout(t)
+	defer restoreOut()
+
+	cmd := newRoot()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"event", "emit", "--stdin", "--agent", "agent-1", "-C", repo})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("emit: %v\n%s", err, capture())
+	}
+
+	var result protocol.EventCLIResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(capture())), &result); err != nil {
+		t.Fatalf("result %q: %v", capture(), err)
+	}
+	if !result.OK {
+		t.Fatalf("result = %+v, want a successful emit", result)
+	}
+
+	runEvents, err := runDir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runEvents) != 1 {
+		t.Fatalf("run audit log holds %d events, want 1", len(runEvents))
+	}
+	if got := eventReviewSeverity(t, runEvents[0]); got != protocol.ReviewSeverityMedium {
+		t.Fatalf("run audit severity = %q, want medium", got)
+	}
+	trailEvents, err := runs.ReadTraceEvents(repo, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trailEvents) != 1 {
+		t.Fatalf("trail record holds %d events, want 1", len(trailEvents))
+	}
+	if got := eventReviewSeverity(t, trailEvents[0]); got != protocol.ReviewSeverityMedium {
+		t.Fatalf("published severity = %q, want medium", got)
+	}
+}
+
+// TestEventEmitRejectsUnknownReviewNoteSeverity checks that a value outside the
+// vocabulary fails through the existing envelope with a field-level detail.
+func TestEventEmitRejectsUnknownReviewNoteSeverity(t *testing.T) {
+	repo := initTopologyFixtureRepoCLI(t)
+	setupCLIHome(t, repo)
+
+	const traceID = "trace-review-note"
+	prepareCLIRun(t, repo, traceID, "agent-1")
+
+	emit := `{"traceId":"` + traceID + `","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":"severe"}}`
+	restoreIn := swapStdin(t, emit)
+	defer restoreIn()
+	restoreOut, capture := captureStdout(t)
+	defer restoreOut()
+
+	cmd := newRoot()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"event", "emit", "--stdin", "--agent", "agent-1", "-C", repo})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("emit must fail for an unknown severity")
+	}
+
+	var result protocol.EventCLIResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(capture())), &result); err != nil {
+		t.Fatalf("result %q: %v", capture(), err)
+	}
+	if result.OK || result.Error != "schema_validation_failed" {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(result.Details) != 1 || result.Details[0].Path != "payload.severity" {
+		t.Fatalf("details = %#v", result.Details)
+	}
+	for _, value := range protocol.ReviewSeverityValues() {
+		if !strings.Contains(result.Details[0].Message, value) {
+			t.Fatalf("message %q must name %q", result.Details[0].Message, value)
+		}
+	}
+}
+
+func prepareCLIRun(t *testing.T, repo, traceID, agentID string) runs.Dir {
+	t.Helper()
+	runDir := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
+	if err := runDir.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := runDir.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		ColonyRoot:      repo,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return runDir
+}
+
+func eventReviewSeverity(t *testing.T, ev protocol.Event) string {
+	t.Helper()
+	var p protocol.NarrativeInsightPayload
+	if err := json.Unmarshal(ev.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p.Severity
+}
+
 // swapStdin points os.Stdin at the given payload for the duration of a test.
 // `paseka event emit` reads the process stdin directly.
 func swapStdin(t *testing.T, payload string) func() {
