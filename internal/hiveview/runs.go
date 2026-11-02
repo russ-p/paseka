@@ -33,6 +33,11 @@ type RunView struct {
 	FinishedAt        *time.Time      `json:"finishedAt,omitempty"`
 	HasEvents         bool            `json:"hasEvents"`
 	HasSession        bool            `json:"hasSession"`
+	// Contract is the completion-contract evidence, always present so an
+	// absent record reads as unknown rather than as a pass.
+	Contract runs.ContractEvidence `json:"contract"`
+	// Records marks a conflicting or incomplete outcome-record pair.
+	Records *runs.RecordIntegrity `json:"records,omitempty"`
 }
 
 // ListRuns returns recent headless adapter runs from the filesystem.
@@ -89,6 +94,8 @@ func runViewFromMeta(meta runs.RunMeta) RunView {
 		StartedAt:         meta.StartedAt,
 		HasEvents:         meta.HasEvents,
 		HasSession:        meta.HasSession,
+		Contract:          meta.Contract,
+		Records:           meta.Records,
 	}
 	if !meta.FinishedAt.IsZero() {
 		finished := meta.FinishedAt

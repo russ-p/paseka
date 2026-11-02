@@ -236,6 +236,15 @@ A contract that changes an otherwise completed run to failed writes `state=faile
 
 Primary failures outrank the contract verdict, and precedence lives in the shared record reconciliation both writers use. A run the gate rejected keeps `failed` with reason `checks_failed` on both records while `contract.status=failed` is still recorded; adapter failure, timeout, and cancellation likewise keep their own status and reason. A suppressed verdict never rewrites the primary error text and never counts as a second rejection: the gate verdict stays on the record as the single rejection for that run.
 
+### Reading the pair
+
+The run projection (`RunMeta`, served by `paseka inspect` / Queen Console) reads the two outcome records honestly instead of letting one overwrite the other:
+
+- `contract` is always present on the projection. It carries the persisted verdict, `rules`, and `observations` or `error`; a record without the field projects `status: "unknown"`. An absent contract — a bee that declared none, an interactive session, or an older run — is never assumed to have passed.
+- `records.status` is `conflict` when `status.json` and `result.json` both carry terminal states that disagree. The projected state is never `completed`: a stale `completed` result cannot mask a recorded failure.
+- `records.status` is `incomplete` when one terminal outcome record exists while its partner is missing or still non-terminal. A run still in flight, with no terminal result yet, is not flagged. Interactive sessions write no `result.json`, and legacy text-only records (`summary.md` / `result.txt`) keep their readable shape; neither is mislabelled as an interruption.
+- The trail summary counts a conflicting or incomplete run as a failure, so a scan does not overstate a trail's success. A contract-downgraded run scans as failed through the same projection.
+
 Interactive sessions stay ungated and carry no contract record.
 
 ---
