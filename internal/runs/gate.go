@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -24,46 +23,17 @@ func (d Dir) CheckLogPath() string {
 // and reason is the machine-readable classifier the status snapshot carries. A
 // note is appended to the existing error text rather than replacing it, so an
 // adapter error survives alongside the gate verdict.
+//
+// The gate writer is one caller of ReconcileRunRecords: the mechanical gate and
+// the completion contract share the same reconciliation operation, so both
+// records are corrected the same way and atomically.
 func (d Dir) WriteGateRecord(gate protocol.GateResult, state protocol.RunStatus, reason, note string) error {
-	snap, err := d.ReadStatus()
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		snap = protocol.StatusSnapshot{
-			ProtocolVersion: protocol.Version,
-			StartedAt:       time.Now().UTC(),
-		}
-	}
-	snap.State = state
-	snap.Reason = reason
-	if note = strings.TrimSpace(note); note != "" {
-		if strings.TrimSpace(snap.Error) != "" {
-			snap.Error += "; " + note
-		} else {
-			snap.Error = note
-		}
-	}
-	snap.Gate = &gate
-	if snap.FinishedAt.IsZero() {
-		snap.FinishedAt = time.Now().UTC()
-	}
-	if err := d.WriteStatusSnapshot(snap); err != nil {
-		return err
-	}
-
-	if res, readErr := d.ReadResultJSON(); readErr == nil {
-		res.Status = state
-		res.Reason = reason
-		res.Gate = &gate
-		if res.FinishedAt.IsZero() {
-			res.FinishedAt = snap.FinishedAt
-		}
-		if err := d.WriteResult(res); err != nil {
-			return err
-		}
-	}
-	return nil
+	return d.ReconcileRunRecords(RunRecordReconciliation{
+		State:  state,
+		Reason: reason,
+		Note:   note,
+		Gate:   &gate,
+	})
 }
 
 // RecordedGateRun is one gate verdict recorded on a run under a trace, together

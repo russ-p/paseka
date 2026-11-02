@@ -127,11 +127,11 @@ func (d Dir) WriteStatusSnapshot(snap protocol.StatusSnapshot) error {
 	if snap.ProtocolVersion == "" {
 		snap.ProtocolVersion = protocol.Version
 	}
-	data, err := json.MarshalIndent(snap, "", "  ")
+	data, err := marshalRecord(snap)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(d.StatusPath(), data, 0o644)
+	return writeFileAtomic(d.StatusPath(), data, 0o644)
 }
 
 // WriteStatus is a convenience wrapper for the final completed/failed snapshot.
@@ -220,11 +220,11 @@ func (d Dir) WriteResult(res protocol.Result) error {
 	if res.ProtocolVersion == "" {
 		res.ProtocolVersion = protocol.Version
 	}
-	data, err := json.MarshalIndent(res, "", "  ")
+	data, err := marshalRecord(res)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(d.ResultJSONPath(), data, 0o644)
+	return writeFileAtomic(d.ResultJSONPath(), data, 0o644)
 }
 
 func (d Dir) ReadResultJSON() (protocol.Result, error) {

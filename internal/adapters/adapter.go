@@ -125,6 +125,9 @@ type RunResult struct {
 	// Gate is the runtime-owned check gate verdict for this run. It is nil for
 	// an un-gated bee and for a run that never reached a proposal attempt.
 	Gate *protocol.GateResult
+	// Contract is the runtime-owned completion-contract verdict for this run.
+	// It is nil when the bee declares no contract.
+	Contract *protocol.ContractRecord
 	// GateReworkSuppressed reports that the gate rejected the run but the
 	// configured consecutive-rejection cap stopped the runtime from signalling
 	// rework, so the task is failed instead.

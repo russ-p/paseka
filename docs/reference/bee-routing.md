@@ -210,6 +210,29 @@ completion_contract:
 
 Narrative `INSIGHT` events are optional and do not satisfy completion contracts. See [insight kinds](insight-kinds.md).
 
+### Recorded verdict
+
+Finalization persists the verdict before a successful outcome is exposed or published. A bee that declares a contract carries an additive `contract` record on `result.json`:
+
+```json
+{
+  "contract": {
+    "status": "failed",
+    "rules": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "count": 1}],
+    "observations": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "want": 1, "got": 0, "satisfied": false}]
+  }
+}
+```
+
+- `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`.
+- `rules` are the effective declared rules (a missing `count` is recorded as `1`); `observations` carry the measured `got` per rule when the contract was evaluated.
+- A bee without a contract omits the field entirely, so "no declared contract" stays distinguishable from "contract passed". Legacy records without it read as unknown.
+- Only events the run's own bee emitted count; runtime-authored events, including the check gate's rejection, never satisfy a contract.
+
+A contract that changes an otherwise completed run to failed writes `state=failed` with reason `completion_contract` to `status.json`, and `status=failed` with the message in `diagnostics.error` to `result.json`, preserving usage, provider session identity, process exit code, timestamps, artifacts, and the rest of diagnostics. The gate verdict outranks the contract verdict: a run the gate rejected keeps reason `checks_failed` while still recording `contract.status=failed`.
+
+Interactive sessions stay ungated and carry no contract record.
+
 ---
 
 ## 7. Colony `auto_invites` (Human Gateway)

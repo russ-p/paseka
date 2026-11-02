@@ -383,7 +383,7 @@ Invalid values fail bee load. See also [bee routing](../reference/bee-routing.md
 
 ## 9. `completion_contract`
 
-Hard requirements checked against `events.ndjson` after the adapter exits. Violation → run **failed** even if the process exit code was zero.
+Hard requirements checked against `events.ndjson` after the adapter exits. Violation → run **failed** even if the process exit code was zero, with reason `completion_contract` on both `status.json` and `result.json`.
 
 ```yaml
 completion_contract:
@@ -400,6 +400,8 @@ completion_contract:
 | `type` | Domain event type (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`) |
 | `kind_one_of` | Allowed `payload.kind` values (required, non-empty) |
 | `count` | Exact match count among those kinds (default `1`) |
+
+A bee that declares a contract gets an additive `contract` record on `result.json` with the verdict (`passed` / `failed` / `unavailable`), the effective rules, and the per-rule observations (or the evaluation error when the event record was unreadable). Bees without a contract omit it. A gate rejection keeps reason `checks_failed` and still records the contract verdict.
 
 Narrative INSIGHTs do not satisfy contracts unless listed. Full routing semantics: [bee routing](../reference/bee-routing.md) §6.
 

@@ -45,6 +45,10 @@ const (
 	ReasonTimeout = "timeout"
 	// ReasonChecksFailed classifies a run the runtime-owned check gate rejected.
 	ReasonChecksFailed = "checks_failed"
+	// ReasonCompletionContract classifies a run the runtime downgraded from
+	// completed because its declared completion contract was not satisfied, or
+	// could not be evaluated.
+	ReasonCompletionContract = "completion_contract"
 )
 
 // Provenance identifies the durable execution ownership and configuration a
@@ -150,7 +154,8 @@ type Result struct {
 	AgentID         string    `json:"agentId"`
 	Status          RunStatus `json:"status"`
 	// Reason is a machine-readable classifier for a terminal state, e.g.
-	// "checks_failed" for a run the runtime-owned gate rejected.
+	// "checks_failed" for a run the runtime-owned gate rejected or
+	// "completion_contract" for a run finalization downgraded.
 	Reason            string        `json:"reason,omitempty"`
 	Summary           string        `json:"summary"`
 	Artifacts         []ArtifactRef `json:"artifacts,omitempty"`
@@ -161,6 +166,9 @@ type Result struct {
 	// Gate is the runtime-owned mechanical check verdict, absent when the bee
 	// declares no gate or the gate did not run.
 	Gate *GateResult `json:"gate,omitempty"`
+	// Contract is the runtime-owned completion-contract verdict, absent when
+	// the bee declares no contract or the run was never finalized.
+	Contract *ContractRecord `json:"contract,omitempty"`
 	Provenance
 }
 
@@ -169,7 +177,8 @@ type StatusSnapshot struct {
 	ProtocolVersion string    `json:"protocolVersion"`
 	State           RunStatus `json:"state"`
 	// Reason is a machine-readable classifier for a terminal state, e.g.
-	// "timeout" for a cancelled run that exceeded params.timeout.
+	// "timeout" for a cancelled run that exceeded params.timeout or
+	// "completion_contract" for a run finalization downgraded.
 	Reason     string    `json:"reason,omitempty"`
 	PID        int       `json:"pid,omitempty"`
 	ExitCode   int       `json:"exitCode,omitempty"`

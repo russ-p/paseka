@@ -385,12 +385,24 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 		_ = p.runDir.WriteResultText(summary)
 	}
 
+	// Finalization owns the persisted outcome. An adapter normally writes
+	// result.json before it returns, but an adapter that did not leaves the
+	// runtime with nowhere to record its own verdict; materialize the record
+	// first so the gate and contract corrections below have both files to
+	// reconcile.
+	if err := p.runDir.EnsureResultRecord(p.resultRecord(result)); err != nil {
+		return result, fmt.Errorf("runtime: write result record: %w", err)
+	}
+
 	// The mechanical gate decides before anything leaves the run: it runs after
 	// the adapter exits and before the deferred-event flush, so a queued proposal
 	// cannot reach the bus ahead of a rejection. It also runs before run-summary
 	// synthesis and completion-contract evaluation, so both see the gate verdict
 	// rather than a stale completed status.
-	gateRejection := d.runCheckGate(ctx, p, result)
+	gateRejection, gateErr := d.runCheckGate(ctx, p, result)
+	if gateErr != nil {
+		return result, gateErr
+	}
 
 	if result.Status == string(protocol.StatusCompleted) {
 		if err := d.flushDeferredEvents(ctx, p.colonyRoot, p.req.TraceID, p.agentID); err != nil {
@@ -438,8 +450,8 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 	}
 
 	d.enforceRunSummaryRequired(p.bee, p.agentID, result, runEvents)
-	if readErr == nil {
-		d.enforceCompletionContract(p.bee, runEvents, result)
+	if err := d.enforceCompletionContract(p.runDir, p.bee, runEvents, readErr, result); err != nil {
+		return result, err
 	}
 
 	d.runPostExec(ctx, p.bee, p.rendered, p.workspace, p.runDir, p.req.TaskID, result, p.plan.Env)

@@ -151,6 +151,12 @@ func TestManagerLaunchWritesSessionArtifacts(t *testing.T) {
 		t.Fatalf("adapter request attempt = %q, want %q", fast.lastReq.AttemptID, sess.AttemptID)
 	}
 
+	// Interactive sessions stay ungated and keep their record shape: the AFK
+	// finalization contract record has no place in a session run directory.
+	if _, err := os.Stat(d.ResultJSONPath()); !os.IsNotExist(err) {
+		t.Fatalf("interactive session wrote result.json: %v", err)
+	}
+
 	st, err := homestate.LoadState(slug)
 	if err != nil {
 		t.Fatal(err)
