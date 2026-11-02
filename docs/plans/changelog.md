@@ -19,7 +19,7 @@ When a trail's honey ran out, the runtime wrote `task.status=blocked` over whate
 - Spec: [044b-standing-supersession-and-energy-observations](../specs/044b-standing-supersession-and-energy-observations.md)
 - Canonical: [task ledger](../reference/task-ledger.md#honey-reserve-energytoken), [event contracts](../reference/event-contracts.md#deferred-publishing), [CLI](../guide/cli.md#paseka-energy), [Queen Console](../guide/queen-console.md#tasks), [Telegram gateway](../guide/telegram-gateway.md)
 
-Not in this ship: the versioned trail metrics vocabulary owned by [spec 043](../specs/043-trail-observability.md) — until it lands, task counts, the export's dispatch-admission line, and the Console/CLI projections carry the pending/`skipped`/legacy `blocked` distinction — and any rewrite of historical ledger snapshots.
+Not in this ship: the versioned trail metrics vocabulary owned by [spec 043b](../specs/043b-trail-metrics-and-work-completion.md) — until it lands, task counts, the export's dispatch-admission line, and the Console/CLI projections carry the pending/`skipped`/legacy `blocked` distinction — and any rewrite of historical ledger snapshots.
 
 ## 2026-11 — Blocked direct work survives a restart instead of vanishing
 
@@ -65,7 +65,7 @@ A trail used to end with its last work task and a generic `_review` gate. The pu
 - Spec: [045-trail-closing-phase](../specs/045-trail-closing-phase.md)
 - Canonical: [task ledger](../reference/task-ledger.md#task-phase-phase), [event contracts](../reference/event-contracts.md#task-plan-phases), [colony layout](../guide/colony-layout.md), [CLI](../guide/cli.md#paseka-task)
 
-Not in this ship: publishing the pull request, any merge behaviour beyond copy (automatic approval, delivery-mode changes), colony-defined phase names, per-severity model routing, multiple closing Bees per trail, closing on standing trails, and the `trail.work.completed` trigger from [spec 043](../specs/043-trail-observability.md) — the v1 "new work completed after the last round" comparison stands in for it.
+Not in this ship: publishing the pull request, any merge behaviour beyond copy (automatic approval, delivery-mode changes), colony-defined phase names, per-severity model routing, multiple closing Bees per trail, closing on standing trails, and the `trail.work.completed` milestone from [spec 043b](../specs/043b-trail-metrics-and-work-completion.md) — the v1 "new work completed after the last round" comparison stands in for it, and 043b keeps the closing seed on that ledger comparison rather than on the milestone.
 
 ## 2026-10 — A typo in `dependsOn` can no longer close a trail
 
@@ -95,7 +95,7 @@ Every trail used to run whatever `.paseka/` happened to say at dispatch time. Ed
 - Spec: [042-trail-fork](../specs/042-trail-fork.md)
 - Canonical: [CLI](../guide/cli.md#paseka-trail), [event contracts](../reference/event-contracts.md#forked-trails-and-consumer-scope), [interactive sessions](../guide/interactive-sessions.md), [glossary](../idea/glossary.md), [colony layout](../guide/colony-layout.md)
 
-Not in this ship: a configurable active-fork cap, per-source fan-out limit, or cumulative experiment allowance; agent-initiated configuration application; whole-plan or dependency-carrying forks; a shared snapshot store with cross-trail dedupe, reference counting, or GC; broker-level or OS-level isolation for experimental work; and metrics `forkOf` reads, which belong to [spec 043](../specs/043-trail-observability.md) (Draft).
+Not in this ship: a configurable active-fork cap, per-source fan-out limit, or cumulative experiment allowance; agent-initiated configuration application; whole-plan or dependency-carrying forks; a shared snapshot store with cross-trail dedupe, reference counting, or GC; broker-level or OS-level isolation for experimental work; and metrics `forkOf` reads, which belong to [spec 043b](../specs/043b-trail-metrics-and-work-completion.md) (Approved).
 
 ## 2026-10 — OpenCode upgrades stop breaking the colony
 

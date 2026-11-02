@@ -252,12 +252,12 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 
 ### Pull-request delivery
 
-Leftovers from [024-pull-request-delivery](../specs/024-pull-request-delivery.md). v1 is colony-wide `defaults.delivery`, an explicit home `forge.command`, and reconcile via forge `get`.
+Leftovers from [024-pull-request-delivery](../specs/024-pull-request-delivery.md). v1 is colony-wide `defaults.delivery`, an explicit home `forge.command`, and reconcile via forge `get`. Delivery outcomes — the trail-owned episode, closed-without-merge, and the badge that distinguishes a published PR from an un-reviewed gate — are designed in [047-delivery-outcomes](../specs/047-delivery-outcomes.md), not here.
 
 #### Per-cue delivery
 
 - **Kind:** follow-up
-- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
+- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md); named in [047-delivery-outcomes](../specs/047-delivery-outcomes.md) § Out of Scope
 - **Summary:** Let a Forage Cue override `defaults.delivery` so one trail can publish a PR while the rest of the colony stays on `local_merge`.
 - **Why deferred:** Colony-wide policy was enough for homelab vs laptop; per-cue mixing needs cue schema and review UX.
 - **Revisit when:** Operators want a single colony that both merges locally and opens PRs depending on the cue.
@@ -269,14 +269,6 @@ Leftovers from [024-pull-request-delivery](../specs/024-pull-request-delivery.md
 - **Summary:** Infer `tea` vs `gh` (or a bundled wrapper) from the `origin` host instead of requiring explicit `forge.command`.
 - **Why deferred:** Fail-closed explicit argv avoids guessing the wrong CLI or a missing login; v1 wants a visible home-config choice.
 - **Revisit when:** Beekeepers routinely have `tea`/`gh` on PATH and trip over the commented init example.
-
-#### Dedicated `pr_open` task status
-
-- **Kind:** follow-up
-- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
-- **Summary:** A ledger status (or Console badge) distinct from `waiting_review` while a published PR is open, so Reviews does not look like an un-reviewed merge gate.
-- **Why deferred:** Homestate PR identity plus URL/state on Reviews was enough for v1; a new status is a ledger/protocol change.
-- **Revisit when:** Operators confuse published-but-unmerged trails with “please approve this diff” gates.
 
 ### Console Git
 

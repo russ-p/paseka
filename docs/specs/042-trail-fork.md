@@ -11,7 +11,7 @@ Related: [008 code proposal workspaces](008-code-proposal-workspaces.md),
 [039 proposal patch records](039-proposal-patch-records.md),
 [040 trail event log](040-trail-event-log.md),
 [041 skills layer](041-skills-layer.md),
-[043 trail observability](043-trail-observability.md),
+[043b trail metrics and work completion](043b-trail-metrics-and-work-completion.md),
 [idea: self-improving colonies](../idea/self-improving-colony.md).
 
 ## Problem Statement
@@ -427,7 +427,7 @@ Content identity remains independent of location, so equality checks and caches 
 
 ### Relationship to adjacent work
 
-- [Spec 043](043-trail-observability.md) supplies metrics, truthful outcomes, and work-completion observation before final approval/delivery, with separately accounted analysis in the same trail. This spec adds configuration/revision evidence and experimental lineage, including the fact that one ordinary trail may contain several procedures.
+- [Spec 043a](043a-truthful-run-records.md) and [Spec 043b](043b-trail-metrics-and-work-completion.md) supply truthful outcomes, metrics, and work-completion observation before final approval/delivery, with separately accounted analysis in the same trail. This spec adds configuration/revision evidence and experimental lineage, including the fact that one ordinary trail may contain several procedures.
 - [Spec 041](041-skills-layer.md) supplies skill resolution and attribution. Captured skill bytes and provenance are inputs to a pinned procedure; a name or mutable absolute path alone is insufficient.
 - [Spec 034](034-swarm-mode.md) owns fan-out and winner selection. A fork supplies one task with one pinned configuration; campaigns remain separate work.
 - The self-improvement idea's R5 is a new trail with a recorded configuration delta. R6 is fulfilled here by a trail-owned execution context and workspace under the existing colony. Earlier descriptions of a mandatory separate plane, bus, and home are superseded by this model.

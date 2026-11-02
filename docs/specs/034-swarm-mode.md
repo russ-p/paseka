@@ -6,7 +6,7 @@
 [016 cue layer](016-cue-layer.md), [019 model aliases](019-model-aliases.md),
 [027 config profiles](027-config-profiles.md), [024 pull-request delivery](024-pull-request-delivery.md),
 [042 trail fork](042-trail-fork.md),
-[043 trail observability](043-trail-observability.md),
+[043b trail metrics and work completion](043b-trail-metrics-and-work-completion.md),
 [idea: self-improving colonies](../idea/self-improving-colony.md)
 
 ---
@@ -512,7 +512,7 @@ The dynamic configuration in 4.12 adds its own questions.
   winner publishes under `pull_request`
 - [042 trail fork](042-trail-fork.md) — the config delta a variant may
   carry; a fork is the smallest unit of comparison
-- [043 trail observability](043-trail-observability.md) — the per-trail
+- [043b trail metrics and work completion](043b-trail-metrics-and-work-completion.md) — the per-trail
   metrics that `swarm stats` aggregates
 - [idea: self-improving colonies](../idea/self-improving-colony.md) — why a
   fan-out and a fork are the same idea at two sizes

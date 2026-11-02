@@ -64,7 +64,7 @@ A Nuc pack can only be written against a stable list of what the platform offers
 | R7 | A budget per trail, with a cap | to keep an experiment from spending the colony's honey |
 | R8 | A skill store with a per-role list and a deterministic load | to deliver a procedure and to know it was reached for |
 
-R1–R3 are the [observability spec](../specs/043-trail-observability.md), which also records what the budget was spent on. R4 exists today ([spec 039](../specs/039-proposal-patch-records.md)). R5 and R6 are [spec 042](../specs/042-trail-fork.md). R8 is [spec 041](../specs/041-skills-layer.md). R7 — the per-trail budget and its cap — is the honey reserve that already exists; the observability spec is what makes its spending readable.
+R1–R3 are the [observability specs](../specs/043b-trail-metrics-and-work-completion.md), which also record what the budget was spent on. R4 exists today ([spec 039](../specs/039-proposal-patch-records.md)). R5 and R6 are [spec 042](../specs/042-trail-fork.md). R8 is [spec 041](../specs/041-skills-layer.md). R7 — the per-trail budget and its cap — is the honey reserve that already exists; the observability spec is what makes its spending readable.
 
 ### What the platform guarantees, and what it does not
 
@@ -115,13 +115,13 @@ Three properties keep this from becoming a self-modifying mess:
 
 | Spec | Status | What it contributes here |
 | --- | --- | --- |
-| [043 — Trail observability](../specs/043-trail-observability.md) | Draft | R1–R3: the runtime records the truth about a trail, and what its budget was spent on |
+| [043a — Truthful run records](../specs/043a-truthful-run-records.md) · [043b — Trail metrics and work completion](../specs/043b-trail-metrics-and-work-completion.md) | Approved | R1–R3: the runtime records the truth about a trail, and what its budget was spent on |
 | [042 — Trail fork](../specs/042-trail-fork.md) | Implemented | R5, R6: a new pinned trail from the same base with a recorded configuration delta |
 | [041 — Skills layer](../specs/041-skills-layer.md) | Draft | R8: the store, the per-role gate, deterministic delivery and attribution |
 | [034 — Swarm mode](../specs/034-swarm-mode.md) | Draft | Fan-out over variants, a judge that cannot see the harness, per-variant stats |
 | Nuc pack (not a spec) | — | the methodology itself: the role, its prompts, its skills, its thresholds |
 
-The order is 043 → 041 → 042 → 034 → the pack. The first two are useful without any methodology at all: an operator who can read a trail's metrics and manage a role's skills gets value from them whether or not any colony ever runs the self-improvement loop.
+The order is 043a → 043b → 041 → 042 → 034 → the pack. The observability and skills work is useful without any methodology at all: an operator who can read a trail's metrics and manage a role's skills gets value from them whether or not any colony ever runs the self-improvement loop.
 
 ## What this note does not decide
 
@@ -139,6 +139,6 @@ The order is 043 → 041 → 042 → 034 → the pack. The first two are useful 
 | Principles of the runtime | [Principles](principles.md) |
 | The skills store and the per-role gate | [Spec 041](../specs/041-skills-layer.md) |
 | Forking a trail | [Spec 042](../specs/042-trail-fork.md) |
-| What the runtime records about a trail | [Spec 043](../specs/043-trail-observability.md) |
+| What the runtime records about a trail | [Spec 043b](../specs/043b-trail-metrics-and-work-completion.md) |
 | Fan-out and comparison | [Spec 034](../specs/034-swarm-mode.md) |
 | Portable bee packs | [Nuc packs](../guide/nuc.md) |
