@@ -99,6 +99,10 @@ review note records a past observation, not a current fact — re-read the code 
 | **Needs a decision** | A product or architecture choice belongs to the Beekeeper | Write it to the artifact with a recommendation |
 | **Obsolete** | The concern no longer applies | Say why; nothing else |
 
+Filing a task is the merge hold: the gate refuses approval until every non-merge task is completed,
+so a filed finding blocks the merge for real. If you are not sure it must hold the gate, write it to
+the artifact instead — the Beekeeper can merge and pick it up later.
+
 ## 3. Turn cheap follow-ups into tasks
 
 Publish one `INSIGHT/task.plan` with the full array of fix-now tasks. Every task depends on this
