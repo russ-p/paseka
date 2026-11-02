@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -37,6 +38,129 @@ func TestValidateReviewNote(t *testing.T) {
 	}
 	if details := in.Validate(); len(details) != 0 {
 		t.Fatalf("details = %#v", details)
+	}
+}
+
+func TestReviewNoteSeverityNormalizedAtConstruction(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":" Medium "}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+	ev, err := in.ToEvent("agent-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload NarrativeInsightPayload
+	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Severity != ReviewSeverityMedium {
+		t.Fatalf("severity = %q, want %q", payload.Severity, ReviewSeverityMedium)
+	}
+}
+
+func TestReviewNoteSeverityRejectsUnknownValue(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":"severe"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in.Validate()
+	if len(details) != 1 {
+		t.Fatalf("details = %#v", details)
+	}
+	if details[0].Path != "payload.severity" {
+		t.Fatalf("path = %q, want payload.severity", details[0].Path)
+	}
+	for _, value := range ReviewSeverityValues() {
+		if !strings.Contains(details[0].Message, value) {
+			t.Fatalf("message %q must name %q", details[0].Message, value)
+		}
+	}
+
+	_, err = in.ToEvent("agent-1")
+	verr, ok := err.(*ValidationError)
+	if !ok {
+		t.Fatalf("error = %v, want *ValidationError", err)
+	}
+	if verr.Code != "schema_validation_failed" {
+		t.Fatalf("code = %q", verr.Code)
+	}
+	if len(verr.Details) != 1 || verr.Details[0].Path != "payload.severity" {
+		t.Fatalf("details = %#v", verr.Details)
+	}
+}
+
+func TestReviewNoteSeverityAbsentAndWhitespaceValid(t *testing.T) {
+	for name, raw := range map[string][]byte{
+		"absent":     []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling"}}`),
+		"whitespace": []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":"   "}}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			in, err := ParseEventInput(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if details := in.Validate(); len(details) != 0 {
+				t.Fatalf("details = %#v", details)
+			}
+			ev, err := in.ToEvent("agent-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload NarrativeInsightPayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if ClassifyReviewSeverity(payload.Severity) != ReviewSeverityUnspecified {
+				t.Fatalf("severity = %q, want unspecified", payload.Severity)
+			}
+		})
+	}
+}
+
+func TestClassifyReviewSeverity(t *testing.T) {
+	tests := map[string]string{
+		"":           ReviewSeverityUnspecified,
+		"   ":        ReviewSeverityUnspecified,
+		"info":       ReviewSeverityInfo,
+		" LOW ":      ReviewSeverityLow,
+		"Medium":     ReviewSeverityMedium,
+		"high":       ReviewSeverityHigh,
+		"critical":   ReviewSeverityCritical,
+		"warning":    ReviewSeverityUnknown,
+		"medium-ish": ReviewSeverityUnknown,
+	}
+	for raw, want := range tests {
+		if got := ClassifyReviewSeverity(raw); got != want {
+			t.Errorf("ClassifyReviewSeverity(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestReviewNoteSeverityVocabularyIsNotSharedWithOtherNarrativeKinds(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"run.summary","summary":"Implemented OAuth callback","severity":"warning"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+	ev, err := in.ToEvent("agent-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload NarrativeInsightPayload
+	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Severity != "warning" {
+		t.Fatalf("severity = %q, want warning untouched", payload.Severity)
 	}
 }
 

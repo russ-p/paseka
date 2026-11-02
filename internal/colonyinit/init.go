@@ -648,6 +648,8 @@ Each event JSON object must include:
 
 If the command returns "ok": false, treat it as a failed publish and correct the payload before continuing. Deferred success includes "deferred": true and does not publish to the bus until flush.
 
+A review.note severity is optional; when present it must be one of info, low, medium, high, or critical. It is trimmed and lowercased before storage, so " Medium " is stored as medium. An unknown value fails emit with a payload.severity detail.
+
 {{template "standing-checkpoint" .}}
 `
 	standingCheckpointPartial = `## Standing Trail ticks
@@ -730,6 +732,8 @@ paseka event emit --stdin <<'EOF'
 EOF
 
 ### review.note — optional reviewer context
+
+severity is optional. When present it must be one of info, low, medium, high, or critical. The value is trimmed and lowercased before storage. Omit it when the note has no severity.
 
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Token refresh path still lacks retry handling","taskId":"{{.TaskID}}","severity":"medium"}}

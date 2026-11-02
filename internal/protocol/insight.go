@@ -20,6 +20,33 @@ const (
 	InsightPRBody         InsightKind = "pr.body"
 )
 
+// Review note severities form a closed vocabulary so a human threshold such as
+// "medium or worse" means the same thing whichever bee wrote the note.
+const (
+	ReviewSeverityInfo     = "info"
+	ReviewSeverityLow      = "low"
+	ReviewSeverityMedium   = "medium"
+	ReviewSeverityHigh     = "high"
+	ReviewSeverityCritical = "critical"
+)
+
+// ReviewSeverityUnspecified classifies a review note with no severity: absent
+// or whitespace-only. It is not a stored value.
+const ReviewSeverityUnspecified = "unspecified"
+
+// ReviewSeverityUnknown classifies a historical non-empty severity outside the
+// closed vocabulary. Readers report it; they never rewrite the payload.
+const ReviewSeverityUnknown = "unknown"
+
+// ReviewSeverityAllowedValues is the human-readable vocabulary used in
+// validation details and prompt guidance.
+const ReviewSeverityAllowedValues = "info, low, medium, high, critical"
+
+// ReviewSeverityValues returns the closed vocabulary in ascending order.
+func ReviewSeverityValues() []string {
+	return []string{ReviewSeverityInfo, ReviewSeverityLow, ReviewSeverityMedium, ReviewSeverityHigh, ReviewSeverityCritical}
+}
+
 // MaxTraceTitleLen is the maximum length of payload.title on INSIGHT/trace.title.
 const MaxTraceTitleLen = 120
 
@@ -70,6 +97,64 @@ type WorktreeBranchPayload struct {
 type PRBodyPayload struct {
 	Kind InsightKind `json:"kind"`
 	Body string      `json:"body"`
+}
+
+// NormalizeReviewSeverity trims and lowercases raw and reports whether the
+// result belongs to the closed review.note vocabulary. An absent or
+// whitespace-only value returns ("", false): it is valid but says nothing.
+func NormalizeReviewSeverity(raw string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case ReviewSeverityInfo, ReviewSeverityLow, ReviewSeverityMedium, ReviewSeverityHigh, ReviewSeverityCritical:
+		return value, true
+	default:
+		return value, false
+	}
+}
+
+// ClassifyReviewSeverity maps a stored severity onto the closed vocabulary. A
+// value outside the vocabulary is reported as unknown; it is never rewritten,
+// so a historical payload keeps whatever it recorded.
+func ClassifyReviewSeverity(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ReviewSeverityUnspecified
+	}
+	if value, ok := NormalizeReviewSeverity(raw); ok {
+		return value
+	}
+	return ReviewSeverityUnknown
+}
+
+// NormalizeReviewNotePayload canonicalizes a review.note payload at
+// construction time, so the persisted and published event carries the trimmed,
+// lowercased severity rather than the prompt's spelling. Other insight kinds
+// keep their payload untouched: only review.note has a closed vocabulary.
+//
+// payload is the generic JSON object produced by decoding an event input.
+func NormalizeReviewNotePayload(payload any) any {
+	obj, ok := payload.(map[string]any)
+	if !ok {
+		return payload
+	}
+	raw, ok := obj["severity"]
+	if !ok {
+		return payload
+	}
+	text, ok := raw.(string)
+	if !ok {
+		return payload
+	}
+	value, valid := NormalizeReviewSeverity(text)
+	if valid {
+		obj["severity"] = value
+		return payload
+	}
+	if value == "" {
+		// A whitespace-only severity is valid and means the same as absent.
+		delete(obj, "severity")
+	}
+	// A historical unknown value stays as written for readers to classify.
+	return payload
 }
 
 // IsPromptMemoryInsightKind reports whether an INSIGHT kind should be projected into prompt memory.
@@ -190,8 +275,8 @@ func RenderInsightForPrompt(ev Event) (string, bool) {
 			return "", false
 		}
 		label := "Review note"
-		if p.Severity != "" {
-			label = fmt.Sprintf("Review note (%s)", p.Severity)
+		if severity := ClassifyReviewSeverity(p.Severity); severity != ReviewSeverityUnspecified {
+			label = fmt.Sprintf("Review note (%s)", severity)
 		}
 		return formatInsightLine(label, ev.BeeLabel(), p.Summary), true
 	case InsightContextNote:

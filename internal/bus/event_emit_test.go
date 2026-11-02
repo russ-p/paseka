@@ -121,6 +121,83 @@ func TestProcessEventInputRefusesEmitWithoutRunAudit(t *testing.T) {
 	}
 }
 
+func TestProcessEventInputNormalizesReviewNoteSeverity(t *testing.T) {
+	root := t.TempDir()
+	runDir := prepareRun(t, root, "trace-1", "agent-1")
+	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":" Medium "}}`)
+	local := LocalPublisher{ColonyRoot: root}
+
+	result, err := ProcessEventInput(context.Background(), local, "", raw, "agent-1", true, false, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.OK {
+		t.Fatalf("result = %#v", result)
+	}
+
+	// The audit log and the published event are the same record: the stored
+	// payload carries the canonical value, not the prompt's spelling.
+	runEvents, err := runDir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runEvents) != 1 {
+		t.Fatalf("run events = %d, want 1", len(runEvents))
+	}
+	if got := reviewNoteSeverity(t, runEvents[0]); got != "medium" {
+		t.Fatalf("run audit severity = %q, want medium", got)
+	}
+	trailEvents, err := runs.ReadTraceEvents(root, "trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trailEvents) != 1 {
+		t.Fatalf("trail events = %d, want 1", len(trailEvents))
+	}
+	if got := reviewNoteSeverity(t, trailEvents[0]); got != "medium" {
+		t.Fatalf("published severity = %q, want medium", got)
+	}
+}
+
+func TestProcessEventInputRejectsUnknownReviewNoteSeverity(t *testing.T) {
+	root := t.TempDir()
+	runDir := prepareRun(t, root, "trace-1", "agent-1")
+	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"review.note","summary":"Missing retry handling","severity":"severe"}}`)
+	local := LocalPublisher{ColonyRoot: root}
+
+	result, err := ProcessEventInput(context.Background(), local, "", raw, "agent-1", true, false, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.OK || result.Error != "schema_validation_failed" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Details) != 1 || result.Details[0].Path != "payload.severity" {
+		t.Fatalf("details = %#v", result.Details)
+	}
+	for _, value := range protocol.ReviewSeverityValues() {
+		if !strings.Contains(result.Details[0].Message, value) {
+			t.Fatalf("message %q must name %q", result.Details[0].Message, value)
+		}
+	}
+	runEvents, err := runDir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("rejected emit recorded %d events", len(runEvents))
+	}
+}
+
+func reviewNoteSeverity(t *testing.T, ev protocol.Event) string {
+	t.Helper()
+	var p protocol.NarrativeInsightPayload
+	if err := json.Unmarshal(ev.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p.Severity
+}
+
 func TestProcessEventInputRecordsLocallyFromARunDirectory(t *testing.T) {
 	root := t.TempDir()
 	runDir := prepareRun(t, root, "trace-1", "agent-1")

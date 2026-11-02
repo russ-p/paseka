@@ -44,7 +44,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | `payload.kind` | Required fields | Optional fields | Typical producer |
 | -------------- | --------------- | --------------- | ---------------- |
 | `run.summary` | `summary` | `taskId` | builder, scout; runtime may auto-synthesize after AFK runs |
-| `review.note` | `summary` | `taskId`, `severity` | guard |
+| `review.note` | `summary` | `taskId`, `severity` (`info`, `low`, `medium`, `high`, `critical`) | guard |
 | `context.note` | `summary` | `taskId` | any bee |
 | `human.feedback` | `taskId`, `message` | `ref` (comb path when annotated review was written) | beekeeper via CLI or Queen Console |
 
@@ -80,6 +80,8 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
   }
 }
 ```
+
+`review.note.severity` is a closed vocabulary: `info`, `low`, `medium`, `high`, `critical`. The value is trimmed and lowercased when the event is constructed, so `" Medium "` is stored as `medium`; a non-empty value outside the set fails emit with `schema_validation_failed` and a `payload.severity` detail. An absent or whitespace-only severity is valid and reads as `unspecified`; a historical non-empty value outside the set reads as `unknown` and is never rewritten. No other narrative kind carries a severity requirement.
 
 ---
 
