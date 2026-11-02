@@ -53,3 +53,19 @@ auto_invites:
       dedupe:
         - intent
         - artifactRef
+closing:
+    enabled: true
+    when:
+        min_work_tasks: 2
+        has_isolated_proposal: true
+    task:
+        bee: trail-guard
+        title: Review the trail and prepare the merge
+    max_rounds: 2
+merge:
+    task:
+        title: "Review and merge: {{.TraceTitle}}"
+        body: |
+            ## What this trail did
+            {{range .Tasks}}- {{.TaskID}} ({{.Intent}}) — {{.Summary}}
+            {{end}}

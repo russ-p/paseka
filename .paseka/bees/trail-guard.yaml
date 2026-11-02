@@ -1,0 +1,27 @@
+role: trail-guard
+adapter: cursor
+prompt_template: trail-guard.md
+intents:
+  - closing
+default_intent: closing
+params:
+  model: reviewer
+  yolo: true
+# The closing round reviews the accumulated trail worktree, so the adapter cwd
+# must be the trace worktree rather than the colony checkout.
+worktree: true
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+publishes:
+  - type: INSIGHT
+    kind: task.plan
+  - type: INSIGHT
+    kind: pr.body
+  - type: INSIGHT
+    kind: trace.summary
+  - type: INSIGHT
+    kind: context.note
+  - type: INSIGHT
+    kind: review.note
