@@ -46,7 +46,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | `run.summary` | `summary` | `taskId` | builder, scout; runtime may auto-synthesize after AFK runs |
 | `review.note` | `summary` | `taskId`, `severity` (`info`, `low`, `medium`, `high`, `critical`) | guard |
 | `context.note` | `summary` | `taskId` | any bee |
-| `human.feedback` | `taskId`, `message` | `ref` (comb path when annotated review was written) | beekeeper via CLI or Queen Console |
+| `human.feedback` | `taskId`, `message` | `ref` (comb path when annotated review was written), `verdict` (`positive`, `negative`, `neutral`) | beekeeper via CLI or Queen Console |
 
 ### Example payloads
 
@@ -82,6 +82,24 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 ```
 
 `review.note.severity` is a closed vocabulary: `info`, `low`, `medium`, `high`, `critical`. The value is trimmed and lowercased when the event is constructed, so `" Medium "` is stored as `medium`; a non-empty value outside the set fails emit with `schema_validation_failed` and a `payload.severity` detail. An absent or whitespace-only severity is valid and reads as `unspecified`; a historical non-empty value outside the set reads as `unknown` and is never rewritten. No other narrative kind carries a severity requirement.
+
+**`human.feedback`**
+
+```json
+{
+  "traceId": "trace-auth-01",
+  "agentId": "console",
+  "type": "INSIGHT",
+  "payload": {
+    "kind": "human.feedback",
+    "taskId": "task-1",
+    "message": "Retry handling still drops the timeout path.",
+    "verdict": "negative"
+  }
+}
+```
+
+`human.feedback.verdict` is optional and closed: `positive`, `negative`, `neutral`. The value is trimmed and lowercased when the event is constructed, so `" Negative "` is stored as `negative`; a non-empty value outside the set fails emit with `schema_validation_failed` and a `payload.verdict` detail. An absent or whitespace-only verdict is valid and reads as `unspecified`; a historical non-empty value outside the set reads as `unknown` and is never rewritten. Every review rejection publishes `negative`. On an eligible `waiting_review` task, `negative` keeps the rework behaviour (the task returns to `ready` and is dispatched); `positive` and `neutral` are observational and change no task status. Verdict-less legacy feedback keeps the rework behaviour and reads as `unspecified`. Approval does not publish feedback and is not inferred from a verdict or from prose.
 
 ---
 

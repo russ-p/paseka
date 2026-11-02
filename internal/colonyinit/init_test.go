@@ -97,8 +97,10 @@ func TestInitScaffold(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(data), "info, low, medium, high, or critical") {
-			t.Fatalf("%s must name the full review.note severity vocabulary", partial)
+		for _, want := range []string{"info, low, medium, high, or critical", "positive, negative, or neutral"} {
+			if !strings.Contains(string(data), want) {
+				t.Fatalf("%s must name %q", partial, want)
+			}
 		}
 	}
 

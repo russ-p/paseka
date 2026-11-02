@@ -463,6 +463,14 @@ func validateHumanFeedback(payload json.RawMessage) []ValidationDetail {
 	if strings.TrimSpace(p.Message) == "" {
 		details = append(details, ValidationDetail{Path: "payload.message", Message: "required"})
 	}
+	if strings.TrimSpace(p.Verdict) != "" {
+		if _, ok := NormalizeFeedbackVerdict(p.Verdict); !ok {
+			details = append(details, ValidationDetail{
+				Path:    "payload.verdict",
+				Message: fmt.Sprintf("must be one of %s", FeedbackVerdictAllowedValues),
+			})
+		}
+	}
 	return details
 }
 
@@ -713,8 +721,11 @@ func (in EventInput) ToEvent(defaultAgentID string) (Event, error) {
 	if err := json.Unmarshal(in.Payload, &payload); err != nil {
 		return Event{}, fmt.Errorf("protocol: unmarshal payload: %w", err)
 	}
-	if InsightKind(PayloadKind(in.Payload)) == InsightReviewNote {
+	switch InsightKind(PayloadKind(in.Payload)) {
+	case InsightReviewNote:
 		payload = NormalizeReviewNotePayload(payload)
+	case InsightHumanFeedback:
+		payload = NormalizeHumanFeedbackPayload(payload)
 	}
 	return NewEvent(in.TraceID, agentID, 0, in.Type, payload)
 }

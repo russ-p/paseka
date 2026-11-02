@@ -47,6 +47,31 @@ func ReviewSeverityValues() []string {
 	return []string{ReviewSeverityInfo, ReviewSeverityLow, ReviewSeverityMedium, ReviewSeverityHigh, ReviewSeverityCritical}
 }
 
+// Feedback verdicts form a closed vocabulary so a reader can tell a rejection
+// from observational feedback without inferring intent from prose.
+const (
+	FeedbackVerdictPositive = "positive"
+	FeedbackVerdictNegative = "negative"
+	FeedbackVerdictNeutral  = "neutral"
+)
+
+// FeedbackVerdictUnspecified classifies feedback with no verdict: absent or
+// whitespace-only. It is not a stored value.
+const FeedbackVerdictUnspecified = "unspecified"
+
+// FeedbackVerdictUnknown classifies a historical non-empty verdict outside the
+// closed vocabulary. Readers report it; they never rewrite the payload.
+const FeedbackVerdictUnknown = "unknown"
+
+// FeedbackVerdictAllowedValues is the human-readable vocabulary used in
+// validation details and prompt guidance.
+const FeedbackVerdictAllowedValues = "positive, negative, neutral"
+
+// FeedbackVerdictValues returns the closed vocabulary.
+func FeedbackVerdictValues() []string {
+	return []string{FeedbackVerdictPositive, FeedbackVerdictNegative, FeedbackVerdictNeutral}
+}
+
 // MaxTraceTitleLen is the maximum length of payload.title on INSIGHT/trace.title.
 const MaxTraceTitleLen = 120
 
@@ -68,11 +93,13 @@ type NarrativeInsightPayload struct {
 }
 
 // HumanFeedbackPayload is emitted as INSIGHT with payload.kind=human.feedback.
+// Verdict is optional; absence keeps the legacy verdict-less behaviour.
 type HumanFeedbackPayload struct {
 	Kind    InsightKind `json:"kind"`
 	TaskID  string      `json:"taskId"`
 	Message string      `json:"message"`
 	Ref     string      `json:"ref,omitempty"`
+	Verdict string      `json:"verdict,omitempty"`
 }
 
 // TraceTitlePayload is emitted as INSIGHT with payload.kind=trace.title.
@@ -152,6 +179,64 @@ func NormalizeReviewNotePayload(payload any) any {
 	if value == "" {
 		// A whitespace-only severity is valid and means the same as absent.
 		delete(obj, "severity")
+	}
+	// A historical unknown value stays as written for readers to classify.
+	return payload
+}
+
+// NormalizeFeedbackVerdict trims and lowercases raw and reports whether the
+// result belongs to the closed human.feedback verdict vocabulary. An absent or
+// whitespace-only value returns ("", false): it is valid but says nothing.
+func NormalizeFeedbackVerdict(raw string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case FeedbackVerdictPositive, FeedbackVerdictNegative, FeedbackVerdictNeutral:
+		return value, true
+	default:
+		return value, false
+	}
+}
+
+// ClassifyFeedbackVerdict maps a stored verdict onto the closed vocabulary. A
+// value outside the vocabulary is reported as unknown; it is never rewritten,
+// so a historical payload keeps whatever it recorded.
+func ClassifyFeedbackVerdict(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return FeedbackVerdictUnspecified
+	}
+	if value, ok := NormalizeFeedbackVerdict(raw); ok {
+		return value
+	}
+	return FeedbackVerdictUnknown
+}
+
+// NormalizeHumanFeedbackPayload canonicalizes a human.feedback payload at
+// construction time, so the persisted and published event carries the trimmed,
+// lowercased verdict rather than the writer's spelling. Other insight kinds
+// keep their payload untouched: only human.feedback has a verdict vocabulary.
+//
+// payload is the generic JSON object produced by decoding an event input.
+func NormalizeHumanFeedbackPayload(payload any) any {
+	obj, ok := payload.(map[string]any)
+	if !ok {
+		return payload
+	}
+	raw, ok := obj["verdict"]
+	if !ok {
+		return payload
+	}
+	text, ok := raw.(string)
+	if !ok {
+		return payload
+	}
+	value, valid := NormalizeFeedbackVerdict(text)
+	if valid {
+		obj["verdict"] = value
+		return payload
+	}
+	if value == "" {
+		// A whitespace-only verdict is valid and means the same as absent.
+		delete(obj, "verdict")
 	}
 	// A historical unknown value stays as written for readers to classify.
 	return payload
@@ -290,7 +375,11 @@ func RenderInsightForPrompt(ev Event) (string, bool) {
 		if err := json.Unmarshal(ev.Payload, &p); err != nil || strings.TrimSpace(p.Message) == "" {
 			return "", false
 		}
-		return formatInsightLine("Beekeeper feedback", "", p.Message), true
+		label := "Beekeeper feedback"
+		if verdict := ClassifyFeedbackVerdict(p.Verdict); verdict != FeedbackVerdictUnspecified {
+			label = fmt.Sprintf("Beekeeper feedback (%s)", verdict)
+		}
+		return formatInsightLine(label, "", p.Message), true
 	default:
 		return "", false
 	}

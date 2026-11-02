@@ -965,7 +965,7 @@ For **isolated** final gates, preview the accumulated worktree diff in Queen Con
 
 ### `paseka proposal reject`
 
-Reject a review-gated task — publishes human `INSIGHT` / `human.feedback`. Tasks with `review: required` return to `ready` for another AFK pass when `paseka run` is active. On a **final merge gate**, unstructured `--feedback` is abandon-style (no rework). `--comments-file` writes the comb packet and, on `review: final`, also plans a rework task for the last isolated-proposal Bee.
+Reject a review-gated task — publishes human `INSIGHT` / `human.feedback` with `verdict: negative`. Tasks with `review: required` return to `ready` for another AFK pass when `paseka run` is active. On a **final merge gate**, unstructured `--feedback` is abandon-style (no rework). `--comments-file` writes the comb packet and, on `review: final`, also plans a rework task for the last isolated-proposal Bee.
 
 | Flag | Short | Required | Default | Description |
 | ---- | ----- | -------- | ------- | ----------- |

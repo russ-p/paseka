@@ -650,6 +650,8 @@ If the command returns "ok": false, treat it as a failed publish and correct the
 
 A review.note severity is optional; when present it must be one of info, low, medium, high, or critical. It is trimmed and lowercased before storage, so " Medium " is stored as medium. An unknown value fails emit with a payload.severity detail.
 
+A human.feedback verdict is optional; when present it must be one of positive, negative, or neutral. It is trimmed and lowercased before storage. Review rejection publishes negative; positive and neutral are observational and do not reopen the task.
+
 {{template "standing-checkpoint" .}}
 `
 	standingCheckpointPartial = `## Standing Trail ticks
@@ -734,6 +736,8 @@ EOF
 ### review.note — optional reviewer context
 
 severity is optional. When present it must be one of info, low, medium, high, or critical. The value is trimmed and lowercased before storage. Omit it when the note has no severity.
+
+A human.feedback verdict is optional. When present it must be one of positive, negative, or neutral, trimmed and lowercased before storage. Review rejection publishes negative; positive and neutral are observational.
 
 paseka event emit --stdin <<'EOF'
 {"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"review.note","summary":"Token refresh path still lacks retry handling","taskId":"{{.TaskID}}","severity":"medium"}}

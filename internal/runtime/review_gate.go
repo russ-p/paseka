@@ -27,6 +27,14 @@ func (r *Reactor) handleHumanFeedback(ctx context.Context, ev protocol.Event, ex
 	if payload.TaskID == "" {
 		return nil
 	}
+	// Positive and neutral verdicts are observational: the feedback is already
+	// in the trail, but it must not reopen the gate, dispatch rework, or approve
+	// the task. Negative, absent (legacy), and historical unknown verdicts keep
+	// the existing react-to-feedback behaviour.
+	switch protocol.ClassifyFeedbackVerdict(payload.Verdict) {
+	case protocol.FeedbackVerdictPositive, protocol.FeedbackVerdictNeutral:
+		return nil
+	}
 	snap, err := r.ledger.Snapshot(ev.TraceID)
 	if err != nil {
 		return err

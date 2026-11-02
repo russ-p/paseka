@@ -198,6 +198,81 @@ func reviewNoteSeverity(t *testing.T, ev protocol.Event) string {
 	return p.Severity
 }
 
+func TestProcessEventInputNormalizesHumanFeedbackVerdict(t *testing.T) {
+	root := t.TempDir()
+	runDir := prepareRun(t, root, "trace-1", "agent-1")
+	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"human.feedback","taskId":"task-1","message":"Please revise","verdict":" Negative "}}`)
+	local := LocalPublisher{ColonyRoot: root}
+
+	result, err := ProcessEventInput(context.Background(), local, "", raw, "agent-1", true, false, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.OK {
+		t.Fatalf("result = %#v", result)
+	}
+
+	runEvents, err := runDir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runEvents) != 1 {
+		t.Fatalf("run events = %d, want 1", len(runEvents))
+	}
+	if got := humanFeedbackVerdict(t, runEvents[0]); got != protocol.FeedbackVerdictNegative {
+		t.Fatalf("run audit verdict = %q, want negative", got)
+	}
+	trailEvents, err := runs.ReadTraceEvents(root, "trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trailEvents) != 1 {
+		t.Fatalf("trail events = %d, want 1", len(trailEvents))
+	}
+	if got := humanFeedbackVerdict(t, trailEvents[0]); got != protocol.FeedbackVerdictNegative {
+		t.Fatalf("published verdict = %q, want negative", got)
+	}
+}
+
+func TestProcessEventInputRejectsUnknownHumanFeedbackVerdict(t *testing.T) {
+	root := t.TempDir()
+	runDir := prepareRun(t, root, "trace-1", "agent-1")
+	raw := []byte(`{"traceId":"trace-1","agentId":"agent-1","type":"INSIGHT","payload":{"kind":"human.feedback","taskId":"task-1","message":"Please revise","verdict":"blocking"}}`)
+	local := LocalPublisher{ColonyRoot: root}
+
+	result, err := ProcessEventInput(context.Background(), local, "", raw, "agent-1", true, false, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.OK || result.Error != "schema_validation_failed" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Details) != 1 || result.Details[0].Path != "payload.verdict" {
+		t.Fatalf("details = %#v", result.Details)
+	}
+	for _, value := range protocol.FeedbackVerdictValues() {
+		if !strings.Contains(result.Details[0].Message, value) {
+			t.Fatalf("message %q must name %q", result.Details[0].Message, value)
+		}
+	}
+	runEvents, err := runDir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("rejected emit recorded %d events", len(runEvents))
+	}
+}
+
+func humanFeedbackVerdict(t *testing.T, ev protocol.Event) string {
+	t.Helper()
+	var p protocol.HumanFeedbackPayload
+	if err := json.Unmarshal(ev.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p.Verdict
+}
+
 func TestProcessEventInputRecordsLocallyFromARunDirectory(t *testing.T) {
 	root := t.TempDir()
 	runDir := prepareRun(t, root, "trace-1", "agent-1")
