@@ -154,6 +154,68 @@ func TestEnforceCompletionContractKeepsGateReason(t *testing.T) {
 	}
 }
 
+func TestEnforceCompletionContractUnavailableKeepsPrimaryFailure(t *testing.T) {
+	d := NewDispatcher()
+	dir := newContractTestRunDir(t)
+	if err := dir.WriteStatus(protocol.StatusFailed, protocol.ReasonChecksFailed, 0, time.Time{}, time.Time{}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := dir.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         dir.TraceID,
+		AgentID:         dir.AgentID,
+		Status:          protocol.StatusFailed,
+		Reason:          protocol.ReasonChecksFailed,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := &adapters.RunResult{
+		Status: string(protocol.StatusFailed),
+		Reason: protocol.ReasonChecksFailed,
+	}
+	if err := d.enforceCompletionContract(dir, contractTestBee(), nil, os.ErrInvalid, result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonChecksFailed)
+	}
+	if result.Contract == nil || result.Contract.Status != protocol.ContractUnavailable || result.Contract.Error == "" {
+		t.Fatalf("contract = %+v, want unavailable with error", result.Contract)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("recorded reason = %q, want %q", res.Reason, protocol.ReasonChecksFailed)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable {
+		t.Fatalf("recorded contract = %+v, want unavailable", res.Contract)
+	}
+}
+
+func TestEnforceCompletionContractNoContractWithUnreadableEvents(t *testing.T) {
+	d := NewDispatcher()
+	dir := newContractTestRunDir(t)
+	result := &adapters.RunResult{Status: string(protocol.StatusCompleted)}
+	if err := d.enforceCompletionContract(dir, colony.Bee{Role: "guard"}, nil, os.ErrInvalid, result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Contract != nil {
+		t.Fatalf("contract = %+v, want nil", result.Contract)
+	}
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("status = %q, want completed even with an unreadable event record", result.Status)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Contract != nil {
+		t.Fatalf("recorded contract = %+v, want nil", res.Contract)
+	}
+}
+
 func TestEnforceCompletionContractNoContractRecordsNothing(t *testing.T) {
 	d := NewDispatcher()
 	dir := newContractTestRunDir(t)

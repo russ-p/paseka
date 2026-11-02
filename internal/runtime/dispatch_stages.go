@@ -432,15 +432,22 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 	}
 
 	var synthesized []protocol.Event
-	updatedEvents, synthesizedEvent, synthErr := d.synthesizeRunSummary(
-		p.runDir, p.bee, p.req.Registry, p.req.TraceID, p.agentID, p.req.TaskID, result, runEvents,
-	)
-	if synthErr != nil {
-		return result, synthErr
-	}
-	runEvents = updatedEvents
-	if synthesizedEvent != nil {
-		synthesized = append(synthesized, *synthesizedEvent)
+	// An unreadable event record cannot prove whether a run.summary already
+	// exists, and appending to it would be a write into unknown state. Skip
+	// synthesis and let the required-summary check and the completion contract
+	// report what is known: a missing summary is its own runtime check and an
+	// unevaluable contract is unavailable.
+	if readErr == nil {
+		updatedEvents, synthesizedEvent, synthErr := d.synthesizeRunSummary(
+			p.runDir, p.bee, p.req.Registry, p.req.TraceID, p.agentID, p.req.TaskID, result, runEvents,
+		)
+		if synthErr != nil {
+			return result, synthErr
+		}
+		runEvents = updatedEvents
+		if synthesizedEvent != nil {
+			synthesized = append(synthesized, *synthesizedEvent)
+		}
 	}
 	// The rejection rides the same synthesized-event list as the run summary, so
 	// the existing publication pass publishes it, records it in the run's event
@@ -449,8 +456,31 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 		synthesized = append(synthesized, *gateRejection)
 	}
 
-	d.enforceRunSummaryRequired(p.bee, p.agentID, result, runEvents)
-	if err := d.enforceCompletionContract(p.runDir, p.bee, runEvents, readErr, result); err != nil {
+	if summaryNote, missing := d.enforceRunSummaryRequired(p.bee, p.agentID, result, runEvents); missing {
+		// A required-summary miss is persisted like any other runtime-owned
+		// verdict, but under its own reason: it must never read as a
+		// completion-contract failure.
+		if err := p.runDir.ReconcileRunRecords(runs.RunRecordReconciliation{
+			State:  protocol.StatusFailed,
+			Reason: protocol.ReasonRunSummaryMissing,
+			Note:   summaryNote,
+		}); err != nil {
+			return result, fmt.Errorf("runtime: reconcile run summary record: %w", err)
+		}
+	}
+	// The contract is evaluated against a strict read. The lenient read above
+	// still serves summary synthesis and proposal detection, where one damaged
+	// line should not hide the rest of the run; a contract is different,
+	// because the lost line may be the very event it requires.
+	contractEvents, contractErr := runEvents, readErr
+	if readErr == nil {
+		if strict, err := p.runDir.ReadEventsStrict(); err != nil {
+			contractEvents, contractErr = nil, err
+		} else {
+			contractEvents = strict
+		}
+	}
+	if err := d.enforceCompletionContract(p.runDir, p.bee, contractEvents, contractErr, result); err != nil {
 		return result, err
 	}
 

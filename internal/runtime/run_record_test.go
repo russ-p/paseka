@@ -53,12 +53,23 @@ type recordWritingAdapter struct {
 	// unreadableEvents replaces events.ndjson with a directory after the
 	// adapter returns, which makes the run's event record unreadable.
 	unreadableEvents bool
+	// emptySummary omits the adapter summary, so run-summary synthesis has
+	// nothing to publish and a required-summary check sees a miss.
+	emptySummary bool
+	// corruptEvents appends an unparseable line to events.ndjson after the
+	// adapter returns, so the log is readable but its record is damaged.
+	corruptEvents bool
 }
 
 func (a *recordWritingAdapter) Name() string { return "cursor" }
 
 func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	dir := runs.Dir{ColonyRoot: req.ColonyRoot, TraceID: req.TraceID, AgentID: req.AgentID}
+
+	summary := "adapter summary"
+	if a.emptySummary {
+		summary = ""
+	}
 
 	events := make([]protocol.Event, 0, len(a.events))
 	for _, ev := range a.events {
@@ -75,7 +86,7 @@ func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (
 		TraceID:         req.TraceID,
 		AgentID:         req.AgentID,
 		Status:          a.status,
-		Summary:         "adapter summary",
+		Summary:         summary,
 		Artifacts:       []protocol.ArtifactRef{{Kind: "diff", Path: ".paseka/runs/x/diff.patch"}},
 		Diagnostics: protocol.Diagnostics{
 			ExitCode: 0,
@@ -113,6 +124,19 @@ func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (
 			return nil, err
 		}
 		if err := os.Mkdir(dir.EventsPath(), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	if a.corruptEvents {
+		f, err := os.OpenFile(dir.EventsPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := f.WriteString("{not json\n"); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		if err := f.Close(); err != nil {
 			return nil, err
 		}
 	}
@@ -318,6 +342,185 @@ func TestFinalizationUnreadableEventsRecordsUnavailable(t *testing.T) {
 	}
 	if res.Contract.Status == protocol.ContractPassed {
 		t.Fatal("unreadable event record was presented as a pass")
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonCompletionContract)
+	}
+	// Both records must agree: an unreadable contract fails the run, and the
+	// run directory cannot keep saying completed.
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonCompletionContract)
+	}
+	if !strings.Contains(snap.Error, "completion contract unavailable") {
+		t.Fatalf("status error = %q, want the evaluation error", snap.Error)
+	}
+}
+
+func TestFinalizationCorruptEventsRecordsUnavailable(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-contract-corrupt", contractBeeYAML, &recordWritingAdapter{
+		status:        protocol.StatusCompleted,
+		corruptEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
+		t.Fatalf("contract record = %+v, want unavailable with the evaluation error", res.Contract)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonCompletionContract)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonCompletionContract)
+	}
+}
+
+func TestFinalizationUnreadableEventsKeepsPrimaryFailureReason(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-unreadable-primary-failure", contractBeeYAML, &recordWritingAdapter{
+		status:           protocol.StatusFailed,
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) {
+		t.Fatalf("result status = %q, want failed", result.Status)
+	}
+	if result.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("an unavailable contract relabelled an adapter failure as a contract miss")
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("result record was relabelled as a contract miss")
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
+		t.Fatalf("contract record = %+v, want unavailable with error", res.Contract)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason == protocol.ReasonCompletionContract {
+		t.Fatalf("status record = %s/%s, want failed with the adapter's own reason", snap.State, snap.Reason)
+	}
+}
+
+func TestFinalizationMissingRequiredSummaryIsNotContractFailure(t *testing.T) {
+	beeYAML := strings.Replace(contractBeeYAML, "run_summary: disabled", "run_summary: required", 1)
+	dir, result := dispatchContractRun(t, "trace-required-summary", beeYAML, &recordWritingAdapter{
+		status:       protocol.StatusCompleted,
+		emptySummary: true,
+	})
+	if result.Status != string(protocol.StatusFailed) {
+		t.Fatalf("result status = %q, want failed", result.Status)
+	}
+	if result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result reason = %q, want %q (never completion_contract)", result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if res.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("a missing required run.summary was reported as a completion-contract failure")
+	}
+	if res.Contract == nil {
+		t.Fatal("declared contract has no verdict; the summary check must not suppress it")
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonRunSummaryMissing)
+	}
+}
+
+func TestFinalizationMissingSummaryWithUnreadableEventsIsNotContractMiss(t *testing.T) {
+	beeYAML := strings.Replace(contractBeeYAML, "run_summary: disabled", "run_summary: required", 1)
+	dir, result := dispatchContractRun(t, "trace-summary-unreadable", beeYAML, &recordWritingAdapter{
+		status:           protocol.StatusCompleted,
+		emptySummary:     true,
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	res, err := dir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result reason = %q, want %q", res.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
+		t.Fatalf("contract record = %+v, want unavailable with error", res.Contract)
+	}
+	snap, err := dir.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("status reason = %q, want %q", snap.Reason, protocol.ReasonRunSummaryMissing)
+	}
+}
+
+func TestFinalizationMissingRequiredSummaryWithoutContractOmitsContract(t *testing.T) {
+	beeYAML := strings.Replace(plainBeeYAML, "run_summary: disabled", "run_summary: required", 1)
+	dir, result := dispatchContractRun(t, "trace-required-summary-no-contract", beeYAML, &recordWritingAdapter{
+		status:       protocol.StatusCompleted,
+		emptySummary: true,
+	})
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if result.Contract != nil {
+		t.Fatalf("result contract = %+v, want nil", result.Contract)
+	}
+	raw, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"contract"`) {
+		t.Fatalf("run.summary miss manufactured a contract verdict: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"run_summary_missing"`) {
+		t.Fatalf("result record = %s, want reason run_summary_missing", raw)
+	}
+}
+
+func TestFinalizationUnreadableEventsWithoutContractOmitsContract(t *testing.T) {
+	dir, result := dispatchContractRun(t, "trace-unreadable-no-contract", plainBeeYAML, &recordWritingAdapter{
+		status:           protocol.StatusCompleted,
+		unreadableEvents: true,
+	})
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("result = %s, want completed", result.Status)
+	}
+	if result.Contract != nil {
+		t.Fatalf("result contract = %+v, want nil", result.Contract)
+	}
+	raw, err := os.ReadFile(dir.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"contract"`) {
+		t.Fatalf("event record unreadable manufactured a contract verdict: %s", raw)
 	}
 }
 

@@ -374,7 +374,7 @@ Controls runtime handling of `INSIGHT/run.summary`:
 | Value | Behavior |
 | ----- | -------- |
 | `auto` (default / empty) | Runtime may synthesize a summary when missing and policy allows |
-| `required` | Run fails if no summary event is present after the adapter exits |
+| `required` | Run fails with reason `run_summary_missing` if no summary event is present after the adapter exits; never reported as `completion_contract` |
 | `disabled` | No synthesis; useful for script / oracle bees |
 
 Invalid values fail bee load. See also [bee routing](../reference/bee-routing.md) §5 and [insight kinds](../reference/insight-kinds.md).
@@ -401,7 +401,7 @@ completion_contract:
 | `kind_one_of` | Allowed `payload.kind` values (required, non-empty) |
 | `count` | Exact match count among those kinds (default `1`) |
 
-A bee that declares a contract gets an additive `contract` record on `result.json` with the verdict (`passed` / `failed` / `unavailable`), the effective rules, and the per-rule observations (or the evaluation error when the event record was unreadable). Bees without a contract omit it. A gate rejection keeps reason `checks_failed` and still records the contract verdict.
+A bee that declares a contract gets an additive `contract` record on `result.json` with the verdict (`passed` / `failed` / `unavailable`), the effective rules, and the per-rule observations (or the evaluation error when the event record was unreadable). An unreadable event record is always `unavailable`, never a pass; it fails an otherwise completed run with reason `completion_contract`, while a run the adapter, the gate, or another runtime check already failed keeps its own reason and still records the verdict. Bees without a contract omit it. A gate rejection keeps reason `checks_failed` and still records the contract verdict.
 
 Narrative INSIGHTs do not satisfy contracts unless listed. Full routing semantics: [bee routing](../reference/bee-routing.md) §6.
 

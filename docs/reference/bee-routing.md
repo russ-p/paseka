@@ -183,7 +183,7 @@ After an adapter run, `Dispatcher.publishRunOutcome` compares emitted domain eve
 
 Auto-generated `MUTATION/code.proposal.isolated` or `code.proposal.root` from workspace diffs is published **only** when the bee declares the matching kind in `publishes` and `worktree` matches the kind (see [bee config](../guide/bee-config.md) § worktree invariants). Runtime captures a **baseline-attributed** tracked diff (MVP: tracked changes only). Reviewer bees like `guard` run `git diff` for artifacts but do not emit a bus mutation unless they declare one.
 
-Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present.
+Runtime may also auto-publish `INSIGHT/run.summary` after successful AFK runs when the bee `run_summary` policy allows (`auto` by default). Set `run_summary: disabled` to skip synthesis or `run_summary: required` to fail the run when no summary event is present. A missing required summary is a runtime check in its own right and writes reason `run_summary_missing`; it is never reported as a completion-contract failure, and a bee with no declared contract gains no contract field because of it.
 
 ```yaml
 # .paseka/bees/builder.yaml
@@ -224,10 +224,11 @@ Finalization persists the verdict before a successful outcome is exposed or publ
 }
 ```
 
-- `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`.
+- `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`. A run already failed by the adapter, the gate, or another runtime check keeps its own reason and still records the unavailable verdict.
 - `rules` are the effective declared rules (a missing `count` is recorded as `1`); `observations` carry the measured `got` per rule when the contract was evaluated.
 - A bee without a contract omits the field entirely, so "no declared contract" stays distinguishable from "contract passed". Legacy records without it read as unknown.
 - Only events the run's own bee emitted count; runtime-authored events, including the check gate's rejection, never satisfy a contract.
+- A missing required `run.summary` is a separate runtime check: it fails the run with reason `run_summary_missing`, never `completion_contract`.
 
 A contract that changes an otherwise completed run to failed writes `state=failed` with reason `completion_contract` to `status.json`, and `status=failed` with the message in `diagnostics.error` to `result.json`, preserving usage, provider session identity, process exit code, timestamps, artifacts, and the rest of diagnostics. The gate verdict outranks the contract verdict: a run the gate rejected keeps reason `checks_failed` while still recording `contract.status=failed`.
 

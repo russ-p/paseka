@@ -90,6 +90,21 @@ func ReadTrailEvents(colonyRoot, traceID string) ([]protocol.Event, error) {
 // diagnostic names the file and the line so the damage is visible rather than
 // silent.
 func readEventsFile(path string) ([]protocol.Event, error) {
+	return readEventsFileMode(path, false)
+}
+
+// readEventsFileStrict reads a run log and refuses a partially damaged file.
+//
+// The lenient reader skips unparseable lines because a trail projection should
+// cost one damaged run its events, not the whole trail. Contract evaluation has
+// the opposite duty: a skipped line may be the very event the contract
+// requires, so a damaged record must be reported as unavailable instead of
+// being evaluated as a shorter one.
+func readEventsFileStrict(path string) ([]protocol.Event, error) {
+	return readEventsFileMode(path, true)
+}
+
+func readEventsFileMode(path string, strict bool) ([]protocol.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -108,6 +123,9 @@ func readEventsFile(path string) ([]protocol.Event, error) {
 		}
 		var ev protocol.Event
 		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
+			if strict {
+				return nil, fmt.Errorf("%s line %d: %w", filepath.Base(path), line, err)
+			}
 			traceLog.Warn("skip unparseable event line",
 				logging.F("path", path),
 				logging.F("line", strconv.Itoa(line)),

@@ -169,6 +169,38 @@ func TestReconcileRunRecordsSurfacesUnreadableRecord(t *testing.T) {
 	}
 }
 
+func TestReadResultWithoutContractStaysReadableAsUnknown(t *testing.T) {
+	root := t.TempDir()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-legacy", AgentID: "agent-legacy"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	legacy := []byte(`{
+  "protocolVersion": "0.0.1",
+  "traceId": "trace-legacy",
+  "agentId": "agent-legacy",
+  "status": "completed",
+  "summary": "old run",
+  "diagnostics": {"exitCode": 0}
+}`)
+	if err := os.WriteFile(d.ResultJSONPath(), legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := d.ReadResultJSON()
+	if err != nil {
+		t.Fatalf("legacy result record is unreadable: %v", err)
+	}
+	if res.Status != protocol.StatusCompleted {
+		t.Fatalf("recorded status = %q, want completed", res.Status)
+	}
+	// An absent contract proves neither the absence nor the success of one;
+	// readers must treat it as unknown rather than as a pass.
+	if res.Contract != nil {
+		t.Fatalf("legacy contract = %+v, want unknown (nil)", res.Contract)
+	}
+}
+
 func TestReconcileRunRecordsDoesNotCreateRecordsForContractOnly(t *testing.T) {
 	root := t.TempDir()
 	d := runs.Dir{ColonyRoot: root, TraceID: "trace-no-records", AgentID: "agent-1"}

@@ -112,9 +112,33 @@ func TestEnforceRunSummaryRequiredMarksFailed(t *testing.T) {
 	bee := colony.Bee{Role: "builder", RunSummary: colony.RunSummaryRequired}
 	result := &adapters.RunResult{Status: string(protocol.StatusCompleted)}
 
-	d.enforceRunSummaryRequired(bee, "agent-1", result, nil)
+	if _, missing := d.enforceRunSummaryRequired(bee, "agent-1", result, nil); !missing {
+		t.Fatal("expected the missing summary to downgrade the run")
+	}
 	if result.Status != string(protocol.StatusFailed) {
 		t.Fatalf("status = %q", result.Status)
+	}
+	if result.Reason != protocol.ReasonRunSummaryMissing {
+		t.Fatalf("reason = %q, want %q", result.Reason, protocol.ReasonRunSummaryMissing)
+	}
+	if result.Reason == protocol.ReasonCompletionContract {
+		t.Fatal("a missing run.summary was reported as a completion-contract failure")
+	}
+}
+
+func TestEnforceRunSummaryRequiredKeepsPrimaryFailure(t *testing.T) {
+	d := NewDispatcher()
+	bee := colony.Bee{Role: "builder", RunSummary: colony.RunSummaryRequired}
+	result := &adapters.RunResult{
+		Status: string(protocol.StatusFailed),
+		Reason: protocol.ReasonChecksFailed,
+	}
+
+	if _, missing := d.enforceRunSummaryRequired(bee, "agent-1", result, nil); missing {
+		t.Fatal("a missing summary must not relabel an already failed run")
+	}
+	if result.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("reason = %q, want %q", result.Reason, protocol.ReasonChecksFailed)
 	}
 }
 

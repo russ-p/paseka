@@ -216,6 +216,18 @@ func (d Dir) ReadEvents() ([]protocol.Event, error) {
 	return readEventsFile(d.EventsPath())
 }
 
+// ReadEventsStrict reads the run's own event log and reports a damaged record
+// as an error instead of skipping the lines it cannot parse.
+//
+// Finalization uses it for contract evaluation: the contract is evaluated
+// against this record, so a line lost to corruption may be the event the
+// contract requires. Skipping it would silently downgrade "record unreadable"
+// to "contract failed", and a partially damaged log must never be read as a
+// complete one.
+func (d Dir) ReadEventsStrict() ([]protocol.Event, error) {
+	return readEventsFileStrict(d.EventsPath())
+}
+
 func (d Dir) WriteResult(res protocol.Result) error {
 	if res.ProtocolVersion == "" {
 		res.ProtocolVersion = protocol.Version
