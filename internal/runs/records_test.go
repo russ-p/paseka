@@ -3,6 +3,7 @@ package runs_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -215,5 +216,84 @@ func TestReconcileRunRecordsDoesNotCreateRecordsForContractOnly(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(d.Root(), runs.ResultJSONFileName)); !os.IsNotExist(err) {
 		t.Fatalf("result.json created for a run with no record: %v", err)
+	}
+}
+
+func TestReconcileRunRecordsNeverRelabelsRecordedPrimaryFailure(t *testing.T) {
+	root := t.TempDir()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-precedence", AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteResult(protocol.Result{
+		TraceID:     "trace-precedence",
+		AgentID:     "agent-1",
+		Status:      protocol.StatusCompleted,
+		Diagnostics: protocol.Diagnostics{ExitCode: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatus(protocol.StatusCompleted, "", 0, time.Time{}, time.Time{}, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	gate := protocol.GateResult{
+		Command:    []string{"sh", "-c", "exit 1"},
+		ExitCode:   1,
+		Reason:     "exit",
+		Summary:    "checks failed (exit 1): sh -c exit 1",
+		LogPath:    ".paseka/runs/trace-precedence/agent-1/checks.log",
+		DurationMs: 12,
+	}
+	if err := d.WriteGateRecord(gate, protocol.StatusFailed, protocol.ReasonChecksFailed, gate.Summary); err != nil {
+		t.Fatal(err)
+	}
+
+	contract := &protocol.ContractRecord{
+		Status:       protocol.ContractFailed,
+		Error:        "runtime: completion contract: expected at least 1 VERIFICATION event(s), got 0",
+		Observations: []protocol.ContractObservation{{Type: "VERIFICATION", Want: 1, Got: 0}},
+	}
+	// A later contract pass asking to rewrite the outcome must lose to the
+	// recorded gate rejection: precedence is enforced by the shared operation,
+	// not by the caller remembering to skip it.
+	if err := d.ReconcileRunRecords(runs.RunRecordReconciliation{
+		State:    protocol.StatusFailed,
+		Reason:   protocol.ReasonCompletionContract,
+		Note:     contract.Error,
+		Contract: contract,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := d.ReadStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("status = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonChecksFailed)
+	}
+	if snap.Gate == nil || snap.Gate.Passed || snap.Gate.ExitCode != 1 || snap.Gate.LogPath != gate.LogPath {
+		t.Fatalf("status gate = %+v, want the recorded rejection preserved", snap.Gate)
+	}
+	if strings.Contains(snap.Error, "completion contract") {
+		t.Fatalf("status error = %q, want the gate message only", snap.Error)
+	}
+
+	res, err := d.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("result = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonChecksFailed)
+	}
+	if res.Gate == nil || res.Gate.Passed || res.Gate.ExitCode != 1 {
+		t.Fatalf("result gate = %+v, want the recorded rejection preserved", res.Gate)
+	}
+	if strings.Contains(res.Diagnostics.Error, "completion contract") {
+		t.Fatalf("result diagnostics.error = %q, want the gate message only", res.Diagnostics.Error)
+	}
+	if res.Contract == nil || res.Contract.Status != protocol.ContractFailed || res.Contract.Error == "" {
+		t.Fatalf("contract = %+v, want failed recorded with its own message", res.Contract)
 	}
 }

@@ -49,7 +49,12 @@ var (
 // then correcting records that already exist, not fabricating them.
 type recordWritingAdapter struct {
 	status protocol.RunStatus
-	events []protocol.Event
+	// reason and errText let a test record the primary outcome a real adapter
+	// writes: "timeout" for a deadline, the process error for a failure, and no
+	// reason for a plain cancel.
+	reason  string
+	errText string
+	events  []protocol.Event
 	// unreadableEvents replaces events.ndjson with a directory after the
 	// adapter returns, which makes the run's event record unreadable.
 	unreadableEvents bool
@@ -86,10 +91,12 @@ func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (
 		TraceID:         req.TraceID,
 		AgentID:         req.AgentID,
 		Status:          a.status,
+		Reason:          a.reason,
 		Summary:         summary,
 		Artifacts:       []protocol.ArtifactRef{{Kind: "diff", Path: ".paseka/runs/x/diff.patch"}},
 		Diagnostics: protocol.Diagnostics{
 			ExitCode: 0,
+			Error:    a.errText,
 			Stderr:   "adapter stderr kept",
 		},
 		Usage: &protocol.Usage{
@@ -112,9 +119,11 @@ func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (
 	if err := dir.WriteStatusSnapshot(protocol.StatusSnapshot{
 		ProtocolVersion: protocol.Version,
 		State:           a.status,
+		Reason:          a.reason,
 		ExitCode:        0,
 		StartedAt:       contractRunStart,
 		FinishedAt:      contractRunEnd,
+		Error:           a.errText,
 		Provenance:      result.Provenance,
 	}); err != nil {
 		return nil, err
@@ -143,6 +152,7 @@ func (a *recordWritingAdapter) Run(_ context.Context, req adapters.RunRequest) (
 
 	return &adapters.RunResult{
 		Status:            string(a.status),
+		Reason:            a.reason,
 		Summary:           result.Summary,
 		Output:            result.Summary,
 		Artifacts:         []adapters.Artifact{{Kind: "diff", Path: ".paseka/runs/x/diff.patch", Content: "diff"}},
@@ -390,6 +400,7 @@ func TestFinalizationCorruptEventsRecordsUnavailable(t *testing.T) {
 func TestFinalizationUnreadableEventsKeepsPrimaryFailureReason(t *testing.T) {
 	dir, result := dispatchContractRun(t, "trace-unreadable-primary-failure", contractBeeYAML, &recordWritingAdapter{
 		status:           protocol.StatusFailed,
+		errText:          "adapter crashed",
 		unreadableEvents: true,
 	})
 	if result.Status != string(protocol.StatusFailed) {
@@ -408,12 +419,93 @@ func TestFinalizationUnreadableEventsKeepsPrimaryFailureReason(t *testing.T) {
 	if res.Contract == nil || res.Contract.Status != protocol.ContractUnavailable || res.Contract.Error == "" {
 		t.Fatalf("contract record = %+v, want unavailable with error", res.Contract)
 	}
+	if res.Diagnostics.Error != "adapter crashed" {
+		t.Fatalf("result diagnostics.error = %q, want the adapter error untouched", res.Diagnostics.Error)
+	}
 	snap, err := dir.ReadStatus()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if snap.State != protocol.StatusFailed || snap.Reason == protocol.ReasonCompletionContract {
 		t.Fatalf("status record = %s/%s, want failed with the adapter's own reason", snap.State, snap.Reason)
+	}
+	if snap.Error != "adapter crashed" {
+		t.Fatalf("status error = %q, want the adapter error untouched", snap.Error)
+	}
+}
+
+func TestFinalizationPrimaryFailureOutranksFailingContract(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  protocol.RunStatus
+		reason  string
+		errText string
+	}{
+		{
+			name:    "adapter failure",
+			status:  protocol.StatusFailed,
+			errText: "cursor: agent run failed (exit 1)",
+		},
+		{
+			name:    "timeout",
+			status:  protocol.StatusCancelled,
+			reason:  protocol.ReasonTimeout,
+			errText: "run exceeded params.timeout",
+		},
+		{
+			name:    "cancellation",
+			status:  protocol.StatusCancelled,
+			errText: "context canceled",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			traceID := "trace-primary-" + strings.ReplaceAll(tc.name, " ", "-")
+			dir, result := dispatchContractRun(t, traceID, contractBeeYAML, &recordWritingAdapter{
+				status:  tc.status,
+				reason:  tc.reason,
+				errText: tc.errText,
+			})
+
+			// The in-memory outcome the caller sees keeps the primary failure.
+			if result.Status != string(tc.status) || result.Reason != tc.reason {
+				t.Fatalf("result = %s/%s, want %s/%s", result.Status, result.Reason, tc.status, tc.reason)
+			}
+			if result.Contract == nil || result.Contract.Status != protocol.ContractFailed {
+				t.Fatalf("result contract = %+v, want failed recorded", result.Contract)
+			}
+
+			res, err := dir.ReadResultJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Status != tc.status || res.Reason != tc.reason {
+				t.Fatalf("result record = %s/%s, want %s/%s", res.Status, res.Reason, tc.status, tc.reason)
+			}
+			if res.Diagnostics.Error != tc.errText {
+				t.Fatalf("result diagnostics.error = %q, want %q untouched", res.Diagnostics.Error, tc.errText)
+			}
+			if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
+				t.Fatalf("contract record = %+v, want failed recorded", res.Contract)
+			}
+			if len(res.Contract.Observations) != 1 || res.Contract.Observations[0].Satisfied {
+				t.Fatalf("observations = %+v, want the unsatisfied rule", res.Contract.Observations)
+			}
+			if !strings.Contains(res.Contract.Error, "completion contract") {
+				t.Fatalf("contract error = %q, want the contract's own message", res.Contract.Error)
+			}
+
+			snap, err := dir.ReadStatus()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snap.State != tc.status || snap.Reason != tc.reason {
+				t.Fatalf("status record = %s/%s, want %s/%s", snap.State, snap.Reason, tc.status, tc.reason)
+			}
+			if snap.Error != tc.errText {
+				t.Fatalf("status error = %q, want %q untouched", snap.Error, tc.errText)
+			}
+		})
 	}
 }
 
@@ -534,22 +626,67 @@ func TestFinalizationGateRejectionKeepsChecksFailedWithFailedContract(t *testing
 	if result.Reason != protocol.ReasonChecksFailed {
 		t.Fatalf("result reason = %q, want %q", result.Reason, protocol.ReasonChecksFailed)
 	}
+	if result.Gate == nil || result.Gate.Passed {
+		t.Fatalf("result gate = %+v, want the recorded rejection", result.Gate)
+	}
 	res, err := dir.ReadResultJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Reason != protocol.ReasonChecksFailed {
-		t.Fatalf("result record reason = %q, want %q", res.Reason, protocol.ReasonChecksFailed)
+	if res.Status != protocol.StatusFailed || res.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("result record = %s/%s, want failed/%s", res.Status, res.Reason, protocol.ReasonChecksFailed)
 	}
 	if res.Contract == nil || res.Contract.Status != protocol.ContractFailed {
 		t.Fatalf("contract record = %+v, want failed observation recorded", res.Contract)
+	}
+	if res.Contract.Error == "" {
+		t.Fatal("a failed contract carries no message; the gate owns the primary error text, so the contract's own reason has nowhere else to live")
+	}
+	if res.Gate == nil || res.Gate.Passed {
+		t.Fatalf("result gate = %+v, want the rejection preserved", res.Gate)
+	}
+	if strings.Contains(res.Diagnostics.Error, "completion contract") {
+		t.Fatalf("result diagnostics.error = %q, want only the gate message", res.Diagnostics.Error)
 	}
 	snap, err := dir.ReadStatus()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snap.Reason != protocol.ReasonChecksFailed {
-		t.Fatalf("status record reason = %q, want %q", snap.Reason, protocol.ReasonChecksFailed)
+	if snap.State != protocol.StatusFailed || snap.Reason != protocol.ReasonChecksFailed {
+		t.Fatalf("status record = %s/%s, want failed/%s", snap.State, snap.Reason, protocol.ReasonChecksFailed)
+	}
+	if snap.Gate == nil || snap.Gate.Passed {
+		t.Fatalf("status gate = %+v, want the rejection preserved", snap.Gate)
+	}
+	if strings.Contains(snap.Error, "completion contract") {
+		t.Fatalf("status error = %q, want only the gate message", snap.Error)
+	}
+
+	// One gate verdict, one rejection record: the contract pass records its own
+	// verdict and must not invent a second gate rejection for the same run.
+	events, err := dir.ReadEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejections := 0
+	for _, ev := range events {
+		if ev.AgentID != protocol.RuntimeAgentID {
+			continue
+		}
+		if ev.Type != protocol.EventVerification || protocol.PayloadKind(ev.Payload) != string(protocol.VerificationFailed) {
+			continue
+		}
+		rejections++
+	}
+	if rejections != 1 {
+		t.Fatalf("gate rejections = %d, want exactly 1", rejections)
+	}
+	recorded, err := runs.RecordedGateRuns(dir.ColonyRoot, dir.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].Gate.Passed {
+		t.Fatalf("recorded gate runs = %+v, want exactly one rejection", recorded)
 	}
 }
 

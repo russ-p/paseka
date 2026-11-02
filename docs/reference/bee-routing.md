@@ -219,18 +219,22 @@ Finalization persists the verdict before a successful outcome is exposed or publ
   "contract": {
     "status": "failed",
     "rules": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "count": 1}],
-    "observations": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "want": 1, "got": 0, "satisfied": false}]
+    "observations": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "want": 1, "got": 0, "satisfied": false}],
+    "error": "runtime: completion contract: expected at least 1 VERIFICATION event(s) with kind in [verification.success verification.failed], got 0"
   }
 }
 ```
 
-- `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`. A run already failed by the adapter, the gate, or another runtime check keeps its own reason and still records the unavailable verdict.
+- `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`. A run already failed by the adapter, the gate, or another runtime check keeps its own reason and still records the verdict.
+  - `error` carries the contract's own message: the evaluation error when the verdict is `unavailable`, and the violated-rule message when it is `failed`. This is where the contract's reason stays visible when an earlier primary failure owns the run's error text.
 - `rules` are the effective declared rules (a missing `count` is recorded as `1`); `observations` carry the measured `got` per rule when the contract was evaluated.
 - A bee without a contract omits the field entirely, so "no declared contract" stays distinguishable from "contract passed". Legacy records without it read as unknown.
 - Only events the run's own bee emitted count; runtime-authored events, including the check gate's rejection, never satisfy a contract.
 - A missing required `run.summary` is a separate runtime check: it fails the run with reason `run_summary_missing`, never `completion_contract`.
 
-A contract that changes an otherwise completed run to failed writes `state=failed` with reason `completion_contract` to `status.json`, and `status=failed` with the message in `diagnostics.error` to `result.json`, preserving usage, provider session identity, process exit code, timestamps, artifacts, and the rest of diagnostics. The gate verdict outranks the contract verdict: a run the gate rejected keeps reason `checks_failed` while still recording `contract.status=failed`.
+A contract that changes an otherwise completed run to failed writes `state=failed` with reason `completion_contract` to `status.json`, and `status=failed` with the message in `diagnostics.error` to `result.json`, preserving usage, provider session identity, process exit code, timestamps, artifacts, and the rest of diagnostics.
+
+Primary failures outrank the contract verdict, and precedence lives in the shared record reconciliation both writers use. A run the gate rejected keeps `failed` with reason `checks_failed` on both records while `contract.status=failed` is still recorded; adapter failure, timeout, and cancellation likewise keep their own status and reason. A suppressed verdict never rewrites the primary error text and never counts as a second rejection: the gate verdict stays on the record as the single rejection for that run.
 
 Interactive sessions stay ungated and carry no contract record.
 

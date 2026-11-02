@@ -19,7 +19,13 @@ import (
 // The gate verdict outranks the contract verdict. A run the gate rejected (or an
 // adapter that failed, timed out, or was cancelled) keeps its own state and
 // reason; the contract verdict is still recorded, but it never relabels that
-// primary failure. A contract changes only an otherwise completed run.
+// primary failure. A contract changes only an otherwise completed run, and the
+// shared reconciliation enforces the same rule against the persisted records so
+// a retried or reordered finalization cannot flip them.
+//
+// A failing contract's message is carried by the contract record itself. It is
+// appended to the primary error only when the contract caused the downgrade; on
+// a run another layer already failed, the primary error text is left alone.
 func (d *Dispatcher) enforceCompletionContract(runDir runs.Dir, bee colony.Bee, runEvents []protocol.Event, readErr error, result *adapters.RunResult) error {
 	record, message := contractVerdict(bee, runEvents, readErr)
 	if record == nil || result == nil {
@@ -80,7 +86,14 @@ func contractVerdict(bee colony.Bee, runEvents []protocol.Event, readErr error) 
 
 	if err := bee.CompletionContract.ValidateRunEvents(domain); err != nil {
 		record.Status = protocol.ContractFailed
-		return record, fmt.Sprintf("runtime: %s", err.Error())
+		// The message lives in the contract evidence. When the contract is the
+		// reason the run failed, finalization appends the same message to the
+		// primary error; when an earlier verdict owns the primary outcome (gate,
+		// adapter failure, timeout, cancellation), this is the only place the
+		// contract's own reason is written.
+		message := fmt.Sprintf("runtime: %s", err.Error())
+		record.Error = message
+		return record, message
 	}
 	record.Status = protocol.ContractPassed
 	return record, ""

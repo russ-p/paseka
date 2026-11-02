@@ -40,7 +40,11 @@ type ContractObservation struct {
 // distinguishable from "contract passed".
 //
 // Observations carry the measured counts when the contract was evaluated;
-// Error carries the evaluation error when it was not (Status unavailable).
+// Error carries the contract message: the evaluation error when the verdict is
+// unavailable, and the violated-rule message when it failed. Recording the
+// message here keeps the contract's own reason visible even when an earlier
+// primary failure (a gate rejection, an adapter failure, a timeout, or a
+// cancellation) owns the run's status and error text.
 type ContractRecord struct {
 	Status       string                `json:"status"`
 	Rules        []ContractRule        `json:"rules,omitempty"`
