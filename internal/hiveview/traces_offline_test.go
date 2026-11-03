@@ -55,6 +55,13 @@ func (failingLedger) ClaimEnergyPausePublished(string) (taskledger.EnergyPauseSn
 func (failingLedger) ClearEnergyPause(string) (taskledger.EnergyPauseSnapshot, bool, error) {
 	return taskledger.EnergyPauseSnapshot{}, false, fmt.Errorf("kv unavailable")
 }
+func (failingLedger) RecordWorkCompletion(string, taskledger.WorkCompletionSnapshot) (taskledger.WorkCompletionSnapshot, bool, error) {
+	return taskledger.WorkCompletionSnapshot{}, false, fmt.Errorf("kv unavailable")
+}
+
+func (failingLedger) MarkWorkCompletionPublished(string, string) error {
+	return fmt.Errorf("kv unavailable")
+}
 
 func TestResolveTraceTasksFallsBackOnLoadTraceError(t *testing.T) {
 	repo := t.TempDir()

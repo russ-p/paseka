@@ -25,7 +25,7 @@ func newInspectMetricsCmd() *cobra.Command {
 		Use:   "metrics",
 		Short: "Show a trail's cost, run counts, and work stage",
 		Long: "Project one flight trail from its retained disk evidence: cue provenance,\n" +
-			"entry task, work stage, honey, tokens, run counts, durations, the per-task\n" +
+			"entry task, work stage and revision, honey, tokens, run counts, durations, the per-task\n" +
 			"rework and review observation, and byPurpose work/closing/analysis splits.\n" +
 			"The read works without NATS.\n" +
 			"--write persists the same projection to .paseka/runs/<traceId>/metrics.json\n" +
@@ -145,6 +145,15 @@ func printTrailMetrics(w io.Writer, m runs.TrailMetrics) error {
 		state = *m.Work.State
 	}
 	fmt.Fprintf(w, "  work: %s (stage %s)\n", state, m.Work.Stage)
+	if m.Work.Revision != nil {
+		fmt.Fprintf(w, "  work revision: %d\n", *m.Work.Revision)
+	}
+	if m.Work.Completion != nil {
+		fmt.Fprintf(w, "  completion: %s at %s (metrics %s)\n",
+			m.Work.Completion.CompletionID,
+			m.Work.Completion.CompletedAt.UTC().Format(time.RFC3339),
+			m.Work.Completion.MetricsRef)
+	}
 	if m.Work.PendingCount > 0 || m.Work.Pause != nil {
 		fmt.Fprintf(w, "  pending dispatches: %d\n", m.Work.PendingCount)
 		for _, reason := range m.Work.PendingReasons {

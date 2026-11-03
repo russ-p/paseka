@@ -63,6 +63,14 @@ func (f failingLedger) ClearEnergyPause(string) (taskledger.EnergyPauseSnapshot,
 	return taskledger.EnergyPauseSnapshot{}, false, f.err
 }
 
+func (f failingLedger) RecordWorkCompletion(string, taskledger.WorkCompletionSnapshot) (taskledger.WorkCompletionSnapshot, bool, error) {
+	return taskledger.WorkCompletionSnapshot{}, false, f.err
+}
+
+func (f failingLedger) MarkWorkCompletionPublished(string, string) error {
+	return f.err
+}
+
 func TestWriteEventApplyBeforePublish(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	pub := &recordingPublisher{}

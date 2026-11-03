@@ -188,6 +188,46 @@ func (l *MemoryLedger) ClaimEnergyPausePublished(traceID string) (EnergyPauseSna
 	return pause, true, nil
 }
 
+// RecordWorkCompletion stores one work-completion episode in the trace
+// snapshot. The first identity for a revision wins.
+func (l *MemoryLedger) RecordWorkCompletion(traceID string, completion WorkCompletionSnapshot) (WorkCompletionSnapshot, bool, error) {
+	if traceID == "" {
+		return WorkCompletionSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		trace = TraceSnapshot{TraceID: traceID, Tasks: map[string]TaskSnapshot{}}
+	}
+	updated, recorded, created, err := RecordWorkCompletion(trace, completion)
+	if err != nil {
+		return WorkCompletionSnapshot{}, false, err
+	}
+	if created {
+		l.traces[traceID] = updated
+	}
+	return recorded, created, nil
+}
+
+// MarkWorkCompletionPublished records the milestone send on the recorded
+// completion. It is idempotent and refuses a mismatched identity.
+func (l *MemoryLedger) MarkWorkCompletionPublished(traceID, completionID string) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	updated, changed, err := MarkWorkCompletionPublished(l.traces[traceID], completionID)
+	if err != nil {
+		return err
+	}
+	if changed {
+		l.traces[traceID] = updated
+	}
+	return nil
+}
+
 // ClearEnergyPause closes the open pause episode, so only one resumed
 // observation is sent for it.
 func (l *MemoryLedger) ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, error) {

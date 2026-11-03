@@ -360,6 +360,9 @@ type MetricsCoverage struct {
 	Honey     string `json:"honey"`
 	Tokens    string `json:"tokens"`
 	Durations string `json:"durations"`
+	// Work reports whether the accepted work revision and current completion
+	// are retained. Absent means the trail predates the work record.
+	Work string `json:"work"`
 	// Purpose reports whether every retained execution carries a recorded
 	// purpose. Unknown historical attribution makes it partial, not work.
 	Purpose string `json:"purpose"`
@@ -459,8 +462,12 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 	m.Runs = runs
 
 	origin, originOK, originErr := ReadTrailOrigin(colonyRoot, traceID)
+	_, workRecordPresent, workRecordErr := ReadTrailWorkRecord(colonyRoot, traceID)
+	if workRecordErr != nil {
+		workRecordPresent = true
+	}
 
-	if len(events) == 0 && runs.Retained == 0 && taskDirCount == 0 && !trailLogPresent {
+	if len(events) == 0 && runs.Retained == 0 && taskDirCount == 0 && !trailLogPresent && !workRecordPresent {
 		if originErr != nil || !originOK {
 			if !hasRetainedCueInvocations(colonyRoot, traceID) {
 				return TrailMetrics{}, fmt.Errorf("%w: %s", ErrTrailNotFound, traceID)
@@ -473,7 +480,7 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 	applyConfigurationEvidence(&m, manifest, manifestOK, manifestErr, runMetas, runUnreadable)
 	applyLineageEvidence(&m, colonyRoot, traceID, origin, originOK, originErr, manifest, manifestOK, manifestErr)
 	applyClass(&m, tasks, taskDirCount)
-	applyWork(&m, tasks, events)
+	applyWork(&m, colonyRoot, traceID, tasks, events)
 	applyHoney(&m, events, trailLogPresent, trailLogUnreadable, trailLogDamaged)
 	applyTokens(&m, runMetas, runs, runCoverage, runUnreadable)
 	// Purpose is read from the run record and the task phase, never from a Bee
@@ -895,10 +902,27 @@ func applyClass(m *TrailMetrics, tasks taskledger.TraceSnapshot, taskCount int) 
 
 // applyWork derives the recorded work state and the same ledger stage the
 // Console's trail detail derives from the same task evidence.
-func applyWork(m *TrailMetrics, tasks taskledger.TraceSnapshot, events []protocol.Event) {
+func applyWork(m *TrailMetrics, colonyRoot, traceID string, tasks taskledger.TraceSnapshot, events []protocol.Event) {
 	m.Work.Stage = string(taskledger.DeriveTrailStage(tasks))
 	m.Work.Revision = nil
 	m.Work.Completion = nil
+
+	if record, ok, err := ReadTrailWorkRecord(colonyRoot, traceID); err != nil {
+		m.warn("work", WarningUnreadable, fmt.Sprintf("retained work record: %v", err))
+		m.Coverage.Work = CoverageUnavailable
+	} else if !ok {
+		m.Coverage.Work = CoveragePartial
+	} else {
+		m.Coverage.Work = CoverageComplete
+		if record.Revision > 0 {
+			revision := record.Revision
+			m.Work.Revision = &revision
+		}
+		if record.Completion != nil && record.Completion.WorkRevision == record.Revision {
+			completion := *record.Completion
+			m.Work.Completion = &completion
+		}
+	}
 
 	pause := openEnergyPause(m, events)
 	m.Work.Pause = pause
@@ -1974,7 +1998,7 @@ func earliestEvidence(tasks taskledger.TraceSnapshot, metas []RunMeta, events []
 			continue
 		}
 		kind := protocol.PayloadKind(ev.Payload)
-		if protocol.IsPlatformObservation(kind) || kind == "trail.work.completed" {
+		if protocol.IsPlatformObservation(kind) || protocol.IsTrailWorkCompletion(kind) {
 			continue
 		}
 		consider(ev.CreatedAt)

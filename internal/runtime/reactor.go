@@ -20,27 +20,30 @@ import (
 
 // Reactor subscribes to colony events, updates the task ledger, and dispatches ready tasks.
 type Reactor struct {
-	colony           colony.Context
-	publisher        bus.Publisher
-	subscriber       bus.EventSubscriber
-	close            func()
-	subjectPrefix    string
-	replayer         bus.TraceReplayer
-	dispatcher       *Dispatcher
-	ledger           taskledger.Ledger
-	registry         *BeeRegistry
-	mu               sync.Mutex
-	inflight         map[string]context.CancelFunc
-	directInflight   map[string]context.CancelFunc
-	directProcessed  map[string]struct{}
-	pendingResume    map[string]struct{}          // pending entries this process is currently resuming
-	barrierHeld      map[string]*barrierHeldState // per-trace bookkeeping for barrier-held direct work
-	recentLocal      map[string]time.Time         // fingerprints of events applied before publish
-	asyncDispatch    bool
-	invitePublisher  bus.Publisher // test override for auto-invite publish
-	autoInvites      []colony.AutoInviteRule
-	configMu         sync.Mutex
-	configRegistries map[string]*BeeRegistry
+	colony             colony.Context
+	publisher          bus.Publisher
+	subscriber         bus.EventSubscriber
+	close              func()
+	subjectPrefix      string
+	replayer           bus.TraceReplayer
+	dispatcher         *Dispatcher
+	ledger             taskledger.Ledger
+	registry           *BeeRegistry
+	mu                 sync.Mutex
+	inflight           map[string]context.CancelFunc
+	directInflight     map[string]context.CancelFunc
+	directProcessed    map[string]struct{}
+	pendingResume      map[string]struct{}               // pending entries this process is currently resuming
+	barrierHeld        map[string]*barrierHeldState      // per-trace bookkeeping for barrier-held direct work
+	completionBarriers map[string]*workCompletionBarrier // per-trace work-completion/admission barrier
+	directPurpose      map[string]protocol.ExecutionPurpose
+	spawning           map[string]int       // async dispatch goroutines not yet registered in-flight
+	recentLocal        map[string]time.Time // fingerprints of events applied before publish
+	asyncDispatch      bool
+	invitePublisher    bus.Publisher // test override for auto-invite publish
+	autoInvites        []colony.AutoInviteRule
+	configMu           sync.Mutex
+	configRegistries   map[string]*BeeRegistry
 }
 
 type trailExecutionContext struct {
@@ -91,24 +94,27 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 	d.SetBeeRegistry(registry)
 
 	return &Reactor{
-		colony:           ctxColony,
-		publisher:        busClient,
-		subscriber:       busClient,
-		close:            busClient.Close,
-		subjectPrefix:    busClient.Config().SubjectPrefix,
-		replayer:         busClient,
-		dispatcher:       d,
-		ledger:           taskledger.NewKVLedger(kv),
-		registry:         registry,
-		inflight:         make(map[string]context.CancelFunc),
-		directInflight:   make(map[string]context.CancelFunc),
-		directProcessed:  make(map[string]struct{}),
-		pendingResume:    make(map[string]struct{}),
-		barrierHeld:      make(map[string]*barrierHeldState),
-		recentLocal:      make(map[string]time.Time),
-		asyncDispatch:    true,
-		autoInvites:      manifest.AutoInvites,
-		configRegistries: make(map[string]*BeeRegistry),
+		colony:             ctxColony,
+		publisher:          busClient,
+		subscriber:         busClient,
+		close:              busClient.Close,
+		subjectPrefix:      busClient.Config().SubjectPrefix,
+		replayer:           busClient,
+		dispatcher:         d,
+		ledger:             taskledger.NewKVLedger(kv),
+		registry:           registry,
+		inflight:           make(map[string]context.CancelFunc),
+		directInflight:     make(map[string]context.CancelFunc),
+		directProcessed:    make(map[string]struct{}),
+		pendingResume:      make(map[string]struct{}),
+		barrierHeld:        make(map[string]*barrierHeldState),
+		completionBarriers: make(map[string]*workCompletionBarrier),
+		directPurpose:      make(map[string]protocol.ExecutionPurpose),
+		spawning:           make(map[string]int),
+		recentLocal:        make(map[string]time.Time),
+		asyncDispatch:      true,
+		autoInvites:        manifest.AutoInvites,
+		configRegistries:   make(map[string]*BeeRegistry),
 	}, nil
 }
 
@@ -148,6 +154,11 @@ func (r *Reactor) Run(ctx context.Context) error {
 	// nothing had a chance to run. Resume it before new events arrive.
 	if err := r.RecoverPendingDispatches(ctx); err != nil {
 		runtimeLog.Warn("recover pending direct dispatches failed", logging.F("error", err.Error()))
+	}
+	// A completion captured before a crash may never have reached the bus.
+	// Republish it with its recorded identity before new work is admitted.
+	if err := r.RecoverPendingWorkCompletions(ctx); err != nil {
+		runtimeLog.Warn("recover pending work completions failed", logging.F("error", err.Error()))
 	}
 
 	go r.runPullRequestReconcile(ctx)
@@ -217,12 +228,13 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 	if stale {
 		return nil
 	}
-	res, err := r.ledger.Apply(ev)
+	res, err := r.applyLedgerEvent(ev)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+		r.retainWorkRevision(res.Trace)
 	}
 	if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
 		if task, ok := res.Trace.Tasks[taskID]; ok && terminalTaskStatus(task.Status) {
@@ -263,9 +275,15 @@ func (r *Reactor) processEvent(ctx context.Context, ev protocol.Event) error {
 		return err
 	}
 	if ev.Type == protocol.EventVerification && protocol.PayloadKind(ev.Payload) == string(protocol.TaskEventCompleted) {
-		return r.maybeActivateFinalReview(ctx, ev.TraceID, execCtx)
+		if err := r.maybeActivateFinalReview(ctx, ev.TraceID, execCtx); err != nil {
+			return err
+		}
 	}
-	return nil
+	// Every applied event is a boundary: working task transitions, mandatory
+	// verification, closing-round transitions, direct/session outcomes, and run
+	// finalization all reach here. The predicate holds while work, a closing
+	// round, a pending admission, or an in-flight invocation is open.
+	return r.maybeCompleteWork(ctx, ev.TraceID)
 }
 
 func (r *Reactor) executionContext(traceID string) (*trailExecutionContext, error) {
@@ -409,7 +427,7 @@ func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, read
 		task := task
 		execCtx := execCtx
 		sourceEventID := eventIdentity(ev)
-		if err := r.runDispatch(ctx, func() error {
+		if err := r.runDispatch(ctx, ev.TraceID, func() error {
 			return r.dispatchReady(ctx, ev.TraceID, task, execCtx, sourceEventID)
 		}); err != nil {
 			return err
@@ -432,7 +450,7 @@ func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, read
 	for _, beeRole := range directBees {
 		beeRole := beeRole
 		directCtx := directCtx
-		if err := r.runDispatch(ctx, func() error {
+		if err := r.runDispatch(ctx, ev.TraceID, func() error {
 			return r.dispatchDirect(ctx, ev, beeRole, directCtx)
 		}); err != nil {
 			return err
@@ -446,11 +464,26 @@ func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, read
 }
 
 // runDispatch executes a dispatch synchronously or in the background (NATS path).
-func (r *Reactor) runDispatch(ctx context.Context, fn func() error) error {
+//
+// An asynchronous dispatch is counted before the goroutine starts, so a
+// completion evaluation that runs while the goroutine is still scheduling does
+// not mistake "no dispatch registered yet" for "no dispatch in flight".
+func (r *Reactor) runDispatch(ctx context.Context, traceID string, fn func() error) error {
 	if r.asyncDispatch {
+		r.noteSpawningDispatch(traceID)
 		go func() {
-			if err := fn(); err != nil {
+			err := fn()
+			r.clearSpawningDispatch(traceID)
+			if err != nil {
 				runtimeLog.Error("dispatch error", logging.F("error", err.Error()))
+			}
+			// The goroutine itself is no longer an unfinished dispatch. Re-run
+			// the boundary now that it has left the spawning/in-flight set.
+			if err := r.maybeCompleteWork(context.Background(), traceID); err != nil {
+				runtimeLog.Warn("work completion check failed",
+					logging.F("trace", traceID),
+					logging.F("error", err.Error()),
+				)
 			}
 		}()
 		return nil
@@ -558,21 +591,24 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		}
 	}
 	return &Reactor{
-		colony:           colony.Context{ColonyRoot: opts.ColonyRoot},
-		publisher:        opts.Publisher,
-		dispatcher:       opts.Dispatcher,
-		ledger:           opts.Ledger,
-		registry:         opts.Registry,
-		replayer:         opts.Replayer,
-		inflight:         make(map[string]context.CancelFunc),
-		directInflight:   make(map[string]context.CancelFunc),
-		directProcessed:  make(map[string]struct{}),
-		pendingResume:    make(map[string]struct{}),
-		barrierHeld:      make(map[string]*barrierHeldState),
-		recentLocal:      make(map[string]time.Time),
-		asyncDispatch:    opts.AsyncDispatch,
-		autoInvites:      autoInvites,
-		configRegistries: make(map[string]*BeeRegistry),
+		colony:             colony.Context{ColonyRoot: opts.ColonyRoot},
+		publisher:          opts.Publisher,
+		dispatcher:         opts.Dispatcher,
+		ledger:             opts.Ledger,
+		registry:           opts.Registry,
+		replayer:           opts.Replayer,
+		inflight:           make(map[string]context.CancelFunc),
+		directInflight:     make(map[string]context.CancelFunc),
+		directProcessed:    make(map[string]struct{}),
+		pendingResume:      make(map[string]struct{}),
+		barrierHeld:        make(map[string]*barrierHeldState),
+		completionBarriers: make(map[string]*workCompletionBarrier),
+		directPurpose:      make(map[string]protocol.ExecutionPurpose),
+		spawning:           make(map[string]int),
+		recentLocal:        make(map[string]time.Time),
+		asyncDispatch:      opts.AsyncDispatch,
+		autoInvites:        autoInvites,
+		configRegistries:   make(map[string]*BeeRegistry),
 	}
 }
 

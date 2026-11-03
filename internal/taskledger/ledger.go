@@ -88,16 +88,38 @@ type PendingDispatch struct {
 
 // TraceSnapshot is the aggregated task ledger for one trace.
 type TraceSnapshot struct {
-	TraceID           string                  `json:"traceId"`
-	EnergyBudget      int                     `json:"energyBudget,omitempty"`
-	EnergyRemaining   int                     `json:"energyRemaining,omitempty"`
-	EnergyAdded       int                     `json:"energyAdded,omitempty"`
-	EnergySeed        *EnergySeedSnapshot     `json:"energySeed,omitempty"`
-	EnergyPause       *EnergyPauseSnapshot    `json:"energyPause,omitempty"`
-	Killed            bool                    `json:"killed,omitempty"`
-	PendingReady      *PendingReadySnapshot   `json:"pendingReady,omitempty"`
-	PendingDispatches []PendingDispatch       `json:"pendingDispatches,omitempty"`
-	Tasks             map[string]TaskSnapshot `json:"tasks"`
+	TraceID           string                `json:"traceId"`
+	EnergyBudget      int                   `json:"energyBudget,omitempty"`
+	EnergyRemaining   int                   `json:"energyRemaining,omitempty"`
+	EnergyAdded       int                   `json:"energyAdded,omitempty"`
+	EnergySeed        *EnergySeedSnapshot   `json:"energySeed,omitempty"`
+	EnergyPause       *EnergyPauseSnapshot  `json:"energyPause,omitempty"`
+	Killed            bool                  `json:"killed,omitempty"`
+	PendingReady      *PendingReadySnapshot `json:"pendingReady,omitempty"`
+	PendingDispatches []PendingDispatch     `json:"pendingDispatches,omitempty"`
+	// WorkRevision identifies the accepted goal work a completion describes. It
+	// advances when substantive work is accepted — a new work-phase task, a
+	// rework return, or rework planned from a gate rejection — and never for a
+	// closing round, analysis, or the completion milestone itself.
+	WorkRevision int `json:"workRevision,omitempty"`
+	// WorkCompletion is the trail's current completion episode. A completion
+	// whose revision the trail has since moved past stays historical on disk
+	// but no longer describes the current work.
+	WorkCompletion *WorkCompletionSnapshot `json:"workCompletion,omitempty"`
+	Tasks          map[string]TaskSnapshot `json:"tasks"`
+}
+
+// WorkCompletionSnapshot is the durable identity of one trail-work-completion
+// episode, recorded before its milestone is published. Published marks that the
+// SIGNAL reached the publisher; an unpublished record is retried with the same
+// identity and never minted again.
+type WorkCompletionSnapshot struct {
+	CompletionID string    `json:"completionId"`
+	WorkRevision int       `json:"workRevision"`
+	CompletedAt  time.Time `json:"completedAt"`
+	ResultRef    string    `json:"resultRef"`
+	MetricsRef   string    `json:"metricsRef"`
+	Published    bool      `json:"published,omitempty"`
 }
 
 // EnergySeedSnapshot is the durable provenance of the winning initial honey
@@ -227,4 +249,14 @@ type Ledger interface {
 	// cleared, so the runtime sends at most one resumed observation after the
 	// field is gone.
 	ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, error)
+
+	// RecordWorkCompletion stores one work-completion episode unless the trace
+	// already records a completion for that revision. The first identity wins,
+	// so a retry, restart, or duplicate event cannot mint a second completion
+	// for the same accepted work.
+	RecordWorkCompletion(traceID string, completion WorkCompletionSnapshot) (WorkCompletionSnapshot, bool, error)
+
+	// MarkWorkCompletionPublished records that the completion's milestone
+	// reached the publisher. It is idempotent and refuses a different identity.
+	MarkWorkCompletionPublished(traceID, completionID string) error
 }

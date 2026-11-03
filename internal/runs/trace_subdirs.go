@@ -19,6 +19,9 @@ var ReservedTraceSubdirs = map[string]struct{}{
 	"fork-requests": {},
 	// Cue invocations are the trail's retained ingress identities.
 	CueInvocationsDirName: {},
+	// Immutable work-completion checkpoints, result evidence, and metrics
+	// snapshots are trail records, not bee runs.
+	WorkCompletionDirName: {},
 }
 
 // skipTraceEventSubdirs have no per-agent events.ndjson to merge.
@@ -32,6 +35,7 @@ var skipTraceEventSubdirs = map[string]struct{}{
 	proposalsDir:          {},
 	"fork-requests":       {},
 	CueInvocationsDirName: {},
+	WorkCompletionDirName: {},
 }
 
 // IsReservedTraceSubdir reports whether name is a reserved trace subdirectory.

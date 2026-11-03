@@ -163,6 +163,7 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 	}
 
 	step := reduceStep{trace: trace}
+	acceptedWork := false
 	for _, spec := range payload.Tasks {
 		if spec.TaskID == "" {
 			continue
@@ -170,6 +171,7 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 		if existing, exists := step.trace.Tasks[spec.TaskID]; exists && existing.Status != "" {
 			continue
 		}
+		phase := plannedTaskPhase(spec, event.AgentID)
 		step.trace.Tasks[spec.TaskID] = TaskSnapshot{
 			TaskID:          spec.TaskID,
 			Title:           spec.Title,
@@ -180,13 +182,22 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 			CueID:           spec.CueID,
 			CueInvocationID: spec.CueInvocationID,
 			Review:          protocol.NormalizeTaskReviewPolicy(spec.Review),
-			Phase:           plannedTaskPhase(spec, event.AgentID),
+			Phase:           phase,
 			Status:          protocol.TaskStatusPlanned,
 			DependsOn:       append([]string(nil), spec.DependsOn...),
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}
+		if phase == protocol.TaskPhaseWork {
+			acceptedWork = true
+		}
 		step.changed = true
+	}
+	if acceptedWork {
+		// One admission of new goal work reopens the work revision once, even
+		// when the plan carries several tasks. Closing and merge plans never
+		// advance it.
+		step.trace = AdvanceWorkRevision(step.trace)
 	}
 
 	var promoted []TaskSnapshot
@@ -413,12 +424,19 @@ func reduceTaskStatus(trace TraceSnapshot, event protocol.Event, now time.Time) 
 
 	task := taskOrNew(trace, payload.TaskID)
 	task = withCreatedAt(task, now)
+	previous := task.Status
 	task.Status = payload.Status
 	// Always assign summary (including "") so unblock/clear transitions
 	// can drop stale reasons like "Honey reserve exhausted".
 	task.Summary = payload.Summary
 	task.UpdatedAt = now
 	trace.Tasks[payload.TaskID] = task
+	if isAcceptedWorkTask(task) && isReworkReturn(previous) &&
+		(payload.Status == protocol.TaskStatusReady || payload.Status == protocol.TaskStatusRunning) {
+		// A task returning to the working set is accepted rework: the previous
+		// completion no longer describes the trail's current work.
+		trace = AdvanceWorkRevision(trace)
+	}
 	// Admission and the deferral record close in this same mutation. A task that
 	// starts running is no longer waiting for dispatch, whichever trigger admitted
 	// it (task.ready, review rework, closing seed, configuration release, or the
@@ -457,6 +475,7 @@ func reduceTaskReady(trace TraceSnapshot, event protocol.Event, now time.Time) (
 	}
 
 	step := reduceStep{trace: trace}
+	previous := task.Status
 	task = applyReadyOverlays(task, payload)
 	switch {
 	case task.Status == protocol.TaskStatusReady:
@@ -466,6 +485,9 @@ func reduceTaskReady(trace TraceSnapshot, event protocol.Event, now time.Time) (
 		task.Summary = ""
 		step.ready = append(step.ready, task)
 		step.changed = true
+		if isAcceptedWorkTask(task) && isReworkReturn(previous) {
+			step.trace = AdvanceWorkRevision(step.trace)
+		}
 	case !HasReadyTask(trace):
 		if first, eligible := FirstEligiblePlanned(trace); eligible && first.TaskID == payload.TaskID {
 			task.Status = protocol.TaskStatusReady

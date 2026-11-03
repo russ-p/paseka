@@ -44,7 +44,18 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	}
 
 	dispatchCtx, endInflight := r.beginTaskInflight(traceID, task.TaskID)
-	defer endInflight()
+	defer func() {
+		endInflight()
+		// The invocation leaves the in-flight set only after its finalization
+		// effects are persisted. This is the boundary that can certify a
+		// completion the same dispatch completed behind.
+		if err := r.maybeCompleteWork(context.Background(), traceID); err != nil {
+			runtimeLog.Warn("work completion check failed",
+				logging.F("trace", traceID),
+				logging.F("error", err.Error()),
+			)
+		}
+	}()
 
 	snap, err := r.ledger.Snapshot(traceID)
 	if err != nil {

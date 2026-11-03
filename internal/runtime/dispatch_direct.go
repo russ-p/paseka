@@ -64,7 +64,22 @@ func (r *Reactor) dispatchDirectWithPurpose(ctx context.Context, ev protocol.Eve
 	r.mu.Unlock()
 
 	dispatchCtx, endInflight := r.beginDirectInflight(key)
-	defer endInflight()
+	r.noteDirectPurpose(key, purpose)
+	defer func() {
+		endInflight()
+		r.clearDirectPurpose(key)
+		// A direct work reaction is an invocation too: the milestone may only
+		// be certified once it has left the in-flight set with its result and
+		// usage persisted. Analysis is recorded but never holds completion.
+		if purpose != protocol.PurposeAnalysis {
+			if err := r.maybeCompleteWork(context.Background(), ev.TraceID); err != nil {
+				runtimeLog.Warn("work completion check failed",
+					logging.F("trace", ev.TraceID),
+					logging.F("error", err.Error()),
+				)
+			}
+		}
+	}()
 
 	if held, err := r.directAdmissionHeld(ev, beeRole, taskID); err != nil {
 		return err

@@ -158,6 +158,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 	switch kind {
 	case SignalCueIngress:
 		return validateCueIngress(payload)
+	case SignalTrailWorkCompleted:
+		return validateTrailWorkCompleted(payload)
 	}
 
 	switch VerificationKind(kind) {
@@ -227,6 +229,9 @@ func expectedEventType(kind string) EventType {
 		return EventSignal
 	}
 	if IsCueIngressObservation(kind) {
+		return EventSignal
+	}
+	if IsTrailWorkCompletion(kind) {
 		return EventSignal
 	}
 	switch VerificationKind(kind) {
@@ -741,6 +746,34 @@ func validateCueIngress(payload json.RawMessage) []ValidationDetail {
 	}
 	if !p.Mode.Known() {
 		details = append(details, ValidationDetail{Path: "payload.mode", Message: "must be one of task, signal"})
+	}
+	return details
+}
+
+// validateTrailWorkCompleted enforces the milestone's evidence contract: an
+// identity, a positive work revision, the completion time, and both immutable
+// references. A payload missing its evidence would announce a completion a
+// reader cannot resolve.
+func validateTrailWorkCompleted(payload json.RawMessage) []ValidationDetail {
+	var p TrailWorkCompletedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid trail.work.completed payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.CompletionID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.completionId", Message: "required"})
+	}
+	if p.WorkRevision < 1 {
+		details = append(details, ValidationDetail{Path: "payload.workRevision", Message: "must be at least 1"})
+	}
+	if p.CompletedAt.IsZero() {
+		details = append(details, ValidationDetail{Path: "payload.completedAt", Message: "required"})
+	}
+	if strings.TrimSpace(p.ResultRef) == "" {
+		details = append(details, ValidationDetail{Path: "payload.resultRef", Message: "required"})
+	}
+	if strings.TrimSpace(p.MetricsRef) == "" {
+		details = append(details, ValidationDetail{Path: "payload.metricsRef", Message: "required"})
 	}
 	return details
 }
