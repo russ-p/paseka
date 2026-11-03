@@ -84,6 +84,10 @@ type RunMeta struct {
 	// Records marks a conflicting or incomplete outcome-record pair and is
 	// absent when the pair agrees or the run is still in flight.
 	Records *RecordIntegrity `json:"records,omitempty"`
+	// Reason is the recorded classifier for a terminal state, e.g. "timeout"
+	// for a cancelled run or "checks_failed" for a gate rejection. A legacy
+	// record may carry no reason; absence stays distinguishable from a reason.
+	Reason string `json:"reason,omitempty"`
 	protocol.Provenance
 }
 
@@ -130,6 +134,9 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		if !snap.FinishedAt.IsZero() {
 			meta.FinishedAt = snap.FinishedAt
 		}
+		if snap.Reason != "" {
+			meta.Reason = snap.Reason
+		}
 		meta.Gate = snap.Gate
 	}
 
@@ -150,6 +157,12 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		}
 		if !res.FinishedAt.IsZero() {
 			meta.FinishedAt = res.FinishedAt
+		}
+		if meta.Reason == "" && res.Reason != "" {
+			meta.Reason = res.Reason
+		}
+		if meta.Gate == nil && res.Gate != nil {
+			meta.Gate = res.Gate
 		}
 		if res.Contract != nil && res.Contract.Status != "" {
 			meta.Contract = ContractEvidence{

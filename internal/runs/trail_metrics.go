@@ -1,0 +1,1174 @@
+package runs
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
+)
+
+// TrailMetricsFileName is the replaceable convenience projection persisted by
+// `paseka inspect metrics --write` and, later, by the work-completion checkpoint.
+// It lives beside the trail's other retained evidence, so worktree-only cleanup
+// leaves it readable. Historical completions reference their own immutable
+// snapshots, never this file.
+const TrailMetricsFileName = "metrics.json"
+
+// TrailMetricsSchemaVersion is the version of the TrailMetrics field contract.
+const TrailMetricsSchemaVersion = 1
+
+// ErrTrailNotFound reports a trace identity with no retained evidence at all.
+// It is a caller error, not an empty projection: an absent trail must not read
+// as a free, idle trail.
+var ErrTrailNotFound = errors.New("runs: trail not found")
+
+// Coverage values for one measurement group.
+const (
+	CoverageComplete    = "complete"
+	CoveragePartial     = "partial"
+	CoverageUnavailable = "unavailable"
+)
+
+// Warning kinds. They keep "we found no record", "we could not read one", "two
+// records disagree", and "this predates the record" distinguishable.
+const (
+	WarningMissing     = "missing"
+	WarningUnreadable  = "unreadable"
+	WarningConflicting = "conflicting"
+	WarningLegacy      = "legacy"
+)
+
+// Cue ingress attribution. A cue invocation is the trail's origin only when the
+// retained origin record proves it; a later invocation is an addition. Without
+// an origin record the attribution stays unknown rather than labelling the
+// first retained cue as the origin.
+const (
+	CueAttributionOrigin   = "origin"
+	CueAttributionAddition = "addition"
+	CueAttributionUnknown  = "unknown"
+)
+
+// TrailMetrics is a versioned projection of one trail's retained disk evidence.
+//
+// It is deliberately independent of NATS: the trail event log, run directories,
+// task projections, retained origin, and recorded seed observations are enough
+// to answer what the trail cost and what its runs did.
+type TrailMetrics struct {
+	SchemaVersion int       `json:"schemaVersion"`
+	TraceID       string    `json:"traceId"`
+	ObservedAt    time.Time `json:"observedAt"`
+
+	// CueID names the initial cue only when the retained origin proves it.
+	CueID        string              `json:"cueId,omitempty"`
+	CueIngresses []MetricsCueIngress `json:"cueIngresses"`
+
+	// Class is the entry-task descriptor. It is null when no non-merge task can
+	// be identified.
+	Class *MetricsClass `json:"class"`
+
+	Work MetricsWork `json:"work"`
+	// Honey is the recorded initial allocation and distinct charges.
+	Honey  MetricsHoney   `json:"honey"`
+	Tokens *MetricsTokens `json:"tokens"`
+	Runs   MetricsRuns    `json:"runs"`
+	// Durations are null when no usable interval exists; zero would claim a
+	// measurement the record does not support.
+	ActiveTimeSec *float64 `json:"activeTimeSec"`
+	WallTimeSec   *float64 `json:"wallTimeSec"`
+
+	Coverage MetricsCoverage  `json:"coverage"`
+	Warnings []MetricsWarning `json:"warnings"`
+}
+
+// MetricsCueIngress is one distinct recorded cue invocation.
+type MetricsCueIngress struct {
+	InvocationID string    `json:"invocationId"`
+	CueID        string    `json:"cueId"`
+	Source       string    `json:"source,omitempty"`
+	Mode         string    `json:"mode,omitempty"`
+	InvokedAt    time.Time `json:"invokedAt,omitempty"`
+	Attribution  string    `json:"attribution"`
+	TaskIDs      []string  `json:"taskIds,omitempty"`
+}
+
+// MetricsClass is the deterministic entry-task descriptor plus the total number
+// of task projections the trail retains.
+type MetricsClass struct {
+	TaskID    string `json:"taskId"`
+	Bee       string `json:"bee,omitempty"`
+	Intent    string `json:"intent,omitempty"`
+	TaskCount int    `json:"taskCount"`
+}
+
+// MetricsWork is the trail's recorded work state, ledger stage, and admission
+// facts. Revision and Completion stay null until the work-completion slice fills
+// them; final acceptance and delivery are separate facts.
+type MetricsWork struct {
+	State          *string                `json:"state"`
+	Stage          string                 `json:"stage"`
+	Revision       *int                   `json:"revision"`
+	Completion     *MetricsCompletion     `json:"completion"`
+	PendingCount   int                    `json:"pendingCount"`
+	PendingReasons []MetricsPendingReason `json:"pendingReasons,omitempty"`
+	Pause          *MetricsEnergyPause    `json:"pause,omitempty"`
+}
+
+// MetricsCompletion is the current completion's identity and evidence
+// reference. It is nil until completion evidence exists.
+type MetricsCompletion struct {
+	CompletionID string    `json:"completionId"`
+	WorkRevision int       `json:"workRevision"`
+	CompletedAt  time.Time `json:"completedAt"`
+	ResultRef    string    `json:"resultRef,omitempty"`
+	MetricsRef   string    `json:"metricsRef,omitempty"`
+}
+
+// MetricsPendingReason is the recorded count of deferred dispatches waiting on
+// one admission reason. Individual dispatch identities live in the task ledger;
+// the trail observation records the count and why they wait.
+type MetricsPendingReason struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
+}
+
+// MetricsEnergyPause is the open honey pause episode, reconstructed from the
+// trail's paired energy.paused/energy.resumed observations.
+type MetricsEnergyPause struct {
+	EpisodeID    string    `json:"episodeId"`
+	Reason       string    `json:"reason,omitempty"`
+	StartedAt    time.Time `json:"startedAt,omitempty"`
+	Remaining    int       `json:"remaining"`
+	PendingCount int       `json:"pendingCount"`
+}
+
+// MetricsHoney is the recorded initial allocation and the distinct charges
+// against it. Budget is null when no seed observation exists; Spent is null when
+// the charge record itself is unavailable.
+type MetricsHoney struct {
+	Budget   *int           `json:"budget"`
+	Spent    *int           `json:"spent"`
+	ByReason map[string]int `json:"byReason,omitempty"`
+}
+
+// MetricsTokens is the summed token accounting of retained executions. It is
+// null when no run reports usage; Partial is explicit when only some runs do.
+type MetricsTokens struct {
+	InputTokens      int64 `json:"inputTokens"`
+	OutputTokens     int64 `json:"outputTokens"`
+	CacheReadTokens  int64 `json:"cacheReadTokens"`
+	CacheWriteTokens int64 `json:"cacheWriteTokens"`
+	RunsWithUsage    int   `json:"runsWithUsage"`
+	Runs             int   `json:"runs"`
+	Partial          bool  `json:"partial,omitempty"`
+}
+
+// MetricsRuns counts retained executions. The dimensions overlap and must not
+// be added together as a failure total.
+type MetricsRuns struct {
+	Retained            int            `json:"retained"`
+	ByBee               map[string]int `json:"byBee,omitempty"`
+	Failed              int            `json:"failed"`
+	Cancelled           int            `json:"cancelled"`
+	ContractFailed      int            `json:"contractFailed"`
+	ContractUnavailable int            `json:"contractUnavailable"`
+	Timeout             int            `json:"timeout"`
+	ChecksFailed        int            `json:"checksFailed"`
+	ChecksPassed        int            `json:"checksPassed"`
+}
+
+// MetricsCoverage reports completeness by measurement group.
+type MetricsCoverage struct {
+	Events    string `json:"events"`
+	Runs      string `json:"runs"`
+	Tasks     string `json:"tasks"`
+	Origin    string `json:"origin"`
+	Honey     string `json:"honey"`
+	Tokens    string `json:"tokens"`
+	Durations string `json:"durations"`
+}
+
+// MetricsWarning is one concrete reason a measurement is missing, unreadable,
+// conflicting, or legacy.
+type MetricsWarning struct {
+	Group  string `json:"group"`
+	Kind   string `json:"kind"`
+	Detail string `json:"detail"`
+}
+
+// TrailMetricsPath returns .paseka/runs/<traceId>/metrics.json.
+func TrailMetricsPath(colonyRoot, traceID string) string {
+	return filepath.Join(colonyRoot, ".paseka", "runs", traceID, TrailMetricsFileName)
+}
+
+// WriteTrailMetrics atomically persists one projection. It never declares work
+// completion: the file is a replaceable convenience read, not a checkpoint.
+func WriteTrailMetrics(colonyRoot, traceID string, metrics TrailMetrics) error {
+	if strings.TrimSpace(colonyRoot) == "" {
+		return fmt.Errorf("runs: colony root is required")
+	}
+	if err := validateTrailRecordID("traceId", traceID); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(metrics, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(TrailMetricsPath(colonyRoot, traceID), append(data, '\n'), 0o644)
+}
+
+// BuildTrailMetrics projects one trail from retained disk evidence. observedAt
+// is the single observation time the whole projection uses; zero means now.
+//
+// A trail with no retained evidence at all is ErrTrailNotFound. A readable but
+// damaged or incomplete trail returns the values it does retain, with coverage
+// and warnings naming every gap.
+func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailMetrics, error) {
+	if strings.TrimSpace(colonyRoot) == "" {
+		return TrailMetrics{}, fmt.Errorf("runs: colony root is required")
+	}
+	if err := validateTrailRecordID("traceId", traceID); err != nil {
+		return TrailMetrics{}, err
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	observedAt = observedAt.UTC()
+
+	m := TrailMetrics{
+		SchemaVersion: TrailMetricsSchemaVersion,
+		TraceID:       traceID,
+		ObservedAt:    observedAt,
+		CueIngresses:  []MetricsCueIngress{},
+		Warnings:      []MetricsWarning{},
+		Runs:          MetricsRuns{ByBee: map[string]int{}},
+	}
+
+	traceRoot := filepath.Join(colonyRoot, ".paseka", "runs", traceID)
+	rootEntries, err := os.ReadDir(traceRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TrailMetrics{}, fmt.Errorf("%w: %s", ErrTrailNotFound, traceID)
+		}
+		return TrailMetrics{}, fmt.Errorf("runs: list trail %s: %w", traceID, err)
+	}
+
+	events, readIssues, err := ReadTraceEventsReport(colonyRoot, traceID)
+	if err != nil {
+		return TrailMetrics{}, err
+	}
+	for _, issue := range readIssues {
+		m.warn("events", WarningUnreadable, issue.Detail)
+	}
+	trailLogPresent := fileExists(Trail{ColonyRoot: colonyRoot, TraceID: traceID}.EventsPath())
+	trailLogUnreadable, trailLogDamaged := trailLogIssues(readIssues, Trail{ColonyRoot: colonyRoot, TraceID: traceID}.EventsPath())
+	if !trailLogPresent {
+		m.warn("events", WarningLegacy,
+			"trail-level event log is absent (legacy trail or no trail-level events)")
+	}
+
+	tasks, tasksCoverage, taskDirCount := loadMetricsTasks(&m, colonyRoot, traceID)
+	m.Coverage.Tasks = tasksCoverage
+
+	runs, runMetas, runCoverage, runUnreadable := loadMetricsRuns(&m, colonyRoot, traceID, rootEntries)
+	m.Coverage.Runs = runCoverage
+	m.Runs = runs
+
+	if len(events) == 0 && runs.Retained == 0 && taskDirCount == 0 && !trailLogPresent {
+		_, originOK, originErr := ReadTrailOrigin(colonyRoot, traceID)
+		if originErr != nil || !originOK {
+			if !hasRetainedCueInvocations(colonyRoot, traceID) {
+				return TrailMetrics{}, fmt.Errorf("%w: %s", ErrTrailNotFound, traceID)
+			}
+		}
+	}
+
+	applyCueEvidence(&m, colonyRoot, traceID, events)
+	applyClass(&m, tasks, taskDirCount)
+	applyWork(&m, tasks, events)
+	applyHoney(&m, events, trailLogPresent, trailLogUnreadable, trailLogDamaged)
+	applyTokens(&m, runMetas, runs, runCoverage, runUnreadable)
+	applyDurations(&m, runMetas, tasks, events, observedAt, runUnreadable)
+	applyEventsCoverage(&m, trailLogPresent, trailLogUnreadable, len(readIssues) > 0)
+	applyTaskRunLinkageWarnings(&m, colonyRoot, traceID)
+	applyRunTaskJoinWarnings(&m, tasks, runMetas)
+
+	sort.SliceStable(m.Warnings, func(i, j int) bool {
+		if m.Warnings[i].Group != m.Warnings[j].Group {
+			return m.Warnings[i].Group < m.Warnings[j].Group
+		}
+		if m.Warnings[i].Kind != m.Warnings[j].Kind {
+			return m.Warnings[i].Kind < m.Warnings[j].Kind
+		}
+		return m.Warnings[i].Detail < m.Warnings[j].Detail
+	})
+	return m, nil
+}
+
+func (m *TrailMetrics) warn(group, kind, detail string) {
+	if strings.TrimSpace(detail) == "" {
+		return
+	}
+	m.Warnings = append(m.Warnings, MetricsWarning{Group: group, Kind: kind, Detail: detail})
+}
+
+func applyEventsCoverage(m *TrailMetrics, trailLogPresent, trailLogUnreadable, anyIssue bool) {
+	switch {
+	case !trailLogPresent:
+		m.Coverage.Events = CoveragePartial
+	case trailLogUnreadable:
+		m.Coverage.Events = CoverageUnavailable
+	case anyIssue:
+		m.Coverage.Events = CoveragePartial
+	default:
+		m.Coverage.Events = CoverageComplete
+	}
+}
+
+// trailLogIssues reports whether the trail-level record itself was unreadable or
+// damaged. A damaged run log does not make trail-level charges unreadable; a
+// damaged trail record does, because that is where they are recorded.
+func trailLogIssues(issues []TrailReadIssue, trailLogPath string) (unreadable, damaged bool) {
+	for _, issue := range issues {
+		if issue.Path != trailLogPath {
+			continue
+		}
+		switch issue.Kind {
+		case TrailIssueUnreadable:
+			unreadable = true
+		case TrailIssueDamaged:
+			damaged = true
+		}
+	}
+	return unreadable, damaged
+}
+
+// loadMetricsTasks reads the task projections leniently: one damaged task.md
+// costs its own task and is reported, never the whole trail.
+func loadMetricsTasks(m *TrailMetrics, colonyRoot, traceID string) (taskledger.TraceSnapshot, string, int) {
+	snapshot := taskledger.TraceSnapshot{TraceID: traceID, Tasks: map[string]taskledger.TaskSnapshot{}}
+	root := TraceTasksRoot(colonyRoot, traceID)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return snapshot, CoverageComplete, 0
+		}
+		m.warn("tasks", WarningUnreadable, fmt.Sprintf("task projection directory: %v", err))
+		return snapshot, CoverageUnavailable, 0
+	}
+
+	coverage := CoverageComplete
+	dirCount := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dirCount++
+		taskID := entry.Name()
+		d := TaskDir{ColonyRoot: colonyRoot, TraceID: traceID, TaskID: taskID}
+		fm, _, err := d.ReadTask()
+		if err != nil {
+			m.warn("tasks", WarningUnreadable, fmt.Sprintf("task %s projection: %v", taskID, err))
+			coverage = CoveragePartial
+			continue
+		}
+		task := taskledger.TaskSnapshot{
+			TaskID:          fm.TaskID,
+			Title:           fm.Title,
+			Bee:             fm.Bee,
+			Sector:          fm.Sector,
+			Intent:          fm.Intent,
+			CueID:           fm.CueID,
+			CueInvocationID: fm.CueInvocationID,
+			Review:          fm.Review,
+			Phase:           protocol.DeriveTaskPhase(fm.Phase, fm.Review),
+			Status:          fm.Status,
+			DependsOn:       append([]string(nil), fm.DependsOn...),
+			Summary:         fm.Summary,
+			Commit:          fm.Commit,
+		}
+		if task.TaskID == "" {
+			task.TaskID = taskID
+		}
+		if fm.CreatedAt != "" {
+			ts, err := time.Parse(time.RFC3339, fm.CreatedAt)
+			if err != nil {
+				m.warn("tasks", WarningUnreadable, fmt.Sprintf("task %s createdAt %q: %v", taskID, fm.CreatedAt, err))
+				coverage = CoveragePartial
+			} else {
+				task.CreatedAt = ts
+			}
+		}
+		if fm.UpdatedAt != "" {
+			ts, err := time.Parse(time.RFC3339, fm.UpdatedAt)
+			if err != nil {
+				m.warn("tasks", WarningUnreadable, fmt.Sprintf("task %s updatedAt %q: %v", taskID, fm.UpdatedAt, err))
+				coverage = CoveragePartial
+			} else {
+				task.UpdatedAt = ts
+			}
+		}
+		snapshot.Tasks[task.TaskID] = task
+	}
+	return snapshot, coverage, dirCount
+}
+
+// loadMetricsRuns reads retained run directories, excluding reserved trace
+// subdirectories such as tasks/, artifacts/, proposals/, and cue-invocations/.
+func loadMetricsRuns(m *TrailMetrics, colonyRoot, traceID string, entries []os.DirEntry) (MetricsRuns, []RunMeta, string, bool) {
+	runs := MetricsRuns{ByBee: map[string]int{}}
+	var metas []RunMeta
+	coverage := CoverageComplete
+	unreadable := false
+	for _, entry := range entries {
+		if !entry.IsDir() || IsReservedTraceSubdir(entry.Name()) {
+			continue
+		}
+		agentID := entry.Name()
+		d := Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: agentID}
+		if !fileExists(d.RequestPath()) {
+			// A directory without request.json is not a retained execution.
+			continue
+		}
+		meta, err := LoadRunMeta(d)
+		if err != nil {
+			m.warn("runs", WarningUnreadable, fmt.Sprintf("run %s record: %v", agentID, err))
+			coverage = CoveragePartial
+			unreadable = true
+			continue
+		}
+		metas = append(metas, meta)
+		runs.Retained++
+		if meta.Bee != "" {
+			runs.ByBee[meta.Bee]++
+		}
+		switch protocol.RunStatus(meta.State) {
+		case protocol.StatusFailed:
+			runs.Failed++
+		case protocol.StatusCancelled:
+			runs.Cancelled++
+		}
+		if meta.Reason == protocol.ReasonTimeout {
+			runs.Timeout++
+		}
+		switch meta.Contract.Status {
+		case protocol.ContractFailed:
+			runs.ContractFailed++
+		case protocol.ContractUnavailable:
+			runs.ContractUnavailable++
+		}
+		if meta.Gate != nil {
+			if meta.Gate.Passed {
+				runs.ChecksPassed++
+			} else {
+				runs.ChecksFailed++
+			}
+		}
+		if meta.Records != nil {
+			m.warn("runs", WarningConflicting,
+				fmt.Sprintf("run %s outcome records: %s (%s)", agentID, meta.Records.Status, meta.Records.Detail))
+			coverage = CoveragePartial
+		}
+	}
+	return runs, metas, coverage, unreadable
+}
+
+// applyCueEvidence reads the retained origin and cue invocation records. A
+// later cue on a manually created trail is an addition; a missing legacy origin
+// leaves attribution unknown instead of promoting the first retained cue.
+func applyCueEvidence(m *TrailMetrics, colonyRoot, traceID string, events []protocol.Event) {
+	byInvocation := map[string]MetricsCueIngress{}
+	origin, originOK, originErr := ReadTrailOrigin(colonyRoot, traceID)
+	originKind := ""
+	switch {
+	case originErr != nil:
+		m.warn("origin", WarningUnreadable, fmt.Sprintf("trail origin record: %v", originErr))
+		m.Coverage.Origin = CoverageUnavailable
+	case !originOK:
+		m.warn("origin", WarningLegacy,
+			"trail origin record is absent (legacy trail); the initial cue is unknown")
+		m.Coverage.Origin = CoveragePartial
+	default:
+		originKind = origin.Kind
+		m.Coverage.Origin = CoverageComplete
+	}
+
+	recordCoverage := loadCueInvocationRecords(m, colonyRoot, traceID, byInvocation)
+	eventCoverage := loadCueInvocationEvents(m, events, byInvocation)
+	if originKind == "" && (recordCoverage == CoverageUnavailable || eventCoverage == CoverageUnavailable) {
+		m.Coverage.Origin = CoverageUnavailable
+	} else if m.Coverage.Origin == CoverageComplete && (recordCoverage == CoveragePartial || eventCoverage == CoveragePartial) {
+		m.Coverage.Origin = CoveragePartial
+	}
+
+	attribution := func(invocationID string) string {
+		switch originKind {
+		case OriginKindCue:
+			if invocationID == origin.InvocationID {
+				return CueAttributionOrigin
+			}
+			return CueAttributionAddition
+		case OriginKindManual, OriginKindFork, OriginKindOther:
+			return CueAttributionAddition
+		default:
+			return CueAttributionUnknown
+		}
+	}
+
+	ingresses := make([]MetricsCueIngress, 0, len(byInvocation))
+	for _, ingress := range byInvocation {
+		ingress.Attribution = attribution(ingress.InvocationID)
+		ingresses = append(ingresses, ingress)
+	}
+	sort.SliceStable(ingresses, func(i, j int) bool {
+		if !ingresses[i].InvokedAt.Equal(ingresses[j].InvokedAt) {
+			return ingresses[i].InvokedAt.Before(ingresses[j].InvokedAt)
+		}
+		return ingresses[i].InvocationID < ingresses[j].InvocationID
+	})
+
+	if originKind == OriginKindCue {
+		m.CueID = origin.CueID
+		found := false
+		for _, ingress := range ingresses {
+			if ingress.InvocationID == origin.InvocationID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// The origin is durable evidence in its own right. Report it even
+			// when its invocation record is gone, and say the record is missing.
+			ingresses = append([]MetricsCueIngress{{
+				InvocationID: origin.InvocationID,
+				CueID:        origin.CueID,
+				Source:       origin.Source,
+				InvokedAt:    origin.CreatedAt,
+				Attribution:  CueAttributionOrigin,
+			}}, ingresses...)
+			m.warn("origin", WarningMissing,
+				fmt.Sprintf("origin invocation %s has no retained cue invocation record", origin.InvocationID))
+			if m.Coverage.Origin == CoverageComplete {
+				m.Coverage.Origin = CoveragePartial
+			}
+		}
+	}
+	m.CueIngresses = ingresses
+}
+
+// loadCueInvocationRecords reads cue-invocations/ leniently.
+func loadCueInvocationRecords(m *TrailMetrics, colonyRoot, traceID string, out map[string]MetricsCueIngress) string {
+	root := CueInvocationsRoot(colonyRoot, traceID)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return CoverageComplete
+		}
+		m.warn("origin", WarningUnreadable, fmt.Sprintf("cue invocation directory: %v", err))
+		return CoverageUnavailable
+	}
+	coverage := CoverageComplete
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		invocationID := strings.TrimSuffix(entry.Name(), ".json")
+		inv, ok, err := ReadCueInvocation(colonyRoot, traceID, invocationID)
+		if err != nil {
+			m.warn("origin", WarningUnreadable,
+				fmt.Sprintf("cue invocation %s record: %v", invocationID, err))
+			coverage = CoveragePartial
+			continue
+		}
+		if !ok {
+			continue
+		}
+		out[inv.InvocationID] = MetricsCueIngress{
+			InvocationID: inv.InvocationID,
+			CueID:        inv.CueID,
+			Source:       inv.Source,
+			Mode:         inv.Mode,
+			InvokedAt:    inv.InvokedAt,
+			TaskIDs:      append([]string(nil), inv.TaskIDs...),
+		}
+	}
+	return coverage
+}
+
+// loadCueInvocationEvents adds ingress observations that have no durable
+// invocation record, and reports a record that disagrees with its observation.
+func loadCueInvocationEvents(m *TrailMetrics, events []protocol.Event, out map[string]MetricsCueIngress) string {
+	coverage := CoverageComplete
+	for _, ev := range events {
+		if ev.Type != protocol.EventSignal || protocol.PayloadKind(ev.Payload) != protocol.SignalCueIngress {
+			continue
+		}
+		var payload protocol.CueIngressPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			m.warn("origin", WarningUnreadable, fmt.Sprintf("cue.ingress event %s payload: %v", ev.ID, err))
+			coverage = CoveragePartial
+			continue
+		}
+		if payload.InvocationID == "" {
+			continue
+		}
+		if recorded, ok := out[payload.InvocationID]; ok {
+			if recorded.CueID != payload.CueID || recorded.Mode != string(payload.Mode) {
+				m.warn("origin", WarningConflicting,
+					fmt.Sprintf("cue invocation %s record disagrees with its cue.ingress event", payload.InvocationID))
+				coverage = CoveragePartial
+			}
+			continue
+		}
+		out[payload.InvocationID] = MetricsCueIngress{
+			InvocationID: payload.InvocationID,
+			CueID:        payload.CueID,
+			Source:       payload.Source,
+			Mode:         string(payload.Mode),
+			InvokedAt:    payload.InvokedAt,
+			TaskIDs:      append([]string(nil), payload.TaskIDs...),
+		}
+		m.warn("origin", WarningLegacy,
+			fmt.Sprintf("cue invocation %s is retained only as its cue.ingress event", payload.InvocationID))
+		coverage = CoveragePartial
+	}
+	return coverage
+}
+
+// applyClass selects the entry-task descriptor deterministically from known
+// non-merge tasks: earliest createdAt, then taskId. A task with no recorded
+// creation time makes the classification partial rather than letting a zero
+// time decide it.
+func applyClass(m *TrailMetrics, tasks taskledger.TraceSnapshot, taskCount int) {
+	candidates := make([]taskledger.TaskSnapshot, 0, len(tasks.Tasks))
+	for _, task := range tasks.Tasks {
+		if taskledger.IsMergeTask(task) {
+			continue
+		}
+		candidates = append(candidates, task)
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	unknownTime := 0
+	timed := make([]taskledger.TaskSnapshot, 0, len(candidates))
+	for _, task := range candidates {
+		if task.CreatedAt.IsZero() {
+			unknownTime++
+			continue
+		}
+		timed = append(timed, task)
+	}
+	if unknownTime > 0 {
+		m.warn("tasks", WarningMissing,
+			fmt.Sprintf("%d task(s) have no recorded createdAt; entry-task classification is partial", unknownTime))
+		if m.Coverage.Tasks == CoverageComplete {
+			m.Coverage.Tasks = CoveragePartial
+		}
+	}
+	var entry taskledger.TaskSnapshot
+	switch {
+	case len(timed) > 0:
+		entry = timed[0]
+		for _, task := range timed[1:] {
+			if task.CreatedAt.Before(entry.CreatedAt) ||
+				(task.CreatedAt.Equal(entry.CreatedAt) && task.TaskID < entry.TaskID) {
+				entry = task
+			}
+		}
+	default:
+		// No creation time is known at all. Fall back to the stable task id so
+		// the descriptor is deterministic, and say why it is not causal.
+		entry = candidates[0]
+		for _, task := range candidates[1:] {
+			if task.TaskID < entry.TaskID {
+				entry = task
+			}
+		}
+	}
+	m.Class = &MetricsClass{
+		TaskID:    entry.TaskID,
+		Bee:       entry.Bee,
+		Intent:    entry.Intent,
+		TaskCount: taskCount,
+	}
+}
+
+// applyWork derives the recorded work state and the same ledger stage the
+// Console's trail detail derives from the same task evidence.
+func applyWork(m *TrailMetrics, tasks taskledger.TraceSnapshot, events []protocol.Event) {
+	m.Work.Stage = string(taskledger.DeriveTrailStage(tasks))
+	m.Work.Revision = nil
+	m.Work.Completion = nil
+
+	pause := openEnergyPause(m, events)
+	m.Work.Pause = pause
+	if pause != nil {
+		m.Work.PendingCount = pause.PendingCount
+		if pause.PendingCount > 0 {
+			reason := strings.TrimSpace(pause.Reason)
+			if reason == "" {
+				reason = "unspecified"
+			}
+			m.Work.PendingReasons = []MetricsPendingReason{{Reason: reason, Count: pause.PendingCount}}
+		}
+	}
+
+	state := deriveWorkState(tasks.Tasks, pause)
+	if state != "" {
+		m.Work.State = &state
+	}
+}
+
+func deriveWorkState(tasks map[string]taskledger.TaskSnapshot, pause *MetricsEnergyPause) string {
+	anyNonMerge := false
+	anyActive := false
+	anyFailed := false
+	anyCancelled := false
+	anyBlocked := false
+	anySkipped := false
+	allCompleted := true
+	for _, task := range tasks {
+		if taskledger.IsMergeTask(task) {
+			continue
+		}
+		anyNonMerge = true
+		switch task.Status {
+		case protocol.TaskStatusFailed:
+			anyFailed = true
+		case protocol.TaskStatusCancelled:
+			anyCancelled = true
+		case protocol.TaskStatusBlocked:
+			anyBlocked = true
+		case protocol.TaskStatusSkipped:
+			anySkipped = true
+		}
+		switch task.Status {
+		case protocol.TaskStatusPlanned, protocol.TaskStatusReady,
+			protocol.TaskStatusRunning, protocol.TaskStatusWaitingReview:
+			anyActive = true
+		}
+		if task.Status != protocol.TaskStatusCompleted {
+			allCompleted = false
+		}
+	}
+	switch {
+	case anyFailed:
+		return string(protocol.TaskStatusFailed)
+	case anyCancelled:
+		return string(protocol.TaskStatusCancelled)
+	case anyBlocked:
+		return string(protocol.TaskStatusBlocked)
+	case anyNonMerge && allCompleted:
+		// Accepted work is complete even if a later dispatch is paused: the
+		// pause is an admission fact, not a regression of finished work.
+		return string(protocol.TaskStatusCompleted)
+	case pause != nil && pause.PendingCount > 0:
+		// Energy-deferred work is not progress: a pause must not read as an
+		// idle or completed trail.
+		return string(protocol.TaskStatusBlocked)
+	case anyActive:
+		return "open"
+	case anySkipped:
+		return string(protocol.TaskStatusSkipped)
+	default:
+		return ""
+	}
+}
+
+// openEnergyPause reconstructs the open pause episode from the trail's paired
+// observations. The ledger is the authority for admission; these events are its
+// retained trail record.
+func openEnergyPause(m *TrailMetrics, events []protocol.Event) *MetricsEnergyPause {
+	var open *MetricsEnergyPause
+	for _, ev := range events {
+		if ev.Type != protocol.EventSignal {
+			continue
+		}
+		switch protocol.PayloadKind(ev.Payload) {
+		case string(protocol.SignalEnergyPaused):
+			var payload protocol.EnergyPausedPayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				m.warn("work", WarningUnreadable, fmt.Sprintf("energy.paused event %s payload: %v", ev.ID, err))
+				continue
+			}
+			if payload.EpisodeID == "" {
+				m.warn("work", WarningUnreadable, fmt.Sprintf("energy.paused event %s has no episode identity", ev.ID))
+				continue
+			}
+			open = &MetricsEnergyPause{
+				EpisodeID:    payload.EpisodeID,
+				Reason:       payload.Reason,
+				StartedAt:    ev.CreatedAt,
+				Remaining:    payload.Remaining,
+				PendingCount: payload.PendingCount,
+			}
+		case string(protocol.SignalEnergyResumed):
+			var payload protocol.EnergyResumedPayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				m.warn("work", WarningUnreadable, fmt.Sprintf("energy.resumed event %s payload: %v", ev.ID, err))
+				continue
+			}
+			if open != nil && (payload.EpisodeID == "" || payload.EpisodeID == open.EpisodeID) {
+				open = nil
+			}
+		}
+	}
+	return open
+}
+
+// applyHoney reads the durable seed observation and the distinct charges. The
+// initial budget comes only from energy.seeded; a top-up or stipend never
+// replaces it. Missing seed evidence leaves the budget unknown.
+func applyHoney(m *TrailMetrics, events []protocol.Event, trailLogPresent, trailLogUnreadable, trailLogDamaged bool) {
+	spent := 0
+	byReason := map[string]int{}
+	// A charge total is observed when the trail record is readable, or when the
+	// merged read actually holds a charge. With no readable record and no
+	// charge, zero would be an invented total.
+	chargesRecorded := (trailLogPresent && !trailLogUnreadable) || hasEnergyConsume(events)
+	partial := trailLogDamaged || !trailLogPresent || (trailLogUnreadable && chargesRecorded)
+	var budget *int
+	for _, ev := range events {
+		if ev.Type != protocol.EventSignal {
+			continue
+		}
+		switch protocol.PayloadKind(ev.Payload) {
+		case string(protocol.SignalEnergySeeded):
+			var payload protocol.EnergySeededPayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				m.warn("honey", WarningUnreadable, fmt.Sprintf("energy.seeded event %s payload: %v", ev.ID, err))
+				partial = true
+				continue
+			}
+			if budget == nil {
+				value := payload.Budget
+				budget = &value
+			} else if *budget != payload.Budget {
+				m.warn("honey", WarningConflicting,
+					fmt.Sprintf("energy.seeded events disagree on the initial budget (%d vs %d)", *budget, payload.Budget))
+				partial = true
+			}
+		case string(protocol.SignalEnergyConsume):
+			var payload protocol.EnergyConsumePayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				m.warn("honey", WarningUnreadable, fmt.Sprintf("energy.consume event %s payload: %v", ev.ID, err))
+				partial = true
+				continue
+			}
+			spent += payload.Amount
+			reason := strings.TrimSpace(payload.Reason)
+			if reason == "" {
+				reason = "unspecified"
+			}
+			byReason[reason] += payload.Amount
+		}
+	}
+	m.Honey.Budget = budget
+	if chargesRecorded {
+		value := spent
+		m.Honey.Spent = &value
+		if len(byReason) > 0 {
+			m.Honey.ByReason = byReason
+		}
+	}
+	if trailLogDamaged {
+		m.warn("honey", WarningUnreadable,
+			"trail event log is damaged; honey charges may be incomplete")
+	}
+	if !trailLogPresent && chargesRecorded {
+		m.warn("honey", WarningLegacy,
+			"trail-level event log is absent; honey charges come from run records only")
+	}
+	if trailLogUnreadable && chargesRecorded {
+		m.warn("honey", WarningUnreadable,
+			"trail event log is unreadable; honey charges may be incomplete")
+	}
+	switch {
+	case !chargesRecorded:
+		m.Coverage.Honey = CoverageUnavailable
+		m.warn("honey", WarningMissing, "no trail event record; honey charges are unavailable")
+	case budget == nil:
+		m.Coverage.Honey = CoveragePartial
+		m.warn("honey", WarningMissing,
+			"no energy.seeded observation; the initial honey budget is unknown")
+	case partial:
+		m.Coverage.Honey = CoveragePartial
+	default:
+		m.Coverage.Honey = CoverageComplete
+	}
+}
+
+// applyTokens sums retained execution usage. It is null when no run reports
+// usage; reported zeros are a measurement and partial reporting is explicit.
+func applyTokens(m *TrailMetrics, metas []RunMeta, runs MetricsRuns, runCoverage string, runUnreadable bool) {
+	if runCoverage == CoverageUnavailable {
+		m.Coverage.Tokens = CoverageUnavailable
+		m.warn("tokens", WarningUnreadable, "run records are unavailable; token usage is unavailable")
+		return
+	}
+	var tokens MetricsTokens
+	withUsage := 0
+	for _, meta := range metas {
+		if meta.Usage == nil {
+			continue
+		}
+		if meta.Usage.Source == protocol.UsageSourceUnavailable {
+			continue
+		}
+		withUsage++
+		tokens.InputTokens += meta.Usage.InputTokens
+		tokens.OutputTokens += meta.Usage.OutputTokens
+		tokens.CacheReadTokens += meta.Usage.CacheReadTokens
+		tokens.CacheWriteTokens += meta.Usage.CacheWriteTokens
+	}
+	if withUsage == 0 {
+		m.Coverage.Tokens = CoverageUnavailable
+		if runs.Retained == 0 {
+			m.warn("tokens", WarningMissing, "no retained execution reports token usage")
+		} else {
+			m.warn("tokens", WarningMissing,
+				fmt.Sprintf("none of the %d retained execution(s) reports token usage", runs.Retained))
+		}
+		return
+	}
+	tokens.RunsWithUsage = withUsage
+	tokens.Runs = runs.Retained
+	missingUsage := runs.Retained - withUsage
+	tokens.Partial = missingUsage > 0 || runUnreadable
+	if tokens.Partial {
+		m.Coverage.Tokens = CoveragePartial
+		if missingUsage > 0 {
+			m.warn("tokens", WarningMissing,
+				fmt.Sprintf("%d of %d retained execution(s) report no usable token usage", missingUsage, runs.Retained))
+		} else {
+			m.warn("tokens", WarningUnreadable,
+				"some run records are unreadable; token usage may be incomplete")
+		}
+	} else {
+		m.Coverage.Tokens = CoverageComplete
+	}
+	m.Tokens = &tokens
+}
+
+// applyDurations computes active and wall time from recorded timestamps.
+// Overlapping executions add to active time; waiting between them stays in wall
+// time. A missing or invalid timestamp makes only that interval unusable.
+func applyDurations(m *TrailMetrics, metas []RunMeta, tasks taskledger.TraceSnapshot, events []protocol.Event, observedAt time.Time, runUnreadable bool) {
+	active := 0.0
+	usable := 0
+	partial := runUnreadable
+	for _, meta := range metas {
+		if meta.StartedAt.IsZero() {
+			m.warn("durations", WarningMissing, fmt.Sprintf("run %s has no recorded start time", meta.AgentID))
+			partial = true
+			continue
+		}
+		end := meta.FinishedAt
+		if end.IsZero() {
+			if !terminalRunState(meta.State) {
+				end = observedAt
+			} else {
+				m.warn("durations", WarningMissing,
+					fmt.Sprintf("run %s is %s but has no recorded finish time", meta.AgentID, meta.State))
+				partial = true
+				continue
+			}
+		}
+		if end.Before(meta.StartedAt) {
+			m.warn("durations", WarningConflicting,
+				fmt.Sprintf("run %s finishes before it starts", meta.AgentID))
+			partial = true
+			continue
+		}
+		active += end.Sub(meta.StartedAt).Seconds()
+		usable++
+	}
+
+	start, startKnown := earliestEvidence(tasks, metas, events)
+	wallKnown := false
+	switch {
+	case !startKnown:
+		m.warn("durations", WarningMissing, "no retained ingress, task, or execution timestamp")
+	case observedAt.Before(start):
+		m.warn("durations", WarningConflicting, "observation time is before the earliest retained evidence")
+		wall := 0.0
+		m.WallTimeSec = &wall
+		wallKnown = true
+		partial = true
+	default:
+		wall := roundSeconds(observedAt.Sub(start).Seconds())
+		m.WallTimeSec = &wall
+		wallKnown = true
+	}
+
+	if usable > 0 {
+		value := roundSeconds(active)
+		m.ActiveTimeSec = &value
+	}
+	switch {
+	case usable == 0 && !wallKnown:
+		m.Coverage.Durations = CoverageUnavailable
+		m.warn("durations", WarningMissing, "no usable execution interval")
+	case usable == 0 || !wallKnown || partial:
+		m.Coverage.Durations = CoveragePartial
+	default:
+		m.Coverage.Durations = CoverageComplete
+	}
+}
+
+func terminalRunState(state string) bool {
+	switch protocol.RunStatus(state) {
+	case protocol.StatusCompleted, protocol.StatusFailed, protocol.StatusCancelled:
+		return true
+	}
+	return false
+}
+
+// earliestEvidence returns the earliest retained ingress/task/execution time.
+// Platform observations describe the trail rather than work, so they do not
+// start the wall clock.
+func earliestEvidence(tasks taskledger.TraceSnapshot, metas []RunMeta, events []protocol.Event) (time.Time, bool) {
+	var earliest time.Time
+	known := false
+	consider := func(at time.Time) {
+		if at.IsZero() {
+			return
+		}
+		if !known || at.Before(earliest) {
+			earliest = at
+			known = true
+		}
+	}
+	for _, meta := range metas {
+		consider(meta.StartedAt)
+	}
+	for _, task := range tasks.Tasks {
+		consider(task.CreatedAt)
+	}
+	for _, ev := range events {
+		if ev.CreatedAt.IsZero() {
+			continue
+		}
+		kind := protocol.PayloadKind(ev.Payload)
+		if protocol.IsPlatformObservation(kind) || kind == "trail.work.completed" {
+			continue
+		}
+		consider(ev.CreatedAt)
+	}
+	return earliest, known
+}
+
+// applyTaskRunLinkageWarnings reports linkage evidence that the retained run
+// directories cannot prove: a linked execution with no run record, and a run
+// directory reused for more than one dispatch (whose earlier results were
+// overwritten).
+func applyTaskRunLinkageWarnings(m *TrailMetrics, colonyRoot, traceID string) {
+	root := TraceTasksRoot(colonyRoot, traceID)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	type linkage struct {
+		attempt string
+		started time.Time
+	}
+	seen := map[string]linkage{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		d := TaskDir{ColonyRoot: colonyRoot, TraceID: traceID, TaskID: entry.Name()}
+		links, err := d.ReadTaskRuns()
+		if err != nil {
+			m.warn("runs", WarningUnreadable, fmt.Sprintf("task %s run linkage: %v", entry.Name(), err))
+			if m.Coverage.Runs == CoverageComplete {
+				m.Coverage.Runs = CoveragePartial
+			}
+			continue
+		}
+		for _, link := range links {
+			if link.AgentID == "" {
+				continue
+			}
+			if !fileExists((Dir{ColonyRoot: colonyRoot, TraceID: traceID, AgentID: link.AgentID}).RequestPath()) {
+				m.warn("runs", WarningMissing,
+					fmt.Sprintf("task %s links execution %s with no retained run record", entry.Name(), link.AgentID))
+				if m.Coverage.Runs == CoverageComplete {
+					m.Coverage.Runs = CoveragePartial
+				}
+				continue
+			}
+			current := linkage{attempt: link.AttemptID, started: link.StartedAt}
+			if previous, ok := seen[link.AgentID]; ok {
+				if previous.attempt != current.attempt || !previous.started.Equal(current.started) {
+					m.warn("runs", WarningConflicting,
+						fmt.Sprintf("execution directory %s was reused; earlier dispatch results are overwritten", link.AgentID))
+					if m.Coverage.Runs == CoverageComplete {
+						m.Coverage.Runs = CoveragePartial
+					}
+				}
+				continue
+			}
+			seen[link.AgentID] = current
+		}
+	}
+}
+
+// applyRunTaskJoinWarnings reports an execution whose recorded task has no
+// retained projection. The execution still counts in trail totals; only the
+// join is missing.
+func applyRunTaskJoinWarnings(m *TrailMetrics, tasks taskledger.TraceSnapshot, metas []RunMeta) {
+	for _, meta := range metas {
+		if meta.TaskID == "" {
+			continue
+		}
+		if _, ok := tasks.Tasks[meta.TaskID]; ok {
+			continue
+		}
+		m.warn("runs", WarningMissing,
+			fmt.Sprintf("run %s names task %s with no retained task projection", meta.AgentID, meta.TaskID))
+		if m.Coverage.Runs == CoverageComplete {
+			m.Coverage.Runs = CoveragePartial
+		}
+	}
+}
+
+func roundSeconds(value float64) float64 {
+	return math.Round(value*1000) / 1000
+}
+
+// hasEnergyConsume reports whether the merged read holds any charge event. It
+// keeps a missing trail record from turning "we saw no charge" into "zero was
+// spent".
+func hasEnergyConsume(events []protocol.Event) bool {
+	for _, ev := range events {
+		if ev.Type == protocol.EventSignal && protocol.PayloadKind(ev.Payload) == string(protocol.SignalEnergyConsume) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasRetainedCueInvocations reports whether the trail retains any cue ingress
+// record. Such a record is trail evidence even before the first run, task, or
+// event.
+func hasRetainedCueInvocations(colonyRoot, traceID string) bool {
+	entries, err := os.ReadDir(CueInvocationsRoot(colonyRoot, traceID))
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			return true
+		}
+	}
+	return false
+}
