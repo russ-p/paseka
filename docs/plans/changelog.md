@@ -2,6 +2,23 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — A run record no longer says `completed` when the runtime failed it
+
+Every AFK adapter wrote `result.json` and `status.json` as soon as the CLI exited, before the completion contract had judged the run. A run that exited zero but skipped a required event was therefore `completed` on disk while the ledger and the human outcome said failed, so scanning `.paseka/runs/` reported success. Review severity was also any string, so a threshold like "medium or worse" depended on how each role spelled it, and `human.feedback` carried only prose, so a rejection could not be counted without reading English.
+
+- **Finalization owns the persisted outcome.** The contract is evaluated after the check gate, and a contract-caused downgrade rewrites both records to `failed` with reason `completion_contract` before a successful outcome is exposed. Usage, process exit code, provider session identity, timestamps, artifacts, and diagnostics survive the rewrite, and repeating finalization produces the same verdict.
+- **The verdict is evidence, not an inference.** A finalized run whose Bee declares a contract carries an additive `contract` record — `passed`, `failed`, or `unavailable` — with the effective declared rules and the observations or the evaluation error. Bees without a contract record no field; a legacy record without one reads as `unknown`, never as a pass.
+- **A record that cannot be read fails closed.** The contract reads the event log strictly, so a damaged line is an evaluation error rather than a silent skip, and an otherwise completed run with an unreadable log is downgraded. The missing-`run.summary` check stays separate and is never reported as a contract failure.
+- **The first decisive verdict keeps the primary reason.** A gate rejection (`checks_failed`), adapter failure, timeout, or cancellation keeps its own state and reason; the contract verdict is still recorded separately. One shared per-file atomic reconcile writes both records for the gate and the contract, so the next runtime verdict extends it instead of adding a second mechanism.
+- **Readers report disagreement.** A run whose two outcome records disagree, or whose partner is missing, is marked conflicting or incomplete instead of projecting the friendlier `completed` value; the trail scan counts conflicting, incomplete, and contract-failed or unavailable runs as failures, and Console/hiveview carry the contract evidence beside the outcome.
+- **Review severity is closed.** `review.note.severity` is `info`, `low`, `medium`, `high`, or `critical`, trimmed and lowercased at construction so `" Medium "` persists as `medium`. A new invalid value fails emit with `schema_validation_failed` and a `payload.severity` detail naming the allowed values; absent stays `unspecified` and a historical outsider stays `unknown` without rewriting history.
+- **Feedback says what kind it is.** `human.feedback` gained an optional `verdict` of `positive`, `negative`, or `neutral` under the same normalization and rejection rules. Review rejection sets `negative`; positive and neutral feedback stay observational and redispatch nothing; verdict-less legacy feedback keeps its existing rework behaviour.
+
+- Spec: [043a-truthful-run-records](../specs/043a-truthful-run-records.md)
+- Canonical: [Bee routing](../reference/bee-routing.md) (completion contracts, recorded verdict, reading the pair), [INSIGHT kinds](../reference/insight-kinds.md), [CLI](../guide/cli.md) (`event emit`), [Queen Console](../guide/queen-console.md)
+
+Not in this ship: interactive sessions stay ungated and are read as before; no historical run record is rewritten; `verification.failed.reason` stays an open classifier. Trail metrics that consume these records belong to [spec 043b](../specs/043b-trail-metrics-and-work-completion.md).
+
 ## 2026-11 — Honey no longer writes a task status, and a new tick no longer inherits the old one
 
 When a trail's honey ran out, the runtime wrote `task.status=blocked` over whatever the task was doing: a task waiting for review looked broken, and a standing trail only started its next tick because the previous one looked blocked. Energy exhaustion is a shared-reserve condition, not a task defect, and a tick boundary is a new allocation rather than a task failure.
