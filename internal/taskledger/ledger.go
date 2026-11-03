@@ -86,11 +86,28 @@ type TraceSnapshot struct {
 	EnergyBudget      int                     `json:"energyBudget,omitempty"`
 	EnergyRemaining   int                     `json:"energyRemaining,omitempty"`
 	EnergyAdded       int                     `json:"energyAdded,omitempty"`
+	EnergySeed        *EnergySeedSnapshot     `json:"energySeed,omitempty"`
 	EnergyPause       *EnergyPauseSnapshot    `json:"energyPause,omitempty"`
 	Killed            bool                    `json:"killed,omitempty"`
 	PendingReady      *PendingReadySnapshot   `json:"pendingReady,omitempty"`
 	PendingDispatches []PendingDispatch       `json:"pendingDispatches,omitempty"`
 	Tasks             map[string]TaskSnapshot `json:"tasks"`
+}
+
+// EnergySeedSnapshot is the durable provenance of the winning initial honey
+// allocation. It records the seed identity, effective budget, and actual seed
+// time before the first charged dispatch. Published marks that its
+// SIGNAL/energy.seeded observation reached the publisher; an unpublished record
+// is retried with the same identity and never reseeds.
+//
+// A ledger written before seed provenance existed has no record even though
+// EnergyBudget may be positive. That history stays unknown: readers must not
+// invent a budget, a timestamp, or a configuration for it.
+type EnergySeedSnapshot struct {
+	SeedID    string    `json:"seedId"`
+	Budget    int       `json:"budget"`
+	SeededAt  time.Time `json:"seededAt"`
+	Published bool      `json:"published,omitempty"`
 }
 
 // EnergyPauseSnapshot is the durable identity of one pause episode: the interval
@@ -168,6 +185,19 @@ type Ledger interface {
 
 	// SeedEnergy initializes the honey reserve when not yet seeded.
 	SeedEnergy(traceID string, budget int) error
+
+	// EnsureEnergySeed is the authoritative seed transition: it allocates the
+	// reserve when the trace has no budget and records the winning seed
+	// identity, effective budget, and actual seed time. It returns the winning
+	// record and whether this call created it. A second request observes the
+	// existing winner; a legacy budget without provenance returns an empty
+	// record and is never relabelled.
+	EnsureEnergySeed(traceID string, budget int) (EnergySeedSnapshot, bool, error)
+
+	// MarkEnergySeedPublished records that the seed observation for seedID
+	// reached the publisher. It is idempotent and refuses a different identity,
+	// so a retry reuses the recorded seed rather than selecting another.
+	MarkEnergySeedPublished(traceID, seedID string) error
 
 	// DeferPendingDispatch records deferred work unless an active entry with the
 	// same id already exists. It reports whether a new entry was added.

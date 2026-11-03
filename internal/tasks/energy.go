@@ -38,6 +38,6 @@ func ConsumeEnergy(ctx context.Context, session *LedgerSession, in ConsumeEnergy
 }
 
 // EnsureEnergySeeded seeds the trace honey reserve from colony defaults when not yet seeded.
-func EnsureEnergySeeded(ledger taskledger.Ledger, colonyRoot, traceID string) error {
-	return energy.EnsureSeeded(ledger, colonyRoot, traceID)
+func EnsureEnergySeeded(ctx context.Context, ledger taskledger.Ledger, pub eventPublisher, colonyRoot, traceID string) error {
+	return energy.EnsureSeeded(ctx, ledger, pub, colonyRoot, traceID, "cli")
 }

@@ -3,6 +3,7 @@ package protocol
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // EnergyEventKind identifies honey-reserve payloads inside SIGNAL events.
@@ -12,6 +13,10 @@ const (
 	SignalEnergyAdd     EnergyEventKind = "energy.add"
 	SignalEnergyConsume EnergyEventKind = "energy.consume"
 	SignalEnergyStipend EnergyEventKind = "energy.stipend"
+	// SignalEnergySeeded is the platform observation that reports the winning
+	// initial honey allocation. It observes an allocation the ledger already
+	// accepted; replaying it never seeds, adds, or consumes again.
+	SignalEnergySeeded EnergyEventKind = "energy.seeded"
 	// SignalEnergyPaused is the platform observation that opens one pause
 	// episode: the trail stopped admitting dispatches because its reserve ran
 	// out. It is emitted once per episode and never routed as work.
@@ -66,6 +71,17 @@ type EnergyStipendPayload struct {
 	Amount int             `json:"amount"`
 }
 
+// EnergySeededPayload is emitted as SIGNAL with payload.kind=energy.seeded.
+// It records the winning initial allocation: its durable seed identity, the
+// effective budget, and the actual seed time. The observation never allocates;
+// it only reports an allocation the ledger already accepted.
+type EnergySeededPayload struct {
+	Kind     EnergyEventKind `json:"kind"`
+	SeedID   string          `json:"seedId"`
+	Budget   int             `json:"budget"`
+	SeededAt time.Time       `json:"seededAt"`
+}
+
 // EnergyResumeSource names the increase that ended a pause episode, so an
 // operator can tell a live top-up from the new allocation a standing tick opens.
 type EnergyResumeSource string
@@ -113,12 +129,13 @@ type EnergyResumedPayload struct {
 	Abandoned     int                `json:"abandoned,omitempty"`
 }
 
-// IsEnergyObservation reports whether kind is a pause or resume observation.
-// Observations describe admission; they are live-only platform signals that are
-// excluded from direct dispatch, deferred buffers, and auto-invite routing.
+// IsEnergyObservation reports whether kind is a seed, pause, or resume
+// observation. Observations describe admission or allocation; they are live-only
+// platform signals that are excluded from direct dispatch, deferred buffers, and
+// auto-invite routing.
 func IsEnergyObservation(kind string) bool {
 	switch EnergyEventKind(strings.TrimSpace(kind)) {
-	case SignalEnergyPaused, SignalEnergyResumed:
+	case SignalEnergySeeded, SignalEnergyPaused, SignalEnergyResumed:
 		return true
 	default:
 		return false

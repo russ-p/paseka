@@ -129,8 +129,16 @@ func (l *MemoryLedger) MarkPendingDispatchUnresolved(traceID, dispatchID, diagno
 
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
+	_, _, err := l.EnsureEnergySeed(traceID, budget)
+	return err
+}
+
+// EnsureEnergySeed performs the authoritative seed transition and returns the
+// winning allocation. In-memory locking makes concurrent callers observe one
+// budget and one seed identity.
+func (l *MemoryLedger) EnsureEnergySeed(traceID string, budget int) (EnergySeedSnapshot, bool, error) {
 	if traceID == "" {
-		return fmt.Errorf("taskledger: traceId is required")
+		return EnergySeedSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -138,11 +146,28 @@ func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
 	if !ok {
 		trace = TraceSnapshot{TraceID: traceID, Tasks: map[string]TaskSnapshot{}}
 	}
-	updated, changed := EnsureEnergySeeded(trace, budget)
-	if !changed {
-		return nil
+	updated, seed, created := EnsureEnergySeed(trace, budget)
+	if created {
+		l.traces[traceID] = updated
 	}
-	l.traces[traceID] = updated
+	return seed, created, nil
+}
+
+// MarkEnergySeedPublished records the seed observation send on the winning
+// record. It is idempotent and refuses a mismatched seed identity.
+func (l *MemoryLedger) MarkEnergySeedPublished(traceID, seedID string) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	updated, changed, err := MarkEnergySeedPublished(l.traces[traceID], seedID)
+	if err != nil {
+		return err
+	}
+	if changed {
+		l.traces[traceID] = updated
+	}
 	return nil
 }
 

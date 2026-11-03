@@ -7,6 +7,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/energy"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -168,15 +169,19 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 	}
 
-	if session.Ledger != nil {
-		if err := session.Ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget()); err != nil {
-			return CreateResult{}, err
-		}
-	}
-
 	agentID := in.AgentID
 	if agentID == "" {
 		agentID = "cli"
+	}
+
+	if session.Ledger != nil {
+		if _, err := energy.Seed(ctx, session.Ledger, session.Publisher, energy.SeedInput{
+			TraceID: traceID,
+			Budget:  manifest.ResolvedEnergyBudget(),
+			AgentID: agentID,
+		}); err != nil {
+			return CreateResult{}, err
+		}
 	}
 
 	spec := protocol.TaskSpec{

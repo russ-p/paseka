@@ -1,7 +1,9 @@
 package taskledger_test
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -588,5 +590,202 @@ func TestFormatPendingReport(t *testing.T) {
 	}
 	if got := taskledger.FormatPendingReport(2); len(got) != 1 || got[0] != "pending:   2" {
 		t.Fatalf("pending report = %#v", got)
+	}
+}
+
+func TestEnsureEnergySeedRecordsWinningAllocation(t *testing.T) {
+	before := time.Now().Add(-time.Second)
+	seeded, seed, created := taskledger.EnsureEnergySeed(taskledger.TraceSnapshot{TraceID: "trace-1"}, 9)
+	if !created {
+		t.Fatal("expected the first request to create the seed")
+	}
+	if seed.SeedID == "" {
+		t.Fatal("expected a durable seed identity")
+	}
+	if seed.Budget != 9 {
+		t.Fatalf("seed budget = %d, want 9", seed.Budget)
+	}
+	if seed.SeededAt.Before(before) || seed.SeededAt.After(time.Now().Add(time.Second)) {
+		t.Fatalf("seed time = %v, want the actual seed time", seed.SeededAt)
+	}
+	if seeded.EnergySeed == nil || seeded.EnergySeed.SeedID != seed.SeedID {
+		t.Fatalf("snapshot seed = %+v, want %+v", seeded.EnergySeed, seed)
+	}
+	if seeded.EnergyBudget != 9 || seeded.EnergyRemaining != 9 {
+		t.Fatalf("honey = %d/%d, want 9/9", seeded.EnergyBudget, seeded.EnergyRemaining)
+	}
+	if got, ok := taskledger.InitialEnergyBudget(seeded); !ok || got != 9 {
+		t.Fatalf("initial budget = %d, ok = %v, want the recorded 9", got, ok)
+	}
+
+	again, winner, created := taskledger.EnsureEnergySeed(seeded, 20)
+	if created {
+		t.Fatal("a second request must not seed again")
+	}
+	if winner.SeedID != seed.SeedID || winner.Budget != 9 || !winner.SeededAt.Equal(seed.SeededAt) {
+		t.Fatalf("winner = %+v, want the recorded seed %+v", winner, seed)
+	}
+	if again.EnergyBudget != 9 || again.EnergyRemaining != 9 {
+		t.Fatalf("second request changed honey = %d/%d", again.EnergyBudget, again.EnergyRemaining)
+	}
+}
+
+func TestEnsureEnergySeedKeepsLegacyAllocationUnknown(t *testing.T) {
+	legacy := taskledger.TraceSnapshot{
+		TraceID:         "trace-legacy",
+		EnergyBudget:    12,
+		EnergyRemaining: 4,
+	}
+	updated, seed, created := taskledger.EnsureEnergySeed(legacy, 20)
+	if created {
+		t.Fatal("a legacy allocation must not be reseeded")
+	}
+	if seed.SeedID != "" || !seed.SeededAt.IsZero() || seed.Budget != 0 {
+		t.Fatalf("seed = %+v, want an unknown allocation", seed)
+	}
+	if updated.EnergySeed != nil {
+		t.Fatalf("seed record = %+v, want none", updated.EnergySeed)
+	}
+	if updated.EnergyBudget != 12 || updated.EnergyRemaining != 4 {
+		t.Fatalf("legacy honey changed = %d/%d", updated.EnergyBudget, updated.EnergyRemaining)
+	}
+	if got, ok := taskledger.InitialEnergyBudget(updated); ok || got != 0 {
+		t.Fatalf("initial budget = %d, ok = %v, want unknown for a legacy allocation", got, ok)
+	}
+}
+
+func TestApplyEnergySeededReplayDoesNotMutateHoney(t *testing.T) {
+	trace, seed, _ := taskledger.EnsureEnergySeed(taskledger.TraceSnapshot{TraceID: "trace-1"}, 9)
+	trace.EnergyRemaining = 5
+	ev, err := protocol.NewEvent("trace-1", "runtime", 0, protocol.EventSignal, protocol.EnergySeededPayload{
+		Kind:     protocol.SignalEnergySeeded,
+		SeedID:   seed.SeedID,
+		Budget:   seed.Budget,
+		SeededAt: seed.SeededAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Fatal("replaying energy.seeded must not change the ledger")
+	}
+	if res.Trace.EnergyRemaining != 5 || res.Trace.EnergyBudget != 9 || res.Trace.EnergyAdded != 0 {
+		t.Fatalf("honey = %d/%d added %d, want 5/9 added 0", res.Trace.EnergyRemaining, res.Trace.EnergyBudget, res.Trace.EnergyAdded)
+	}
+	if res.Trace.EnergySeed == nil || res.Trace.EnergySeed.SeedID != seed.SeedID || res.Trace.EnergySeed.Published {
+		t.Fatalf("seed record = %+v, want the unchanged pending winner", res.Trace.EnergySeed)
+	}
+}
+
+func TestEnergyAddAndStipendKeepRecordedSeed(t *testing.T) {
+	trace, seed, _ := taskledger.EnsureEnergySeed(taskledger.TraceSnapshot{TraceID: "trace-1"}, 9)
+
+	add, err := protocol.NewEvent("trace-1", "cli", 0, protocol.EventSignal, protocol.EnergyAddPayload{
+		Kind:   protocol.SignalEnergyAdd,
+		Amount: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, add)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.EnergyBudget != seed.Budget {
+		t.Fatalf("budget = %d after top-up, want the recorded seed %d", res.Trace.EnergyBudget, seed.Budget)
+	}
+	if res.Trace.EnergyAdded != 4 {
+		t.Fatalf("added = %d, want 4 separately visible", res.Trace.EnergyAdded)
+	}
+	if res.Trace.EnergySeed == nil || res.Trace.EnergySeed.SeedID != seed.SeedID || res.Trace.EnergySeed.Budget != seed.Budget {
+		t.Fatalf("seed = %+v, want the recorded winner", res.Trace.EnergySeed)
+	}
+
+	stipend, err := protocol.NewEvent("trace-1", "cli", 0, protocol.EventSignal, protocol.EnergyStipendPayload{
+		Kind:   protocol.SignalEnergyStipend,
+		Amount: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = taskledger.ApplyEvent(res.Trace, stipend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.EnergyBudget != seed.Budget {
+		t.Fatalf("budget = %d after stipend, want the recorded seed %d", res.Trace.EnergyBudget, seed.Budget)
+	}
+	if res.Trace.EnergyRemaining != 3 {
+		t.Fatalf("remaining = %d, want the stipend allocation", res.Trace.EnergyRemaining)
+	}
+	if res.Trace.EnergySeed == nil || res.Trace.EnergySeed.SeedID != seed.SeedID || res.Trace.EnergySeed.Budget != seed.Budget {
+		t.Fatalf("seed = %+v, want the recorded winner", res.Trace.EnergySeed)
+	}
+}
+
+func TestKVLedgerEnsureEnergySeedConvergesOnWinner(t *testing.T) {
+	ledger := taskledger.NewKVLedger(newFakeKV())
+	first, created, err := ledger.EnsureEnergySeed("trace-1", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("expected the first request to create the seed")
+	}
+	second, created, err := ledger.EnsureEnergySeed("trace-1", 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created {
+		t.Fatal("a second request must not create another seed")
+	}
+	if second.SeedID != first.SeedID || second.Budget != first.Budget {
+		t.Fatalf("second = %+v, want the winner %+v", second, first)
+	}
+	if err := ledger.MarkEnergySeedPublished("trace-1", first.SeedID); err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.MarkEnergySeedPublished("trace-1", first.SeedID); err != nil {
+		t.Fatalf("idempotent mark: %v", err)
+	}
+	if err := ledger.MarkEnergySeedPublished("trace-1", "seed-other"); err == nil {
+		t.Fatal("expected a mismatched seed identity to be refused")
+	}
+	snap, err := ledger.Snapshot("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergySeed == nil || !snap.EnergySeed.Published || snap.EnergyBudget != 8 || snap.EnergyRemaining != 8 {
+		t.Fatalf("snapshot = %+v, want one published seed of 8", snap)
+	}
+}
+
+func TestKVLedgerLegacySnapshotHasNoSeedRecord(t *testing.T) {
+	kv := newFakeKV()
+	legacy, err := json.Marshal(taskledger.TraceSnapshot{
+		TraceID:         "trace-legacy",
+		EnergyBudget:    12,
+		EnergyRemaining: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kv.Create("trace-legacy", legacy); err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewKVLedger(kv)
+	snap, err := ledger.Snapshot("trace-legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.EnergySeed != nil {
+		t.Fatalf("seed = %+v, want none for a pre-provenance ledger", snap.EnergySeed)
+	}
+	if snap.EnergyBudget != 12 || snap.EnergyRemaining != 5 {
+		t.Fatalf("legacy honey = %d/%d, want unchanged", snap.EnergyBudget, snap.EnergyRemaining)
 	}
 }

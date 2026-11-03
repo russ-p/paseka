@@ -142,6 +142,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateEnergyConsume(payload)
 	case SignalEnergyStipend:
 		return validateEnergyStipend(payload)
+	case SignalEnergySeeded:
+		return validateEnergySeeded(payload)
 	case SignalEnergyPaused:
 		return validateEnergyPaused(payload)
 	case SignalEnergyResumed:
@@ -212,7 +214,7 @@ func expectedEventType(kind string) EventType {
 		return EventVerification
 	}
 	switch EnergyEventKind(kind) {
-	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend, SignalEnergyPaused, SignalEnergyResumed:
+	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend, SignalEnergySeeded, SignalEnergyPaused, SignalEnergyResumed:
 		return EventSignal
 	}
 	switch SystemEventKind(kind) {
@@ -558,6 +560,24 @@ func validateEnergyStipend(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.amount", Message: "must be positive"}}
 	}
 	return nil
+}
+
+func validateEnergySeeded(payload json.RawMessage) []ValidationDetail {
+	var p EnergySeededPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.seeded payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.SeedID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.seedId", Message: "required"})
+	}
+	if p.Budget <= 0 {
+		details = append(details, ValidationDetail{Path: "payload.budget", Message: "must be positive"})
+	}
+	if p.SeededAt.IsZero() {
+		details = append(details, ValidationDetail{Path: "payload.seededAt", Message: "required"})
+	}
+	return details
 }
 
 func validateEnergyPaused(payload json.RawMessage) []ValidationDetail {

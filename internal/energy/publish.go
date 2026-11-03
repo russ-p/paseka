@@ -153,7 +153,7 @@ func Consume(ctx context.Context, slug, colonyRoot string, ledger taskledger.Led
 	if amount <= 0 {
 		amount = 1
 	}
-	if err := EnsureSeeded(ledger, colonyRoot, in.TraceID); err != nil {
+	if err := EnsureSeeded(ctx, ledger, pub, colonyRoot, in.TraceID, in.AgentID); err != nil {
 		return taskledger.TraceSnapshot{}, err
 	}
 	before, err := ledger.Snapshot(in.TraceID)

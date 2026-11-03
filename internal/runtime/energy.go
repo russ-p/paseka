@@ -2,16 +2,55 @@ package runtime
 
 import (
 	"context"
+	"sort"
 
 	"github.com/russ-p/paseka/internal/energy"
+	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 const energyDispatchCost = 1
 
+// seedObservationPublisher routes the seed observation through the reactor's
+// local-event memory, so the reactor does not apply or route its own echo.
+type seedObservationPublisher struct {
+	reactor *Reactor
+}
+
+func (p seedObservationPublisher) PublishEvent(ctx context.Context, ev protocol.Event) error {
+	return p.reactor.publishObservation(ctx, ev)
+}
+
 func (r *Reactor) ensureEnergySeeded(ctx context.Context, traceID string) error {
-	return energy.EnsureSeeded(r.ledger, r.colony.ColonyRoot, traceID)
+	return energy.EnsureSeeded(ctx, r.ledger, seedObservationPublisher{reactor: r}, r.colony.ColonyRoot, traceID, protocol.RuntimeAgentID)
+}
+
+// RecoverPendingSeedObservations repairs seed observations that never reached
+// the publisher before the reactor stopped. It republishes the recorded winner
+// with its original identity and never seeds a trail that has no record.
+func (r *Reactor) RecoverPendingSeedObservations(ctx context.Context) error {
+	if r.ledger == nil {
+		return nil
+	}
+	lister, ok := r.ledger.(taskledger.TraceLister)
+	if !ok {
+		return nil
+	}
+	traceIDs, err := lister.TraceIDs()
+	if err != nil {
+		return err
+	}
+	sort.Strings(traceIDs)
+	for _, traceID := range traceIDs {
+		if err := energy.PublishPendingSeedObservation(ctx, r.ledger, seedObservationPublisher{reactor: r}, traceID, protocol.RuntimeAgentID); err != nil {
+			runtimeLog.Warn("repair pending energy.seeded observation failed",
+				logging.F("trace", traceID),
+				logging.F("error", err.Error()),
+			)
+		}
+	}
+	return nil
 }
 
 func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string) (bool, error) {

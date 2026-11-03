@@ -430,17 +430,28 @@ body: "{{.Body}}"
 	if res.TaskID == "" || res.Kind != string(protocol.TaskEventPlan) {
 		t.Fatalf("result = %+v", res)
 	}
-	if len(pub.events) != 2 {
-		t.Fatalf("events = %d, want plan+ready", len(pub.events))
+	if len(pub.events) != 3 {
+		t.Fatalf("events = %d, want seed+plan+ready", len(pub.events))
 	}
-	if pub.events[0].Type != protocol.EventInsight {
-		t.Fatalf("plan type = %s", pub.events[0].Type)
+	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != string(protocol.SignalEnergySeeded) {
+		t.Fatalf("first kind = %q, want the seed observation", kind)
 	}
-	if pub.events[1].Type != protocol.EventSignal {
-		t.Fatalf("ready type = %s", pub.events[1].Type)
+	planEv, ok := eventByKind(pub.events, string(protocol.TaskEventPlan))
+	if !ok {
+		t.Fatalf("missing task.plan: %+v", pub.events)
+	}
+	if planEv.Type != protocol.EventInsight {
+		t.Fatalf("plan type = %s", planEv.Type)
+	}
+	readyEv, ok := eventByKind(pub.events, string(protocol.TaskEventReady))
+	if !ok {
+		t.Fatalf("missing task.ready: %+v", pub.events)
+	}
+	if readyEv.Type != protocol.EventSignal {
+		t.Fatalf("ready type = %s", readyEv.Type)
 	}
 	var plan protocol.TaskPlanPayload
-	if err := json.Unmarshal(pub.events[0].Payload, &plan); err != nil {
+	if err := json.Unmarshal(planEv.Payload, &plan); err != nil {
 		t.Fatal(err)
 	}
 	if len(plan.Tasks) != 1 || plan.Tasks[0].Bee != "builder" || plan.Tasks[0].Intent != "bugfix" {
@@ -451,7 +462,7 @@ body: "{{.Body}}"
 	}
 
 	var ready protocol.TaskReadyPayload
-	if err := json.Unmarshal(pub.events[1].Payload, &ready); err != nil {
+	if err := json.Unmarshal(readyEv.Payload, &ready); err != nil {
 		t.Fatal(err)
 	}
 	if ready.Kind != protocol.TaskEventReady || ready.TaskID != res.TaskID {
@@ -893,17 +904,25 @@ func TestRunStandingOmitsTraceUsesStandingID(t *testing.T) {
 	if res.TraceID != "trail-daily-triage" {
 		t.Fatalf("trace = %q", res.TraceID)
 	}
-	if len(pub.events) != 2 {
-		t.Fatalf("events = %+v", pub.events)
+	if len(pub.events) != 3 {
+		t.Fatalf("events = %+v, want seed+title+ingress", pub.events)
 	}
-	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.InsightTraceTitle) {
-		t.Fatalf("first kind = %q, want trace.title", protocol.PayloadKind(pub.events[0].Payload))
+	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != string(protocol.SignalEnergySeeded) {
+		t.Fatalf("first kind = %q, want the seed observation", kind)
 	}
-	if got := insightTraceTitle(t, pub.events[0]); got != "Daily triage" {
+	titleEv, ok := eventByKind(pub.events, string(protocol.InsightTraceTitle))
+	if !ok {
+		t.Fatalf("missing trace.title: %+v", pub.events)
+	}
+	if got := insightTraceTitle(t, titleEv); got != "Daily triage" {
 		t.Fatalf("title = %q", got)
 	}
-	if pub.events[1].TraceID != "trail-daily-triage" || protocol.PayloadKind(pub.events[1].Payload) != "triage.tick" {
-		t.Fatalf("ingress = %+v", pub.events[1])
+	ingress, ok := eventByKind(pub.events, "triage.tick")
+	if !ok {
+		t.Fatalf("missing ingress: %+v", pub.events)
+	}
+	if ingress.TraceID != "trail-daily-triage" {
+		t.Fatalf("ingress = %+v", ingress)
 	}
 	snap, err := ledger.Snapshot("trail-daily-triage")
 	if err != nil {
@@ -1170,7 +1189,11 @@ body: "{{.Body}}"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := insightTraceTitle(t, pub.events[0]); got != "daily-triage" {
+	titleEv, ok := eventByKind(pub.events, string(protocol.InsightTraceTitle))
+	if !ok {
+		t.Fatalf("missing trace.title: %+v", pub.events)
+	}
+	if got := insightTraceTitle(t, titleEv); got != "daily-triage" {
 		t.Fatalf("title = %q, want cue id", got)
 	}
 }
@@ -1200,7 +1223,11 @@ body: "{{.Body}}"
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := insightTraceTitle(t, pub.events[0])
+	titleEv, ok := eventByKind(pub.events, string(protocol.InsightTraceTitle))
+	if !ok {
+		t.Fatalf("missing trace.title: %+v", pub.events)
+	}
+	got := insightTraceTitle(t, titleEv)
 	if got != strings.Repeat("a", protocol.MaxTraceTitleLen) {
 		t.Fatalf("title len = %d, want %d", len(got), protocol.MaxTraceTitleLen)
 	}
@@ -1225,8 +1252,11 @@ func TestRunStandingDoesNotOverwriteExistingTitle(t *testing.T) {
 	if n := countKind(pub.events, string(protocol.InsightTraceTitle)); n != 0 {
 		t.Fatalf("published title events = %d, want none: %+v", n, pub.events)
 	}
-	if len(pub.events) != 1 || protocol.PayloadKind(pub.events[0].Payload) != "triage.tick" {
-		t.Fatalf("events = %+v", pub.events)
+	if n := countKind(pub.events, "triage.tick"); n != 1 {
+		t.Fatalf("ingress events = %d, want one: %+v", n, pub.events)
+	}
+	if len(pub.events) != 2 || protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergySeeded) {
+		t.Fatalf("events = %+v, want seed+ingress", pub.events)
 	}
 }
 

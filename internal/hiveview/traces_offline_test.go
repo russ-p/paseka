@@ -28,6 +28,14 @@ func (failingLedger) SeedEnergy(string, int) error {
 	return fmt.Errorf("kv unavailable")
 }
 
+func (failingLedger) EnsureEnergySeed(string, int) (taskledger.EnergySeedSnapshot, bool, error) {
+	return taskledger.EnergySeedSnapshot{}, false, fmt.Errorf("kv unavailable")
+}
+
+func (failingLedger) MarkEnergySeedPublished(string, string) error {
+	return fmt.Errorf("kv unavailable")
+}
+
 func (failingLedger) DeferPendingDispatch(string, taskledger.PendingDispatch) (bool, error) {
 	return false, fmt.Errorf("kv unavailable")
 }

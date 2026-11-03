@@ -35,6 +35,14 @@ func (f failingLedger) SeedEnergy(string, int) error {
 	return f.err
 }
 
+func (f failingLedger) EnsureEnergySeed(string, int) (taskledger.EnergySeedSnapshot, bool, error) {
+	return taskledger.EnergySeedSnapshot{}, false, f.err
+}
+
+func (f failingLedger) MarkEnergySeedPublished(string, string) error {
+	return f.err
+}
+
 func (f failingLedger) DeferPendingDispatch(string, taskledger.PendingDispatch) (bool, error) {
 	return false, f.err
 }

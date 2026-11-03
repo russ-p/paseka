@@ -60,11 +60,41 @@ func (l *KVLedger) Apply(event protocol.Event) (ApplyResult, error) {
 
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *KVLedger) SeedEnergy(traceID string, budget int) error {
+	_, _, err := l.EnsureEnergySeed(traceID, budget)
+	return err
+}
+
+// EnsureEnergySeed performs the authoritative seed transition through the same
+// compare-and-set path as every other ledger mutation. Concurrent callers
+// converge on one winner: the loser re-reads the stored snapshot and observes
+// the recorded seed instead of allocating again.
+func (l *KVLedger) EnsureEnergySeed(traceID string, budget int) (EnergySeedSnapshot, bool, error) {
+	if traceID == "" {
+		return EnergySeedSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	var seed EnergySeedSnapshot
+	created := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, winner, added := EnsureEnergySeed(trace, budget)
+		seed, created = winner, added
+		return updated, ApplyResult{Trace: updated, Changed: added}, nil
+	})
+	if err != nil {
+		return EnergySeedSnapshot{}, false, err
+	}
+	return seed, created, nil
+}
+
+// MarkEnergySeedPublished persists the send flag on the winning seed record.
+func (l *KVLedger) MarkEnergySeedPublished(traceID, seedID string) error {
 	if traceID == "" {
 		return fmt.Errorf("taskledger: traceId is required")
 	}
 	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
-		updated, changed := EnsureEnergySeeded(trace, budget)
+		updated, changed, err := MarkEnergySeedPublished(trace, seedID)
+		if err != nil {
+			return TraceSnapshot{}, ApplyResult{}, err
+		}
 		return updated, ApplyResult{Trace: updated, Changed: changed}, nil
 	})
 	return err

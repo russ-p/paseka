@@ -112,3 +112,35 @@ func TestValidateEnergyResumedRequiresKnownSource(t *testing.T) {
 		t.Fatalf("details = %#v", details)
 	}
 }
+
+func TestValidateEnergySeeded(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"energy.seeded","seedId":"seed-1","budget":9,"seededAt":"2026-11-03T10:00:00Z"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+	if !IsEnergyObservation("energy.seeded") {
+		t.Fatal("energy.seeded must read as an observation")
+	}
+}
+
+func TestValidateEnergySeededRequiresProvenance(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"energy.seeded","seedId":"","budget":0}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in.Validate()
+	paths := make(map[string]bool, len(details))
+	for _, detail := range details {
+		paths[detail.Path] = true
+	}
+	for _, want := range []string{"payload.seedId", "payload.budget", "payload.seededAt"} {
+		if !paths[want] {
+			t.Fatalf("missing %s in %#v", want, details)
+		}
+	}
+}

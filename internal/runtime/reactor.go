@@ -136,6 +136,11 @@ func (r *Reactor) Run(ctx context.Context) error {
 	if err := r.RecoverPendingConfigs(ctx); err != nil {
 		runtimeLog.Warn("recover pending configuration failed", logging.F("error", err.Error()))
 	}
+	// A seed observation interrupted between the ledger commit and the send is
+	// republished with its recorded identity before any charged dispatch.
+	if err := r.RecoverPendingSeedObservations(ctx); err != nil {
+		runtimeLog.Warn("recover pending energy seed observations failed", logging.F("error", err.Error()))
+	}
 	// An interrupted fork approval resumes under its recorded request identity
 	// before any new event can plan the same initial task again.
 	r.recoverInterruptedForkCreations(ctx)

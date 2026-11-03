@@ -1,6 +1,7 @@
 package purge
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/russ-p/paseka/internal/bus"
@@ -84,7 +85,7 @@ func reseedEnergy(ctx colony.Context, traceID string) (int, error) {
 	if session.Ledger == nil {
 		return 0, fmt.Errorf("nats url not configured (--reseed-energy requires NATS)")
 	}
-	if err := energy.EnsureSeeded(session.Ledger, ctx.ColonyRoot, traceID); err != nil {
+	if err := energy.EnsureSeeded(context.Background(), session.Ledger, session.Publisher, ctx.ColonyRoot, traceID, "cli"); err != nil {
 		return 0, err
 	}
 	snap, err := session.Ledger.Snapshot(traceID)

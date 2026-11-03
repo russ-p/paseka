@@ -1186,7 +1186,7 @@ func TestRecoverCreatingFinishesAnUnpublishedInitialPlan(t *testing.T) {
 	for _, ev := range pub.events {
 		kinds[protocol.PayloadKind(ev.Payload)]++
 	}
-	if kinds[string(protocol.TaskEventPlan)] != 1 || kinds[string(protocol.TaskEventReady)] != 1 {
+	if kinds[string(protocol.SignalEnergySeeded)] != 1 || kinds[string(protocol.TaskEventPlan)] != 1 || kinds[string(protocol.TaskEventReady)] != 1 {
 		t.Fatalf("recovered publication = %+v", kinds)
 	}
 
@@ -1199,8 +1199,8 @@ func TestRecoverCreatingFinishesAnUnpublishedInitialPlan(t *testing.T) {
 	if err != nil || len(again) != 0 {
 		t.Fatalf("second recovery = %+v %v", again, err)
 	}
-	if len(pub.events) != 2 {
-		t.Fatalf("recovery republished events: %d", len(pub.events))
+	if len(pub.events) != 3 {
+		t.Fatalf("recovery republished events: %d, want seed+plan+ready", len(pub.events))
 	}
 	stored, err := trailfork.LoadRequest(root, req.RequestID)
 	if err != nil {

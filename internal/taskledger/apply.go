@@ -294,6 +294,11 @@ func reduceEnergy(trace TraceSnapshot, event protocol.Event, kind string, now ti
 		}
 		return step, nil
 
+	case protocol.SignalEnergySeeded:
+		// The seed observation reports an allocation the ledger already
+		// accepted. Applying or replaying it must not seed, add, or consume.
+		return skipStep(trace), nil
+
 	default:
 		// A SIGNAL kind this ledger does not own is skipped, but a payload that
 		// is not valid JSON still fails to parse.

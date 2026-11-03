@@ -65,6 +65,7 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `SIGNAL` | `energy.add` | positive `amount` | beekeeper → honey reserve |
 | `SIGNAL` | `energy.consume` | positive `amount` | runtime → honey reserve |
 | `SIGNAL` | `energy.stipend` | positive `amount` | standing cue runtime → honey remaining (set, not add) |
+| `SIGNAL` | `energy.seeded` | `seedId`, positive `budget`, `seededAt` | seed transition (runtime/CLI/fork/session) → durable initial allocation observation |
 | `SIGNAL` | `energy.paused` | `episodeId`, `remaining`, `pendingCount`; optional `reason`, `budget` | runtime → trail admission observation |
 | `SIGNAL` | `energy.resumed` | `episodeId`, `source` (`energy.add` or `energy.stipend`), `remaining`, `pendingBefore`, `pendingAfter`, `dispatched`; optional `budget`, `abandoned` when a stipend superseded work | runtime → trail admission observation |
 | `SIGNAL` | `system.kill` | optional `reason` | beekeeper → reactor/tasks |
@@ -243,15 +244,17 @@ live-only and cannot be deferred:
 - `energy.add`
 - `energy.consume`
 - `energy.stipend`
+- `energy.seeded`
 - `energy.paused`
 - `energy.resumed`
 - `session.invite`
 - `beekeeper.ready`
 - `task.status`
 
-`energy.paused` and `energy.resumed` are platform observations: they are also
-excluded from direct dispatch and from auto-invite matching, so receiving one
-never wakes a Bee.
+`energy.seeded`, `energy.paused`, and `energy.resumed` are platform observations:
+they are also excluded from direct dispatch and from auto-invite matching, so
+receiving one never wakes a Bee. `energy.seeded` reports the winning initial
+allocation; replaying it never seeds, adds, or consumes honey.
 
 Artifact announcements are additionally checked against the referenced trail
 comb files before deferred flush.

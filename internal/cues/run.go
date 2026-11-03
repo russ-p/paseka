@@ -245,7 +245,11 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 			return err
 		}
 		if snap.EnergyBudget == 0 {
-			if err := ledger.SeedEnergy(traceID, cue.StandingStipend); err != nil {
+			if _, err := energy.Seed(ctx, ledger, publisher, energy.SeedInput{
+				TraceID: traceID,
+				Budget:  cue.StandingStipend,
+				AgentID: agentID,
+			}); err != nil {
 				return err
 			}
 			return publishFirstStandingTitle(ctx, publisher, colonyRoot, traceID, agentID, cue)
@@ -275,7 +279,12 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 		return nil
 	}
 	if cue.EnergyBudget > 0 {
-		return ledger.SeedEnergy(traceID, cue.EnergyBudget)
+		_, err := energy.Seed(ctx, ledger, publisher, energy.SeedInput{
+			TraceID: traceID,
+			Budget:  cue.EnergyBudget,
+			AgentID: agentID,
+		})
+		return err
 	}
 	if cue.Emit != EmitTask {
 		return nil
@@ -284,7 +293,12 @@ func prepareTrailEnergy(ctx context.Context, publisher bus.Publisher, ledger tas
 	if err != nil {
 		return err
 	}
-	return ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget())
+	_, err = energy.Seed(ctx, ledger, publisher, energy.SeedInput{
+		TraceID: traceID,
+		Budget:  manifest.ResolvedEnergyBudget(),
+		AgentID: agentID,
+	})
+	return err
 }
 
 func publishFirstStandingTitle(ctx context.Context, publisher bus.Publisher, colonyRoot, traceID, agentID string, cue Cue) error {

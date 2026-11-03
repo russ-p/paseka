@@ -22,6 +22,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/energy"
 	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/patches"
 	"github.com/russ-p/paseka/internal/protocol"
@@ -416,7 +417,11 @@ func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskled
 	if err := writeLineage(opts.Context.ColonyRoot, plan); err != nil {
 		return Result{}, err
 	}
-	if err := ledger.SeedEnergy(plan.TraceID, plan.Budget); err != nil {
+	if _, err := energy.Seed(ctx, ledger, publisher, energy.SeedInput{
+		TraceID: plan.TraceID,
+		Budget:  plan.Budget,
+		AgentID: "cli",
+	}); err != nil {
 		return Result{}, fmt.Errorf("trailfork: seed honey reserve: %w", err)
 	}
 
@@ -501,7 +506,11 @@ func finishInitialPublication(ctx context.Context, publisher bus.Publisher, ledg
 	if snap.Killed {
 		return fmt.Errorf("trailfork: fork %s was stopped before its initial task was published", lineage.TraceID)
 	}
-	if err := ledger.SeedEnergy(lineage.TraceID, lineage.Budget); err != nil {
+	if _, err := energy.Seed(ctx, ledger, publisher, energy.SeedInput{
+		TraceID: lineage.TraceID,
+		Budget:  lineage.Budget,
+		AgentID: "cli",
+	}); err != nil {
 		return fmt.Errorf("trailfork: seed honey reserve: %w", err)
 	}
 	task := taskledger.TaskSnapshot{
