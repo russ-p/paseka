@@ -62,6 +62,12 @@ type EnergyConsumePayload struct {
 	Amount int             `json:"amount"`
 	Reason string          `json:"reason,omitempty"`
 	TaskID string          `json:"taskId,omitempty"`
+	// Purpose attributes the charge to the execution purpose that spent it.
+	// Admission writes it so a later reader does not have to guess from the Bee
+	// name or the charge reason. Old charges without it stay unknown unless a
+	// task join proves their purpose.
+	Purpose    ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string           `json:"analysisOf,omitempty"`
 }
 
 // EnergyStipendPayload is emitted as SIGNAL with payload.kind=energy.stipend.

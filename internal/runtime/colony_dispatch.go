@@ -51,6 +51,11 @@ type ColonyDispatchRequest struct {
 	Provenance protocol.Provenance
 	// Raw requests plain-text adapter output for this run only (CLI --raw).
 	Raw bool
+	// Purpose is the runtime-owned admission purpose. A task dispatch passes the
+	// purpose derived from the task phase; direct, CLI and session paths default
+	// to work. An operator analysis action passes analysis plus AnalysisOf.
+	Purpose    protocol.ExecutionPurpose
+	AnalysisOf string
 }
 
 // DispatchColonyBee prepares workspace and runs one bee without re-resolving colony context.
@@ -61,6 +66,15 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if req.TraceID == "" {
 		return nil, fmt.Errorf("runtime: traceId is required")
 	}
+	// Admission owns purpose. An ordinary dispatch that says nothing is work; an
+	// analysis must name the milestone it studies. Guessing either from the Bee
+	// name would turn provenance into decoration.
+	purpose, analysisOf, err := protocol.ResolveAdmissionAttribution(req.Purpose, req.AnalysisOf)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: %w", err)
+	}
+	req.Purpose = purpose
+	req.AnalysisOf = analysisOf
 	execColony := ctxColony
 	scope, err := trailview.ResolveScope(ctxColony, req.TraceID)
 	if err != nil {
@@ -220,6 +234,8 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		Raw:                  req.Raw,
 		ProfileApply:         profileApply,
 		Registry:             registry,
+		Purpose:              req.Purpose,
+		AnalysisOf:           req.AnalysisOf,
 	})
 	if err != nil {
 		return nil, err

@@ -79,6 +79,11 @@ type PendingDispatch struct {
 	Diagnostic    string                `json:"diagnostic,omitempty"`
 	CreatedAt     time.Time             `json:"createdAt,omitempty"`
 	UpdatedAt     time.Time             `json:"updatedAt,omitempty"`
+	// Purpose and AnalysisOf preserve admission attribution across a deferral.
+	// A resumed direct reaction must not silently change from analysis to work,
+	// or from goal work to a closing round.
+	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string                    `json:"analysisOf,omitempty"`
 }
 
 // TraceSnapshot is the aggregated task ledger for one trace.

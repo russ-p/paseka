@@ -203,6 +203,8 @@ Dispatch one bee — a single non-interactive adapter invocation (AFK run).
 | `--path` | `-C` | | Colony resolution start directory |
 | `--no-bus` | | | Skip NATS publish (file-only run) |
 | `--raw` | | | Debug only: request plain text instead of the runtime-owned structured output, logging the runtime features it degrades (usage, session tracking, summary normalization) |
+| `--purpose` | | | Execution purpose: `work` (default) or `analysis`. Runtime task dispatch records `work`/`closing` from the task phase; an operator cannot label a run `closing` |
+| `--analysis-of` | | | Work-completion milestone an `--purpose analysis` run studies. Required with analysis; refused with work. Recorded in the run record and exposed in `inspect metrics` `byPurpose` |
 
 \* Provide `--body` or `--prompt` for LLM bees. Script bees (`adapter: script`) do not require a prompt; they run the bee's `command:` and receive runtime context via `PASEKA_*` env vars (see [architecture overview](../architecture/overview.md) § Script adapter).
 
@@ -238,6 +240,8 @@ Start an interactive human-in-the-loop session in a long-lived agent process.
 | `--intent` | | | Task intent for the bee role (vocabulary from bee `intents` or `<role>-intent-*` partials) |
 | `--path` | `-C` | | Colony resolution start directory |
 | `--terminal` | | | `default` or `ghostty` (overrides `~/.config/paseka/<slug>/terminal.yaml`) |
+| `--purpose` | | | Execution purpose: `work` (default) or `analysis` |
+| `--analysis-of` | | | Work-completion milestone an `--purpose analysis` session studies (required with analysis) |
 
 \* Provide a positional prompt, `--body`, or `--prompt`.
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -30,23 +31,30 @@ func appendMetricsEvent(t *testing.T, root, traceID string, ev protocol.Event) {
 }
 
 type metricsRunSpec struct {
-	agentID      string
-	bee          string
-	taskID       string
-	started      time.Time
-	finished     time.Time
-	state        protocol.RunStatus
-	reason       string
-	usage        *protocol.Usage
-	sessionUsage *protocol.Usage
-	gate         *protocol.GateResult
-	contract     *protocol.ContractRecord
+	agentID       string
+	bee           string
+	taskID        string
+	started       time.Time
+	finished      time.Time
+	state         protocol.RunStatus
+	reason        string
+	purpose       protocol.ExecutionPurpose
+	analysisOf    string
+	legacyPurpose bool
+	usage         *protocol.Usage
+	sessionUsage  *protocol.Usage
+	gate          *protocol.GateResult
+	contract      *protocol.ContractRecord
 }
 
 func writeMetricsRun(t *testing.T, root, traceID string, spec metricsRunSpec) {
 	t.Helper()
 	if spec.state == "" {
 		spec.state = protocol.StatusCompleted
+	}
+	purpose := spec.purpose
+	if purpose == "" && !spec.legacyPurpose {
+		purpose = protocol.PurposeWork
 	}
 	d := Dir{ColonyRoot: root, TraceID: traceID, AgentID: spec.agentID}
 	if err := d.Prepare(); err != nil {
@@ -61,6 +69,8 @@ func writeMetricsRun(t *testing.T, root, traceID string, spec metricsRunSpec) {
 		Workspace:       root,
 		ColonyRoot:      root,
 		TaskID:          spec.taskID,
+		Purpose:         purpose,
+		AnalysisOf:      spec.analysisOf,
 		CreatedAt:       spec.started,
 	}); err != nil {
 		t.Fatal(err)
@@ -245,6 +255,7 @@ func TestBuildTrailMetricsCostAndRunHalf(t *testing.T) {
 		"events": m.Coverage.Events, "runs": m.Coverage.Runs, "tasks": m.Coverage.Tasks,
 		"origin": m.Coverage.Origin, "honey": m.Coverage.Honey,
 		"tokens": m.Coverage.Tokens, "durations": m.Coverage.Durations,
+		"purpose": m.Coverage.Purpose,
 	} {
 		if got != CoverageComplete {
 			t.Fatalf("coverage %s = %q, want complete (warnings: %+v)", label, got, m.Warnings)
@@ -1198,5 +1209,314 @@ func TestBuildTrailMetricsTasksAreStableTaskIDOrdered(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("tasks = %+v, want stable task-id order %+v", got, want)
 		}
+	}
+}
+
+func TestBuildTrailMetricsSplitsObservedActivityByPurpose(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-by-purpose"
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	observedAt := base.Add(10 * time.Minute)
+
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-work", Bee: "builder", Status: protocol.TaskStatusCompleted, CreatedAt: base.Add(time.Second),
+	})
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-closing", Bee: "reviewer", Phase: protocol.TaskPhaseClosing,
+		Status: protocol.TaskStatusCompleted, CreatedAt: base.Add(2 * time.Second),
+	})
+
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergySeededPayload{
+		Kind: protocol.SignalEnergySeeded, SeedID: "seed-1", Budget: 20, SeededAt: base,
+	}, base))
+	charge := func(amount int, taskID string, purpose protocol.ExecutionPurpose, analysisOf string, at time.Time) {
+		appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergyConsumePayload{
+			Kind: protocol.SignalEnergyConsume, Amount: amount, Reason: "task.dispatch",
+			TaskID: taskID, Purpose: purpose, AnalysisOf: analysisOf,
+		}, at))
+	}
+	charge(2, "task-work", protocol.PurposeWork, "", base.Add(10*time.Second))
+	charge(1, "task-closing", protocol.PurposeClosing, "", base.Add(70*time.Second))
+	charge(1, "", protocol.PurposeAnalysis, "completion-r1", base.Add(110*time.Second))
+	charge(1, "", "", "", base.Add(111*time.Second))
+
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-work-1", bee: "builder", taskID: "task-work", purpose: protocol.PurposeWork,
+		started: base.Add(10 * time.Second), finished: base.Add(40 * time.Second),
+		usage: &protocol.Usage{InputTokens: 100, OutputTokens: 10},
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-work-2", bee: "builder", taskID: "task-work", purpose: protocol.PurposeWork,
+		started: base.Add(50 * time.Second), finished: base.Add(60 * time.Second),
+		usage: &protocol.Usage{InputTokens: 50, OutputTokens: 5},
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-closing", bee: "reviewer", taskID: "task-closing", purpose: protocol.PurposeClosing,
+		started: base.Add(70 * time.Second), finished: base.Add(100 * time.Second),
+		state: protocol.StatusFailed, reason: protocol.ReasonChecksFailed,
+		gate:  &protocol.GateResult{Passed: false},
+		usage: &protocol.Usage{InputTokens: 200, OutputTokens: 20},
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-analysis", purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1",
+		started: base.Add(110 * time.Second), finished: base.Add(120 * time.Second),
+		state: protocol.StatusFailed,
+		usage: &protocol.Usage{InputTokens: 10, OutputTokens: 1},
+	})
+
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "run-work-1", protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationFailed, TaskID: "task-work", Summary: "review",
+	}, base.Add(45*time.Second)))
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationFailed, TaskID: "task-closing", Reason: protocol.ReasonChecksFailed,
+	}, base.Add(101*time.Second)))
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "run-analysis", protocol.EventVerification, protocol.VerificationPayload{
+		Kind: protocol.VerificationFailed, Summary: "analysis finding",
+	}, base.Add(121*time.Second)))
+
+	note := func(agentID, taskID, severity string, at time.Time) {
+		appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, agentID, protocol.EventInsight, protocol.NarrativeInsightPayload{
+			Kind: protocol.InsightReviewNote, TaskID: taskID, Severity: severity, Summary: "note",
+		}, at))
+	}
+	note("run-work-1", "task-work", "medium", base.Add(46*time.Second))
+	note("run-closing", "task-closing", "high", base.Add(102*time.Second))
+	note("run-analysis", "", "low", base.Add(122*time.Second))
+
+	m, err := BuildTrailMetrics(root, traceID, observedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Coverage.Purpose != CoverageComplete {
+		t.Fatalf("purpose coverage = %q, want complete (warnings %+v)", m.Coverage.Purpose, m.Warnings)
+	}
+
+	work := m.ByPurpose.Work
+	closing := m.ByPurpose.Closing
+	analysis := m.ByPurpose.Analysis
+	unknown := m.ByPurpose.Unknown
+
+	if work.Runs != 2 || work.Failed != 0 || work.VerificationFailed != 1 || work.ReviewNotes != 1 ||
+		work.GateRejections != 0 || work.Retries == nil || *work.Retries != 1 {
+		t.Fatalf("work bucket = %+v", work)
+	}
+	if work.HoneySpent == nil || *work.HoneySpent != 2 {
+		t.Fatalf("work honey = %v, want 2", work.HoneySpent)
+	}
+	if work.Tokens == nil || work.Tokens.InputTokens != 150 || work.Tokens.OutputTokens != 15 || work.Tokens.RunsWithUsage != 2 {
+		t.Fatalf("work tokens = %+v", work.Tokens)
+	}
+	if work.ActiveTimeSec == nil || *work.ActiveTimeSec != 40 {
+		t.Fatalf("work active time = %v, want 40", work.ActiveTimeSec)
+	}
+
+	if closing.Runs != 1 || closing.Failed != 1 || closing.VerificationFailed != 1 ||
+		closing.ReviewNotes != 1 || closing.GateRejections != 1 || closing.Retries == nil || *closing.Retries != 0 {
+		t.Fatalf("closing bucket = %+v", closing)
+	}
+	if closing.HoneySpent == nil || *closing.HoneySpent != 1 {
+		t.Fatalf("closing honey = %v, want 1", closing.HoneySpent)
+	}
+	if closing.Tokens == nil || closing.Tokens.InputTokens != 200 || closing.Tokens.OutputTokens != 20 {
+		t.Fatalf("closing tokens = %+v", closing.Tokens)
+	}
+	if closing.ActiveTimeSec == nil || *closing.ActiveTimeSec != 30 {
+		t.Fatalf("closing active time = %v, want 30", closing.ActiveTimeSec)
+	}
+
+	if analysis.Runs != 1 || analysis.Failed != 1 || analysis.VerificationFailed != 1 ||
+		analysis.ReviewNotes != 1 || analysis.GateRejections != 0 || analysis.Retries == nil || *analysis.Retries != 0 {
+		t.Fatalf("analysis bucket = %+v", analysis)
+	}
+	if analysis.HoneySpent == nil || *analysis.HoneySpent != 1 {
+		t.Fatalf("analysis honey = %v, want 1", analysis.HoneySpent)
+	}
+	if analysis.Tokens == nil || analysis.Tokens.InputTokens != 10 || analysis.Tokens.OutputTokens != 1 {
+		t.Fatalf("analysis tokens = %+v", analysis.Tokens)
+	}
+	if analysis.ActiveTimeSec == nil || *analysis.ActiveTimeSec != 10 {
+		t.Fatalf("analysis active time = %v, want 10", analysis.ActiveTimeSec)
+	}
+
+	if unknown.Runs != 0 || unknown.HoneySpent == nil || *unknown.HoneySpent != 1 {
+		t.Fatalf("unknown bucket = %+v, want an unattributed legacy charge and no runs", unknown)
+	}
+
+	// Root aggregates stay total observed activity; the buckets split that same
+	// deduplicated evidence rather than recounting it.
+	if got := work.Runs + closing.Runs + analysis.Runs + unknown.Runs; got != m.Runs.Retained {
+		t.Fatalf("bucket runs sum = %d, root retained = %d", got, m.Runs.Retained)
+	}
+	if got := *work.HoneySpent + *closing.HoneySpent + *analysis.HoneySpent + *unknown.HoneySpent; got != *m.Honey.Spent {
+		t.Fatalf("bucket honey sum = %d, root spent = %d", got, *m.Honey.Spent)
+	}
+	if got := work.Tokens.InputTokens + closing.Tokens.InputTokens + analysis.Tokens.InputTokens; got != m.Tokens.InputTokens {
+		t.Fatalf("bucket token sum = %d, root input = %d", got, m.Tokens.InputTokens)
+	}
+	if got := work.VerificationFailed + closing.VerificationFailed + analysis.VerificationFailed + unknown.VerificationFailed; got != m.VerificationFailed {
+		t.Fatalf("bucket verification sum = %d, root = %d", got, m.VerificationFailed)
+	}
+	if got := work.GateRejections + closing.GateRejections + analysis.GateRejections + unknown.GateRejections; got != m.GateRejections {
+		t.Fatalf("bucket gate sum = %d, root = %d (one rejection recorded twice)", got, m.GateRejections)
+	}
+	if m.GateRejections != 1 || m.VerificationFailed != 3 {
+		t.Fatalf("root verification %d gate %d, want 3 and 1", m.VerificationFailed, m.GateRejections)
+	}
+	if *work.ActiveTimeSec+*closing.ActiveTimeSec+*analysis.ActiveTimeSec != *m.ActiveTimeSec {
+		t.Fatalf("bucket active time does not sum to root")
+	}
+
+	// Task observations carry the phase-derived purpose.
+	for _, task := range m.Tasks {
+		switch task.TaskID {
+		case "task-work":
+			if task.Purpose != string(protocol.PurposeWork) {
+				t.Fatalf("task-work purpose = %q", task.Purpose)
+			}
+		case "task-closing":
+			if task.Purpose != string(protocol.PurposeClosing) {
+				t.Fatalf("task-closing purpose = %q", task.Purpose)
+			}
+		}
+	}
+}
+
+func TestBuildTrailMetricsLegacyPurposeStaysUnknown(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-legacy-purpose"
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	observedAt := base.Add(10 * time.Minute)
+
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-work", Bee: "builder", Status: protocol.TaskStatusCompleted, CreatedAt: base.Add(time.Second),
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-work", bee: "builder", taskID: "task-work", purpose: protocol.PurposeWork,
+		started: base.Add(10 * time.Second), finished: base.Add(20 * time.Second),
+		usage: &protocol.Usage{InputTokens: 10, OutputTokens: 1},
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-legacy", bee: "builder", legacyPurpose: true,
+		started: base.Add(30 * time.Second), finished: base.Add(40 * time.Second),
+		state: protocol.StatusFailed,
+		usage: &protocol.Usage{InputTokens: 5, OutputTokens: 1},
+	})
+
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergyConsumePayload{
+		Kind: protocol.SignalEnergyConsume, Amount: 1, Reason: "task.dispatch", TaskID: "task-work",
+		Purpose: protocol.PurposeWork,
+	}, base.Add(11*time.Second)))
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergyConsumePayload{
+		Kind: protocol.SignalEnergyConsume, Amount: 1, Reason: "task.dispatch",
+	}, base.Add(31*time.Second)))
+
+	m, err := BuildTrailMetrics(root, traceID, observedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Coverage.Purpose != CoveragePartial {
+		t.Fatalf("purpose coverage = %q, want partial", m.Coverage.Purpose)
+	}
+	assertWarning(t, m.Warnings, "purpose", WarningLegacy)
+
+	if m.ByPurpose.Work.Runs != 1 || m.ByPurpose.Work.Failed != 0 {
+		t.Fatalf("work bucket = %+v, want the one attributed run", m.ByPurpose.Work)
+	}
+	if m.ByPurpose.Unknown.Runs != 1 || m.ByPurpose.Unknown.Failed != 1 {
+		t.Fatalf("unknown bucket = %+v, want the legacy run", m.ByPurpose.Unknown)
+	}
+	if m.ByPurpose.Analysis.Runs != 0 {
+		t.Fatalf("analysis bucket = %+v, a legacy run must not become analysis", m.ByPurpose.Analysis)
+	}
+	if m.ByPurpose.Unknown.Retries != nil {
+		t.Fatalf("unknown retries = %v, want null", *m.ByPurpose.Unknown.Retries)
+	}
+	if m.ByPurpose.Work.HoneySpent == nil || *m.ByPurpose.Work.HoneySpent != 1 {
+		t.Fatalf("work honey = %v, want 1", m.ByPurpose.Work.HoneySpent)
+	}
+	if m.ByPurpose.Unknown.HoneySpent == nil || *m.ByPurpose.Unknown.HoneySpent != 1 {
+		t.Fatalf("unknown honey = %v, want 1", m.ByPurpose.Unknown.HoneySpent)
+	}
+	if m.Runs.Retained != 2 || m.Honey.Spent == nil || *m.Honey.Spent != 2 {
+		t.Fatalf("root totals = runs %d honey %v, want 2 and 2", m.Runs.Retained, m.Honey.Spent)
+	}
+}
+
+func TestBuildTrailMetricsWorkBaselineExcludesClosingAndAnalysis(t *testing.T) {
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	observedAt := base.Add(10 * time.Minute)
+
+	build := func(t *testing.T, traceID string, overhead bool) TrailMetrics {
+		t.Helper()
+		root := t.TempDir()
+		writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+			TaskID: "task-work", Bee: "builder", Status: protocol.TaskStatusCompleted, CreatedAt: base.Add(time.Second),
+		})
+		writeMetricsRun(t, root, traceID, metricsRunSpec{
+			agentID: "run-work", bee: "builder", taskID: "task-work", purpose: protocol.PurposeWork,
+			started: base.Add(10 * time.Second), finished: base.Add(20 * time.Second),
+			usage: &protocol.Usage{InputTokens: 100, OutputTokens: 10},
+		})
+		appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergyConsumePayload{
+			Kind: protocol.SignalEnergyConsume, Amount: 2, Reason: "task.dispatch", TaskID: "task-work",
+			Purpose: protocol.PurposeWork,
+		}, base.Add(11*time.Second)))
+
+		if overhead {
+			writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+				TaskID: "closing-1", Bee: "reviewer", Phase: protocol.TaskPhaseClosing,
+				Status: protocol.TaskStatusCompleted, CreatedAt: base.Add(2 * time.Second),
+			})
+			writeMetricsRun(t, root, traceID, metricsRunSpec{
+				agentID: "run-closing", bee: "reviewer", taskID: "closing-1", purpose: protocol.PurposeClosing,
+				started: base.Add(30 * time.Second), finished: base.Add(time.Minute),
+				state: protocol.StatusFailed, reason: protocol.ReasonChecksFailed,
+				gate:  &protocol.GateResult{Passed: false},
+				usage: &protocol.Usage{InputTokens: 500, OutputTokens: 50},
+			})
+			writeMetricsRun(t, root, traceID, metricsRunSpec{
+				agentID: "run-analysis", purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1",
+				started: base.Add(70 * time.Second), finished: base.Add(90 * time.Second),
+				usage: &protocol.Usage{InputTokens: 1000, OutputTokens: 100},
+			})
+			appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergyConsumePayload{
+				Kind: protocol.SignalEnergyConsume, Amount: 3, Reason: "task.dispatch", TaskID: "closing-1",
+				Purpose: protocol.PurposeClosing,
+			}, base.Add(31*time.Second)))
+			appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergyConsumePayload{
+				Kind: protocol.SignalEnergyConsume, Amount: 5, Reason: "task.dispatch",
+				Purpose: protocol.PurposeAnalysis, AnalysisOf: "completion-r1",
+			}, base.Add(71*time.Second)))
+		}
+
+		m, err := BuildTrailMetrics(root, traceID, observedAt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+
+	baseline := build(t, "trace-baseline", false)
+	wrapped := build(t, "trace-wrapped", true)
+
+	if !reflect.DeepEqual(baseline.ByPurpose.Work, wrapped.ByPurpose.Work) {
+		t.Fatalf("work baseline changed by closing/analysis:\nbaseline %+v\nwrapped  %+v",
+			baseline.ByPurpose.Work, wrapped.ByPurpose.Work)
+	}
+	if wrapped.ByPurpose.Work.HoneySpent == nil || *wrapped.ByPurpose.Work.HoneySpent != 2 {
+		t.Fatalf("wrapped work honey = %v, want the goal work only", wrapped.ByPurpose.Work.HoneySpent)
+	}
+	if baseline.Honey.Spent == nil || wrapped.Honey.Spent == nil || *wrapped.Honey.Spent <= *baseline.Honey.Spent {
+		t.Fatalf("root honey did not grow with overhead: baseline %v wrapped %v",
+			baseline.Honey.Spent, wrapped.Honey.Spent)
+	}
+	if wrapped.ByPurpose.Closing.Runs != 1 || wrapped.ByPurpose.Analysis.Runs != 1 {
+		t.Fatalf("closing/analysis buckets = %+v / %+v", wrapped.ByPurpose.Closing, wrapped.ByPurpose.Analysis)
+	}
+	if wrapped.ByPurpose.Closing.HoneySpent == nil || *wrapped.ByPurpose.Closing.HoneySpent != 3 {
+		t.Fatalf("closing honey = %v, want 3", wrapped.ByPurpose.Closing.HoneySpent)
+	}
+	if wrapped.ByPurpose.Analysis.HoneySpent == nil || *wrapped.ByPurpose.Analysis.HoneySpent != 5 {
+		t.Fatalf("analysis honey = %v, want 5", wrapped.ByPurpose.Analysis.HoneySpent)
 	}
 }

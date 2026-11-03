@@ -136,6 +136,8 @@ func newSessionRunCmd() *cobra.Command {
 		traceID      string
 		intent       string
 		inlinePrompt string
+		purpose      string
+		analysisOf   string
 	)
 	cmd := &cobra.Command{
 		Use:    "run <role>",
@@ -146,6 +148,10 @@ func newSessionRunCmd() *cobra.Command {
 			if body == "" && inlinePrompt == "" {
 				return fmt.Errorf("provide --body or --prompt")
 			}
+			execPurpose, execAnalysisOf, err := operatorExecutionPurpose(purpose, analysisOf)
+			if err != nil {
+				return err
+			}
 			res, err := sessions.DefaultManager.RunInteractive(cmd.Context(), sessions.RunRequest{
 				StartDir:     startDir,
 				Bee:          args[0],
@@ -153,6 +159,8 @@ func newSessionRunCmd() *cobra.Command {
 				Task:         body,
 				Intent:       intent,
 				InlinePrompt: inlinePrompt,
+				Purpose:      execPurpose,
+				AnalysisOf:   execAnalysisOf,
 			})
 			if err != nil {
 				return err
@@ -169,6 +177,8 @@ func newSessionRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
 	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override")
+	cmd.Flags().StringVar(&purpose, "purpose", "", "execution purpose: work (default) or analysis")
+	cmd.Flags().StringVar(&analysisOf, "analysis-of", "", "work-completion milestone studied by an --purpose analysis session")
 	return cmd
 }
 

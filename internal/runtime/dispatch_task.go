@@ -59,6 +59,11 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
 	}
 
+	// Purpose follows the recorded task phase. The closing round is trail
+	// overhead, so its executions never enter the work baseline; ordinary (and
+	// merge-adjacent) tasks are goal work.
+	purpose := protocol.PurposeForTaskPhase(taskledger.TaskPhaseOf(task))
+
 	if held, err := r.taskAdmissionHeld(traceID, task.TaskID); err != nil {
 		return err
 	} else if held {
@@ -66,7 +71,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
-	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, bee, sourceEventID, "task.dispatch")
+	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, bee, sourceEventID, "task.dispatch", purpose)
 	if err != nil {
 		return err
 	}
@@ -133,6 +138,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		TrailInventory: inventory,
 		PolicyParams:   policyParams,
 		Provenance:     attemptProvenance(attempt),
+		Purpose:        purpose,
 	}, DispatchModeTask)
 	if err != nil {
 		// Kill may cancel finalize after a completed adapter run (busRequired); do not
@@ -148,7 +154,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	if err := trailconfig.RecordAttemptAgent(r.colony.ColonyRoot, traceID, attempt.AttemptID, res.AgentID); err != nil {
 		runtimeLog.Warn("attempt agent record failed", logging.F("error", err.Error()))
 	}
-	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt, attempt)
+	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt, attempt, purpose)
 	if res.Result == nil || res.Result.Status != string(protocol.StatusCompleted) {
 		if res.Result != nil {
 			r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, res.Result.Status, time.Now().UTC())
@@ -226,7 +232,7 @@ func taskDispatchFailureSummary(res *BeeRunResult, dispatchErr error) string {
 	return "adapter failed"
 }
 
-func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time, attempt trailconfig.Attempt) {
+func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time, attempt trailconfig.Attempt, purpose protocol.ExecutionPurpose) {
 	if res == nil || taskID == "" {
 		return
 	}
@@ -239,6 +245,7 @@ func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunRes
 		AttemptID:      attempt.AttemptID,
 		ConfigRef:      attempt.ConfigRef,
 		ConfigRevision: attempt.ConfigRevision,
+		Purpose:        purpose,
 	}); err != nil {
 		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
 	}

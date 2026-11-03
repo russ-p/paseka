@@ -13,6 +13,7 @@ import (
 	"github.com/russ-p/paseka/internal/adapters/script"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
@@ -55,6 +56,10 @@ type DispatchRequest struct {
 	Registry *BeeRegistry
 	// Raw requests plain-text adapter output for this run only (CLI --raw).
 	Raw bool
+	// Purpose is the runtime-owned admission purpose and the studied milestone
+	// for analysis. Ordinary callers leave it empty and get work.
+	Purpose    protocol.ExecutionPurpose
+	AnalysisOf string
 }
 
 // Dispatcher renders prompts and runs adapters.

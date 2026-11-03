@@ -53,7 +53,7 @@ func (r *Reactor) RecoverPendingSeedObservations(ctx context.Context) error {
 	return nil
 }
 
-func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string) (bool, error) {
+func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string, purpose protocol.ExecutionPurpose, analysisOf string) (bool, error) {
 	if amount <= 0 {
 		return true, nil
 	}
@@ -69,10 +69,12 @@ func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int,
 	}
 
 	ev, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
-		Kind:   protocol.SignalEnergyConsume,
-		Amount: amount,
-		Reason: reason,
-		TaskID: taskID,
+		Kind:       protocol.SignalEnergyConsume,
+		Amount:     amount,
+		Reason:     reason,
+		TaskID:     taskID,
+		Purpose:    purpose,
+		AnalysisOf: analysisOf,
 	})
 	if err != nil {
 		return false, err
@@ -113,8 +115,8 @@ func (r *Reactor) unblockEnergyBlockedTasks(ctx context.Context, traceID string)
 // gateTaskDispatchEnergy never writes a task status. A denied task dispatch is
 // recorded as deferred trail work and keeps its lifecycle state, so `ready`
 // still means eligible and a waiting_review task never becomes blocked.
-func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string) (bool, error) {
-	ok, err := r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
+func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string, purpose protocol.ExecutionPurpose) (bool, error) {
+	ok, err := r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID, purpose, "")
 	if err != nil {
 		return false, err
 	}
@@ -122,7 +124,7 @@ func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, b
 		return true, nil
 	}
 	if taskID != "" {
-		if err := r.deferTaskDispatch(ctx, traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary); err != nil {
+		if err := r.deferTaskDispatch(ctx, traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary, purpose); err != nil {
 			return false, err
 		}
 	}
@@ -132,8 +134,8 @@ func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, b
 // gateDirectDispatchEnergy never mutates task status: a direct dispatch reacts
 // to an event and can run while the task is waiting_review or running. Deferred
 // direct work is recorded separately and resumed on energy.add.
-func (r *Reactor) gateDirectDispatchEnergy(ctx context.Context, traceID, taskID, reason string) (bool, error) {
-	return r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
+func (r *Reactor) gateDirectDispatchEnergy(ctx context.Context, traceID, taskID, reason string, purpose protocol.ExecutionPurpose, analysisOf string) (bool, error) {
+	return r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID, purpose, analysisOf)
 }
 
 func energyAddDetected(ev protocol.Event) bool {

@@ -53,6 +53,10 @@ type TaskRunEntry struct {
 	AttemptID      string    `json:"attemptId,omitempty"`
 	ConfigRef      string    `json:"configRef,omitempty"`
 	ConfigRevision int       `json:"configRevision,omitempty"`
+	// Purpose and AnalysisOf carry the admission attribution through the task
+	// chain, so a joined execution does not lose why it ran.
+	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string                    `json:"analysisOf,omitempty"`
 }
 
 // TaskDir holds paths for one task projection under a trace.

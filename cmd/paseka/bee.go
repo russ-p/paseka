@@ -6,6 +6,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runtime"
 	"github.com/russ-p/paseka/internal/sessions"
 	"github.com/spf13/cobra"
@@ -30,6 +31,8 @@ func newBeeRunCmd() *cobra.Command {
 		inlinePrompt string
 		noBus        bool
 		raw          bool
+		purpose      string
+		analysisOf   string
 	)
 	cmd := &cobra.Command{
 		Use:   "run <role>",
@@ -47,6 +50,10 @@ func newBeeRunCmd() *cobra.Command {
 			if bee.RequiresPrompt() && body == "" && inlinePrompt == "" {
 				return fmt.Errorf("provide --body or --prompt")
 			}
+			execPurpose, execAnalysisOf, err := operatorExecutionPurpose(purpose, analysisOf)
+			if err != nil {
+				return err
+			}
 			d := runtime.NewDispatcher()
 			res, err := d.BeeRun(cmd.Context(), runtime.BeeRunRequest{
 				StartDir:     startDir,
@@ -57,6 +64,8 @@ func newBeeRunCmd() *cobra.Command {
 				InlinePrompt: inlinePrompt,
 				NoBus:        noBus,
 				Raw:          raw,
+				Purpose:      execPurpose,
+				AnalysisOf:   execAnalysisOf,
 			})
 			if err != nil {
 				return err
@@ -78,6 +87,8 @@ func newBeeRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().BoolVar(&noBus, "no-bus", false, "skip NATS publish (file-only run)")
 	cmd.Flags().BoolVar(&raw, "raw", false, "request plain-text adapter output (degrades usage/session parsing; debug only)")
+	cmd.Flags().StringVar(&purpose, "purpose", "", "execution purpose: work (default) or analysis")
+	cmd.Flags().StringVar(&analysisOf, "analysis-of", "", "work-completion milestone studied by an --purpose analysis run")
 	return cmd
 }
 
@@ -89,6 +100,8 @@ func newBeeChatCmd() *cobra.Command {
 		intent       string
 		inlinePrompt string
 		terminal     string
+		purpose      string
+		analysisOf   string
 	)
 	cmd := &cobra.Command{
 		Use:   "chat <role> [prompt]",
@@ -98,6 +111,10 @@ func newBeeChatCmd() *cobra.Command {
 			beeRole := args[0]
 			if len(args) > 1 && inlinePrompt == "" {
 				inlinePrompt = strings.Join(args[1:], " ")
+			}
+			execPurpose, execAnalysisOf, err := operatorExecutionPurpose(purpose, analysisOf)
+			if err != nil {
+				return err
 			}
 			if body == "" && inlinePrompt == "" {
 				ctxColony, err := colony.ResolveContext(startDir)
@@ -133,6 +150,12 @@ func newBeeChatCmd() *cobra.Command {
 			if inlinePrompt != "" {
 				runArgs = append(runArgs, "--prompt", inlinePrompt)
 			}
+			if purpose != "" {
+				runArgs = append(runArgs, "--purpose", purpose)
+			}
+			if analysisOf != "" {
+				runArgs = append(runArgs, "--analysis-of", analysisOf)
+			}
 
 			termKind := sessions.ResolveTerminalKind(terminal)
 			if termKind == sessions.TerminalDefault {
@@ -167,6 +190,8 @@ func newBeeChatCmd() *cobra.Command {
 				Task:         body,
 				Intent:       intent,
 				InlinePrompt: inlinePrompt,
+				Purpose:      execPurpose,
+				AnalysisOf:   execAnalysisOf,
 			})
 			if err != nil {
 				return err
@@ -184,7 +209,25 @@ func newBeeChatCmd() *cobra.Command {
 	cmd.Flags().StringVar(&intent, "intent", "", "task intent for the bee role (see bee intents or <role>-intent-* prompt partials)")
 	cmd.Flags().StringVar(&inlinePrompt, "prompt", "", "inline prompt override (skips template)")
 	cmd.Flags().StringVar(&terminal, "terminal", "", "terminal UI: default or ghostty (overrides ~/.config/paseka/<slug>/terminal.yaml)")
+	cmd.Flags().StringVar(&purpose, "purpose", "", "execution purpose: work (default) or analysis")
+	cmd.Flags().StringVar(&analysisOf, "analysis-of", "", "work-completion milestone studied by an --purpose analysis session")
 	return cmd
+}
+
+// operatorExecutionPurpose validates the operator-facing purpose flag. Closing
+// is runtime-owned: an operator may start ordinary work or an analysis action,
+// but cannot relabel a bespoke run as the trail's closing round.
+func operatorExecutionPurpose(purpose, analysisOf string) (protocol.ExecutionPurpose, string, error) {
+	var value protocol.ExecutionPurpose
+	switch strings.TrimSpace(purpose) {
+	case "", string(protocol.PurposeWork):
+		value = protocol.PurposeWork
+	case string(protocol.PurposeAnalysis):
+		value = protocol.PurposeAnalysis
+	default:
+		return "", "", fmt.Errorf("--purpose must be %q or %q", protocol.PurposeWork, protocol.PurposeAnalysis)
+	}
+	return protocol.ResolveAdmissionAttribution(value, analysisOf)
 }
 
 func printBeeRunResult(res *runtime.BeeRunResult) {

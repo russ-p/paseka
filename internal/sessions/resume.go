@@ -202,6 +202,8 @@ func (m *Manager) prepareResume(req ResumeRequest) (RunRequest, error) {
 		Task:             strings.TrimSpace(req.Continue),
 		ConfigRef:        sourceConfigRef,
 		ConfigRevision:   source.ConfigRevision,
+		Purpose:          source.Purpose,
+		AnalysisOf:       source.AnalysisOf,
 		resumeFrom:       sessionID,
 		resumeProviderID: providerID,
 	}, nil

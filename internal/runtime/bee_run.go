@@ -7,6 +7,7 @@ import (
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
@@ -24,6 +25,10 @@ type BeeRunRequest struct {
 	BusRequired  bool
 	// Raw requests plain-text adapter output for this run only (CLI --raw).
 	Raw bool
+	// Purpose and AnalysisOf are the operator-selected admission attribution.
+	// Empty means ordinary work; an analysis action must name its milestone.
+	Purpose    protocol.ExecutionPurpose
+	AnalysisOf string
 }
 
 // BeeRunResult summarizes a completed bee run.
@@ -98,5 +103,7 @@ func (d *Dispatcher) BeeRun(ctx context.Context, req BeeRunRequest) (*BeeRunResu
 		Insights:     req.Insights,
 		InlinePrompt: req.InlinePrompt,
 		Raw:          req.Raw,
+		Purpose:      req.Purpose,
+		AnalysisOf:   req.AnalysisOf,
 	}, DispatchModeCLI)
 }

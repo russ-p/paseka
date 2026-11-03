@@ -82,6 +82,10 @@ type TrailMetrics struct {
 
 	// Tasks is the stable task-id ordered observation of every recorded task.
 	Tasks []MetricsTask `json:"tasks"`
+	// ByPurpose separates work, closing, and analysis. Root aggregates above
+	// remain total observed activity; unknown holds historical executions whose
+	// purpose was never recorded and is never folded into work or analysis.
+	ByPurpose MetricsByPurpose `json:"byPurpose"`
 	// VerificationFailed counts distinct recorded verification.failed events,
 	// including the ones that join to no task.
 	VerificationFailed int `json:"verificationFailed"`
@@ -204,8 +208,11 @@ type MetricsRuns struct {
 // today's registry. Retries is max(0, executions-1); it is null for the same
 // reason. A skipped task contributes no execution and no completion.
 type MetricsTask struct {
-	TaskID    string `json:"taskId"`
-	Phase     string `json:"phase"`
+	TaskID string `json:"taskId"`
+	Phase  string `json:"phase"`
+	// Purpose is the execution purpose derived from the recorded task phase.
+	// It is work for ordinary tasks and closing for the runtime-seeded round.
+	Purpose   string `json:"purpose"`
 	Bee       string `json:"bee,omitempty"`
 	Intent    string `json:"intent,omitempty"`
 	Status    string `json:"status"`
@@ -219,6 +226,49 @@ type MetricsTask struct {
 	Retries            *int     `json:"retries"`
 	VerificationFailed int      `json:"verificationFailed"`
 	GateRejections     int      `json:"gateRejections"`
+}
+
+// MetricsByPurpose is the trail's observed activity split by the purpose
+// admission recorded. Root aggregates remain total observed activity: the four
+// buckets add up to it, and deduplication already happened before either was
+// counted.
+//
+// Work is the completion baseline: cumulative goal work through the observed
+// revision, including earlier failed work, but excluding every closing round and
+// every analysis. Closing is trail overhead. Unknown holds historical
+// executions whose purpose was never recorded; it is never silently folded into
+// work or relabelled as analysis.
+type MetricsByPurpose struct {
+	Work     MetricsPurpose `json:"work"`
+	Closing  MetricsPurpose `json:"closing"`
+	Analysis MetricsPurpose `json:"analysis"`
+	Unknown  MetricsPurpose `json:"unknown"`
+	Coverage string         `json:"coverage"`
+}
+
+// MetricsPurpose is one purpose bucket's measurements. A nil pointer means the
+// record does not support a measurement; zero means an observed zero. Runs and
+// failure-type counters are always observed for retained executions.
+type MetricsPurpose struct {
+	HoneySpent         *int                  `json:"honeySpent"`
+	Tokens             *MetricsPurposeTokens `json:"tokens"`
+	Runs               int                   `json:"runs"`
+	Failed             int                   `json:"failed"`
+	Retries            *int                  `json:"retries"`
+	VerificationFailed int                   `json:"verificationFailed"`
+	ReviewNotes        int                   `json:"reviewNotes"`
+	GateRejections     int                   `json:"gateRejections"`
+	ActiveTimeSec      *float64              `json:"activeTimeSec"`
+}
+
+// MetricsPurposeTokens is the token accounting of one purpose bucket's retained
+// executions with usable usage.
+type MetricsPurposeTokens struct {
+	InputTokens      int64 `json:"inputTokens"`
+	OutputTokens     int64 `json:"outputTokens"`
+	CacheReadTokens  int64 `json:"cacheReadTokens"`
+	CacheWriteTokens int64 `json:"cacheWriteTokens"`
+	RunsWithUsage    int   `json:"runsWithUsage"`
 }
 
 // MetricsReviewNotes counts review.note observations by the closed severity
@@ -254,6 +304,9 @@ type MetricsCoverage struct {
 	Honey     string `json:"honey"`
 	Tokens    string `json:"tokens"`
 	Durations string `json:"durations"`
+	// Purpose reports whether every retained execution carries a recorded
+	// purpose. Unknown historical attribution makes it partial, not work.
+	Purpose string `json:"purpose"`
 }
 
 // MetricsWarning is one concrete reason a measurement is missing, unreadable,
@@ -357,12 +410,19 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 	applyWork(&m, tasks, events)
 	applyHoney(&m, events, trailLogPresent, trailLogUnreadable, trailLogDamaged)
 	applyTokens(&m, runMetas, runs, runCoverage, runUnreadable)
-	perTaskVerification := applyVerification(&m, events)
-	perTaskGate := applyGateRejections(&m, runMetas, events)
-	applyTasks(&m, colonyRoot, traceID, tasks, runMetas, perTaskVerification, perTaskGate)
-	applyReviewNotes(&m, events)
+	// Purpose is read from the run record and the task phase, never from a Bee
+	// name. The same maps feed the root counters and byPurpose, so the buckets
+	// cannot drift from the total they split.
+	taskPurposes := metricsTaskPurposes(tasks)
+	runPurposes := metricsRunPurposes(runMetas)
+	verification := applyVerification(&m, events, taskPurposes, runPurposes)
+	gate := applyGateRejections(&m, runMetas, events, taskPurposes, runPurposes)
+	applyTasks(&m, colonyRoot, traceID, tasks, runMetas, verification.perTask, gate.perTask)
+	reviewNotes := applyReviewNotes(&m, events, taskPurposes, runPurposes)
 	applyHumanFeedback(&m, events)
-	applyDurations(&m, runMetas, tasks, events, observedAt, runUnreadable)
+	runDurations := applyDurations(&m, runMetas, tasks, events, observedAt, runUnreadable)
+	applyByPurpose(&m, events, runMetas, taskPurposes, runDurations, verification.byPurpose, gate.byPurpose, reviewNotes)
+	applyPurposeCoverage(&m, runMetas)
 	applyEventsCoverage(&m, trailLogPresent, trailLogUnreadable, len(readIssues) > 0)
 	applyTaskRunLinkageWarnings(&m, colonyRoot, traceID)
 	applyRunTaskJoinWarnings(&m, tasks, runMetas)
@@ -1025,11 +1085,71 @@ func applyTokens(m *TrailMetrics, metas []RunMeta, runs MetricsRuns, runCoverage
 	m.Tokens = &tokens
 }
 
+// metricsPurposeUnknown is the bucket for an execution whose purpose was not
+// recorded. It is a reader-side bucket name, not a value admission writes.
+const metricsPurposeUnknown = "unknown"
+
+// metricsPurposeKey maps a recorded purpose to its bucket. Anything outside the
+// closed vocabulary is unknown: a reader never invents work or analysis for it.
+func metricsPurposeKey(purpose protocol.ExecutionPurpose) string {
+	if protocol.IsKnownExecutionPurpose(purpose) {
+		return string(purpose)
+	}
+	return metricsPurposeUnknown
+}
+
+// metricsTaskPurposes derives each task's execution purpose from its recorded
+// phase. The phase vocabulary is closed, so every task has a purpose: work or
+// closing. A merge gate is not dispatched and is not goal work.
+func metricsTaskPurposes(tasks taskledger.TraceSnapshot) map[string]protocol.ExecutionPurpose {
+	out := make(map[string]protocol.ExecutionPurpose, len(tasks.Tasks))
+	for taskID, task := range tasks.Tasks {
+		out[taskID] = protocol.PurposeForTaskPhase(task.Phase)
+	}
+	return out
+}
+
+// metricsRunPurposes indexes the purpose recorded on each retained execution.
+// Empty or unsupported values stay absent, which makes them unknown.
+func metricsRunPurposes(metas []RunMeta) map[string]protocol.ExecutionPurpose {
+	out := make(map[string]protocol.ExecutionPurpose, len(metas))
+	for _, meta := range metas {
+		purpose := protocol.ExecutionPurpose(meta.Purpose)
+		if protocol.IsKnownExecutionPurpose(purpose) {
+			out[meta.AgentID] = purpose
+		}
+	}
+	return out
+}
+
+// metricsEventPurpose attributes an observation to the execution that produced
+// it, then to the task it names. A legacy event produced by the runtime and
+// naming no task stays unknown.
+func metricsEventPurpose(ev protocol.Event, taskID string, taskPurposes map[string]protocol.ExecutionPurpose, runPurposes map[string]protocol.ExecutionPurpose) protocol.ExecutionPurpose {
+	if purpose, ok := runPurposes[ev.AgentID]; ok {
+		return purpose
+	}
+	if taskID != "" {
+		return taskPurposes[taskID]
+	}
+	return ""
+}
+
+// verificationEvidence is the trail's verification.failed observation, split
+// per task and per purpose. The per-task map may sum to less than the trail
+// total: a taskless verification stays in the total and in one purpose bucket.
+type verificationEvidence struct {
+	perTask   map[string]int
+	byPurpose map[string]int
+}
+
 // applyVerification counts distinct verification.failed observations and joins
-// them to their recorded task. The returned per-task map may sum to less than
-// the trail total: a taskless verification stays in the total.
-func applyVerification(m *TrailMetrics, events []protocol.Event) map[string]int {
-	perTask := map[string]int{}
+// them to their recorded task and purpose.
+func applyVerification(m *TrailMetrics, events []protocol.Event, taskPurposes map[string]protocol.ExecutionPurpose, runPurposes map[string]protocol.ExecutionPurpose) verificationEvidence {
+	evidence := verificationEvidence{
+		perTask:   map[string]int{},
+		byPurpose: map[string]int{},
+	}
 	total := 0
 	for _, ev := range events {
 		if ev.Type != protocol.EventVerification {
@@ -1045,12 +1165,22 @@ func applyVerification(m *TrailMetrics, events []protocol.Event) map[string]int 
 			continue
 		}
 		total++
-		if taskID := strings.TrimSpace(payload.TaskID); taskID != "" {
-			perTask[taskID]++
+		taskID := strings.TrimSpace(payload.TaskID)
+		if taskID != "" {
+			evidence.perTask[taskID]++
 		}
+		purpose := metricsEventPurpose(ev, taskID, taskPurposes, runPurposes)
+		evidence.byPurpose[metricsPurposeKey(purpose)]++
 	}
 	m.VerificationFailed = total
-	return perTask
+	return evidence
+}
+
+// gateEvidence is the deduplicated mechanical rejection count, split per task
+// and per purpose.
+type gateEvidence struct {
+	perTask   map[string]int
+	byPurpose map[string]int
 }
 
 // applyGateRejections counts mechanical check rejections once per rejection.
@@ -1060,9 +1190,14 @@ func applyVerification(m *TrailMetrics, events []protocol.Event) map[string]int 
 // checks_failed. They describe the same event, so neither recorder may be
 // added on top of the other. A failed gate with no surviving event still
 // counts, and a surviving event whose run record was overwritten still counts.
-func applyGateRejections(m *TrailMetrics, metas []RunMeta, events []protocol.Event) map[string]int {
+//
+// The purpose split uses the same deduplicated counts: a task rejection takes
+// the task's phase purpose, and a taskless rejection keeps the purpose of its
+// run record when that is unambiguous.
+func applyGateRejections(m *TrailMetrics, metas []RunMeta, events []protocol.Event, taskPurposes map[string]protocol.ExecutionPurpose, runPurposes map[string]protocol.ExecutionPurpose) gateEvidence {
 	runGates := map[string]int{}
-	tasklessRuns := 0
+	tasklessRunGates := 0
+	tasklessRunPurposes := map[string]struct{}{}
 	for _, meta := range metas {
 		if meta.Gate == nil || meta.Gate.Passed {
 			continue
@@ -1070,12 +1205,14 @@ func applyGateRejections(m *TrailMetrics, metas []RunMeta, events []protocol.Eve
 		if taskID := strings.TrimSpace(meta.TaskID); taskID != "" {
 			runGates[taskID]++
 		} else {
-			tasklessRuns++
+			tasklessRunGates++
+			tasklessRunPurposes[metricsPurposeKey(protocol.ExecutionPurpose(meta.Purpose))] = struct{}{}
 		}
 	}
 
 	checkEvents := map[string]int{}
 	tasklessEvents := 0
+	tasklessEventPurposes := map[string]struct{}{}
 	for _, ev := range events {
 		if ev.Type != protocol.EventVerification {
 			continue
@@ -1094,24 +1231,72 @@ func applyGateRejections(m *TrailMetrics, metas []RunMeta, events []protocol.Eve
 			checkEvents[taskID]++
 		} else {
 			tasklessEvents++
+			purpose := metricsPurposeKey(metricsEventPurpose(ev, "", taskPurposes, runPurposes))
+			tasklessEventPurposes[purpose] = struct{}{}
 		}
 	}
 
-	perTask := runGates
+	perTask := make(map[string]int, len(runGates)+len(checkEvents))
+	for taskID, count := range runGates {
+		perTask[taskID] = count
+	}
 	for taskID, recorded := range checkEvents {
 		if recorded > perTask[taskID] {
 			perTask[taskID] = recorded
 		}
 	}
-	total := tasklessRuns
-	if tasklessEvents > total {
-		total = tasklessEvents
+	taskless := tasklessRunGates
+	if tasklessEvents > taskless {
+		taskless = tasklessEvents
 	}
+	total := taskless
 	for _, count := range perTask {
 		total += count
 	}
+
+	byPurpose := map[string]int{}
+	for taskID, count := range perTask {
+		byPurpose[metricsPurposeKey(taskPurposes[taskID])] += count
+	}
+	if taskless > 0 {
+		// The two recorders of a taskless rejection share one identity, so the
+		// count is deduplicated before attribution. If their purposes disagree,
+		// or no purpose is recorded, the rejection stays unknown.
+		purposes := tasklessRunPurposes
+		if tasklessRunGates == 0 {
+			purposes = tasklessEventPurposes
+		} else if tasklessEvents > 0 {
+			purposes = unionPurposeSets(tasklessRunPurposes, tasklessEventPurposes)
+		}
+		byPurpose[singlePurposeOrUnknown(purposes)] += taskless
+	}
+
 	m.GateRejections = total
-	return perTask
+	return gateEvidence{perTask: perTask, byPurpose: byPurpose}
+}
+
+func unionPurposeSets(a, b map[string]struct{}) map[string]struct{} {
+	out := make(map[string]struct{}, len(a)+len(b))
+	for key := range a {
+		out[key] = struct{}{}
+	}
+	for key := range b {
+		out[key] = struct{}{}
+	}
+	return out
+}
+
+func singlePurposeOrUnknown(purposes map[string]struct{}) string {
+	if len(purposes) != 1 {
+		return metricsPurposeUnknown
+	}
+	for purpose := range purposes {
+		if purpose == metricsPurposeUnknown {
+			return metricsPurposeUnknown
+		}
+		return purpose
+	}
+	return metricsPurposeUnknown
 }
 
 // applyTasks builds the stable task-id ordered observation. Executions count
@@ -1187,6 +1372,7 @@ func applyTasks(m *TrailMetrics, colonyRoot, traceID string, tasks taskledger.Tr
 		row := MetricsTask{
 			TaskID:             taskID,
 			Phase:              string(task.Phase),
+			Purpose:            string(protocol.PurposeForTaskPhase(task.Phase)),
 			Bee:                task.Bee,
 			Intent:             task.Intent,
 			Status:             string(task.Status),
@@ -1299,8 +1485,9 @@ func taskStartedByStatus(status protocol.TaskStatus) bool {
 }
 
 // applyReviewNotes counts review.note observations by the closed severity
-// vocabulary.
-func applyReviewNotes(m *TrailMetrics, events []protocol.Event) {
+// vocabulary and attributes each note to the execution that produced it.
+func applyReviewNotes(m *TrailMetrics, events []protocol.Event, taskPurposes map[string]protocol.ExecutionPurpose, runPurposes map[string]protocol.ExecutionPurpose) map[string]int {
+	byPurpose := map[string]int{}
 	for _, ev := range events {
 		if ev.Type != protocol.EventInsight {
 			continue
@@ -1314,6 +1501,8 @@ func applyReviewNotes(m *TrailMetrics, events []protocol.Event) {
 				fmt.Sprintf("review.note event %s payload: %v", ev.ID, err))
 			continue
 		}
+		purpose := metricsEventPurpose(ev, strings.TrimSpace(payload.TaskID), taskPurposes, runPurposes)
+		byPurpose[metricsPurposeKey(purpose)]++
 		switch protocol.ClassifyReviewSeverity(payload.Severity) {
 		case protocol.ReviewSeverityInfo:
 			m.ReviewNotes.Info++
@@ -1331,6 +1520,7 @@ func applyReviewNotes(m *TrailMetrics, events []protocol.Event) {
 			m.ReviewNotes.Unspecified++
 		}
 	}
+	return byPurpose
 }
 
 // applyHumanFeedback counts human.feedback observations by the closed verdict
@@ -1370,37 +1560,65 @@ func markTasksPartial(m *TrailMetrics) {
 	}
 }
 
+// runIntervalProblem classifies why an execution has no usable active interval.
+type runIntervalProblem int
+
+const (
+	runIntervalOK runIntervalProblem = iota
+	runIntervalMissingStart
+	runIntervalMissingEnd
+	runIntervalConflicting
+)
+
+// runActiveSeconds returns one execution's usable active interval. A running
+// execution ends at observedAt; a terminal one needs its recorded finish time.
+func runActiveSeconds(meta RunMeta, observedAt time.Time) (float64, runIntervalProblem) {
+	if meta.StartedAt.IsZero() {
+		return 0, runIntervalMissingStart
+	}
+	end := meta.FinishedAt
+	if end.IsZero() {
+		if terminalRunState(meta.State) {
+			return 0, runIntervalMissingEnd
+		}
+		end = observedAt
+	}
+	if end.Before(meta.StartedAt) {
+		return 0, runIntervalConflicting
+	}
+	return end.Sub(meta.StartedAt).Seconds(), runIntervalOK
+}
+
 // applyDurations computes active and wall time from recorded timestamps.
 // Overlapping executions add to active time; waiting between them stays in wall
-// time. A missing or invalid timestamp makes only that interval unusable.
-func applyDurations(m *TrailMetrics, metas []RunMeta, tasks taskledger.TraceSnapshot, events []protocol.Event, observedAt time.Time, runUnreadable bool) {
+// time. A missing or invalid timestamp makes only that interval unusable. The
+// returned map holds each usable execution's interval so byPurpose can sum the
+// same measurements without a second, possibly divergent, read.
+func applyDurations(m *TrailMetrics, metas []RunMeta, tasks taskledger.TraceSnapshot, events []protocol.Event, observedAt time.Time, runUnreadable bool) map[string]float64 {
 	active := 0.0
 	usable := 0
 	partial := runUnreadable
+	durations := make(map[string]float64, len(metas))
 	for _, meta := range metas {
-		if meta.StartedAt.IsZero() {
+		seconds, problem := runActiveSeconds(meta, observedAt)
+		switch problem {
+		case runIntervalMissingStart:
 			m.warn("durations", WarningMissing, fmt.Sprintf("run %s has no recorded start time", meta.AgentID))
 			partial = true
 			continue
-		}
-		end := meta.FinishedAt
-		if end.IsZero() {
-			if !terminalRunState(meta.State) {
-				end = observedAt
-			} else {
-				m.warn("durations", WarningMissing,
-					fmt.Sprintf("run %s is %s but has no recorded finish time", meta.AgentID, meta.State))
-				partial = true
-				continue
-			}
-		}
-		if end.Before(meta.StartedAt) {
+		case runIntervalMissingEnd:
+			m.warn("durations", WarningMissing,
+				fmt.Sprintf("run %s is %s but has no recorded finish time", meta.AgentID, meta.State))
+			partial = true
+			continue
+		case runIntervalConflicting:
 			m.warn("durations", WarningConflicting,
 				fmt.Sprintf("run %s finishes before it starts", meta.AgentID))
 			partial = true
 			continue
 		}
-		active += end.Sub(meta.StartedAt).Seconds()
+		active += seconds
+		durations[meta.AgentID] = seconds
 		usable++
 	}
 
@@ -1434,8 +1652,229 @@ func applyDurations(m *TrailMetrics, metas []RunMeta, tasks taskledger.TraceSnap
 	default:
 		m.Coverage.Durations = CoverageComplete
 	}
+	return durations
 }
 
+// applyByPurpose splits the same measured evidence the root aggregates count.
+// It never recounts a rejection: the deduplicated verification and gate maps
+// arrive already counted, so the buckets add up to the trail total rather than
+// to a second, looser pass over the same events.
+func applyByPurpose(
+	m *TrailMetrics,
+	events []protocol.Event,
+	metas []RunMeta,
+	taskPurposes map[string]protocol.ExecutionPurpose,
+	runDurations map[string]float64,
+	verificationByPurpose, gateByPurpose, reviewNotesByPurpose map[string]int,
+) {
+	buckets := map[string]*MetricsPurpose{
+		string(protocol.PurposeWork):     &m.ByPurpose.Work,
+		string(protocol.PurposeClosing):  &m.ByPurpose.Closing,
+		string(protocol.PurposeAnalysis): &m.ByPurpose.Analysis,
+		metricsPurposeUnknown:            &m.ByPurpose.Unknown,
+	}
+	bucketFor := func(purpose protocol.ExecutionPurpose) *MetricsPurpose {
+		return buckets[metricsPurposeKey(purpose)]
+	}
+
+	// Honey charges are divided, never the shared budget allocation. A charge
+	// recorded with its purpose is authoritative; an older charge falls back to
+	// the task it names, and a charge with neither stays unknown.
+	honeyByPurpose := map[string]int{}
+	if m.Honey.Spent != nil {
+		for _, ev := range events {
+			if ev.Type != protocol.EventSignal || protocol.PayloadKind(ev.Payload) != string(protocol.SignalEnergyConsume) {
+				continue
+			}
+			var payload protocol.EnergyConsumePayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				continue
+			}
+			honeyByPurpose[metricsPurposeKey(chargePurpose(payload, taskPurposes))] += payload.Amount
+		}
+	}
+
+	tokensByPurpose := map[string]*MetricsPurposeTokens{}
+	activeByPurpose := map[string]float64{}
+	activeSeen := map[string]bool{}
+	for _, meta := range metas {
+		purpose := protocol.ExecutionPurpose(meta.Purpose)
+		bucket := bucketFor(purpose)
+		bucket.Runs++
+		if protocol.RunStatus(meta.State) == protocol.StatusFailed {
+			bucket.Failed++
+		}
+		if meta.Usage != nil && meta.Usage.Source != protocol.UsageSourceUnavailable {
+			key := metricsPurposeKey(purpose)
+			tokens := tokensByPurpose[key]
+			if tokens == nil {
+				tokens = &MetricsPurposeTokens{}
+				tokensByPurpose[key] = tokens
+			}
+			tokens.RunsWithUsage++
+			tokens.InputTokens += meta.Usage.InputTokens
+			tokens.OutputTokens += meta.Usage.OutputTokens
+			tokens.CacheReadTokens += meta.Usage.CacheReadTokens
+			tokens.CacheWriteTokens += meta.Usage.CacheWriteTokens
+		}
+		if seconds, ok := runDurations[meta.AgentID]; ok {
+			key := metricsPurposeKey(purpose)
+			activeByPurpose[key] += seconds
+			activeSeen[key] = true
+		}
+	}
+
+	for key, bucket := range buckets {
+		if m.Honey.Spent != nil {
+			value := honeyByPurpose[key]
+			bucket.HoneySpent = &value
+		}
+		bucket.Tokens = tokensByPurpose[key]
+		if activeSeen[key] {
+			value := roundSeconds(activeByPurpose[key])
+			bucket.ActiveTimeSec = &value
+		}
+		bucket.VerificationFailed = verificationByPurpose[key]
+		bucket.GateRejections = gateByPurpose[key]
+		bucket.ReviewNotes = reviewNotesByPurpose[key]
+	}
+
+	applyPurposeRetries(buckets, m.Tasks, metas)
+}
+
+// applyPurposeRetries attributes recorded rework to the purpose that performed
+// it. A task's retries are max(0, executions-1) over its recorded work role; an
+// analysis has no task row, so repeated executions for the same studied
+// milestone are its retries. An attribution the record cannot prove stays null.
+func applyPurposeRetries(buckets map[string]*MetricsPurpose, tasks []MetricsTask, metas []RunMeta) {
+	taskRetries := map[string]int{}
+	taskSeen := map[string]bool{}
+	unknown := map[string]bool{}
+	for _, task := range tasks {
+		key := metricsPurposeKey(protocol.ExecutionPurpose(task.Purpose))
+		taskSeen[key] = true
+		if task.Retries == nil {
+			unknown[key] = true
+			continue
+		}
+		taskRetries[key] += *task.Retries
+	}
+
+	analysisGroups := map[string]int{}
+	analysisRuns := 0
+	analysisMissingMilestone := false
+	for _, meta := range metas {
+		if protocol.ExecutionPurpose(meta.Purpose) != protocol.PurposeAnalysis {
+			continue
+		}
+		analysisRuns++
+		milestone := strings.TrimSpace(meta.AnalysisOf)
+		if milestone == "" {
+			analysisMissingMilestone = true
+			continue
+		}
+		analysisGroups[milestone]++
+	}
+	analysisRetries := 0
+	for _, count := range analysisGroups {
+		if count > 1 {
+			analysisRetries += count - 1
+		}
+	}
+
+	for key, bucket := range buckets {
+		switch key {
+		case string(protocol.PurposeAnalysis):
+			if analysisRuns == 0 {
+				zero := 0
+				bucket.Retries = &zero
+				continue
+			}
+			if analysisMissingMilestone {
+				continue
+			}
+			value := analysisRetries
+			bucket.Retries = &value
+		case metricsPurposeUnknown:
+			if bucket.Runs > 0 {
+				continue
+			}
+			zero := 0
+			bucket.Retries = &zero
+		default:
+			if unknown[key] {
+				continue
+			}
+			if !taskSeen[key] && bucket.Runs > 0 {
+				// Direct-only work has no task ownership evidence.
+				continue
+			}
+			value := taskRetries[key]
+			bucket.Retries = &value
+		}
+	}
+}
+
+// chargePurpose resolves a honey charge's purpose from the recorded admission
+// attribution, falling back to the task it names. It never guesses from the
+// charge reason or a Bee name.
+func chargePurpose(payload protocol.EnergyConsumePayload, taskPurposes map[string]protocol.ExecutionPurpose) protocol.ExecutionPurpose {
+	if protocol.IsKnownExecutionPurpose(payload.Purpose) {
+		return payload.Purpose
+	}
+	if taskID := strings.TrimSpace(payload.TaskID); taskID != "" {
+		if purpose, ok := taskPurposes[taskID]; ok {
+			return purpose
+		}
+	}
+	return ""
+}
+
+// applyPurposeCoverage reports how much of the trail's execution history has a
+// recorded purpose. Legacy executions remain unknown: they are never defaulted
+// to work, and never reclassified as analysis.
+func applyPurposeCoverage(m *TrailMetrics, metas []RunMeta) {
+	legacy := 0
+	invalid := 0
+	analysisWithoutMilestone := 0
+	for _, meta := range metas {
+		purpose := protocol.ExecutionPurpose(meta.Purpose)
+		switch {
+		case strings.TrimSpace(string(meta.Purpose)) == "":
+			legacy++
+		case !protocol.IsKnownExecutionPurpose(purpose):
+			invalid++
+			m.warn("purpose", WarningConflicting,
+				fmt.Sprintf("run %s records unsupported purpose %q", meta.AgentID, meta.Purpose))
+		}
+		if purpose == protocol.PurposeAnalysis && strings.TrimSpace(meta.AnalysisOf) == "" {
+			analysisWithoutMilestone++
+		}
+	}
+
+	switch {
+	case len(metas) == 0:
+		m.Coverage.Purpose = CoverageComplete
+	case legacy > 0 || invalid > 0 || analysisWithoutMilestone > 0:
+		m.Coverage.Purpose = CoveragePartial
+	default:
+		m.Coverage.Purpose = CoverageComplete
+	}
+	m.ByPurpose.Coverage = m.Coverage.Purpose
+
+	if legacy > 0 {
+		m.warn("purpose", WarningLegacy,
+			fmt.Sprintf("%d of %d retained execution(s) have no recorded purpose; they are counted as unknown, not work or analysis",
+				legacy, len(metas)))
+	}
+	if analysisWithoutMilestone > 0 {
+		m.warn("purpose", WarningMissing,
+			fmt.Sprintf("%d analysis execution(s) name no studied milestone (analysisOf); their retry attribution is unknown",
+				analysisWithoutMilestone))
+	}
+}
+
+// terminalRunState reports whether a run state is terminal.
 func terminalRunState(state string) bool {
 	switch protocol.RunStatus(state) {
 	case protocol.StatusCompleted, protocol.StatusFailed, protocol.StatusCancelled:

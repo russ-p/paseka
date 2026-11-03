@@ -57,6 +57,10 @@ type RunRequest struct {
 	// legacy sessions do.
 	ConfigRef      string
 	ConfigRevision int
+	// Purpose and AnalysisOf are the operator-selected admission attribution.
+	// Empty means ordinary work; an analysis action must name its milestone.
+	Purpose    protocol.ExecutionPurpose
+	AnalysisOf string
 
 	resumeFrom       string
 	resumeProviderID string
@@ -193,6 +197,14 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 	if req.Bee == "" {
 		return nil, fmt.Errorf("sessions: bee role is required")
 	}
+	// Admission records purpose for the session's run record. A resumed session
+	// keeps the attribution its caller passes; an ordinary session is work.
+	purpose, analysisOf, err := protocol.ResolveAdmissionAttribution(req.Purpose, req.AnalysisOf)
+	if err != nil {
+		return nil, fmt.Errorf("sessions: %w", err)
+	}
+	req.Purpose = purpose
+	req.AnalysisOf = analysisOf
 
 	ctxColony, err := colony.ResolveContext(req.StartDir)
 	if err != nil {
@@ -453,6 +465,8 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ResumedFrom:       req.resumeFrom,
 		Profile:           execColony.Profile,
 		StartedAt:         startedAt,
+		Purpose:           req.Purpose,
+		AnalysisOf:        req.AnalysisOf,
 		Provenance:        provenance,
 	}); err != nil {
 		return nil, err
@@ -478,6 +492,8 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		InitialCodeBaseSHA:   provenance.InitialCodeBaseSHA,
 		InitialCodeBaseDirty: provenance.InitialCodeBaseDirty,
 		LaunchForm:           string(plan.Form),
+		Purpose:              req.Purpose,
+		AnalysisOf:           req.AnalysisOf,
 		ResultPath:           resultFile,
 		EventLogPath:         runDir.EventsPath(),
 		CreatedAt:            startedAt,
@@ -567,6 +583,8 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			ResumedFrom:       req.resumeFrom,
 			Profile:           execColony.Profile,
 			StartedAt:         startedAt,
+			Purpose:           req.Purpose,
+			AnalysisOf:        req.AnalysisOf,
 			Provenance:        provenance,
 		}); err != nil {
 			return nil, fmt.Errorf("sessions: write meta: %w", err)
@@ -627,6 +645,8 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		ResumedFrom:       req.resumeFrom,
 		Profile:           execColony.Profile,
 		StartedAt:         startedAt,
+		Purpose:           req.Purpose,
+		AnalysisOf:        req.AnalysisOf,
 		Provenance:        provenance,
 	}); err != nil {
 		_ = proc.Kill()

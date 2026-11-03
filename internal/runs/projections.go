@@ -88,6 +88,10 @@ type RunMeta struct {
 	// for a cancelled run or "checks_failed" for a gate rejection. A legacy
 	// record may carry no reason; absence stays distinguishable from a reason.
 	Reason string `json:"reason,omitempty"`
+	// Purpose is the admission-time execution purpose. It is empty for legacy
+	// records that never recorded one; such a run is unknown, not work.
+	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string                    `json:"analysisOf,omitempty"`
 	protocol.Provenance
 }
 
@@ -110,6 +114,8 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		Intent:     req.Intent,
 		Model:      req.Model,
 		Profile:    req.Profile,
+		Purpose:    req.Purpose,
+		AnalysisOf: req.AnalysisOf,
 		RunDir:     d.Root(),
 		StartedAt:  req.CreatedAt,
 		Provenance: protocol.Provenance{
@@ -201,6 +207,14 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 			meta.Usage = sess.Usage
 		}
 	}
+	if meta.Purpose == "" {
+		if sess, err := d.ReadSession(); err == nil {
+			meta.Purpose = sess.Purpose
+			if meta.AnalysisOf == "" {
+				meta.AnalysisOf = sess.AnalysisOf
+			}
+		}
+	}
 
 	if meta.Model == "" {
 		if sess, err := d.ReadSession(); err == nil {
@@ -220,6 +234,12 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		}
 		if meta.Implementation == "" {
 			meta.Implementation = legacy.Implementation
+		}
+		if meta.Purpose == "" {
+			meta.Purpose = legacy.Purpose
+			if meta.AnalysisOf == "" {
+				meta.AnalysisOf = legacy.AnalysisOf
+			}
 		}
 	}
 

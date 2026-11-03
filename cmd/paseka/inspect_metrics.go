@@ -25,8 +25,9 @@ func newInspectMetricsCmd() *cobra.Command {
 		Use:   "metrics",
 		Short: "Show a trail's cost, run counts, and work stage",
 		Long: "Project one flight trail from its retained disk evidence: cue provenance,\n" +
-			"entry task, work stage, honey, tokens, run counts, durations, and the\n" +
-			"per-task rework and review observation. The read works without NATS.\n" +
+			"entry task, work stage, honey, tokens, run counts, durations, the per-task\n" +
+			"rework and review observation, and byPurpose work/closing/analysis splits.\n" +
+			"The read works without NATS.\n" +
 			"--write persists the same projection to .paseka/runs/<traceId>/metrics.json\n" +
 			"without declaring work completed.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -174,6 +175,12 @@ func printTrailMetrics(w io.Writer, m runs.TrailMetrics) error {
 		m.Runs.Failed, m.Runs.Cancelled, m.Runs.ContractFailed, m.Runs.ContractUnavailable,
 		m.Runs.Timeout, m.Runs.ChecksFailed, m.Runs.ChecksPassed)
 
+	fmt.Fprintf(w, "  by purpose (completion baseline is work; coverage: %s)\n", m.ByPurpose.Coverage)
+	printPurposeBucket(w, "work", m.ByPurpose.Work)
+	printPurposeBucket(w, "closing", m.ByPurpose.Closing)
+	printPurposeBucket(w, "analysis", m.ByPurpose.Analysis)
+	printPurposeBucket(w, "unknown", m.ByPurpose.Unknown)
+
 	if len(m.Tasks) > 0 {
 		fmt.Fprintf(w, "  tasks: %d (stable task-id order)\n", len(m.Tasks))
 		for _, task := range m.Tasks {
@@ -213,9 +220,9 @@ func printTrailMetrics(w io.Writer, m runs.TrailMetrics) error {
 	fmt.Fprintf(w, "  active: %s\n", secondsLabel(m.ActiveTimeSec))
 	fmt.Fprintf(w, "  wall: %s\n", secondsLabel(m.WallTimeSec))
 
-	fmt.Fprintf(w, "  coverage: events %s, runs %s, tasks %s, origin %s, honey %s, tokens %s, durations %s\n",
+	fmt.Fprintf(w, "  coverage: events %s, runs %s, tasks %s, origin %s, honey %s, tokens %s, durations %s, purpose %s\n",
 		m.Coverage.Events, m.Coverage.Runs, m.Coverage.Tasks, m.Coverage.Origin,
-		m.Coverage.Honey, m.Coverage.Tokens, m.Coverage.Durations)
+		m.Coverage.Honey, m.Coverage.Tokens, m.Coverage.Durations, m.Coverage.Purpose)
 
 	if len(m.Warnings) == 0 {
 		fmt.Fprintln(w, "  warnings: (none)")
@@ -250,4 +257,23 @@ func countLabel(value *int) string {
 		return "unknown"
 	}
 	return strconv.Itoa(*value)
+}
+
+// printPurposeBucket prints one purpose split. Work is the completion baseline;
+// closing and analysis are overhead/study and are never folded into it.
+func printPurposeBucket(w io.Writer, label string, bucket runs.MetricsPurpose) {
+	honey := "unknown"
+	if bucket.HoneySpent != nil {
+		honey = strconv.Itoa(*bucket.HoneySpent)
+	}
+	tokens := "unknown"
+	if bucket.Tokens != nil {
+		tokens = fmt.Sprintf("in %d, out %d, cache read %d, cache write %d (%d run(s))",
+			bucket.Tokens.InputTokens, bucket.Tokens.OutputTokens,
+			bucket.Tokens.CacheReadTokens, bucket.Tokens.CacheWriteTokens, bucket.Tokens.RunsWithUsage)
+	}
+	fmt.Fprintf(w, "    %s: runs %d, failed %d, retries %s, honey %s, tokens %s, active %s\n",
+		label, bucket.Runs, bucket.Failed, countLabel(bucket.Retries), honey, tokens, secondsLabel(bucket.ActiveTimeSec))
+	fmt.Fprintf(w, "      verification failed %d, review notes %d, gate rejections %d\n",
+		bucket.VerificationFailed, bucket.ReviewNotes, bucket.GateRejections)
 }

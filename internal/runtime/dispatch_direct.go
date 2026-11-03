@@ -10,7 +10,14 @@ import (
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
+// dispatchDirect handles an ordinary direct reaction. Ordinary work defaults to
+// purpose work; an explicitly attributed analysis reaction enters through
+// dispatchDirectWithPurpose and keeps its studied milestone.
 func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole string, execCtx *trailExecutionContext) error {
+	return r.dispatchDirectWithPurpose(ctx, ev, beeRole, execCtx, protocol.PurposeWork, "")
+}
+
+func (r *Reactor) dispatchDirectWithPurpose(ctx context.Context, ev protocol.Event, beeRole string, execCtx *trailExecutionContext, purpose protocol.ExecutionPurpose, analysisOf string) error {
 	defer func() {
 		if _, err := r.tryActivateConfig(context.Background(), ev.TraceID, true); err != nil {
 			runtimeLog.Warn("activate pending configuration failed", logging.F("error", err.Error()))
@@ -62,7 +69,7 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 	if held, err := r.directAdmissionHeld(ev, beeRole, taskID); err != nil {
 		return err
 	} else if held {
-		if err := r.deferDirectDispatch(dispatchCtx, ev, beeRole, taskID, protocol.ConfigBarrierHoldReason); err != nil {
+		if err := r.deferDirectDispatch(dispatchCtx, ev, beeRole, taskID, protocol.ConfigBarrierHoldReason, purpose, analysisOf); err != nil {
 			return err
 		}
 		r.markBarrierHeldDeferral(ev.TraceID)
@@ -70,12 +77,12 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		return nil
 	}
 
-	ok, err := r.gateDirectDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch")
+	ok, err := r.gateDirectDispatchEnergy(dispatchCtx, ev.TraceID, taskID, "direct.dispatch", purpose, analysisOf)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		if err := r.deferDirectDispatch(dispatchCtx, ev, beeRole, taskID, protocol.HoneyReserveExhaustedSummary); err != nil {
+		if err := r.deferDirectDispatch(dispatchCtx, ev, beeRole, taskID, protocol.HoneyReserveExhaustedSummary, purpose, analysisOf); err != nil {
 			return err
 		}
 		logDispatchSkip("honey reserve exhausted — direct dispatch deferred", ev.TraceID, taskID, beeRole)
@@ -102,6 +109,8 @@ func (r *Reactor) dispatchDirect(ctx context.Context, ev protocol.Event, beeRole
 		Sector:       proposalSector,
 		ProposalKind: proposalKind,
 		Provenance:   attemptProvenance(attempt),
+		Purpose:      purpose,
+		AnalysisOf:   analysisOf,
 	}, DispatchModeDirect)
 	if err != nil {
 		return err

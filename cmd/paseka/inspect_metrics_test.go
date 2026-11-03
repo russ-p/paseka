@@ -25,6 +25,8 @@ func TestInspectMetricsCLI(t *testing.T) {
 		"  honey: ",
 		"  tokens: ",
 		"  runs: 1",
+		"  by purpose ",
+		"    work: ",
 		"  active: ",
 		"  wall: ",
 		"  verification failed: ",
