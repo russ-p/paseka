@@ -107,6 +107,39 @@ func printTrailMetrics(w io.Writer, m runs.TrailMetrics) error {
 			len(m.CueIngresses), origin, addition, unknown)
 	}
 
+	if m.ForkOf == nil {
+		fmt.Fprintf(w, "  forkOf: (none, lineage coverage %s)\n", m.Coverage.Lineage)
+	} else {
+		fork := m.ForkOf
+		fmt.Fprintf(w, "  forkOf: %s (task %s, attempt %s", fork.SourceTrace, fork.SourceTask, fork.SourceAttempt)
+		if fork.SourceRun != "" {
+			fmt.Fprintf(w, ", run %s", fork.SourceRun)
+		}
+		fmt.Fprintf(w, ")\n")
+		fmt.Fprintf(w, "    source configuration: %s (revision %d), coverage %s\n",
+			orUnknown(fork.SourceConfigRef), fork.SourceConfigRevision, m.Coverage.Lineage)
+	}
+
+	if m.Configuration == nil {
+		fmt.Fprintf(w, "  configuration: (unavailable, coverage %s)\n", m.Coverage.Configuration)
+	} else {
+		config := m.Configuration
+		multiple := ""
+		if config.MultipleVersions {
+			multiple = ", multiple versions"
+		}
+		fmt.Fprintf(w, "  configuration: initial %s, active %s, revision %d (%s%s, coverage %s)\n",
+			orUnknown(config.InitialConfigRef), orUnknown(config.ActiveConfigRef),
+			config.ConfigRevision, orUnknown(config.Policy), multiple, m.Coverage.Configuration)
+		for _, use := range config.Used {
+			fmt.Fprintf(w, "    used %s (revision %d, %d run(s))\n",
+				use.ConfigRef, use.ConfigRevision, use.Runs)
+		}
+		if config.UnknownRuns > 0 {
+			fmt.Fprintf(w, "    %d run(s) recorded no configuration reference (unknown)\n", config.UnknownRuns)
+		}
+	}
+
 	state := "unknown"
 	if m.Work.State != nil {
 		state = *m.Work.State
@@ -220,8 +253,9 @@ func printTrailMetrics(w io.Writer, m runs.TrailMetrics) error {
 	fmt.Fprintf(w, "  active: %s\n", secondsLabel(m.ActiveTimeSec))
 	fmt.Fprintf(w, "  wall: %s\n", secondsLabel(m.WallTimeSec))
 
-	fmt.Fprintf(w, "  coverage: events %s, runs %s, tasks %s, origin %s, honey %s, tokens %s, durations %s, purpose %s\n",
+	fmt.Fprintf(w, "  coverage: events %s, runs %s, tasks %s, origin %s, lineage %s, configuration %s, honey %s, tokens %s, durations %s, purpose %s\n",
 		m.Coverage.Events, m.Coverage.Runs, m.Coverage.Tasks, m.Coverage.Origin,
+		m.Coverage.Lineage, m.Coverage.Configuration,
 		m.Coverage.Honey, m.Coverage.Tokens, m.Coverage.Durations, m.Coverage.Purpose)
 
 	if len(m.Warnings) == 0 {
@@ -243,6 +277,13 @@ func cueLabel(m runs.TrailMetrics) string {
 		return "(unknown origin)"
 	}
 	return "(none)"
+}
+
+func orUnknown(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "(unknown)"
+	}
+	return value
 }
 
 func secondsLabel(value *float64) string {

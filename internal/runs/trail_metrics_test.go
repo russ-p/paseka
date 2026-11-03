@@ -31,20 +31,22 @@ func appendMetricsEvent(t *testing.T, root, traceID string, ev protocol.Event) {
 }
 
 type metricsRunSpec struct {
-	agentID       string
-	bee           string
-	taskID        string
-	started       time.Time
-	finished      time.Time
-	state         protocol.RunStatus
-	reason        string
-	purpose       protocol.ExecutionPurpose
-	analysisOf    string
-	legacyPurpose bool
-	usage         *protocol.Usage
-	sessionUsage  *protocol.Usage
-	gate          *protocol.GateResult
-	contract      *protocol.ContractRecord
+	agentID        string
+	bee            string
+	taskID         string
+	started        time.Time
+	finished       time.Time
+	state          protocol.RunStatus
+	reason         string
+	purpose        protocol.ExecutionPurpose
+	analysisOf     string
+	legacyPurpose  bool
+	configRef      string
+	configRevision int
+	usage          *protocol.Usage
+	sessionUsage   *protocol.Usage
+	gate           *protocol.GateResult
+	contract       *protocol.ContractRecord
 }
 
 func writeMetricsRun(t *testing.T, root, traceID string, spec metricsRunSpec) {
@@ -72,6 +74,8 @@ func writeMetricsRun(t *testing.T, root, traceID string, spec metricsRunSpec) {
 		Purpose:         purpose,
 		AnalysisOf:      spec.analysisOf,
 		CreatedAt:       spec.started,
+		ConfigRef:       spec.configRef,
+		ConfigRevision:  spec.configRevision,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +147,46 @@ func writeMetricsInvocation(t *testing.T, root, traceID string, inv CueInvocatio
 	}
 }
 
+// writeMetricsManifest writes the retained spec 042 configuration binding. The
+// fixture is raw JSON so the test pins the on-disk contract the metrics reader
+// depends on, not the reader's own struct tags.
+func writeMetricsManifest(t *testing.T, root, traceID string, manifest map[string]any) {
+	t.Helper()
+	path := metricsConfigManifestPath(root, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := manifest["version"]; !ok {
+		manifest["version"] = 1
+	}
+	if _, ok := manifest["traceId"]; !ok {
+		manifest["traceId"] = traceID
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeMetricsForkRecord writes the retained spec 042 fork lineage record.
+func writeMetricsForkRecord(t *testing.T, root, traceID string, record map[string]any) {
+	t.Helper()
+	path := metricsForkLineagePath(root, traceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBuildTrailMetricsCostAndRunHalf(t *testing.T) {
 	root := t.TempDir()
 	traceID := "trace-metrics"
@@ -172,6 +216,12 @@ func TestBuildTrailMetricsCostAndRunHalf(t *testing.T) {
 		TaskID: "task-2", Bee: "reviewer", Intent: "feature", Status: protocol.TaskStatusCompleted,
 		CreatedAt: base.Add(2 * time.Second),
 	})
+	writeMetricsManifest(t, root, traceID, map[string]any{
+		"initialConfigRef": "sha256:cfg-a",
+		"activeConfigRef":  "sha256:cfg-a",
+		"configRevision":   1,
+		"policy":           "editable",
+	})
 
 	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "runtime", protocol.EventSignal, protocol.EnergySeededPayload{
 		Kind: protocol.SignalEnergySeeded, SeedID: "seed-1", Budget: 12, SeededAt: base,
@@ -192,11 +242,13 @@ func TestBuildTrailMetricsCostAndRunHalf(t *testing.T) {
 	writeMetricsRun(t, root, traceID, metricsRunSpec{
 		agentID: "run-a", bee: "builder", taskID: "task-1",
 		started: base.Add(time.Minute), finished: base.Add(2 * time.Minute),
+		configRef: "sha256:cfg-a", configRevision: 1,
 		usage: &protocol.Usage{InputTokens: 100, OutputTokens: 20, CacheReadTokens: 5},
 	})
 	writeMetricsRun(t, root, traceID, metricsRunSpec{
 		agentID: "run-b", bee: "builder", taskID: "task-2",
 		started: base.Add(90 * time.Second), finished: base.Add(3 * time.Minute),
+		configRef: "sha256:cfg-a", configRevision: 1,
 		usage: &protocol.Usage{InputTokens: 50, OutputTokens: 10, CacheWriteTokens: 1},
 	})
 
@@ -255,11 +307,25 @@ func TestBuildTrailMetricsCostAndRunHalf(t *testing.T) {
 		"events": m.Coverage.Events, "runs": m.Coverage.Runs, "tasks": m.Coverage.Tasks,
 		"origin": m.Coverage.Origin, "honey": m.Coverage.Honey,
 		"tokens": m.Coverage.Tokens, "durations": m.Coverage.Durations,
-		"purpose": m.Coverage.Purpose,
+		"purpose": m.Coverage.Purpose, "lineage": m.Coverage.Lineage,
+		"configuration": m.Coverage.Configuration,
 	} {
+		if label == "lineage" {
+			// This trail is known ordinary: its origin is a cue, not a fork.
+			if got != CoverageAbsent {
+				t.Fatalf("coverage %s = %q, want absent", label, got)
+			}
+			continue
+		}
 		if got != CoverageComplete {
 			t.Fatalf("coverage %s = %q, want complete (warnings: %+v)", label, got, m.Warnings)
 		}
+	}
+	if m.ForkOf != nil {
+		t.Fatalf("forkOf = %+v, want null for an ordinary trail", m.ForkOf)
+	}
+	if m.Configuration == nil || m.Configuration.MultipleVersions {
+		t.Fatalf("configuration = %+v, want one retained version", m.Configuration)
 	}
 	if len(m.Warnings) != 0 {
 		t.Fatalf("warnings = %+v, want none", m.Warnings)
@@ -1519,4 +1585,367 @@ func TestBuildTrailMetricsWorkBaselineExcludesClosingAndAnalysis(t *testing.T) {
 	if wrapped.ByPurpose.Analysis.HoneySpent == nil || *wrapped.ByPurpose.Analysis.HoneySpent != 5 {
 		t.Fatalf("analysis honey = %v, want 5", wrapped.ByPurpose.Analysis.HoneySpent)
 	}
+}
+
+func TestBuildTrailMetricsForkLineageComesFromRetainedRecord(t *testing.T) {
+	root := t.TempDir()
+	forkTrace := "trace-fork"
+	sourceTrace := "trace-source"
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	observedAt := base.Add(10 * time.Minute)
+
+	writeMetricsManifest(t, root, forkTrace, map[string]any{
+		"initialConfigRef": "sha256:candidate",
+		"activeConfigRef":  "sha256:candidate",
+		"configRevision":   1,
+		"policy":           "pinned",
+	})
+	writeMetricsForkRecord(t, root, forkTrace, map[string]any{
+		"version":          1,
+		"forkId":           "fork-1",
+		"traceId":          forkTrace,
+		"sourceTrace":      sourceTrace,
+		"sourceTask":       "source-task",
+		"sourceAttempt":    "attempt-source",
+		"sourceRun":        "run-source",
+		"sourceConfigRef":  "sha256:source-cfg",
+		"sourceRevision":   3,
+		"configRef":        "sha256:candidate",
+		"policy":           "pinned",
+		"state":            "runnable",
+		"delta":            map[string]any{"form": "none"},
+		"createdAt":        base,
+		"sourceTaskDigest": "sha256:digest",
+		"sourceBaseSha":    "abc",
+		"baseSha":          "abc",
+	})
+	writeMetricsOrigin(t, root, forkTrace, TrailOrigin{
+		Kind: OriginKindFork, SourceTraceID: sourceTrace, ForkID: "fork-1",
+	})
+	writeMetricsRun(t, root, forkTrace, metricsRunSpec{
+		agentID: "run-fork", bee: "builder", taskID: "fork-task",
+		started: base, finished: base.Add(time.Minute),
+		configRef: "sha256:candidate", configRevision: 1,
+	})
+
+	m, err := BuildTrailMetrics(root, forkTrace, observedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := MetricsForkOf{
+		SourceTrace:          sourceTrace,
+		SourceTask:           "source-task",
+		SourceAttempt:        "attempt-source",
+		SourceRun:            "run-source",
+		SourceConfigRef:      "sha256:source-cfg",
+		SourceConfigRevision: 3,
+		ForkID:               "fork-1",
+		Delta:                "none",
+		State:                "runnable",
+	}
+	if m.ForkOf == nil || *m.ForkOf != want {
+		t.Fatalf("forkOf = %+v, want %+v", m.ForkOf, want)
+	}
+	if m.Coverage.Lineage != CoverageComplete {
+		t.Fatalf("lineage coverage = %q, want complete (warnings %+v)", m.Coverage.Lineage, m.Warnings)
+	}
+	if m.Configuration == nil {
+		t.Fatal("configuration = nil, want the retained binding")
+	}
+	if m.Configuration.InitialConfigRef != "sha256:candidate" ||
+		m.Configuration.ActiveConfigRef != "sha256:candidate" ||
+		m.Configuration.ConfigRevision != 1 ||
+		m.Configuration.MultipleVersions {
+		t.Fatalf("configuration = %+v", m.Configuration)
+	}
+	if len(m.Configuration.Used) != 1 ||
+		m.Configuration.Used[0].ConfigRef != "sha256:candidate" ||
+		m.Configuration.Used[0].ConfigRevision != 1 ||
+		m.Configuration.Used[0].Runs != 1 {
+		t.Fatalf("used = %+v", m.Configuration.Used)
+	}
+	if m.Coverage.Configuration != CoverageComplete {
+		t.Fatalf("configuration coverage = %q, want complete (warnings %+v)", m.Coverage.Configuration, m.Warnings)
+	}
+
+	// The source trail is not consulted. Applying a new configuration and
+	// changing its task state after the fork must not rewrite the fork's
+	// retained lineage.
+	writeMetricsManifest(t, root, sourceTrace, map[string]any{
+		"initialConfigRef": "sha256:new-source-cfg",
+		"activeConfigRef":  "sha256:new-source-cfg",
+		"configRevision":   5,
+		"policy":           "editable",
+	})
+	writeMetricsTask(t, root, sourceTrace, taskledger.TaskSnapshot{
+		TaskID: "source-task", Bee: "builder", Status: protocol.TaskStatusCompleted,
+		CreatedAt: base,
+	})
+
+	again, err := BuildTrailMetrics(root, forkTrace, observedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.ForkOf == nil || *again.ForkOf != want {
+		t.Fatalf("forkOf changed with the source trail: %+v, want %+v", again.ForkOf, want)
+	}
+	if !reflect.DeepEqual(again.Configuration, m.Configuration) {
+		t.Fatalf("fork configuration changed with the source trail:\nbefore %+v\nafter  %+v",
+			m.Configuration, again.Configuration)
+	}
+}
+
+func TestBuildTrailMetricsConfigurationMultipleVersions(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-multi-config"
+	base := time.Now().UTC().Truncate(time.Second)
+
+	writeMetricsManifest(t, root, traceID, map[string]any{
+		"initialConfigRef": "sha256:cfg-a",
+		"activeConfigRef":  "sha256:cfg-b",
+		"configRevision":   2,
+		"policy":           "editable",
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-a", bee: "builder", taskID: "task-1",
+		started: base, finished: base.Add(time.Minute),
+		configRef: "sha256:cfg-a", configRevision: 1,
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-b", bee: "builder", taskID: "task-2",
+		started: base.Add(2 * time.Minute), finished: base.Add(3 * time.Minute),
+		configRef: "sha256:cfg-b", configRevision: 2,
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(10*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Configuration == nil {
+		t.Fatal("configuration = nil")
+	}
+	if !m.Configuration.MultipleVersions {
+		t.Fatalf("multipleVersions = false, want true for two retained versions: %+v", m.Configuration)
+	}
+	if m.Configuration.InitialConfigRef != "sha256:cfg-a" || m.Configuration.ActiveConfigRef != "sha256:cfg-b" {
+		t.Fatalf("initial/active = %q/%q", m.Configuration.InitialConfigRef, m.Configuration.ActiveConfigRef)
+	}
+	wantUsed := []MetricsConfigUse{
+		{ConfigRef: "sha256:cfg-a", ConfigRevision: 1, Runs: 1},
+		{ConfigRef: "sha256:cfg-b", ConfigRevision: 2, Runs: 1},
+	}
+	if !reflect.DeepEqual(m.Configuration.Used, wantUsed) {
+		t.Fatalf("used = %+v, want %+v", m.Configuration.Used, wantUsed)
+	}
+	if m.Coverage.Configuration != CoverageComplete {
+		t.Fatalf("configuration coverage = %q, want complete (warnings %+v)", m.Coverage.Configuration, m.Warnings)
+	}
+}
+
+func TestBuildTrailMetricsOrdinaryTrailLineageIsKnownAbsent(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-ordinary"
+	base := time.Now().UTC()
+
+	writeMetricsOrigin(t, root, traceID, TrailOrigin{Kind: OriginKindManual, Source: "cli"})
+
+	m, err := BuildTrailMetrics(root, traceID, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.ForkOf != nil {
+		t.Fatalf("forkOf = %+v, want null", m.ForkOf)
+	}
+	if m.Coverage.Lineage != CoverageAbsent {
+		t.Fatalf("lineage coverage = %q, want %q (known ordinary)", m.Coverage.Lineage, CoverageAbsent)
+	}
+	for _, warning := range m.Warnings {
+		if warning.Group == "lineage" {
+			t.Fatalf("ordinary trail warned about lineage: %+v", warning)
+		}
+	}
+	if m.Configuration != nil {
+		t.Fatalf("configuration = %+v, want null without a binding", m.Configuration)
+	}
+	if m.Coverage.Configuration != CoverageUnavailable {
+		t.Fatalf("configuration coverage = %q, want unavailable", m.Coverage.Configuration)
+	}
+	assertWarning(t, m.Warnings, "configuration", WarningMissing)
+}
+
+func TestBuildTrailMetricsMissingLineageIsUnavailable(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-pinned-no-lineage"
+	base := time.Now().UTC()
+
+	writeMetricsManifest(t, root, traceID, map[string]any{
+		"initialConfigRef": "sha256:cfg-a",
+		"activeConfigRef":  "sha256:cfg-a",
+		"configRevision":   1,
+		"policy":           "pinned",
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-a", bee: "builder", started: base, finished: base.Add(time.Minute),
+		configRef: "sha256:cfg-a", configRevision: 1,
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.ForkOf != nil {
+		t.Fatalf("forkOf = %+v, want null", m.ForkOf)
+	}
+	if m.Coverage.Lineage != CoverageUnavailable {
+		t.Fatalf("lineage coverage = %q, want unavailable for a pinned trail", m.Coverage.Lineage)
+	}
+	assertWarning(t, m.Warnings, "lineage", WarningMissing)
+	// The rest of the read still works.
+	if m.Runs.Retained != 1 {
+		t.Fatalf("runs = %+v, want the retained execution", m.Runs)
+	}
+	if m.Configuration == nil || m.Coverage.Configuration != CoverageComplete {
+		t.Fatalf("configuration = %+v (coverage %q), want complete", m.Configuration, m.Coverage.Configuration)
+	}
+}
+
+func TestBuildTrailMetricsUnreadableEvidenceKeepsReadAvailable(t *testing.T) {
+	base := time.Now().UTC()
+
+	t.Run("fork lineage", func(t *testing.T) {
+		root := t.TempDir()
+		traceID := "trace-bad-lineage"
+		writeMetricsOrigin(t, root, traceID, TrailOrigin{Kind: OriginKindFork, SourceTraceID: "trace-source"})
+		writeMetricsRun(t, root, traceID, metricsRunSpec{
+			agentID: "run-a", bee: "builder", started: base, finished: base.Add(time.Minute),
+		})
+		path := metricsForkLineagePath(root, traceID)
+		if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		m, err := BuildTrailMetrics(root, traceID, base.Add(2*time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.ForkOf != nil {
+			t.Fatalf("forkOf = %+v, want null", m.ForkOf)
+		}
+		if m.Coverage.Lineage != CoverageUnavailable {
+			t.Fatalf("lineage coverage = %q, want unavailable", m.Coverage.Lineage)
+		}
+		assertWarning(t, m.Warnings, "lineage", WarningUnreadable)
+		if m.Runs.Retained != 1 {
+			t.Fatalf("runs = %+v, want the retained execution", m.Runs)
+		}
+	})
+
+	t.Run("configuration manifest", func(t *testing.T) {
+		root := t.TempDir()
+		traceID := "trace-bad-config"
+		writeMetricsOrigin(t, root, traceID, TrailOrigin{Kind: OriginKindManual})
+		writeMetricsRun(t, root, traceID, metricsRunSpec{
+			agentID: "run-a", bee: "builder", started: base, finished: base.Add(time.Minute),
+			configRef: "sha256:cfg-a", configRevision: 2,
+		})
+		path := metricsConfigManifestPath(root, traceID)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		m, err := BuildTrailMetrics(root, traceID, base.Add(2*time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Coverage.Configuration != CoverageUnavailable {
+			t.Fatalf("configuration coverage = %q, want unavailable", m.Coverage.Configuration)
+		}
+		assertWarning(t, m.Warnings, "configuration", WarningUnreadable)
+		if m.Configuration == nil || len(m.Configuration.Used) != 1 ||
+			m.Configuration.Used[0].ConfigRef != "sha256:cfg-a" {
+			t.Fatalf("configuration = %+v, want the recorded execution reference", m.Configuration)
+		}
+		// A readable origin still answers the lineage question.
+		if m.Coverage.Lineage != CoverageAbsent {
+			t.Fatalf("lineage coverage = %q, want absent", m.Coverage.Lineage)
+		}
+	})
+}
+
+func TestBuildTrailMetricsLegacyRunConfigurationStaysUnknown(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-legacy-config"
+	base := time.Now().UTC()
+
+	writeMetricsManifest(t, root, traceID, map[string]any{
+		"initialConfigRef": "sha256:cfg-a",
+		"activeConfigRef":  "sha256:cfg-a",
+		"configRevision":   1,
+		"policy":           "editable",
+	})
+	// A run recorded before configuration provenance existed. The manifest's
+	// active reference is not evidence of what this execution used.
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-legacy", bee: "builder", started: base, finished: base.Add(time.Minute),
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Configuration == nil {
+		t.Fatal("configuration = nil, want the retained binding")
+	}
+	if len(m.Configuration.Used) != 0 {
+		t.Fatalf("used = %+v, want empty: a legacy execution must not be backfilled", m.Configuration.Used)
+	}
+	if m.Configuration.UnknownRuns != 1 {
+		t.Fatalf("unknownRuns = %d, want 1", m.Configuration.UnknownRuns)
+	}
+	if m.Configuration.InitialConfigRef != "sha256:cfg-a" || m.Configuration.ActiveConfigRef != "sha256:cfg-a" {
+		t.Fatalf("binding = %+v, want the retained initial/active references", m.Configuration)
+	}
+	if m.Configuration.MultipleVersions {
+		t.Fatalf("multipleVersions = true, want false for one retained version")
+	}
+	if m.Coverage.Configuration != CoveragePartial {
+		t.Fatalf("configuration coverage = %q, want partial", m.Coverage.Configuration)
+	}
+	assertWarning(t, m.Warnings, "configuration", WarningLegacy)
+}
+
+func TestBuildTrailMetricsConfigurationWithoutBindingKeepsRecordedUses(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-unbound-config"
+	base := time.Now().UTC()
+
+	writeMetricsOrigin(t, root, traceID, TrailOrigin{Kind: OriginKindManual})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-a", bee: "builder", started: base, finished: base.Add(time.Minute),
+		configRef: "sha256:cfg-a", configRevision: 1,
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Configuration == nil {
+		t.Fatal("configuration = nil, want the recorded execution reference")
+	}
+	if m.Configuration.InitialConfigRef != "" || m.Configuration.ActiveConfigRef != "" {
+		t.Fatalf("binding = %+v, want no invented initial/active reference", m.Configuration)
+	}
+	if len(m.Configuration.Used) != 1 || m.Configuration.Used[0].ConfigRef != "sha256:cfg-a" {
+		t.Fatalf("used = %+v", m.Configuration.Used)
+	}
+	if m.Configuration.MultipleVersions {
+		t.Fatalf("multipleVersions = true, want false for one used reference")
+	}
+	if m.Coverage.Configuration != CoveragePartial {
+		t.Fatalf("configuration coverage = %q, want partial", m.Coverage.Configuration)
+	}
+	assertWarning(t, m.Warnings, "configuration", WarningMissing)
 }

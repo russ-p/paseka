@@ -20,6 +20,8 @@ func TestInspectMetricsCLI(t *testing.T) {
 		"  observedAt: ",
 		"  class: ",
 		"  cue: ",
+		"  forkOf: ",
+		"  configuration: ",
 		"  work: ",
 		"stage work",
 		"  honey: ",

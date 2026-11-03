@@ -30,11 +30,14 @@ const TrailMetricsSchemaVersion = 1
 // as a free, idle trail.
 var ErrTrailNotFound = errors.New("runs: trail not found")
 
-// Coverage values for one measurement group.
+// Coverage values for one measurement group. Absent is a known no-record
+// answer, distinct from unavailable provenance: a trail whose lineage record is
+// known not to exist is ordinary, not unmeasured.
 const (
 	CoverageComplete    = "complete"
 	CoveragePartial     = "partial"
 	CoverageUnavailable = "unavailable"
+	CoverageAbsent      = "absent"
 )
 
 // Warning kinds. They keep "we found no record", "we could not read one", "two
@@ -73,6 +76,14 @@ type TrailMetrics struct {
 	// Class is the entry-task descriptor. It is null when no non-merge task can
 	// be identified.
 	Class *MetricsClass `json:"class"`
+
+	// ForkOf is the retained spec 042 lineage. It is null for an ordinary
+	// trail; coverage says whether that absence is known or unavailable.
+	ForkOf *MetricsForkOf `json:"forkOf"`
+	// Configuration is the retained configuration binding and the references
+	// executions actually used. It is null when no configuration evidence was
+	// retained, never filled from today's colony or cue defaults.
+	Configuration *MetricsConfiguration `json:"configuration"`
 
 	Work MetricsWork `json:"work"`
 	// Honey is the recorded initial allocation and distinct charges.
@@ -122,6 +133,51 @@ type MetricsClass struct {
 	Bee       string `json:"bee,omitempty"`
 	Intent    string `json:"intent,omitempty"`
 	TaskCount int    `json:"taskCount"`
+}
+
+// MetricsForkOf names the retained fork lineage: the source trace, task,
+// selected attempt/run, and the source configuration reference and revision the
+// experiment inherited.
+//
+// Every value comes from the fork's own retained record. The source trail's
+// current task or active configuration is never consulted, so applying a new
+// configuration to the source cannot rewrite what the fork studied.
+type MetricsForkOf struct {
+	SourceTrace          string `json:"sourceTrace"`
+	SourceTask           string `json:"sourceTask"`
+	SourceAttempt        string `json:"sourceAttempt"`
+	SourceRun            string `json:"sourceRun,omitempty"`
+	SourceConfigRef      string `json:"sourceConfigRef"`
+	SourceConfigRevision int    `json:"sourceConfigRevision"`
+	ForkID               string `json:"forkId,omitempty"`
+	Delta                string `json:"delta,omitempty"`
+	State                string `json:"state,omitempty"`
+}
+
+// MetricsConfiguration is the trail's retained configuration history.
+//
+// Initial and active references describe the binding. Used lists only the
+// references recorded executions actually ran under; a reference that was
+// merely active is not an execution version. UnknownRuns counts retained
+// executions whose configuration was never recorded, and MultipleVersions is
+// explicit because one active reference must not stand in for the history.
+type MetricsConfiguration struct {
+	InitialConfigRef string             `json:"initialConfigRef,omitempty"`
+	ActiveConfigRef  string             `json:"activeConfigRef,omitempty"`
+	ConfigRevision   int                `json:"configRevision,omitempty"`
+	Policy           string             `json:"policy,omitempty"`
+	Used             []MetricsConfigUse `json:"used"`
+	UnknownRuns      int                `json:"unknownRuns"`
+	MultipleVersions bool               `json:"multipleVersions"`
+}
+
+// MetricsConfigUse is one distinct configuration reference recorded by
+// retained executions. ConfigRevision is zero when the records disagree or
+// recorded no revision.
+type MetricsConfigUse struct {
+	ConfigRef      string `json:"configRef"`
+	ConfigRevision int    `json:"configRevision,omitempty"`
+	Runs           int    `json:"runs"`
 }
 
 // MetricsWork is the trail's recorded work state, ledger stage, and admission
@@ -307,6 +363,12 @@ type MetricsCoverage struct {
 	// Purpose reports whether every retained execution carries a recorded
 	// purpose. Unknown historical attribution makes it partial, not work.
 	Purpose string `json:"purpose"`
+	// Lineage reports whether fork lineage is known. Absent means the trail is
+	// known ordinary; unavailable means a fork-shaped trail lost its record.
+	Lineage string `json:"lineage"`
+	// Configuration reports whether the retained binding and the configuration
+	// each execution ran under are known.
+	Configuration string `json:"configuration"`
 }
 
 // MetricsWarning is one concrete reason a measurement is missing, unreadable,
@@ -396,8 +458,9 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 	m.Coverage.Runs = runCoverage
 	m.Runs = runs
 
+	origin, originOK, originErr := ReadTrailOrigin(colonyRoot, traceID)
+
 	if len(events) == 0 && runs.Retained == 0 && taskDirCount == 0 && !trailLogPresent {
-		_, originOK, originErr := ReadTrailOrigin(colonyRoot, traceID)
 		if originErr != nil || !originOK {
 			if !hasRetainedCueInvocations(colonyRoot, traceID) {
 				return TrailMetrics{}, fmt.Errorf("%w: %s", ErrTrailNotFound, traceID)
@@ -405,7 +468,10 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 		}
 	}
 
-	applyCueEvidence(&m, colonyRoot, traceID, events)
+	applyCueEvidence(&m, colonyRoot, traceID, origin, originOK, originErr, events)
+	manifest, manifestOK, manifestErr := readMetricsConfigManifest(colonyRoot, traceID)
+	applyConfigurationEvidence(&m, manifest, manifestOK, manifestErr, runMetas, runUnreadable)
+	applyLineageEvidence(&m, colonyRoot, traceID, origin, originOK, originErr, manifest, manifestOK, manifestErr)
 	applyClass(&m, tasks, taskDirCount)
 	applyWork(&m, tasks, events)
 	applyHoney(&m, events, trailLogPresent, trailLogUnreadable, trailLogDamaged)
@@ -610,9 +676,8 @@ func loadMetricsRuns(m *TrailMetrics, colonyRoot, traceID string, entries []os.D
 // applyCueEvidence reads the retained origin and cue invocation records. A
 // later cue on a manually created trail is an addition; a missing legacy origin
 // leaves attribution unknown instead of promoting the first retained cue.
-func applyCueEvidence(m *TrailMetrics, colonyRoot, traceID string, events []protocol.Event) {
+func applyCueEvidence(m *TrailMetrics, colonyRoot, traceID string, origin TrailOrigin, originOK bool, originErr error, events []protocol.Event) {
 	byInvocation := map[string]MetricsCueIngress{}
-	origin, originOK, originErr := ReadTrailOrigin(colonyRoot, traceID)
 	originKind := ""
 	switch {
 	case originErr != nil:
