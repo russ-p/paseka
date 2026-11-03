@@ -25,6 +25,9 @@ var deferredDenyKinds = map[string]struct{}{
 	"session.invite":  {},
 	"beekeeper.ready": {},
 	"task.status":     {},
+	// Cue ingress is an observation that must precede its invocation's normal
+	// events, so it cannot be queued behind them.
+	"cue.ingress": {},
 }
 
 // FlushResult summarizes a pending queue flush or discard.

@@ -21,21 +21,25 @@ const (
 
 // TaskFrontmatter is the machine-readable task snapshot stored in task.md frontmatter.
 type TaskFrontmatter struct {
-	TraceID   string                    `yaml:"traceId"`
-	TaskID    string                    `yaml:"taskId"`
-	Title     string                    `yaml:"title,omitempty"`
-	Bee       string                    `yaml:"bee,omitempty"`
-	Sector    string                    `yaml:"sector,omitempty"`
-	Intent    string                    `yaml:"intent,omitempty"`
-	CueID     string                    `yaml:"cueId,omitempty"`
-	Review    protocol.TaskReviewPolicy `yaml:"review,omitempty"`
-	Phase     protocol.TaskPhase        `yaml:"phase,omitempty"`
-	Status    protocol.TaskStatus       `yaml:"status"`
-	DependsOn []string                  `yaml:"dependsOn,omitempty"`
-	Summary   string                    `yaml:"summary,omitempty"`
-	Commit    string                    `yaml:"commit,omitempty"`
-	CreatedAt string                    `yaml:"createdAt,omitempty"`
-	UpdatedAt string                    `yaml:"updatedAt,omitempty"`
+	TraceID string `yaml:"traceId"`
+	TaskID  string `yaml:"taskId"`
+	Title   string `yaml:"title,omitempty"`
+	Bee     string `yaml:"bee,omitempty"`
+	Sector  string `yaml:"sector,omitempty"`
+	Intent  string `yaml:"intent,omitempty"`
+	CueID   string `yaml:"cueId,omitempty"`
+	// CueInvocationID names the cue invocation that created the task. It is
+	// empty for role- or manually-created tasks and for records written before
+	// invocation provenance existed.
+	CueInvocationID string                    `yaml:"cueInvocationId,omitempty"`
+	Review          protocol.TaskReviewPolicy `yaml:"review,omitempty"`
+	Phase           protocol.TaskPhase        `yaml:"phase,omitempty"`
+	Status          protocol.TaskStatus       `yaml:"status"`
+	DependsOn       []string                  `yaml:"dependsOn,omitempty"`
+	Summary         string                    `yaml:"summary,omitempty"`
+	Commit          string                    `yaml:"commit,omitempty"`
+	CreatedAt       string                    `yaml:"createdAt,omitempty"`
+	UpdatedAt       string                    `yaml:"updatedAt,omitempty"`
 }
 
 // TaskRunEntry is one line in runs.ndjson linking a task to an agent run directory.
@@ -91,19 +95,20 @@ func WriteTaskSnapshot(colonyRoot string, traceID string, task taskledger.TaskSn
 		return err
 	}
 	fm := TaskFrontmatter{
-		TraceID:   traceID,
-		TaskID:    task.TaskID,
-		Title:     task.Title,
-		Bee:       task.Bee,
-		Sector:    task.Sector,
-		Intent:    task.Intent,
-		CueID:     task.CueID,
-		Review:    task.Review,
-		Phase:     protocol.DeriveTaskPhase(task.Phase, task.Review),
-		Status:    task.Status,
-		DependsOn: append([]string(nil), task.DependsOn...),
-		Summary:   task.Summary,
-		Commit:    task.Commit,
+		TraceID:         traceID,
+		TaskID:          task.TaskID,
+		Title:           task.Title,
+		Bee:             task.Bee,
+		Sector:          task.Sector,
+		Intent:          task.Intent,
+		CueID:           task.CueID,
+		CueInvocationID: task.CueInvocationID,
+		Review:          task.Review,
+		Phase:           protocol.DeriveTaskPhase(task.Phase, task.Review),
+		Status:          task.Status,
+		DependsOn:       append([]string(nil), task.DependsOn...),
+		Summary:         task.Summary,
+		Commit:          task.Commit,
 	}
 	if !task.CreatedAt.IsZero() {
 		fm.CreatedAt = task.CreatedAt.UTC().Format(time.RFC3339)
@@ -272,19 +277,20 @@ func LoadTraceTasksFromFS(colonyRoot, traceID string) (taskledger.TraceSnapshot,
 			return taskledger.TraceSnapshot{}, fmt.Errorf("runs: read task %s: %w", ent.Name(), err)
 		}
 		task := taskledger.TaskSnapshot{
-			TaskID:    fm.TaskID,
-			Title:     fm.Title,
-			Body:      body,
-			Bee:       fm.Bee,
-			Sector:    fm.Sector,
-			Intent:    fm.Intent,
-			CueID:     fm.CueID,
-			Review:    fm.Review,
-			Phase:     protocol.DeriveTaskPhase(fm.Phase, fm.Review),
-			Status:    fm.Status,
-			DependsOn: append([]string(nil), fm.DependsOn...),
-			Summary:   fm.Summary,
-			Commit:    fm.Commit,
+			TaskID:          fm.TaskID,
+			Title:           fm.Title,
+			Body:            body,
+			Bee:             fm.Bee,
+			Sector:          fm.Sector,
+			Intent:          fm.Intent,
+			CueID:           fm.CueID,
+			CueInvocationID: fm.CueInvocationID,
+			Review:          fm.Review,
+			Phase:           protocol.DeriveTaskPhase(fm.Phase, fm.Review),
+			Status:          fm.Status,
+			DependsOn:       append([]string(nil), fm.DependsOn...),
+			Summary:         fm.Summary,
+			Commit:          fm.Commit,
 		}
 		if fm.CreatedAt != "" {
 			if ts, err := time.Parse(time.RFC3339, fm.CreatedAt); err == nil {

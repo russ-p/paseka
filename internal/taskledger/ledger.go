@@ -15,6 +15,7 @@ type TaskSnapshot struct {
 	Sector            string                     `json:"sector,omitempty"`
 	Intent            string                     `json:"intent,omitempty"`
 	CueID             string                     `json:"cueId,omitempty"`
+	CueInvocationID   string                     `json:"cueInvocationId,omitempty"` // invocation that created the task
 	Review            protocol.TaskReviewPolicy  `json:"review,omitempty"`
 	Phase             protocol.TaskPhase         `json:"phase,omitempty"`
 	Status            protocol.TaskStatus        `json:"status"`
@@ -136,6 +137,8 @@ type PendingReadySnapshot struct {
 	Sector string `json:"sector,omitempty"`
 	Intent string `json:"intent,omitempty"`
 	CueID  string `json:"cueId,omitempty"`
+	// CueInvocationID carries the invocation through a parked task.ready.
+	CueInvocationID string `json:"cueInvocationId,omitempty"`
 }
 
 // ApplyResult is the outcome of applying one bus event to a trace ledger.

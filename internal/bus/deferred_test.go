@@ -389,6 +389,9 @@ func TestIsDeferDenied(t *testing.T) {
 	if !IsDeferDenied("energy.resumed") {
 		t.Fatal("expected deny resume observation")
 	}
+	if !IsDeferDenied("cue.ingress") {
+		t.Fatal("expected deny cue ingress observation")
+	}
 	if IsDeferDenied("context.note") {
 		t.Fatal("expected allow")
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/russ-p/paseka/internal/bus"
@@ -18,6 +19,15 @@ import (
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
+// RunResult is returned after a successful cue run.
+type RunResult struct {
+	TraceID      string
+	InvocationID string
+	TaskID       string
+	EventType    string
+	Kind         string
+}
+
 // RunInput describes a cue run request from any channel.
 type RunInput struct {
 	ColonyRoot string
@@ -27,14 +37,6 @@ type RunInput struct {
 	Vars       map[string]string
 	Source     string
 	AgentID    string
-}
-
-// RunResult is returned after a successful cue run.
-type RunResult struct {
-	TraceID   string
-	TaskID    string
-	EventType string
-	Kind      string
 }
 
 // Run loads a cue, optionally seeds honey, and publishes its bus event(s).
@@ -87,19 +89,24 @@ func runSignal(ctx context.Context, publisher bus.Publisher, ledger taskledger.L
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
+	invokedAt := time.Now().UTC()
 	ev, err := bus.NewEventFromCLI(traceID, agentID, cue.SignalType, string(payload))
 	if err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
-	if err := publisher.PublishEvent(ctx, ev); err != nil {
-		return RunResult{}, fmt.Errorf("cue %q: publish: %w", cue.ID, err)
+	invocationID, err := newCueInvocationID()
+	if err != nil {
+		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
+	}
+	inv, err := buildInvocation(invocationID, cue, traceID, source, agentID, protocol.CueIngressModeSignal, invokedAt, nil, []protocol.Event{ev})
+	if err != nil {
+		return RunResult{}, err
+	}
+	if err := publishInvocation(ctx, publisher, in.ColonyRoot, inv); err != nil {
+		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
-	return RunResult{
-		TraceID:   traceID,
-		EventType: cue.SignalType,
-		Kind:      cue.SignalKind,
-	}, nil
+	return resultForInvocation(inv), nil
 }
 
 func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, cue Cue, in RunInput) (RunResult, error) {
@@ -154,18 +161,23 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 	if err != nil {
 		return RunResult{}, err
 	}
+	invocationID, err := newCueInvocationID()
+	if err != nil {
+		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
+	}
 
 	resolvedTitle := tasks.DeriveTitle(title, body)
 	resolvedBody := strings.TrimSpace(body)
 	bee := colony.EffectiveTaskBee(cue.Bee, manifest.Defaults)
 	spec := protocol.TaskSpec{
-		TaskID: taskID,
-		Title:  resolvedTitle,
-		Body:   resolvedBody,
-		Bee:    bee,
-		Intent: cue.Intent,
-		CueID:  cue.ID,
-		Review: protocol.TaskReviewPolicy(strings.TrimSpace(cue.Review)),
+		TaskID:          taskID,
+		Title:           resolvedTitle,
+		Body:            resolvedBody,
+		Bee:             bee,
+		Intent:          cue.Intent,
+		CueID:           cue.ID,
+		CueInvocationID: invocationID,
+		Review:          protocol.TaskReviewPolicy(strings.TrimSpace(cue.Review)),
 	}
 	bees, err := colony.LoadAllBees(in.ColonyRoot)
 	if err != nil {
@@ -175,37 +187,36 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
+	invokedAt := time.Now().UTC()
 	planEv, err := tasks.PlanEvent(traceID, agentID, spec)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
-	if err := publisher.PublishEvent(ctx, planEv); err != nil {
-		return RunResult{}, fmt.Errorf("cue %q: publish: %w", cue.ID, err)
-	}
-
+	events := []protocol.Event{planEv}
 	if cue.Autorun {
 		readyEv, err := tasks.ReadyEvent(traceID, agentID, taskledger.TaskSnapshot{
-			TaskID: taskID,
-			Title:  resolvedTitle,
-			Body:   resolvedBody,
-			Bee:    bee,
-			Intent: cue.Intent,
-			CueID:  cue.ID,
+			TaskID:          taskID,
+			Title:           resolvedTitle,
+			Body:            resolvedBody,
+			Bee:             bee,
+			Intent:          cue.Intent,
+			CueID:           cue.ID,
+			CueInvocationID: invocationID,
 		}, manifest.Defaults)
 		if err != nil {
 			return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 		}
-		if err := publisher.PublishEvent(ctx, readyEv); err != nil {
-			return RunResult{}, fmt.Errorf("cue %q: publish: %w", cue.ID, err)
-		}
+		events = append(events, readyEv)
 	}
 
-	return RunResult{
-		TraceID:   traceID,
-		TaskID:    taskID,
-		EventType: string(protocol.EventInsight),
-		Kind:      string(protocol.TaskEventPlan),
-	}, nil
+	inv, err := buildInvocation(invocationID, cue, traceID, source, agentID, protocol.CueIngressModeTask, invokedAt, []string{taskID}, events)
+	if err != nil {
+		return RunResult{}, err
+	}
+	if err := publishInvocation(ctx, publisher, in.ColonyRoot, inv); err != nil {
+		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
+	}
+	return resultForInvocation(inv), nil
 }
 
 func resolveRunTraceID(cue Cue, requested string) (string, error) {

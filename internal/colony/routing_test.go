@@ -171,6 +171,30 @@ func TestDirectSubscribersCodeProposalFamily(t *testing.T) {
 	}
 }
 
+func TestDirectSubscribersDenyPlatformObservations(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"watch": {
+			Role: "watch",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "SIGNAL"}, Dispatch: colony.DispatchDirect},
+			},
+		},
+	}
+	for _, kind := range []string{
+		protocol.SignalCueIngress,
+		"energy.seeded",
+		"energy.paused",
+		"energy.resumed",
+	} {
+		if roles := colony.DirectSubscribers(bees, protocol.EventSignal, kind); len(roles) != 0 {
+			t.Fatalf("platform observation %q routed to %v", kind, roles)
+		}
+	}
+	if roles := colony.DirectSubscribers(bees, protocol.EventSignal, "triage.tick"); len(roles) != 1 || roles[0] != "watch" {
+		t.Fatalf("work signal routed to %v, want [watch]", roles)
+	}
+}
+
 func TestDeclaresPublishAdvisory(t *testing.T) {
 	bee := colony.Bee{
 		Role: "builder",

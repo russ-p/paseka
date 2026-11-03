@@ -9,13 +9,14 @@ import (
 
 func pendingReadyFromPayload(payload protocol.TaskReadyPayload) *PendingReadySnapshot {
 	return &PendingReadySnapshot{
-		TaskID: payload.TaskID,
-		Title:  payload.Title,
-		Body:   payload.Body,
-		Bee:    payload.Bee,
-		Sector: payload.Sector,
-		Intent: payload.Intent,
-		CueID:  payload.CueID,
+		TaskID:          payload.TaskID,
+		Title:           payload.Title,
+		Body:            payload.Body,
+		Bee:             payload.Bee,
+		Sector:          payload.Sector,
+		Intent:          payload.Intent,
+		CueID:           payload.CueID,
+		CueInvocationID: payload.CueInvocationID,
 	}
 }
 
@@ -38,17 +39,21 @@ func applyReadyOverlays(task TaskSnapshot, payload protocol.TaskReadyPayload) Ta
 	if payload.CueID != "" {
 		task.CueID = payload.CueID
 	}
+	if payload.CueInvocationID != "" {
+		task.CueInvocationID = payload.CueInvocationID
+	}
 	return task
 }
 
 func applyPendingOverlays(task TaskSnapshot, pending PendingReadySnapshot) TaskSnapshot {
 	return applyReadyOverlays(task, protocol.TaskReadyPayload{
-		Title:  pending.Title,
-		Body:   pending.Body,
-		Bee:    pending.Bee,
-		Sector: pending.Sector,
-		Intent: pending.Intent,
-		CueID:  pending.CueID,
+		Title:           pending.Title,
+		Body:            pending.Body,
+		Bee:             pending.Bee,
+		Sector:          pending.Sector,
+		Intent:          pending.Intent,
+		CueID:           pending.CueID,
+		CueInvocationID: pending.CueInvocationID,
 	})
 }
 

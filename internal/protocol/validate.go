@@ -155,6 +155,11 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateSystemKill(payload)
 	}
 
+	switch kind {
+	case SignalCueIngress:
+		return validateCueIngress(payload)
+	}
+
 	switch VerificationKind(kind) {
 	case VerificationSuccess, VerificationFailed:
 		return validateVerification(payload)
@@ -219,6 +224,9 @@ func expectedEventType(kind string) EventType {
 	}
 	switch SystemEventKind(kind) {
 	case SignalSystemKill:
+		return EventSignal
+	}
+	if IsCueIngressObservation(kind) {
 		return EventSignal
 	}
 	switch VerificationKind(kind) {
@@ -717,6 +725,24 @@ func validateForkDecision(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.requestId", Message: "required"}}
 	}
 	return nil
+}
+
+func validateCueIngress(payload json.RawMessage) []ValidationDetail {
+	var p CueIngressPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid cue.ingress payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.InvocationID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.invocationId", Message: "required"})
+	}
+	if strings.TrimSpace(p.CueID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.cueId", Message: "required"})
+	}
+	if !p.Mode.Known() {
+		details = append(details, ValidationDetail{Path: "payload.mode", Message: "must be one of task, signal"})
+	}
+	return details
 }
 
 func isBeekeeperAction(action BeekeeperAction) bool {

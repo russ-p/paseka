@@ -354,14 +354,15 @@ func PlanEvent(traceID, agentID string, spec protocol.TaskSpec) (protocol.Event,
 func ReadyEvent(traceID, agentID string, task taskledger.TaskSnapshot, defaults colony.Defaults) (protocol.Event, error) {
 	bee := colony.EffectiveTaskBee(task.Bee, defaults)
 	return protocol.NewEvent(traceID, agentID, 0, protocol.EventSignal, protocol.TaskReadyPayload{
-		Kind:   protocol.TaskEventReady,
-		TaskID: task.TaskID,
-		Title:  task.Title,
-		Body:   task.Body,
-		Bee:    bee,
-		Sector: task.Sector,
-		Intent: task.Intent,
-		CueID:  task.CueID,
+		Kind:            protocol.TaskEventReady,
+		TaskID:          task.TaskID,
+		Title:           task.Title,
+		Body:            task.Body,
+		Bee:             bee,
+		Sector:          task.Sector,
+		Intent:          task.Intent,
+		CueID:           task.CueID,
+		CueInvocationID: task.CueInvocationID,
 	})
 }
 

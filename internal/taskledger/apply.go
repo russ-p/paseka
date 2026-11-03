@@ -171,19 +171,20 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 			continue
 		}
 		step.trace.Tasks[spec.TaskID] = TaskSnapshot{
-			TaskID:    spec.TaskID,
-			Title:     spec.Title,
-			Body:      spec.Body,
-			Bee:       spec.Bee,
-			Sector:    spec.Sector,
-			Intent:    spec.Intent,
-			CueID:     spec.CueID,
-			Review:    protocol.NormalizeTaskReviewPolicy(spec.Review),
-			Phase:     plannedTaskPhase(spec, event.AgentID),
-			Status:    protocol.TaskStatusPlanned,
-			DependsOn: append([]string(nil), spec.DependsOn...),
-			CreatedAt: now,
-			UpdatedAt: now,
+			TaskID:          spec.TaskID,
+			Title:           spec.Title,
+			Body:            spec.Body,
+			Bee:             spec.Bee,
+			Sector:          spec.Sector,
+			Intent:          spec.Intent,
+			CueID:           spec.CueID,
+			CueInvocationID: spec.CueInvocationID,
+			Review:          protocol.NormalizeTaskReviewPolicy(spec.Review),
+			Phase:           plannedTaskPhase(spec, event.AgentID),
+			Status:          protocol.TaskStatusPlanned,
+			DependsOn:       append([]string(nil), spec.DependsOn...),
+			CreatedAt:       now,
+			UpdatedAt:       now,
 		}
 		step.changed = true
 	}
@@ -207,6 +208,10 @@ func reduceSignal(trace TraceSnapshot, event protocol.Event, now time.Time) (red
 		return reduceTaskStatus(trace, event, now)
 	case string(protocol.TaskEventReady):
 		return reduceTaskReady(trace, event, now)
+	case protocol.SignalCueIngress:
+		// The observation reports an invocation; it creates no task, seeds no
+		// honey, and changes no ledger state.
+		return skipStep(trace), nil
 	default:
 		return reduceEnergy(trace, event, kind, now)
 	}

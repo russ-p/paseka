@@ -164,7 +164,13 @@ func (b Bee) CanHandleTaskReady() bool {
 }
 
 // DirectSubscribers returns bee roles with a direct subscription matching the event.
+// Platform observations — seed and pause/resume reports, and the cue ingress
+// record — describe an admission decision rather than work, so they never wake
+// a Bee however broadly a subscription matches.
 func DirectSubscribers(bees map[string]Bee, evType protocol.EventType, kind string) []string {
+	if protocol.IsPlatformObservation(kind) {
+		return nil
+	}
 	var roles []string
 	for role, bee := range bees {
 		for _, sub := range bee.Subscribes {

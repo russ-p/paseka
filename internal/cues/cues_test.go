@@ -266,10 +266,13 @@ body: "{{.Body}}"
 	if res.Kind != "feature.requested" || res.EventType != "SIGNAL" {
 		t.Fatalf("result = %+v", res)
 	}
-	if len(pub.events) != 1 {
-		t.Fatalf("events = %d", len(pub.events))
+	if len(pub.events) != 2 {
+		t.Fatalf("events = %d, want cue.ingress then the signal", len(pub.events))
 	}
-	ev := pub.events[0]
+	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != protocol.SignalCueIngress {
+		t.Fatalf("first kind = %q, want cue.ingress", kind)
+	}
+	ev := pub.events[1]
 	if ev.Type != protocol.EventSignal || ev.AgentID != "cli" {
 		t.Fatalf("event = %+v", ev)
 	}
@@ -430,8 +433,8 @@ body: "{{.Body}}"
 	if res.TaskID == "" || res.Kind != string(protocol.TaskEventPlan) {
 		t.Fatalf("result = %+v", res)
 	}
-	if len(pub.events) != 3 {
-		t.Fatalf("events = %d, want seed+plan+ready", len(pub.events))
+	if len(pub.events) != 4 {
+		t.Fatalf("events = %d, want seed+cue.ingress+plan+ready", len(pub.events))
 	}
 	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != string(protocol.SignalEnergySeeded) {
 		t.Fatalf("first kind = %q, want the seed observation", kind)
@@ -904,8 +907,8 @@ func TestRunStandingOmitsTraceUsesStandingID(t *testing.T) {
 	if res.TraceID != "trail-daily-triage" {
 		t.Fatalf("trace = %q", res.TraceID)
 	}
-	if len(pub.events) != 3 {
-		t.Fatalf("events = %+v, want seed+title+ingress", pub.events)
+	if len(pub.events) != 4 {
+		t.Fatalf("events = %+v, want seed+title+cue.ingress+ingress", pub.events)
 	}
 	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != string(protocol.SignalEnergySeeded) {
 		t.Fatalf("first kind = %q, want the seed observation", kind)
@@ -1038,6 +1041,21 @@ body: "{{.Body}}"
 	if second.TaskID == "" || second.TaskID == first.TaskID {
 		t.Fatalf("second task id = %q, first = %q", second.TaskID, first.TaskID)
 	}
+	if first.InvocationID == "" || second.InvocationID == "" || first.InvocationID == second.InvocationID {
+		t.Fatalf("tick invocations = %q, %q; want two distinct identities", first.InvocationID, second.InvocationID)
+	}
+	invocations, err := runs.ListCueInvocations(root, first.TraceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(invocations) != 2 {
+		t.Fatalf("retained task invocations = %d, want two", len(invocations))
+	}
+	for _, inv := range invocations {
+		if inv.Mode != string(cues.EmitTask) || len(inv.TaskIDs) != 1 {
+			t.Fatalf("record = %+v", inv)
+		}
+	}
 	snap, err := ledger.Snapshot("trail-daily-triage")
 	if err != nil {
 		t.Fatal(err)
@@ -1045,13 +1063,17 @@ body: "{{.Body}}"
 	if snap.EnergyBudget != 4 || snap.EnergyRemaining != 4 {
 		t.Fatalf("honey = %+v", snap)
 	}
-	if len(pub.events) < 2 {
+	if len(pub.events) < 3 {
 		t.Fatalf("events = %d", len(pub.events))
 	}
-	stipend := pub.events[len(pub.events)-2]
+	stipend := pub.events[len(pub.events)-3]
+	observation := pub.events[len(pub.events)-2]
 	ingress := pub.events[len(pub.events)-1]
 	if protocol.PayloadKind(stipend.Payload) != string(protocol.SignalEnergyStipend) {
-		t.Fatalf("penultimate kind = %q, want energy.stipend", protocol.PayloadKind(stipend.Payload))
+		t.Fatalf("third-from-last kind = %q, want energy.stipend", protocol.PayloadKind(stipend.Payload))
+	}
+	if protocol.PayloadKind(observation.Payload) != protocol.SignalCueIngress {
+		t.Fatalf("second-from-last kind = %q, want cue.ingress", protocol.PayloadKind(observation.Payload))
 	}
 	if protocol.PayloadKind(ingress.Payload) != string(protocol.TaskEventPlan) {
 		t.Fatalf("last kind = %q, want task.plan", protocol.PayloadKind(ingress.Payload))
@@ -1255,8 +1277,8 @@ func TestRunStandingDoesNotOverwriteExistingTitle(t *testing.T) {
 	if n := countKind(pub.events, "triage.tick"); n != 1 {
 		t.Fatalf("ingress events = %d, want one: %+v", n, pub.events)
 	}
-	if len(pub.events) != 2 || protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergySeeded) {
-		t.Fatalf("events = %+v, want seed+ingress", pub.events)
+	if len(pub.events) != 3 || protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergySeeded) {
+		t.Fatalf("events = %+v, want seed+cue.ingress+ingress", pub.events)
 	}
 }
 
@@ -1308,14 +1330,17 @@ func TestRunStandingLaterTickReplacesRemainingKeepsBudget(t *testing.T) {
 	if snap.EnergyRemaining != 4 {
 		t.Fatalf("remaining = %d, want stipend 4", snap.EnergyRemaining)
 	}
-	if len(pub.events) != 2 {
-		t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+	if len(pub.events) != 3 {
+		t.Fatalf("events = %d, want stipend then cue.ingress then ingress", len(pub.events))
 	}
 	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergyStipend) {
 		t.Fatalf("first kind = %q, want energy.stipend", protocol.PayloadKind(pub.events[0].Payload))
 	}
-	if protocol.PayloadKind(pub.events[1].Payload) != "triage.tick" {
-		t.Fatalf("second kind = %q, want triage.tick", protocol.PayloadKind(pub.events[1].Payload))
+	if protocol.PayloadKind(pub.events[1].Payload) != protocol.SignalCueIngress {
+		t.Fatalf("second kind = %q, want cue.ingress", protocol.PayloadKind(pub.events[1].Payload))
+	}
+	if protocol.PayloadKind(pub.events[2].Payload) != "triage.tick" {
+		t.Fatalf("third kind = %q, want triage.tick", protocol.PayloadKind(pub.events[2].Payload))
 	}
 }
 
@@ -1543,11 +1568,14 @@ func TestRunStandingAllowsBlockedOrFinishedTick(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(pub.events) != 2 {
-				t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+			if len(pub.events) != 3 {
+				t.Fatalf("events = %d, want stipend then cue.ingress then ingress", len(pub.events))
 			}
 			if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergyStipend) {
 				t.Fatalf("first kind = %q", protocol.PayloadKind(pub.events[0].Payload))
+			}
+			if protocol.PayloadKind(pub.events[1].Payload) != protocol.SignalCueIngress {
+				t.Fatalf("second kind = %q, want cue.ingress", protocol.PayloadKind(pub.events[1].Payload))
 			}
 		})
 	}
@@ -1590,11 +1618,14 @@ func TestRunStandingSupersedesEnergyDeferredTick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pub.events) != 2 {
-		t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+	if len(pub.events) != 3 {
+		t.Fatalf("events = %d, want stipend then cue.ingress then ingress", len(pub.events))
 	}
 	if protocol.PayloadKind(pub.events[0].Payload) != string(protocol.SignalEnergyStipend) {
 		t.Fatalf("first kind = %q, want energy.stipend", protocol.PayloadKind(pub.events[0].Payload))
+	}
+	if protocol.PayloadKind(pub.events[1].Payload) != protocol.SignalCueIngress {
+		t.Fatalf("second kind = %q, want cue.ingress", protocol.PayloadKind(pub.events[1].Payload))
 	}
 	snap, err := ledger.Snapshot("trail-daily-triage")
 	if err != nil {
@@ -1707,8 +1738,8 @@ func TestRunStandingAllowsInteractiveSessionOnTrail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pub.events) != 2 {
-		t.Fatalf("events = %d, want stipend then ingress", len(pub.events))
+	if len(pub.events) != 3 {
+		t.Fatalf("events = %d, want stipend then cue.ingress then ingress", len(pub.events))
 	}
 }
 
