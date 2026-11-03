@@ -179,6 +179,14 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		Adapter:        adapterName,
 	}, knownIntents, defaultIntent)
 
+	// An analysis studies captured evidence, not a live worktree. Name the
+	// studied milestone and the retained files so the run still has its input
+	// after delivery removed the source checkout.
+	if req.Purpose == protocol.PurposeAnalysis && req.AnalysisOf != "" {
+		promptCtx.AnalysisOf = req.AnalysisOf
+		promptCtx.RetainedEvidence = runs.CompletionEvidencePaths(colonyRoot, req.TraceID, req.AnalysisOf)
+	}
+
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
 		BeeLocalTemplate: overlay.SystemTemplate,
 		BeeTemplate:      bee.SystemTemplate,

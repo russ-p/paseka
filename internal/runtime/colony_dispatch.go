@@ -153,7 +153,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 
 	effectiveSector := colony.EffectiveSector(req.Sector, bee.Sector)
-	workspace, sectorRel, err := workspaceForDispatch(execColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind)
+	workspace, sectorRel, err := workspaceForDispatchPurpose(execColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind, req.Purpose)
 	if err != nil {
 		return nil, err
 	}
@@ -287,6 +287,18 @@ func ensureCLIAttempt(ctxColony, execColony colony.Context, req ColonyDispatchRe
 }
 
 func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string) (workspace string, sectorRel string, err error) {
+	return workspaceForDispatchPurpose(ctxColony, manifest, bee, traceID, sectorName, proposalKind, protocol.PurposeWork)
+}
+
+// workspaceForDispatchPurpose resolves the execution root for one dispatch.
+//
+// Analysis studies an already-captured result and must not depend on the
+// delivery worktree: that worktree is removed by a local merge or by PR
+// reconcile, and recreating it would silently replace the result being studied
+// with the current default-branch checkout. An analysis run therefore executes
+// at the colony (or fork) root and reads retained evidence under
+// .paseka/runs/<traceId>/.
+func workspaceForDispatchPurpose(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string, purpose protocol.ExecutionPurpose) (workspace string, sectorRel string, err error) {
 	base := ctxColony.ColonyRoot
 	fixedRoot := ""
 	if ctxColony.WorkspaceRoot != "" {
@@ -303,6 +315,9 @@ func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee 
 			return "", "", fmt.Errorf("runtime: unsupported proposal kind %q for workspace affinity", proposalKind)
 		}
 		useWorktree = protocol.NormalizeCodeProposalKind(protocol.MutationKind(proposalKind)) == protocol.MutationCodeProposalIsolated
+	}
+	if purpose == protocol.PurposeAnalysis {
+		useWorktree = false
 	}
 	if useWorktree {
 		// A fork owns its checkout. Worktree-enabled roles and isolated

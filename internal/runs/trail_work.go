@@ -24,6 +24,7 @@ const (
 	workCompletionCheckpointFile = "completion.json"
 	workCompletionResultFile     = "result.json"
 	workCompletionMetricsFile    = TrailMetricsFileName
+	workCompletionPatchFile      = "patch.diff"
 	trailWorkVersion             = 1
 	workCompletionVersion        = 1
 )
@@ -127,6 +128,12 @@ func WorkCompletionResultPath(colonyRoot, traceID, completionID string) string {
 	return filepath.Join(WorkCompletionDir(colonyRoot, traceID, completionID), workCompletionResultFile)
 }
 
+// WorkCompletionPatchPath returns the immutable final-patch path for one
+// completion. It is written before delivery may remove the worktree.
+func WorkCompletionPatchPath(colonyRoot, traceID, completionID string) string {
+	return filepath.Join(WorkCompletionDir(colonyRoot, traceID, completionID), workCompletionPatchFile)
+}
+
 // WorkCompletionResultRef returns the colony-root-relative result reference
 // for one completion.
 func WorkCompletionResultRef(traceID, completionID string) string {
@@ -138,6 +145,12 @@ func WorkCompletionResultRef(traceID, completionID string) string {
 // trail-level metrics.json.
 func WorkCompletionMetricsRef(traceID, completionID string) string {
 	return filepath.ToSlash(filepath.Join(".paseka", "runs", traceID, WorkCompletionDirName, completionID, workCompletionMetricsFile))
+}
+
+// WorkCompletionPatchRef returns the colony-root-relative final-patch reference
+// for one completion, or the empty string when no code diff was captured.
+func WorkCompletionPatchRef(traceID, completionID string) string {
+	return filepath.ToSlash(filepath.Join(".paseka", "runs", traceID, WorkCompletionDirName, completionID, workCompletionPatchFile))
 }
 
 // WorkCompletionCheckpoint is the immutable envelope of one completion
@@ -152,7 +165,13 @@ type WorkCompletionCheckpoint struct {
 	CompletedAt  time.Time `json:"completedAt"`
 	ResultRef    string    `json:"resultRef"`
 	MetricsRef   string    `json:"metricsRef"`
-	TaskIDs      []string  `json:"taskIds"`
+	// PatchRef names the retained final code diff, empty for a non-code result.
+	PatchRef string `json:"patchRef,omitempty"`
+	// Base and Revision are the recorded diff endpoints, empty when no code
+	// result existed at capture time.
+	Base     string   `json:"base,omitempty"`
+	Revision string   `json:"revision,omitempty"`
+	TaskIDs  []string `json:"taskIds"`
 }
 
 // WorkCompletionTask is one accepted task's retained result evidence. It is a
@@ -184,8 +203,9 @@ type WorkCompletionChecks struct {
 // WorkCompletionResult is the immutable result evidence captured for one
 // completion: the accepted task set with its commits and any skipped tasks plus
 // the mandatory-check totals. For a code result it retains the final patch
-// identity; for a non-code result it records that the work itself completed
-// without a proposal.
+// identity and the base/revision/tree endpoints; for a non-code result it
+// records that the work itself completed without a proposal and the retained
+// non-code artifacts.
 type WorkCompletionResult struct {
 	Version      int                  `json:"version"`
 	TraceID      string               `json:"traceId"`
@@ -194,12 +214,28 @@ type WorkCompletionResult struct {
 	CompletedAt  time.Time            `json:"completedAt"`
 	Tasks        []WorkCompletionTask `json:"tasks"`
 	Checks       WorkCompletionChecks `json:"checks"`
+	// Base, Revision, and Tree are the recorded git endpoints for a code
+	// result. They are empty for a non-code result and for a trail whose
+	// worktree was already gone when evidence was captured.
+	Base     string `json:"base,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	Tree     string `json:"tree,omitempty"`
+	// PatchRef names the immutable final patch under the completion directory.
+	PatchRef string `json:"patchRef,omitempty"`
+	// Artifacts are colony-root-relative references to retained non-code result
+	// evidence (trail comb files). They live outside the worktree, so
+	// worktree-only cleanup leaves them readable.
+	Artifacts []string `json:"artifacts,omitempty"`
+	// Patch is the raw captured diff written to PatchRef. It is never serialized
+	// into result.json: the patch is its own immutable file.
+	Patch []byte `json:"-"`
 }
 
-// WriteWorkCompletion writes one completion's checkpoint, result evidence, and
-// immutable metrics snapshot. Files already present for the recorded identity
-// are left untouched, so a retry after a partial crash fills only what is
-// missing and a retry after publication cannot rewrite history.
+// WriteWorkCompletion writes one completion's checkpoint, result evidence,
+// final patch when present, and immutable metrics snapshot. Files already
+// present for the recorded identity are left untouched, so a retry after a
+// partial crash fills only what is missing and a retry after publication cannot
+// rewrite history.
 func WriteWorkCompletion(colonyRoot, traceID string, checkpoint WorkCompletionCheckpoint, result WorkCompletionResult, metrics TrailMetrics) (WorkCompletionCheckpoint, error) {
 	if strings.TrimSpace(colonyRoot) == "" {
 		return WorkCompletionCheckpoint{}, fmt.Errorf("runs: colony root is required")
@@ -227,15 +263,21 @@ func WriteWorkCompletion(colonyRoot, traceID string, checkpoint WorkCompletionCh
 		if existing.WorkRevision != checkpoint.WorkRevision {
 			return WorkCompletionCheckpoint{}, fmt.Errorf("runs: completion %q already records revision %d, not %d", checkpoint.CompletionID, existing.WorkRevision, checkpoint.WorkRevision)
 		}
-		// Keep the first capture's refs and time: a retry must not rewrite the
-		// evidence the already-announced completion pointed at.
+		// Keep the first capture's refs, endpoints, and time: a retry must not
+		// rewrite the evidence the already-announced completion pointed at.
 		checkpoint.ResultRef = existing.ResultRef
 		checkpoint.MetricsRef = existing.MetricsRef
+		checkpoint.PatchRef = existing.PatchRef
+		checkpoint.Base = existing.Base
+		checkpoint.Revision = existing.Revision
 		checkpoint.CompletedAt = existing.CompletedAt
 		checkpoint.TaskIDs = existing.TaskIDs
 	} else {
 		checkpoint.ResultRef = WorkCompletionResultRef(traceID, checkpoint.CompletionID)
 		checkpoint.MetricsRef = WorkCompletionMetricsRef(traceID, checkpoint.CompletionID)
+		if len(result.Patch) > 0 {
+			checkpoint.PatchRef = WorkCompletionPatchRef(traceID, checkpoint.CompletionID)
+		}
 	}
 
 	dir := WorkCompletionDir(colonyRoot, traceID, checkpoint.CompletionID)
@@ -246,17 +288,36 @@ func WriteWorkCompletion(colonyRoot, traceID string, checkpoint WorkCompletionCh
 	if err := writeImmutableJSON(WorkCompletionCheckpointPath(colonyRoot, traceID, checkpoint.CompletionID), checkpoint); err != nil {
 		return WorkCompletionCheckpoint{}, err
 	}
+	// A concurrent or retried capture may have published the checkpoint first.
+	// Return the persisted envelope so the caller records exactly the identity
+	// and time the immutable evidence carries.
+	if stored, ok, err := ReadWorkCompletionCheckpoint(colonyRoot, traceID, checkpoint.CompletionID); err != nil {
+		return WorkCompletionCheckpoint{}, err
+	} else if ok {
+		checkpoint = stored
+	}
 
 	result.TraceID = traceID
 	result.CompletionID = checkpoint.CompletionID
 	result.WorkRevision = checkpoint.WorkRevision
 	result.CompletedAt = checkpoint.CompletedAt
 	result.Version = workCompletionVersion
+	result.Base = checkpoint.Base
+	result.Revision = checkpoint.Revision
+	result.PatchRef = checkpoint.PatchRef
 	if result.Tasks == nil {
 		result.Tasks = []WorkCompletionTask{}
 	}
 	if err := writeImmutableJSON(WorkCompletionResultPath(colonyRoot, traceID, checkpoint.CompletionID), result); err != nil {
 		return WorkCompletionCheckpoint{}, err
+	}
+
+	if checkpoint.PatchRef != "" && len(result.Patch) > 0 {
+		// A retry that passed the diff writes a patch a crash left absent; an
+		// existing patch is never rewritten.
+		if err := writeImmutableFile(WorkCompletionPatchPath(colonyRoot, traceID, checkpoint.CompletionID), result.Patch); err != nil {
+			return WorkCompletionCheckpoint{}, err
+		}
 	}
 
 	metrics.SchemaVersion = TrailMetricsSchemaVersion
@@ -345,12 +406,58 @@ func writeImmutableJSON(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(path); err == nil {
-		// The completion directory is immutable. A retry may fill a file a
-		// crash left absent, but it must never rewrite evidence that exists.
-		return nil
-	} else if !os.IsNotExist(err) {
+	return writeImmutableBytes(path, append(data, '\n'))
+}
+
+// writeImmutableFile is writeImmutableJSON's counterpart for raw evidence.
+func writeImmutableFile(path string, data []byte) error {
+	if data == nil {
+		data = []byte{}
+	}
+	return writeImmutableBytes(path, data)
+}
+
+// writeImmutableBytes publishes one evidence file only if the name is still
+// absent. The temp file is linked into place, which fails atomically with an
+// existing name: a retried or concurrent capture can fill a file a crash left
+// absent but cannot replace evidence an announced completion already points at.
+func writeImmutableBytes(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return writeFileAtomic(path, append(data, '\n'), 0o644)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	discard := func() { _ = os.Remove(tmpPath) }
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		discard()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		discard()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		discard()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		discard()
+		return err
+	}
+	if err := os.Link(tmpPath, path); err != nil {
+		discard()
+		if os.IsExist(err) {
+			return nil
+		}
+		return fmt.Errorf("runs: publish immutable %s: %w", filepath.Base(path), err)
+	}
+	return os.Remove(tmpPath)
 }

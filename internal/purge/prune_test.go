@@ -209,6 +209,105 @@ func TestPruneKeepsDirtyWorktree(t *testing.T) {
 	}
 }
 
+func TestPruneWorktreesKeepsCompletionEvidenceReadable(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	traceID := "trace-completion"
+
+	if _, err := worktree.Ensure(worktree.EnsureOptions{
+		ColonyRoot: repo,
+		TraceID:    traceID,
+		Slug:       slug,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	completionID := "completion-r1-prune"
+	checkpoint, err := runs.WriteWorkCompletion(repo, traceID, runs.WorkCompletionCheckpoint{
+		CompletionID: completionID,
+		WorkRevision: 1,
+		CompletedAt:  time.Now().UTC(),
+	}, runs.WorkCompletionResult{}, runs.TrailMetrics{ObservedAt: time.Now().UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	wtPath := filepath.Join(repo, ".paseka", "worktrees", traceID)
+	if err := os.Chtimes(wtPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(wtPath, ".git"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	// The retained run evidence is old too, so it does not protect the worktree.
+	setTreeModTime(t, filepath.Join(repo, ".paseka", "runs", traceID), old)
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	target := purge.PruneTarget{Worktrees: true, OlderThan: 14 * 24 * time.Hour, Now: time.Now()}
+	plan, err := purge.Prune(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Worktrees) != 1 || plan.Worktrees[0].TraceID != traceID {
+		t.Fatalf("plan worktrees = %+v", plan.Worktrees)
+	}
+	if _, err := purge.ExecutePrune(ctx, target, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists: %v", err)
+	}
+
+	// Worktree-only cleanup must leave the completion evidence readable.
+	if _, err := os.Stat(runs.WorkCompletionCheckpointPath(repo, traceID, completionID)); err != nil {
+		t.Fatalf("checkpoint removed with the worktree: %v", err)
+	}
+	read, ok, err := runs.ReadWorkCompletionCheckpoint(repo, traceID, checkpoint.CompletionID)
+	if err != nil || !ok {
+		t.Fatalf("checkpoint unreadable after worktree prune: ok=%v err=%v", ok, err)
+	}
+	if read.ResultRef == "" || read.MetricsRef == "" {
+		t.Fatalf("checkpoint references = %+v", read)
+	}
+	if _, ok, err := runs.ReadWorkCompletionMetrics(repo, traceID, completionID); err != nil || !ok {
+		t.Fatalf("metrics snapshot unreadable after worktree prune: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestPruneRunsRemovesCompletionEvidenceWithTheTrail(t *testing.T) {
+	repo := initTestRepo(t)
+	slug := setupPurgeHome(t, repo)
+	traceID := "trace-completion-runs"
+
+	completionID := "completion-r1-prune-runs"
+	if _, err := runs.WriteWorkCompletion(repo, traceID, runs.WorkCompletionCheckpoint{
+		CompletionID: completionID,
+		WorkRevision: 1,
+		CompletedAt:  time.Now().UTC(),
+	}, runs.WorkCompletionResult{}, runs.TrailMetrics{ObservedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	setTreeModTime(t, filepath.Join(repo, ".paseka", "runs", traceID), time.Now().Add(-30*24*time.Hour))
+
+	ctx := colony.Context{ColonyRoot: repo, Slug: slug}
+	target := purge.PruneTarget{Runs: true, OlderThan: 14 * 24 * time.Hour, Now: time.Now()}
+	plan, err := purge.Prune(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Runs) != 1 || plan.Runs[0].TraceID != traceID {
+		t.Fatalf("plan runs = %+v", plan.Runs)
+	}
+	if _, err := purge.ExecutePrune(ctx, target, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := runs.ReadWorkCompletionCheckpoint(repo, traceID, completionID); err != nil || ok {
+		t.Fatalf("completion survived run-data retention: ok=%v err=%v", ok, err)
+	}
+	if _, err := os.Stat(runs.WorkCompletionMetricsPath(repo, traceID, completionID)); !os.IsNotExist(err) {
+		t.Fatalf("metrics snapshot survived run-data retention: %v", err)
+	}
+}
+
 func TestFormatPrunePlan(t *testing.T) {
 	plan := purge.PrunePlan{
 		Cutoff: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),

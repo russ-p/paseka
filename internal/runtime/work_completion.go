@@ -222,40 +222,13 @@ func (r *Reactor) maybeCompleteWork(ctx context.Context, traceID string) error {
 	if r.workInvocationInFlight(traceID) {
 		return nil
 	}
-	if !bus.PublisherAvailable(r.publisher) {
-		// No announcement channel means no milestone to certify; the next
-		// boundary retries once a publisher exists.
-		return nil
-	}
 
 	completedAt := time.Now().UTC()
-	completionID := taskledger.CompletionIDForRevision(traceID, snap.WorkRevision)
-	metrics, err := runs.BuildTrailMetrics(r.colony.ColonyRoot, traceID, completedAt)
-	if err != nil {
-		return fmt.Errorf("runtime: build completion metrics: %w", err)
-	}
-	result := r.workCompletionResult(traceID, snap, metrics)
-	metrics.Work.Revision = &snap.WorkRevision
-	metrics.Work.Completion = &runs.MetricsCompletion{
-		CompletionID: completionID,
-		WorkRevision: snap.WorkRevision,
-		CompletedAt:  completedAt,
-		ResultRef:    runs.WorkCompletionResultRef(traceID, completionID),
-		MetricsRef:   runs.WorkCompletionMetricsRef(traceID, completionID),
-	}
-	checkpoint, err := runs.WriteWorkCompletion(r.colony.ColonyRoot, traceID, runs.WorkCompletionCheckpoint{
-		CompletionID: completionID,
-		WorkRevision: snap.WorkRevision,
-		CompletedAt:  completedAt,
-		TaskIDs:      completionTaskIDs(snap),
-	}, result, metrics)
+	checkpoint, err := runs.CaptureWorkCompletion(r.colony.ColonyRoot, snap, completedAt)
 	if err != nil {
 		// Required evidence that cannot persist is a visible finalization
 		// error, never a successfully announced completion.
 		return fmt.Errorf("runtime: capture work completion: %w", err)
-	}
-	if err := runs.WriteTrailMetrics(r.colony.ColonyRoot, traceID, metrics); err != nil {
-		return fmt.Errorf("runtime: write metrics projection: %w", err)
 	}
 
 	recorded, _, err := r.ledger.RecordWorkCompletion(traceID, taskledger.WorkCompletionSnapshot{
@@ -277,8 +250,18 @@ func (r *Reactor) maybeCompleteWork(ctx context.Context, traceID string) error {
 // boundary or reactor restart retries the same identity; the work itself is
 // not failed by an undeliverable announcement.
 func (r *Reactor) publishCompletion(ctx context.Context, snap taskledger.TraceSnapshot, completion taskledger.WorkCompletionSnapshot) error {
+	if completion.Published {
+		// A duplicate delivery must not announce the same completion twice.
+		return nil
+	}
 	if completion.ResultRef == "" || completion.MetricsRef == "" {
 		return fmt.Errorf("runtime: completion %q has no evidence references", completion.CompletionID)
+	}
+	if !bus.PublisherAvailable(r.publisher) {
+		// The evidence and identity are already durable. Without an announcement
+		// channel the completion stays recorded-but-unpublished, and the next
+		// boundary or reactor restart retries the same identity.
+		return nil
 	}
 	for _, ref := range []string{completion.ResultRef, completion.MetricsRef} {
 		path, err := runs.ResolveTrailRef(r.colony.ColonyRoot, ref)
@@ -384,65 +367,4 @@ func (r *Reactor) RecoverPendingWorkCompletions(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (r *Reactor) workCompletionResult(traceID string, snap taskledger.TraceSnapshot, metrics runs.TrailMetrics) runs.WorkCompletionResult {
-	var ids []string
-	for taskID := range snap.Tasks {
-		ids = append(ids, taskID)
-	}
-	sort.Strings(ids)
-	result := runs.WorkCompletionResult{
-		TraceID:      traceID,
-		WorkRevision: snap.WorkRevision,
-		Tasks:        make([]runs.WorkCompletionTask, 0, len(ids)),
-	}
-	for _, taskID := range ids {
-		task := snap.Tasks[taskID]
-		if taskledger.IsMergeTask(task) {
-			// Final acceptance and delivery are later observations.
-			continue
-		}
-		taskResult := runs.WorkCompletionTask{
-			TaskID:       task.TaskID,
-			Phase:        string(taskledger.TaskPhaseOf(task)),
-			Bee:          task.Bee,
-			Intent:       task.Intent,
-			Status:       string(task.Status),
-			Commit:       task.Commit,
-			Summary:      task.Summary,
-			ProposalType: string(task.ProposalWorkspace),
-			Skipped:      task.Status == protocol.TaskStatusSkipped,
-		}
-		if taskDir, err := runs.NewTaskDir(r.colony.ColonyRoot, traceID, taskID); err == nil {
-			if entries, err := taskDir.ReadTaskRuns(); err == nil {
-				for _, entry := range entries {
-					if entry.AgentID != "" {
-						taskResult.Runs = append(taskResult.Runs, entry.AgentID)
-					}
-				}
-			}
-		}
-		result.Tasks = append(result.Tasks, taskResult)
-	}
-	result.Checks = runs.WorkCompletionChecks{
-		Runs:               metrics.Runs.Retained,
-		ChecksPassed:       metrics.Runs.ChecksPassed,
-		ChecksFailed:       metrics.Runs.ChecksFailed,
-		VerificationFailed: metrics.VerificationFailed,
-		GateRejections:     metrics.GateRejections,
-	}
-	return result
-}
-
-func completionTaskIDs(snap taskledger.TraceSnapshot) []string {
-	ids := make([]string, 0, len(snap.Tasks))
-	for taskID, task := range snap.Tasks {
-		if taskledger.IsMergeTask(task) {
-			continue
-		}
-		ids = append(ids, taskID)
-	}
-	sort.Strings(ids)
-	return ids
 }

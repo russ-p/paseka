@@ -584,6 +584,10 @@ func TestWorkCompletionRestartRecoversPendingPublication(t *testing.T) {
 		t.Fatal("no completion recorded before the simulated restart")
 	}
 	completionID := snap.WorkCompletion.CompletionID
+	checkpointBefore, ok, err := runs.ReadWorkCompletionCheckpoint(r.ColonyRoot(), traceID, completionID)
+	if err != nil || !ok {
+		t.Fatalf("checkpoint before restart: ok=%v err=%v", ok, err)
+	}
 
 	restarted := runtime.NewTestReactor(runtime.TestReactorOptions{
 		ColonyRoot: r.ColonyRoot(),
@@ -598,8 +602,151 @@ func TestWorkCompletionRestartRecoversPendingPublication(t *testing.T) {
 	if len(signals) != 1 {
 		t.Fatalf("signals after restart recovery = %d", len(signals))
 	}
-	if got := decodeCompletion(t, signals[0]).CompletionID; got != completionID {
-		t.Fatalf("restart identity = %q, want %q", got, completionID)
+	payload := decodeCompletion(t, signals[0])
+	if payload.CompletionID != completionID {
+		t.Fatalf("restart identity = %q, want %q", payload.CompletionID, completionID)
+	}
+	if payload.ResultRef != checkpointBefore.ResultRef || payload.MetricsRef != checkpointBefore.MetricsRef {
+		t.Fatalf("restart rewrote the evidence references: payload=%+v checkpoint=%+v", payload, checkpointBefore)
+	}
+	for _, ref := range []string{payload.ResultRef, payload.MetricsRef} {
+		path, err := runs.ResolveTrailRef(r.ColonyRoot(), ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("restart evidence %q does not resolve: %v", ref, err)
+		}
+	}
+}
+
+func TestWorkCompletionDuplicateDeliveryKeepsIdentity(t *testing.T) {
+	r, pub, _ := newWorkCompletionReactor(t, workCompletionColony, map[string]colony.Bee{
+		"builder": {Role: "builder"},
+	})
+	traceID := "trace-work-duplicate"
+	completionPlan(t, r, traceID, "scout", protocol.TaskSpec{TaskID: "task-1", Bee: "builder"})
+	completionDone(t, r, traceID, "builder-agent", "task-1")
+	signals := pub.published(protocol.SignalTrailWorkCompleted)
+	if len(signals) != 1 {
+		t.Fatalf("signals = %d, want 1", len(signals))
+	}
+	payload := decodeCompletion(t, signals[0])
+	checkpointBefore, ok, err := runs.ReadWorkCompletionCheckpoint(r.ColonyRoot(), traceID, payload.CompletionID)
+	if err != nil || !ok {
+		t.Fatalf("checkpoint: ok=%v err=%v", ok, err)
+	}
+	resultBefore, err := os.ReadFile(runs.WorkCompletionResultPath(r.ColonyRoot(), traceID, payload.CompletionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bus delivery is at least once. A redelivered milestone must resolve to
+	// the same recorded identity and must not announce itself twice.
+	duplicate, err := protocol.NewEvent(traceID, protocol.RuntimeAgentID, 0, protocol.EventSignal, protocol.TrailWorkCompletedPayload{
+		Kind:         payload.Kind,
+		CompletionID: payload.CompletionID,
+		WorkRevision: payload.WorkRevision,
+		CompletedAt:  payload.CompletedAt,
+		ResultRef:    payload.ResultRef,
+		MetricsRef:   payload.MetricsRef,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ProcessEvent(context.Background(), duplicate); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := pub.count(protocol.SignalTrailWorkCompleted); got != 1 {
+		t.Fatalf("duplicate delivery announced the completion again (%d signals)", got)
+	}
+	snap, err := r.Ledger().Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.WorkCompletion == nil || snap.WorkCompletion.CompletionID != payload.CompletionID {
+		t.Fatalf("recorded completion = %+v", snap.WorkCompletion)
+	}
+	if snap.WorkCompletion.ResultRef != payload.ResultRef || snap.WorkCompletion.MetricsRef != payload.MetricsRef {
+		t.Fatalf("duplicate delivery rewrote the references: %+v", snap.WorkCompletion)
+	}
+	checkpointAfter, ok, err := runs.ReadWorkCompletionCheckpoint(r.ColonyRoot(), traceID, payload.CompletionID)
+	if err != nil || !ok {
+		t.Fatalf("checkpoint after duplicate: ok=%v err=%v", ok, err)
+	}
+	if !checkpointAfter.CompletedAt.Equal(checkpointBefore.CompletedAt) ||
+		checkpointAfter.ResultRef != checkpointBefore.ResultRef ||
+		checkpointAfter.MetricsRef != checkpointBefore.MetricsRef {
+		t.Fatalf("duplicate delivery rewrote the checkpoint: before=%+v after=%+v", checkpointBefore, checkpointAfter)
+	}
+	resultAfter, err := os.ReadFile(runs.WorkCompletionResultPath(r.ColonyRoot(), traceID, payload.CompletionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(resultBefore) != string(resultAfter) {
+		t.Fatal("duplicate delivery rewrote the immutable result evidence")
+	}
+}
+
+func TestWorkCompletionOldEvidenceStaysResolvableAfterNewWork(t *testing.T) {
+	r, pub, _ := newWorkCompletionReactor(t, workCompletionColony, map[string]colony.Bee{
+		"builder": {Role: "builder"},
+	})
+	traceID := "trace-work-history"
+	completionPlan(t, r, traceID, "scout", protocol.TaskSpec{TaskID: "task-1", Bee: "builder"})
+	completionDone(t, r, traceID, "builder-agent", "task-1")
+	first := decodeCompletion(t, pub.published(protocol.SignalTrailWorkCompleted)[0])
+	firstMetrics, err := os.ReadFile(runs.WorkCompletionMetricsPath(r.ColonyRoot(), traceID, first.CompletionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A later accepted revision gets its own completion; the older one stays
+	// historical and still resolves to its original result and metrics.
+	completionPlan(t, r, traceID, "scout", protocol.TaskSpec{TaskID: "task-2", Bee: "builder"})
+	completionDone(t, r, traceID, "builder-agent", "task-2")
+	signals := pub.published(protocol.SignalTrailWorkCompleted)
+	if len(signals) != 2 {
+		t.Fatalf("signals = %d, want 2", len(signals))
+	}
+	second := decodeCompletion(t, signals[1])
+	if second.CompletionID == first.CompletionID || second.WorkRevision != 2 {
+		t.Fatalf("second completion = %+v (first %+v)", second, first)
+	}
+
+	for _, ref := range []string{first.ResultRef, first.MetricsRef} {
+		path, err := runs.ResolveTrailRef(r.ColonyRoot(), ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("older completion evidence %q no longer resolves: %v", ref, err)
+		}
+	}
+	oldSnapshot, ok, err := runs.ReadWorkCompletionMetrics(r.ColonyRoot(), traceID, first.CompletionID)
+	if err != nil || !ok {
+		t.Fatalf("old metrics snapshot: ok=%v err=%v", ok, err)
+	}
+	if oldSnapshot.Work.Revision == nil || *oldSnapshot.Work.Revision != 1 {
+		t.Fatalf("old snapshot revision = %v, want 1", oldSnapshot.Work.Revision)
+	}
+	if oldSnapshot.Work.Completion == nil || oldSnapshot.Work.Completion.CompletionID != first.CompletionID {
+		t.Fatalf("old snapshot completion = %+v", oldSnapshot.Work.Completion)
+	}
+	afterMetrics, err := os.ReadFile(runs.WorkCompletionMetricsPath(r.ColonyRoot(), traceID, first.CompletionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(firstMetrics) != string(afterMetrics) {
+		t.Fatal("new accepted work rewrote the older completion snapshot")
+	}
+	record, ok, err := runs.ReadTrailWorkRecord(r.ColonyRoot(), traceID)
+	if err != nil || !ok {
+		t.Fatalf("work record: ok=%v err=%v", ok, err)
+	}
+	if record.Completion == nil || record.Completion.CompletionID != second.CompletionID {
+		t.Fatalf("work record current completion = %+v", record.Completion)
 	}
 }
 
@@ -645,6 +792,59 @@ func TestWorkCompletionIgnoresAcceptanceAndNarrativeEvents(t *testing.T) {
 	}
 	if pub.count(protocol.SignalTrailWorkCompleted) != 1 {
 		t.Fatal("acceptance or narrative events produced another completion")
+	}
+}
+
+func TestWorkCompletionRecordsEvidenceWithoutPublisher(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestColony(t, root, map[string]colony.Bee{"builder": {Role: "builder"}})
+	if err := os.WriteFile(filepath.Join(root, ".paseka/colony.yaml"), []byte(workCompletionColony), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := runtime.NewBeeRegistryFromBees(map[string]colony.Bee{"builder": {Role: "builder"}})
+	d := runtime.NewDispatcher()
+	d.SetBeeRegistry(reg)
+	d.RegisterAdapter("cursor", &recordingAdapter{})
+	r := runtime.NewTestReactor(runtime.TestReactorOptions{
+		ColonyRoot: root,
+		Dispatcher: d,
+		Registry:   reg,
+		Ledger:     taskledger.NewMemoryLedger(),
+	})
+	traceID := "trace-work-no-publisher"
+	completionPlan(t, r, traceID, "scout", protocol.TaskSpec{TaskID: "task-1", Bee: "builder"})
+	completionDone(t, r, traceID, "builder-agent", "task-1")
+
+	snap, err := r.Ledger().Snapshot(traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.WorkCompletion == nil || snap.WorkCompletion.Published {
+		t.Fatalf("completion = %+v, want a durable unpublished record", snap.WorkCompletion)
+	}
+	checkpoint, ok, err := runs.ReadWorkCompletionCheckpoint(root, traceID, snap.WorkCompletion.CompletionID)
+	if err != nil || !ok {
+		t.Fatalf("checkpoint without a publisher: ok=%v err=%v", ok, err)
+	}
+
+	// Once a channel exists, startup republishes the recorded identity.
+	pub := &workPublisher{}
+	restarted := runtime.NewTestReactor(runtime.TestReactorOptions{
+		ColonyRoot: root,
+		Registry:   reg,
+		Ledger:     r.Ledger(),
+		Publisher:  pub,
+	})
+	if err := restarted.RecoverPendingWorkCompletions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	signals := pub.published(protocol.SignalTrailWorkCompleted)
+	if len(signals) != 1 {
+		t.Fatalf("signals after publisher recovery = %d", len(signals))
+	}
+	payload := decodeCompletion(t, signals[0])
+	if payload.CompletionID != checkpoint.CompletionID {
+		t.Fatalf("recovered identity = %q, want %q", payload.CompletionID, checkpoint.CompletionID)
 	}
 }
 
