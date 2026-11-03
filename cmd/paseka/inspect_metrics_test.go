@@ -27,6 +27,10 @@ func TestInspectMetricsCLI(t *testing.T) {
 		"  runs: 1",
 		"  active: ",
 		"  wall: ",
+		"  verification failed: ",
+		"  gate rejections: ",
+		"  review notes: ",
+		"  human feedback: ",
 		"  coverage: ",
 		"  warnings:",
 	} {

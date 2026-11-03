@@ -836,3 +836,367 @@ func assertWarning(t *testing.T, warnings []MetricsWarning, group, kind string) 
 	}
 	t.Fatalf("missing warning %s/%s in %+v", group, kind, warnings)
 }
+
+func findMetricsTask(t *testing.T, m TrailMetrics, taskID string) MetricsTask {
+	t.Helper()
+	for _, task := range m.Tasks {
+		if task.TaskID == taskID {
+			return task
+		}
+	}
+	t.Fatalf("task %s not found in %+v", taskID, m.Tasks)
+	return MetricsTask{}
+}
+
+func assertCount(t *testing.T, label string, got *int, want int) {
+	t.Helper()
+	if got == nil {
+		t.Fatalf("%s = nil, want %d", label, want)
+	}
+	if *got != want {
+		t.Fatalf("%s = %d, want %d", label, *got, want)
+	}
+}
+
+func TestBuildTrailMetricsTaskExecutionsIgnoreAssociatedRoles(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-rework-roles"
+
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1", Bee: "builder", Intent: "feature",
+		Status: protocol.TaskStatusCompleted, CreatedAt: base,
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-work-1", bee: "builder", taskID: "task-1",
+		started: base, finished: base.Add(time.Minute),
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-guard", bee: "guard", taskID: "task-1",
+		started: base.Add(time.Minute), finished: base.Add(2 * time.Minute),
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := findMetricsTask(t, m, "task-1")
+	if len(task.Runs) != 2 {
+		t.Fatalf("joined runs = %+v, want the work and the Guard execution", task.Runs)
+	}
+	// The Guard execution stays a joined run, but it is not a retry.
+	assertCount(t, "executions", task.Executions, 1)
+	assertCount(t, "retries", task.Retries, 0)
+
+	// A second execution of the assigned work role is one retry.
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-work-2", bee: "builder", taskID: "task-1",
+		started: base.Add(2 * time.Minute), finished: base.Add(3 * time.Minute),
+	})
+	m, err = BuildTrailMetrics(root, traceID, base.Add(6*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task = findMetricsTask(t, m, "task-1")
+	assertCount(t, "executions", task.Executions, 2)
+	assertCount(t, "retries", task.Retries, 1)
+}
+
+func TestBuildTrailMetricsTaskExecutionsCustomRoleAndDirectRework(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-custom-role"
+
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1", Bee: "mason", Status: protocol.TaskStatusCompleted, CreatedAt: base,
+	})
+	// The task dispatch records its own execution-time role, even when it is a
+	// custom name no registry would recognise today.
+	taskDir := TaskDir{ColonyRoot: root, TraceID: traceID, TaskID: "task-1"}
+	if err := taskDir.AppendTaskRun(TaskRunEntry{
+		AgentID: "run-mason-1", Bee: "mason", AttemptID: "attempt-1", StartedAt: base,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-mason-1", bee: "mason", taskID: "task-1",
+		started: base, finished: base.Add(time.Minute),
+	})
+	// A direct-dispatch rework that performs the same assigned work role counts.
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-mason-rework", bee: "mason", taskID: "task-1",
+		started: base.Add(time.Minute), finished: base.Add(2 * time.Minute),
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := findMetricsTask(t, m, "task-1")
+	if task.Phase != string(protocol.TaskPhaseWork) {
+		t.Fatalf("phase = %q, want work", task.Phase)
+	}
+	assertCount(t, "executions", task.Executions, 2)
+	assertCount(t, "retries", task.Retries, 1)
+}
+
+func TestBuildTrailMetricsTaskExecutionsUseRecordedDispatchOwnership(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-renamed-role"
+
+	// The task's recorded role was renamed after dispatch. The run is still the
+	// task's work execution because its dispatch entry carries the role used at
+	// execution time, not because today's record says "builder".
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted, CreatedAt: base,
+	})
+	taskDir := TaskDir{ColonyRoot: root, TraceID: traceID, TaskID: "task-1"}
+	if err := taskDir.AppendTaskRun(TaskRunEntry{
+		AgentID: "run-1", Bee: "builder-v2", AttemptID: "attempt-1", StartedAt: base,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-1", bee: "builder-v2", taskID: "task-1",
+		started: base, finished: base.Add(time.Minute),
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := findMetricsTask(t, m, "task-1")
+	assertCount(t, "executions", task.Executions, 1)
+	assertCount(t, "retries", task.Retries, 0)
+}
+
+func TestBuildTrailMetricsMissingOwnershipIsCoverageGap(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-missing-ownership"
+
+	// A legacy task.md carries no assigned role, and only the run record joins
+	// the execution. The reader cannot prove the run performed the assignment.
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1", Status: protocol.TaskStatusCompleted, CreatedAt: base,
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-1", bee: "builder", taskID: "task-1",
+		started: base, finished: base.Add(time.Minute),
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := findMetricsTask(t, m, "task-1")
+	if len(task.Runs) != 1 {
+		t.Fatalf("joined runs = %+v, want the retained execution", task.Runs)
+	}
+	if task.Executions != nil || task.Retries != nil {
+		t.Fatalf("executions/retries = %v/%v, want unknown rather than a guess", task.Executions, task.Retries)
+	}
+	if m.Coverage.Tasks != CoveragePartial {
+		t.Fatalf("tasks coverage = %q, want partial", m.Coverage.Tasks)
+	}
+	assertWarning(t, m.Warnings, "tasks", WarningMissing)
+}
+
+func TestBuildTrailMetricsVerificationAndGateRejections(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-gate-rework"
+
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-1", Bee: "builder", Status: protocol.TaskStatusCompleted, CreatedAt: base,
+	})
+	// The rejected run records its mechanical gate verdict and the runtime
+	// records the matching verification.failed.
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-check", bee: "builder", taskID: "task-1",
+		started: base, finished: base.Add(time.Minute),
+		state: protocol.StatusFailed, reason: protocol.ReasonChecksFailed,
+		gate: &protocol.GateResult{Passed: false, Reason: "exit"},
+	})
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, protocol.RuntimeAgentID, protocol.EventVerification,
+		protocol.VerificationPayload{
+			Kind: protocol.VerificationFailed, TaskID: "task-1", Reason: protocol.ReasonChecksFailed,
+			Summary: "checks failed",
+		}, base.Add(time.Minute)))
+	// The builder reworks: one execution of the assigned work role more.
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-rework", bee: "builder", taskID: "task-1",
+		started: base.Add(2 * time.Minute), finished: base.Add(3 * time.Minute),
+	})
+
+	// A verification failure without another execution does not invent a retry.
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-2", Bee: "reviewer", Status: protocol.TaskStatusFailed, CreatedAt: base.Add(time.Second),
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-review", bee: "reviewer", taskID: "task-2",
+		started: base, finished: base.Add(time.Minute),
+	})
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "reviewer-1", protocol.EventVerification,
+		protocol.VerificationPayload{Kind: protocol.VerificationFailed, TaskID: "task-2", Summary: "please revise"},
+		base.Add(time.Minute)))
+
+	// A taskless verification stays in the trail total.
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "cli", protocol.EventVerification,
+		protocol.VerificationPayload{Kind: protocol.VerificationFailed, Summary: "unjoined failure"},
+		base.Add(4*time.Minute)))
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(10*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := findMetricsTask(t, m, "task-1")
+	assertCount(t, "executions", task.Executions, 2)
+	assertCount(t, "retries", task.Retries, 1)
+	if task.VerificationFailed != 1 || task.GateRejections != 1 {
+		t.Fatalf("task-1 verification/gate = %d/%d, want 1/1", task.VerificationFailed, task.GateRejections)
+	}
+	// The run's failed gate and its matching event are one rejection, not two.
+	if m.GateRejections != 1 {
+		t.Fatalf("trail gate rejections = %d, want the one recorded rejection", m.GateRejections)
+	}
+
+	review := findMetricsTask(t, m, "task-2")
+	assertCount(t, "review executions", review.Executions, 1)
+	assertCount(t, "review retries", review.Retries, 0)
+	if review.VerificationFailed != 1 {
+		t.Fatalf("task-2 verification = %d, want 1", review.VerificationFailed)
+	}
+
+	if m.VerificationFailed != 3 {
+		t.Fatalf("trail verification = %d, want all three distinct events", m.VerificationFailed)
+	}
+	perTask := 0
+	for _, row := range m.Tasks {
+		perTask += row.VerificationFailed
+	}
+	if perTask >= m.VerificationFailed {
+		t.Fatalf("per-task sum = %d, trail total = %d: the taskless failure must stay only in the total",
+			perTask, m.VerificationFailed)
+	}
+}
+
+func TestBuildTrailMetricsSkippedAndDeferredTasks(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-skipped-deferred"
+
+	// A superseded standing tick keeps a retained execution record but must not
+	// count as work, an execution, a retry, or a completion.
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-skipped", Bee: "builder", Status: protocol.TaskStatusSkipped,
+		CreatedAt: base, Summary: protocol.SupersededByStipendSummary(4),
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "run-old-tick", bee: "builder", taskID: "task-skipped",
+		started: base, finished: base.Add(time.Minute),
+	})
+
+	// Energy-deferred work keeps its lifecycle status while the trail cannot
+	// admit it. It has not started.
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-deferred", Bee: "builder", Status: protocol.TaskStatusReady,
+		CreatedAt: base.Add(time.Second),
+	})
+	// A deferred rework may leave the lifecycle status looking active. Without
+	// an execution the deferred entry still means it did not start.
+	writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+		TaskID: "task-deferred-active", Bee: "builder", Status: protocol.TaskStatusRunning,
+		CreatedAt: base.Add(2 * time.Second),
+	})
+	appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, protocol.RuntimeAgentID, protocol.EventSignal,
+		protocol.EnergyPausedPayload{
+			Kind: protocol.SignalEnergyPaused, EpisodeID: "pause-1", Reason: "Honey reserve exhausted",
+			Remaining: 0, PendingCount: 1,
+		}, base.Add(time.Minute)))
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	skipped := findMetricsTask(t, m, "task-skipped")
+	assertCount(t, "skipped executions", skipped.Executions, 0)
+	assertCount(t, "skipped retries", skipped.Retries, 0)
+	if skipped.Started || skipped.Completed {
+		t.Fatalf("skipped task started/completed = %t/%t, want false/false", skipped.Started, skipped.Completed)
+	}
+	deferred := findMetricsTask(t, m, "task-deferred")
+	assertCount(t, "deferred executions", deferred.Executions, 0)
+	assertCount(t, "deferred retries", deferred.Retries, 0)
+	if deferred.Started || deferred.Completed {
+		t.Fatalf("deferred task started/completed = %t/%t, want false/false", deferred.Started, deferred.Completed)
+	}
+	deferredActive := findMetricsTask(t, m, "task-deferred-active")
+	assertCount(t, "deferred active executions", deferredActive.Executions, 0)
+	if deferredActive.Started {
+		t.Fatalf("energy-deferred task with status %q counted as started", deferredActive.Status)
+	}
+	if m.Work.Pause == nil || m.Work.Pause.PendingCount != 1 {
+		t.Fatalf("pause = %+v, want the open energy-deferred episode", m.Work.Pause)
+	}
+}
+
+func TestBuildTrailMetricsReviewNotesAndHumanFeedbackBuckets(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-review-buckets"
+
+	for i, severity := range []string{"info", "low", "medium", "high", "critical", "", "severe"} {
+		appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "reviewer", protocol.EventInsight,
+			protocol.NarrativeInsightPayload{Kind: protocol.InsightReviewNote, Summary: "note", Severity: severity},
+			base.Add(time.Duration(i)*time.Second)))
+	}
+	for i, verdict := range []string{"negative", "positive", "neutral", "", "blocking"} {
+		appendMetricsEvent(t, root, traceID, metricsEvent(t, traceID, "beekeeper", protocol.EventInsight,
+			protocol.HumanFeedbackPayload{Kind: protocol.InsightHumanFeedback, TaskID: "task-1", Message: "feedback", Verdict: verdict},
+			base.Add(time.Duration(i)*time.Second)))
+	}
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNotes := MetricsReviewNotes{Info: 1, Low: 1, Medium: 1, High: 1, Critical: 1, Unspecified: 1, Unknown: 1}
+	if m.ReviewNotes != wantNotes {
+		t.Fatalf("review notes = %+v, want %+v", m.ReviewNotes, wantNotes)
+	}
+	wantFeedback := MetricsHumanFeedback{Negative: 1, Positive: 1, Neutral: 1, Unspecified: 1, Unknown: 1}
+	if m.HumanFeedback != wantFeedback {
+		t.Fatalf("human feedback = %+v, want %+v", m.HumanFeedback, wantFeedback)
+	}
+}
+
+func TestBuildTrailMetricsTasksAreStableTaskIDOrdered(t *testing.T) {
+	base := time.Now().UTC()
+	root := t.TempDir()
+	traceID := "trace-task-order"
+
+	for _, taskID := range []string{"task-3", "task-1", "task-2"} {
+		writeMetricsTask(t, root, traceID, taskledger.TaskSnapshot{
+			TaskID: taskID, Bee: "builder", Status: protocol.TaskStatusCompleted, CreatedAt: base,
+		})
+	}
+	m, err := BuildTrailMetrics(root, traceID, base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(m.Tasks))
+	for _, task := range m.Tasks {
+		got = append(got, task.TaskID)
+	}
+	want := []string{"task-1", "task-2", "task-3"}
+	if len(got) != len(want) {
+		t.Fatalf("tasks = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("tasks = %+v, want stable task-id order %+v", got, want)
+		}
+	}
+}

@@ -79,6 +79,18 @@ type TrailMetrics struct {
 	Honey  MetricsHoney   `json:"honey"`
 	Tokens *MetricsTokens `json:"tokens"`
 	Runs   MetricsRuns    `json:"runs"`
+
+	// Tasks is the stable task-id ordered observation of every recorded task.
+	Tasks []MetricsTask `json:"tasks"`
+	// VerificationFailed counts distinct recorded verification.failed events,
+	// including the ones that join to no task.
+	VerificationFailed int `json:"verificationFailed"`
+	// GateRejections counts mechanical check rejections once each, whether the
+	// rejection was recorded on a run, as a verification.failed event, or both.
+	GateRejections int                  `json:"gateRejections"`
+	ReviewNotes    MetricsReviewNotes   `json:"reviewNotes"`
+	HumanFeedback  MetricsHumanFeedback `json:"humanFeedback"`
+
 	// Durations are null when no usable interval exists; zero would claim a
 	// measurement the record does not support.
 	ActiveTimeSec *float64 `json:"activeTimeSec"`
@@ -184,6 +196,55 @@ type MetricsRuns struct {
 	ChecksPassed        int            `json:"checksPassed"`
 }
 
+// MetricsTask is one recorded task's rework and review observation.
+//
+// Executions counts the invocations that performed the task's assigned work
+// role. It is null when the retained record cannot prove that ownership: a
+// missing historical assignment is a coverage gap, never a zero inferred from
+// today's registry. Retries is max(0, executions-1); it is null for the same
+// reason. A skipped task contributes no execution and no completion.
+type MetricsTask struct {
+	TaskID    string `json:"taskId"`
+	Phase     string `json:"phase"`
+	Bee       string `json:"bee,omitempty"`
+	Intent    string `json:"intent,omitempty"`
+	Status    string `json:"status"`
+	Started   bool   `json:"started"`
+	Completed bool   `json:"completed"`
+	// Runs lists every execution identity joined to the task, including roles
+	// that did not perform its work (a Guard review, for example) and identities
+	// whose run directory is no longer retained.
+	Runs               []string `json:"runs"`
+	Executions         *int     `json:"executions"`
+	Retries            *int     `json:"retries"`
+	VerificationFailed int      `json:"verificationFailed"`
+	GateRejections     int      `json:"gateRejections"`
+}
+
+// MetricsReviewNotes counts review.note observations by the closed severity
+// vocabulary. Unspecified is a note with no severity; Unknown is a historical
+// value outside the vocabulary and is never folded into another bucket.
+type MetricsReviewNotes struct {
+	Info        int `json:"info"`
+	Low         int `json:"low"`
+	Medium      int `json:"medium"`
+	High        int `json:"high"`
+	Critical    int `json:"critical"`
+	Unspecified int `json:"unspecified"`
+	Unknown     int `json:"unknown"`
+}
+
+// MetricsHumanFeedback counts human.feedback observations by the closed verdict
+// vocabulary. Unspecified is feedback with no verdict; Unknown is a historical
+// value outside the vocabulary.
+type MetricsHumanFeedback struct {
+	Negative    int `json:"negative"`
+	Positive    int `json:"positive"`
+	Neutral     int `json:"neutral"`
+	Unspecified int `json:"unspecified"`
+	Unknown     int `json:"unknown"`
+}
+
 // MetricsCoverage reports completeness by measurement group.
 type MetricsCoverage struct {
 	Events    string `json:"events"`
@@ -247,6 +308,7 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 		TraceID:       traceID,
 		ObservedAt:    observedAt,
 		CueIngresses:  []MetricsCueIngress{},
+		Tasks:         []MetricsTask{},
 		Warnings:      []MetricsWarning{},
 		Runs:          MetricsRuns{ByBee: map[string]int{}},
 	}
@@ -295,6 +357,11 @@ func BuildTrailMetrics(colonyRoot, traceID string, observedAt time.Time) (TrailM
 	applyWork(&m, tasks, events)
 	applyHoney(&m, events, trailLogPresent, trailLogUnreadable, trailLogDamaged)
 	applyTokens(&m, runMetas, runs, runCoverage, runUnreadable)
+	perTaskVerification := applyVerification(&m, events)
+	perTaskGate := applyGateRejections(&m, runMetas, events)
+	applyTasks(&m, colonyRoot, traceID, tasks, runMetas, perTaskVerification, perTaskGate)
+	applyReviewNotes(&m, events)
+	applyHumanFeedback(&m, events)
 	applyDurations(&m, runMetas, tasks, events, observedAt, runUnreadable)
 	applyEventsCoverage(&m, trailLogPresent, trailLogUnreadable, len(readIssues) > 0)
 	applyTaskRunLinkageWarnings(&m, colonyRoot, traceID)
@@ -956,6 +1023,351 @@ func applyTokens(m *TrailMetrics, metas []RunMeta, runs MetricsRuns, runCoverage
 		m.Coverage.Tokens = CoverageComplete
 	}
 	m.Tokens = &tokens
+}
+
+// applyVerification counts distinct verification.failed observations and joins
+// them to their recorded task. The returned per-task map may sum to less than
+// the trail total: a taskless verification stays in the total.
+func applyVerification(m *TrailMetrics, events []protocol.Event) map[string]int {
+	perTask := map[string]int{}
+	total := 0
+	for _, ev := range events {
+		if ev.Type != protocol.EventVerification {
+			continue
+		}
+		if protocol.PayloadKind(ev.Payload) != string(protocol.VerificationFailed) {
+			continue
+		}
+		var payload protocol.VerificationPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			m.warn("events", WarningUnreadable,
+				fmt.Sprintf("verification.failed event %s payload: %v", ev.ID, err))
+			continue
+		}
+		total++
+		if taskID := strings.TrimSpace(payload.TaskID); taskID != "" {
+			perTask[taskID]++
+		}
+	}
+	m.VerificationFailed = total
+	return perTask
+}
+
+// applyGateRejections counts mechanical check rejections once per rejection.
+//
+// A rejection is normally recorded twice: the run carries the failed gate
+// verdict, and the runtime records a verification.failed with reason
+// checks_failed. They describe the same event, so neither recorder may be
+// added on top of the other. A failed gate with no surviving event still
+// counts, and a surviving event whose run record was overwritten still counts.
+func applyGateRejections(m *TrailMetrics, metas []RunMeta, events []protocol.Event) map[string]int {
+	runGates := map[string]int{}
+	tasklessRuns := 0
+	for _, meta := range metas {
+		if meta.Gate == nil || meta.Gate.Passed {
+			continue
+		}
+		if taskID := strings.TrimSpace(meta.TaskID); taskID != "" {
+			runGates[taskID]++
+		} else {
+			tasklessRuns++
+		}
+	}
+
+	checkEvents := map[string]int{}
+	tasklessEvents := 0
+	for _, ev := range events {
+		if ev.Type != protocol.EventVerification {
+			continue
+		}
+		if protocol.PayloadKind(ev.Payload) != string(protocol.VerificationFailed) {
+			continue
+		}
+		var payload protocol.VerificationPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			continue
+		}
+		if strings.TrimSpace(payload.Reason) != protocol.ReasonChecksFailed {
+			continue
+		}
+		if taskID := strings.TrimSpace(payload.TaskID); taskID != "" {
+			checkEvents[taskID]++
+		} else {
+			tasklessEvents++
+		}
+	}
+
+	perTask := runGates
+	for taskID, recorded := range checkEvents {
+		if recorded > perTask[taskID] {
+			perTask[taskID] = recorded
+		}
+	}
+	total := tasklessRuns
+	if tasklessEvents > total {
+		total = tasklessEvents
+	}
+	for _, count := range perTask {
+		total += count
+	}
+	m.GateRejections = total
+	return perTask
+}
+
+// applyTasks builds the stable task-id ordered observation. Executions count
+// invocations that performed the task's assigned work role, resolved from the
+// ownership recorded when each execution ran:
+//
+//   - a task's runs.ndjson entry is a recorded task dispatch, so it performed
+//     the assigned role whatever that role is called;
+//   - a direct-dispatch or HITL run joined through request.json counts when its
+//     recorded Bee matches the task's recorded assignment (or the Bee recorded
+//     on a task dispatch of the same task).
+//
+// A Guard or other associated role therefore stays in the joined run list
+// without becoming an execution or a retry. Missing ownership is reported as a
+// coverage gap instead of being guessed: executions and retries stay null.
+// A skipped task contributes no execution, retry, or completion.
+func applyTasks(m *TrailMetrics, colonyRoot, traceID string, tasks taskledger.TraceSnapshot, metas []RunMeta, verification, gate map[string]int) {
+	metaByAgent := make(map[string]RunMeta, len(metas))
+	runsByTask := map[string][]string{}
+	for _, meta := range metas {
+		metaByAgent[meta.AgentID] = meta
+		if taskID := strings.TrimSpace(meta.TaskID); taskID != "" {
+			runsByTask[taskID] = append(runsByTask[taskID], meta.AgentID)
+		}
+	}
+
+	taskIDs := make([]string, 0, len(tasks.Tasks))
+	for taskID := range tasks.Tasks {
+		taskIDs = append(taskIDs, taskID)
+	}
+	sort.Strings(taskIDs)
+
+	rows := make([]MetricsTask, 0, len(taskIDs))
+	for _, mapID := range taskIDs {
+		task := tasks.Tasks[mapID]
+		taskID := task.TaskID
+		if taskID == "" {
+			taskID = mapID
+		}
+		d := TaskDir{ColonyRoot: colonyRoot, TraceID: traceID, TaskID: taskID}
+		entries, err := d.ReadTaskRuns()
+		if err != nil {
+			m.warn("tasks", WarningUnreadable, fmt.Sprintf("task %s run linkage: %v", taskID, err))
+			markTasksPartial(m)
+		}
+
+		entryByAgent := make(map[string]TaskRunEntry, len(entries))
+		joined := map[string]struct{}{}
+		workRoles := map[string]struct{}{}
+		if bee := strings.TrimSpace(task.Bee); bee != "" {
+			workRoles[bee] = struct{}{}
+		}
+		for _, entry := range entries {
+			if entry.AgentID == "" {
+				continue
+			}
+			entryByAgent[entry.AgentID] = entry
+			joined[entry.AgentID] = struct{}{}
+			if bee := strings.TrimSpace(entry.Bee); bee != "" {
+				workRoles[bee] = struct{}{}
+			}
+		}
+		for _, agentID := range runsByTask[taskID] {
+			joined[agentID] = struct{}{}
+		}
+
+		runIDs := make([]string, 0, len(joined))
+		for agentID := range joined {
+			runIDs = append(runIDs, agentID)
+		}
+		sort.Strings(runIDs)
+
+		row := MetricsTask{
+			TaskID:             taskID,
+			Phase:              string(task.Phase),
+			Bee:                task.Bee,
+			Intent:             task.Intent,
+			Status:             string(task.Status),
+			Runs:               runIDs,
+			VerificationFailed: verification[taskID],
+			GateRejections:     gate[taskID],
+		}
+
+		switch task.Status {
+		case protocol.TaskStatusSkipped:
+			// A superseded standing allocation never counts as work, however
+			// many records the trail still retains around it.
+			zero := 0
+			row.Executions = &zero
+			row.Retries = &zero
+			row.Started = false
+			row.Completed = false
+		default:
+			executions := 0
+			ownershipUnknown := false
+			for _, agentID := range runIDs {
+				if _, ok := entryByAgent[agentID]; ok {
+					// A recorded task dispatch is the assigned work role by
+					// construction, whatever the role is named.
+					executions++
+					continue
+				}
+				meta, ok := metaByAgent[agentID]
+				if !ok {
+					// The identity is joined but its run record is gone; it
+					// stays visible without contributing a proven execution.
+					continue
+				}
+				bee := strings.TrimSpace(meta.Bee)
+				if bee != "" {
+					if _, ok := workRoles[bee]; ok {
+						executions++
+						continue
+					}
+				}
+				// Either the assignment is unknown, or the run records no role
+				// at all: the execution count cannot be proven.
+				if len(workRoles) == 0 || bee == "" {
+					ownershipUnknown = true
+				}
+			}
+			if ownershipUnknown {
+				m.warn("tasks", WarningMissing,
+					fmt.Sprintf("task %s has joined executions without a recorded assigned role; executions and retries are unknown", taskID))
+				markTasksPartial(m)
+			} else {
+				retries := executions - 1
+				if retries < 0 {
+					retries = 0
+				}
+				value := executions
+				row.Executions = &value
+				row.Retries = &retries
+				row.Started = taskStarted(executions, task.Status, energyDeferred(m))
+				row.Completed = task.Status == protocol.TaskStatusCompleted
+			}
+		}
+		rows = append(rows, row)
+	}
+	m.Tasks = rows
+}
+
+// taskStarted reports whether a task actually started. An execution proves it
+// did. Without one, an open energy pause pending entry keeps a task that still
+// looks active from counting as started, whatever its lifecycle status says;
+// only a terminal status is evidence in its own right.
+func taskStarted(executions int, status protocol.TaskStatus, deferred bool) bool {
+	if executions > 0 {
+		return true
+	}
+	if deferred && !terminalTaskStatus(status) {
+		return false
+	}
+	return taskStartedByStatus(status)
+}
+
+// terminalTaskStatus reports whether the lifecycle status itself proves the
+// task had started.
+func terminalTaskStatus(status protocol.TaskStatus) bool {
+	switch status {
+	case protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// energyDeferred reports whether the trail has an open pause with work waiting
+// behind it.
+func energyDeferred(m *TrailMetrics) bool {
+	return m.Work.Pause != nil && m.Work.Pause.PendingCount > 0
+}
+
+// taskStartedByStatus reports whether the lifecycle status itself proves the
+// task started. planned and ready do not: an energy-deferred entry keeps its
+// lifecycle status while the trail cannot admit it.
+func taskStartedByStatus(status protocol.TaskStatus) bool {
+	switch status {
+	case protocol.TaskStatusRunning, protocol.TaskStatusWaitingReview,
+		protocol.TaskStatusCompleted, protocol.TaskStatusFailed, protocol.TaskStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// applyReviewNotes counts review.note observations by the closed severity
+// vocabulary.
+func applyReviewNotes(m *TrailMetrics, events []protocol.Event) {
+	for _, ev := range events {
+		if ev.Type != protocol.EventInsight {
+			continue
+		}
+		if protocol.PayloadKind(ev.Payload) != string(protocol.InsightReviewNote) {
+			continue
+		}
+		var payload protocol.NarrativeInsightPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			m.warn("events", WarningUnreadable,
+				fmt.Sprintf("review.note event %s payload: %v", ev.ID, err))
+			continue
+		}
+		switch protocol.ClassifyReviewSeverity(payload.Severity) {
+		case protocol.ReviewSeverityInfo:
+			m.ReviewNotes.Info++
+		case protocol.ReviewSeverityLow:
+			m.ReviewNotes.Low++
+		case protocol.ReviewSeverityMedium:
+			m.ReviewNotes.Medium++
+		case protocol.ReviewSeverityHigh:
+			m.ReviewNotes.High++
+		case protocol.ReviewSeverityCritical:
+			m.ReviewNotes.Critical++
+		case protocol.ReviewSeverityUnknown:
+			m.ReviewNotes.Unknown++
+		default:
+			m.ReviewNotes.Unspecified++
+		}
+	}
+}
+
+// applyHumanFeedback counts human.feedback observations by the closed verdict
+// vocabulary.
+func applyHumanFeedback(m *TrailMetrics, events []protocol.Event) {
+	for _, ev := range events {
+		if ev.Type != protocol.EventInsight {
+			continue
+		}
+		if protocol.PayloadKind(ev.Payload) != string(protocol.InsightHumanFeedback) {
+			continue
+		}
+		var payload protocol.HumanFeedbackPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			m.warn("events", WarningUnreadable,
+				fmt.Sprintf("human.feedback event %s payload: %v", ev.ID, err))
+			continue
+		}
+		switch protocol.ClassifyFeedbackVerdict(payload.Verdict) {
+		case protocol.FeedbackVerdictNegative:
+			m.HumanFeedback.Negative++
+		case protocol.FeedbackVerdictPositive:
+			m.HumanFeedback.Positive++
+		case protocol.FeedbackVerdictNeutral:
+			m.HumanFeedback.Neutral++
+		case protocol.FeedbackVerdictUnknown:
+			m.HumanFeedback.Unknown++
+		default:
+			m.HumanFeedback.Unspecified++
+		}
+	}
+}
+
+func markTasksPartial(m *TrailMetrics) {
+	if m.Coverage.Tasks == CoverageComplete {
+		m.Coverage.Tasks = CoveragePartial
+	}
 }
 
 // applyDurations computes active and wall time from recorded timestamps.

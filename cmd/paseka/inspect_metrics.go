@@ -25,9 +25,10 @@ func newInspectMetricsCmd() *cobra.Command {
 		Use:   "metrics",
 		Short: "Show a trail's cost, run counts, and work stage",
 		Long: "Project one flight trail from its retained disk evidence: cue provenance,\n" +
-			"entry task, work stage, honey, tokens, run counts, and durations. The read\n" +
-			"works without NATS. --write persists the same projection to\n" +
-			".paseka/runs/<traceId>/metrics.json without declaring work completed.",
+			"entry task, work stage, honey, tokens, run counts, durations, and the\n" +
+			"per-task rework and review observation. The read works without NATS.\n" +
+			"--write persists the same projection to .paseka/runs/<traceId>/metrics.json\n" +
+			"without declaring work completed.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if traceID == "" {
 				return fmt.Errorf("--trace is required")
@@ -173,6 +174,42 @@ func printTrailMetrics(w io.Writer, m runs.TrailMetrics) error {
 		m.Runs.Failed, m.Runs.Cancelled, m.Runs.ContractFailed, m.Runs.ContractUnavailable,
 		m.Runs.Timeout, m.Runs.ChecksFailed, m.Runs.ChecksPassed)
 
+	if len(m.Tasks) > 0 {
+		fmt.Fprintf(w, "  tasks: %d (stable task-id order)\n", len(m.Tasks))
+		for _, task := range m.Tasks {
+			descriptor := task.Phase
+			if descriptor == "" {
+				descriptor = "work"
+			}
+			if task.Bee != "" {
+				descriptor += ", " + task.Bee
+			}
+			if task.Intent != "" {
+				descriptor += ", " + task.Intent
+			}
+			markers := ""
+			if task.Started {
+				markers += ", started"
+			}
+			if task.Completed {
+				markers += ", completed"
+			}
+			fmt.Fprintf(w, "    %s: %s (%s%s)\n", task.TaskID, task.Status, descriptor, markers)
+			fmt.Fprintf(w, "      runs %d, executions %s, retries %s, verification failed %d, gate rejections %d\n",
+				len(task.Runs), countLabel(task.Executions), countLabel(task.Retries),
+				task.VerificationFailed, task.GateRejections)
+		}
+	}
+
+	fmt.Fprintf(w, "  verification failed: %d (per-task sums may be smaller)\n", m.VerificationFailed)
+	fmt.Fprintf(w, "  gate rejections: %d\n", m.GateRejections)
+	fmt.Fprintf(w, "  review notes: info %d, low %d, medium %d, high %d, critical %d, unspecified %d, unknown %d\n",
+		m.ReviewNotes.Info, m.ReviewNotes.Low, m.ReviewNotes.Medium, m.ReviewNotes.High,
+		m.ReviewNotes.Critical, m.ReviewNotes.Unspecified, m.ReviewNotes.Unknown)
+	fmt.Fprintf(w, "  human feedback: negative %d, positive %d, neutral %d, unspecified %d, unknown %d\n",
+		m.HumanFeedback.Negative, m.HumanFeedback.Positive, m.HumanFeedback.Neutral,
+		m.HumanFeedback.Unspecified, m.HumanFeedback.Unknown)
+
 	fmt.Fprintf(w, "  active: %s\n", secondsLabel(m.ActiveTimeSec))
 	fmt.Fprintf(w, "  wall: %s\n", secondsLabel(m.WallTimeSec))
 
@@ -206,4 +243,11 @@ func secondsLabel(value *float64) string {
 		return "unknown"
 	}
 	return strconv.FormatFloat(*value, 'f', -1, 64) + "s"
+}
+
+func countLabel(value *int) string {
+	if value == nil {
+		return "unknown"
+	}
+	return strconv.Itoa(*value)
 }
