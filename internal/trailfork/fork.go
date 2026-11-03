@@ -331,6 +331,19 @@ func resumeDirectRequest(ctx context.Context, publisher bus.Publisher, ledger ta
 }
 
 func createResolved(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, opts Options, plan Lineage, evidence sourceEvidence) (Result, error) {
+	// A fork records its own action as the trail's origin. The carried task may
+	// copy the source task's cue id, but that is not this trail's origin and must
+	// never be reported as one.
+	if _, _, err := runs.EnsureTrailOrigin(opts.Context.ColonyRoot, plan.TraceID, runs.TrailOrigin{
+		Kind:          runs.OriginKindFork,
+		Source:        "trail.fork",
+		Actor:         actor(opts),
+		SourceTraceID: plan.SourceTrace,
+		ForkID:        plan.ForkID,
+		RequestID:     plan.RequestID,
+	}); err != nil {
+		return Result{}, fmt.Errorf("trailfork: record trail origin: %w", err)
+	}
 	if plan.RequestID != "" {
 		if existing, err := LoadLineage(opts.Context.ColonyRoot, plan.TraceID); err == nil && existing.RequestID == plan.RequestID {
 			// An interrupted approval may have written the lineage and binding
@@ -560,6 +573,17 @@ func finishInitialPublication(ctx context.Context, publisher bus.Publisher, ledg
 // dispatchable fork, including when finishInitialPublication finds the task
 // already past planned and publishes nothing.
 func finishCreation(ctx context.Context, publisher bus.Publisher, ledger taskledger.Ledger, colonyRoot string, lineage Lineage, defaults colony.Defaults) (Lineage, error) {
+	// A resumed fork must still have a fork origin even when an earlier attempt
+	// crashed before createResolved recorded it. An existing origin is retained.
+	if _, _, err := runs.EnsureTrailOrigin(colonyRoot, lineage.TraceID, runs.TrailOrigin{
+		Kind:          runs.OriginKindFork,
+		Source:        "trail.fork",
+		SourceTraceID: lineage.SourceTrace,
+		ForkID:        lineage.ForkID,
+		RequestID:     lineage.RequestID,
+	}); err != nil {
+		return Lineage{}, fmt.Errorf("trailfork: record trail origin: %w", err)
+	}
 	if err := finishInitialPublication(ctx, publisher, ledger, lineage, defaults); err != nil {
 		return Lineage{}, err
 	}

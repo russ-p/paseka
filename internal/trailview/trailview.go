@@ -32,6 +32,10 @@ const (
 	AdmissionRunnable = "runnable"
 	// AdmissionPinned marks a pinned trail whose lineage record is missing.
 	AdmissionPinned = "pinned"
+
+	// OriginUnknown marks a trail with no retained origin record. It is
+	// deliberately distinct from a known non-cue origin.
+	OriginUnknown = runs.OriginKindUnknown
 )
 
 // Trail is one runnable trail with the evidence every surface needs.
@@ -59,6 +63,12 @@ type Trail struct {
 	WorkspaceRoot      string                `json:"workspaceRoot,omitempty"`
 	Config             *trailconfig.Manifest `json:"config,omitempty"`
 	PendingConfig      *trailconfig.Change   `json:"pendingConfig,omitempty"`
+
+	// Origin is the trail-owned record of how the trail was created. A nil
+	// Origin with OriginKind "unknown" is a historical trail that predates the
+	// record; it is never reported as a known non-cue origin.
+	Origin     *runs.TrailOrigin `json:"origin"`
+	OriginKind string            `json:"originKind"`
 
 	// Fork lineage, when this trail is an experiment.
 	Lineage              *trailfork.Lineage `json:"lineage,omitempty"`
@@ -195,7 +205,11 @@ func LoadTrail(ctx colony.Context, traceID string) (Trail, bool, error) {
 		return Trail{}, false, err
 	}
 	if summary.RunCount == 0 && summary.TaskCount == 0 && summary.EventCount == 0 {
-		return Trail{}, false, nil
+		// A retained origin is trail evidence even before the first run, task,
+		// or event: creation/admission happens before execution begins.
+		if _, ok, err := runs.ReadTrailOrigin(ctx.ColonyRoot, traceID); err != nil || !ok {
+			return Trail{}, false, nil
+		}
 	}
 	pending, err := trailfork.ListPending(ctx.ColonyRoot)
 	if err != nil {
@@ -227,6 +241,7 @@ func TrailFromSummary(ctx colony.Context, summary runs.TraceSummary, pending []t
 	if text, err := runs.ResolveTraceSummary(ctx.ColonyRoot, summary.TraceID); err == nil {
 		trail.Summary = text
 	}
+	trail.applyOrigin(ctx.ColonyRoot, summary.TraceID)
 
 	manifest, bound, err := trailconfig.LoadManifestIfExists(ctx.ColonyRoot, summary.TraceID)
 	switch {
@@ -283,6 +298,22 @@ func (t *Trail) verifyConfig(colonyRoot string) {
 	if !retainsRef(manifest, manifest.ActiveConfigRef) {
 		t.Evidence = append(t.Evidence,
 			fmt.Sprintf("active configuration %s is not in the retained snapshot inventory", manifest.ActiveConfigRef))
+	}
+}
+
+func (t *Trail) applyOrigin(colonyRoot, traceID string) {
+	t.OriginKind = runs.OriginKindUnknown
+	origin, ok, err := runs.ReadTrailOrigin(colonyRoot, traceID)
+	if err != nil {
+		t.Evidence = append(t.Evidence, fmt.Sprintf("trail origin record is unreadable: %v", err))
+		return
+	}
+	if !ok {
+		return
+	}
+	t.Origin = &origin
+	if origin.Kind != "" {
+		t.OriginKind = origin.Kind
 	}
 }
 

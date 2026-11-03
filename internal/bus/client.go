@@ -11,6 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
@@ -107,6 +108,13 @@ func (c *Client) PublishEvent(ctx context.Context, event protocol.Event) error {
 	if c.cfg.ColonyRoot != "" && trailconfig.IsNewTrail(c.cfg.ColonyRoot, event.TraceID) {
 		if _, err := trailconfig.EnsureForRoot(c.cfg.ColonyRoot, event.TraceID); err != nil && !errors.Is(err, trailconfig.ErrNotColony) {
 			return fmt.Errorf("bus: trail config: %w", err)
+		}
+		if _, _, err := runs.EnsureTrailOrigin(c.cfg.ColonyRoot, event.TraceID, runs.TrailOrigin{
+			Kind:   runs.OriginKindOther,
+			Source: "event",
+			Actor:  event.AgentID,
+		}); err != nil {
+			return fmt.Errorf("bus: trail origin: %w", err)
 		}
 	}
 	// The record is best-effort and never blocks the publish: see recordTrailEvent.

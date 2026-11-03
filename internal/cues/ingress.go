@@ -17,6 +17,28 @@ func newCueInvocationID() (string, error) {
 	return ids.Prefixed("cueinv-")
 }
 
+// ensureCueTrailOrigin records the cue that created a trail exactly once.
+//
+// It runs before the invocation seeds honey or publishes anything, so the
+// trail's origin is never inferred later from the earliest task or from a
+// different cue that touched the trail afterwards. An existing origin is left
+// unchanged: a later cue is an addition, not a new origin.
+func ensureCueTrailOrigin(colonyRoot, traceID, invocationID string, cue Cue, source, agentID string) error {
+	if strings.TrimSpace(colonyRoot) == "" {
+		return nil
+	}
+	if _, _, err := runs.EnsureTrailOrigin(colonyRoot, traceID, runs.TrailOrigin{
+		Kind:         runs.OriginKindCue,
+		Source:       source,
+		Actor:        agentID,
+		InvocationID: invocationID,
+		CueID:        cue.ID,
+	}); err != nil {
+		return fmt.Errorf("cue %q: record trail origin: %w", cue.ID, err)
+	}
+	return nil
+}
+
 // buildInvocation assembles the durable record for one validated cue
 // invocation. events are the invocation's normal ingress events in publish
 // order; taskIDs are the tasks it creates, if any.
@@ -71,6 +93,19 @@ func buildInvocation(invocationID string, cue Cue, traceID, source, agentID stri
 // into the same record, so a retry replays only what is still unconfirmed and
 // never mints a second invocation or a second event identity.
 func publishInvocation(ctx context.Context, publisher bus.Publisher, colonyRoot string, inv runs.CueInvocation) error {
+	// Republishing a retained invocation still proves this trail's cue origin.
+	// An existing origin from an earlier admission is left untouched.
+	if strings.TrimSpace(colonyRoot) != "" {
+		if _, _, err := runs.EnsureTrailOrigin(colonyRoot, inv.TraceID, runs.TrailOrigin{
+			Kind:         runs.OriginKindCue,
+			Source:       inv.Source,
+			Actor:        inv.AgentID,
+			InvocationID: inv.InvocationID,
+			CueID:        inv.CueID,
+		}); err != nil {
+			return fmt.Errorf("record trail origin: %w", err)
+		}
+	}
 	if err := runs.WriteCueInvocation(colonyRoot, inv.TraceID, inv); err != nil {
 		return fmt.Errorf("record invocation: %w", err)
 	}

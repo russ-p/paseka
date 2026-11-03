@@ -85,16 +85,20 @@ func runSignal(ctx context.Context, publisher bus.Publisher, ledger taskledger.L
 		return RunResult{}, err
 	}
 
+	invocationID, err := newCueInvocationID()
+	if err != nil {
+		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
+	}
+	if err := ensureCueTrailOrigin(in.ColonyRoot, traceID, invocationID, cue, source, agentID); err != nil {
+		return RunResult{}, err
+	}
+
 	if err := prepareTrailEnergy(ctx, publisher, ledger, traceID, in.ColonyRoot, agentID, cue); err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
 	invokedAt := time.Now().UTC()
 	ev, err := bus.NewEventFromCLI(traceID, agentID, cue.SignalType, string(payload))
-	if err != nil {
-		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
-	}
-	invocationID, err := newCueInvocationID()
 	if err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
@@ -149,6 +153,14 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 		return RunResult{}, err
 	}
 
+	invocationID, err := newCueInvocationID()
+	if err != nil {
+		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
+	}
+	if err := ensureCueTrailOrigin(in.ColonyRoot, traceID, invocationID, cue, source, agentID); err != nil {
+		return RunResult{}, err
+	}
+
 	if err := prepareTrailEnergy(ctx, publisher, ledger, traceID, in.ColonyRoot, agentID, cue); err != nil {
 		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
@@ -160,10 +172,6 @@ func runTask(ctx context.Context, publisher bus.Publisher, ledger taskledger.Led
 	taskID, err := colony.NewTaskID()
 	if err != nil {
 		return RunResult{}, err
-	}
-	invocationID, err := newCueInvocationID()
-	if err != nil {
-		return RunResult{}, fmt.Errorf("cue %q: %w", cue.ID, err)
 	}
 
 	resolvedTitle := tasks.DeriveTitle(title, body)

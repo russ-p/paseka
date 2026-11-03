@@ -149,6 +149,22 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 	}
 
+	agentID := in.AgentID
+	if agentID == "" {
+		agentID = "cli"
+	}
+	// Task creation is a manual admission path: record a known non-cue origin
+	// before seeding or publishing, and never invent a cue identity here.
+	if session.Colony.ColonyRoot != "" {
+		if _, _, err := runs.EnsureTrailOrigin(session.Colony.ColonyRoot, traceID, runs.TrailOrigin{
+			Kind:   runs.OriginKindManual,
+			Source: "task.create",
+			Actor:  agentID,
+		}); err != nil {
+			return CreateResult{}, fmt.Errorf("task origin: %w", err)
+		}
+	}
+
 	taskID := in.TaskID
 	if taskID == "" {
 		id, err := colony.NewTaskID()
@@ -167,11 +183,6 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		if _, err := manifest.ResolveSector(in.Sector); err != nil {
 			return CreateResult{}, err
 		}
-	}
-
-	agentID := in.AgentID
-	if agentID == "" {
-		agentID = "cli"
 	}
 
 	if session.Ledger != nil {
