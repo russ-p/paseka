@@ -46,7 +46,20 @@ Version-controlled colony definition. Safe to commit; no secrets.
 ├── runs/                # gitignored — per-agent file IPC, trail records, and retained configuration
 │   └── <traceId>/
 │       ├── trail-events.ndjson   # the trail's own record — every domain event the colony published for it
+│       ├── origin.json           # where the trail came from, recorded once (cue invocation, manual, fork)
+│       ├── work.json             # accepted work revision and the current completion, readable offline
+│       ├── metrics.json          # replaceable trail metrics projection (`inspect metrics --write`, runtime)
 │       ├── fork.json             # fork lineage, when the trail is an experiment
+│       ├── cue-invocations/      # one durable record per validated cue invocation
+│       │   └── <invocationId>.json
+│       ├── analysis/             # one durable admission per configured same-trail analysis dispatch
+│       │   └── <admissionId>.json
+│       ├── completions/          # immutable evidence per work-completion episode
+│       │   └── <completionId>/
+│       │       ├── completion.json   # checkpoint: identity, revision, result/metrics refs, base/revision
+│       │       ├── result.json       # accepted task set, checks, retained artifact refs
+│       │       ├── patch.diff        # final code diff, when the result was code
+│       │       └── metrics.json      # frozen TrailMetrics snapshot for this completion
 │       ├── <agentId>/
 │       │   ├── prompt.txt
 │       │   ├── system.txt   # optional — rendered system_template
@@ -75,6 +88,15 @@ ordinary trail keeps its initial, active, and previously applied snapshots until
 the whole trail is purged, and a fork keeps its own source and candidate copies.
 `fork-requests/` belongs to the source trail and holds requests that have no
 runnable trail yet. See [CLI — `paseka trail`](cli.md#paseka-trail).
+
+The provenance files sit at the trail root so worktree-only cleanup cannot erase
+them. `origin.json` is written once, before the first ingress event, and a later
+cue never replaces it; `cue-invocations/` holds each invocation's durable
+identity and the events it owns, so a retried publish replays rather than mints.
+`work.json` and `metrics.json` are replaceable projections for offline reads;
+`completions/<completionId>/` is immutable, and a historical completion's
+`resultRef`/`metricsRef` always point there, never at the replaceable
+`metrics.json`. `paseka purge --runs` removes all of it with the trail.
 
 **`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`defaults.delivery`** (`local_merge` or `pull_request`; see [pull-request delivery](pull-request-delivery.md)), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)), and the optional **`closing`** / **`merge`** policy blocks (trail wrap-up rounds and merge-gate copy — see [spec 045](../specs/045-trail-closing-phase.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
 

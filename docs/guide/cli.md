@@ -64,7 +64,7 @@ Non-empty **`PASEKA_PROFILE`** selects a profile when the flags are omitted (fla
 
 | Command | NATS required? |
 | ------- | -------------- |
-| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage` | No |
+| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage`, `inspect metrics` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
 | `paseka run`, `doctor`, `replay`, `verify`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
@@ -104,7 +104,8 @@ paseka
 │   ├── pending
 │   └── flush
 ├── inspect
-│   └── usage
+│   ├── usage
+│   └── metrics
 ├── replay <traceId>
 ├── verify <traceId>
 ├── cue
@@ -215,6 +216,8 @@ Dispatch one bee — a single non-interactive adapter invocation (AFK run).
 - Builder bees with `worktree: true` run in `.paseka/worktrees/<traceId>/`
 - Publishes domain events (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`) to NATS when configured
 - Prints status, trace, agent id, workspace, run dir, output, and diff summary
+
+`--purpose analysis --analysis-of <completionId>` starts an operator analysis action in the **original** trail: the run reads the work-completion milestone's retained checkpoint, result, and metrics evidence at the colony (or fork) root, and its usage, failures, and narrative stay in `byPurpose.analysis`. It does not hold work completion, reopen the work revision, emit another milestone, or block final approval, merge, or PR publication. `--analysis-of` is required with analysis and refused with work; `closing` is runtime-owned and cannot be requested from the CLI. See [bee routing](../reference/bee-routing.md#analysis-reactions) and [task ledger](../reference/task-ledger.md#execution-purpose-purpose-analysisof).
 
 ```bash
 paseka bee run scout --body "Plan auth for the API"
@@ -745,6 +748,29 @@ paseka inspect usage --trace trace-1
 paseka inspect usage --trace trace-1 --agent agent-abc
 ```
 
+### `paseka inspect metrics`
+
+Project one flight trail from its retained disk evidence — no NATS. The output is a versioned `TrailMetrics` object (`schemaVersion: 1`) covering cue origin and ingresses, the entry task class, fork lineage and configuration versions, work state/stage/revision/completion, the initial honey budget and spend, tokens, run and task counts (executions, retries, verification failures, gate rejections), `byPurpose` work/closing/analysis splits, review and feedback counts, active/wall time, and explicit coverage and warnings.
+
+| Flag | Short | Required | Description |
+| ---- | ----- | -------- | ----------- |
+| `--trace` | | yes | Flight trail id |
+| `--json` | | | Print the projection as JSON (the same object `--write` persists) |
+| `--write` | | | Persist the projection to `.paseka/runs/<traceId>/metrics.json` |
+| `--path` | `-C` | | Colony resolution start directory |
+
+Without `--json` it prints a short table: class, cue origin and ingress attribution counts, lineage and configuration, work state plus the derived `stage` (`work`, `closing`, `gate`, `delivered`) and revision, completion identity, pending/honey-pause admission, honey budget/spent by reason, tokens, run outcomes, the purpose buckets, per-task rework rows, review/feedback counts, durations, coverage, and warnings.
+
+Reading and writing are separate from completion. A default read changes no files and publishes nothing; `--write` persists the same projection the invocation printed and does **not** declare work completed — only the runtime's work-completion checkpoint certifies a completion snapshot, and it writes its own immutable copy under `.paseka/runs/<traceId>/completions/<completionId>/`. A missing trail is an error; a readable partial or legacy trail returns observed values with coverage and warnings instead of claiming exact zeros. Missing historical seed evidence reads as an unknown budget rather than today's defaults, and root aggregates stay total observed activity while `byPurpose.work` is the completion baseline.
+
+```bash
+paseka inspect metrics --trace trace-1
+paseka inspect metrics --trace trace-1 --json
+paseka inspect metrics --trace trace-1 --write
+```
+
+These fields, and the run-records they read, are described in [task ledger](../reference/task-ledger.md#work-revision-and-completion-workrevision-workcompletion) and [event contracts](../reference/event-contracts.md#work-completion-milestone).
+
 ---
 
 ## `paseka energy`
@@ -1053,14 +1079,11 @@ the command prints how many and points at `trail fork pending`.
 
 ### `paseka trail show <traceId>`
 
-Show one trail's admission state, active configuration, and lineage, then the
-full binding (policy, revision, initial/active `ConfigRef`, config directory, and
-any pending change with its blockers), the fork record (source task and attempt,
-source configuration, base, delta, workspace, branch, budget, state), the change
-history, and a `missing evidence` list.
+Show one trail's admission state, retained origin, active configuration, and lineage, then the full binding (policy, revision, initial/active `ConfigRef`, config directory, and any pending change with its blockers), the fork record (source task and attempt, source configuration, base, delta, workspace, branch, budget, state), the change history, and a `missing evidence` list.
 
-A trail with configuration but no runnable history still answers from its
-manifest and says so; a trail with neither is an error.
+The `origin:` line reads the trail's durable `.paseka/runs/<traceId>/origin.json`, not its tasks: a cue-created trail reads `cue cue=<id> invocation=<cueinv-…>`, and other trails read `manual`, `fork sourceTrace=<id>`, `other`, or `unknown` for a trail that predates the record or was admitted without one. A cue added later shows up in `paseka inspect metrics` ingress counts; it never replaces the origin. `--json` carries the same record.
+
+A trail with configuration but no runnable history still answers from its manifest and says so; a trail with neither is an error.
 
 ### `paseka trail config capture <traceId>`
 

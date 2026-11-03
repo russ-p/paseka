@@ -68,6 +68,8 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `SIGNAL` | `energy.seeded` | `seedId`, positive `budget`, `seededAt` | seed transition (runtime/CLI/fork/session) → durable initial allocation observation |
 | `SIGNAL` | `energy.paused` | `episodeId`, `remaining`, `pendingCount`; optional `reason`, `budget` | runtime → trail admission observation |
 | `SIGNAL` | `energy.resumed` | `episodeId`, `source` (`energy.add` or `energy.stipend`), `remaining`, `pendingBefore`, `pendingAfter`, `dispatched`; optional `budget`, `abandoned` when a stipend superseded work | runtime → trail admission observation |
+| `SIGNAL` | `cue.ingress` | `invocationId`, `cueId`, `mode` (`task` or `signal`); optional `source`, `invokedAt`, `eventIds[]`, `taskIds[]` | cue subsystem → durable ingress provenance |
+| `SIGNAL` | `trail.work.completed` | `completionId`, positive `workRevision`, `completedAt`, `resultRef`, `metricsRef` | runtime → pre-merge work-completion milestone |
 | `SIGNAL` | `system.kill` | optional `reason` | beekeeper → reactor/tasks |
 | `MUTATION` | `code.proposal.isolated` | proposal metadata; isolated workspace | builder → guard/review gate |
 | `MUTATION` | `code.proposal.root` | proposal metadata; root workspace | hivewright → main guard |
@@ -85,6 +87,49 @@ These kinds have stable type and payload validation in `internal/protocol`.
 Narrative and operational `INSIGHT` kinds are catalogued separately in
 [INSIGHT kinds](insight-kinds.md) (`pr.body` is operational pull-request copy;
 see [pull-request delivery](../guide/pull-request-delivery.md)).
+
+### Cue ingress and task provenance
+
+`SIGNAL/cue.ingress` is written by the cue subsystem before the invocation's
+normal events and records ingress intent, not delivery: it names the
+invocation, cue, channel, mode, and the event and task identities the
+invocation owns. A repeated publication reuses that identity, and a genuinely
+new invocation gets a new one. Receiving one creates no task, seeds no honey,
+and wakes no Bee — like the energy observations it is a platform observation,
+excluded from direct dispatch, auto-invite matching, and deferred buffers.
+
+`task.plan` and `task.ready` accept an optional `cueId` (the cue that directly
+created the task) and `cueInvocationId` (the invocation that published it);
+`task.md` carries both. Role- and manually-created tasks leave them empty, and
+older events decode without them. A task's `cueId` is **not** the trail's
+origin: a fork copies its source task's cue and later tasks may carry another
+cue, so use the retained `origin.json` record — see
+[colony layout](../guide/colony-layout.md) — for where a trail came from.
+
+### Work completion milestone
+
+`SIGNAL/trail.work.completed` announces that the trail's accepted working set —
+every non-merge task, ordinary work and closing alike — and its mandatory checks
+have passed. It is not final acceptance and not a delivery outcome: the merge
+gate, human approval, PR publication, and merge stay separate observations and
+do not gate it.
+
+- **Identity.** `completionId` is derived from the trail and its accepted
+  `workRevision`, so a publication retry, duplicate delivery, or reactor restart
+  reuses it. Bus delivery is at least once; consumers deduplicate by identity.
+- **Evidence.** `resultRef` and `metricsRef` are colony-root-relative
+  references to immutable trail-owned evidence under
+  `.paseka/runs/<traceId>/completions/<completionId>/`, captured before the
+  event is published and before delivery may remove the worktree. A missing
+  reference fails validation; a failed capture is a visible finalization error.
+- **Silence.** Blocked, failed, cancelled, skipped, energy-deferred, killed, and
+  taskless trails emit nothing. A new accepted work revision reopens work and
+  produces a later completion with its own identity; analysis, narrative
+  events, final approval, and delivery do not.
+- **Analysis.** A direct analysis reaction subscribes to this kind with
+  `purpose: analysis`; it runs in the same trail against the retained evidence
+  and never reopens work or blocks delivery. See
+  [bee routing](bee-routing.md#analysis-reactions).
 
 ### Task plan phases
 
@@ -247,6 +292,7 @@ live-only and cannot be deferred:
 - `energy.seeded`
 - `energy.paused`
 - `energy.resumed`
+- `cue.ingress`
 - `session.invite`
 - `beekeeper.ready`
 - `task.status`
@@ -255,6 +301,10 @@ live-only and cannot be deferred:
 they are also excluded from direct dispatch and from auto-invite matching, so
 receiving one never wakes a Bee. `energy.seeded` reports the winning initial
 allocation; replaying it never seeds, adds, or consumes honey.
+
+`cue.ingress` is live-only for the same ordering reason: it must precede the
+normal events of its invocation, so it cannot be queued behind them. It is a
+platform observation too and never wakes a Bee.
 
 Artifact announcements are additionally checked against the referenced trail
 comb files before deferred flush.

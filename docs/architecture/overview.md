@@ -65,6 +65,40 @@ of them:
 .paseka/runs/<traceId>/trail-events.ndjson   # the trail's history — see below
 ```
 
+Trail-owned records beside the run directories (written by the runtime, the cue
+layer, and the metrics reader; never read as Bee run directories):
+
+```
+.paseka/runs/<traceId>/
+├── origin.json                 # where the trail came from, recorded once
+├── work.json                   # accepted work revision + current completion
+├── metrics.json                # replaceable TrailMetrics projection
+├── fork.json                   # fork lineage, when the trail is an experiment
+├── cue-invocations/<invocationId>.json
+├── analysis/<admissionId>.json
+└── completions/<completionId>/
+    ├── completion.json         # immutable checkpoint (identity, revision, refs)
+    ├── result.json             # accepted task set, checks, retained artifact refs
+    ├── patch.diff              # final code diff, when the result was code
+    └── metrics.json            # frozen metrics snapshot for this completion
+```
+
+`origin.json` is the only evidence of where a trail came from; it is written once
+before the first ingress event, and neither a later cue nor a task's `cueId`
+changes it. A `cue-invocations/` record is the durable identity of one validated
+`paseka cue run` invocation and the normal events it owns, so a retried publish
+replays those identities instead of minting new ones. `work.json` and
+`metrics.json` are convenience projections for offline reads;
+`completions/<completionId>/` is immutable, and a completion's `resultRef` and
+`metricsRef` resolve there — never to the replaceable trail-level
+`metrics.json`. `analysis/` holds one durable admission per configured
+same-trail analysis dispatch. Worktree-only cleanup leaves all of them readable;
+purging the trail's run data removes them with it. `cue-invocations/`,
+`analysis/`, and `completions/` are reserved trace subdirectories, alongside
+`tasks/`, `artifacts/`, `proposals/`, `config/`, `fork-requests/`, and
+`console/`. See [task ledger](../reference/task-ledger.md) and [event
+contracts](../reference/event-contracts.md#work-completion-milestone).
+
 Task ledger projection (updated by `paseka run`):
 
 ```

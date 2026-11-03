@@ -35,6 +35,16 @@ Cue success means the bus publish(es) succeeded (and honey seed or standing stip
 
 Cue **id** = filename without extension. `paseka init` scaffolds `feature` and `hotfix` when missing.
 
+### Invocation identity and trail origin
+
+Every validated cue invocation — `paseka cue run`, a Console or Telegram cue, a fresh trail, an explicit `--trace`, or a standing tick — is one **invocation** with its own durable identity:
+
+- The invocation mints `cueinv-*` and writes `.paseka/runs/<traceId>/cue-invocations/<invocationId>.json` **before** publishing anything. The record names the invocation, cue, channel (`source`), mode (`task` or `signal`), invocation time, the tasks it created, and the normal ingress events it owns with their identities.
+- It then publishes `SIGNAL` / `cue.ingress` ahead of those normal events. The observation is ingress provenance, not a delivery guarantee, and it creates no task, seeds no honey, and wakes no Bee. It is live-only and cannot be queued with `--defer` behind the events it must precede.
+- A retried publish replays the recorded identities instead of minting a second invocation or a second event. A genuinely new `cue run` gets a new identity.
+
+The trail's **origin** is recorded separately and exactly once in `.paseka/runs/<traceId>/origin.json`, before the first ingress event: a cue origin names its invocation and cue, while a manually created, event-first, or forked trail records its own kind (`manual`, `other`, `fork`) and leaves the cue fields empty rather than inventing one. A later cue on an existing trail is an addition — it appears in the invocation records and in `paseka inspect metrics` `cueIngresses`, but it never replaces the origin. Task specs, ledger snapshots, `task.md`, and `paseka inspect metrics` carry `cueId`/`cueInvocationId` for the cue and invocation that directly created a task; role- and manually-created tasks leave both empty. **A task's `cueId` is not the trail's origin** — a fork copies its source task's cue, and any later task may carry another cue. `paseka trail show <traceId>` prints the retained origin; a legacy trail without the record reads `unknown` instead of being labelled `manual`.
+
 ---
 
 ## 3. Authoring
@@ -190,6 +200,8 @@ Rules:
 - Killed standing trail → cue run fails closed (names `system.kill`); no stipend event, no ingress.
 - Standing trail with an open tick (`planned` / `running` / `waiting_review`, or `ready` with no active energy-deferred entry) or a live AFK run on that `traceId` → cue run fails closed (error says the trail **is busy**); no stipend, no ingress. A task held by a configuration barrier still occupies the tick; `blocked` / `completed` / `skipped` / `failed` / `cancelled` and interactive sessions do not block.
 - Cues never emit `energy.add` — use CLI, Console, or Telegram `/energy` for a live-tick extra token.
+
+Whichever path seeds, the winning allocation is recorded once (`energySeed`: `seedId`, effective budget, seed time) and published as `SIGNAL` / `energy.seeded` before the first charged dispatch. A competing request observes the recorded winner, replay never reseeds, and an unpublished observation is retried with the same identity — so an offline reader can recover a cue override or experimental budget long after the cue changed. Top-ups and stipends do not replace it; a trail seeded before this record existed stays unknown instead of taking today's default.
 
 Full ledger model: [task ledger](../reference/task-ledger.md) § Honey reserve.
 

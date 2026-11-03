@@ -115,7 +115,7 @@ Three properties keep this from becoming a self-modifying mess:
 
 | Spec | Status | What it contributes here |
 | --- | --- | --- |
-| [043a — Truthful run records](../specs/043a-truthful-run-records.md) · [043b — Trail metrics and work completion](../specs/043b-trail-metrics-and-work-completion.md) | Approved | R1–R3: the runtime records the truth about a trail, and what its budget was spent on |
+| [043a — Truthful run records](../specs/043a-truthful-run-records.md) · [043b — Trail metrics and work completion](../specs/043b-trail-metrics-and-work-completion.md) | Implemented | R1–R3: the runtime records the truth about a trail, and what its budget was spent on |
 | [042 — Trail fork](../specs/042-trail-fork.md) | Implemented | R5, R6: a new pinned trail from the same base with a recorded configuration delta |
 | [041 — Skills layer](../specs/041-skills-layer.md) | Draft | R8: the store, the per-role gate, deterministic delivery and attribution |
 | [034 — Swarm mode](../specs/034-swarm-mode.md) | Draft | Fan-out over variants, a judge that cannot see the harness, per-variant stats |
