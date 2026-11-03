@@ -11,7 +11,7 @@ func IsLastWorkTask(trace TraceSnapshot, currentTaskID string) bool {
 	var soleIncompleteID string
 	incomplete := 0
 	for _, task := range trace.Tasks {
-		if IsFinalReviewTask(task) {
+		if IsFinalReviewTask(task) || IsAnalysisTask(task) {
 			continue
 		}
 		if task.Status == protocol.TaskStatusCompleted {

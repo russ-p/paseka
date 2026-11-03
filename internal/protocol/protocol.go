@@ -65,6 +65,13 @@ type Provenance struct {
 	ConfigRevision       int    `json:"configRevision,omitempty"`
 	InitialCodeBaseSHA   string `json:"initialCodeBaseSha,omitempty"`
 	InitialCodeBaseDirty bool   `json:"initialCodeBaseDirty,omitempty"`
+	// Purpose and AnalysisOf carry the runtime-owned admission attribution into
+	// every event an execution emits. A downstream task plan, review note, or
+	// failure therefore stays in the same accounting bucket and names the same
+	// studied milestone as the run that produced it. An empty purpose on a
+	// legacy record means unknown, never work by inference.
+	Purpose    ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string           `json:"analysisOf,omitempty"`
 }
 
 // Event is one NDJSON line in events.ndjson.

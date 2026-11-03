@@ -56,6 +56,13 @@ func (r *BeeRegistry) DirectSubscribers(ev protocol.Event) []string {
 	return colony.DirectSubscribers(r.bees, ev.Type, kind)
 }
 
+// DirectReactions returns the direct reactions for an event, including the
+// admission purpose each subscription configured.
+func (r *BeeRegistry) DirectReactions(ev protocol.Event) []colony.DirectReaction {
+	kind := protocol.PayloadKind(ev.Payload)
+	return colony.DirectReactions(r.bees, ev.Type, kind)
+}
+
 // CanDispatchTaskReady reports whether a bee may run task.ready dispatches.
 func (r *BeeRegistry) CanDispatchTaskReady(role string) bool {
 	bee, ok := r.bees[role]

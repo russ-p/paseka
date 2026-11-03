@@ -589,6 +589,8 @@ func loadMetricsTasks(m *TrailMetrics, colonyRoot, traceID string) (taskledger.T
 			CueInvocationID: fm.CueInvocationID,
 			Review:          fm.Review,
 			Phase:           protocol.DeriveTaskPhase(fm.Phase, fm.Review),
+			Purpose:         fm.Purpose,
+			AnalysisOf:      fm.AnalysisOf,
 			Status:          fm.Status,
 			DependsOn:       append([]string(nil), fm.DependsOn...),
 			Summary:         fm.Summary,
@@ -848,7 +850,7 @@ func loadCueInvocationEvents(m *TrailMetrics, events []protocol.Event, out map[s
 func applyClass(m *TrailMetrics, tasks taskledger.TraceSnapshot, taskCount int) {
 	candidates := make([]taskledger.TaskSnapshot, 0, len(tasks.Tasks))
 	for _, task := range tasks.Tasks {
-		if taskledger.IsMergeTask(task) {
+		if taskledger.IsMergeTask(task) || taskledger.IsAnalysisTask(task) {
 			continue
 		}
 		candidates = append(candidates, task)
@@ -952,7 +954,7 @@ func deriveWorkState(tasks map[string]taskledger.TaskSnapshot, pause *MetricsEne
 	anySkipped := false
 	allCompleted := true
 	for _, task := range tasks {
-		if taskledger.IsMergeTask(task) {
+		if taskledger.IsMergeTask(task) || taskledger.IsAnalysisTask(task) {
 			continue
 		}
 		anyNonMerge = true
@@ -1193,7 +1195,7 @@ func metricsPurposeKey(purpose protocol.ExecutionPurpose) string {
 func metricsTaskPurposes(tasks taskledger.TraceSnapshot) map[string]protocol.ExecutionPurpose {
 	out := make(map[string]protocol.ExecutionPurpose, len(tasks.Tasks))
 	for taskID, task := range tasks.Tasks {
-		out[taskID] = protocol.PurposeForTaskPhase(task.Phase)
+		out[taskID] = taskledger.TaskPurposeOf(task)
 	}
 	return out
 }
@@ -1461,7 +1463,7 @@ func applyTasks(m *TrailMetrics, colonyRoot, traceID string, tasks taskledger.Tr
 		row := MetricsTask{
 			TaskID:             taskID,
 			Phase:              string(task.Phase),
-			Purpose:            string(protocol.PurposeForTaskPhase(task.Phase)),
+			Purpose:            string(taskledger.TaskPurposeOf(task)),
 			Bee:                task.Bee,
 			Intent:             task.Intent,
 			Status:             string(task.Status),

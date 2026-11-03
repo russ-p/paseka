@@ -80,6 +80,7 @@ publishes:
 | `type` | `protocol.EventType` published on the bus |
 | `kind` | `payload.kind` inside the event JSON (optional wildcard when omitted) |
 | `dispatch` | `task` — capability for task-ledger dispatches; `direct` — reactor runs this bee when the event arrives |
+| `purpose` | Optional admission purpose for the reaction. Only `analysis` may be configured, and only on a direct `SIGNAL/trail.work.completed` rule; it records the milestone as `analysisOf`. Work is the default and closing is runtime-owned. |
 
 If `dispatch` is omitted:
 
@@ -89,6 +90,23 @@ If `dispatch` is omitted:
 ### Backward compatibility
 
 Bees **without** `subscribes` behave as before: any `task.ready` dispatch is allowed.
+
+### Analysis reactions
+
+A configured reaction may study the trail's result instead of producing it:
+
+```yaml
+# .paseka/bees/analyst.yaml
+subscribes:
+  - type: SIGNAL
+    kind: trail.work.completed
+    dispatch: direct
+    purpose: analysis
+```
+
+The runtime admits the run with purpose `analysis` and `analysisOf` set to the milestone's `completionId`. The run executes at the colony (or fork) root, not the removable delivery worktree, and reads the retained checkpoint/result/metrics evidence. Its tasks, runs, sessions, and emitted events keep the analysis attribution, so they stay out of `byPurpose.work` and never reopen the work revision, hold completion, or block merge/PR publication.
+
+Dispatch is deduplicated by source milestone and reaction identity in `.paseka/runs/<traceId>/analysis/`, including after a reactor restart. A failed analysis is recorded as an analysis failure; retrying it is an explicit operator action (`paseka bee run|chat --purpose analysis --analysis-of <completionId>`), not an automatic redelivery. Accepting substantive findings is ordinary work admission: plan a work task, which reopens the episode and can produce a later completion.
 
 ---
 

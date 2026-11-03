@@ -34,12 +34,17 @@ type TaskFrontmatter struct {
 	CueInvocationID string                    `yaml:"cueInvocationId,omitempty"`
 	Review          protocol.TaskReviewPolicy `yaml:"review,omitempty"`
 	Phase           protocol.TaskPhase        `yaml:"phase,omitempty"`
-	Status          protocol.TaskStatus       `yaml:"status"`
-	DependsOn       []string                  `yaml:"dependsOn,omitempty"`
-	Summary         string                    `yaml:"summary,omitempty"`
-	Commit          string                    `yaml:"commit,omitempty"`
-	CreatedAt       string                    `yaml:"createdAt,omitempty"`
-	UpdatedAt       string                    `yaml:"updatedAt,omitempty"`
+	// Purpose and AnalysisOf are the admission attribution the task inherited
+	// from the execution that planned it. They are empty for ordinary work and
+	// legacy records.
+	Purpose    protocol.ExecutionPurpose `yaml:"purpose,omitempty"`
+	AnalysisOf string                    `yaml:"analysisOf,omitempty"`
+	Status     protocol.TaskStatus       `yaml:"status"`
+	DependsOn  []string                  `yaml:"dependsOn,omitempty"`
+	Summary    string                    `yaml:"summary,omitempty"`
+	Commit     string                    `yaml:"commit,omitempty"`
+	CreatedAt  string                    `yaml:"createdAt,omitempty"`
+	UpdatedAt  string                    `yaml:"updatedAt,omitempty"`
 }
 
 // TaskRunEntry is one line in runs.ndjson linking a task to an agent run directory.
@@ -109,6 +114,8 @@ func WriteTaskSnapshot(colonyRoot string, traceID string, task taskledger.TaskSn
 		CueInvocationID: task.CueInvocationID,
 		Review:          task.Review,
 		Phase:           protocol.DeriveTaskPhase(task.Phase, task.Review),
+		Purpose:         task.Purpose,
+		AnalysisOf:      task.AnalysisOf,
 		Status:          task.Status,
 		DependsOn:       append([]string(nil), task.DependsOn...),
 		Summary:         task.Summary,

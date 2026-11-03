@@ -202,6 +202,72 @@ func TestEvaluateWorkCompletion(t *testing.T) {
 	}
 }
 
+// TestAnalysisTasksStayOutsideTheWorkingSet pins the analysis boundary: an
+// analysis task may be planned, running, or failed without reopening the work
+// revision, holding completion, or blocking the final gate.
+func TestAnalysisTasksStayOutsideTheWorkingSet(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1", Tasks: map[string]taskledger.TaskSnapshot{}}
+	trace = planWork(t, trace, "scout", protocol.TaskSpec{TaskID: "task-1", Title: "work"})
+	trace = applyStatus(t, trace, "task-1", protocol.TaskStatusCompleted)
+
+	ev, err := protocol.NewEvent(trace.TraceID, "analyst-agent", 0, protocol.EventInsight, protocol.TaskPlanPayload{
+		Kind: protocol.TaskEventPlan,
+		Tasks: []protocol.TaskSpec{{
+			TaskID: "analysis-1", Title: "study the result", Bee: "analyst",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev.Purpose = protocol.PurposeAnalysis
+	ev.AnalysisOf = "completion-r1"
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace = res.Trace
+	if trace.WorkRevision != 1 {
+		t.Fatalf("analysis plan advanced the revision to %d", trace.WorkRevision)
+	}
+	task := trace.Tasks["analysis-1"]
+	if !taskledger.IsAnalysisTask(task) || task.AnalysisOf != "completion-r1" {
+		t.Fatalf("analysis task attribution = %+v", task)
+	}
+
+	// An unfinished analysis task neither holds completion nor the final gate.
+	if verdict := taskledger.EvaluateWorkCompletion(trace); !verdict.Complete {
+		t.Fatalf("analysis task held completion: %s", verdict.Reason)
+	}
+	if !taskledger.AllPreMergeCompleted(trace) {
+		t.Fatal("analysis task held the final gate")
+	}
+	if _, ok := taskledger.InFlightRework(trace); ok {
+		t.Fatal("analysis task became in-flight product rework")
+	}
+
+	// A failed analysis task stays an analysis failure, not failed goal work.
+	trace = applyStatus(t, trace, "analysis-1", protocol.TaskStatusFailed)
+	if trace.WorkRevision != 1 {
+		t.Fatalf("analysis failure advanced the revision to %d", trace.WorkRevision)
+	}
+	if verdict := taskledger.EvaluateWorkCompletion(trace); !verdict.Complete {
+		t.Fatalf("failed analysis held completion: %s", verdict.Reason)
+	}
+	if !taskledger.AllPreMergeCompleted(trace) {
+		t.Fatal("failed analysis held the final gate")
+	}
+
+	// Accepting substantive findings is ordinary work admission: it reopens the
+	// episode and advances the revision.
+	trace = planWork(t, trace, "human", protocol.TaskSpec{TaskID: "rework-1", Title: "implement finding"})
+	if trace.WorkRevision != 2 {
+		t.Fatalf("accepted rework revision = %d, want 2", trace.WorkRevision)
+	}
+	if verdict := taskledger.EvaluateWorkCompletion(trace); verdict.Complete {
+		t.Fatal("accepted rework did not reopen work completion")
+	}
+}
+
 func TestCompletionIdentityIsStablePerRevision(t *testing.T) {
 	a := taskledger.CompletionIDForRevision("trace-1", 1)
 	b := taskledger.CompletionIDForRevision("trace-1", 1)
@@ -237,5 +303,35 @@ func TestRecordWorkCompletionKeepsFirstIdentity(t *testing.T) {
 	}
 	if _, changed, err = taskledger.MarkWorkCompletionPublished(trace, "other"); err == nil || changed {
 		t.Fatal("marking a different identity must fail closed")
+	}
+}
+
+func TestAnalysisTaskDoesNotBlockChangeRequest(t *testing.T) {
+	trace := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {
+				TaskID: "task-1", Status: protocol.TaskStatusCompleted,
+				ProposalWorkspace: protocol.ProposalWorkspaceIsolated,
+			},
+			"_review": {
+				TaskID: "_review", Review: protocol.TaskReviewFinal,
+				Phase: protocol.TaskPhaseMerge, Status: protocol.TaskStatusWaitingReview,
+			},
+			"analysis-1": {
+				TaskID: "analysis-1", Status: protocol.TaskStatusRunning,
+				Purpose: protocol.PurposeAnalysis, AnalysisOf: "completion-r1",
+			},
+		},
+	}
+	final, ok := trace.Tasks["_review"]
+	if !ok {
+		t.Fatal("merge task missing")
+	}
+	if !taskledger.CanRequestChanges(trace, final) {
+		t.Fatal("an in-flight analysis suppressed a legitimate change request")
+	}
+	if !taskledger.AllPreMergeCompleted(trace) {
+		t.Fatal("an analysis task held the final gate")
 	}
 }

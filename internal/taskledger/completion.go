@@ -67,8 +67,9 @@ func EvaluateWorkCompletion(trace TraceSnapshot) WorkCompletionVerdict {
 	sort.Strings(ids)
 	for _, taskID := range ids {
 		task := trace.Tasks[taskID]
-		if IsMergeTask(task) {
-			// The merge gate and final acceptance are later observations.
+		if IsMergeTask(task) || IsAnalysisTask(task) {
+			// The merge gate and final acceptance are later observations, and
+			// analysis studies a result instead of producing one.
 			continue
 		}
 		if task.Status != protocol.TaskStatusCompleted {
@@ -114,10 +115,11 @@ func AdvanceWorkRevision(trace TraceSnapshot) TraceSnapshot {
 }
 
 // isAcceptedWorkTask reports whether a task snapshot represents ordinary goal
-// work for revision accounting. Closing rounds are overhead and merge gates are
-// acceptance, so neither reopens the work revision.
+// work for revision accounting. Closing rounds are overhead, merge gates are
+// acceptance, and analysis studies a result, so none of them reopens the work
+// revision.
 func isAcceptedWorkTask(task TaskSnapshot) bool {
-	return TaskPhaseOf(task) == protocol.TaskPhaseWork
+	return !IsAnalysisTask(task) && TaskPhaseOf(task) == protocol.TaskPhaseWork
 }
 
 // isReworkReturn reports whether a previous status means the task had already

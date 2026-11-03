@@ -37,6 +37,7 @@ type Reactor struct {
 	barrierHeld        map[string]*barrierHeldState      // per-trace bookkeeping for barrier-held direct work
 	completionBarriers map[string]*workCompletionBarrier // per-trace work-completion/admission barrier
 	directPurpose      map[string]protocol.ExecutionPurpose
+	taskPurpose        map[string]protocol.ExecutionPurpose
 	spawning           map[string]int       // async dispatch goroutines not yet registered in-flight
 	recentLocal        map[string]time.Time // fingerprints of events applied before publish
 	asyncDispatch      bool
@@ -110,6 +111,7 @@ func NewReactor(opts ReactorOptions) (*Reactor, error) {
 		barrierHeld:        make(map[string]*barrierHeldState),
 		completionBarriers: make(map[string]*workCompletionBarrier),
 		directPurpose:      make(map[string]protocol.ExecutionPurpose),
+		taskPurpose:        make(map[string]protocol.ExecutionPurpose),
 		spawning:           make(map[string]int),
 		recentLocal:        make(map[string]time.Time),
 		asyncDispatch:      true,
@@ -442,16 +444,16 @@ func (r *Reactor) executeDispatches(ctx context.Context, ev protocol.Event, read
 		logDispatchSkip("attempt closed or unknown", ev.TraceID, protocol.PayloadTaskID(ev.Payload), "")
 		return nil
 	}
-	directBees := directCtx.Registry.DirectSubscribers(ev)
+	directBees := directCtx.Registry.DirectReactions(ev)
 	if len(directBees) > 0 {
-		logDirectDispatchPlan(ev.TraceID, ev, directBees)
+		logDirectDispatchPlan(ev.TraceID, ev, directReactionRoles(directBees))
 		dispatched = true
 	}
-	for _, beeRole := range directBees {
-		beeRole := beeRole
+	for _, reaction := range directBees {
+		reaction := reaction
 		directCtx := directCtx
 		if err := r.runDispatch(ctx, ev.TraceID, func() error {
-			return r.dispatchDirect(ctx, ev, beeRole, directCtx)
+			return r.dispatchReaction(ctx, ev, reaction, directCtx)
 		}); err != nil {
 			return err
 		}
@@ -604,6 +606,7 @@ func NewTestReactor(opts TestReactorOptions) *Reactor {
 		barrierHeld:        make(map[string]*barrierHeldState),
 		completionBarriers: make(map[string]*workCompletionBarrier),
 		directPurpose:      make(map[string]protocol.ExecutionPurpose),
+		taskPurpose:        make(map[string]protocol.ExecutionPurpose),
 		spawning:           make(map[string]int),
 		recentLocal:        make(map[string]time.Time),
 		asyncDispatch:      opts.AsyncDispatch,

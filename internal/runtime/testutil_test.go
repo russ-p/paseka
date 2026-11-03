@@ -48,6 +48,9 @@ prompt_template: default.md
 				if sub.Dispatch != "" {
 					content += fmt.Sprintf("    dispatch: %s\n", sub.Dispatch)
 				}
+				if sub.Purpose != "" {
+					content += fmt.Sprintf("    purpose: %s\n", sub.Purpose)
+				}
 			}
 		}
 		if len(bee.Publishes) > 0 {

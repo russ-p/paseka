@@ -357,6 +357,10 @@ func BuildTrailInventory(colonyCtx colony.Context, traceID string, snap taskledg
 	inventory.Tasks = make([]colony.TrailTask, 0, len(ids))
 	for _, taskID := range ids {
 		task := snap.Tasks[taskID]
+		if taskledger.IsAnalysisTask(task) {
+			// Analysis studies the result; it is not part of the product review.
+			continue
+		}
 		inventory.Tasks = append(inventory.Tasks, colony.TrailTask{
 			TaskID:    task.TaskID,
 			Title:     task.Title,

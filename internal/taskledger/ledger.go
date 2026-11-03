@@ -8,16 +8,24 @@ import (
 
 // TaskSnapshot is the current state of one task within a trace.
 type TaskSnapshot struct {
-	TaskID            string                     `json:"taskId"`
-	Title             string                     `json:"title,omitempty"`
-	Body              string                     `json:"body,omitempty"`
-	Bee               string                     `json:"bee,omitempty"`
-	Sector            string                     `json:"sector,omitempty"`
-	Intent            string                     `json:"intent,omitempty"`
-	CueID             string                     `json:"cueId,omitempty"`
-	CueInvocationID   string                     `json:"cueInvocationId,omitempty"` // invocation that created the task
-	Review            protocol.TaskReviewPolicy  `json:"review,omitempty"`
-	Phase             protocol.TaskPhase         `json:"phase,omitempty"`
+	TaskID          string                    `json:"taskId"`
+	Title           string                    `json:"title,omitempty"`
+	Body            string                    `json:"body,omitempty"`
+	Bee             string                    `json:"bee,omitempty"`
+	Sector          string                    `json:"sector,omitempty"`
+	Intent          string                    `json:"intent,omitempty"`
+	CueID           string                    `json:"cueId,omitempty"`
+	CueInvocationID string                    `json:"cueInvocationId,omitempty"` // invocation that created the task
+	Review          protocol.TaskReviewPolicy `json:"review,omitempty"`
+	Phase           protocol.TaskPhase        `json:"phase,omitempty"`
+	// Purpose and AnalysisOf are the runtime-owned admission attribution the
+	// task inherited from the execution that planned it. Analysis tasks are
+	// studying an already-recorded result: they never reopen goal work, advance
+	// its revision, or satisfy/block its completion. An empty purpose on a
+	// legacy task is unknown and is read through the phase, never guessed to be
+	// analysis.
+	Purpose           protocol.ExecutionPurpose  `json:"purpose,omitempty"`
+	AnalysisOf        string                     `json:"analysisOf,omitempty"`
 	Status            protocol.TaskStatus        `json:"status"`
 	DependsOn         []string                   `json:"dependsOn,omitempty"`
 	Summary           string                     `json:"summary,omitempty"`

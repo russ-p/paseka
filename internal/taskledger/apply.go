@@ -172,6 +172,14 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 			continue
 		}
 		phase := plannedTaskPhase(spec, event.AgentID)
+		purpose := event.Purpose
+		analysisOf := ""
+		if purpose == protocol.PurposeAnalysis {
+			// An analysis run may plan its own follow-up tasks. They inherit the
+			// purpose and studied milestone from the run that planned them, so
+			// their executions never enter goal work.
+			analysisOf = event.AnalysisOf
+		}
 		step.trace.Tasks[spec.TaskID] = TaskSnapshot{
 			TaskID:          spec.TaskID,
 			Title:           spec.Title,
@@ -183,12 +191,14 @@ func reduceInsight(trace TraceSnapshot, event protocol.Event, now time.Time) (re
 			CueInvocationID: spec.CueInvocationID,
 			Review:          protocol.NormalizeTaskReviewPolicy(spec.Review),
 			Phase:           phase,
+			Purpose:         purpose,
+			AnalysisOf:      analysisOf,
 			Status:          protocol.TaskStatusPlanned,
 			DependsOn:       append([]string(nil), spec.DependsOn...),
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}
-		if phase == protocol.TaskPhaseWork {
+		if phase == protocol.TaskPhaseWork && purpose != protocol.PurposeAnalysis {
 			acceptedWork = true
 		}
 		step.changed = true

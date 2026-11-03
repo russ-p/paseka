@@ -65,6 +65,9 @@ func (r *Reactor) workInvocationInFlight(traceID string) bool {
 	}
 	for key := range r.inflight {
 		if strings.HasPrefix(key, taskPrefix) {
+			if r.taskPurpose[key] == protocol.PurposeAnalysis {
+				continue
+			}
 			return true
 		}
 	}
@@ -95,6 +98,23 @@ func (r *Reactor) clearDirectPurpose(key string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.directPurpose, key)
+}
+
+// noteTaskPurpose records why a task invocation is running. An analysis task is
+// studying a recorded result, so it must not hold the work-completion barrier.
+func (r *Reactor) noteTaskPurpose(traceID, taskID string, purpose protocol.ExecutionPurpose) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.taskPurpose == nil {
+		r.taskPurpose = make(map[string]protocol.ExecutionPurpose)
+	}
+	r.taskPurpose[traceID+":"+taskID] = purpose
+}
+
+func (r *Reactor) clearTaskPurpose(traceID, taskID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.taskPurpose, traceID+":"+taskID)
 }
 
 func (r *Reactor) noteSpawningDispatch(traceID string) {

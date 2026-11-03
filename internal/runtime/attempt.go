@@ -39,6 +39,12 @@ func (r *Reactor) stampIncomingProvenance(ev *protocol.Event) {
 		return
 	}
 	ev.Provenance = meta.Provenance
+	// Admission purpose is runtime-owned, so the run record is the authority
+	// even when a producer's envelope carried a different value. This is what
+	// carries analysis (and its studied milestone) through a task plan or a
+	// review note the run emits.
+	ev.Purpose = meta.Purpose
+	ev.AnalysisOf = meta.AnalysisOf
 }
 
 // stampRuntimeProvenance attaches the task's owning attempt to an event the

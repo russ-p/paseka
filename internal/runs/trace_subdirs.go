@@ -19,6 +19,8 @@ var ReservedTraceSubdirs = map[string]struct{}{
 	"fork-requests": {},
 	// Cue invocations are the trail's retained ingress identities.
 	CueInvocationsDirName: {},
+	// Analysis admissions are durable reaction identities, not agent runs.
+	AnalysisDirName: {},
 	// Immutable work-completion checkpoints, result evidence, and metrics
 	// snapshots are trail records, not bee runs.
 	WorkCompletionDirName: {},
@@ -35,6 +37,7 @@ var skipTraceEventSubdirs = map[string]struct{}{
 	proposalsDir:          {},
 	"fork-requests":       {},
 	CueInvocationsDirName: {},
+	AnalysisDirName:       {},
 	WorkCompletionDirName: {},
 }
 

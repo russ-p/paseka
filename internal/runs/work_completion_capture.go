@@ -191,11 +191,11 @@ func completionResultFromSnapshot(colonyRoot, traceID string, trace taskledger.T
 }
 
 // completionTaskIDs returns the accepted task identities in stable order, with
-// merge tasks excluded.
+// merge tasks and analysis tasks excluded.
 func completionTaskIDs(trace taskledger.TraceSnapshot) []string {
 	ids := make([]string, 0, len(trace.Tasks))
 	for taskID, task := range trace.Tasks {
-		if taskledger.IsMergeTask(task) {
+		if taskledger.IsMergeTask(task) || taskledger.IsAnalysisTask(task) {
 			continue
 		}
 		ids = append(ids, taskID)

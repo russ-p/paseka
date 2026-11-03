@@ -296,6 +296,8 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 			ConfigRevision:       req.ConfigRevision,
 			InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
 			InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+			Purpose:              req.Purpose,
+			AnalysisOf:           req.AnalysisOf,
 		},
 	}); err != nil {
 		return nil, fmt.Errorf("runtime: write status: %w", err)
@@ -360,6 +362,8 @@ func (req DispatchRequest) provenance() protocol.Provenance {
 		ConfigRevision:       req.ConfigRevision,
 		InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
 		InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+		Purpose:              req.Purpose,
+		AnalysisOf:           req.AnalysisOf,
 	}
 }
 

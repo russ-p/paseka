@@ -1949,3 +1949,38 @@ func TestBuildTrailMetricsConfigurationWithoutBindingKeepsRecordedUses(t *testin
 	}
 	assertWarning(t, m.Warnings, "configuration", WarningMissing)
 }
+
+func TestAnalysisRetryStaysInAnalysis(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-analysis-retry"
+	base := time.Now().UTC().Add(-time.Hour)
+
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "analysis-1", bee: "analyst", started: base, finished: base.Add(10 * time.Second),
+		state: protocol.StatusFailed, reason: "analysis broke",
+		purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1",
+	})
+	writeMetricsRun(t, root, traceID, metricsRunSpec{
+		agentID: "analysis-2", bee: "analyst", started: base.Add(time.Minute), finished: base.Add(time.Minute + 10*time.Second),
+		state:   protocol.StatusCompleted,
+		purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1",
+	})
+
+	m, err := BuildTrailMetrics(root, traceID, base.Add(2*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis := m.ByPurpose.Analysis
+	if analysis.Runs != 2 || analysis.Failed != 1 {
+		t.Fatalf("analysis bucket = %+v", analysis)
+	}
+	if analysis.Retries == nil || *analysis.Retries != 1 {
+		t.Fatalf("analysis retries = %v, want 1", analysis.Retries)
+	}
+	if m.ByPurpose.Work.Runs != 0 || m.ByPurpose.Work.Failed != 0 {
+		t.Fatalf("analysis retry leaked into work: %+v", m.ByPurpose.Work)
+	}
+	if m.Runs.Retained != 2 || m.Runs.Failed != 1 {
+		t.Fatalf("total runs = %+v", m.Runs)
+	}
+}
