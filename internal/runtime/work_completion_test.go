@@ -919,4 +919,41 @@ func TestWorkCompletionWaitsForInFlightDispatcher(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
+
+	// The completion announcement is written before the dispatch goroutine's
+	// final retained-work write. Wait for that record to settle before TempDir
+	// cleanup can race the trailing writer.
+	waitForTrailWorkSettled(t, root, traceID)
+}
+
+// waitForTrailWorkSettled polls until the retained work record has carried a
+// completion and its file has stopped changing. The async dispatch goroutine
+// writes it twice (accepted revision, then completion), so existence alone is
+// not enough for a clean TempDir teardown.
+func waitForTrailWorkSettled(t *testing.T, root, traceID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var lastMod time.Time
+	var lastSize int64
+	stableSince := time.Time{}
+	for {
+		record, ok, err := runs.ReadTrailWorkRecord(root, traceID)
+		if err == nil && ok && record.Completion != nil {
+			if info, statErr := os.Stat(runs.TrailWorkPath(root, traceID)); statErr == nil {
+				mod, size := info.ModTime(), info.Size()
+				if mod.Equal(lastMod) && size == lastSize {
+					if time.Since(stableSince) >= 100*time.Millisecond {
+						return
+					}
+				} else {
+					lastMod, lastSize = mod, size
+					stableSince = time.Now()
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("completion did not retain a settled work record")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

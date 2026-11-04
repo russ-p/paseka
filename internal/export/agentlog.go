@@ -6,6 +6,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/adapters/cursor"
+	"github.com/russ-p/paseka/internal/adapters/opencode"
 	"github.com/russ-p/paseka/internal/adapters/pi"
 	"github.com/russ-p/paseka/internal/hiveview"
 )
@@ -42,6 +43,8 @@ func defaultTranscriptLookup(adapterName string) adapters.TranscriptResolver {
 	switch adapterName {
 	case "cursor":
 		return cursor.New()
+	case "opencode":
+		return opencode.New()
 	case "pi":
 		return pi.New()
 	default:
