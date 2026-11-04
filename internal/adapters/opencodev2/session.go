@@ -101,8 +101,10 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 	}
 
 	args := buildInteractiveArgs(srv.URL(), providerSessionID, prompt, true)
+	client := srv.client()
+	registerOwnedSession(providerSessionID, client)
 	env := append(envWithout(req.Env, "OPENCODE_SERVER_PASSWORD", "OPENCODE_SERVER_USERNAME"),
-		"OPENCODE_SERVER_PASSWORD="+srv.client().password,
+		"OPENCODE_SERVER_PASSWORD="+client.password,
 		"OPENCODE_SERVER_USERNAME="+apiUsername)
 
 	logging.Component("adapter").Info("opencodev2 session launch",
@@ -123,7 +125,10 @@ func (a *SessionAdapter) SessionCommand(req adapters.SessionRequest) (adapters.S
 		Dir:               adapters.ResolveDir(req.Dir, req.Workspace),
 		ProviderSessionID: providerSessionID,
 		Implementation:    implementation,
-		Cleanup:           srv.Close,
+		Cleanup: func() {
+			unregisterOwnedSession(providerSessionID)
+			srv.Close()
+		},
 	}, nil
 }
 
