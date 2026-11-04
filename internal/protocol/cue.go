@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// CueIngressKind is the platform observation a validated cue invocation
-// publishes before its normal task or signal events.
+// SignalCueIngress is the payload kind of the platform observation a validated
+// cue invocation publishes before its normal task or signal events.
 const SignalCueIngress = "cue.ingress"
 
 // CueIngressMode names how one cue invocation admits work: a task plan or a
