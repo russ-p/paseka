@@ -88,15 +88,28 @@ Interactive sessions reuse `.paseka/runs/<traceId>/<agentId>/` under the **colon
 ├── request.json
 ├── events.ndjson
 ├── session.json        # live session metadata (PID, state, workspace)
-└── transcript.ndjson   # NDJSON log of user/agent/system turns
+└── transcript.ndjson   # raw PTY capture (attach / replay / fallback)
 ```
 
 | File | Purpose |
 | ---- | ------- |
 | `session.json` | `sessionId`, `traceId`, `pid`, `state` (`active` → `completed` / `failed` / `cancelled`), configured `adapter`, optional `implementation` (for example `opencodev2`), optional `providerSessionId`, optional `usage` |
-| `transcript.ndjson` | Audit trail for dialogue (`role`: `user` \| `agent` \| `system`) |
+| `transcript.ndjson` | Raw PTY capture: terminal writes (escape sequences, cursor moves, partial redraws) kept for attach, replay, and fallback. It is not a normalized conversation and is never re-rendered into one. |
 
 `sessionId` equals `agentId` in the MVP.
+
+### 3.1 Three records that are not the same
+
+HITL work leaves several records behind, and only one of them is the provider's conversation. Do not use "event", "artifact", and "transcript" interchangeably.
+
+| Record | Where | What it is |
+| ------ | ----- | ---------- |
+| **Bus audit events** | `<agentId>/events.ndjson` (run) and `trail-events.ndjson` (trail) | Only domain publishes (`SIGNAL`, `INSIGHT`, `MUTATION`, `VERIFICATION`), plus runtime domain synthesis. Assistant output and provider chatter are never written here. |
+| **Trail comb artifacts** | `<traceId>/artifacts/` | Handoff files written by bees or humans and announced by `SIGNAL/artifact.written`. Notes and drafts, not a conversation. |
+| **Provider transcript** | The provider's own store, read in place | The ordered native conversation: user, assistant, and system turns, with typed text, reasoning, and tool parts. Resolved at view time through the adapter's `TranscriptResolver`, never copied into `.paseka/runs/`, and never published as a domain event. |
+| **PTY capture** | `<agentId>/transcript.ndjson` | The raw terminal record for attach, replay, and fallback. Escape sequences and redraws make it unreadable as dialogue, so it is never cleaned, post-processed, or passed off as one. |
+
+The provider transcript is what export reads: `--include transcript` renders its dialogue projection, `--include reasoning` renders the same dialogue with thinking blocks, and `--include agent-logs` renders its tool-call projection. Cursor, Pi, and OpenCode resolve a transcript; Claude returns `unsupported`, so the section is omitted with a stable reason and the export still succeeds. Readers use the provider's own files, CLI export, or HTTP API — no database driver and no provider SDK. A session whose provider store is gone keeps the PTY capture as the labelled fallback record.
 
 **Token usage:** a TUI reports nothing machine-readable on stdout, so after the process exits the runtime asks the adapter for the session's spend through the optional `SessionUsageResolver` seam and stores it as `usage` on `session.json` (`paseka inspect` and trace totals read it from there, since an interactive run has no `result.json`). Pi sums its run-scoped session file (source `pi.session-jsonl`); OpenCode V1 asks a throwaway `opencode serve` for the session's cumulative tokens (source `opencode.server-json`). OpenCode V2 reads the session record over a throwaway server started after the managed session server is stopped, so accounting is independent of that server's lifetime; the source is `opencode.v2-session-record`, and a reported reasoning-token count and dollar cost are included. Adapters that cannot report usage leave the field absent, and an unreachable provider never fails teardown.
 

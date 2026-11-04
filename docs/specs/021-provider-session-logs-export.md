@@ -3,7 +3,7 @@
 ## Status
 
 **(Draft)**
-AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Export `--include agent-logs` renders a per-run Agent log via `SessionLogResolver`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place (omit `store not found` / `parse error`). Pi remains stubbed (`not implemented`). Remaining: Pi reader, Cursor `store.db`, `events.ndjson` bus-only cleanup. Do not mix provider CLI stream into `events.ndjson`.
+AFK Cursor and Pi persist `providerSessionId`. HITL Cursor uses `create-chat` / `--resume`; HITL Pi records the pinned `--session-id`. Export `--include agent-logs` renders a per-run **Agent log** as the **tool-call projection** over the run's **provider transcript** resolved by `providerSessionId`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place (omit `store not found` / `parse error`); Pi reads its run-local `pi-sessions` JSONL; OpenCode reads its 1.x storage tree or 2.x provider export behind the `opencode` proxy. [048](048-native-session-transcript.md) replaced the tool-call-only seam and retired the Pi stub. Remaining: Cursor `store.db`. Do not mix provider CLI stream into `events.ndjson`.
 
 ## Problem Statement
 
@@ -18,7 +18,7 @@ After a Flight Trail finishes, Beekeepers want a detailed local report for analy
 
 1. **Capture and associate** each adapter invocation with a **provider session id** (Cursor chat UUID, Pi session id, etc.) on the agent run record.
 2. **Do not copy** provider log bodies into the colony runs tree. Runtime and export **resolve** logs through the adapter when enrichment is requested.
-3. **`paseka export`** optionally (or best-effort) adds a per-run **Agent log** section (MVP: tool-call summary) sourced from provider logs when the id resolves; omit quietly when unavailable.
+3. **`paseka export`** optionally (or best-effort) adds a per-run **Agent log** section (tool-call projection over the provider transcript) sourced from provider logs when the id resolves; omit quietly when unavailable.
 4. **Stop writing** provider stream diagnostics (`TOOL_CALL`, `ASSISTANT_TEXT`) into `events.ndjson`. That file remains the domain-bus audit log only. Token usage stays on `result.json` as today.
 5. **Phased delivery:**
    - **Slice A — AFK Cursor:** parse `session_id` from `stream-json` (earliest on `system` / `init`); persist on the run; export enrichment from Cursor store / stream-derived reader.
@@ -103,15 +103,15 @@ PTY remains the attach UI for HITL; it is not the source of truth for structured
 
 ### 5. Adapter capability
 
-- Optional adapter seam: `SessionLogResolver` resolves a tool-call summary by `providerSessionId` (+ workspace / runDir hints).
+- Optional adapter seam: `TranscriptResolver` resolves the run's provider transcript by `providerSessionId` (+ workspace / runDir hints). The **Agent log** is its tool-call projection, not the resolver's return type — that seam change belongs to [048](048-native-session-transcript.md).
 - Adapters without the capability → omit `unsupported`.
 - Cursor reads local `agent-transcripts` jsonl by UUID (workspace slug first, then glob). Missing file → `store not found`; bad jsonl → `parse error`. SQLite `store.db` is a later follow-up.
-- Pi remains stubbed (`not implemented`) until a session-dir reader lands.
-- Claude deferred until native id/log surface is specified in a follow-up decision note.
+- Pi reads the run-local `pi-sessions` JSONL, choosing the file whose session header id matches `providerSessionId` and otherwise the newest file. The former `not implemented` stub is retired.
+- Claude does not implement the capability and omits with `unsupported` until its native id/log surface is specified in a follow-up decision note.
 
 ### 6. Export enrichment
 
-- Add include kind **`agent-logs`** (opt-in). Per-run Agent log subsection in HTML and Markdown (under Runs). MVP content: tool calls (name, path/short args, `call_id` when present, timestamps if cheap).
+- Add include kind **`agent-logs`** (opt-in). Per-run Agent log subsection in HTML and Markdown (under Runs). Content: tool calls projected from the shared provider transcript (name, path/short args, `call_id` when present, timestamps if cheap).
 - Later (out of MVP priority): system prompt, reasoning/thinking blocks when provider exposes them.
 - Missing id / missing store / parse error → omit section or show a one-line omitted reason; export exit code stays success for trail-only data.
 - Do not merge provider tool calls into the domain Timeline section.
@@ -132,7 +132,7 @@ This boundary now holds in both directions: the file receives only domain publis
 - Runs / session meta — persist `providerSessionId`.
 - Session manager + Cursor session adapter — Slice B create-chat + resume argv.
 - Export include + HTML/Markdown renderers — Agent log subsection under each run (`--include agent-logs`).
-- Cursor/Pi `SessionLogResolver`; Cursor jsonl reader; Pi stub.
+- Cursor/Pi/OpenCode `TranscriptResolver` readers; Cursor jsonl, Pi run-local JSONL, OpenCode storage tree and provider export.
 - Docs: architecture (association), interactive sessions (HITL resume), CLI (`paseka export` include), bee/event boundary reminder.
 
 ### 9. Security / size
@@ -148,9 +148,9 @@ This boundary now holds in both directions: the file receives only domain publis
 | A (partial) | AFK Cursor + Pi `providerSessionId` on run meta/result (export Agent log and stream→events cleanup not in this slice) |
 | A (remaining) | Stop stream→events dump — **shipped**: the Cursor and Claude stream parsers no longer append their `TOOL_CALL` / `ASSISTANT_TEXT` diagnostics to the run's event log, so the file holds domain publishes only |
 | B (partial) | HITL Cursor `create-chat` / `--resume` + Pi HITL persist `providerSessionId` (export Agent log not in this slice) |
-| Export (stubs) | `--include agent-logs` + per-run Agent log; Pi stub omit `not implemented` |
+| Export | `--include agent-logs` + per-run Agent log as the tool-call projection; missing provider data omits with a reason |
 | Cursor jsonl | Read-in-place `agent-transcripts/<uuid>/<uuid>.jsonl` for Agent log tool calls |
-| C | Pi (and later Claude) log readers; Cursor `store.db` if jsonl is absent |
+| C | Pi run-local JSONL reader (stub retired) and OpenCode 1.x storage / 2.x provider-export readers behind the `opencode` proxy; Cursor `store.db` if jsonl is absent |
 
 ## Testing Decisions
 
@@ -181,7 +181,7 @@ Prefer fixtures with synthetic stream lines and fake log reader seams over live 
 
 ## Further Notes
 
-- Superseded in part by [048 native session transcript](048-native-session-transcript.md): the Agent log becomes a projection over a normalized transcript, the Pi stub is retired there, and Console dialogue stops being sourced from PTY. This spec remains the record of `providerSessionId` capture and the no-copy policy.
+- Superseded in part by [048 native session transcript](048-native-session-transcript.md): the tool-call-only seam is replaced by a normalized provider transcript, the Agent log is now its tool-call projection, the Pi stub is retired, and Console dialogue stops being sourced from PTY. This spec remains the record of `providerSessionId` capture and the no-copy policy.
 - Related: [001 Pi integration](001-pi-integration.md) (run-local `--session-id` / `--session-dir`), [002 Queen Console](002-queen-console-mvp.md) (transcript vs PTY), [014 artifacts](014-artifacts-protocol.md) (trail comb ≠ provider logs), [025 Cursor HITL resume](025-cursor-session-resume.md) (new Paseka session, same `providerSessionId`). Architecture overview already states domain events are not inferred from assistant stdout — this spec extends that boundary to “do not park CLI stream diagnostics in the bus audit file.”
 - Naming: user-facing **Agent log** / **provider session**; wire field **`providerSessionId`**. Avoid calling these “events” in UI copy.
 - After implementation: update changelog, CLI export help, interactive-sessions guide (HITL resume), architecture adapter result-collection notes; set status to Implemented.

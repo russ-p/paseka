@@ -2,7 +2,9 @@
 
 ## Status
 
-**(Approved)**
+**(Implemented)**
+Shipped across slices A–F: `TranscriptResolver` returns ordered turns with text, reasoning, and tool parts under an include mask, presets, per-part caps, and a page window; `--include transcript` and `--include reasoning` render the Conversation, and `--include agent-logs` is now the tool-call projection; the Cursor, Pi, OpenCode 1.x, and OpenCode 2.x readers all resolve behind the one `opencode` identity; redaction runs on the transcript path. The Console Conversation panel remains a separate spec.
+
 Agreed with the Beekeeper after measuring real sessions: reasoning is its own include, `transcript` joins the `--include` family, first page is 100 turns, caps are 8 k text / 16 k reasoning / 2 k tool input / 16 k tool output, Console panel ships as a separate spec, redaction is Paseka's own.
 
 Replaces the tool-call-only provider log seam of [021](021-provider-session-logs-export.md) with one adapter capability that returns a normalized native conversation, and moves filtering to the consumers. Adds `paseka export --include transcript` and a separate `--include reasoning`, fills the Pi reader, and shapes the capability so a paged Console view can be built on it — the Console panel itself is a separate spec. Claude stays out of scope; OpenCode v2 must not read SQLite.
@@ -220,4 +222,4 @@ Fixtures and stubs only: no real provider binary, no network, no account.
 - Settled: reasoning is a separate `--include` that implies `transcript`; `transcript` lives in the existing `--include` family; the Console panel ships separately and paginates — 100 turns per page, then a cursor; redaction is Paseka's own, not the provider's sanitize option; caps are 8 k text, 16 k reasoning, 2 k tool input, 16 k tool output.
 - The measurement above is a snapshot of one machine and will drift; it exists to justify the defaults, not to be re-derived in tests. Tests pin the defaults as constants and assert behaviour at the boundary, not the distribution.
 - Pi's session JSONL is run-local by adapter design, so its reader has no glob and no cross-run ambiguity — it should be the simplest reader and the reference implementation for the seam.
-- Spec [021](021-provider-session-logs-export.md) remains the record of `providerSessionId` capture and the no-copy policy; when this spec ships, 021's Agent log sections become projections and its Pi stub is retired.
+- Spec [021](021-provider-session-logs-export.md) remains the record of `providerSessionId` capture and the no-copy policy; with this spec shipped, 021's Agent log sections are projections and its Pi stub is retired.
