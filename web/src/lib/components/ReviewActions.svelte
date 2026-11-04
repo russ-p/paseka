@@ -61,10 +61,15 @@
 	const approveLabel = $derived(
 		showPrFields ? (prUrl ? 'Update PR' : 'Open PR') : 'Approve'
 	);
+	/**
+	 * The summary is optional, like `paseka proposal approve --summary`, whose
+	 * default is `approved by human`: the review domain supplies that note when
+	 * the field is empty, so requiring it here would make Console the only entry
+	 * point that refuses a sign-off the ledger already knows how to record.
+	 */
 	const approveReady = $derived(
 		approveBlockedReason === '' &&
 			submitting === null &&
-			summary.trim() !== '' &&
 			(showPrFields === false || prTitle.trim() !== '')
 	);
 	const rejectReady = $derived(submitting === null && feedback.trim() !== '');
@@ -107,7 +112,9 @@
 		error = '';
 		try {
 			const result = await approveTask(task.traceId, task.taskId, {
-				summary: summary.trim(),
+				// Absent and empty are the same to the server, which then records the
+				// CLI's own default note; sending `""` would only restate the default.
+				...(summary.trim() === '' ? {} : { summary: summary.trim() }),
 				...(mergeMessage.trim() === '' ? {} : { mergeMessage: mergeMessage.trim() }),
 				...(showPrFields ? { prTitle: prTitle.trim(), prBody: prBody.trim(), draft, runHooks } : {})
 			});
@@ -250,10 +257,12 @@
 			<textarea
 				id="task-approve-summary"
 				class="textarea textarea-bordered min-h-20 w-full"
-				placeholder="What you checked, and what you are accepting"
+				placeholder="approved by human"
 				bind:value={summary}
 			></textarea>
-			<span class="fieldset-label">Required. Recorded against the task.</span>
+			<span class="fieldset-label">
+				Optional. Left empty, it records “approved by human”.
+			</span>
 		</div>
 
 		{#if showMergeFields}

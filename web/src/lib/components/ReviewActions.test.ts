@@ -97,17 +97,23 @@ describe('ReviewActions', () => {
 			).toBeInTheDocument();
 		});
 
-		it('needs a summary, because an approval recorded with nothing said is not a sign-off', async () => {
+		it('approves with no summary, because the server records the CLI default note', async () => {
+			const { sent } = stubActions();
 			mount();
 
 			await userEvent.click(screen.getByRole('button', { name: 'Approve…' }));
 			const approve = screen.getByRole('button', { name: 'Approve' });
-
-			expect(approve).toBeDisabled();
-			await userEvent.type(screen.getByLabelText('Approval summary'), '   ');
-			expect(approve).toBeDisabled();
-			await userEvent.type(screen.getByLabelText('Approval summary'), 'Checked the merge body.');
 			expect(approve).toBeEnabled();
+
+			// Whitespace is empty, not a sign-off, and must not be sent as one.
+			await userEvent.type(screen.getByLabelText('Approval summary'), '   ');
+			expect(approve).toBeEnabled();
+			await userEvent.click(approve);
+
+			await waitFor(() => expect(sent).toHaveLength(1));
+			// Absent, not "": the server then records "approved by human", the same note
+			// `paseka proposal approve` writes when `--summary` is not given.
+			expect(sent[0].body).toEqual({});
 		});
 
 		it('offers a commit message and sends it only when one was written', async () => {
