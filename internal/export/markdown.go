@@ -191,7 +191,7 @@ func writeMarkdownRuns(buf *bytes.Buffer, data TraceExportData) {
 		if data.Include.Has(IncludeAgentLogs) {
 			writeMarkdownAgentLog(buf, agentLogByAgentID(data.AgentLogs, run.AgentID))
 		}
-		if data.Include.Has(IncludeTranscript) {
+		if data.Include.HasConversation() {
 			writeMarkdownConversation(buf, conversationByAgentID(data.Conversations, run.AgentID))
 		}
 		buf.WriteString("\n")
@@ -243,6 +243,16 @@ func writeMarkdownConversation(buf *bytes.Buffer, conversation ConversationExpor
 					continue
 				}
 				fmt.Fprintf(buf, "- `%s` · %s\n", block.Tool.Name, block.Tool.Status)
+			case adapters.DialogueBlockReasoning:
+				if block.Reasoning == "" {
+					continue
+				}
+				buf.WriteString("_reasoning:_\n\n")
+				buf.WriteString(strings.TrimRight(block.Reasoning, "\n"))
+				buf.WriteString("\n")
+				if block.Truncated {
+					buf.WriteString("\n_(truncated)_\n")
+				}
 			case adapters.DialogueBlockText:
 				buf.WriteString(strings.TrimRight(block.Text, "\n"))
 				buf.WriteString("\n")

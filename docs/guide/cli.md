@@ -1272,7 +1272,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | no | Flight trail id (alternative to the positional argument) |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `patches`, `config` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `reasoning`, `patches`, `config` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -1293,6 +1293,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
 | `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place. Missing id, unsupported adapter, missing transcript (`store not found`), parse errors, Pi stub (`not implemented`), or resolve errors omit the section with a reason; export still succeeds. Obvious secrets in tool arguments are replaced with `<redacted>` before the 200-rune summary cap. |
 | `transcript` | Per-run **Conversation** (dialogue projection) resolved through the same adapter seam. User and assistant turns appear in provider order, each tool call collapses to one line with its name and status, reasoning and system turns stay out, and tool input/output never appear. A capped text part is marked `truncated`; a missing id, unsupported adapter, missing store, parse error, or resolve error omits the section with a one-line reason and the export still succeeds. Independent of `agent-logs`. Obvious secrets in text (authorization/bearer headers, well-known token prefixes, private-key blocks, secret-looking `KEY=value` assignments) are replaced with `<redacted>` before caps, so a secret cut by a cap is never emitted in part. |
+| `reasoning` | The same per-run **Conversation** section with **thinking blocks**: the dialogue request asks for text and reasoning through the dialogue-with-reasoning preset. A bare `reasoning` implies `transcript`, and spelling both is equivalent and produces one section. Reasoning shares the 16 k-rune cap and the shared redaction path with text; a capped reasoning block is marked `truncated`. System turns and tool payloads stay out. Cursor records no reasoning parts, so a Cursor session renders an ordinary dialogue with no blocks and no omission; providers whose readers record thinking show it here. Independent of `agent-logs` and `transcript`. |
 | `patches` | Proposal patches under `.paseka/runs/<traceId>/proposals/` — one record per proposal attempt, with run identity, bee, AFK/HITL mode, proposal kind, workspace, base SHA, summary, size, capture time, and publication state. Bodies are inlined within per-patch and aggregate budgets; oversized, unsuitable-for-text, or unreadable entries keep their metadata and ref and say why. Filesystem-only: no broker is required, and a trail without a proposals directory reads as an empty slice. |
 | `config` | The trail's retained configuration versions: policy, revision, initial/active `ConfigRef`, and each snapshot's files. Committed procedure files are inlined; private inputs (home-scoped adapter recipes and skills, and gitignored `*.local.yaml` overlays) are listed by path with `omitted: private configuration input is not exported`, and an **Export omissions** section repeats every gap. Oversized, binary, missing, or corrupt entries say why instead of disappearing. Filesystem-only: no broker is required. |
 
@@ -1311,6 +1312,7 @@ paseka export trace-abc123 --include usage,durations
 paseka export trace-abc123 --include bees --include colony --format md
 paseka export trace-abc123 --include artifacts --format md
 paseka export trace-abc123 --include agent-logs --format md
+paseka export trace-abc123 --include reasoning --format md
 paseka export trace-abc123 --include patches --format md
 paseka export trace-abc123 -C /path/to/repo
 paseka export --trace trace-abc123

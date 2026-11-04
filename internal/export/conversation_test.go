@@ -89,7 +89,7 @@ func TestResolveConversationRequestsDialoguePreset(t *testing.T) {
 		RunDir:            "/colony/.paseka/runs/t/a",
 	}, func(string) adapters.TranscriptResolver {
 		return recordingResolver{seen: &seen, transcript: dialogueTranscript()}
-	}, 0)
+	}, 0, false)
 	if got.Omitted != "" {
 		t.Fatalf("Omitted = %q", got.Omitted)
 	}
@@ -146,7 +146,7 @@ func TestResolveConversationOmitReasons(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := resolveConversation(tc.run, tc.lookup, 0)
+			got := resolveConversation(tc.run, tc.lookup, 0, false)
 			if got.Omitted != tc.want {
 				t.Fatalf("Omitted = %q, want %q", got.Omitted, tc.want)
 			}
@@ -161,7 +161,7 @@ func TestResolveConversationsKeepsRunsSeparate(t *testing.T) {
 		{AgentID: "agent-2", Adapter: "cursor", ProviderSessionID: "sess-2"},
 	}, func(string) adapters.TranscriptResolver {
 		return recordingDialogueResolver{ids: &ids}
-	}, 0)
+	}, 0, false)
 	if len(conversations) != 2 {
 		t.Fatalf("conversations = %+v", conversations)
 	}
@@ -442,6 +442,244 @@ func TestExportTraceTranscriptTwoAgentsGetSeparateSections(t *testing.T) {
 	for _, want := range []string{"turn sess-1", "turn sess-2"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("missing %q:\n%s", want, md)
+		}
+	}
+}
+
+// reasoningTranscript builds the transcript a provider that records thinking
+// returns: a system turn and tool payload the dialogue must keep out, and one
+// reasoning part visible only when the consumer asks for reasoning.
+func reasoningTranscript() adapters.Transcript {
+	return adapters.Transcript{Turns: []adapters.Turn{
+		{Role: adapters.TurnRoleSystem, Timestamp: time.Unix(90, 0).UTC(), Parts: []adapters.Part{
+			{Kind: adapters.PartText, Text: "system prompt must stay out"},
+		}},
+		{Role: adapters.TurnRoleUser, Timestamp: time.Unix(100, 0).UTC(), Parts: []adapters.Part{
+			{Kind: adapters.PartText, Text: "please read the file"},
+		}},
+		{Role: adapters.TurnRoleAssistant, Timestamp: time.Unix(101, 0).UTC(), Parts: []adapters.Part{
+			{Kind: adapters.PartReasoning, Reasoning: "weighing whether the lockfile matters"},
+			{Kind: adapters.PartText, Text: "I will read it."},
+			{Kind: adapters.PartTool, Tool: &adapters.ToolPart{
+				Name:   "Read",
+				CallID: "call-1",
+				Status: adapters.ToolStatusOK,
+				Input:  `{"path":"secret/lockfile.json"}`,
+				Output: "TOOL OUTPUT MUST STAY OUT",
+			}},
+		}},
+	}}
+}
+
+func TestResolveConversationReasoningRequestsDialogueWithReasoning(t *testing.T) {
+	var seen adapters.TranscriptRequest
+	got := resolveConversation(hiveview.RunView{
+		AgentID:           "agent-1",
+		Adapter:           "cursor",
+		ProviderSessionID: "sess",
+	}, func(string) adapters.TranscriptResolver {
+		return recordingResolver{seen: &seen, transcript: reasoningTranscript()}
+	}, 0, true)
+	if got.Omitted != "" {
+		t.Fatalf("Omitted = %q", got.Omitted)
+	}
+	if seen.Include != adapters.PresetDialogueWithReasoning() {
+		t.Fatalf("include = %+v, want the dialogue-with-reasoning preset", seen.Include)
+	}
+	if len(got.Turns) != 2 {
+		t.Fatalf("turns = %+v", got.Turns)
+	}
+	blocks := got.Turns[1].Blocks
+	if len(blocks) != 3 || blocks[0].Kind != adapters.DialogueBlockReasoning {
+		t.Fatalf("assistant blocks = %+v", blocks)
+	}
+	if blocks[0].Reasoning != "weighing whether the lockfile matters" {
+		t.Fatalf("reasoning block = %+v", blocks[0])
+	}
+}
+
+// cursorTranscriptWithoutReasoning is the Cursor case: a transcript with text
+// and tools only, because Cursor records no reasoning parts.
+func cursorTranscriptWithoutReasoning() adapters.Transcript {
+	transcript := dialogueTranscript()
+	for i := range transcript.Turns {
+		parts := make([]adapters.Part, 0, len(transcript.Turns[i].Parts))
+		for _, part := range transcript.Turns[i].Parts {
+			if part.Kind == adapters.PartReasoning {
+				continue
+			}
+			parts = append(parts, part)
+		}
+		transcript.Turns[i].Parts = parts
+	}
+	return transcript
+}
+
+func TestExportTraceIncludeReasoningAloneRendersConversation(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-reasoning-alone"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+	lookup := func(string) adapters.TranscriptResolver {
+		return normalizingResolver{transcript: reasoningTranscript()}
+	}
+
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		body := exportWithIncludes(t, ctx, traceID, format, lookup, "reasoning")
+		marker := "#### Conversation"
+		if format == FormatHTML {
+			marker = "<h3>Conversation</h3>"
+		}
+		if strings.Count(body, marker) != 1 {
+			t.Fatalf("format %s rendered %d Conversation sections:\n%s", format, strings.Count(body, marker), body)
+		}
+		for _, want := range []string{
+			"please read the file",
+			"weighing whether the lockfile matters",
+			"I will read it.",
+		} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("format %s missing %q", format, want)
+			}
+		}
+		if strings.Contains(body, "system prompt must stay out") {
+			t.Fatalf("format %s carried the system turn", format)
+		}
+	}
+}
+
+func TestExportTraceReasoningAndTranscriptReasoningProduceOneSection(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-reasoning-equivalent"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+	lookup := func(string) adapters.TranscriptResolver {
+		return normalizingResolver{transcript: reasoningTranscript()}
+	}
+
+	alone := exportWithIncludes(t, ctx, traceID, FormatMarkdown, lookup, "reasoning")
+	both := exportWithIncludes(t, ctx, traceID, FormatMarkdown, lookup, "transcript", "reasoning")
+	for name, body := range map[string]string{"reasoning": alone, "transcript+reasoning": both} {
+		if got := strings.Count(body, "#### Conversation"); got != 1 {
+			t.Fatalf("%s rendered %d Conversation sections:\n%s", name, got, body)
+		}
+		if !strings.Contains(conversationSection(body), "weighing whether the lockfile matters") {
+			t.Fatalf("%s lost its reasoning block:\n%s", name, body)
+		}
+	}
+}
+
+func TestExportTraceTranscriptAloneCarriesNoReasoning(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-transcript-no-reasoning"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+	lookup := func(string) adapters.TranscriptResolver {
+		return normalizingResolver{transcript: reasoningTranscript()}
+	}
+
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		body := exportWithIncludes(t, ctx, traceID, format, lookup, "transcript")
+		if strings.Contains(body, "weighing whether the lockfile matters") {
+			t.Fatalf("format %s carried reasoning without the include", format)
+		}
+		if strings.Contains(body, ">reasoning<") {
+			t.Fatalf("format %s rendered a reasoning block without the include", format)
+		}
+		if !strings.Contains(body, "I will read it.") {
+			t.Fatalf("format %s lost the dialogue text", format)
+		}
+	}
+}
+
+func TestExportTraceReasoningCapMarksTruncation(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-reasoning-truncated"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+	long := strings.Repeat("r", adapters.DefaultMaxReasoningRunes+50)
+	transcript := adapters.Transcript{Turns: []adapters.Turn{
+		{Role: adapters.TurnRoleAssistant, Parts: []adapters.Part{
+			{Kind: adapters.PartReasoning, Reasoning: long},
+			{Kind: adapters.PartText, Text: "still here"},
+		}},
+	}}
+
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		body := exportWithIncludes(t, ctx, traceID, format, func(string) adapters.TranscriptResolver {
+			return normalizingResolver{transcript: transcript}
+		}, "reasoning")
+		if !strings.Contains(body, "truncated") {
+			t.Fatalf("format %s did not mark reasoning truncation", format)
+		}
+		if strings.Contains(body, long) {
+			t.Fatalf("format %s carried the uncapped reasoning", format)
+		}
+		if !strings.Contains(body, "still here") {
+			t.Fatalf("format %s lost the dialogue text", format)
+		}
+	}
+}
+
+// TestExportTraceReasoningCursorSessionHasNoBlocksOrOmission pins the Cursor
+// case: the provider records no reasoning, so the reasoning include renders an
+// ordinary dialogue with no thinking blocks and no omission.
+func TestExportTraceReasoningCursorSessionHasNoBlocksOrOmission(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-reasoning-cursor-empty"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+	lookup := func(string) adapters.TranscriptResolver {
+		return normalizingResolver{transcript: cursorTranscriptWithoutReasoning()}
+	}
+
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		body := exportWithIncludes(t, ctx, traceID, format, lookup, "reasoning")
+		if strings.Contains(body, "omitted:") {
+			t.Fatalf("format %s omitted a reasoning request:\n%s", format, body)
+		}
+		if strings.Contains(body, ">reasoning<") {
+			t.Fatalf("format %s rendered a thinking block for Cursor", format)
+		}
+		if !strings.Contains(body, "please read the file") || !strings.Contains(body, "I will read it.") {
+			t.Fatalf("format %s lost the dialogue", format)
+		}
+	}
+}
+
+// TestExportTraceReasoningRedactsSecrets proves the reasoning include travels
+// the shared redaction path instead of bypassing it.
+func TestExportTraceReasoningRedactsSecrets(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-reasoning-redacted"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: "cursor-uuid",
+	})
+	secret := "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+	transcript := adapters.Transcript{Turns: []adapters.Turn{
+		{Role: adapters.TurnRoleAssistant, Parts: []adapters.Part{
+			{Kind: adapters.PartReasoning, Reasoning: "the operator token is " + secret},
+			{Kind: adapters.PartText, Text: "noted"},
+		}},
+	}}
+
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		body := exportWithIncludes(t, ctx, traceID, format, func(string) adapters.TranscriptResolver {
+			return normalizingResolver{transcript: transcript}
+		}, "reasoning")
+		if strings.Contains(body, secret) {
+			t.Fatalf("format %s leaked the reasoning secret", format)
+		}
+		if !strings.Contains(body, "redacted") {
+			t.Fatalf("format %s did not render the redaction placeholder", format)
+		}
+		if !strings.Contains(body, "noted") {
+			t.Fatalf("format %s lost the dialogue text", format)
 		}
 	}
 }

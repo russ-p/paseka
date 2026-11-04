@@ -102,3 +102,47 @@ func TestProjectDialogueSkipsEmptyAndNonDialogueTurns(t *testing.T) {
 		t.Fatalf("turns = %+v", turns)
 	}
 }
+
+// TestProjectDialogueWithReasoningKeepsThinking pins the opt-in projection: the
+// reasoning request keeps thinking blocks, and a thinking-only assistant turn
+// still renders because the reasoning block is the payload the consumer asked for.
+func TestProjectDialogueWithReasoningKeepsThinking(t *testing.T) {
+	transcript := NormalizeTranscript(Transcript{Turns: []Turn{
+		{Role: TurnRoleSystem, Parts: []Part{{Kind: PartText, Text: "system prompt"}}},
+		{Role: TurnRoleAssistant, Parts: []Part{
+			{Kind: PartReasoning, Reasoning: "weighing the options"},
+			{Kind: PartText, Text: "decided"},
+		}},
+		{Role: TurnRoleAssistant, Parts: []Part{{Kind: PartReasoning, Reasoning: "only thinking"}}},
+	}}, PresetDialogueWithReasoning(), TranscriptLimits{}, TranscriptWindow{})
+
+	turns := ProjectDialogueWithReasoning(transcript)
+	if len(turns) != 2 {
+		t.Fatalf("turns = %+v", turns)
+	}
+	first := turns[0].Blocks
+	if len(first) != 2 || first[0].Kind != DialogueBlockReasoning || first[0].Reasoning != "weighing the options" {
+		t.Fatalf("first blocks = %+v", first)
+	}
+	if first[1].Kind != DialogueBlockText || first[1].Text != "decided" {
+		t.Fatalf("second block = %+v", first[1])
+	}
+	if len(turns[1].Blocks) != 1 || turns[1].Blocks[0].Kind != DialogueBlockReasoning {
+		t.Fatalf("thinking-only turn = %+v", turns[1])
+	}
+}
+
+func TestProjectDialogueMarksTruncatedReasoning(t *testing.T) {
+	transcript := NormalizeTranscript(Transcript{Turns: []Turn{
+		{Role: TurnRoleAssistant, Parts: []Part{{Kind: PartReasoning, Reasoning: "abcdef"}}},
+	}}, PresetDialogueWithReasoning(), TranscriptLimits{Reasoning: 3}, TranscriptWindow{})
+
+	turns := ProjectDialogueWithReasoning(transcript)
+	if len(turns) != 1 || len(turns[0].Blocks) != 1 {
+		t.Fatalf("turns = %+v", turns)
+	}
+	block := turns[0].Blocks[0]
+	if block.Kind != DialogueBlockReasoning || block.Reasoning != "abc…" || !block.Truncated {
+		t.Fatalf("reasoning block = %+v", block)
+	}
+}

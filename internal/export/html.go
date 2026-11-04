@@ -173,7 +173,7 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 			view.IncludeAgentLog = true
 			view.AgentLog = agentLogByAgentID(data.AgentLogs, run.AgentID)
 		}
-		if data.Include.Has(IncludeTranscript) {
+		if data.Include.HasConversation() {
 			view.IncludeConversation = true
 			view.Conversation = conversationView(conversationByAgentID(data.Conversations, run.AgentID))
 		}
@@ -264,7 +264,8 @@ func conversationView(conversation ConversationExport) htmlConversationView {
 			row.Timestamp = formatTime(turn.Timestamp)
 		}
 		for _, block := range turn.Blocks {
-			if block.Kind == adapters.DialogueBlockTool {
+			switch block.Kind {
+			case adapters.DialogueBlockTool:
 				if block.Tool == nil {
 					continue
 				}
@@ -273,16 +274,22 @@ func conversationView(conversation ConversationExport) htmlConversationView {
 					ToolName:   block.Tool.Name,
 					ToolStatus: block.Tool.Status,
 				})
-				continue
+			case adapters.DialogueBlockReasoning:
+				if block.Reasoning == "" {
+					continue
+				}
+				row.Blocks = append(row.Blocks, htmlDialogueBlock{
+					Kind:      string(adapters.DialogueBlockReasoning),
+					Text:      formatMarkdown(block.Reasoning),
+					Truncated: block.Truncated,
+				})
+			case adapters.DialogueBlockText:
+				row.Blocks = append(row.Blocks, htmlDialogueBlock{
+					Kind:      string(adapters.DialogueBlockText),
+					Text:      formatMarkdown(block.Text),
+					Truncated: block.Truncated,
+				})
 			}
-			if block.Kind != adapters.DialogueBlockText {
-				continue
-			}
-			row.Blocks = append(row.Blocks, htmlDialogueBlock{
-				Kind:      string(adapters.DialogueBlockText),
-				Text:      formatMarkdown(block.Text),
-				Truncated: block.Truncated,
-			})
 		}
 		if len(row.Blocks) == 0 {
 			continue
@@ -491,6 +498,22 @@ header h1 { margin: 0; font-size: 1.35rem; }
 .dialogue-text {
   font-size: 0.85rem;
   margin: 0.2rem 0;
+}
+.dialogue-reasoning {
+  border-left: 2px solid var(--warn);
+  padding-left: 0.5rem;
+  margin: 0.25rem 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.dialogue-reasoning-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--warn);
+  margin-bottom: 0.15rem;
 }
 .dialogue-tool {
   font-size: 0.78rem;
@@ -742,6 +765,12 @@ code { font-family: var(--mono); font-size: 0.85em; }
             {{ range .Blocks }}
             {{ if eq .Kind "tool" }}
             <div class="dialogue-tool"><code>{{ .ToolName }}</code> · <span class="badge {{ badgeClass .ToolStatus }}">{{ .ToolStatus }}</span></div>
+            {{ else if eq .Kind "reasoning" }}
+            <div class="dialogue-reasoning">
+              <span class="dialogue-reasoning-label">reasoning</span>
+              <div class="formatted-text">{{ .Text }}</div>
+            </div>
+            {{ if .Truncated }}<p class="dialogue-truncated">truncated</p>{{ end }}
             {{ else }}
             <div class="dialogue-text formatted-text">{{ .Text }}</div>
             {{ if .Truncated }}<p class="dialogue-truncated">truncated</p>{{ end }}

@@ -16,18 +16,18 @@ type ConversationExport struct {
 	Turns   []adapters.DialogueTurn
 }
 
-func resolveConversations(runs []hiveview.RunView, lookup TranscriptLookup, timeout time.Duration) []ConversationExport {
+func resolveConversations(runs []hiveview.RunView, lookup TranscriptLookup, timeout time.Duration, reasoning bool) []ConversationExport {
 	if lookup == nil {
 		lookup = defaultTranscriptLookup
 	}
 	out := make([]ConversationExport, 0, len(runs))
 	for _, run := range runs {
-		out = append(out, resolveConversation(run, lookup, timeout))
+		out = append(out, resolveConversation(run, lookup, timeout, reasoning))
 	}
 	return out
 }
 
-func resolveConversation(run hiveview.RunView, lookup TranscriptLookup, timeout time.Duration) ConversationExport {
+func resolveConversation(run hiveview.RunView, lookup TranscriptLookup, timeout time.Duration, reasoning bool) ConversationExport {
 	entry := ConversationExport{AgentID: run.AgentID}
 	if run.ProviderSessionID == "" {
 		entry.Omitted = adapters.SessionLogOmittedNoProviderSessionID
@@ -47,6 +47,12 @@ func resolveConversation(run hiveview.RunView, lookup TranscriptLookup, timeout 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// The reasoning include requests the same dialogue with thinking blocks; the
+	// transcript token alone never asks for reasoning, so it never carries it.
+	mask := adapters.PresetDialogue()
+	if reasoning {
+		mask = adapters.PresetDialogueWithReasoning()
+	}
 	transcript := adapters.ResolveTranscript(ctx, resolver, adapters.TranscriptRequest{
 		ProviderSessionID: run.ProviderSessionID,
 		Adapter:           run.Adapter,
@@ -54,11 +60,15 @@ func resolveConversation(run hiveview.RunView, lookup TranscriptLookup, timeout 
 		ColonyRoot:        run.ColonyRoot,
 		RunDir:            run.RunDir,
 		AgentID:           run.AgentID,
-		Include:           adapters.PresetDialogue(),
+		Include:           mask,
 		Limits:            adapters.DefaultTranscriptLimits(),
 	})
 	if transcript.Omitted != "" {
 		entry.Omitted = transcript.Omitted
+		return entry
+	}
+	if reasoning {
+		entry.Turns = adapters.ProjectDialogueWithReasoning(transcript)
 		return entry
 	}
 	entry.Turns = adapters.ProjectDialogue(transcript)

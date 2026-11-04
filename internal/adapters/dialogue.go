@@ -6,8 +6,9 @@ import "time"
 type DialogueBlockKind string
 
 const (
-	DialogueBlockText DialogueBlockKind = "text"
-	DialogueBlockTool DialogueBlockKind = "tool"
+	DialogueBlockText      DialogueBlockKind = "text"
+	DialogueBlockReasoning DialogueBlockKind = "reasoning"
+	DialogueBlockTool      DialogueBlockKind = "tool"
 )
 
 // DialogueTool is a tool call collapsed to the identity a conversation needs:
@@ -17,11 +18,13 @@ type DialogueTool struct {
 	Status string
 }
 
-// DialogueBlock is one render-ready line of a dialogue turn. It is either a
-// text block (possibly capped) or a one-line tool call.
+// DialogueBlock is one render-ready line of a dialogue turn. It is a text block,
+// a reasoning block (only when the request asked for reasoning), or a one-line
+// tool call. Truncated marks a payload the shared cap cut.
 type DialogueBlock struct {
 	Kind      DialogueBlockKind
 	Text      string
+	Reasoning string
 	Truncated bool
 	Tool      *DialogueTool
 }
@@ -34,11 +37,22 @@ type DialogueTurn struct {
 	Blocks    []DialogueBlock
 }
 
-// ProjectDialogue flattens a transcript into render-ready conversation turns. It
-// keeps user and assistant turns in provider order, collapses each tool call to
-// a single name/status block, and drops reasoning and system turns. It performs
-// no IO and knows nothing about any provider.
+// ProjectDialogue flattens a transcript into render-ready conversation turns
+// without thinking blocks. It keeps user and assistant turns in provider order,
+// collapses each tool call to a single name/status block, and drops reasoning
+// and system turns. It performs no IO and knows nothing about any provider.
 func ProjectDialogue(t Transcript) []DialogueTurn {
+	return projectDialogue(t, false)
+}
+
+// ProjectDialogueWithReasoning is the dialogue-with-reasoning projection. It
+// carries the reasoning parts the request mask already allowed, so a transcript
+// resolved without the reasoning payload still renders no thinking blocks.
+func ProjectDialogueWithReasoning(t Transcript) []DialogueTurn {
+	return projectDialogue(t, true)
+}
+
+func projectDialogue(t Transcript, keepReasoning bool) []DialogueTurn {
 	turns := make([]DialogueTurn, 0, len(t.Turns))
 	for _, turn := range t.Turns {
 		role := turn.Role
@@ -55,6 +69,15 @@ func ProjectDialogue(t Transcript) []DialogueTurn {
 				next.Blocks = append(next.Blocks, DialogueBlock{
 					Kind:      DialogueBlockText,
 					Text:      part.Text,
+					Truncated: part.Truncated,
+				})
+			case PartReasoning:
+				if !keepReasoning || part.Reasoning == "" {
+					continue
+				}
+				next.Blocks = append(next.Blocks, DialogueBlock{
+					Kind:      DialogueBlockReasoning,
+					Reasoning: part.Reasoning,
 					Truncated: part.Truncated,
 				})
 			case PartTool:

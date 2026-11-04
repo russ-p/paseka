@@ -170,8 +170,8 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 	if include.Has(IncludeAgentLogs) {
 		data.AgentLogs = resolveAgentLogs(runsView, opts.Transcripts, opts.TranscriptTimeout)
 	}
-	if include.Has(IncludeTranscript) {
-		data.Conversations = resolveConversations(runsView, opts.Transcripts, opts.TranscriptTimeout)
+	if include.HasConversation() {
+		data.Conversations = resolveConversations(runsView, opts.Transcripts, opts.TranscriptTimeout, include.HasReasoning())
 	}
 	if include.Has(IncludeBees) {
 		bees, err := loadBeeYAML(ctx.ColonyRoot, detail.Bees)
