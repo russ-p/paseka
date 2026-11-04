@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/russ-p/paseka/internal/redact"
 )
 
 // Stable omit reasons for provider transcript resolution. Every consumer shares
@@ -239,9 +241,11 @@ func ResolveTranscript(ctx context.Context, resolver TranscriptResolver, req Tra
 	}
 }
 
-// NormalizeTranscript applies the request mask, the per-part caps, and the page
-// window to a provider-ordered transcript. Adapters call it once before
-// returning so every consumer sees the same masking and truncation semantics.
+// NormalizeTranscript applies the request mask, redacts obvious secrets, the
+// per-part caps, and the page window to a provider-ordered transcript. Redaction
+// runs before truncation so a secret straddling a cap is replaced rather than
+// emitted as a partial value. Adapters call it once before returning so every
+// consumer sees the same masking, redaction, and truncation semantics.
 func NormalizeTranscript(t Transcript, include IncludeMask, limits TranscriptLimits, window TranscriptWindow) Transcript {
 	out := Transcript{Omitted: t.Omitted, Truncated: t.Truncated, Turns: []Turn{}}
 	if t.Omitted != "" {
@@ -268,14 +272,14 @@ func NormalizeTranscript(t Transcript, include IncludeMask, limits TranscriptLim
 				if !include.Text || part.Text == "" {
 					continue
 				}
-				text, cut := TruncateRunes(part.Text, limits.Text)
+				text, cut := TruncateRunes(redact.Text(part.Text), limits.Text)
 				out.Truncated = out.Truncated || cut
 				next.Parts = append(next.Parts, Part{Kind: PartText, Text: text, Truncated: cut})
 			case PartReasoning:
 				if !include.Reasoning || part.Reasoning == "" {
 					continue
 				}
-				reasoning, cut := TruncateRunes(part.Reasoning, limits.Reasoning)
+				reasoning, cut := TruncateRunes(redact.Text(part.Reasoning), limits.Reasoning)
 				out.Truncated = out.Truncated || cut
 				next.Parts = append(next.Parts, Part{Kind: PartReasoning, Reasoning: reasoning, Truncated: cut})
 			case PartTool:
@@ -289,14 +293,14 @@ func NormalizeTranscript(t Transcript, include IncludeMask, limits TranscriptLim
 				if !include.ToolInput {
 					tool.Input = ""
 				} else {
-					input, cut := TruncateRunes(tool.Input, limits.ToolInput)
+					input, cut := TruncateRunes(redact.Text(tool.Input), limits.ToolInput)
 					out.Truncated = out.Truncated || cut
 					tool.Input = input
 				}
 				if !include.ToolOutput {
 					tool.Output = ""
 				} else {
-					output, cut := TruncateRunes(tool.Output, limits.ToolOutput)
+					output, cut := TruncateRunes(redact.Text(tool.Output), limits.ToolOutput)
 					out.Truncated = out.Truncated || cut
 					tool.Output = output
 				}

@@ -50,13 +50,13 @@ Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The 
 
 ### Secret redaction
 
-#### Content redaction exists only for env values and CLI arguments
+#### Content redaction covers the transcript path only
 
 - **Kind:** follow-up
-- **Source:** [048-native-session-transcript](../specs/048-native-session-transcript.md) § 8 (Draft), while deciding who sanitizes transcript text
-- **Summary:** What exists today is name-based redaction of launcher inputs: `adapters.RedactEnv` masks the env keys a launch plan declares, `adapters.RedactArgs` masks `--api-key`, and `logging` never receives raw values. Nothing inspects *content*. Transcript text, reasoning, tool arguments and tool output are free-form: an agent that runs `env`, `cat ~/.aws/credentials`, or a failing command that echoes a token puts the value verbatim into anything rendered from it — agent logs, a future Conversation view, exported HTML/Markdown, proposal patches, Telegram messages. Spec 048 says the transcript path must redact before rendering, but there is no shared helper for it, and each surface inventing its own pattern list is how one of them ends up missing the obvious cases. The work is one content-redaction package with pattern classes (bearer/authorization headers, well-known token prefixes, private-key blocks, `KEY=value` shapes for names that look secret), an escape hatch for colony-declared extra patterns, and wiring at every render boundary, with tests over a fixture corpus rather than per-surface copies.
-- **Why deferred:** 048 must not block on inventing a policy; truncation plus a minimal pattern set can ship first, and the policy question (redact or drop the whole part, what to do about near-misses, whether redaction is on by default off-machine) belongs in one place with its own review.
-- **Revisit when:** the transcript export ships and an export is shared off-machine, or a real secret is found in any emitted artifact — whichever comes first.
+- **Source:** [048-native-session-transcript](../specs/048-native-session-transcript.md) § 8, after the minimal transcript helper shipped
+- **Summary:** A minimal content helper now lives in `internal/redact` and runs once in `adapters.NormalizeTranscript`, so transcript text, reasoning, tool arguments, and tool output are masked before caps for every provider and both export projections. Its pattern set is authorization/bearer headers, well-known token prefixes, private-key blocks, and `KEY=value` assignments whose key looks secret, pinned by table-driven fixture tests. What remains is the cross-surface policy: colony-declared extra patterns, an escape hatch, near-miss handling, redact-vs-drop per surface, and wiring at the other render boundaries (proposal patches, Telegram, logs, Console), so those surfaces stop needing their own pattern list.
+- **Why deferred:** 048 needed a minimal pattern set to ship the transcript export safely, not a policy decision; the policy question (redact or drop the whole part, what to do about near-misses, whether redaction is on by default off-machine) belongs in one place with its own review.
+- **Revisit when:** Another surface needs content redaction, a colony wants to declare its own patterns, or a real secret is found in an emitted artifact — whichever comes first.
 
 ### Adapter launch resolution
 

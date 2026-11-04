@@ -138,6 +138,153 @@ func TestNormalizeTruncatesAndFlags(t *testing.T) {
 	}
 }
 
+// TestNormalizeRedactsEveryPatternInEveryPart pins the one shared helper: each
+// pattern class is masked in text, reasoning, tool input, and tool output, and
+// the prose around the secret survives.
+func TestNormalizeRedactsEveryPatternInEveryPart(t *testing.T) {
+	patterns := []struct {
+		name    string
+		content string
+		leak    string
+		anchor  string
+	}{
+		{
+			name:    "authorization header",
+			content: "curl https://api.example.test Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+			leak:    "abcdefghijklmnopqrstuvwxyz",
+			anchor:  "https://api.example.test",
+		},
+		{
+			name:    "well-known token prefix",
+			content: "run ghp_abcdefghijklmnopqrstuvwxyz0123456789 now",
+			leak:    "ghp_",
+			anchor:  "run ",
+		},
+		{
+			name:    "private key block",
+			content: "before -----BEGIN RSA PRIVATE KEY-----\nMIIEexample\n-----END RSA PRIVATE KEY----- after",
+			leak:    "MIIEexample",
+			anchor:  "before ",
+		},
+		{
+			name:    "secret assignment",
+			content: "DB_PASSWORD=hunter2 then docs/guide/cli.md",
+			leak:    "hunter2",
+			anchor:  "DB_PASSWORD=",
+		},
+	}
+
+	type probe struct {
+		name  string
+		part  Part
+		value func(Part) string
+	}
+	probes := []probe{
+		{name: "text", part: Part{Kind: PartText}, value: func(p Part) string { return p.Text }},
+		{name: "reasoning", part: Part{Kind: PartReasoning}, value: func(p Part) string { return p.Reasoning }},
+		{name: "tool input", part: Part{Kind: PartTool, Tool: &ToolPart{Name: "Bash"}}, value: func(p Part) string { return p.Tool.Input }},
+		{name: "tool output", part: Part{Kind: PartTool, Tool: &ToolPart{Name: "Bash"}}, value: func(p Part) string { return p.Tool.Output }},
+	}
+
+	for _, pattern := range patterns {
+		for _, p := range probes {
+			t.Run(pattern.name+"/"+p.name, func(t *testing.T) {
+				part := p.part
+				switch part.Kind {
+				case PartText:
+					part.Text = pattern.content
+				case PartReasoning:
+					part.Reasoning = pattern.content
+				case PartTool:
+					switch p.name {
+					case "tool input":
+						part.Tool.Input = pattern.content
+					default:
+						part.Tool.Output = pattern.content
+					}
+				}
+				got := NormalizeTranscript(Transcript{Turns: []Turn{{
+					Role:  TurnRoleAssistant,
+					Parts: []Part{part},
+				}}}, PresetFull(), TranscriptLimits{}, TranscriptWindow{})
+				value := p.value(got.Turns[0].Parts[0])
+				if strings.Contains(value, pattern.leak) {
+					t.Fatalf("secret leaked: %q", value)
+				}
+				if !strings.Contains(value, "<redacted>") {
+					t.Fatalf("secret not marked redacted: %q", value)
+				}
+				if !strings.Contains(value, pattern.anchor) {
+					t.Fatalf("non-secret content changed: %q, want %q", value, pattern.anchor)
+				}
+			})
+		}
+	}
+}
+
+// TestNormalizeRedactsBeforeCapping pins the ordering: a secret that sits across
+// a cap boundary is replaced first, so truncation can never emit its prefix.
+func TestNormalizeRedactsBeforeCapping(t *testing.T) {
+	const secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+	padding := strings.Repeat("a", 9)
+	content := padding + " " + secret
+
+	tests := []struct {
+		name  string
+		part  Part
+		limit func(*TranscriptLimits)
+		value func(Part) string
+	}{
+		{
+			name:  "text",
+			part:  Part{Kind: PartText, Text: content},
+			limit: func(l *TranscriptLimits) { l.Text = 15 },
+			value: func(p Part) string { return p.Text },
+		},
+		{
+			name:  "reasoning",
+			part:  Part{Kind: PartReasoning, Reasoning: content},
+			limit: func(l *TranscriptLimits) { l.Reasoning = 15 },
+			value: func(p Part) string { return p.Reasoning },
+		},
+		{
+			name:  "tool input",
+			part:  Part{Kind: PartTool, Tool: &ToolPart{Name: "Bash", Input: content}},
+			limit: func(l *TranscriptLimits) { l.ToolInput = 15 },
+			value: func(p Part) string { return p.Tool.Input },
+		},
+		{
+			name:  "tool output",
+			part:  Part{Kind: PartTool, Tool: &ToolPart{Name: "Bash", Output: content}},
+			limit: func(l *TranscriptLimits) { l.ToolOutput = 15 },
+			value: func(p Part) string { return p.Tool.Output },
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var limits TranscriptLimits
+			tc.limit(&limits)
+			got := NormalizeTranscript(Transcript{Turns: []Turn{{
+				Role:  TurnRoleAssistant,
+				Parts: []Part{tc.part},
+			}}}, PresetFull(), limits, TranscriptWindow{})
+			value := tc.value(got.Turns[0].Parts[0])
+			if strings.Contains(value, "ghp") {
+				t.Fatalf("partial secret emitted at the cap boundary: %q", value)
+			}
+			if !strings.HasPrefix(value, padding) {
+				t.Fatalf("ordinary prefix changed: %q", value)
+			}
+			if !strings.Contains(value, "<red") || !strings.Contains(value, "…") {
+				t.Fatalf("expected a capped redaction marker: %q", value)
+			}
+			if !got.Truncated {
+				t.Fatal("expected Truncated")
+			}
+		})
+	}
+}
+
 func TestNormalizeWindowPages(t *testing.T) {
 	transcript := sampleTranscript()
 	first := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Limit: 1})
