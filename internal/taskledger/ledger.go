@@ -8,15 +8,24 @@ import (
 
 // TaskSnapshot is the current state of one task within a trace.
 type TaskSnapshot struct {
-	TaskID            string                     `json:"taskId"`
-	Title             string                     `json:"title,omitempty"`
-	Body              string                     `json:"body,omitempty"`
-	Bee               string                     `json:"bee,omitempty"`
-	Sector            string                     `json:"sector,omitempty"`
-	Intent            string                     `json:"intent,omitempty"`
-	CueID             string                     `json:"cueId,omitempty"`
-	Review            protocol.TaskReviewPolicy  `json:"review,omitempty"`
-	Phase             protocol.TaskPhase         `json:"phase,omitempty"`
+	TaskID          string                    `json:"taskId"`
+	Title           string                    `json:"title,omitempty"`
+	Body            string                    `json:"body,omitempty"`
+	Bee             string                    `json:"bee,omitempty"`
+	Sector          string                    `json:"sector,omitempty"`
+	Intent          string                    `json:"intent,omitempty"`
+	CueID           string                    `json:"cueId,omitempty"`
+	CueInvocationID string                    `json:"cueInvocationId,omitempty"` // invocation that created the task
+	Review          protocol.TaskReviewPolicy `json:"review,omitempty"`
+	Phase           protocol.TaskPhase        `json:"phase,omitempty"`
+	// Purpose and AnalysisOf are the runtime-owned admission attribution the
+	// task inherited from the execution that planned it. Analysis tasks are
+	// studying an already-recorded result: they never reopen goal work, advance
+	// its revision, or satisfy/block its completion. An empty purpose on a
+	// legacy task is unknown and is read through the phase, never guessed to be
+	// analysis.
+	Purpose           protocol.ExecutionPurpose  `json:"purpose,omitempty"`
+	AnalysisOf        string                     `json:"analysisOf,omitempty"`
 	Status            protocol.TaskStatus        `json:"status"`
 	DependsOn         []string                   `json:"dependsOn,omitempty"`
 	Summary           string                     `json:"summary,omitempty"`
@@ -78,19 +87,63 @@ type PendingDispatch struct {
 	Diagnostic    string                `json:"diagnostic,omitempty"`
 	CreatedAt     time.Time             `json:"createdAt,omitempty"`
 	UpdatedAt     time.Time             `json:"updatedAt,omitempty"`
+	// Purpose and AnalysisOf preserve admission attribution across a deferral.
+	// A resumed direct reaction must not silently change from analysis to work,
+	// or from goal work to a closing round.
+	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string                    `json:"analysisOf,omitempty"`
 }
 
 // TraceSnapshot is the aggregated task ledger for one trace.
 type TraceSnapshot struct {
-	TraceID           string                  `json:"traceId"`
-	EnergyBudget      int                     `json:"energyBudget,omitempty"`
-	EnergyRemaining   int                     `json:"energyRemaining,omitempty"`
-	EnergyAdded       int                     `json:"energyAdded,omitempty"`
-	EnergyPause       *EnergyPauseSnapshot    `json:"energyPause,omitempty"`
-	Killed            bool                    `json:"killed,omitempty"`
-	PendingReady      *PendingReadySnapshot   `json:"pendingReady,omitempty"`
-	PendingDispatches []PendingDispatch       `json:"pendingDispatches,omitempty"`
-	Tasks             map[string]TaskSnapshot `json:"tasks"`
+	TraceID           string                `json:"traceId"`
+	EnergyBudget      int                   `json:"energyBudget,omitempty"`
+	EnergyRemaining   int                   `json:"energyRemaining,omitempty"`
+	EnergyAdded       int                   `json:"energyAdded,omitempty"`
+	EnergySeed        *EnergySeedSnapshot   `json:"energySeed,omitempty"`
+	EnergyPause       *EnergyPauseSnapshot  `json:"energyPause,omitempty"`
+	Killed            bool                  `json:"killed,omitempty"`
+	PendingReady      *PendingReadySnapshot `json:"pendingReady,omitempty"`
+	PendingDispatches []PendingDispatch     `json:"pendingDispatches,omitempty"`
+	// WorkRevision identifies the accepted goal work a completion describes. It
+	// advances when substantive work is accepted — a new work-phase task, a
+	// rework return, or rework planned from a gate rejection — and never for a
+	// closing round, analysis, or the completion milestone itself.
+	WorkRevision int `json:"workRevision,omitempty"`
+	// WorkCompletion is the trail's current completion episode. A completion
+	// whose revision the trail has since moved past stays historical on disk
+	// but no longer describes the current work.
+	WorkCompletion *WorkCompletionSnapshot `json:"workCompletion,omitempty"`
+	Tasks          map[string]TaskSnapshot `json:"tasks"`
+}
+
+// WorkCompletionSnapshot is the durable identity of one trail-work-completion
+// episode, recorded before its milestone is published. Published marks that the
+// SIGNAL reached the publisher; an unpublished record is retried with the same
+// identity and never minted again.
+type WorkCompletionSnapshot struct {
+	CompletionID string    `json:"completionId"`
+	WorkRevision int       `json:"workRevision"`
+	CompletedAt  time.Time `json:"completedAt"`
+	ResultRef    string    `json:"resultRef"`
+	MetricsRef   string    `json:"metricsRef"`
+	Published    bool      `json:"published,omitempty"`
+}
+
+// EnergySeedSnapshot is the durable provenance of the winning initial honey
+// allocation. It records the seed identity, effective budget, and actual seed
+// time before the first charged dispatch. Published marks that its
+// SIGNAL/energy.seeded observation reached the publisher; an unpublished record
+// is retried with the same identity and never reseeds.
+//
+// A ledger written before seed provenance existed has no record even though
+// EnergyBudget may be positive. That history stays unknown: readers must not
+// invent a budget, a timestamp, or a configuration for it.
+type EnergySeedSnapshot struct {
+	SeedID    string    `json:"seedId"`
+	Budget    int       `json:"budget"`
+	SeededAt  time.Time `json:"seededAt"`
+	Published bool      `json:"published,omitempty"`
 }
 
 // EnergyPauseSnapshot is the durable identity of one pause episode: the interval
@@ -119,6 +172,8 @@ type PendingReadySnapshot struct {
 	Sector string `json:"sector,omitempty"`
 	Intent string `json:"intent,omitempty"`
 	CueID  string `json:"cueId,omitempty"`
+	// CueInvocationID carries the invocation through a parked task.ready.
+	CueInvocationID string `json:"cueInvocationId,omitempty"`
 }
 
 // ApplyResult is the outcome of applying one bus event to a trace ledger.
@@ -169,6 +224,19 @@ type Ledger interface {
 	// SeedEnergy initializes the honey reserve when not yet seeded.
 	SeedEnergy(traceID string, budget int) error
 
+	// EnsureEnergySeed is the authoritative seed transition: it allocates the
+	// reserve when the trace has no budget and records the winning seed
+	// identity, effective budget, and actual seed time. It returns the winning
+	// record and whether this call created it. A second request observes the
+	// existing winner; a legacy budget without provenance returns an empty
+	// record and is never relabelled.
+	EnsureEnergySeed(traceID string, budget int) (EnergySeedSnapshot, bool, error)
+
+	// MarkEnergySeedPublished records that the seed observation for seedID
+	// reached the publisher. It is idempotent and refuses a different identity,
+	// so a retry reuses the recorded seed rather than selecting another.
+	MarkEnergySeedPublished(traceID, seedID string) error
+
 	// DeferPendingDispatch records deferred work unless an active entry with the
 	// same id already exists. It reports whether a new entry was added.
 	DeferPendingDispatch(traceID string, dispatch PendingDispatch) (bool, error)
@@ -189,4 +257,14 @@ type Ledger interface {
 	// cleared, so the runtime sends at most one resumed observation after the
 	// field is gone.
 	ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, error)
+
+	// RecordWorkCompletion stores one work-completion episode unless the trace
+	// already records a completion for that revision. The first identity wins,
+	// so a retry, restart, or duplicate event cannot mint a second completion
+	// for the same accepted work.
+	RecordWorkCompletion(traceID string, completion WorkCompletionSnapshot) (WorkCompletionSnapshot, bool, error)
+
+	// MarkWorkCompletionPublished records that the completion's milestone
+	// reached the publisher. It is idempotent and refuses a different identity.
+	MarkWorkCompletionPublished(traceID, completionID string) error
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/russ-p/paseka/internal/bus"
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/energy"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/taskledger"
@@ -148,6 +149,22 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 		}
 	}
 
+	agentID := in.AgentID
+	if agentID == "" {
+		agentID = "cli"
+	}
+	// Task creation is a manual admission path: record a known non-cue origin
+	// before seeding or publishing, and never invent a cue identity here.
+	if session.Colony.ColonyRoot != "" {
+		if _, _, err := runs.EnsureTrailOrigin(session.Colony.ColonyRoot, traceID, runs.TrailOrigin{
+			Kind:   runs.OriginKindManual,
+			Source: "task.create",
+			Actor:  agentID,
+		}); err != nil {
+			return CreateResult{}, fmt.Errorf("task origin: %w", err)
+		}
+	}
+
 	taskID := in.TaskID
 	if taskID == "" {
 		id, err := colony.NewTaskID()
@@ -169,14 +186,13 @@ func Create(ctx context.Context, session *LedgerSession, in CreateInput) (Create
 	}
 
 	if session.Ledger != nil {
-		if err := session.Ledger.SeedEnergy(traceID, manifest.ResolvedEnergyBudget()); err != nil {
+		if _, err := energy.Seed(ctx, session.Ledger, session.Publisher, energy.SeedInput{
+			TraceID: traceID,
+			Budget:  manifest.ResolvedEnergyBudget(),
+			AgentID: agentID,
+		}); err != nil {
 			return CreateResult{}, err
 		}
-	}
-
-	agentID := in.AgentID
-	if agentID == "" {
-		agentID = "cli"
 	}
 
 	spec := protocol.TaskSpec{
@@ -349,14 +365,15 @@ func PlanEvent(traceID, agentID string, spec protocol.TaskSpec) (protocol.Event,
 func ReadyEvent(traceID, agentID string, task taskledger.TaskSnapshot, defaults colony.Defaults) (protocol.Event, error) {
 	bee := colony.EffectiveTaskBee(task.Bee, defaults)
 	return protocol.NewEvent(traceID, agentID, 0, protocol.EventSignal, protocol.TaskReadyPayload{
-		Kind:   protocol.TaskEventReady,
-		TaskID: task.TaskID,
-		Title:  task.Title,
-		Body:   task.Body,
-		Bee:    bee,
-		Sector: task.Sector,
-		Intent: task.Intent,
-		CueID:  task.CueID,
+		Kind:            protocol.TaskEventReady,
+		TaskID:          task.TaskID,
+		Title:           task.Title,
+		Body:            task.Body,
+		Bee:             bee,
+		Sector:          task.Sector,
+		Intent:          task.Intent,
+		CueID:           task.CueID,
+		CueInvocationID: task.CueInvocationID,
 	})
 }
 

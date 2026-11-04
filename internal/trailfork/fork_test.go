@@ -189,27 +189,30 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 		t.Fatalf("fork attempt evidence = %+v", attempt)
 	}
 
-	if len(pub.events) != 2 {
-		t.Fatalf("published %d events, want plan+ready", len(pub.events))
+	if len(pub.events) != 3 {
+		t.Fatalf("published %d events, want seed+plan+ready", len(pub.events))
 	}
-	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != string(protocol.TaskEventPlan) {
-		t.Fatalf("first event kind = %q", kind)
+	if kind := protocol.PayloadKind(pub.events[0].Payload); kind != string(protocol.SignalEnergySeeded) {
+		t.Fatalf("first event kind = %q, want the seed observation", kind)
 	}
-	if kind := protocol.PayloadKind(pub.events[1].Payload); kind != string(protocol.TaskEventReady) {
+	if kind := protocol.PayloadKind(pub.events[1].Payload); kind != string(protocol.TaskEventPlan) {
 		t.Fatalf("second event kind = %q", kind)
 	}
+	if kind := protocol.PayloadKind(pub.events[2].Payload); kind != string(protocol.TaskEventReady) {
+		t.Fatalf("third event kind = %q", kind)
+	}
 	var planPayload protocol.TaskPlanPayload
-	if err := json.Unmarshal(pub.events[0].Payload, &planPayload); err != nil {
+	if err := json.Unmarshal(pub.events[1].Payload, &planPayload); err != nil {
 		t.Fatal(err)
 	}
 	if len(planPayload.Tasks) != 1 || planPayload.Tasks[0].TaskID != plan.Task.TaskID {
 		t.Fatalf("plan payload = %+v", planPayload)
 	}
-	if event := pub.events[1]; event.TraceID != plan.TraceID || protocol.PayloadTaskID(event.Payload) != plan.Task.TaskID {
+	if event := pub.events[2]; event.TraceID != plan.TraceID || protocol.PayloadTaskID(event.Payload) != plan.Task.TaskID {
 		t.Fatalf("ready event routed to %s/%s", event.TraceID, protocol.PayloadTaskID(event.Payload))
 	}
-	if pub.events[0].TraceID != plan.TraceID {
-		t.Fatalf("plan event routed to %s", pub.events[0].TraceID)
+	if pub.events[1].TraceID != plan.TraceID {
+		t.Fatalf("plan event routed to %s", pub.events[1].TraceID)
 	}
 
 	// The fork owns its snapshot copy: deleting the source trail records leaves
@@ -985,7 +988,11 @@ func TestForkKeepsSourceResolvedBeeAndCueProvenance(t *testing.T) {
 		t.Fatalf("created task = %+v", created.Plan.Task)
 	}
 	var plan protocol.TaskPlanPayload
-	if err := json.Unmarshal(pub.events[0].Payload, &plan); err != nil {
+	planEv, ok := trailforkEventByKind(pub.events, string(protocol.TaskEventPlan))
+	if !ok {
+		t.Fatalf("missing task.plan: %+v", pub.events)
+	}
+	if err := json.Unmarshal(planEv.Payload, &plan); err != nil {
 		t.Fatal(err)
 	}
 	if len(plan.Tasks) != 1 || plan.Tasks[0].Bee != "builder" || plan.Tasks[0].CueID != "feature" {
@@ -1241,4 +1248,13 @@ func assertOrdinaryForkEvents(t *testing.T, events []protocol.Event, forkTrace s
 			}
 		}
 	}
+}
+
+func trailforkEventByKind(events []protocol.Event, kind string) (protocol.Event, bool) {
+	for _, ev := range events {
+		if protocol.PayloadKind(ev.Payload) == kind {
+			return ev, true
+		}
+	}
+	return protocol.Event{}, false
 }

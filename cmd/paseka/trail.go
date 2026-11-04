@@ -654,6 +654,7 @@ func showTrailBinding(startDir, traceID string, jsonOut bool) error {
 			Config:           &manifest,
 			PendingConfig:    manifest.Pending,
 			AdmissionState:   admission,
+			OriginKind:       trailview.OriginUnknown,
 			Evidence:         []string{"configuration exists but the trail has no runnable history"},
 		}
 	}
@@ -735,11 +736,29 @@ func printTrailRows(trails []trailview.Trail) {
 func printTrailEvidenceSummary(trail trailview.Trail) {
 	fmt.Printf("trace: %s\n", trail.TraceID)
 	fmt.Printf("admission: %s\n", trail.AdmissionState)
+	fmt.Printf("origin: %s\n", trailOriginSummary(trail))
 	fmt.Printf("configRef: %s\n", trail.ConfigRef)
 	fmt.Printf("forkOf: %s\n", trail.ForkOf)
 	if trail.PendingForkRequests > 0 {
 		fmt.Printf("pendingForkRequests: %d\n", trail.PendingForkRequests)
 	}
+}
+
+func trailOriginSummary(trail trailview.Trail) string {
+	if trail.Origin == nil || trail.Origin.Kind == "" {
+		return trailview.OriginUnknown
+	}
+	summary := trail.Origin.Kind
+	if trail.Origin.CueID != "" {
+		summary += " cue=" + trail.Origin.CueID
+	}
+	if trail.Origin.InvocationID != "" {
+		summary += " invocation=" + trail.Origin.InvocationID
+	}
+	if trail.Origin.SourceTraceID != "" {
+		summary += " sourceTrace=" + trail.Origin.SourceTraceID
+	}
+	return summary
 }
 
 func formatTrailActivity(at time.Time) string {

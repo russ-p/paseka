@@ -172,8 +172,17 @@ func TestConsumeSeedsAndDecrements(t *testing.T) {
 	if snap.EnergyRemaining != protocol.DefaultEnergyBudget-1 {
 		t.Fatalf("remaining = %d", snap.EnergyRemaining)
 	}
-	if len(pub.published) != 1 {
-		t.Fatalf("published = %d", len(pub.published))
+	if len(pub.published) != 2 {
+		t.Fatalf("published = %d, want seed then consume", len(pub.published))
+	}
+	if kind := protocol.PayloadKind(pub.published[0].Payload); kind != string(protocol.SignalEnergySeeded) {
+		t.Fatalf("first published kind = %q, want energy.seeded before the charge", kind)
+	}
+	if kind := protocol.PayloadKind(pub.published[1].Payload); kind != string(protocol.SignalEnergyConsume) {
+		t.Fatalf("second published kind = %q, want energy.consume", kind)
+	}
+	if snap.EnergySeed == nil || !snap.EnergySeed.Published {
+		t.Fatalf("seed = %+v, want a published record", snap.EnergySeed)
 	}
 }
 

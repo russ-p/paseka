@@ -125,6 +125,10 @@ type TaskSpec struct {
 	Phase     TaskPhase        `json:"phase,omitempty"`
 	DependsOn []string         `json:"dependsOn,omitempty"`
 	CueID     string           `json:"cueId,omitempty"`
+	// CueInvocationID names the cue invocation that created this task. It stays
+	// empty for role- or manually-created tasks, and old payloads decode as an
+	// unknown provenance rather than an invented invocation.
+	CueInvocationID string `json:"cueInvocationId,omitempty"`
 }
 
 // TaskPlanPayload is emitted as INSIGHT with payload.kind=task.plan.
@@ -143,6 +147,8 @@ type TaskReadyPayload struct {
 	Sector string        `json:"sector,omitempty"`
 	Intent string        `json:"intent,omitempty"`
 	CueID  string        `json:"cueId,omitempty"`
+	// CueInvocationID carries the creating cue invocation through task.ready.
+	CueInvocationID string `json:"cueInvocationId,omitempty"`
 }
 
 // TaskStatusPayload is emitted as SIGNAL with payload.kind=task.status.

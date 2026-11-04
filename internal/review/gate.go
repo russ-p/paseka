@@ -83,6 +83,12 @@ func Approve(ctx context.Context, colonyCtx colony.Context, pub bus.Publisher, l
 	if err != nil {
 		return ApproveResult{}, err
 	}
+	// A fast final approval can arrive before the reactor's own completion
+	// boundary. Capture the checkpoint before merging or publishing: delivery is
+	// allowed to remove the worktree, the evidence is not.
+	if err := ensureWorkCompletionEvidence(colonyCtx, snap); err != nil {
+		return ApproveResult{}, err
+	}
 	result := ApproveResult{Experimental: experimental}
 	// Experimental work may complete its internal review, but its branch is
 	// never delivered. Promotion is a separate ordinary-trail proposal.

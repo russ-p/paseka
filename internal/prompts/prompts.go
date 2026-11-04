@@ -40,7 +40,13 @@ type Context struct {
 	// TrailInventory is the structured task list of the trail. It is set for a
 	// closing-phase dispatch and is the same inventory gate copy renders with.
 	TrailInventory colony.TrailInventory
-	Adapter        string // resolved adapter name (cursor, pi, claude, script)
+	// AnalysisOf and RetainedEvidence describe an analysis run: the studied
+	// work-completion milestone and the absolute paths of its retained
+	// checkpoint, result, metrics snapshot, and patch. Both are empty for
+	// ordinary work, closing, and legacy dispatches.
+	AnalysisOf       string
+	RetainedEvidence []string
+	Adapter          string // resolved adapter name (cursor, pi, claude, script)
 }
 
 // PromptContext builds a template context with normalized intent fields.

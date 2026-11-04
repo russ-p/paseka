@@ -38,7 +38,7 @@ func taskDispatchKey(taskID, beeRole string) string {
 // honey belongs to the trail, not to one unit of work, so a deferral must not
 // turn ready into blocked. The ledger opens the pause episode in the same
 // mutation; this call then publishes its one paused observation if it is new.
-func (r *Reactor) deferTaskDispatch(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string) error {
+func (r *Reactor) deferTaskDispatch(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string, purpose protocol.ExecutionPurpose) error {
 	dispatch := taskledger.PendingDispatch{
 		ID:            taskDispatchKey(taskID, beeRole),
 		Kind:          taskledger.PendingDispatchTask,
@@ -48,6 +48,7 @@ func (r *Reactor) deferTaskDispatch(ctx context.Context, traceID, taskID, beeRol
 		Reason:        reason,
 		Status:        taskledger.PendingDispatchPending,
 		CreatedAt:     time.Now().UTC(),
+		Purpose:       purpose,
 	}
 	added, err := r.ledger.DeferPendingDispatch(traceID, dispatch)
 	if err != nil {
@@ -68,7 +69,7 @@ func (r *Reactor) deferTaskDispatch(ctx context.Context, traceID, taskID, beeRol
 // task lifecycle status is untouched: the reaction belongs to an event, not to
 // the task's next state. A configuration barrier hold is not energy waiting, so
 // it does not open a pause episode.
-func (r *Reactor) deferDirectDispatch(ctx context.Context, ev protocol.Event, beeRole, taskID, reason string) error {
+func (r *Reactor) deferDirectDispatch(ctx context.Context, ev protocol.Event, beeRole, taskID, reason string, purpose protocol.ExecutionPurpose, analysisOf string) error {
 	dispatch := taskledger.PendingDispatch{
 		ID:            directDispatchKey(ev, beeRole),
 		Kind:          taskledger.PendingDispatchDirect,
@@ -78,6 +79,8 @@ func (r *Reactor) deferDirectDispatch(ctx context.Context, ev protocol.Event, be
 		Reason:        reason,
 		Status:        taskledger.PendingDispatchPending,
 		CreatedAt:     time.Now().UTC(),
+		Purpose:       purpose,
+		AnalysisOf:    analysisOf,
 	}
 	added, err := r.ledger.DeferPendingDispatch(ev.TraceID, dispatch)
 	if err != nil {
@@ -311,7 +314,11 @@ func (r *Reactor) resumeDirectPendingDispatch(ctx context.Context, traceID strin
 		return false, r.markPendingUnresolved(traceID, item)
 	}
 	r.stampIncomingProvenance(&ev)
-	if err := r.dispatchDirect(ctx, ev, item.Bee, nil); err != nil {
+	purpose, analysisOf, err := protocol.ResolveAdmissionAttribution(item.Purpose, item.AnalysisOf)
+	if err != nil {
+		return false, err
+	}
+	if err := r.dispatchDirectWithPurpose(ctx, ev, item.Bee, nil, purpose, analysisOf); err != nil {
 		return false, err
 	}
 	// Resolve against the dispatch the event actually produces, not the stored

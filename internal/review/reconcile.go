@@ -126,6 +126,12 @@ func completePublishedTrail(ctx context.Context, colonyCtx colony.Context, pub b
 		if err != nil {
 			return false, err
 		}
+		// The merged pull request is delivery: the worktree below is removed.
+		// Capture the completion checkpoint first, so a reactor restart or a
+		// later analysis read is not left without the evidence it references.
+		if err := ensureWorkCompletionEvidence(colonyCtx, snap); err != nil {
+			return false, err
+		}
 		task, ok := taskledger.FindFinalReviewTask(snap)
 		if ok && task.Status == protocol.TaskStatusWaitingReview {
 			summary := "Pull request merged"

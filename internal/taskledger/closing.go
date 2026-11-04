@@ -176,10 +176,14 @@ func MergeGateWaiting(trace TraceSnapshot) bool {
 }
 
 // WorkTaskCount counts work-phase tasks in the trail regardless of status. It
-// backs the min_work_tasks predicate.
+// backs the min_work_tasks predicate. Analysis tasks are studying the result,
+// not producing goal work, so they never satisfy that predicate.
 func WorkTaskCount(trace TraceSnapshot) int {
 	count := 0
 	for _, task := range trace.Tasks {
+		if IsAnalysisTask(task) {
+			continue
+		}
 		if TaskPhaseOf(task) == protocol.TaskPhaseWork {
 			count++
 		}
@@ -222,6 +226,9 @@ func WorkCompletedAfter(trace TraceSnapshot, closing TaskSnapshot) bool {
 		return false
 	}
 	for _, task := range trace.Tasks {
+		if IsAnalysisTask(task) {
+			continue
+		}
 		if TaskPhaseOf(task) != protocol.TaskPhaseWork || task.Status != protocol.TaskStatusCompleted {
 			continue
 		}

@@ -16,6 +16,7 @@ func newInspectCmd() *cobra.Command {
 		Short: "Inspect flight trail and run projections",
 	}
 	cmd.AddCommand(newInspectUsageCmd())
+	cmd.AddCommand(newInspectMetricsCmd())
 	return cmd
 }
 

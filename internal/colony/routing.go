@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -27,6 +28,25 @@ type EventRule struct {
 type SubscriptionRule struct {
 	EventRule `yaml:",inline"`
 	Dispatch  DispatchMode `yaml:"dispatch,omitempty"`
+	// Purpose marks an explicitly configured analysis reaction. Analysis is the
+	// only purpose an operator can configure: work is the default and closing is
+	// runtime-owned. A configured analysis reaction must be a direct
+	// subscription to SIGNAL/trail.work.completed, because that milestone names
+	// the accepted work revision the run studies.
+	Purpose protocol.ExecutionPurpose `yaml:"purpose,omitempty"`
+}
+
+// DirectReaction is one bee role that reacts directly to an event, with the
+// admission purpose the subscription configured for that reaction.
+type DirectReaction struct {
+	Bee     string
+	Purpose protocol.ExecutionPurpose
+}
+
+// AnalysisReaction reports whether the rule is an explicitly configured
+// analysis reaction.
+func (s SubscriptionRule) AnalysisReaction() bool {
+	return s.Purpose == protocol.PurposeAnalysis
 }
 
 // PublicationRule declares which domain events a bee may emit (advisory contract).
@@ -137,6 +157,9 @@ func (b Bee) ValidateEventRules() error {
 		default:
 			return fmt.Errorf("colony: bee %q subscribes[%d]: invalid dispatch %q", b.Role, i, sub.Dispatch)
 		}
+		if err := validateSubscriptionPurpose(sub); err != nil {
+			return fmt.Errorf("colony: bee %q subscribes[%d]: %w", b.Role, i, err)
+		}
 	}
 	for i, pub := range b.Publishes {
 		if _, err := pub.EventType(); err != nil {
@@ -164,20 +187,88 @@ func (b Bee) CanHandleTaskReady() bool {
 }
 
 // DirectSubscribers returns bee roles with a direct subscription matching the event.
+// Platform observations — seed and pause/resume reports, and the cue ingress
+// record — describe an admission decision rather than work, so they never wake
+// a Bee however broadly a subscription matches.
 func DirectSubscribers(bees map[string]Bee, evType protocol.EventType, kind string) []string {
-	var roles []string
-	for role, bee := range bees {
-		for _, sub := range bee.Subscribes {
+	reactions := DirectReactions(bees, evType, kind)
+	roles := make([]string, 0, len(reactions))
+	for _, reaction := range reactions {
+		roles = append(roles, reaction.Bee)
+	}
+	return roles
+}
+
+// DirectReactions returns the direct reactions for an event, including the
+// admission purpose each subscription configured. A configured analysis
+// reaction wins over a broader ordinary subscription on the same Bee, so the
+// studied milestone is never silently downgraded to work.
+func DirectReactions(bees map[string]Bee, evType protocol.EventType, kind string) []DirectReaction {
+	if protocol.IsPlatformObservation(kind) {
+		return nil
+	}
+	roles := make([]string, 0, len(bees))
+	for role := range bees {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	var out []DirectReaction
+	for _, role := range roles {
+		bee := bees[role]
+		var ordinary *SubscriptionRule
+		var analysis *SubscriptionRule
+		for i := range bee.Subscribes {
+			sub := &bee.Subscribes[i]
 			if sub.ResolvedDispatch() != DispatchDirect {
 				continue
 			}
-			if sub.Matches(evType, kind) {
-				roles = append(roles, role)
+			if !sub.Matches(evType, kind) {
+				continue
+			}
+			if sub.AnalysisReaction() {
+				analysis = sub
 				break
 			}
+			if ordinary == nil {
+				ordinary = sub
+			}
+		}
+		switch {
+		case analysis != nil:
+			out = append(out, DirectReaction{Bee: role, Purpose: protocol.PurposeAnalysis})
+		case ordinary != nil:
+			out = append(out, DirectReaction{Bee: role, Purpose: protocol.PurposeWork})
 		}
 	}
-	return roles
+	return out
+}
+
+// validateSubscriptionPurpose keeps the configured purpose vocabulary honest.
+// Only analysis may be configured; work is the ordinary default and closing is
+// runtime-owned. Analysis needs the completion milestone that names the studied
+// revision, so it is accepted only on a direct trail.work.completed rule.
+func validateSubscriptionPurpose(sub SubscriptionRule) error {
+	purpose := sub.Purpose
+	if purpose == "" {
+		return nil
+	}
+	if !protocol.IsKnownExecutionPurpose(purpose) {
+		return fmt.Errorf("unsupported subscription purpose %q", purpose)
+	}
+	if purpose != protocol.PurposeAnalysis {
+		return fmt.Errorf("subscription purpose %q is runtime-owned and cannot be configured", purpose)
+	}
+	if sub.ResolvedDispatch() != DispatchDirect {
+		return fmt.Errorf("analysis subscription must use dispatch direct")
+	}
+	evType, err := sub.EventType()
+	if err != nil {
+		return err
+	}
+	if evType != protocol.EventSignal || strings.TrimSpace(sub.Kind) != protocol.SignalTrailWorkCompleted {
+		return fmt.Errorf("analysis subscription must listen to SIGNAL/%s", protocol.SignalTrailWorkCompleted)
+	}
+	return nil
 }
 
 // DeclaresPublish reports whether a bee declares the given event in publishes (advisory).

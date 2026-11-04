@@ -65,6 +65,13 @@ type Provenance struct {
 	ConfigRevision       int    `json:"configRevision,omitempty"`
 	InitialCodeBaseSHA   string `json:"initialCodeBaseSha,omitempty"`
 	InitialCodeBaseDirty bool   `json:"initialCodeBaseDirty,omitempty"`
+	// Purpose and AnalysisOf carry the runtime-owned admission attribution into
+	// every event an execution emits. A downstream task plan, review note, or
+	// failure therefore stays in the same accounting bucket and names the same
+	// studied milestone as the run that produced it. An empty purpose on a
+	// legacy record means unknown, never work by inference.
+	Purpose    ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string           `json:"analysisOf,omitempty"`
 }
 
 // Event is one NDJSON line in events.ndjson.
@@ -87,29 +94,37 @@ type Event struct {
 
 // Request is written to request.json before the agent starts.
 type Request struct {
-	ProtocolVersion      string    `json:"protocolVersion"`
-	TraceID              string    `json:"traceId"`
-	AgentID              string    `json:"agentId"`
-	Bee                  string    `json:"bee"`
-	Adapter              string    `json:"adapter"`
-	Workspace            string    `json:"workspace"`
-	ColonyRoot           string    `json:"colonyRoot"`
-	TaskID               string    `json:"taskId,omitempty"`
-	Task                 string    `json:"task,omitempty"`
-	Intent               string    `json:"intent,omitempty"`
-	Insights             []string  `json:"insights,omitempty"`
-	Model                string    `json:"model,omitempty"`
-	ModelAlias           string    `json:"modelAlias,omitempty"`
-	Profile              string    `json:"profile,omitempty"`
-	AttemptID            string    `json:"attemptId,omitempty"`
-	ConfigRef            string    `json:"configRef,omitempty"`
-	ConfigRevision       int       `json:"configRevision,omitempty"`
-	InitialCodeBaseSHA   string    `json:"initialCodeBaseSha,omitempty"`
-	InitialCodeBaseDirty bool      `json:"initialCodeBaseDirty,omitempty"`
-	LaunchForm           string    `json:"launchForm,omitempty"`
-	ResultPath           string    `json:"resultPath"`
-	EventLogPath         string    `json:"eventLogPath"`
-	CreatedAt            time.Time `json:"createdAt"`
+	ProtocolVersion      string   `json:"protocolVersion"`
+	TraceID              string   `json:"traceId"`
+	AgentID              string   `json:"agentId"`
+	Bee                  string   `json:"bee"`
+	Adapter              string   `json:"adapter"`
+	Workspace            string   `json:"workspace"`
+	ColonyRoot           string   `json:"colonyRoot"`
+	TaskID               string   `json:"taskId,omitempty"`
+	Task                 string   `json:"task,omitempty"`
+	Intent               string   `json:"intent,omitempty"`
+	Insights             []string `json:"insights,omitempty"`
+	Model                string   `json:"model,omitempty"`
+	ModelAlias           string   `json:"modelAlias,omitempty"`
+	Profile              string   `json:"profile,omitempty"`
+	AttemptID            string   `json:"attemptId,omitempty"`
+	ConfigRef            string   `json:"configRef,omitempty"`
+	ConfigRevision       int      `json:"configRevision,omitempty"`
+	InitialCodeBaseSHA   string   `json:"initialCodeBaseSha,omitempty"`
+	InitialCodeBaseDirty bool     `json:"initialCodeBaseDirty,omitempty"`
+	LaunchForm           string   `json:"launchForm,omitempty"`
+	// Purpose is the runtime-owned reason this execution was admitted. It is
+	// written at admission and never inferred by a reader from the Bee name or
+	// task text. An empty value on an existing record means the purpose was not
+	// recorded, not that the execution was work.
+	Purpose ExecutionPurpose `json:"purpose,omitempty"`
+	// AnalysisOf names the work-completion milestone this analysis studies. It
+	// is set only with Purpose analysis.
+	AnalysisOf   string    `json:"analysisOf,omitempty"`
+	ResultPath   string    `json:"resultPath"`
+	EventLogPath string    `json:"eventLogPath"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // ArtifactRef points to a normalized output artifact.

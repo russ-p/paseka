@@ -2,19 +2,58 @@ package runtime
 
 import (
 	"context"
+	"sort"
 
 	"github.com/russ-p/paseka/internal/energy"
+	"github.com/russ-p/paseka/internal/logging"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 const energyDispatchCost = 1
 
-func (r *Reactor) ensureEnergySeeded(ctx context.Context, traceID string) error {
-	return energy.EnsureSeeded(r.ledger, r.colony.ColonyRoot, traceID)
+// seedObservationPublisher routes the seed observation through the reactor's
+// local-event memory, so the reactor does not apply or route its own echo.
+type seedObservationPublisher struct {
+	reactor *Reactor
 }
 
-func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string) (bool, error) {
+func (p seedObservationPublisher) PublishEvent(ctx context.Context, ev protocol.Event) error {
+	return p.reactor.publishObservation(ctx, ev)
+}
+
+func (r *Reactor) ensureEnergySeeded(ctx context.Context, traceID string) error {
+	return energy.EnsureSeeded(ctx, r.ledger, seedObservationPublisher{reactor: r}, r.colony.ColonyRoot, traceID, protocol.RuntimeAgentID)
+}
+
+// RecoverPendingSeedObservations repairs seed observations that never reached
+// the publisher before the reactor stopped. It republishes the recorded winner
+// with its original identity and never seeds a trail that has no record.
+func (r *Reactor) RecoverPendingSeedObservations(ctx context.Context) error {
+	if r.ledger == nil {
+		return nil
+	}
+	lister, ok := r.ledger.(taskledger.TraceLister)
+	if !ok {
+		return nil
+	}
+	traceIDs, err := lister.TraceIDs()
+	if err != nil {
+		return err
+	}
+	sort.Strings(traceIDs)
+	for _, traceID := range traceIDs {
+		if err := energy.PublishPendingSeedObservation(ctx, r.ledger, seedObservationPublisher{reactor: r}, traceID, protocol.RuntimeAgentID); err != nil {
+			runtimeLog.Warn("repair pending energy.seeded observation failed",
+				logging.F("trace", traceID),
+				logging.F("error", err.Error()),
+			)
+		}
+	}
+	return nil
+}
+
+func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int, reason, taskID string, purpose protocol.ExecutionPurpose, analysisOf string) (bool, error) {
 	if amount <= 0 {
 		return true, nil
 	}
@@ -30,10 +69,12 @@ func (r *Reactor) consumeEnergy(ctx context.Context, traceID string, amount int,
 	}
 
 	ev, err := protocol.NewEvent(traceID, "runtime", 0, protocol.EventSignal, protocol.EnergyConsumePayload{
-		Kind:   protocol.SignalEnergyConsume,
-		Amount: amount,
-		Reason: reason,
-		TaskID: taskID,
+		Kind:       protocol.SignalEnergyConsume,
+		Amount:     amount,
+		Reason:     reason,
+		TaskID:     taskID,
+		Purpose:    purpose,
+		AnalysisOf: analysisOf,
 	})
 	if err != nil {
 		return false, err
@@ -74,8 +115,8 @@ func (r *Reactor) unblockEnergyBlockedTasks(ctx context.Context, traceID string)
 // gateTaskDispatchEnergy never writes a task status. A denied task dispatch is
 // recorded as deferred trail work and keeps its lifecycle state, so `ready`
 // still means eligible and a waiting_review task never becomes blocked.
-func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string) (bool, error) {
-	ok, err := r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
+func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, beeRole, sourceEventID, reason string, purpose protocol.ExecutionPurpose) (bool, error) {
+	ok, err := r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID, purpose, "")
 	if err != nil {
 		return false, err
 	}
@@ -83,7 +124,7 @@ func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, b
 		return true, nil
 	}
 	if taskID != "" {
-		if err := r.deferTaskDispatch(ctx, traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary); err != nil {
+		if err := r.deferTaskDispatch(ctx, traceID, taskID, beeRole, sourceEventID, protocol.HoneyReserveExhaustedSummary, purpose); err != nil {
 			return false, err
 		}
 	}
@@ -93,8 +134,8 @@ func (r *Reactor) gateTaskDispatchEnergy(ctx context.Context, traceID, taskID, b
 // gateDirectDispatchEnergy never mutates task status: a direct dispatch reacts
 // to an event and can run while the task is waiting_review or running. Deferred
 // direct work is recorded separately and resumed on energy.add.
-func (r *Reactor) gateDirectDispatchEnergy(ctx context.Context, traceID, taskID, reason string) (bool, error) {
-	return r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID)
+func (r *Reactor) gateDirectDispatchEnergy(ctx context.Context, traceID, taskID, reason string, purpose protocol.ExecutionPurpose, analysisOf string) (bool, error) {
+	return r.consumeEnergy(ctx, traceID, energyDispatchCost, reason, taskID, purpose, analysisOf)
 }
 
 func energyAddDetected(ev protocol.Event) bool {

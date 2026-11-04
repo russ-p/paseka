@@ -36,7 +36,7 @@ func (s *Service) consumeSessionEnergy(ctx context.Context, traceID string) erro
 	}
 	ledger := taskledger.NewKVLedger(kv)
 
-	if err := energy.EnsureSeeded(ledger, s.Colony.ColonyRoot, traceID); err != nil {
+	if err := energy.EnsureSeeded(ctx, ledger, pub, s.Colony.ColonyRoot, traceID, "beekeeper"); err != nil {
 		return err
 	}
 	before, err := ledger.Snapshot(traceID)

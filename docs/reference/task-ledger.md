@@ -68,6 +68,8 @@ Status answers *where a task is*; phase answers *what the task is for*. The two 
 
 The phase is written into `task.plan` and persisted, so the ledger stays self-describing and replay, fork, `verify`, and the Console never consult colony configuration to read it. A `task.plan` published by anyone but the runtime is coerced to `work`; a plan with `review: final` is recorded as `merge`, and `phase: merge` with any other review policy is coerced back to `work`. A task record with `review: final` and no phase reads as `merge`; one with neither reads as `work`.
 
+A task may also carry `cueId` and `cueInvocationId` — the cue that created it and the invocation that published it, empty for role- or manually-created tasks — and the `purpose`/`analysisOf` attribution it inherited from the execution that planned it. The task's `cueId` is not the trail's origin; see [Forage Cues](../guide/cues.md#invocation-identity-and-trail-origin).
+
 Closing rounds come from the colony's pinned `closing` policy, not from a Bee. When every `work` task is completed and the policy predicates match, the runtime seeds exactly one closing round under the next free `closing-N` id and kicks it with the ordinary `task.ready` scheduler. Follow-up work planned by the closing Bee runs as `work`, and once it completes the runtime seeds the next round, up to `max_rounds`. A trail with no `work` task, an in-flight or unfinished round, or an already delivered (`merge` completed) trail seeds nothing.
 
 A round skipped by the predicates or by the round cap is explained with one `INSIGHT` / `context.note`, written once on the boundary that opens the merge gate. A closing task that ends `failed`, `blocked`, or `cancelled` keeps the gate closed: nothing seeds a replacement, and the trail waits for a human.
@@ -81,6 +83,7 @@ Each trace carries a shared honey reserve on the task ledger snapshot:
 | `energyBudget` | Initial seed from `colony.yaml` → `defaults.energy_budget` (default `12`), a Forage Cue `energy_budget` on a fresh bloom trail, or a standing cue `stipend` on a fresh Standing Trail. Frozen after first seed. |
 | `energyRemaining` | Tokens left; each adapter dispatch consumes `1`; `energy.add` increments this; standing `energy.stipend` **sets** it to the cue stipend |
 | `energyAdded` | Sum of `energy.add` amounts **after** seed. Pre-seed top-ups stay in `energyRemaining` only so `SeedEnergy` can still apply colony/cue budget. |
+| `energySeed` | Durable provenance of the winning initial allocation: `seedId`, effective `budget`, actual `seededAt`, and `published` for its observation. Absent on a ledger written before seed provenance existed — that history stays unknown. |
 
 Display uses **remaining / allocated**, where `allocated = energyBudget + energyAdded` once the trail is seeded. When `energyAdded > 0`, UIs also show `seed {budget} · topped {added}`. Queen Console **low** still means `remaining <= energyBudget/4` (seed, not allocated). Colony status attention still flags traces with `remaining <= 0`.
 
@@ -97,6 +100,32 @@ The task board and trace export keep the axes separate: `taskCounts` stays statu
 Hard-kill a trace with `paseka kill --trace <id> [--reason …]` (`SIGNAL` / `system.kill`). Sets `killed` on the trace snapshot, cancels non-terminal tasks, stops new dispatches, abandons active pending task and direct dispatches in the same mutation, and cancels in-flight AFK adapter processes. `energy.add` after kill tops up honey but does not redispatch killed tasks or revive abandoned pending work. A standing cue run on a killed trail fails closed (no stipend, no ingress). See [Spec 013](../specs/013-system-kill.md).
 
 `energy.add` does not change `energyBudget`. After seed it also increments `energyAdded`. `energy.stipend` does not change `energyBudget` or `energyAdded`. Formal seeding (`SeedEnergy` / reactor dispatch) applies `defaults.energy_budget` from `colony.yaml` and clears `energyAdded`. **Forage Cues** may override the initial seed on a fresh bloom trail with per-cue `energy_budget`, or seed a Standing Trail from `standing.stipend` (ledger `SeedEnergy` on first sight; later ticks use `energy.stipend`) — see [Forage Cues](../guide/cues.md) § Honey. Out-of-process honey events (`energy.add` / `energy.stipend`) publish and let the reactor project when `paseka run` is alive, or apply locally when it is stopped, so remaining is not applied twice. Runtime-generated ledger events are applied locally before publish; the reactor skips its own JetStream echo so non-idempotent reducers (notably `energy.consume`) are not applied twice.
+
+#### Seed record (`energySeed`)
+
+The seed transition is the single authoritative allocation: `EnsureEnergySeed` allocates once, records the winning `seedId`, effective `budget`, and actual `seededAt`, and returns the existing record to any competing request instead of allocating a second budget. It runs before the first charged dispatch on every seed path — colony defaults, a cue `energy_budget`, a standing first seed, a session entry, a fork, and an experimental budget. The record is observed as `SIGNAL` / `energy.seeded`; `published` marks that the observation reached the publisher, and an unpublished seed is retried on startup **with the same `seedId`**, so a crash never reseeds or mints a new identity. Replaying an `energy.seeded` event is a no-op: it does not seed, add, consume, or dispatch.
+
+Top-ups and standing stipends leave `energySeed` and its `budget` untouched — the budget is the initial reserve, not total lifetime expenditure. A ledger with a positive `energyBudget` but no `energySeed` predates provenance and stays unknown; readers must not fill it from today's colony or cue defaults. Offline metrics read the seed record (never current defaults) for the initial budget.
+
+### Execution purpose (`purpose`, `analysisOf`)
+
+Admission records why an execution runs, on the run record (`result.json` / `meta.json`), `session.json`, `TaskRunEntry` rows in `runs.ndjson`, pending dispatch entries, task projections, and every event the execution emits:
+
+| `purpose` | Meaning |
+| --------- | ------- |
+| `work` | Ordinary goal work. The default for a new admission with no other recorded purpose. |
+| `closing` | The runtime-seeded closing round. Trail overhead, not goal work. |
+| `analysis` | Studying an already-recorded result. Stays in the same trail but is accounted separately. |
+
+For task dispatch the purpose follows the recorded task phase (`closing` is runtime-owned). An operator analysis action is `paseka bee run|chat --purpose analysis --analysis-of <completionId>`; a configured direct reaction sets `purpose: analysis` on its `SIGNAL/trail.work.completed` subscription. `analysisOf` names the studied completion's `completionId` and is required for analysis. Purpose travels with the causal chain — a task planned by an analysis run is an analysis task — and an unsupported or missing historical attribution stays unknown rather than being guessed from a Bee or intent name. `paseka inspect metrics` splits activity into `byPurpose.work`, `byPurpose.closing`, `byPurpose.analysis`, and `byPurpose.unknown`; root aggregates remain total observed activity.
+
+### Work revision and completion (`workRevision`, `workCompletion`)
+
+`workRevision` identifies the accepted goal work a completion describes. It advances when substantive work is accepted — a new `work`-phase task, a rework return, or rework planned from a gate rejection — and never for a closing round, analysis, the milestone itself, final approval, or delivery. That is what lets an older completion stay historical instead of describing the trail's current work.
+
+`workCompletion` is the trail's current completion episode: `completionId`, `workRevision`, `completedAt`, `resultRef`, `metricsRef`, and `published`. It is recorded before `SIGNAL` / `trail.work.completed` is published, its identity is derived from the trail and revision, and an unpublished record is retried with the same identity. The ledger is the authority for that identity; `.paseka/runs/<traceId>/work.json` and `completions/<completionId>/` retain the same facts for offline reads.
+
+The predicate is "every non-merge task is completed": ordinary work plus every closing round, with analysis tasks excluded as study rather than product work, at least one working task, and no active deferred work dispatch. A merge task at `waiting_review` does not block, and a task whose phase/review evidence cannot prove it is final acceptance reads as work and holds the milestone rather than being guessed. A killed, failed, cancelled, or `skipped` task, an energy-deferred entry, or an empty ledger emits nothing. See [event contracts](event-contracts.md#work-completion-milestone) for the announced payload and its non-gating semantics.
 
 ### Review policy
 
@@ -337,7 +366,7 @@ The runtime mirrors each trace task into `.paseka/runs/<traceId>/tasks/<taskId>/
       runs.ndjson    # agent run history for this task
 ```
 
-`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `phase`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `createdAt`, `updatedAt`). `phase` is omitted for `work`, so an older file without it still reads as work (or as `merge` when its `review` is `final`). The markdown body stores the human-readable task description (`body`).
+`task.md` frontmatter stores machine-readable fields (`traceId`, `taskId`, `title`, `bee`, `status`, `phase`, `dependsOn`, `summary`, `commit`, `proposalWorkspace`, `cueId`, `cueInvocationId`, `purpose`, `analysisOf`, `createdAt`, `updatedAt`). `phase` is omitted for `work`, so an older file without it still reads as work (or as `merge` when its `review` is `final`). `cueId`/`cueInvocationId` and `purpose`/`analysisOf` are omitted when the task has no such provenance. The markdown body stores the human-readable task description (`body`).
 
 `createdAt` is stamped **once**, when the ledger first sees the task (normally on `task.plan`; a task first seen through `task.status`, `task.completed`, or `code.proposal` gets the same stamp at that point) and never moves afterwards, while `updatedAt` moves on every status write. Wait time is therefore `updatedAt - createdAt` read straight from the file, with no bus. `createdAt` is omitted when unknown, so trails written before it existed still parse — treat a missing `createdAt` as unknown rather than zero.
 

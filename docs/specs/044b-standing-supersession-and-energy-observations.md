@@ -117,7 +117,7 @@ This spec builds on the `PendingDispatch` record, statuses, compare-and-set writ
 1. Queen Console task rows show the task's real status. A trail-level paused badge and pending count appear beside the trail, not as a fake task status.
 2. `paseka energy show` prints whether the trail is paused, the pending count, and the reason; `paseka status` attention uses the same projection.
 3. Telegram subscribes to `energy.paused` / `energy.resumed` for its energy category and stops synthesizing an energy alert from a task status.
-4. Metrics and exports distinguish pending, `skipped`, and legacy `blocked` work. A skipped task contributes no execution or retry. The metrics half depends on the trail metrics surface owned by [043b](043b-trail-metrics-and-work-completion.md); until that lands, existing exports and the Console/CLI projections carry the distinction.
+4. Metrics and exports distinguish pending, `skipped`, and legacy `blocked` work. A skipped task contributes no execution or retry. The trail metrics surface that reports these dimensions belongs to [043b](043b-trail-metrics-and-work-completion.md); the live exports and the Console/CLI projections keep carrying the distinction too.
 5. Existing legacy honey-blocked cards remain readable until purge, but new energy deferrals do not create them.
 
 ### 8. Compatibility and rollout

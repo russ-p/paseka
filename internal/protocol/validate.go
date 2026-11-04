@@ -142,6 +142,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateEnergyConsume(payload)
 	case SignalEnergyStipend:
 		return validateEnergyStipend(payload)
+	case SignalEnergySeeded:
+		return validateEnergySeeded(payload)
 	case SignalEnergyPaused:
 		return validateEnergyPaused(payload)
 	case SignalEnergyResumed:
@@ -151,6 +153,13 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 	switch SystemEventKind(kind) {
 	case SignalSystemKill:
 		return validateSystemKill(payload)
+	}
+
+	switch kind {
+	case SignalCueIngress:
+		return validateCueIngress(payload)
+	case SignalTrailWorkCompleted:
+		return validateTrailWorkCompleted(payload)
 	}
 
 	switch VerificationKind(kind) {
@@ -212,11 +221,17 @@ func expectedEventType(kind string) EventType {
 		return EventVerification
 	}
 	switch EnergyEventKind(kind) {
-	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend, SignalEnergyPaused, SignalEnergyResumed:
+	case SignalEnergyAdd, SignalEnergyConsume, SignalEnergyStipend, SignalEnergySeeded, SignalEnergyPaused, SignalEnergyResumed:
 		return EventSignal
 	}
 	switch SystemEventKind(kind) {
 	case SignalSystemKill:
+		return EventSignal
+	}
+	if IsCueIngressObservation(kind) {
+		return EventSignal
+	}
+	if IsTrailWorkCompletion(kind) {
 		return EventSignal
 	}
 	switch VerificationKind(kind) {
@@ -560,6 +575,24 @@ func validateEnergyStipend(payload json.RawMessage) []ValidationDetail {
 	return nil
 }
 
+func validateEnergySeeded(payload json.RawMessage) []ValidationDetail {
+	var p EnergySeededPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid energy.seeded payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.SeedID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.seedId", Message: "required"})
+	}
+	if p.Budget <= 0 {
+		details = append(details, ValidationDetail{Path: "payload.budget", Message: "must be positive"})
+	}
+	if p.SeededAt.IsZero() {
+		details = append(details, ValidationDetail{Path: "payload.seededAt", Message: "required"})
+	}
+	return details
+}
+
 func validateEnergyPaused(payload json.RawMessage) []ValidationDetail {
 	var p EnergyPausedPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
@@ -697,6 +730,52 @@ func validateForkDecision(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.requestId", Message: "required"}}
 	}
 	return nil
+}
+
+func validateCueIngress(payload json.RawMessage) []ValidationDetail {
+	var p CueIngressPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid cue.ingress payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.InvocationID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.invocationId", Message: "required"})
+	}
+	if strings.TrimSpace(p.CueID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.cueId", Message: "required"})
+	}
+	if !p.Mode.Known() {
+		details = append(details, ValidationDetail{Path: "payload.mode", Message: "must be one of task, signal"})
+	}
+	return details
+}
+
+// validateTrailWorkCompleted enforces the milestone's evidence contract: an
+// identity, a positive work revision, the completion time, and both immutable
+// references. A payload missing its evidence would announce a completion a
+// reader cannot resolve.
+func validateTrailWorkCompleted(payload json.RawMessage) []ValidationDetail {
+	var p TrailWorkCompletedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid trail.work.completed payload"}}
+	}
+	var details []ValidationDetail
+	if strings.TrimSpace(p.CompletionID) == "" {
+		details = append(details, ValidationDetail{Path: "payload.completionId", Message: "required"})
+	}
+	if p.WorkRevision < 1 {
+		details = append(details, ValidationDetail{Path: "payload.workRevision", Message: "must be at least 1"})
+	}
+	if p.CompletedAt.IsZero() {
+		details = append(details, ValidationDetail{Path: "payload.completedAt", Message: "required"})
+	}
+	if strings.TrimSpace(p.ResultRef) == "" {
+		details = append(details, ValidationDetail{Path: "payload.resultRef", Message: "required"})
+	}
+	if strings.TrimSpace(p.MetricsRef) == "" {
+		details = append(details, ValidationDetail{Path: "payload.metricsRef", Message: "required"})
+	}
+	return details
 }
 
 func isBeekeeperAction(action BeekeeperAction) bool {

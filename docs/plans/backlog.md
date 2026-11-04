@@ -18,6 +18,26 @@ Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross
 - **Why deferred:** Unverified and harmless on its own: `runs.ResolveTraceSummary` takes the last non-empty summary, so a duplicate changes nothing downstream.
 - **Revisit when:** A trail shows a summary that disagrees with what actually happened, or trail tooling needs to diff two bus payloads rather than match them.
 
+### Trail metrics and provenance
+
+Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The runtime records and the CLI projects; what is left is a Console surface and one recovery case in the analysis admission ledger.
+
+#### Console does not show a trail's origin or its metrics
+
+- **Kind:** follow-up
+- **Source:** [043b-trail-metrics-and-work-completion](../specs/043b-trail-metrics-and-work-completion.md) § Out of Scope (reader surfaces)
+- **Summary:** The trail detail reads the same derived stage as `inspect metrics`, but it shows neither the retained origin (`cue` + invocation, `manual`, `other`, `fork`, `unknown`) nor any of the metrics projection — honey by purpose, per-task retries and gate rejections, coverage warnings, the current completion identity. Add an origin line to the trail header and a read-only metrics panel fed by the same `runs.BuildTrailMetrics` call the CLI uses, so the Console and `inspect metrics` cannot disagree.
+- **Why deferred:** 043b ships the recorder and the offline read surface; the Console work is a separate UI slice with its own layout decisions, and no runtime data is missing for it.
+- **Revisit when:** An operator compares two trails of the same kind, or asks why a trail looked expensive, without leaving the Console.
+
+#### An analysis admission left `running` after a crash is never reconciled
+
+- **Kind:** bug
+- **Source:** [043b-trail-metrics-and-work-completion](../specs/043b-trail-metrics-and-work-completion.md) § 4.3; `internal/runtime/dispatch_direct.go` (`prepareAnalysisAdmission`)
+- **Summary:** A configured analysis reaction writes `.paseka/runs/<traceId>/analysis/<admissionId>.json` as `running` before the adapter starts and finishes it as `completed`/`failed` afterwards. If the reactor dies mid-run, the record stays `running` forever; restart treats it as already taken and never redelivers, so the analysis silently never happens. Only an explicit operator action recovers it, and there is no surface that names the stuck admission. Add a startup reconciliation that marks an abandoned `running` admission `failed` with a diagnostic (or records it as retryable), so the trail does not hide an analysis it never finished.
+- **Why deferred:** The at-most-once choice is deliberate — redelivering on every restart would duplicate expensive analysis — and the failure mode loses one retrospective, not work. Changing it needs a policy for when a `running` record is stale and a test that pins restart behavior.
+- **Revisit when:** An operator expects an analysis that never appears, or reactor restarts mid-analysis become routine (homelab redeploy, laptop sleep).
+
 ### Adapter catalog
 
 #### The Agent CLI roster is duplicated across the Go/TS boundary
@@ -410,6 +430,7 @@ Trail audit tooling has exactly one reliable join and three traps. Verified agai
 - **`tasks/<taskId>/runs.ndjson` is not a complete task→run join** — on that trail it held only the first builder run. Rework dispatches (`dispatch: direct`, i.e. `verification.failed` fix-ups), guard inspections, and the receiver's commit run are absent from it. Join on `request.json.taskId`, not on this file.
 - **`createdAt` in task frontmatter is absent on trails planned before it shipped** — the ledger now stamps it once per task, so wait time is `updatedAt - createdAt` read offline, but a trail written earlier carries only `updatedAt`, which moves on every status write. Read a missing `createdAt` as unknown, never as zero. See [task ledger](../reference/task-ledger.md) § Filesystem task projection.
 - **A run's own event log proves only what that bee published** — `<agentId>/events.ndjson` is a per-attempt audit of that run, and nothing the runtime did on its behalf lands there. Runtime-synthesized events (a `MUTATION` proposal above all) are in the trail record, `<traceId>/trail-events.ndjson`. Join the two, or read the trail through `runs.ReadTraceEvents`, which does it for you.
+- **Metrics count retained evidence, not broker history** — `paseka inspect metrics` (and `metrics.json`) reads the trail record, run directories, task projections, retained origin, seed evidence, and completion snapshots. A dispatch whose run directory was reused or pruned is not counted, an absent usage report is `null` rather than zero, and gaps appear as `coverage`/`warnings`. Treat a partial total as "what is retained", never as the trail's full cost. See [CLI](../guide/cli.md#paseka-inspect-metrics).
 
 ### NDJSON line size
 

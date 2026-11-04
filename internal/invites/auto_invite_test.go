@@ -74,6 +74,28 @@ func TestMatchAutoInviteRejectsEnergyObservations(t *testing.T) {
 	}
 }
 
+// Cue ingress reports which invocation ran; it is not work, however broadly a
+// rule names SIGNAL events.
+func TestMatchAutoInviteRejectsCueIngress(t *testing.T) {
+	rule := colony.AutoInviteRule{
+		When: colony.EventRule{Type: "SIGNAL"},
+		Invite: colony.AutoInviteInviteSpec{
+			Bee:  colony.InviteStringField{Default: "drone"},
+			Task: colony.InviteTaskField{Default: "Review ingress"},
+		},
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"kind":         "cue.ingress",
+		"invocationId": "cueinv-1",
+		"cueId":        "feature",
+		"mode":         "signal",
+	})
+	ev := protocol.Event{TraceID: "trace-1", Type: protocol.EventSignal, Payload: raw}
+	if MatchAutoInvite(ev, rule) {
+		t.Fatal("cue.ingress must not match an auto-invite rule")
+	}
+}
+
 func TestBuildInviteTaskFromTrace(t *testing.T) {
 	reqRaw, _ := json.Marshal(map[string]any{
 		"kind":  "review.requested",

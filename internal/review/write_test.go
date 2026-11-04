@@ -35,6 +35,14 @@ func (f failingLedger) SeedEnergy(string, int) error {
 	return f.err
 }
 
+func (f failingLedger) EnsureEnergySeed(string, int) (taskledger.EnergySeedSnapshot, bool, error) {
+	return taskledger.EnergySeedSnapshot{}, false, f.err
+}
+
+func (f failingLedger) MarkEnergySeedPublished(string, string) error {
+	return f.err
+}
+
 func (f failingLedger) DeferPendingDispatch(string, taskledger.PendingDispatch) (bool, error) {
 	return false, f.err
 }
@@ -53,6 +61,14 @@ func (f failingLedger) ClaimEnergyPausePublished(string) (taskledger.EnergyPause
 
 func (f failingLedger) ClearEnergyPause(string) (taskledger.EnergyPauseSnapshot, bool, error) {
 	return taskledger.EnergyPauseSnapshot{}, false, f.err
+}
+
+func (f failingLedger) RecordWorkCompletion(string, taskledger.WorkCompletionSnapshot) (taskledger.WorkCompletionSnapshot, bool, error) {
+	return taskledger.WorkCompletionSnapshot{}, false, f.err
+}
+
+func (f failingLedger) MarkWorkCompletionPublished(string, string) error {
+	return f.err
 }
 
 func TestWriteEventApplyBeforePublish(t *testing.T) {

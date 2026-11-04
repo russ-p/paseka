@@ -203,12 +203,13 @@ func (r *Reactor) applyTaskCompletedEvent(ctx context.Context, traceID string, c
 	if stale {
 		return nil
 	}
-	res, err := r.ledger.Apply(completed)
+	res, err := r.applyLedgerEvent(completed)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+		r.retainWorkRevision(res.Trace)
 	}
 	if taskID := protocol.PayloadTaskID(completed.Payload); taskID != "" {
 		if err := r.closeCompletedTaskAttempt(traceID, taskID, completed.AttemptID); err != nil {
@@ -323,12 +324,13 @@ func (r *Reactor) applyAndSync(ctx context.Context, ev protocol.Event) error {
 	if stale {
 		return nil
 	}
-	res, err := r.ledger.Apply(ev)
+	res, err := r.applyLedgerEvent(ev)
 	if err != nil {
 		return err
 	}
 	if res.Changed {
 		r.syncTaskProjection(res.Trace)
+		r.retainWorkRevision(res.Trace)
 	}
 	if taskID := protocol.PayloadTaskID(ev.Payload); taskID != "" {
 		if task, ok := res.Trace.Tasks[taskID]; ok && terminalTaskStatus(task.Status) {

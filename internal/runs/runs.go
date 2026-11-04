@@ -66,6 +66,10 @@ type Meta struct {
 	ResumedFrom       string    `json:"resumedFrom,omitempty"`
 	Profile           string    `json:"profile"`
 	StartedAt         time.Time `json:"startedAt"`
+	// Purpose is the runtime-owned admission purpose. Legacy records leave it
+	// empty, which means unknown rather than work.
+	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string                    `json:"analysisOf,omitempty"`
 	protocol.Provenance
 }
 
@@ -295,6 +299,10 @@ type SessionMeta struct {
 	Profile           string          `json:"profile"`
 	StartedAt         time.Time       `json:"startedAt"`
 	FinishedAt        time.Time       `json:"finishedAt,omitempty"`
+	// Purpose and AnalysisOf travel with the interactive session's run record.
+	// An empty purpose is unknown history, never ordinary work by inference.
+	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
+	AnalysisOf string                    `json:"analysisOf,omitempty"`
 	protocol.Provenance
 }
 

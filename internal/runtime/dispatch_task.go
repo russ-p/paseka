@@ -44,7 +44,19 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	}
 
 	dispatchCtx, endInflight := r.beginTaskInflight(traceID, task.TaskID)
-	defer endInflight()
+	defer func() {
+		endInflight()
+		r.clearTaskPurpose(traceID, task.TaskID)
+		// The invocation leaves the in-flight set only after its finalization
+		// effects are persisted. This is the boundary that can certify a
+		// completion the same dispatch completed behind.
+		if err := r.maybeCompleteWork(context.Background(), traceID); err != nil {
+			runtimeLog.Warn("work completion check failed",
+				logging.F("trace", traceID),
+				logging.F("error", err.Error()),
+			)
+		}
+	}()
 
 	snap, err := r.ledger.Snapshot(traceID)
 	if err != nil {
@@ -59,6 +71,26 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return r.setTaskStatus(dispatchCtx, traceID, task.TaskID, protocol.TaskStatusWaitingReview, "Trace ready for human review and merge")
 	}
 
+	// Purpose follows the recorded task attribution. Closing rounds are trail
+	// overhead and analysis tasks study a recorded result, so neither enters the
+	// work baseline; ordinary (and merge-adjacent) tasks are goal work.
+	purpose := taskledger.TaskPurposeOf(task)
+	analysisOf := ""
+	if purpose == protocol.PurposeAnalysis {
+		analysisOf = strings.TrimSpace(task.AnalysisOf)
+		if analysisOf == "" {
+			// An analysis task without its studied milestone cannot be recorded
+			// honestly. Fail closed instead of silently calling it work.
+			runtimeLog.Warn("analysis task has no source milestone",
+				logging.F("trace", traceID),
+				logging.F("task", task.TaskID),
+				logging.F("bee", bee),
+			)
+			return nil
+		}
+	}
+	r.noteTaskPurpose(traceID, task.TaskID, purpose)
+
 	if held, err := r.taskAdmissionHeld(traceID, task.TaskID); err != nil {
 		return err
 	} else if held {
@@ -66,7 +98,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		return nil
 	}
 
-	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, bee, sourceEventID, "task.dispatch")
+	ok, err := r.gateTaskDispatchEnergy(dispatchCtx, traceID, task.TaskID, bee, sourceEventID, "task.dispatch", purpose)
 	if err != nil {
 		return err
 	}
@@ -133,6 +165,8 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 		TrailInventory: inventory,
 		PolicyParams:   policyParams,
 		Provenance:     attemptProvenance(attempt),
+		Purpose:        purpose,
+		AnalysisOf:     analysisOf,
 	}, DispatchModeTask)
 	if err != nil {
 		// Kill may cancel finalize after a completed adapter run (busRequired); do not
@@ -148,7 +182,7 @@ func (r *Reactor) dispatchReady(ctx context.Context, traceID string, task taskle
 	if err := trailconfig.RecordAttemptAgent(r.colony.ColonyRoot, traceID, attempt.AttemptID, res.AgentID); err != nil {
 		runtimeLog.Warn("attempt agent record failed", logging.F("error", err.Error()))
 	}
-	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt, attempt)
+	r.recordTaskRunStart(traceID, task.TaskID, bee, res, startedAt, attempt, purpose, analysisOf)
 	if res.Result == nil || res.Result.Status != string(protocol.StatusCompleted) {
 		if res.Result != nil {
 			r.recordTaskRunFinish(traceID, task.TaskID, res.AgentID, res.Result.Status, time.Now().UTC())
@@ -226,7 +260,7 @@ func taskDispatchFailureSummary(res *BeeRunResult, dispatchErr error) string {
 	return "adapter failed"
 }
 
-func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time, attempt trailconfig.Attempt) {
+func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunResult, startedAt time.Time, attempt trailconfig.Attempt, purpose protocol.ExecutionPurpose, analysisOf string) {
 	if res == nil || taskID == "" {
 		return
 	}
@@ -239,6 +273,8 @@ func (r *Reactor) recordTaskRunStart(traceID, taskID, bee string, res *BeeRunRes
 		AttemptID:      attempt.AttemptID,
 		ConfigRef:      attempt.ConfigRef,
 		ConfigRevision: attempt.ConfigRevision,
+		Purpose:        purpose,
+		AnalysisOf:     analysisOf,
 	}); err != nil {
 		runtimeLog.Warn("task run projection failed", logging.F("error", err.Error()))
 	}

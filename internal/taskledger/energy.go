@@ -3,27 +3,89 @@ package taskledger
 import (
 	"fmt"
 	"strconv"
+	"time"
 
+	"github.com/russ-p/paseka/internal/ids"
 	"github.com/russ-p/paseka/internal/protocol"
 )
 
 // EnsureEnergySeeded initializes honey reserve fields when the trace has no budget yet.
 func EnsureEnergySeeded(trace TraceSnapshot, budget int) (TraceSnapshot, bool) {
+	updated, _, changed := EnsureEnergySeed(trace, budget)
+	return updated, changed
+}
+
+// EnsureEnergySeed is the authoritative seed transition. It allocates the
+// reserve once, records the winning seed identity, effective budget, and actual
+// seed time, and reports whether this call performed the seed.
+//
+// A competing request observes the recorded winner instead of allocating a
+// second budget. A ledger written before seed provenance existed keeps its
+// positive budget but has no record: it stays unknown rather than being given
+// an invented identity, budget, or timestamp.
+func EnsureEnergySeed(trace TraceSnapshot, budget int) (TraceSnapshot, EnergySeedSnapshot, bool) {
+	if trace.EnergySeed != nil {
+		return trace, *trace.EnergySeed, false
+	}
 	if trace.EnergyBudget > 0 {
-		return trace, false
+		// A positive budget without a record predates seed provenance. It stays
+		// unknown: no identity, budget, or timestamp is invented for it.
+		return trace, EnergySeedSnapshot{}, false
 	}
 	if budget <= 0 {
 		budget = protocol.DefaultEnergyBudget
 	}
+	now := time.Now().UTC()
+	seed := EnergySeedSnapshot{
+		SeedID:   newSeedID(trace.TraceID, now),
+		Budget:   budget,
+		SeededAt: now,
+	}
+	trace.EnergySeed = &seed
 	trace.EnergyAdded = 0
 	// Preserve honey from energy.add that landed before formal seed.
-	if trace.EnergyRemaining > 0 {
-		trace.EnergyBudget = budget
-		return trace, true
-	}
 	trace.EnergyBudget = budget
-	trace.EnergyRemaining = budget
-	return trace, true
+	if trace.EnergyRemaining <= 0 {
+		trace.EnergyRemaining = budget
+	}
+	return trace, seed, true
+}
+
+// InitialEnergyBudget returns the winning initial allocation recorded by the
+// seed transition. ok is false for an unseeded trail and for a legacy ledger
+// that has a budget but no provenance, so a reader never substitutes today's
+// default for a missing seed record.
+func InitialEnergyBudget(trace TraceSnapshot) (int, bool) {
+	if trace.EnergySeed == nil || trace.EnergySeed.Budget <= 0 {
+		return 0, false
+	}
+	return trace.EnergySeed.Budget, true
+}
+
+// MarkEnergySeedPublished records that seedID's observation reached the
+// publisher. It reports whether the flag changed; a second call is a no-op and
+// an identity that does not match the recorded winner is refused.
+func MarkEnergySeedPublished(trace TraceSnapshot, seedID string) (TraceSnapshot, bool, error) {
+	if trace.EnergySeed == nil {
+		return trace, false, fmt.Errorf("taskledger: no seed record to publish")
+	}
+	if trace.EnergySeed.SeedID != seedID {
+		return trace, false, fmt.Errorf("taskledger: seed %q does not match recorded seed %q", seedID, trace.EnergySeed.SeedID)
+	}
+	if trace.EnergySeed.Published {
+		return trace, false, nil
+	}
+	seed := *trace.EnergySeed
+	seed.Published = true
+	trace.EnergySeed = &seed
+	return trace, true, nil
+}
+
+func newSeedID(traceID string, now time.Time) string {
+	if id, err := ids.Prefixed("seed-"); err == nil {
+		return id
+	}
+	return fmt.Sprintf("seed-%s-%d", traceID, now.UnixNano())
 }
 
 // Allocated is the display denominator after seed: seed plus post-seed top-ups.

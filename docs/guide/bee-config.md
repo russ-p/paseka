@@ -77,7 +77,7 @@ type Bee struct {
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |
 | `checks` | no | Runtime-owned mechanical gate for AFK proposals: `command`, optional `timeout` (default `10m`), optional `rejection_cap` (default `2`, `0` = no cap). A failure fails the run with reason `checks_failed`, suppresses the proposal, and emits a platform-authored `verification.failed` that drives builder rework. See §6. |
-| `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. See [bee routing](../reference/bee-routing.md). |
+| `subscribes` | no | Event → dispatch rules. Empty = backward-compatible allow any `task.ready`. A rule may set `purpose: analysis` on a direct `SIGNAL/trail.work.completed` subscription to start a same-trail analysis run. See [bee routing](../reference/bee-routing.md). |
 | `publishes` | no | Advisory expected outputs; undeclared domain publishes warn only (MVP). |
 | `completion_contract` | no | Hard post-run event requirements; violation fails the run. |
 | `run_summary` | no | `auto` (default) \| `required` \| `disabled` — controls `INSIGHT/run.summary` synthesis/enforcement. |

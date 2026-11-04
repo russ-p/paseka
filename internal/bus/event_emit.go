@@ -162,6 +162,23 @@ func ProcessEventInput(ctx context.Context, pub Publisher, subjectPrefix string,
 				}},
 			}, nil
 		}
+		if _, _, err := runs.EnsureTrailOrigin(colonyRoot, ev.TraceID, runs.TrailOrigin{
+			Kind:   runs.OriginKindOther,
+			Source: "event.emit",
+			Actor:  ev.AgentID,
+		}); err != nil {
+			return protocol.EventCLIResult{
+				OK:      false,
+				Error:   "origin_capture_failed",
+				TraceID: ev.TraceID,
+				Type:    ev.Type,
+				Kind:    kind,
+				Details: []protocol.ValidationDetail{{
+					Path:    "",
+					Message: err.Error(),
+				}},
+			}, nil
+		}
 	}
 
 	// The run-directory audit is the emit's authority check, not a postscript.

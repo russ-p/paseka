@@ -171,6 +171,30 @@ func TestDirectSubscribersCodeProposalFamily(t *testing.T) {
 	}
 }
 
+func TestDirectSubscribersDenyPlatformObservations(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"watch": {
+			Role: "watch",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "SIGNAL"}, Dispatch: colony.DispatchDirect},
+			},
+		},
+	}
+	for _, kind := range []string{
+		protocol.SignalCueIngress,
+		"energy.seeded",
+		"energy.paused",
+		"energy.resumed",
+	} {
+		if roles := colony.DirectSubscribers(bees, protocol.EventSignal, kind); len(roles) != 0 {
+			t.Fatalf("platform observation %q routed to %v", kind, roles)
+		}
+	}
+	if roles := colony.DirectSubscribers(bees, protocol.EventSignal, "triage.tick"); len(roles) != 1 || roles[0] != "watch" {
+		t.Fatalf("work signal routed to %v, want [watch]", roles)
+	}
+}
+
 func TestDeclaresPublishAdvisory(t *testing.T) {
 	bee := colony.Bee{
 		Role: "builder",
@@ -243,5 +267,88 @@ adapter: cursor
 	}
 	if len(bees) != 2 {
 		t.Fatalf("bees = %d, want 2", len(bees))
+	}
+}
+
+func TestConfiguredAnalysisReactionLoads(t *testing.T) {
+	root := t.TempDir()
+	writeBeeYAML(t, root, "analyst", `role: analyst
+adapter: cursor
+prompt_template: analyst.md
+subscribes:
+  - type: SIGNAL
+    kind: trail.work.completed
+    dispatch: direct
+    purpose: analysis
+`)
+
+	bee, _, err := colony.LoadBee(root, "analyst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bee.Subscribes) != 1 || !bee.Subscribes[0].AnalysisReaction() {
+		t.Fatalf("subscribes = %+v", bee.Subscribes)
+	}
+	reactions := colony.DirectReactions(map[string]colony.Bee{"analyst": bee}, protocol.EventSignal, protocol.SignalTrailWorkCompleted)
+	if len(reactions) != 1 || reactions[0].Purpose != protocol.PurposeAnalysis {
+		t.Fatalf("reactions = %+v", reactions)
+	}
+}
+
+func TestConfiguredAnalysisReactionRejectsOtherRules(t *testing.T) {
+	cases := map[string]string{
+		"work purpose": `role: analyst
+adapter: cursor
+subscribes:
+  - type: SIGNAL
+    kind: trail.work.completed
+    dispatch: direct
+    purpose: work
+`,
+		"task dispatch": `role: analyst
+adapter: cursor
+subscribes:
+  - type: SIGNAL
+    kind: trail.work.completed
+    dispatch: task
+    purpose: analysis
+`,
+		"other event": `role: analyst
+adapter: cursor
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: direct
+    purpose: analysis
+`,
+	}
+	for name, yaml := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeBeeYAML(t, root, "analyst", yaml)
+			if _, _, err := colony.LoadBee(root, "analyst"); err == nil {
+				t.Fatal("invalid configured analysis reaction was accepted")
+			}
+		})
+	}
+}
+
+func TestAnalysisReactionWinsOverBroadOrdinarySubscription(t *testing.T) {
+	bees := map[string]colony.Bee{
+		"analyst": {
+			Role: "analyst",
+			Subscribes: []colony.SubscriptionRule{
+				{EventRule: colony.EventRule{Type: "SIGNAL"}, Dispatch: colony.DispatchDirect},
+				{
+					EventRule: colony.EventRule{Type: "SIGNAL", Kind: protocol.SignalTrailWorkCompleted},
+					Dispatch:  colony.DispatchDirect,
+					Purpose:   protocol.PurposeAnalysis,
+				},
+			},
+		},
+	}
+	reactions := colony.DirectReactions(bees, protocol.EventSignal, protocol.SignalTrailWorkCompleted)
+	if len(reactions) != 1 || reactions[0].Purpose != protocol.PurposeAnalysis {
+		t.Fatalf("reactions = %+v, want one analysis reaction", reactions)
 	}
 }

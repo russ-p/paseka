@@ -230,6 +230,7 @@ func writeInspectRun(t *testing.T, root, traceID, agentID string, started time.T
 		Adapter:         "cursor",
 		Workspace:       root,
 		ColonyRoot:      root,
+		Purpose:         protocol.PurposeWork,
 		CreatedAt:       started,
 	}); err != nil {
 		t.Fatal(err)

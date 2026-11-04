@@ -105,16 +105,25 @@ func readEventsFileStrict(path string) ([]protocol.Event, error) {
 }
 
 func readEventsFileMode(path string, strict bool) ([]protocol.Event, error) {
+	events, _, err := readEventsFileReport(path, strict)
+	return events, err
+}
+
+// readEventsFileReport reads one NDJSON event log and reports how many complete
+// lines it had to skip. The count is what lets a projection say that a record is
+// damaged instead of presenting the surviving lines as a whole history.
+func readEventsFileReport(path string, strict bool) ([]protocol.Event, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	var events []protocol.Event
+	skipped := 0
 	scanner := newLineScanner(f)
 	for line := 1; scanner.Scan(); line++ {
 		raw := strings.TrimSpace(scanner.Text())
@@ -124,8 +133,9 @@ func readEventsFileMode(path string, strict bool) ([]protocol.Event, error) {
 		var ev protocol.Event
 		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
 			if strict {
-				return nil, fmt.Errorf("%s line %d: %w", filepath.Base(path), line, err)
+				return nil, skipped, fmt.Errorf("%s line %d: %w", filepath.Base(path), line, err)
 			}
+			skipped++
 			traceLog.Warn("skip unparseable event line",
 				logging.F("path", path),
 				logging.F("line", strconv.Itoa(line)),
@@ -135,9 +145,9 @@ func readEventsFileMode(path string, strict bool) ([]protocol.Event, error) {
 		events = append(events, ev)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, skipped, err
 	}
-	return events, nil
+	return events, skipped, nil
 }
 
 // DedupeTrailEvents returns one copy per event, keeping the first occurrence.

@@ -51,6 +51,11 @@ type ColonyDispatchRequest struct {
 	Provenance protocol.Provenance
 	// Raw requests plain-text adapter output for this run only (CLI --raw).
 	Raw bool
+	// Purpose is the runtime-owned admission purpose. A task dispatch passes the
+	// purpose derived from the task phase; direct, CLI and session paths default
+	// to work. An operator analysis action passes analysis plus AnalysisOf.
+	Purpose    protocol.ExecutionPurpose
+	AnalysisOf string
 }
 
 // DispatchColonyBee prepares workspace and runs one bee without re-resolving colony context.
@@ -61,6 +66,15 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	if req.TraceID == "" {
 		return nil, fmt.Errorf("runtime: traceId is required")
 	}
+	// Admission owns purpose. An ordinary dispatch that says nothing is work; an
+	// analysis must name the milestone it studies. Guessing either from the Bee
+	// name would turn provenance into decoration.
+	purpose, analysisOf, err := protocol.ResolveAdmissionAttribution(req.Purpose, req.AnalysisOf)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: %w", err)
+	}
+	req.Purpose = purpose
+	req.AnalysisOf = analysisOf
 	execColony := ctxColony
 	scope, err := trailview.ResolveScope(ctxColony, req.TraceID)
 	if err != nil {
@@ -139,7 +153,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 	}
 
 	effectiveSector := colony.EffectiveSector(req.Sector, bee.Sector)
-	workspace, sectorRel, err := workspaceForDispatch(execColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind)
+	workspace, sectorRel, err := workspaceForDispatchPurpose(execColony, manifest, bee, req.TraceID, effectiveSector, req.ProposalKind, req.Purpose)
 	if err != nil {
 		return nil, err
 	}
@@ -220,6 +234,8 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		Raw:                  req.Raw,
 		ProfileApply:         profileApply,
 		Registry:             registry,
+		Purpose:              req.Purpose,
+		AnalysisOf:           req.AnalysisOf,
 	})
 	if err != nil {
 		return nil, err
@@ -271,6 +287,18 @@ func ensureCLIAttempt(ctxColony, execColony colony.Context, req ColonyDispatchRe
 }
 
 func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string) (workspace string, sectorRel string, err error) {
+	return workspaceForDispatchPurpose(ctxColony, manifest, bee, traceID, sectorName, proposalKind, protocol.PurposeWork)
+}
+
+// workspaceForDispatchPurpose resolves the execution root for one dispatch.
+//
+// Analysis studies an already-captured result and must not depend on the
+// delivery worktree: that worktree is removed by a local merge or by PR
+// reconcile, and recreating it would silently replace the result being studied
+// with the current default-branch checkout. An analysis run therefore executes
+// at the colony (or fork) root and reads retained evidence under
+// .paseka/runs/<traceId>/.
+func workspaceForDispatchPurpose(ctxColony colony.Context, manifest colony.Colony, bee colony.Bee, traceID, sectorName, proposalKind string, purpose protocol.ExecutionPurpose) (workspace string, sectorRel string, err error) {
 	base := ctxColony.ColonyRoot
 	fixedRoot := ""
 	if ctxColony.WorkspaceRoot != "" {
@@ -287,6 +315,9 @@ func workspaceForDispatch(ctxColony colony.Context, manifest colony.Colony, bee 
 			return "", "", fmt.Errorf("runtime: unsupported proposal kind %q for workspace affinity", proposalKind)
 		}
 		useWorktree = protocol.NormalizeCodeProposalKind(protocol.MutationKind(proposalKind)) == protocol.MutationCodeProposalIsolated
+	}
+	if purpose == protocol.PurposeAnalysis {
+		useWorktree = false
 	}
 	if useWorktree {
 		// A fork owns its checkout. Worktree-enabled roles and isolated

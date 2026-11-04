@@ -62,6 +62,15 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 	if req.Registry == nil {
 		req.Registry = d.registry
 	}
+	// A direct caller of prepareDispatch bypasses DispatchColonyBee, so admission
+	// attribution is resolved here too. An empty purpose on a new dispatch is
+	// ordinary work; it is not the same as a legacy record that has no purpose.
+	purpose, analysisOf, err := protocol.ResolveAdmissionAttribution(req.Purpose, req.AnalysisOf)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: %w", err)
+	}
+	req.Purpose = purpose
+	req.AnalysisOf = analysisOf
 
 	agentID := req.AgentID
 	if agentID == "" {
@@ -170,6 +179,14 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		Adapter:        adapterName,
 	}, knownIntents, defaultIntent)
 
+	// An analysis studies captured evidence, not a live worktree. Name the
+	// studied milestone and the retained files so the run still has its input
+	// after delivery removed the source checkout.
+	if req.Purpose == protocol.PurposeAnalysis && req.AnalysisOf != "" {
+		promptCtx.AnalysisOf = req.AnalysisOf
+		promptCtx.RetainedEvidence = runs.CompletionEvidencePaths(colonyRoot, req.TraceID, req.AnalysisOf)
+	}
+
 	renderedSystem, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
 		BeeLocalTemplate: overlay.SystemTemplate,
 		BeeTemplate:      bee.SystemTemplate,
@@ -261,6 +278,8 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
 		InitialCodeBaseDirty: req.InitialCodeBaseDirty,
 		LaunchForm:           string(plan.Form),
+		Purpose:              req.Purpose,
+		AnalysisOf:           req.AnalysisOf,
 		ResultPath:           resultFile,
 		EventLogPath:         runDir.EventsPath(),
 		CreatedAt:            createdAt,
@@ -277,6 +296,8 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 			ConfigRevision:       req.ConfigRevision,
 			InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
 			InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+			Purpose:              req.Purpose,
+			AnalysisOf:           req.AnalysisOf,
 		},
 	}); err != nil {
 		return nil, fmt.Errorf("runtime: write status: %w", err)
@@ -341,6 +362,8 @@ func (req DispatchRequest) provenance() protocol.Provenance {
 		ConfigRevision:       req.ConfigRevision,
 		InitialCodeBaseSHA:   req.InitialCodeBaseSHA,
 		InitialCodeBaseDirty: req.InitialCodeBaseDirty,
+		Purpose:              req.Purpose,
+		AnalysisOf:           req.AnalysisOf,
 	}
 }
 

@@ -60,11 +60,41 @@ func (l *KVLedger) Apply(event protocol.Event) (ApplyResult, error) {
 
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *KVLedger) SeedEnergy(traceID string, budget int) error {
+	_, _, err := l.EnsureEnergySeed(traceID, budget)
+	return err
+}
+
+// EnsureEnergySeed performs the authoritative seed transition through the same
+// compare-and-set path as every other ledger mutation. Concurrent callers
+// converge on one winner: the loser re-reads the stored snapshot and observes
+// the recorded seed instead of allocating again.
+func (l *KVLedger) EnsureEnergySeed(traceID string, budget int) (EnergySeedSnapshot, bool, error) {
+	if traceID == "" {
+		return EnergySeedSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	var seed EnergySeedSnapshot
+	created := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, winner, added := EnsureEnergySeed(trace, budget)
+		seed, created = winner, added
+		return updated, ApplyResult{Trace: updated, Changed: added}, nil
+	})
+	if err != nil {
+		return EnergySeedSnapshot{}, false, err
+	}
+	return seed, created, nil
+}
+
+// MarkEnergySeedPublished persists the send flag on the winning seed record.
+func (l *KVLedger) MarkEnergySeedPublished(traceID, seedID string) error {
 	if traceID == "" {
 		return fmt.Errorf("taskledger: traceId is required")
 	}
 	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
-		updated, changed := EnsureEnergySeeded(trace, budget)
+		updated, changed, err := MarkEnergySeedPublished(trace, seedID)
+		if err != nil {
+			return TraceSnapshot{}, ApplyResult{}, err
+		}
 		return updated, ApplyResult{Trace: updated, Changed: changed}, nil
 	})
 	return err
@@ -146,6 +176,43 @@ func (l *KVLedger) ClearEnergyPause(traceID string) (EnergyPauseSnapshot, bool, 
 		return EnergyPauseSnapshot{}, false, err
 	}
 	return pause, closed, nil
+}
+
+// RecordWorkCompletion stores one work-completion episode in the trace
+// snapshot. The first identity for a revision wins.
+func (l *KVLedger) RecordWorkCompletion(traceID string, completion WorkCompletionSnapshot) (WorkCompletionSnapshot, bool, error) {
+	if traceID == "" {
+		return WorkCompletionSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	var recorded WorkCompletionSnapshot
+	created := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, winner, added, err := RecordWorkCompletion(trace, completion)
+		if err != nil {
+			return TraceSnapshot{}, ApplyResult{}, err
+		}
+		recorded, created = winner, added
+		return updated, ApplyResult{Trace: updated, Changed: added}, nil
+	})
+	if err != nil {
+		return WorkCompletionSnapshot{}, false, err
+	}
+	return recorded, created, nil
+}
+
+// MarkWorkCompletionPublished persists the milestone send flag.
+func (l *KVLedger) MarkWorkCompletionPublished(traceID, completionID string) error {
+	if traceID == "" {
+		return fmt.Errorf("taskledger: traceId is required")
+	}
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, changed, err := MarkWorkCompletionPublished(trace, completionID)
+		if err != nil {
+			return TraceSnapshot{}, ApplyResult{}, err
+		}
+		return updated, ApplyResult{Trace: updated, Changed: changed}, nil
+	})
+	return err
 }
 
 func (l *KVLedger) loadTrace(traceID string) (TraceSnapshot, uint64, error) {

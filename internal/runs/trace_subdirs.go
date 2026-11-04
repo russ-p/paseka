@@ -17,6 +17,13 @@ var ReservedTraceSubdirs = map[string]struct{}{
 	proposalsDir: {},
 	// Fork requests are durable admission records, not agent runs.
 	"fork-requests": {},
+	// Cue invocations are the trail's retained ingress identities.
+	CueInvocationsDirName: {},
+	// Analysis admissions are durable reaction identities, not agent runs.
+	AnalysisDirName: {},
+	// Immutable work-completion checkpoints, result evidence, and metrics
+	// snapshots are trail records, not bee runs.
+	WorkCompletionDirName: {},
 }
 
 // skipTraceEventSubdirs have no per-agent events.ndjson to merge.
@@ -24,11 +31,14 @@ var ReservedTraceSubdirs = map[string]struct{}{
 // "proposals" is reserved and skipped: its sidecars retain a synthesized event envelope,
 // but that envelope is the archive's own context and is never merged into event feeds.
 var skipTraceEventSubdirs = map[string]struct{}{
-	"tasks":         {},
-	"artifacts":     {},
-	"config":        {},
-	proposalsDir:    {},
-	"fork-requests": {},
+	"tasks":               {},
+	"artifacts":           {},
+	"config":              {},
+	proposalsDir:          {},
+	"fork-requests":       {},
+	CueInvocationsDirName: {},
+	AnalysisDirName:       {},
+	WorkCompletionDirName: {},
 }
 
 // IsReservedTraceSubdir reports whether name is a reserved trace subdirectory.
