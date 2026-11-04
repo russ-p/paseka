@@ -128,6 +128,23 @@ func TestTraceExportAPIHandler(t *testing.T) {
 			t.Fatalf("include body missing %q:\n%s", want, body)
 		}
 	}
+
+	// The transcript include reaches the same renderer the CLI uses.
+	transcriptReq := httptest.NewRequest(
+		http.MethodGet,
+		"/api/traces/"+traceID+"/export?format=md&include=transcript",
+		nil,
+	)
+	transcriptRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(transcriptRec, transcriptReq)
+	if transcriptRec.Code != http.StatusOK {
+		t.Fatalf("transcript include status = %d body=%s", transcriptRec.Code, transcriptRec.Body.String())
+	}
+	for _, want := range []string{"#### Conversation", "_omitted: no providerSessionId_"} {
+		if !strings.Contains(transcriptRec.Body.String(), want) {
+			t.Fatalf("transcript include missing %q:\n%s", want, transcriptRec.Body.String())
+		}
+	}
 }
 
 func TestTraceExportAPIErrors(t *testing.T) {

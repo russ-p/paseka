@@ -47,6 +47,7 @@ type completedRunCfg struct {
 	AgentID           string
 	Adapter           string
 	ProviderSessionID string
+	State             protocol.RunStatus
 	Usage             *protocol.Usage
 }
 
@@ -59,6 +60,10 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 	adapter := cfg.Adapter
 	if adapter == "" {
 		adapter = "cursor"
+	}
+	state := cfg.State
+	if state == "" {
+		state = protocol.StatusCompleted
 	}
 	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
 	if err := d.Prepare(); err != nil {
@@ -79,7 +84,7 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 	finished := started.Add(90 * time.Second)
 	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
 		ProtocolVersion: protocol.Version,
-		State:           protocol.StatusCompleted,
+		State:           state,
 		StartedAt:       started,
 		FinishedAt:      finished,
 	}); err != nil {
@@ -89,7 +94,7 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 		ProtocolVersion:   protocol.Version,
 		TraceID:           traceID,
 		AgentID:           agentID,
-		Status:            protocol.StatusCompleted,
+		Status:            state,
 		Summary:           "done",
 		Usage:             cfg.Usage,
 		ProviderSessionID: cfg.ProviderSessionID,

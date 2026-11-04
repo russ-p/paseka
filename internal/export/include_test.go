@@ -23,6 +23,11 @@ func TestParseInclude(t *testing.T) {
 			want: []IncludeKind{IncludeAgentLogs},
 		},
 		{
+			name: "transcript",
+			in:   []string{"transcript"},
+			want: []IncludeKind{IncludeTranscript},
+		},
+		{
 			name: "csv",
 			in:   []string{"usage,durations"},
 			want: []IncludeKind{IncludeUsage, IncludeDurations},
@@ -57,6 +62,9 @@ func TestParseInclude(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), "invalid --include") {
 					t.Fatalf("error = %v", err)
+				}
+				if !strings.Contains(err.Error(), "transcript") {
+					t.Fatalf("error does not list transcript: %v", err)
 				}
 				return
 			}

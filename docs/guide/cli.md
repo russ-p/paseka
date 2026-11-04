@@ -1272,7 +1272,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | no | Flight trail id (alternative to the positional argument) |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `patches`, `config` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `patches`, `config` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -1292,6 +1292,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | `cues` | All committed `.paseka/cues/*.yaml` in the colony |
 | `artifacts` | Trail comb files under `.paseka/runs/<traceId>/artifacts/` (inline bodies; skips hidden/temp files; omits binary/oversize with a note) |
 | `agent-logs` | Per-run **Agent log** (tool-call summary) resolved through the adapter by `providerSessionId`. Cursor reads `~/.cursor/projects/.../agent-transcripts/<uuid>/<uuid>.jsonl` in place. Missing id, unsupported adapter, missing transcript (`store not found`), parse errors, Pi stub (`not implemented`), or resolve errors omit the section with a reason; export still succeeds. |
+| `transcript` | Per-run **Conversation** (dialogue projection) resolved through the same adapter seam. User and assistant turns appear in provider order, each tool call collapses to one line with its name and status, reasoning and system turns stay out, and tool input/output never appear. A capped text part is marked `truncated`; a missing id, unsupported adapter, missing store, parse error, or resolve error omits the section with a one-line reason and the export still succeeds. Independent of `agent-logs`. |
 | `patches` | Proposal patches under `.paseka/runs/<traceId>/proposals/` — one record per proposal attempt, with run identity, bee, AFK/HITL mode, proposal kind, workspace, base SHA, summary, size, capture time, and publication state. Bodies are inlined within per-patch and aggregate budgets; oversized, unsuitable-for-text, or unreadable entries keep their metadata and ref and say why. Filesystem-only: no broker is required, and a trail without a proposals directory reads as an empty slice. |
 | `config` | The trail's retained configuration versions: policy, revision, initial/active `ConfigRef`, and each snapshot's files. Committed procedure files are inlined; private inputs (home-scoped adapter recipes and skills, and gitignored `*.local.yaml` overlays) are listed by path with `omitted: private configuration input is not exported`, and an **Export omissions** section repeats every gap. Oversized, binary, missing, or corrupt entries say why instead of disappearing. Filesystem-only: no broker is required. |
 

@@ -29,19 +29,20 @@ type Options struct {
 
 // TraceExportData is the view model passed to export renderers.
 type TraceExportData struct {
-	Slug       string
-	ColonyRoot string
-	ExportedAt time.Time
-	Trace      hiveview.TraceDetailView
-	Runs       []hiveview.RunView
-	Events     []hiveview.EventFeedItem
-	Include    IncludeSet
-	BeeYAML    []NamedYAML
-	ColonyYAML *NamedYAML
-	CueYAML    []NamedYAML
-	Artifacts  []ArtifactExport
-	AgentLogs  []AgentLogExport
-	Patches    []PatchExport
+	Slug          string
+	ColonyRoot    string
+	ExportedAt    time.Time
+	Trace         hiveview.TraceDetailView
+	Runs          []hiveview.RunView
+	Events        []hiveview.EventFeedItem
+	Include       IncludeSet
+	BeeYAML       []NamedYAML
+	ColonyYAML    *NamedYAML
+	CueYAML       []NamedYAML
+	Artifacts     []ArtifactExport
+	AgentLogs     []AgentLogExport
+	Conversations []ConversationExport
+	Patches       []PatchExport
 	// PatchDiagnostics explain records on disk that are not ordinary entries, so one
 	// malformed file cannot make the valid ones disappear.
 	PatchDiagnostics []PatchDiagnosticExport
@@ -168,6 +169,9 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 	}
 	if include.Has(IncludeAgentLogs) {
 		data.AgentLogs = resolveAgentLogs(runsView, opts.Transcripts, opts.TranscriptTimeout)
+	}
+	if include.Has(IncludeTranscript) {
+		data.Conversations = resolveConversations(runsView, opts.Transcripts, opts.TranscriptTimeout)
 	}
 	if include.Has(IncludeBees) {
 		bees, err := loadBeeYAML(ctx.ColonyRoot, detail.Bees)

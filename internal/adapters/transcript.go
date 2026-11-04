@@ -100,12 +100,14 @@ const (
 )
 
 // Part is one typed piece of a turn. Tool identity is always present; input and
-// output are filled only when the request mask asks for them.
+// output are filled only when the request mask asks for them. Truncated marks a
+// payload the shared cap cut, so a renderer can say the text is a prefix.
 type Part struct {
 	Kind      PartKind
 	Text      string
 	Reasoning string
 	Tool      *ToolPart
+	Truncated bool
 }
 
 // ToolPart is a tool call with always-present identity and status, plus payloads
@@ -268,14 +270,14 @@ func NormalizeTranscript(t Transcript, include IncludeMask, limits TranscriptLim
 				}
 				text, cut := TruncateRunes(part.Text, limits.Text)
 				out.Truncated = out.Truncated || cut
-				next.Parts = append(next.Parts, Part{Kind: PartText, Text: text})
+				next.Parts = append(next.Parts, Part{Kind: PartText, Text: text, Truncated: cut})
 			case PartReasoning:
 				if !include.Reasoning || part.Reasoning == "" {
 					continue
 				}
 				reasoning, cut := TruncateRunes(part.Reasoning, limits.Reasoning)
 				out.Truncated = out.Truncated || cut
-				next.Parts = append(next.Parts, Part{Kind: PartReasoning, Reasoning: reasoning})
+				next.Parts = append(next.Parts, Part{Kind: PartReasoning, Reasoning: reasoning, Truncated: cut})
 			case PartTool:
 				if part.Tool == nil {
 					continue

@@ -9,15 +9,16 @@ import (
 type IncludeKind string
 
 const (
-	IncludeUsage     IncludeKind = "usage"
-	IncludeDurations IncludeKind = "durations"
-	IncludeBees      IncludeKind = "bees"
-	IncludeColony    IncludeKind = "colony"
-	IncludeCues      IncludeKind = "cues"
-	IncludeArtifacts IncludeKind = "artifacts"
-	IncludeAgentLogs IncludeKind = "agent-logs"
-	IncludePatches   IncludeKind = "patches"
-	IncludeConfig    IncludeKind = "config"
+	IncludeUsage      IncludeKind = "usage"
+	IncludeDurations  IncludeKind = "durations"
+	IncludeBees       IncludeKind = "bees"
+	IncludeColony     IncludeKind = "colony"
+	IncludeCues       IncludeKind = "cues"
+	IncludeArtifacts  IncludeKind = "artifacts"
+	IncludeAgentLogs  IncludeKind = "agent-logs"
+	IncludeTranscript IncludeKind = "transcript"
+	IncludePatches    IncludeKind = "patches"
+	IncludeConfig     IncludeKind = "config"
 )
 
 // IncludeSet is a normalized, deduplicated list of include tokens.
@@ -45,7 +46,7 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 			}
 			kind := IncludeKind(part)
 			if !kind.valid() {
-				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs, patches, config)", part)
+				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs, transcript, patches, config)", part)
 			}
 			if _, ok := seen[kind]; ok {
 				continue
@@ -59,7 +60,7 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 
 func (k IncludeKind) valid() bool {
 	switch k {
-	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs, IncludePatches, IncludeConfig:
+	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs, IncludeTranscript, IncludePatches, IncludeConfig:
 		return true
 	default:
 		return false

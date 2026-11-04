@@ -1282,6 +1282,7 @@ export type TraceExportInclude =
 	| 'cues'
 	| 'artifacts'
 	| 'agent-logs'
+	| 'transcript'
 	| 'patches'
 	| 'config';
 
@@ -1304,6 +1305,11 @@ export const traceExportIncludes: TraceExportIncludeOption[] = [
 	{ value: 'cues', label: 'Cue definitions', description: 'The signal cues' },
 	{ value: 'artifacts', label: 'Trail artifacts', description: 'The reported artifact files' },
 	{ value: 'agent-logs', label: 'Agent logs', description: 'The raw event log for each run' },
+	{
+		value: 'transcript',
+		label: 'Conversation',
+		description: 'Per-run user and assistant turns with tool calls collapsed to one line'
+	},
 	{
 		value: 'patches',
 		label: 'Proposal patches',

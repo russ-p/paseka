@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
@@ -25,12 +26,34 @@ type htmlEventView struct {
 }
 
 type htmlRunView struct {
-	Run             hiveview.RunView
-	ModelLine       string
-	DurationLine    string
-	UsageLine       string
-	IncludeAgentLog bool
-	AgentLog        AgentLogExport
+	Run                 hiveview.RunView
+	ModelLine           string
+	DurationLine        string
+	UsageLine           string
+	IncludeAgentLog     bool
+	AgentLog            AgentLogExport
+	IncludeConversation bool
+	Conversation        htmlConversationView
+}
+
+type htmlConversationView struct {
+	Omitted string
+	Turns   []htmlDialogueTurn
+}
+
+type htmlDialogueTurn struct {
+	Role         string
+	Timestamp    string
+	HasTimestamp bool
+	Blocks       []htmlDialogueBlock
+}
+
+type htmlDialogueBlock struct {
+	Kind       string
+	Text       template.HTML
+	Truncated  bool
+	ToolName   string
+	ToolStatus string
 }
 
 type htmlPageData struct {
@@ -150,6 +173,10 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 			view.IncludeAgentLog = true
 			view.AgentLog = agentLogByAgentID(data.AgentLogs, run.AgentID)
 		}
+		if data.Include.Has(IncludeTranscript) {
+			view.IncludeConversation = true
+			view.Conversation = conversationView(conversationByAgentID(data.Conversations, run.AgentID))
+		}
 		page.Runs = append(page.Runs, view)
 	}
 	if data.Trace.EnergyBudget > 0 {
@@ -228,6 +255,43 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func conversationView(conversation ConversationExport) htmlConversationView {
+	view := htmlConversationView{Omitted: conversation.Omitted}
+	for _, turn := range conversation.Turns {
+		row := htmlDialogueTurn{Role: turn.Role}
+		if !turn.Timestamp.IsZero() {
+			row.HasTimestamp = true
+			row.Timestamp = formatTime(turn.Timestamp)
+		}
+		for _, block := range turn.Blocks {
+			if block.Kind == adapters.DialogueBlockTool {
+				if block.Tool == nil {
+					continue
+				}
+				row.Blocks = append(row.Blocks, htmlDialogueBlock{
+					Kind:       string(adapters.DialogueBlockTool),
+					ToolName:   block.Tool.Name,
+					ToolStatus: block.Tool.Status,
+				})
+				continue
+			}
+			if block.Kind != adapters.DialogueBlockText {
+				continue
+			}
+			row.Blocks = append(row.Blocks, htmlDialogueBlock{
+				Kind:      string(adapters.DialogueBlockText),
+				Text:      formatMarkdown(block.Text),
+				Truncated: block.Truncated,
+			})
+		}
+		if len(row.Blocks) == 0 {
+			continue
+		}
+		view.Turns = append(view.Turns, row)
+	}
+	return view
+}
+
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return "—"
@@ -242,7 +306,7 @@ func badgeClass(state string) string {
 		return "active"
 	case "completed", "done":
 		return "completed"
-	case "failed", "cancelled", "stale", "stopping":
+	case "failed", "cancelled", "stale", "stopping", "error":
 		return "failed"
 	default:
 		return ""
@@ -399,6 +463,45 @@ header h1 { margin: 0; font-size: 1.35rem; }
   word-break: break-word;
 }
 .agent-log th { color: var(--muted); font-weight: 600; }
+.conversation {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border);
+}
+.conversation h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+}
+.dialogue-turn {
+  border-left: 2px solid var(--border);
+  padding: 0 0 0 0.6rem;
+  margin: 0 0 0.6rem;
+}
+.dialogue-turn:last-child { margin-bottom: 0; }
+.dialogue-role {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+.dialogue-role.user { color: var(--accent); }
+.dialogue-role.assistant { color: var(--ok); }
+.dialogue-text {
+  font-size: 0.85rem;
+  margin: 0.2rem 0;
+}
+.dialogue-tool {
+  font-size: 0.78rem;
+  margin: 0.2rem 0;
+}
+.dialogue-tool code { color: var(--text); }
+.dialogue-truncated {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: var(--warn);
+}
 .timeline-feed { list-style: none; margin: 0; padding: 0; }
 .timeline-item {
   border: 1px solid var(--border);
@@ -624,6 +727,30 @@ code { font-family: var(--mono); font-size: 0.85em; }
           {{ if .AgentLog.Truncated }}<p class="muted" style="margin:0.35rem 0 0;font-size:0.75rem">Showing first 100 tool calls.</p>{{ end }}
           {{ else }}
           <p class="muted" style="margin:0;font-size:0.78rem">No tool calls.</p>
+          {{ end }}
+        </div>
+        {{ end }}
+        {{ if .IncludeConversation }}
+        <div class="conversation">
+          <h3>Conversation</h3>
+          {{ if .Conversation.Omitted }}
+          <p class="muted" style="margin:0;font-size:0.78rem">omitted: {{ .Conversation.Omitted }}</p>
+          {{ else if .Conversation.Turns }}
+          {{ range .Conversation.Turns }}
+          <div class="dialogue-turn">
+            <div class="dialogue-role {{ .Role }}">{{ .Role }}{{ if .HasTimestamp }} · {{ .Timestamp }}{{ end }}</div>
+            {{ range .Blocks }}
+            {{ if eq .Kind "tool" }}
+            <div class="dialogue-tool"><code>{{ .ToolName }}</code> · <span class="badge {{ badgeClass .ToolStatus }}">{{ .ToolStatus }}</span></div>
+            {{ else }}
+            <div class="dialogue-text formatted-text">{{ .Text }}</div>
+            {{ if .Truncated }}<p class="dialogue-truncated">truncated</p>{{ end }}
+            {{ end }}
+            {{ end }}
+          </div>
+          {{ end }}
+          {{ else }}
+          <p class="muted" style="margin:0;font-size:0.78rem">No conversation turns.</p>
           {{ end }}
         </div>
         {{ end }}
