@@ -30,8 +30,9 @@ review. AFK slices can be implemented and merged without human interaction. Pref
 - Prefer many thin slices over few thick ones
 </vertical-slice-rules>
 
-### 4. Quiz the user
+### 4. Present the breakdown
 
+{{if .Interactive}}
 Present the proposed breakdown as a numbered list. For each slice, show:
 
 - **Title**: short descriptive name
@@ -47,6 +48,14 @@ Ask the user:
 - Are the correct slices marked as HITL and AFK?
 
 Iterate until the user approves the breakdown.
+{{else}}
+This is an **AFK planning run**: there is no Beekeeper in the session to answer a quiz. Do not present a
+questionnaire and do not wait for approval. Treat the readable spec as the approved source of truth, draft
+the slices, and publish them in one `task.plan`.
+
+If a slice genuinely needs a human decision, mark it **HITL** and state the decision it needs in the task
+body instead of stopping to ask. Prefer AFK slices everywhere else.
+{{end}}
 
 ### 5. Publish the tasks
 
@@ -54,14 +63,20 @@ taskId Format: `nnn-short-description`
 - Sequential numbering
 - Three-digit format (001, 002, 003…)
 
-After approval, emit **one** `INSIGHT/task.plan` whose `tasks` array lists every approved slice (dependency
-order: blockers first). Put the task body template below into each task's `body` field. Do not emit one
-`task.plan` per slice.
+Emit **one** `INSIGHT/task.plan` whose `tasks` array lists every slice (dependency order: blockers first).
+Put the task body template below into each task's `body` field. Do not emit one `task.plan` per slice.
 
-Then ask whether to start the first unblocked AFK slice immediately. Emit deferred `SIGNAL/task.ready`
-(`taskId` only) **immediately after** deferred `task.plan`, **only** for that first task, and **only** when
-the Beekeeper confirms immediate start. Never mark later tasks ready yourself — the ledger unlocks them
-after prior tasks complete.
+{{if .Interactive}}
+After approval, ask whether to start the first unblocked AFK slice immediately. Emit deferred
+`SIGNAL/task.ready` (`taskId` only) **immediately after** deferred `task.plan`, **only** for that first
+task, and **only** when the Beekeeper confirms immediate start. Never mark later tasks ready yourself —
+the ledger unlocks them after prior tasks complete.
+{{else}}
+Planning is the whole deliverable of this run: publish the plan and stop. Do **not** emit `task.ready` and
+do not start the first slice yourself — a Beekeeper or a follow-up cue starts it later. Do **not** add a
+standalone review or merge task (`review: final` / "human review and merge"): the colony closing policy and
+the runtime-ensured merge gate own trail review, and a breakdown-authored review card would preempt both.
+{{end}}
 
 Optionally emit `INSIGHT/context.note` for a short trace fact (source doc, ordering rationale).
 

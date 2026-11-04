@@ -1,0 +1,18 @@
+# Plan a spec: launch Drone in breakdown intent as an AFK task.
+#
+# The Drone publishes exactly one task.plan and stops. It does not add a
+# review/merge task (the colony closing policy and the runtime-ensured merge
+# gate own trail review) and it does not start implementation (no task.ready).
+# A Beekeeper or a follow-up cue kicks the first unblocked slice when ready.
+description: Break a spec into ledger tasks via Drone (plan only, no implementation)
+emit: task
+bee: drone
+intent: breakdown
+review: none
+autorun: true
+title: "Break down {{.Title}}"
+body: |
+  {{.Body}}
+
+  Planning only: publish the task breakdown for this spec. Do not start
+  implementation and do not add a review/merge task.
