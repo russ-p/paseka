@@ -2,7 +2,10 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -10,10 +13,15 @@ import (
 	"github.com/russ-p/paseka/internal/gitroot"
 )
 
+// deletedFileHash marks a tracked path that was already absent from the working
+// tree when the baseline was captured. Real git blob hashes are hex strings, so
+// the sentinel cannot collide with one.
+const deletedFileHash = "<deleted>"
+
 // WorkspaceBaseline captures tracked dirty state before an adapter run.
 type WorkspaceBaseline struct {
 	BaseSHA    string
-	FileHashes map[string]string // repo-relative path -> git blob hash
+	FileHashes map[string]string // repo-relative path -> git blob hash or deletedFileHash
 }
 
 // CaptureWorkspaceBaseline records HEAD and hashes of files dirty vs HEAD.
@@ -34,7 +42,7 @@ func CaptureWorkspaceBaseline(ctx context.Context, workspace string) (WorkspaceB
 	}
 	hashes := make(map[string]string, len(files))
 	for _, file := range files {
-		hash, err := gitHashObject(ctx, root, file)
+		hash, err := workspaceFileHash(ctx, root, file)
 		if err != nil {
 			return WorkspaceBaseline{}, err
 		}
@@ -59,7 +67,7 @@ func AttributableDiff(ctx context.Context, workspace string, baseline WorkspaceB
 	}
 	var attributable []string
 	for _, file := range files {
-		hash, err := gitHashObject(ctx, root, file)
+		hash, err := workspaceFileHash(ctx, root, file)
 		if err != nil {
 			return "", err
 		}
@@ -83,21 +91,40 @@ func gitRevParse(ctx context.Context, repoRoot, ref string) (string, error) {
 }
 
 func gitDiffNameOnly(ctx context.Context, repoRoot string) ([]string, error) {
-	out, err := gitOutput(exec.CommandContext(ctx, "git", "diff", "HEAD", "--name-only"), repoRoot)
+	out, err := gitOutput(exec.CommandContext(ctx, "git", "diff", "HEAD", "--name-only", "-z"), repoRoot)
 	if err != nil {
-		out, err = gitOutput(exec.CommandContext(ctx, "git", "diff", "--name-only"), repoRoot)
+		out, err = gitOutput(exec.CommandContext(ctx, "git", "diff", "--name-only", "-z"), repoRoot)
 		if err != nil {
 			return nil, err
 		}
 	}
-	var files []string
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			files = append(files, filepath.ToSlash(line))
+	return splitPathList(out), nil
+}
+
+// splitPathList parses git's -z output: NUL-separated paths, never quoted.
+func splitPathList(out []byte) []string {
+	parts := strings.Split(string(out), "\x00")
+	files := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
 		}
+		files = append(files, filepath.ToSlash(part))
 	}
-	return files, nil
+	return files
+}
+
+// workspaceFileHash hashes the working-tree content of file. A path that git
+// lists as changed but that no longer exists (deletion, rename source) hashes to
+// deletedFileHash instead of failing hash-object.
+func workspaceFileHash(ctx context.Context, repoRoot, file string) (string, error) {
+	if _, err := os.Lstat(filepath.Join(repoRoot, file)); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return deletedFileHash, nil
+		}
+		return "", err
+	}
+	return gitHashObject(ctx, repoRoot, file)
 }
 
 func gitHashObject(ctx context.Context, repoRoot, file string) (string, error) {

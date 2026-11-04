@@ -328,7 +328,12 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 
 	baseline, baselineErr := adapters.CaptureWorkspaceBaseline(ctx, workspace)
 	if baselineErr != nil {
-		runtimeLog.Warn("workspace baseline capture failed", logging.F("error", baselineErr.Error()))
+		runtimeLog.Warn("workspace baseline capture failed",
+			logging.F("trace", req.TraceID),
+			logging.F("agent", agentID),
+			logging.F("workspace", workspace),
+			logging.F("error", baselineErr.Error()),
+		)
 	}
 	captureArtifactsBaseline(colonyRoot, req.TraceID, agentID)
 

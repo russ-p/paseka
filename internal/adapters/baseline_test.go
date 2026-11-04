@@ -74,6 +74,95 @@ func TestAttributableDiffEmptyWhenOnlyPreExistingDirty(t *testing.T) {
 	}
 }
 
+// Pre-existing deletions (staged renames, previously removed files) must not
+// break hash-object: git lists them in diff HEAD, but they have no working-tree
+// content to hash.
+func TestCaptureWorkspaceBaselineHandlesPreExistingDeletion(t *testing.T) {
+	repo := initGitRepo(t)
+	doomed := filepath.Join(repo, "doomed.txt")
+	if err := os.WriteFile(doomed, []byte("bye\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "doomed.txt")
+	runGit(t, repo, "commit", "-m", "add doomed")
+	runGit(t, repo, "rm", "doomed.txt")
+
+	ctx := context.Background()
+	baseline, err := adapters.CaptureWorkspaceBaseline(ctx, repo)
+	if err != nil {
+		t.Fatalf("baseline capture must tolerate deletions: %v", err)
+	}
+	if _, ok := baseline.FileHashes["doomed.txt"]; !ok {
+		t.Fatalf("deleted file missing from baseline: %v", baseline.FileHashes)
+	}
+
+	diff, err := adapters.AttributableDiff(ctx, repo, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(diff) != "" {
+		t.Fatalf("pre-existing deletion must not be attributable: %q", diff)
+	}
+}
+
+// A deletion made during the run is attributable, and must not abort the run's
+// diff because the file is gone from disk.
+func TestAttributableDiffIncludesRunDeletion(t *testing.T) {
+	repo := initGitRepo(t)
+	doomed := filepath.Join(repo, "doomed.txt")
+	if err := os.WriteFile(doomed, []byte("bye\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "doomed.txt")
+	runGit(t, repo, "commit", "-m", "add doomed")
+
+	ctx := context.Background()
+	baseline, err := adapters.CaptureWorkspaceBaseline(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Remove(doomed); err != nil {
+		t.Fatal(err)
+	}
+
+	diff, err := adapters.AttributableDiff(ctx, repo, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "doomed.txt") {
+		t.Fatalf("attributable diff missing run deletion: %q", diff)
+	}
+}
+
+// git quotes non-ASCII paths unless -z is used; a quoted path would be handed to
+// hash-object verbatim and fail to open.
+func TestCaptureWorkspaceBaselineHandlesNonASCIIName(t *testing.T) {
+	repo := initGitRepo(t)
+	name := "кириллица.txt"
+	if err := os.WriteFile(filepath.Join(repo, name), []byte("привет\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", name)
+
+	ctx := context.Background()
+	baseline, err := adapters.CaptureWorkspaceBaseline(ctx, repo)
+	if err != nil {
+		t.Fatalf("baseline capture must tolerate non-ASCII paths: %v", err)
+	}
+	if _, ok := baseline.FileHashes[name]; !ok {
+		t.Fatalf("non-ASCII path missing from baseline: %v", baseline.FileHashes)
+	}
+
+	diff, err := adapters.AttributableDiff(ctx, repo, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(diff, name) {
+		t.Fatalf("clean non-ASCII file must not be attributable: %q", diff)
+	}
+}
+
 // Sector workspaces are subdirectory cwds; git still reports repo-root-relative paths.
 func TestAttributableDiffFromSectorWorkspace(t *testing.T) {
 	repo := initGitRepo(t)
