@@ -87,7 +87,7 @@ func TestResolveAgentLogRequestsToolInputOnly(t *testing.T) {
 	if seen.Limits != wantLimits {
 		t.Fatalf("limits = %+v, want %+v", seen.Limits, wantLimits)
 	}
-	if seen.Window != (adapters.TranscriptWindow{}) {
+	if seen.Window != adapters.WholeTranscriptWindow() {
 		t.Fatalf("window = %+v, want the whole transcript", seen.Window)
 	}
 }

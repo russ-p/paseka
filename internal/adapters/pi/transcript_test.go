@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -254,6 +255,47 @@ func TestResolveTranscriptIsReadOnly(t *testing.T) {
 	}
 	if after := snapshotPiTree(t, runDir); !reflect.DeepEqual(before, after) {
 		t.Fatalf("resolution changed the run directory:\nbefore=%v\nafter=%v", before, after)
+	}
+}
+
+// TestResolveTranscriptPagesLongSessions pins the default first page and the
+// cursor walk on the reference line-oriented reader.
+func TestResolveTranscriptPagesLongSessions(t *testing.T) {
+	runDir := t.TempDir()
+	var body strings.Builder
+	body.WriteString(`{"type":"session","version":3,"id":"agent-1","timestamp":"2026-11-01T10:00:00Z"}` + "\n")
+	for i := 0; i < 120; i++ {
+		role := "user"
+		if i%2 == 1 {
+			role = "assistant"
+		}
+		body.WriteString(`{"type":"message","id":"m` + strconv.Itoa(i) + `","message":{"role":"` + role + `","content":"turn ` + strconv.Itoa(i) + `"}}` + "\n")
+	}
+	writePiSessionFile(t, runDir, "20260101_100000_agent-1.jsonl", body.String())
+
+	req := adapters.TranscriptRequest{
+		ProviderSessionID: "agent-1",
+		RunDir:            runDir,
+		Include:           adapters.PresetDialogue(),
+	}
+	first, err := New().ResolveTranscript(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Turns) != adapters.DefaultTranscriptPageTurns || !first.HasMore || first.NextCursor == "" {
+		t.Fatalf("first page = %d turns, hasMore %v, cursor %q", len(first.Turns), first.HasMore, first.NextCursor)
+	}
+
+	req.Window = adapters.TranscriptWindow{Cursor: first.NextCursor}
+	second, err := New().ResolveTranscript(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Turns) != 20 || second.HasMore || second.NextCursor != "" {
+		t.Fatalf("second page = %d turns, hasMore %v, cursor %q", len(second.Turns), second.HasMore, second.NextCursor)
+	}
+	if last := second.Turns[len(second.Turns)-1].Parts[0].Text; last != "turn 119" {
+		t.Fatalf("last turn = %q", last)
 	}
 }
 

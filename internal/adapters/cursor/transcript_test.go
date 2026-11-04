@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -328,6 +329,119 @@ func TestResolveTranscriptWindow(t *testing.T) {
 	if len(second.Turns) != 1 || second.HasMore {
 		t.Fatalf("second page = %+v", second)
 	}
+}
+
+// numberedTranscriptBody writes n alternating user/assistant turns, each naming
+// its position, so a page can be checked for its exact slice.
+func numberedTranscriptBody(n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		role := "user"
+		if i%2 == 1 {
+			role = "assistant"
+		}
+		b.WriteString(`{"role":"` + role + `","message":{"content":[{"type":"text","text":"turn ` + strconv.Itoa(i) + `"}]}}`)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// TestResolveTranscriptDefaultPageIsOneHundredTurns pins the measured first page
+// for a line-oriented reader and proves the cursor walks to an honest end.
+func TestResolveTranscriptDefaultPageIsOneHundredTurns(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeTranscript(t, home, "tmp-colony", testSessionID, numberedTranscriptBody(150))
+
+	req := adapters.TranscriptRequest{
+		ProviderSessionID: testSessionID,
+		Workspace:         "/tmp/colony",
+		Include:           adapters.PresetDialogue(),
+	}
+	first, err := New().ResolveTranscript(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Turns) != adapters.DefaultTranscriptPageTurns || !first.HasMore || first.NextCursor == "" {
+		t.Fatalf("first page = %d turns, hasMore %v, cursor %q", len(first.Turns), first.HasMore, first.NextCursor)
+	}
+	if first.Turns[0].Parts[0].Text != "turn 0" {
+		t.Fatalf("first turn = %+v", first.Turns[0])
+	}
+
+	req.Window = adapters.TranscriptWindow{Cursor: first.NextCursor}
+	second, err := New().ResolveTranscript(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Turns) != 50 || second.HasMore || second.NextCursor != "" {
+		t.Fatalf("second page = %d turns, hasMore %v, cursor %q", len(second.Turns), second.HasMore, second.NextCursor)
+	}
+	if last := second.Turns[len(second.Turns)-1].Parts[0].Text; last != "turn 149" {
+		t.Fatalf("last turn = %q", last)
+	}
+}
+
+// TestResolveTranscriptIsAReadOnlySnapshot pins that repeated resolution of the
+// same session returns the same page and writes nothing, so a panel can poll
+// while the provider file stays untouched.
+func TestResolveTranscriptIsAReadOnlySnapshot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeTranscript(t, home, "tmp-colony", testSessionID, testTranscriptBody)
+
+	dir := filepath.Join(home, ".cursor", "projects", "tmp-colony", "agent-transcripts", testSessionID)
+	path := filepath.Join(dir, testSessionID+".jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entriesBefore := directoryEntries(t, dir)
+
+	req := adapters.TranscriptRequest{
+		ProviderSessionID: testSessionID,
+		Workspace:         "/tmp/colony",
+		Include:           adapters.PresetDialogue(),
+		Window:            adapters.TranscriptWindow{Limit: 1, Cursor: "turn:1"},
+	}
+	first, err := New().ResolveTranscript(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := New().ResolveTranscript(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated resolution diverged:\n%+v\n%+v", first, second)
+	}
+	if first.Omitted != "" || len(first.Turns) != 1 {
+		t.Fatalf("page = %+v", first)
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("resolution modified the provider transcript")
+	}
+	if got := directoryEntries(t, dir); !reflect.DeepEqual(got, entriesBefore) {
+		t.Fatalf("resolution changed the provider directory: %v -> %v", entriesBefore, got)
+	}
+}
+
+func directoryEntries(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
 }
 
 func TestResolveTranscriptMissing(t *testing.T) {

@@ -48,6 +48,16 @@ const (
 	DefaultMaxToolOutputRunes = 16000
 )
 
+// DefaultTranscriptPageTurns is the first page a request without an explicit
+// limit gets. Measured to cover most Cursor, OpenCode, and Pi sessions, so an
+// ordinary session opens in one request. Tests pin the value; the distribution
+// it came from is not re-derived here.
+const DefaultTranscriptPageTurns = 100
+
+// AllTranscriptTurns is the limit that asks for the whole transcript instead of
+// a page. Export uses it so its output never depends on the page default.
+const AllTranscriptTurns = -1
+
 // TranscriptRequest is the read-time lookup for a provider-native session. The
 // association fields mirror the run; Include, Limits, and Window say how much
 // of the conversation the caller wants.
@@ -183,13 +193,31 @@ func (l TranscriptLimits) withDefaults() TranscriptLimits {
 	return l
 }
 
-// TranscriptWindow asks for a page of turns. A zero window means the whole
-// transcript. Cursor is the opaque value from a previous NextCursor and is used
-// when Offset is zero.
+// TranscriptWindow asks for a page of turns. The zero value asks for the default
+// first page (DefaultTranscriptPageTurns); Limit AllTranscriptTurns asks for
+// everything. Offset is a turn offset in the normalized transcript, and Cursor
+// is the opaque value from a previous NextCursor, used when Offset is zero. An
+// unrecognized cursor is ignored rather than treated as a read failure.
 type TranscriptWindow struct {
 	Offset int
 	Limit  int
 	Cursor string
+}
+
+// WholeTranscriptWindow asks a reader for every turn and no further cursor. A
+// consumer that must not page (export) says so explicitly rather than relying on
+// the default page.
+func WholeTranscriptWindow() TranscriptWindow {
+	return TranscriptWindow{Limit: AllTranscriptTurns}
+}
+
+// withDefaultLimit turns a zero limit into the measured default first page. A
+// negative limit asks for the whole transcript and is left alone.
+func (w TranscriptWindow) withDefaultLimit() TranscriptWindow {
+	if w.Limit == 0 {
+		w.Limit = DefaultTranscriptPageTurns
+	}
+	return w
 }
 
 // ToolResult is a tool result the provider stored separately from its call. The
@@ -243,8 +271,10 @@ func ResolveTranscript(ctx context.Context, resolver TranscriptResolver, req Tra
 // NormalizeTranscript applies the request mask, redacts obvious secrets, the
 // per-part caps, and the page window to a provider-ordered transcript. Redaction
 // runs before truncation so a secret straddling a cap is replaced rather than
-// emitted as a partial value. Adapters call it once before returning so every
-// consumer sees the same masking, redaction, and truncation semantics.
+// emitted as a partial value. A zero window is the measured default first page;
+// WholeTranscriptWindow asks for everything. Adapters call it once before
+// returning so every consumer sees the same masking, redaction, truncation, and
+// paging semantics.
 func NormalizeTranscript(t Transcript, include IncludeMask, limits TranscriptLimits, window TranscriptWindow) Transcript {
 	out := Transcript{Omitted: t.Omitted, Truncated: t.Truncated, Turns: []Turn{}}
 	if t.Omitted != "" {
@@ -312,9 +342,20 @@ func NormalizeTranscript(t Transcript, include IncludeMask, limits TranscriptLim
 		out.Turns = append(out.Turns, next)
 	}
 
-	// A zero window means the whole transcript. A provider that already paged
-	// reports its own signal through the result and is left alone.
-	if window.Limit <= 0 {
+	// The page request is best effort and never a correctness requirement. A zero
+	// limit means the measured default first page; a negative limit asks for the
+	// whole transcript, and a page past the end is an empty page rather than an
+	// omission.
+	window = window.withDefaultLimit()
+	if window.Limit < 0 {
+		out.HasMore = false
+		out.NextCursor = ""
+		return out
+	}
+	// A reader whose format allows a cheap slice may have answered the page
+	// itself and handed back its own cursor. That signal wins over a second
+	// slice here, so an adapter cursor is never re-encoded or dropped.
+	if t.HasMore || t.NextCursor != "" {
 		out.HasMore = t.HasMore
 		out.NextCursor = t.NextCursor
 		return out

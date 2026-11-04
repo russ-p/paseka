@@ -3,6 +3,8 @@ package adapters
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -298,6 +300,163 @@ func TestNormalizeWindowPages(t *testing.T) {
 	past := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Limit: 5, Cursor: "turn:9"})
 	if len(past.Turns) != 0 || past.Omitted != "" || past.HasMore {
 		t.Fatalf("past end = %+v", past)
+	}
+}
+
+// numberedTurns builds n dialogue turns whose text names their position, so a
+// page can be checked for exactly the requested slice rather than a count.
+func numberedTurns(n int) Transcript {
+	turns := make([]Turn, 0, n)
+	for i := 0; i < n; i++ {
+		role := TurnRoleUser
+		if i%2 == 1 {
+			role = TurnRoleAssistant
+		}
+		turns = append(turns, Turn{
+			Role:  role,
+			Parts: []Part{{Kind: PartText, Text: "turn " + strconv.Itoa(i)}},
+		})
+	}
+	return Transcript{Turns: turns}
+}
+
+func turnTexts(turns []Turn) []string {
+	texts := make([]string, 0, len(turns))
+	for _, turn := range turns {
+		if len(turn.Parts) == 0 {
+			texts = append(texts, "")
+			continue
+		}
+		texts = append(texts, turn.Parts[0].Text)
+	}
+	return texts
+}
+
+func wantSequence(start, count int) []string {
+	texts := make([]string, 0, count)
+	for i := start; i < start+count; i++ {
+		texts = append(texts, "turn "+strconv.Itoa(i))
+	}
+	return texts
+}
+
+// TestDefaultPageIsOneHundredTurns pins the measured first page and proves the
+// cursor walks the transcript one page at a time to an honest end.
+func TestDefaultPageIsOneHundredTurns(t *testing.T) {
+	if DefaultTranscriptPageTurns != 100 {
+		t.Fatalf("default page = %d, want 100", DefaultTranscriptPageTurns)
+	}
+	transcript := numberedTurns(250)
+
+	first := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{})
+	if got := turnTexts(first.Turns); !reflect.DeepEqual(got, wantSequence(0, 100)) {
+		t.Fatalf("first page = %v", got)
+	}
+	if !first.HasMore || first.NextCursor == "" {
+		t.Fatalf("first page signal = hasMore %v cursor %q", first.HasMore, first.NextCursor)
+	}
+
+	second := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Cursor: first.NextCursor})
+	if got := turnTexts(second.Turns); !reflect.DeepEqual(got, wantSequence(100, 100)) {
+		t.Fatalf("second page = %v", got)
+	}
+	if !second.HasMore || second.NextCursor == "" || second.NextCursor == first.NextCursor {
+		t.Fatalf("second page signal = hasMore %v cursor %q", second.HasMore, second.NextCursor)
+	}
+
+	third := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Cursor: second.NextCursor})
+	if got := turnTexts(third.Turns); !reflect.DeepEqual(got, wantSequence(200, 50)) {
+		t.Fatalf("third page = %v", got)
+	}
+	if third.HasMore || third.NextCursor != "" {
+		t.Fatalf("last page signal = hasMore %v cursor %q", third.HasMore, third.NextCursor)
+	}
+}
+
+func TestWindowOffsetAndLimitSliceExactly(t *testing.T) {
+	transcript := numberedTurns(20)
+	page := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Offset: 5, Limit: 5})
+	if got := turnTexts(page.Turns); !reflect.DeepEqual(got, wantSequence(5, 5)) {
+		t.Fatalf("offset page = %v", got)
+	}
+	if !page.HasMore {
+		t.Fatal("offset page must report more turns")
+	}
+	next := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Limit: 5, Cursor: page.NextCursor})
+	if got := turnTexts(next.Turns); !reflect.DeepEqual(got, wantSequence(10, 5)) {
+		t.Fatalf("next page = %v", got)
+	}
+}
+
+func TestWholeTranscriptWindowKeepsEveryTurn(t *testing.T) {
+	transcript := numberedTurns(DefaultTranscriptPageTurns + 25)
+	got := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, WholeTranscriptWindow())
+	if len(got.Turns) != len(transcript.Turns) {
+		t.Fatalf("turns = %d, want %d", len(got.Turns), len(transcript.Turns))
+	}
+	if got.HasMore || got.NextCursor != "" {
+		t.Fatalf("whole transcript signal = hasMore %v cursor %q", got.HasMore, got.NextCursor)
+	}
+}
+
+// TestWindowPastEndIsAnEmptyPage pins that paging is not a read failure: an
+// offset or cursor beyond the conversation returns an empty page and no
+// omission.
+func TestWindowPastEndIsAnEmptyPage(t *testing.T) {
+	transcript := numberedTurns(3)
+	for _, window := range []TranscriptWindow{
+		{Offset: 500, Limit: 10},
+		{Limit: 10, Cursor: "turn:500"},
+	} {
+		got := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, window)
+		if got.Omitted != "" {
+			t.Fatalf("window %+v omitted = %q", window, got.Omitted)
+		}
+		if len(got.Turns) != 0 || got.HasMore || got.NextCursor != "" {
+			t.Fatalf("window %+v = %+v, want an empty page", window, got)
+		}
+	}
+}
+
+// TestUnknownCursorFallsBackToTheFirstPage pins that an opaque cursor from an
+// older or unrelated call is ignored rather than treated as a read failure.
+func TestUnknownCursorFallsBackToTheFirstPage(t *testing.T) {
+	got := NormalizeTranscript(numberedTurns(3), PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Limit: 10, Cursor: "not-a-cursor"})
+	if got.Omitted != "" {
+		t.Fatalf("Omitted = %q", got.Omitted)
+	}
+	if len(got.Turns) != 3 || got.HasMore {
+		t.Fatalf("fallback page = %+v", got)
+	}
+}
+
+// TestPrePagedTranscriptKeepsItsOwnSignal pins the reader that windows cheaply
+// itself: its page and opaque cursor are not sliced or re-encoded here.
+func TestPrePagedTranscriptKeepsItsOwnSignal(t *testing.T) {
+	prePaged := numberedTurns(5)
+	prePaged.HasMore = true
+	prePaged.NextCursor = "adapter-cursor"
+
+	got := NormalizeTranscript(prePaged, PresetDialogue(), TranscriptLimits{}, TranscriptWindow{Limit: 2})
+	if len(got.Turns) != 5 || !got.HasMore || got.NextCursor != "adapter-cursor" {
+		t.Fatalf("pre-paged result = %+v", got)
+	}
+}
+
+// TestNormalizeIsAReadOnlySnapshot pins that repeated normalization of the same
+// transcript returns the same page and leaves the input untouched, so a panel
+// can poll without any state between calls.
+func TestNormalizeIsAReadOnlySnapshot(t *testing.T) {
+	transcript := numberedTurns(150)
+	before := numberedTurns(150)
+	window := TranscriptWindow{Limit: 25, Cursor: "turn:10"}
+	first := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, window)
+	second := NormalizeTranscript(transcript, PresetDialogue(), TranscriptLimits{}, window)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated resolution diverged:\n%+v\n%+v", first, second)
+	}
+	if !reflect.DeepEqual(transcript, before) {
+		t.Fatal("normalization mutated its input")
 	}
 }
 

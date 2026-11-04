@@ -62,6 +62,9 @@ func resolveConversation(run hiveview.RunView, lookup TranscriptLookup, timeout 
 		AgentID:           run.AgentID,
 		Include:           mask,
 		Limits:            adapters.DefaultTranscriptLimits(),
+		// The Conversation section is a self-contained export, so it always
+		// carries the whole dialogue rather than the Console's first page.
+		Window: adapters.WholeTranscriptWindow(),
 	})
 	if transcript.Omitted != "" {
 		entry.Omitted = transcript.Omitted

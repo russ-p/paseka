@@ -160,6 +160,32 @@ func TestResolveTranscriptHonorsDialogueMask(t *testing.T) {
 	}
 }
 
+// TestResolveTranscriptDoesNotWindowAWholeExport pins the degradation for a
+// provider that cannot window: a page request is answered with the whole
+// conversation, no further cursor, and no omission.
+func TestResolveTranscriptDoesNotWindowAWholeExport(t *testing.T) {
+	installFakeOpenCode(t, exportFixture, "")
+
+	got, err := New().ResolveTranscript(context.Background(), adapters.TranscriptRequest{
+		ProviderSessionID: "ses_export2",
+		Include:           adapters.PresetDialogue(),
+		Window:            adapters.TranscriptWindow{Limit: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Omitted != "" {
+		t.Fatalf("a window must never become an omission: %q", got.Omitted)
+	}
+	// The dialogue mask drops the system turn; every remaining turn is present.
+	if len(got.Turns) != 4 {
+		t.Fatalf("turns = %+v", got.Turns)
+	}
+	if got.HasMore || got.NextCursor != "" {
+		t.Fatalf("hasMore = %v cursor = %q, want no further page", got.HasMore, got.NextCursor)
+	}
+}
+
 func TestDecodeExportAcceptsDataEnvelope(t *testing.T) {
 	turns, err := decodeExport([]byte(`{"data":` + exportFixture + `}`))
 	if err != nil {

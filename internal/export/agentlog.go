@@ -91,6 +91,9 @@ func resolveAgentLog(run hiveview.RunView, lookup TranscriptLookup, timeout time
 		AgentID:           run.AgentID,
 		Include:           adapters.PresetToolCall(),
 		Limits:            limits,
+		// The Agent log is a whole-table projection with its own row cap, so it
+		// never inherits the Console page default.
+		Window: adapters.WholeTranscriptWindow(),
 	})
 	if transcript.Omitted != "" {
 		entry.Omitted = transcript.Omitted

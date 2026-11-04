@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -102,11 +103,41 @@ func TestResolveConversationRequestsDialoguePreset(t *testing.T) {
 	if seen.Limits != adapters.DefaultTranscriptLimits() {
 		t.Fatalf("limits = %+v, want the defaults", seen.Limits)
 	}
-	if seen.Window != (adapters.TranscriptWindow{}) {
+	if seen.Window != adapters.WholeTranscriptWindow() {
 		t.Fatalf("window = %+v, want the whole transcript", seen.Window)
 	}
 	if len(got.Turns) != 2 {
 		t.Fatalf("turns = %+v", got.Turns)
+	}
+}
+
+// TestResolveConversationRendersPastThePageDefault pins that both transcript
+// includes ask for the whole conversation: a dialogue longer than the Console's
+// first page still renders every turn.
+func TestResolveConversationRendersPastThePageDefault(t *testing.T) {
+	count := adapters.DefaultTranscriptPageTurns + 20
+	turns := make([]adapters.Turn, 0, count)
+	for i := 0; i < count; i++ {
+		turns = append(turns, adapters.Turn{
+			Role:  adapters.TurnRoleUser,
+			Parts: []adapters.Part{{Kind: adapters.PartText, Text: "turn " + strconv.Itoa(i)}},
+		})
+	}
+
+	for _, reasoning := range []bool{false, true} {
+		got := resolveConversation(hiveview.RunView{
+			AgentID:           "agent-1",
+			Adapter:           "cursor",
+			ProviderSessionID: "sess",
+		}, func(string) adapters.TranscriptResolver {
+			return normalizingResolver{transcript: adapters.Transcript{Turns: turns}}
+		}, 0, reasoning)
+		if got.Omitted != "" {
+			t.Fatalf("reasoning=%v Omitted = %q", reasoning, got.Omitted)
+		}
+		if len(got.Turns) != count {
+			t.Fatalf("reasoning=%v turns = %d, want %d", reasoning, len(got.Turns), count)
+		}
 	}
 }
 

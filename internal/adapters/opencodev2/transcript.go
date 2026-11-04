@@ -91,7 +91,7 @@ func resolveFromServer(ctx context.Context, client *apiClient, id string, req ad
 	if err != nil {
 		return adapters.Transcript{Omitted: adapters.SessionLogOmittedParseError}
 	}
-	return adapters.NormalizeTranscript(adapters.Transcript{Turns: turns}, req.Include, req.Limits, req.Window)
+	return normalizeWholeExport(turns, req)
 }
 
 // resolveFromExport asks the provider for its own JSON export. The command
@@ -110,7 +110,16 @@ func resolveFromExport(ctx context.Context, id string, req adapters.TranscriptRe
 	if err != nil {
 		return adapters.Transcript{Omitted: adapters.SessionLogOmittedParseError}
 	}
-	return adapters.NormalizeTranscript(adapters.Transcript{Turns: turns}, req.Include, req.Limits, req.Window)
+	return normalizeWholeExport(turns, req)
+}
+
+// normalizeWholeExport answers a page request with the whole transcript. Both
+// 2.x routes hand over every message in one document, so this reader cannot
+// window cheaply; it says so by returning no further cursor instead of slicing
+// or answering the window with an omission. Paging degrades rather than fails,
+// and the export output stays identical to a full read.
+func normalizeWholeExport(turns []adapters.Turn, req adapters.TranscriptRequest) adapters.Transcript {
+	return adapters.NormalizeTranscript(adapters.Transcript{Turns: turns}, req.Include, req.Limits, adapters.WholeTranscriptWindow())
 }
 
 func exportStderr(output string) string {
