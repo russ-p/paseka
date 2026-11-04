@@ -222,7 +222,7 @@ Prior art in-tree: the fake-binary script pattern for adapter argv tests, the pa
 
 - Changing the domain event set, honey rules, or bus choreography because of the split.
 - Removing the V1 adapter, or deprecating V1 support.
-- Console live streaming of OpenCode events, transcript hydration from the OpenCode store, and per-turn diff views — valuable follow-ups that reuse the V2 API but are separate specs.
+- Console live streaming of OpenCode events, transcript hydration from the OpenCode store, and per-turn diff views — valuable follow-ups that reuse the V2 API but are separate specs. Transcript hydration (without SQLite) is specified in [048](048-native-session-transcript.md); live streaming and per-turn diffs remain unclaimed.
 - V2-native worktree management (`worktree_create` and friends), ACP, the plugin system, and Code Mode tools.
 - Answering OpenCode permission requests through the API from Queen Console. The adapters keep auto-approval for non-interactive runs.
 - Migrating or rewriting existing `opencode` usage source labels in already-written run files.

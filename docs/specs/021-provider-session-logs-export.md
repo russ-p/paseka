@@ -181,6 +181,7 @@ Prefer fixtures with synthetic stream lines and fake log reader seams over live 
 
 ## Further Notes
 
+- Superseded in part by [048 native session transcript](048-native-session-transcript.md): the Agent log becomes a projection over a normalized transcript, the Pi stub is retired there, and Console dialogue stops being sourced from PTY. This spec remains the record of `providerSessionId` capture and the no-copy policy.
 - Related: [001 Pi integration](001-pi-integration.md) (run-local `--session-id` / `--session-dir`), [002 Queen Console](002-queen-console-mvp.md) (transcript vs PTY), [014 artifacts](014-artifacts-protocol.md) (trail comb ≠ provider logs), [025 Cursor HITL resume](025-cursor-session-resume.md) (new Paseka session, same `providerSessionId`). Architecture overview already states domain events are not inferred from assistant stdout — this spec extends that boundary to “do not park CLI stream diagnostics in the bus audit file.”
 - Naming: user-facing **Agent log** / **provider session**; wire field **`providerSessionId`**. Avoid calling these “events” in UI copy.
 - After implementation: update changelog, CLI export help, interactive-sessions guide (HITL resume), architecture adapter result-collection notes; set status to Implemented.

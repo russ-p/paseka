@@ -48,6 +48,16 @@ Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The 
 - **Why deferred:** The block is lazy by contract — arriving on `/next/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
 - **Revisit when:** A fifth adapter is added, or the roster stops being a fixed set.
 
+### Secret redaction
+
+#### Content redaction exists only for env values and CLI arguments
+
+- **Kind:** follow-up
+- **Source:** [048-native-session-transcript](../specs/048-native-session-transcript.md) § 8 (Draft), while deciding who sanitizes transcript text
+- **Summary:** What exists today is name-based redaction of launcher inputs: `adapters.RedactEnv` masks the env keys a launch plan declares, `adapters.RedactArgs` masks `--api-key`, and `logging` never receives raw values. Nothing inspects *content*. Transcript text, reasoning, tool arguments and tool output are free-form: an agent that runs `env`, `cat ~/.aws/credentials`, or a failing command that echoes a token puts the value verbatim into anything rendered from it — agent logs, a future Conversation view, exported HTML/Markdown, proposal patches, Telegram messages. Spec 048 says the transcript path must redact before rendering, but there is no shared helper for it, and each surface inventing its own pattern list is how one of them ends up missing the obvious cases. The work is one content-redaction package with pattern classes (bearer/authorization headers, well-known token prefixes, private-key blocks, `KEY=value` shapes for names that look secret), an escape hatch for colony-declared extra patterns, and wiring at every render boundary, with tests over a fixture corpus rather than per-surface copies.
+- **Why deferred:** 048 must not block on inventing a policy; truncation plus a minimal pattern set can ship first, and the policy question (redact or drop the whole part, what to do about near-misses, whether redaction is on by default off-machine) belongs in one place with its own review.
+- **Revisit when:** the transcript export ships and an export is shared off-machine, or a real secret is found in any emitted artifact — whichever comes first.
+
 ### Adapter launch resolution
 
 #### Remove the legacy params aliases after a release ships with them deprecated
