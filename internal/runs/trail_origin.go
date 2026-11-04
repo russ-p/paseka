@@ -136,12 +136,6 @@ func ReadTrailOrigin(colonyRoot, traceID string) (TrailOrigin, bool, error) {
 	return origin, true, nil
 }
 
-// LoadTrailOrigin is an alias for ReadTrailOrigin for readers that describe the
-// operation as loading retained evidence.
-func LoadTrailOrigin(colonyRoot, traceID string) (TrailOrigin, bool, error) {
-	return ReadTrailOrigin(colonyRoot, traceID)
-}
-
 func normalizeTrailOrigin(traceID string, origin TrailOrigin) (TrailOrigin, error) {
 	origin.TraceID = strings.TrimSpace(origin.TraceID)
 	if origin.TraceID == "" {
