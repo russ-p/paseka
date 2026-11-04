@@ -37,12 +37,6 @@ func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
 	return adapters.LaunchSpec{DefaultBinary: defaultBinary}
 }
 
-// ResolveTranscript is a stub until the Pi session-dir reader lands (spec 048
-// slice D). It returns the shipped stable reason rather than an error.
-func (a *Adapter) ResolveTranscript(_ context.Context, _ adapters.TranscriptRequest) (adapters.Transcript, error) {
-	return adapters.Transcript{Omitted: adapters.SessionLogOmittedNotImplemented}, nil
-}
-
 // Run invokes `pi -p` in non-interactive mode.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {

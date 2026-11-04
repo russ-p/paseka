@@ -20,21 +20,6 @@ func TestAdapterName(t *testing.T) {
 	}
 }
 
-func TestResolveTranscriptStub(t *testing.T) {
-	got, err := New().ResolveTranscript(context.Background(), adapters.TranscriptRequest{
-		ProviderSessionID: "agent-1",
-	})
-	if err != nil {
-		t.Fatalf("ResolveTranscript: %v", err)
-	}
-	if got.Omitted != adapters.SessionLogOmittedNotImplemented {
-		t.Fatalf("Omitted = %q, want %q", got.Omitted, adapters.SessionLogOmittedNotImplemented)
-	}
-	if len(got.Turns) != 0 {
-		t.Fatalf("stub must not return turns: %+v", got.Turns)
-	}
-}
-
 func TestBuildArgs(t *testing.T) {
 	req := adapters.RunRequest{
 		AgentID: "agent-1",

@@ -132,9 +132,9 @@ func TestResolveAgentLogEmptyToolCallsWithOmitted(t *testing.T) {
 		Adapter:           "cursor",
 		ProviderSessionID: "sess",
 	}, func(string) adapters.TranscriptResolver {
-		return fakeTranscriptResolver{transcript: adapters.Transcript{Omitted: adapters.SessionLogOmittedNotImplemented}}
+		return fakeTranscriptResolver{transcript: adapters.Transcript{Omitted: adapters.SessionLogOmittedStoreNotFound}}
 	}, 0)
-	if got.Omitted != adapters.SessionLogOmittedNotImplemented {
+	if got.Omitted != adapters.SessionLogOmittedStoreNotFound {
 		t.Fatalf("Omitted = %q", got.Omitted)
 	}
 }
@@ -219,8 +219,8 @@ func TestDefaultTranscriptLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if piLog.Omitted != adapters.SessionLogOmittedNotImplemented {
-		t.Fatalf("pi stub Omitted = %q", piLog.Omitted)
+	if piLog.Omitted != adapters.SessionLogOmittedStoreNotFound {
+		t.Fatalf("pi missing run dir Omitted = %q", piLog.Omitted)
 	}
 }
 
