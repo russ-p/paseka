@@ -39,7 +39,8 @@ describe('ExportTraceModal', () => {
 		expect(dialog).toHaveTextContent('Export trail');
 		expect(screen.getByRole('radio', { name: 'HTML' })).toBeChecked();
 		expect(screen.getByRole('radio', { name: 'Markdown' })).not.toBeChecked();
-		expect(screen.getAllByRole('checkbox')).toHaveLength(10);
+		expect(screen.getAllByRole('checkbox')).toHaveLength(11);
+		expect(screen.getByRole('checkbox', { name: /Conversation with thinking/ })).toBeInTheDocument();
 		expect(screen.getAllByRole('checkbox').every((box) => !(box as HTMLInputElement).checked)).toBe(true);
 	});
 

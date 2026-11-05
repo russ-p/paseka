@@ -1283,6 +1283,7 @@ export type TraceExportInclude =
 	| 'artifacts'
 	| 'agent-logs'
 	| 'transcript'
+	| 'reasoning'
 	| 'patches'
 	| 'config';
 
@@ -1309,6 +1310,11 @@ export const traceExportIncludes: TraceExportIncludeOption[] = [
 		value: 'transcript',
 		label: 'Conversation',
 		description: 'Per-run user and assistant turns with tool calls collapsed to one line'
+	},
+	{
+		value: 'reasoning',
+		label: 'Conversation with thinking',
+		description: 'The same turns with thinking blocks; implies the Conversation slice'
 	},
 	{
 		value: 'patches',
