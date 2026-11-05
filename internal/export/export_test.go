@@ -3,8 +3,10 @@ package export
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +47,7 @@ type completedRunCfg struct {
 	AgentID           string
 	Adapter           string
 	ProviderSessionID string
+	State             protocol.RunStatus
 	Usage             *protocol.Usage
 }
 
@@ -57,6 +60,10 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 	adapter := cfg.Adapter
 	if adapter == "" {
 		adapter = "cursor"
+	}
+	state := cfg.State
+	if state == "" {
+		state = protocol.StatusCompleted
 	}
 	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
 	if err := d.Prepare(); err != nil {
@@ -77,7 +84,7 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 	finished := started.Add(90 * time.Second)
 	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
 		ProtocolVersion: protocol.Version,
-		State:           protocol.StatusCompleted,
+		State:           state,
 		StartedAt:       started,
 		FinishedAt:      finished,
 	}); err != nil {
@@ -87,7 +94,7 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 		ProtocolVersion:   protocol.Version,
 		TraceID:           traceID,
 		AgentID:           agentID,
-		Status:            protocol.StatusCompleted,
+		Status:            state,
 		Summary:           "done",
 		Usage:             cfg.Usage,
 		ProviderSessionID: cfg.ProviderSessionID,
@@ -774,23 +781,23 @@ func TestRenderHTMLColonyMissingNote(t *testing.T) {
 	}
 }
 
-type fakeSessionLogResolver struct {
-	log adapters.SessionLog
-	err error
+type fakeTranscriptResolver struct {
+	transcript adapters.Transcript
+	err        error
 }
 
-func (f fakeSessionLogResolver) ResolveSessionLog(_ context.Context, _ adapters.SessionLogRequest) (adapters.SessionLog, error) {
-	return f.log, f.err
+func (f fakeTranscriptResolver) ResolveTranscript(_ context.Context, _ adapters.TranscriptRequest) (adapters.Transcript, error) {
+	return f.transcript, f.err
 }
 
-func exportAgentLogs(t *testing.T, ctx colony.Context, traceID string, format Format, lookup SessionLogLookup) string {
+func exportAgentLogs(t *testing.T, ctx colony.Context, traceID string, format Format, lookup TranscriptLookup) string {
 	t.Helper()
 	path, err := ExportTrace(ctx, Options{
 		TraceID:     traceID,
 		OutputDir:   t.TempDir(),
 		Format:      format,
 		Include:     mustInclude(t, "agent-logs"),
-		SessionLogs: lookup,
+		Transcripts: lookup,
 	})
 	if err != nil {
 		t.Fatalf("ExportTrace: %v", err)
@@ -830,16 +837,83 @@ func TestExportTraceIncludeAgentLogsCursorStoreNotFound(t *testing.T) {
 	}
 }
 
-func TestExportTraceIncludeAgentLogsPiStubNotImplemented(t *testing.T) {
+const piSessionFixture = `{"type":"session","version":3,"id":"pi-session","timestamp":"2026-11-01T10:00:00Z"}
+{"type":"model_change","provider":"anthropic","modelId":"claude"}
+{"type":"message","timestamp":"2026-11-01T10:00:01Z","message":{"role":"system","content":[{"type":"text","text":"system prompt must stay out"}],"timestamp":1762077601000}}
+{"type":"message","timestamp":"2026-11-01T10:00:02Z","message":{"role":"user","content":"please read docs/guide/cli.md","timestamp":1762077602000}}
+{"type":"message","timestamp":"2026-11-01T10:00:03Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"weighing the guide"},{"type":"text","text":"reading the guide"},{"type":"toolCall","id":"call-1","name":"read","arguments":{"path":"docs/guide/cli.md"}}],"timestamp":1762077603000}}
+{"type":"message","timestamp":"2026-11-01T10:00:04Z","message":{"role":"toolResult","toolCallId":"call-1","toolName":"read","content":[{"type":"text","text":"guide contents"}],"isError":false,"timestamp":1762077604000}}
+`
+
+func writePiSessionFixture(t *testing.T, repo, traceID, agentID, sessionID, body string) {
+	t.Helper()
+	dir := filepath.Join(runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}.Root(), "pi-sessions")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "20260101_100000_"+sessionID+".jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExportTraceIncludeAgentLogsPiRunLocalSession(t *testing.T) {
 	ctx, repo := setupExportColony(t)
-	writeCompletedRunCfg(t, repo, "trace-agent-log-pi", time.Now().UTC().Add(-time.Minute), completedRunCfg{
+	traceID := "trace-agent-log-pi"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
 		AgentID:           "agent-pi",
 		Adapter:           "pi",
 		ProviderSessionID: "pi-session",
 	})
-	piMD := exportAgentLogs(t, ctx, "trace-agent-log-pi", FormatMarkdown, nil)
-	if !strings.Contains(piMD, "_omitted: not implemented_") {
-		t.Fatalf("pi stub omit missing:\n%s", piMD)
+	writePiSessionFixture(t, repo, traceID, "agent-pi", "pi-session", piSessionFixture)
+
+	piMD := exportAgentLogs(t, ctx, traceID, FormatMarkdown, nil)
+	for _, want := range []string{
+		"#### Agent log",
+		"| read | docs/guide/cli.md | call-1 |",
+	} {
+		if !strings.Contains(piMD, want) {
+			t.Fatalf("pi agent log missing %q:\n%s", want, piMD)
+		}
+	}
+	if strings.Contains(piMD, "not implemented") {
+		t.Fatalf("pi stub omission still present:\n%s", piMD)
+	}
+}
+
+func TestExportTraceIncludePiTranscriptAndReasoning(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-transcript-pi"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		AgentID:           "agent-pi",
+		Adapter:           "pi",
+		ProviderSessionID: "pi-session",
+	})
+	writePiSessionFixture(t, repo, traceID, "agent-pi", "pi-session", piSessionFixture)
+
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		transcriptBody := exportWithIncludes(t, ctx, traceID, format, nil, "transcript")
+		for _, want := range []string{"please read docs/guide/cli.md", "reading the guide", "read"} {
+			if !strings.Contains(transcriptBody, want) {
+				t.Fatalf("format %s transcript missing %q:\n%s", format, want, transcriptBody)
+			}
+		}
+		if strings.Contains(transcriptBody, "weighing the guide") {
+			t.Fatalf("format %s transcript carried reasoning:\n%s", format, transcriptBody)
+		}
+		if strings.Contains(transcriptBody, "system prompt must stay out") {
+			t.Fatalf("format %s transcript carried the system turn:\n%s", format, transcriptBody)
+		}
+		if strings.Contains(transcriptBody, "not implemented") {
+			t.Fatalf("format %s kept the retired Pi stub:\n%s", format, transcriptBody)
+		}
+
+		reasoningBody := exportWithIncludes(t, ctx, traceID, format, nil, "reasoning")
+		if !strings.Contains(reasoningBody, "weighing the guide") {
+			t.Fatalf("format %s reasoning missing the thinking block:\n%s", format, reasoningBody)
+		}
+		if !strings.Contains(reasoningBody, "reading the guide") {
+			t.Fatalf("format %s reasoning lost the dialogue:\n%s", format, reasoningBody)
+		}
 	}
 }
 
@@ -864,8 +938,8 @@ func TestExportTraceIncludeAgentLogsResolverError(t *testing.T) {
 		ProviderSessionID: "cursor-uuid",
 	})
 
-	text := exportAgentLogs(t, ctx, traceID, FormatMarkdown, func(string) adapters.SessionLogResolver {
-		return fakeSessionLogResolver{err: errors.New("store boom")}
+	text := exportAgentLogs(t, ctx, traceID, FormatMarkdown, func(string) adapters.TranscriptResolver {
+		return fakeTranscriptResolver{err: errors.New("store boom")}
 	})
 	if !strings.Contains(text, "_omitted: resolve error_") {
 		t.Fatalf("resolve error omit missing:\n%s", text)
@@ -879,14 +953,12 @@ func TestExportTraceIncludeAgentLogsFakeToolCalls(t *testing.T) {
 		ProviderSessionID: "cursor-uuid",
 	})
 
-	lookup := func(string) adapters.SessionLogResolver {
-		return fakeSessionLogResolver{log: adapters.SessionLog{
-			ToolCalls: []adapters.ToolCall{{
-				Name:   "Read",
-				CallID: "call-abc",
-				Args:   "docs/guide/cli.md",
-			}},
-		}}
+	lookup := func(string) adapters.TranscriptResolver {
+		return fakeTranscriptResolver{transcript: toolCallTranscript(adapters.ToolCall{
+			Name:   "Read",
+			CallID: "call-abc",
+			Args:   "docs/guide/cli.md",
+		})}
 	}
 	md := exportAgentLogs(t, ctx, traceID, FormatMarkdown, lookup)
 	for _, want := range []string{
@@ -916,6 +988,70 @@ func TestExportTraceIncludeAgentLogsFakeToolCalls(t *testing.T) {
 	}
 	if strings.Contains(html, "TOOL_CALL") {
 		t.Fatalf("HTML timeline must not dump tool calls")
+	}
+}
+
+// TestExportTraceAgentLogsFromCursorFixture pins the shipped Agent log shape
+// end to end: a real Cursor transcript fixture projects to the same rows, the
+// same 200-rune argument summary, the same call ids, and the same 100-row cap.
+func TestExportTraceAgentLogsFromCursorFixture(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-agent-log-fixture"
+	sessionID := "11111111-2222-3333-4444-555555555555"
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		ProviderSessionID: sessionID,
+	})
+
+	longPath := strings.Repeat("p", maxAgentLogArgsRunes+30)
+	var body strings.Builder
+	for i := 0; i < maxAgentLogToolCalls+5; i++ {
+		path := "docs/file.go"
+		if i == 0 {
+			path = longPath
+		}
+		fmt.Fprintf(&body, `{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Read","id":"call-%d","input":{"path":%q}}]}}`+"\n", i, path)
+	}
+	dir := filepath.Join(home, ".cursor", "projects", "fixture-project", "agent-transcripts", sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, sessionID+".jsonl"), []byte(body.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	md := exportAgentLogs(t, ctx, traceID, FormatMarkdown, nil)
+	wantArgs := strings.Repeat("p", maxAgentLogArgsRunes) + "…"
+	for _, want := range []string{
+		"| Name | Args | Call id |",
+		"| Read | " + wantArgs + " | call-0 |",
+		"| Read | docs/file.go | call-1 |",
+		"| Read | docs/file.go | call-" + strconv.Itoa(maxAgentLogToolCalls-1) + " |",
+		"_Showing first 100 tool calls._",
+	} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("markdown missing %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "call-"+strconv.Itoa(maxAgentLogToolCalls)) {
+		t.Fatalf("markdown exceeded the 100-row cap:\n%s", md)
+	}
+
+	html := exportAgentLogs(t, ctx, traceID, FormatHTML, nil)
+	for _, want := range []string{
+		"<h3>Agent log</h3>",
+		wantArgs,
+		"call-0",
+		"call-" + strconv.Itoa(maxAgentLogToolCalls-1),
+		"Showing first 100 tool calls.",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML missing %q", want)
+		}
+	}
+	if strings.Contains(html, "call-"+strconv.Itoa(maxAgentLogToolCalls)+"<") {
+		t.Fatalf("HTML exceeded the 100-row cap")
 	}
 }
 

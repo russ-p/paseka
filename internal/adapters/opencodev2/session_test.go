@@ -103,7 +103,13 @@ func TestSessionCommandCreatesProviderSession(t *testing.T) {
 	if cmd.Cleanup == nil {
 		t.Fatal("cleanup missing")
 	}
+	if _, ok := ownedSessionClient(cmd.ProviderSessionID); !ok {
+		t.Fatalf("owned server for %q is not registered", cmd.ProviderSessionID)
+	}
 	cmd.Cleanup()
+	if _, ok := ownedSessionClient(cmd.ProviderSessionID); ok {
+		t.Fatalf("owned server for %q stayed registered after cleanup", cmd.ProviderSessionID)
+	}
 	if stub.closed.Load() != 1 {
 		t.Fatalf("server close count = %d", stub.closed.Load())
 	}
@@ -133,6 +139,7 @@ func TestSessionCommandResumeSkipsCreate(t *testing.T) {
 	if cmd.ProviderSessionID != "ses_existing" {
 		t.Fatalf("provider session = %q", cmd.ProviderSessionID)
 	}
+	t.Cleanup(cmd.Cleanup)
 	want := []string{"--server", stub.url, "--session", "ses_existing", "--auto", "--prompt", "continue"}
 	if strings.Join(cmd.Args, " ") != strings.Join(want, " ") {
 		t.Fatalf("argv = %v, want %v", cmd.Args, want)
@@ -151,6 +158,7 @@ func TestSessionCommandResumeEmptyContinueOmitsPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(cmd.Cleanup)
 	if containsArg(cmd.Args, "--prompt") {
 		t.Fatalf("argv = %v, want no prompt", cmd.Args)
 	}

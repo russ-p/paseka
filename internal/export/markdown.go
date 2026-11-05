@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/russ-p/paseka/internal/taskledger"
 )
@@ -190,6 +191,9 @@ func writeMarkdownRuns(buf *bytes.Buffer, data TraceExportData) {
 		if data.Include.Has(IncludeAgentLogs) {
 			writeMarkdownAgentLog(buf, agentLogByAgentID(data.AgentLogs, run.AgentID))
 		}
+		if data.Include.HasConversation() {
+			writeMarkdownConversation(buf, conversationByAgentID(data.Conversations, run.AgentID))
+		}
 		buf.WriteString("\n")
 	}
 }
@@ -213,6 +217,51 @@ func writeMarkdownAgentLog(buf *bytes.Buffer, log AgentLogExport) {
 	}
 	if log.Truncated {
 		buf.WriteString("\n_Showing first 100 tool calls._\n")
+	}
+}
+
+func writeMarkdownConversation(buf *bytes.Buffer, conversation ConversationExport) {
+	buf.WriteString("\n#### Conversation\n\n")
+	if conversation.Omitted != "" {
+		fmt.Fprintf(buf, "_omitted: %s_\n", conversation.Omitted)
+		return
+	}
+	if len(conversation.Turns) == 0 {
+		buf.WriteString("_No conversation turns._\n")
+		return
+	}
+	for _, turn := range conversation.Turns {
+		fmt.Fprintf(buf, "**%s**", turn.Role)
+		if !turn.Timestamp.IsZero() {
+			fmt.Fprintf(buf, " · %s", formatTime(turn.Timestamp))
+		}
+		buf.WriteString("\n\n")
+		for _, block := range turn.Blocks {
+			switch block.Kind {
+			case adapters.DialogueBlockTool:
+				if block.Tool == nil {
+					continue
+				}
+				fmt.Fprintf(buf, "- `%s` · %s\n", block.Tool.Name, block.Tool.Status)
+			case adapters.DialogueBlockReasoning:
+				if block.Reasoning == "" {
+					continue
+				}
+				buf.WriteString("_reasoning:_\n\n")
+				buf.WriteString(strings.TrimRight(block.Reasoning, "\n"))
+				buf.WriteString("\n")
+				if block.Truncated {
+					buf.WriteString("\n_(truncated)_\n")
+				}
+			case adapters.DialogueBlockText:
+				buf.WriteString(strings.TrimRight(block.Text, "\n"))
+				buf.WriteString("\n")
+				if block.Truncated {
+					buf.WriteString("\n_(truncated)_\n")
+				}
+			}
+			buf.WriteString("\n")
+		}
 	}
 }
 

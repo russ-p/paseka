@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -327,6 +328,18 @@ func (c *apiClient) Session(ctx context.Context, id string) (sessionRecord, erro
 	var rec sessionRecord
 	err := c.do(ctx, http.MethodGet, "/api/session/"+id, nil, &rec)
 	return rec, err
+}
+
+// ExportSession reads the provider's projected transcript: `{info, messages}`.
+// It is the same data `opencode session export` prints, read over the API of a
+// server Paseka already owns. The call is a plain GET and mutates nothing.
+func (c *apiClient) ExportSession(ctx context.Context, id string) (json.RawMessage, error) {
+	var raw json.RawMessage
+	path := "/api/experimental/session/" + url.PathEscape(id) + "/export"
+	if err := c.do(ctx, http.MethodGet, path, nil, &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 // Prompt admits a turn into a session. The V2 TUI delivers the kickoff through

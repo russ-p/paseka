@@ -9,13 +9,18 @@ import (
 type IncludeKind string
 
 const (
-	IncludeUsage     IncludeKind = "usage"
-	IncludeDurations IncludeKind = "durations"
-	IncludeBees      IncludeKind = "bees"
-	IncludeColony    IncludeKind = "colony"
-	IncludeCues      IncludeKind = "cues"
-	IncludeArtifacts IncludeKind = "artifacts"
-	IncludeAgentLogs IncludeKind = "agent-logs"
+	IncludeUsage      IncludeKind = "usage"
+	IncludeDurations  IncludeKind = "durations"
+	IncludeBees       IncludeKind = "bees"
+	IncludeColony     IncludeKind = "colony"
+	IncludeCues       IncludeKind = "cues"
+	IncludeArtifacts  IncludeKind = "artifacts"
+	IncludeAgentLogs  IncludeKind = "agent-logs"
+	IncludeTranscript IncludeKind = "transcript"
+	// IncludeReasoning is a conversation view with thinking blocks. It implies
+	// IncludeTranscript: a bare reasoning token that changed nothing would be a
+	// trap, so the set always carries both.
+	IncludeReasoning IncludeKind = "reasoning"
 	IncludePatches   IncludeKind = "patches"
 	IncludeConfig    IncludeKind = "config"
 )
@@ -33,6 +38,18 @@ func (s IncludeSet) Has(kind IncludeKind) bool {
 	return false
 }
 
+// HasConversation reports whether the per-run Conversation section is requested.
+// reasoning is a conversation view, so it implies transcript.
+func (s IncludeSet) HasConversation() bool {
+	return s.Has(IncludeTranscript) || s.Has(IncludeReasoning)
+}
+
+// HasReasoning reports whether the Conversation section should carry thinking
+// blocks.
+func (s IncludeSet) HasReasoning() bool {
+	return s.Has(IncludeReasoning)
+}
+
 // ParseInclude normalizes cobra StringSlice values (repeatable and comma-separated).
 func ParseInclude(flags []string) (IncludeSet, error) {
 	seen := make(map[IncludeKind]struct{})
@@ -45,7 +62,7 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 			}
 			kind := IncludeKind(part)
 			if !kind.valid() {
-				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs, patches, config)", part)
+				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs, transcript, reasoning, patches, config)", part)
 			}
 			if _, ok := seen[kind]; ok {
 				continue
@@ -54,12 +71,38 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 			out = append(out, kind)
 		}
 	}
-	return out, nil
+	return normalizeInclude(out), nil
+}
+
+// normalizeInclude applies the include family's implications in canonical order:
+// reasoning is a conversation view with thinking blocks, so it always brings
+// transcript along, and spelling both is the same set as spelling one.
+func normalizeInclude(in IncludeSet) IncludeSet {
+	if !in.Has(IncludeReasoning) {
+		return in
+	}
+	// Keep first-appearance order for every other token, then make the pair
+	// canonical: transcript, reasoning.
+	out := make(IncludeSet, 0, len(in)+1)
+	hasTranscript := false
+	for _, kind := range in {
+		switch kind {
+		case IncludeReasoning:
+			continue
+		case IncludeTranscript:
+			hasTranscript = true
+		}
+		out = append(out, kind)
+	}
+	if !hasTranscript {
+		out = append(out, IncludeTranscript)
+	}
+	return append(out, IncludeReasoning)
 }
 
 func (k IncludeKind) valid() bool {
 	switch k {
-	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs, IncludePatches, IncludeConfig:
+	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs, IncludeTranscript, IncludeReasoning, IncludePatches, IncludeConfig:
 		return true
 	default:
 		return false

@@ -16,28 +16,33 @@ import (
 
 // Options configures a trace export.
 type Options struct {
-	TraceID     string
-	OutputDir   string
-	Format      Format
-	Include     IncludeSet
-	SessionLogs SessionLogLookup // optional; default Cursor/Pi stubs
+	TraceID   string
+	OutputDir string
+	Format    Format
+	Include   IncludeSet
+	// Transcripts overrides the default Cursor/Pi transcript lookup.
+	Transcripts TranscriptLookup
+	// TranscriptTimeout bounds each provider resolution; zero means the
+	// package default.
+	TranscriptTimeout time.Duration
 }
 
 // TraceExportData is the view model passed to export renderers.
 type TraceExportData struct {
-	Slug       string
-	ColonyRoot string
-	ExportedAt time.Time
-	Trace      hiveview.TraceDetailView
-	Runs       []hiveview.RunView
-	Events     []hiveview.EventFeedItem
-	Include    IncludeSet
-	BeeYAML    []NamedYAML
-	ColonyYAML *NamedYAML
-	CueYAML    []NamedYAML
-	Artifacts  []ArtifactExport
-	AgentLogs  []AgentLogExport
-	Patches    []PatchExport
+	Slug          string
+	ColonyRoot    string
+	ExportedAt    time.Time
+	Trace         hiveview.TraceDetailView
+	Runs          []hiveview.RunView
+	Events        []hiveview.EventFeedItem
+	Include       IncludeSet
+	BeeYAML       []NamedYAML
+	ColonyYAML    *NamedYAML
+	CueYAML       []NamedYAML
+	Artifacts     []ArtifactExport
+	AgentLogs     []AgentLogExport
+	Conversations []ConversationExport
+	Patches       []PatchExport
 	// PatchDiagnostics explain records on disk that are not ordinary entries, so one
 	// malformed file cannot make the valid ones disappear.
 	PatchDiagnostics []PatchDiagnosticExport
@@ -163,7 +168,10 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 		Include:    include,
 	}
 	if include.Has(IncludeAgentLogs) {
-		data.AgentLogs = resolveAgentLogs(runsView, opts.SessionLogs)
+		data.AgentLogs = resolveAgentLogs(runsView, opts.Transcripts, opts.TranscriptTimeout)
+	}
+	if include.HasConversation() {
+		data.Conversations = resolveConversations(runsView, opts.Transcripts, opts.TranscriptTimeout, include.HasReasoning())
 	}
 	if include.Has(IncludeBees) {
 		bees, err := loadBeeYAML(ctx.ColonyRoot, detail.Bees)

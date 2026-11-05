@@ -2,10 +2,11 @@ package export
 
 import (
 	"context"
-	"unicode/utf8"
+	"time"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/adapters/cursor"
+	"github.com/russ-p/paseka/internal/adapters/opencode"
 	"github.com/russ-p/paseka/internal/adapters/pi"
 	"github.com/russ-p/paseka/internal/hiveview"
 )
@@ -13,12 +14,24 @@ import (
 const (
 	maxAgentLogToolCalls = 100
 	maxAgentLogArgsRunes = 200
+	// maxAgentLogToolInputRunes leaves the transcript's generic tool-input cap
+	// out of the Agent log's way: the shipped table picked path/url/command out
+	// of the whole input before applying its own 200-rune summary cap, so a
+	// summary key past the 2k default must still be found. 8 MiB is the Cursor
+	// JSONL line ceiling, so no parsed input can exceed it.
+	maxAgentLogToolInputRunes = 8 << 20
+	// defaultTranscriptTimeout bounds one provider resolution. A wedged
+	// resolver is cut off and reported as an omission instead of stalling the
+	// export.
+	defaultTranscriptTimeout = 15 * time.Second
 )
 
-// SessionLogLookup returns an optional provider-log resolver for an adapter name.
-type SessionLogLookup func(adapterName string) adapters.SessionLogResolver
+// TranscriptLookup returns an optional provider-transcript resolver for an
+// adapter name.
+type TranscriptLookup func(adapterName string) adapters.TranscriptResolver
 
-// AgentLogExport is the per-run Agent log view for HTML/Markdown.
+// AgentLogExport is the per-run Agent log view for HTML/Markdown. It is the
+// tool-call projection over the resolved transcript.
 type AgentLogExport struct {
 	AgentID   string
 	Omitted   string
@@ -26,10 +39,12 @@ type AgentLogExport struct {
 	Truncated bool
 }
 
-func defaultSessionLogLookup(adapterName string) adapters.SessionLogResolver {
+func defaultTranscriptLookup(adapterName string) adapters.TranscriptResolver {
 	switch adapterName {
 	case "cursor":
 		return cursor.New()
+	case "opencode":
+		return opencode.New()
 	case "pi":
 		return pi.New()
 	default:
@@ -37,18 +52,18 @@ func defaultSessionLogLookup(adapterName string) adapters.SessionLogResolver {
 	}
 }
 
-func resolveAgentLogs(runs []hiveview.RunView, lookup SessionLogLookup) []AgentLogExport {
+func resolveAgentLogs(runs []hiveview.RunView, lookup TranscriptLookup, timeout time.Duration) []AgentLogExport {
 	if lookup == nil {
-		lookup = defaultSessionLogLookup
+		lookup = defaultTranscriptLookup
 	}
 	out := make([]AgentLogExport, 0, len(runs))
 	for _, run := range runs {
-		out = append(out, resolveAgentLog(run, lookup))
+		out = append(out, resolveAgentLog(run, lookup, timeout))
 	}
 	return out
 }
 
-func resolveAgentLog(run hiveview.RunView, lookup SessionLogLookup) AgentLogExport {
+func resolveAgentLog(run hiveview.RunView, lookup TranscriptLookup, timeout time.Duration) AgentLogExport {
 	entry := AgentLogExport{AgentID: run.AgentID}
 	if run.ProviderSessionID == "" {
 		entry.Omitted = adapters.SessionLogOmittedNoProviderSessionID
@@ -59,30 +74,40 @@ func resolveAgentLog(run hiveview.RunView, lookup SessionLogLookup) AgentLogExpo
 		entry.Omitted = adapters.SessionLogOmittedUnsupported
 		return entry
 	}
-	log, err := resolver.ResolveSessionLog(context.Background(), adapters.SessionLogRequest{
+	if timeout <= 0 {
+		timeout = defaultTranscriptTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	limits := adapters.DefaultTranscriptLimits()
+	limits.ToolInput = maxAgentLogToolInputRunes
+	transcript := adapters.ResolveTranscript(ctx, resolver, adapters.TranscriptRequest{
 		ProviderSessionID: run.ProviderSessionID,
 		Adapter:           run.Adapter,
 		Workspace:         run.Workspace,
 		ColonyRoot:        run.ColonyRoot,
 		RunDir:            run.RunDir,
 		AgentID:           run.AgentID,
+		Include:           adapters.PresetToolCall(),
+		Limits:            limits,
+		// The Agent log is a whole-table projection with its own row cap, so it
+		// never inherits the Console page default.
+		Window: adapters.WholeTranscriptWindow(),
 	})
-	if err != nil {
-		entry.Omitted = adapters.SessionLogOmittedResolveError
+	if transcript.Omitted != "" {
+		entry.Omitted = transcript.Omitted
 		return entry
 	}
-	if log.Omitted != "" {
-		entry.Omitted = log.Omitted
-		return entry
-	}
-	calls := log.ToolCalls
+
+	calls := adapters.ProjectToolCalls(transcript)
 	if len(calls) > maxAgentLogToolCalls {
 		calls = calls[:maxAgentLogToolCalls]
 		entry.Truncated = true
 	}
 	trimmed := make([]adapters.ToolCall, len(calls))
 	for i, call := range calls {
-		call.Args = truncateRunes(call.Args, maxAgentLogArgsRunes)
+		call.Args, _ = adapters.TruncateRunes(call.Args, maxAgentLogArgsRunes)
 		trimmed[i] = call
 	}
 	entry.ToolCalls = trimmed
@@ -96,15 +121,4 @@ func agentLogByAgentID(logs []AgentLogExport, agentID string) AgentLogExport {
 		}
 	}
 	return AgentLogExport{AgentID: agentID}
-}
-
-func truncateRunes(s string, limit int) string {
-	if limit <= 0 || s == "" {
-		return s
-	}
-	if utf8.RuneCountInString(s) <= limit {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:limit]) + "…"
 }

@@ -23,6 +23,26 @@ func TestParseInclude(t *testing.T) {
 			want: []IncludeKind{IncludeAgentLogs},
 		},
 		{
+			name: "transcript",
+			in:   []string{"transcript"},
+			want: []IncludeKind{IncludeTranscript},
+		},
+		{
+			name: "reasoning implies transcript",
+			in:   []string{"reasoning"},
+			want: []IncludeKind{IncludeTranscript, IncludeReasoning},
+		},
+		{
+			name: "transcript and reasoning are equivalent to reasoning alone",
+			in:   []string{"transcript,reasoning"},
+			want: []IncludeKind{IncludeTranscript, IncludeReasoning},
+		},
+		{
+			name: "reasoning deduped with transcript",
+			in:   []string{"reasoning", "reasoning,transcript"},
+			want: []IncludeKind{IncludeTranscript, IncludeReasoning},
+		},
+		{
 			name: "csv",
 			in:   []string{"usage,durations"},
 			want: []IncludeKind{IncludeUsage, IncludeDurations},
@@ -58,6 +78,12 @@ func TestParseInclude(t *testing.T) {
 				if !strings.Contains(err.Error(), "invalid --include") {
 					t.Fatalf("error = %v", err)
 				}
+				if !strings.Contains(err.Error(), "transcript") {
+					t.Fatalf("error does not list transcript: %v", err)
+				}
+				if !strings.Contains(err.Error(), "reasoning") {
+					t.Fatalf("error does not list reasoning: %v", err)
+				}
 				return
 			}
 			if err != nil {
@@ -85,5 +111,22 @@ func TestIncludeSetHas(t *testing.T) {
 	}
 	if set.Has(IncludeColony) {
 		t.Fatal("colony should not be included")
+	}
+}
+
+func TestIncludeSetConversationHelpers(t *testing.T) {
+	reasoning, err := ParseInclude([]string{"reasoning"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reasoning.HasConversation() || !reasoning.HasReasoning() {
+		t.Fatalf("reasoning set = %+v, want a conversation with thinking", reasoning)
+	}
+	transcript, err := ParseInclude([]string{"transcript"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !transcript.HasConversation() || transcript.HasReasoning() {
+		t.Fatalf("transcript set = %+v, want a conversation without thinking", transcript)
 	}
 }

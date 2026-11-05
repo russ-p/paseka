@@ -37,11 +37,6 @@ func (a *Adapter) LaunchSpec() adapters.LaunchSpec {
 	return adapters.LaunchSpec{DefaultBinary: defaultBinary}
 }
 
-// ResolveSessionLog is a stub until Pi session-dir readers land (spec 021).
-func (a *Adapter) ResolveSessionLog(_ context.Context, _ adapters.SessionLogRequest) (adapters.SessionLog, error) {
-	return adapters.SessionLog{Omitted: adapters.SessionLogOmittedNotImplemented}, nil
-}
-
 // Run invokes `pi -p` in non-interactive mode.
 func (a *Adapter) Run(ctx context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
 	if req.Workspace == "" {

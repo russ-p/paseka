@@ -42,6 +42,28 @@ Adapters live under `internal/adapters/<name>/`. Registration is declarative via
 
 How a bee becomes a binary, argv, and env — config layer precedence (repo, profile, machine-local), `params` vs `command`, credentials, and the single-resolver model: **[Adapter launch resolution](../reference/adapter-launch-resolution.md)**.
 
+### Provider transcripts (`TranscriptResolver`)
+
+Reading a provider's own conversation is a second, optional adapter capability beside `Adapter.Run()`. `ResolveTranscript` takes the association fields already stored on the run (`providerSessionId`, adapter, workspace, colony root, run dir, agent id) plus three request knobs, and returns a normalized transcript:
+
+- **Include mask** — which payloads the caller wants: text, reasoning, tool input, tool output, system turns. Tool identity (name, call id, status) is always present because every view uses it; an adapter skips work the mask did not request.
+- **Limits** — per-part rune caps applied through one shared helper: 8 000 text, 16 000 reasoning, 2 000 tool input, 16 000 tool output. A cut part is marked `truncated` so a renderer can say it is a prefix.
+- **Window** — a turn offset, limit, and opaque cursor. The default first page is 100 turns. Export asks for the whole transcript so a report never depends on the page default; a provider that cannot slice returns everything and reports `hasMore` honestly instead of faking a cursor.
+
+Consumers pick a named preset rather than assembling a mask: tool-call (tool input only), dialogue (text only), dialogue-with-reasoning, or full. Two pure projections live above the adapter and are shared by export and future Console work: **Agent log** (tool calls with the shipped 200-rune argument summary and 100-row cap) and **Conversation** (user/assistant dialogue with tools collapsed to name and status). The normalized shape carries ordered user/assistant/system turns with typed text, reasoning, and tool parts, an omit reason, the truncation flag, and the page signal. A failed read is a stable omission — `no providerSessionId`, `unsupported`, `store not found`, `parse error`, `resolve error`, or `timeout` — never an error that fails an export, and resolution runs read-only and side-effect free under a caller deadline.
+
+Provider routes (durable rules):
+
+| Provider | Route |
+| -------- | ----- |
+| **Cursor** | The per-project `agent-transcripts/<uuid>/<uuid>.jsonl` read in place. It records user/assistant text and tool parts but no reasoning, so a reasoning request yields an empty reasoning set, not an omission. Workspace slug first, then glob. |
+| **OpenCode 1** | The frozen 1.x storage JSON tree (`session`, then messages by session id, then parts by message id), read with the standard library. |
+| **OpenCode 2** | The provider's own `opencode session export <id>` output, or its HTTP export endpoint when the adapter already owns a live server for that session. The SQLite store is never opened. |
+| **Pi** | The run-local `<runDir>/pi-sessions` JSONL; the file whose session header id matches `providerSessionId` wins, otherwise the newest. `toolResult` messages are folded into the call they answer by call id. |
+| **Claude** | Unsupported: the adapter returns `unsupported`, so transcript, reasoning, and Agent log sections are omitted with that reason. |
+
+The OpenCode generation split stays behind the `opencode` adapter name: callers ask for `opencode`, and the proxy tries the frozen 1.x reader first and falls through to 2.x only when the 1.x store is absent, so a 2.x binary still resolves old 1.x sessions. **Dependency rule:** resolution may use the standard library, the provider's files, the provider's CLI subcommand, or the provider's HTTP API — never a database driver, a provider SDK, or a new third-party module. If no readable export surface exists, the adapter returns `unsupported` rather than coupling to a store it does not own.
+
 ### 1.1 File-based agent IPC (`runs/`)
 
 Each spawned agent gets an isolated directory under the **colony root** (not inside a worktree), so results survive worktree cleanup and multiple agents can share one `traceId`.
@@ -55,7 +77,7 @@ Each spawned agent gets an isolated directory under the **colony root** (not ins
 ├── meta.json          # adapter → observers: bee, adapter, implementation, workspace, profile, startedAt, providerSessionId
 ├── status.json        # runtime → observers: completed|failed, exitCode, finishedAt
 ├── session.json       # interactive only: pid, state, session metadata
-└── transcript.ndjson  # interactive only: dialogue audit log
+└── transcript.ndjson  # interactive only: raw PTY capture (attach / replay / fallback)
 ```
 
 One record per Flight Trail, beside the run directories rather than inside one
@@ -192,7 +214,7 @@ agent -p --trust --force \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `agent` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root). Pre-existing dirty files are not attributed to the run.
-5. **Stream JSON** — stdout, because the runtime always requests `--output-format stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). When stream (or compact JSON) lines include `session_id`, the adapter persists **`providerSessionId`** on `result.json` and `meta.json` so later export/inspect can associate the run with Cursor’s native chat without copying the vendor store. `paseka export --include agent-logs` resolves a per-run **Agent log** through `SessionLogResolver` at read time: Cursor reads `~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl` (UUID = `providerSessionId`; workspace slug first, then glob). Missing provider data never fails export. Pi still stubs that seam. Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
+5. **Stream JSON** — stdout, because the runtime always requests `--output-format stream-json` (lifecycle/diagnostic parse only; domain events are not extracted from assistant text). When the final `result` line includes `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`), the adapter persists it on `result.json` as optional `usage` (source `cursor.stream-json`). When stream (or compact JSON) lines include `session_id`, the adapter persists **`providerSessionId`** on `result.json` and `meta.json` so later export/inspect can associate the run with Cursor’s native chat without copying the vendor store. `paseka export --include agent-logs` resolves the run's **provider transcript** through `TranscriptResolver` at read time and projects it into the per-run **Agent log**: Cursor reads `~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl` in place (UUID = `providerSessionId`; workspace slug first, then glob) for user/assistant text and tool parts, and the tool-call projection keeps the 200-rune argument summary and 100-row cap. `paseka export --include transcript` resolves through the same seam with the dialogue preset and projects the result into the per-run **Conversation**: user and assistant turns in provider order, each tool call collapsed to one name/status line, reasoning and system turns dropped, and tool input/output never carried. `paseka export --include reasoning` uses the dialogue-with-reasoning preset instead: it implies `transcript`, renders thinking blocks under the reasoning cap with truncation marked, and still excludes system turns and tool payloads. Missing provider data never fails export; it omits with a stable reason. Both projections run the shared `internal/redact` content helper before caps, so obvious secrets in text, reasoning, tool arguments, and tool output become `<redacted>` and a secret cut by a cap is never emitted in part. Pi reads the run-local `pi-sessions` JSONL in place: the file whose session header id matches `providerSessionId`, otherwise the newest file in that directory, so multiple session files never mix turns. Adapters without usage omit the field; Honey Reserve (`energyToken`) stays dispatch-count based and is unrelated.
 6. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
 Go implementation: `internal/adapters/cursor/` runs `agent` with `exec.CommandContext` (no tmux — process wait replaces the shell's `tmux wait-for` pattern).
@@ -236,7 +258,7 @@ pi -p --mode json \
 2. **Run summary** — runtime auto-publishes `INSIGHT/run.summary` when allowed and missing; agents may emit it explicitly via `paseka event emit`.
 3. **Log artifact** — runtime writes normalized summary to `summary.md` for human inspection.
 4. **Git diff** — after `pi` exits, capture a **baseline-attributed** tracked diff in the **workspace** (worktree or repo root).
-5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `summary.md` only. A native session id is resolved from the JSON session header (`{"type":"session","id":…}`) when present, otherwise from `--session-id` on the argv, and persisted as **`providerSessionId`** on `result.json` and `meta.json`. `command:` overrides do not inject session flags; association then depends on stdout or flags already in the custom argv. Export Agent log uses the same optional `SessionLogResolver` seam as Cursor (Pi is stubbed until session-dir readers land).
+5. **Stdout** — raw stdout is preserved as an artifact. In `json`/`rpc` modes the adapter tolerantly extracts a human summary from common JSON fields (`summary`, `output`, `text`, etc.) for `summary.md` only. A native session id is resolved from the JSON session header (`{"type":"session","id":…}`) when present, otherwise from `--session-id` on the argv, and persisted as **`providerSessionId`** on `result.json` and `meta.json`. `command:` overrides do not inject session flags; association then depends on stdout or flags already in the custom argv. Export Agent log and the Conversation section use the same optional `TranscriptResolver` seam as Cursor; Pi reads the run-local `<runDir>/pi-sessions` JSONL, choosing the file whose session header id matches `providerSessionId` and otherwise the newest file.
 6. **Token usage** — optional `usage` on `result.json`. In `--mode json` the adapter sums each assistant turn's `message_end` usage (`message_update` deltas repeat the same running totals, so they are not counted; tool results carry tool-level usage and are skipped) — source `pi.print-json`. When stdout carries no usage (`text`, `rpc`, or a JSON stream without events) the adapter falls back to the run-scoped session file(s) under `--session-dir`, counting assistant messages plus standalone spend (`usage` cache-warm entries) and compaction summaries — source `pi.session-jsonl`. Both are cumulative for the session file, so a resumed session includes earlier turns. `command:` overrides skip the fallback because the session dir is then not ours.
 7. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
 
@@ -296,8 +318,10 @@ claude -p --output-format stream-json --verbose \
 The adapter records process outcome, normalized summary, stdout/stderr, git
 diff, `result.json`, and `status.json`. Stream JSON is parsed for lifecycle
 events and summary only; domain choreography should still be emitted through
-`paseka event emit --stdin`. Machine-local overrides live in
-`~/.config/paseka/<slug>/adapters/claude.yaml`.
+`paseka event emit --stdin`. Claude does not implement `TranscriptResolver`:
+`--include transcript`, `--include reasoning`, and `--include agent-logs` omit
+their sections with `unsupported`, and the export still succeeds. Machine-local
+overrides live in `~/.config/paseka/<slug>/adapters/claude.yaml`.
 
 Go implementation: `internal/adapters/claude/`.
 
@@ -353,6 +377,8 @@ cd "$WORKSPACE" && opencode run --format json --auto --title "$AGENT_ID" \
 5. **Stdout** — raw stdout is preserved as an artifact. In JSON format both lines tolerantly read `sessionID` and the text parts; the native id is persisted as **`providerSessionId`** on `result.json` and `meta.json`. V1 reads token usage from `step_finish` parts (source `opencode.run-json`); V2 first reads the run stream (source `opencode.v2-run-stream`) and, when a single-step run emits no token event, falls back to the session record (source `opencode.v2-session-record`). V2 also records reasoning tokens and reported cost, and surfaces a provider outcome of `failed` / `interrupted` as a run warning.
 6. **Token usage (HITL)** — a TUI has no machine-readable stdout. V1 starts a throwaway `opencode serve` after exit and reads the session's cumulative `tokens` from `GET /session/<id>` (source `opencode.server-json`). V2 stops its managed server and starts a throwaway one to read the session record (source `opencode.v2-session-record`), so accounting is independent of the managed server's lifetime. Totals are cumulative for that provider session, so a resumed session includes earlier turns. An answer that reports nothing means no usage, never a failure.
 7. **status.json** — runtime records exit code and outcome for `paseka inspect` / Queen Console.
+
+**Provider transcript:** `--include transcript`, `--include reasoning`, and `--include agent-logs` read the session in place through `TranscriptResolver` behind the same `opencode` identity. V1 reads the frozen storage JSON tree; V2 uses the provider's own `opencode session export <id>` output, or its HTTP export endpoint when the adapter already owns a live server for that session. Neither line opens the SQLite store. See [Provider transcripts](#provider-transcripts-transcriptresolver) for the capability, presets, and the dependency rule.
 
 **Event publishing boundary:** OpenCode JSON is **not** parsed into domain bus events. Agents must publish via `paseka event emit --stdin`.
 
@@ -455,7 +481,7 @@ For human-in-the-loop dialogue, Paseka uses a **parallel** session path alongsid
 | AFK | `paseka bee run <role>` | `Adapter.Run()` — Cursor: `agent -p`; Pi: `pi -p`; OpenCode: `opencode run` via the `opencode` proxy or a pinned `opencodev1` / `opencodev2` |
 | Interactive | `paseka bee chat <role>` | `SessionAdapter.SessionCommand()` — Cursor: `agent` without `-p`; Pi: `pi` without `-p`/`--mode`; OpenCode: TUI without `run`, PTY-owned by runtime |
 
-Interactive runs add `session.json` and `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree. Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; OpenCode V1 pre-creates a session (`opencode serve` + `POST /session`, no model turn), launches the TUI with `--session` plus its own loopback control server, and posts the kickoff to `/session/<id>/prompt_async`; OpenCode V2 keeps a Paseka-managed `opencode serve`, creates the session with a caller-supplied id over `/api/session`, and launches the TUI with `--server` + `--session` + `--prompt`. **Resume** skips pre-create/creation for all and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta); a recorded implementation that disagrees with the major that would now run is refused with `generation_mismatch`. Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). The configured adapter name and the concrete `implementation` are recorded together. Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
+Interactive runs add `session.json` and a raw PTY `transcript.ndjson` under the same `.paseka/runs/<traceId>/<agentId>/` tree; the provider conversation is not stored there and is resolved read-only at view time through [Provider transcripts](#provider-transcripts-transcriptresolver). Cursor HITL pre-creates a chat (`agent create-chat`) and launches the TUI with `--resume`; OpenCode V1 pre-creates a session (`opencode serve` + `POST /session`, no model turn), launches the TUI with `--session` plus its own loopback control server, and posts the kickoff to `/session/<id>/prompt_async`; OpenCode V2 keeps a Paseka-managed `opencode serve`, creates the session with a caller-supplied id over `/api/session`, and launches the TUI with `--server` + `--session` + `--prompt`. **Resume** skips pre-create/creation for all and reuses the stored `providerSessionId` on a new Paseka session (`resumedFrom` on meta); a recorded implementation that disagrees with the major that would now run is refused with `generation_mismatch`. Pi HITL pins `--session-id <agentId>`. The native id is stored as **`providerSessionId`** on `session.json` and `meta.json` before the PTY starts (missing id does not fail a new session). The configured adapter name and the concrete `implementation` are recorded together. Active sessions are registered in `~/.config/paseka/<slug>/state.json`. Terminal UI (default terminal vs Ghostty) is configured in `~/.config/paseka/<slug>/terminal.yaml`.
 
 ---
 
@@ -593,7 +619,7 @@ internal/
   hiveview/                 # shared read models (traces, tasks, runs, agents, invites)
   console/                  # Queen Console HTTP API + embedded SPA (transport); chrome header SSE; Host/System/Git snapshots are console-local, not hiveview
   gate/telegram/            # Telegram Human Gateway (transport)
-  export/                   # trace HTML/Markdown export (uses hiveview; agent-logs via adapter SessionLogResolver)
+  export/                   # trace HTML/Markdown export (uses hiveview; agent-logs and transcript project the provider transcript)
   colony/                   # load .paseka + home config, config profiles, bee schema, slug resolution
   colonyinit/               # paseka init scaffolds (.paseka/, home config, default bees)
   homestate/                # machine-local state.json registry (runtime, sessions, invites, worktrees, pull requests)
