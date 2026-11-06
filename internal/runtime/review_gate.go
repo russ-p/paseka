@@ -260,7 +260,13 @@ func (r *Reactor) maybeActivateFinalReview(ctx context.Context, traceID string, 
 		return err
 	}
 	if res.ClosingSeeded != nil {
-		if err := r.dispatchReady(ctx, traceID, *res.ClosingSeeded, execCtx, "closing-seed"); err != nil {
+		// Dispatch through the ordinary scheduler without holding the bus
+		// subscription: a closing run lasts minutes, and a blocked consumer lets
+		// JetStream redeliver every event published meanwhile.
+		seeded := *res.ClosingSeeded
+		if err := r.runDispatch(ctx, traceID, func() error {
+			return r.dispatchReady(ctx, traceID, seeded, execCtx, "closing-seed")
+		}); err != nil {
 			return err
 		}
 	}

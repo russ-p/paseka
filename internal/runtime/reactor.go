@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -381,6 +382,31 @@ func (r *Reactor) registryForConfig(ctx colony.Context) (*BeeRegistry, error) {
 	return registry, nil
 }
 
+// localEchoTTL bounds how long a locally applied event stays suppressed when
+// its bus echo arrives. It must outlive any work the reactor can do between
+// applying the event and consuming the echo — a handler blocked behind a long
+// adapter run, a slow ledger write, or a backing-up subscription — because an
+// expired entry lets the reactor apply its own event again (moving a completed
+// task back to running, double-charging honey). The window is generous rather
+// than tight for that reason.
+const localEchoTTL = time.Hour
+
+// localEchoMaxEntries bounds the suppression memory. Entries are kept after
+// they are matched (a redelivered echo must stay suppressed), so a long-lived
+// reactor needs a ceiling; halves are dropped at once to avoid pruning on every
+// publish.
+const localEchoMaxEntries = 8192
+
+// localEchoKey identifies one event for echo suppression. The event identity is
+// stable across redeliveries; the payload fingerprint is only for records
+// written before identities existed.
+func localEchoKey(ev protocol.Event) string {
+	if ev.ID != "" {
+		return ev.ID
+	}
+	return eventFingerprint(ev)
+}
+
 func eventFingerprint(ev protocol.Event) string {
 	return fmt.Sprintf("%s\x00%s\x00%d\x00%s", ev.TraceID, ev.Type, ev.CreatedAt.UnixNano(), string(ev.Payload))
 }
@@ -391,26 +417,42 @@ func (r *Reactor) rememberLocalEvent(ev protocol.Event) {
 	if r.recentLocal == nil {
 		r.recentLocal = make(map[string]time.Time)
 	}
-	now := time.Now()
-	r.recentLocal[eventFingerprint(ev)] = now
+	r.recentLocal[localEchoKey(ev)] = time.Now()
+	if len(r.recentLocal) <= localEchoMaxEntries {
+		return
+	}
+	type stampedEntry struct {
+		key string
+		at  time.Time
+	}
+	entries := make([]stampedEntry, 0, len(r.recentLocal))
 	for key, at := range r.recentLocal {
-		if now.Sub(at) > 2*time.Minute {
-			delete(r.recentLocal, key)
-		}
+		entries = append(entries, stampedEntry{key: key, at: at})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+	for _, entry := range entries[:len(entries)-localEchoMaxEntries/2] {
+		delete(r.recentLocal, entry.key)
 	}
 }
 
+// takeLocalEcho reports whether the event is this reactor's own echo. The entry
+// is kept: the subscription can redeliver the same event (a handler that
+// outlives AckWait), and every copy must stay suppressed, not just the first.
 func (r *Reactor) takeLocalEcho(ev protocol.Event) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.recentLocal == nil {
 		return false
 	}
-	key := eventFingerprint(ev)
-	if _, ok := r.recentLocal[key]; !ok {
+	key := localEchoKey(ev)
+	at, ok := r.recentLocal[key]
+	if !ok {
 		return false
 	}
-	delete(r.recentLocal, key)
+	if time.Since(at) > localEchoTTL {
+		delete(r.recentLocal, key)
+		return false
+	}
 	return true
 }
 

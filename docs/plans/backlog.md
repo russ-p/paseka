@@ -422,8 +422,15 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 - **Why deferred:** Orthogonal to bee contracts; needs a written split (embedded vs external, bind address, data dir, one-consumer-per-prefix, shutdown) before changing `paseka init` defaults.
 - **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
 
-#### Fork marker on shared-bus events
+#### Dispatches still run inside the bus callback
 
+- **Kind:** follow-up
+- **Source:** trail audit `trace-01a1a867357be42e` (closing round re-dispatched and left `running`)
+- **Summary:** The reactor now dispatches a seeded closing round through `runDispatch` (async on the NATS path) and keeps its own echoes suppressed for redelivery, so a slow closing run no longer blocks the durable consumer. Two callback paths still run an agent inline and can hold the consumer past `AckWait` (30s): `handleHumanFeedback` (`review_gate.go`) and `unblockEnergyBlockedTasks` (`energy.go`, ordered before the pending drain on `energy.add`). A rework or energy-unblock run therefore still lets JetStream redeliver the events published during it; the echo memory absorbs the runtime's own events, but any non-idempotent reducer reached by another producer's redelivery is unprotected. Move the rework dispatch onto `runDispatch` and give the energy drain the same treatment, or raise `AckWait` and ack in a way that survives a long handler.
+- **Why deferred:** The reported closing-phase failure is fixed by the echo and seed changes; the remaining paths are rarer (human rejection, energy top-up) and the energy drain's ordering needs its own test before it can move off the callback.
+- **Revisit when:** A rework or energy-unblock run is observed blocking the reactor, or another task is found stuck `running`/`waiting_review` with no owner after a long run.
+
+#### Fork marker on shared-bus events
 - **Kind:** idea
 - **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Consumer decision
 - **Summary:** Add an optional NATS message header such as `Paseka-Trail-Kind: fork` and `Paseka-Fork-Of: <sourceTrace>` so an external side-effecting subscriber can filter experimental trails without querying trail lineage. Keep the event envelope and payload unchanged. Persist the header in the trail event record only if replay or audit needs that provenance. V1 has no confirmed external consumers and uses lineage lookup by `traceId` instead.
