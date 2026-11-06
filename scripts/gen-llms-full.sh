@@ -10,6 +10,7 @@ files=(
   guide/bee-config.md
   guide/prompt-templates.md
   guide/cues.md
+  guide/skills.md
   reference/bee-routing.md
   reference/event-contracts.md
   reference/insight-kinds.md

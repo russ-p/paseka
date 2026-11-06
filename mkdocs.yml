@@ -84,6 +84,7 @@ nav:
       - Interactive sessions: guide/interactive-sessions.md
       - Queen Console: guide/queen-console.md
       - Forage Cues: guide/cues.md
+      - Colony skills: guide/skills.md
       - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
       - Homelab deployment: guide/homelab-deployment.md

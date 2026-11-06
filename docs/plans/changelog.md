@@ -2,6 +2,22 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — The colony owns its procedures, and one rule set says what a skill is
+
+A colony's procedures lived in prompt templates and in a Beekeeper's head: unconditional per role, growing without bound, and invisible to the clients a bee actually runs under. The colony now has a skill store of its own, in the portable Agent Skills format, and one validation rule set that every later path reuses.
+
+- **One root, in the repository.** `.paseka/skills/<name>/SKILL.md` plus optional `scripts/`, `references/`, and `assets/`. Each immediate directory is one skill named for that directory; the store is flat, so a family is a name prefix. The store is plain committed files, outside worktrees, run directories, and caches, and a trail's configuration snapshot already carries it. The state ledger sits beside the store (`.paseka/skills.index.json`), so a directory under the store is always a skill.
+- **One rule set.** A skill is valid when its `name` is present, has the standard's shape (lowercase letters, digits, hyphens; no leading, trailing, or doubled hyphen; at most 64 characters), equals its directory name, and its `description` is present and within 1–1024 characters. Optional `metadata` must be string to string. Frontmatter is YAML; other keys are ignored so a skill authored for another client stays readable. The same scan runs for the live store, `doctor`, and every later path — there is no second copy to drift.
+- **Fixed budgets.** A single file in a skill directory may not exceed 256 KiB, and the store may not exceed 8 MiB with the ledger excluded. A breach is reported, never resolved by silently dropping a reference.
+- **One reference syntax.** A reference is a bare name, a `*` glob over the name, or `*` alone. `shared:`/`local:` prefixes, paths, and `?`, `[]`, `{}` are invalid references rather than literal names. A non-wildcard reference that matches nothing is a failure; `*` may match an empty store.
+- **`paseka skills validate [reference|pattern|*]`** scans the live repository store and exits non-zero on any invalid skill, unmatched reference, or budget breach. Bare `paseka skills` prints the group's help and changes nothing. `paseka doctor` reports the same verdict as errors.
+- **Reusable seam.** `internal/skills` exposes the scan, the report (findings by skill and reason), the reference parser, and a resolver-style selection that fails closed, for the runtime, snapshot, and approval paths that build on it.
+
+- Spec: [041-skills-layer](../specs/041-skills-layer.md)
+- Canonical: [Colony skills](../guide/skills.md), [CLI](../guide/cli.md#paseka-skills) (`skills validate`, doctor findings)
+
+Not in this ship: the per-role gate and colony defaults, the system-prompt advertisement, the run record, `paseka skills load`, the rest of the store command group (`list`, `show`, `remove`, `disable`, `enable`), usage attribution and the export section, proposals/approval/trial, and the native client bridge — those are the later slices of the same spec.
+
 ## 2026-11 — A conversation is read from the provider, not reconstructed from terminal noise
 
 The only per-run dialogue Paseka kept was the PTY capture: escape sequences, cursor moves, partial redraws. The provider had already written a clean, ordered conversation to its own store, but the adapter seam returned only tool calls, so every other consumer threw that conversation away. Export could show a tool table but not what was said, and a HITL session was readable only as a rendering.

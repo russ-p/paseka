@@ -10,6 +10,7 @@ import (
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/cues"
 	"github.com/russ-p/paseka/internal/review"
+	"github.com/russ-p/paseka/internal/skills"
 	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +40,16 @@ func newDoctorCmd() *cobra.Command {
 			if beesErr != nil {
 				report.Errors = append(report.Errors, beesErr.Error())
 				bees = map[string]colony.Bee{}
+			}
+			// The skill store is colony configuration, so a broken skill is an
+			// error here, not a warning: it is the same verdict `skills validate`
+			// prints, from the same scan.
+			if skillReport, skillErr := skills.ScanColony(ctxColony.ColonyRoot); skillErr != nil {
+				report.Errors = append(report.Errors, skillErr.Error())
+			} else {
+				for _, issue := range skillReport.Issues() {
+					report.Errors = append(report.Errors, issue.Error())
+				}
 			}
 			standing := cues.DiagnoseStanding(ctxColony.ColonyRoot, bees)
 			report.Warnings = append(report.Warnings, standing.Warnings...)

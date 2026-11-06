@@ -111,6 +111,8 @@ paseka
 ├── cue
 │   ├── list
 │   └── run <id> <text>
+├── skills
+│   └── validate [reference|pattern|*]
 ├── signal
 ├── proposal
 │   ├── approve
@@ -507,7 +509,7 @@ Check NATS connectivity, JetStream resources, and colony bee wiring for the colo
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning); **task dependencies** (warnings for a trail with a planned task whose `dependsOn` names an unknown, cancelled, or blocked task, or forms a cycle — the state that keeps the final gate closed).
+**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning); **task dependencies** (warnings for a trail with a planned task whose `dependsOn` names an unknown, cancelled, or blocked task, or forms a cycle — the state that keeps the final gate closed); **skills** (the same store scan `paseka skills validate` uses — an invalid `SKILL.md`, a stray entry at the store root, or a budget breach — as errors).
 
 Exits with an error if any check fails.
 
@@ -601,6 +603,28 @@ paseka cue run daily-triage "tick $(date -I)"
 ```
 
 Standing cues seed honey on the first tick and replace remaining with `standing.stipend` on later ticks (`SIGNAL` / `energy.stipend`). The first seed also sets `INSIGHT/trace.title` from the cue description (or cue id) when the trail has no title yet. A killed standing trail refuses the run. A busy standing trail (open ledger task or live AFK on that id) refuses the run without burning stipend.
+
+---
+
+## `paseka skills`
+
+Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, and budgets: [Colony skills](skills.md).
+
+### `paseka skills validate [reference|pattern|*]`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+
+Validates the live repository store with the one rule set the runtime uses. With no argument the whole store is checked; with a reference only the skills it names are checked, plus the store-wide budgets. A pattern that matches nothing is itself a failure. `*` alone is allowed to match an empty store. Needs no NATS.
+
+Exits non-zero on any invalid skill, unmatched reference, or budget breach, so it can guard a commit:
+
+```bash
+paseka skills validate
+paseka skills validate "paseka-*"
+paseka skills validate "*"
+```
 
 ---
 
