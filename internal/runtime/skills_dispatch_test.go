@@ -2,12 +2,14 @@ package runtime_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/russ-p/paseka/internal/adapters"
+	"github.com/russ-p/paseka/internal/adapters/script"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/runtime"
@@ -152,6 +154,105 @@ params:
 	}
 	if !strings.HasPrefix(string(system), skills.SectionHeading) {
 		t.Fatalf("system.txt = %q, want the section as the whole prompt", string(system))
+	}
+}
+
+// TestDispatchScriptBeeReceivesSkillManifest drives a real script bee through
+// dispatch and reads the environment the child received. The manifest is data
+// in both delivery modes, with the same name, description, and absolute frozen
+// path the advertisement carries, so a script never depends on `load`.
+func TestDispatchScriptBeeReceivesSkillManifest(t *testing.T) {
+	for _, mode := range []string{"path", "command"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			writeSkillDispatchColony(t, root)
+
+			outPath := filepath.Join(root, "manifest.json")
+			scriptPath := filepath.Join(root, "capture.sh")
+			body := "#!/bin/sh\n" +
+				"printf '%s' \"$PASEKA_SKILLS\" > \"" + outPath + "\"\n" +
+				"echo done\n"
+			if err := os.WriteFile(scriptPath, []byte(body), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			colonyDoc := "defaults:\n  prompt_template: default.md\n"
+			if mode == "command" {
+				colonyDoc += "  skills_delivery: command\n"
+			}
+			if err := os.WriteFile(filepath.Join(root, ".paseka", "colony.yaml"), []byte(colonyDoc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			beeDoc := "role: builder\n" +
+				"adapter: script\n" +
+				"command:\n  - " + scriptPath + "\n" +
+				"system_template: builder-system.md\n" +
+				"skills:\n  - paseka-release\n"
+			if err := os.WriteFile(filepath.Join(root, ".paseka", "bees", "builder.yaml"), []byte(beeDoc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			d := runtime.NewDispatcher()
+			d.RegisterAdapter("script", script.New())
+			if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+				ColonyRoot: root,
+				Bee:        "builder",
+				TraceID:    "trace-script-skills",
+				Task:       "ship it",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			data, err := os.ReadFile(outPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []adapters.SkillRef
+			if err := json.Unmarshal(data, &got); err != nil {
+				t.Fatalf("PASEKA_SKILLS is not JSON: %v\n%s", err, data)
+			}
+			wantPath := filepath.Join(root, ".paseka", "skills", "paseka-release", skills.ManifestName)
+			if len(got) != 1 {
+				t.Fatalf("manifest = %+v, want one entry", got)
+			}
+			if got[0].Name != "paseka-release" || got[0].Description != "Run the colony release procedure." {
+				t.Fatalf("manifest entry = %+v", got[0])
+			}
+			if got[0].Path != wantPath || !filepath.IsAbs(got[0].Path) {
+				t.Fatalf("manifest path = %q, want absolute %q", got[0].Path, wantPath)
+			}
+
+			agentID := ""
+			entries, err := os.ReadDir(filepath.Join(root, ".paseka", "runs", "trace-script-skills"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				if _, err := os.Stat(filepath.Join(root, ".paseka", "runs", "trace-script-skills", entry.Name(), "request.json")); err == nil {
+					agentID = entry.Name()
+				}
+			}
+			if agentID == "" {
+				t.Fatal("run directory not found")
+			}
+			system, err := os.ReadFile(runs.Dir{ColonyRoot: root, TraceID: "trace-script-skills", AgentID: agentID}.SystemPath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			hasPath := strings.Contains(string(system), "path: ")
+			if mode == "path" && !hasPath {
+				t.Fatalf("path mode advertisement has no path:\n%s", system)
+			}
+			if mode == "command" && hasPath {
+				t.Fatalf("command mode advertisement leaked a path:\n%s", system)
+			}
+			if !strings.Contains(string(system), "paseka-release") {
+				t.Fatalf("advertisement is missing the skill:\n%s", system)
+			}
+		})
 	}
 }
 

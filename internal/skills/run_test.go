@@ -137,6 +137,23 @@ func TestResolveRunSection(t *testing.T) {
 	}
 }
 
+func TestResolveRunAdapterSkills(t *testing.T) {
+	root := runFixture(t, "builder", "role: builder\nadapter: script\ncommand: [echo]\nskills:\n  - paseka-release\n")
+	writeRunSkill(t, root, "paseka-release", "Run the release procedure.", "SECRET-BODY-TEXT")
+
+	resolved := resolveFixture(t, root, "builder")
+	refs := resolved.AdapterSkills()
+	if len(refs) != 1 {
+		t.Fatalf("adapter skills = %+v, want one entry", refs)
+	}
+	if refs[0].Name != "paseka-release" || refs[0].Description != "Run the release procedure." {
+		t.Fatalf("adapter skill = %+v", refs[0])
+	}
+	if refs[0].Path != resolved.Skills[0].Path || !filepath.IsAbs(refs[0].Path) {
+		t.Fatalf("adapter path = %q, want absolute %q", refs[0].Path, resolved.Skills[0].Path)
+	}
+}
+
 func TestResolveRunFailsFast(t *testing.T) {
 	cases := []struct {
 		name    string

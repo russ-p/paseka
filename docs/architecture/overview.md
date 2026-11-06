@@ -452,6 +452,7 @@ publishes:
 | `PASEKA_EVENT_LOG` | path to `events.ndjson` |
 | `PASEKA_RESULT_FILE` | path to `summary.md` |
 | `PASEKA_PROMPT_FILE` | path to `prompt.txt` |
+| `PASEKA_SKILLS` | resolved skill set as JSON `[{name, description, path}]`; absent when empty |
 
 **Emitting events:** scripts publish domain events the same way LLM agents do — pipe JSON to `paseka event emit --stdin`:
 

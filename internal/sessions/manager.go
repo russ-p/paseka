@@ -455,6 +455,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		TaskID:       req.TaskID,
 		Prompt:       rendered,
 		SystemPrompt: renderedSystem,
+		SkillRefs:    skillResolution.AdapterSkills(),
 		Resume:       resuming,
 		RunDir:       runDir,
 	})

@@ -15,6 +15,17 @@ type Artifact struct {
 	Content string
 }
 
+// SkillRef is one resolved skill as an adapter receives it: the name, the
+// description the advertisement carries, and the absolute location of the
+// frozen SKILL.md. It is the seam between resolution and delivery — a small set
+// of references on the launch request — so an adapter that can deliver skills
+// natively has the data without reading the store or the prompt.
+type SkillRef struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Path        string `json:"path"`
+}
+
 // RunRequest is passed to an adapter when a bee is dispatched.
 type RunRequest struct {
 	Bee          string // role name from bees/*.yaml
@@ -37,6 +48,10 @@ type RunRequest struct {
 	// order. The runtime advertises the same set in the system prompt; an
 	// adapter that can deliver skills natively may use these names later.
 	Skills []string
+	// SkillRefs carries the same resolved set as data: each skill's name,
+	// description, and absolute frozen SKILL.md path. The script adapter
+	// renders it into PASEKA_SKILLS; other adapters may use it later.
+	SkillRefs []SkillRef
 	protocol.Provenance
 	// Raw is the runtime-owned `--raw` escape hatch: the adapter requests plain
 	// text instead of its structured mode, so usage and providerSessionId

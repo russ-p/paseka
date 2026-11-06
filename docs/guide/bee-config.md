@@ -203,7 +203,13 @@ publishes:
     kind: verification.failed
 ```
 
-Script process env (in addition to `command` variable substitution): `PASEKA_TRACE_ID`, `PASEKA_AGENT_ID`, `PASEKA_TASK_ID`, `PASEKA_WORKSPACE`, `PASEKA_COLONY_ROOT`, `PASEKA_RUN_DIR`, `PASEKA_BEE`, `PASEKA_EVENT_LOG`, `PASEKA_RESULT_FILE`, `PASEKA_PROMPT_FILE`. Domain events still go through `paseka event emit --stdin`.
+Script process env (in addition to `command` variable substitution): `PASEKA_TRACE_ID`, `PASEKA_AGENT_ID`, `PASEKA_TASK_ID`, `PASEKA_WORKSPACE`, `PASEKA_COLONY_ROOT`, `PASEKA_RUN_DIR`, `PASEKA_BEE`, `PASEKA_EVENT_LOG`, `PASEKA_RESULT_FILE`, `PASEKA_PROMPT_FILE`, and `PASEKA_SKILLS` when the role resolves at least one skill. Domain events still go through `paseka event emit --stdin`.
+
+`PASEKA_SKILLS` is the resolved skill set as data: a JSON array of `{"name", "description", "path"}` objects, one per skill, where `path` is the absolute location of the frozen `SKILL.md`. It is the same set the system-prompt advertisement describes, and it is present in both `path` and `command` delivery modes, so a script never needs `paseka skills load`. The variable is absent when the set is empty, and a script that ignores it behaves exactly as before. JSON keeps a path containing spaces in one value, so parse it rather than word-splitting it:
+
+```sh
+printf '%s' "$PASEKA_SKILLS" | jq -r '.[] | "\(.name)\t\(.path)"'
+```
 
 ---
 

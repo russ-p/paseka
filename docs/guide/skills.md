@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the reading commands (`list`, `show`, `load`, `validate`), and the store mutations (`disable`, `enable`, `remove`); attribution and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`), and the store mutations (`disable`, `enable`, `remove`); attribution and approval build on the same rules.
 
 ---
 
@@ -159,6 +159,7 @@ defaults:
 - The section carries metadata only — name, description, and per mode either the absolute path or the load command. A body is never inlined: progressive disclosure is what keeps a procedure cheap until a bee needs it.
 - The runtime appends the section; it is never written into a template file. A bee whose role declares no `system_template` receives the section as its whole system prompt, and a run whose effective set is empty receives no section at all.
 - The composed system prompt is written to `.paseka/runs/<traceId>/<agentId>/system.txt` before the adapter starts, so a script bee has the same auditable file even when its adapter writes no system prompt of its own.
+- A script bee also receives the resolved set as data in `PASEKA_SKILLS`: a JSON array of `{"name", "description", "path"}` entries, one per skill, with the same names and descriptions as the advertisement and the absolute frozen `SKILL.md` path in **both** delivery modes. It is absent when the set is empty. A path with a space is one JSON string, so a script parses the value instead of word-splitting it; a script that ignores the variable is unaffected. See [bee config](bee-config.md#4-adapters) for the full script environment.
 - In `path` mode the advertised path is inside the trail's **frozen configuration**, not the live store, so a running trail keeps reading the bytes it started with. A store or role-list edit after trail start changes the next trail, not this run; it reaches a trail only through an explicit configuration application.
 - The resolved names are recorded in the run's `request.json` as `skills` (omitted when the set is empty). Both the unattended dispatcher and the interactive session manager write it, so an AFK run and a HITL session carry the same field, and it stays readable after the role's list changes.
 - A resumed provider session keeps the first turn's context; the runtime records the set but does not re-inject the section. A configuration application changes later runs and new sessions only.

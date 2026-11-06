@@ -31,6 +31,7 @@ type preparedDispatch struct {
 	rendered       string
 	renderedSystem string
 	skills         []string
+	skillRefs      []adapters.SkillRef
 	plan           launch.LaunchPlan
 	runDir         runs.Dir
 	baseline       adapters.WorkspaceBaseline
@@ -259,6 +260,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		TaskID:       req.TaskID,
 		Prompt:       rendered,
 		SystemPrompt: renderedSystem,
+		SkillRefs:    skillResolution.AdapterSkills(),
 		RunDir:       runDir,
 		Raw:          req.Raw,
 	})
@@ -381,6 +383,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		rendered:       rendered,
 		renderedSystem: renderedSystem,
 		skills:         skillResolution.Names(),
+		skillRefs:      skillResolution.AdapterSkills(),
 		plan:           plan,
 		runDir:         runDir,
 		baseline:       baseline,
@@ -434,6 +437,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Insights:     p.insights,
 		Profile:      p.req.Profile,
 		Skills:       p.skills,
+		SkillRefs:    p.skillRefs,
 		Provenance:   p.req.provenance(),
 	})
 }

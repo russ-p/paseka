@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
 )
 
@@ -61,6 +62,22 @@ func (r RunResolution) Names() []string {
 		names = append(names, skill.Name)
 	}
 	return names
+}
+
+// AdapterSkills returns the resolved set as the data an adapter receives: the
+// same names, descriptions, and absolute frozen paths the advertisement
+// carries, in resolution order. A script bee gets this as PASEKA_SKILLS in
+// both delivery modes, so it never depends on the load command.
+func (r RunResolution) AdapterSkills() []adapters.SkillRef {
+	refs := make([]adapters.SkillRef, 0, len(r.Skills))
+	for _, skill := range r.Skills {
+		refs = append(refs, adapters.SkillRef{
+			Name:        skill.Name,
+			Description: skill.Description,
+			Path:        skill.Path,
+		})
+	}
+	return refs
 }
 
 // SectionContext names the run the advertisement addresses. In `command` mode
