@@ -49,6 +49,12 @@ guard a commit.`,
 			if err != nil {
 				return err
 			}
+			// A corrupt ledger fails the command even though `validate` does not
+			// need the disable state: every store command reads the same ledger,
+			// so one that cannot be read must not look like an empty one.
+			if _, err := skills.LoadLedger(ctxColony.ColonyRoot); err != nil {
+				return err
+			}
 
 			var issues []skills.Issue
 			if len(args) == 0 {

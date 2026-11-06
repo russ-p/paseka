@@ -28,7 +28,7 @@ Related: [bee routing](../reference/bee-routing.md) (`subscribes` / `publishes`)
 1. Role must be non-empty and must not contain `/` or `..`.
 2. Base file is `.paseka/bees/<role>.yaml` (filename stem = role when `role:` is omitted).
 3. Event rules, `run_summary`, and adapter requirements are validated at load time.
-4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [prompt templates](prompt-templates.md)). Profiles do **not** overlay prompts, routing, `command:`, or `post_exec` — `*.local.yaml` stays prompt-only.
+4. If `<role>.local.yaml` exists, its `prompt_template` and `system_template` override the base at resolve time (see [prompt templates](prompt-templates.md)). Profiles do **not** overlay prompts, routing, `command:`, or `post_exec` — `*.local.yaml` stays prompt-only. A `skills` key in `<role>.local.yaml` is a load error naming the file and the key: the skill gate is committed, and a profile is the supported per-machine override.
 
 Trail export `--include bees` and Nuc pack the committed YAML files, not the overlayed view.
 
@@ -50,6 +50,7 @@ type Bee struct {
     Worktree           bool
     Intents            []string
     DefaultIntent      string
+    Skills             SkillSelection
     Command            Command
     PostExec           Command
     Checks             *Checks
@@ -73,6 +74,7 @@ type Bee struct {
 | `worktree` | no | When `true`, adapter cwd is under `.paseka/worktrees/<traceId>/` (plus sector path if any). |
 | `intents` | no | Explicit intent vocabulary for this bee. When omitted, runtime discovers intents from `_partials/<role>-intent-*.md` prompt partials. |
 | `default_intent` | no | Default intent when the caller omits `--intent` or passes an unknown value. When omitted, `general` is used if present in the vocabulary; otherwise the first discovered intent. |
+| `skills` | no | Presence-aware list of skill references this role may use: a bare name, a `*` pattern, or `*`. **Absent** inherits `defaults.skills`; `skills: []` opts out explicitly; a non-empty list is the whole set and replaces the colony default. A missing reference, an unmatched non-`*` pattern, an invalid skill, or more than 32 resolved skills fails the run and `doctor`. See [colony skills](skills.md). |
 | `params` | no | Adapter flag map (`model`, `yolo`, `plan`, `reasoning`, …). Mutually exclusive with `command`: a bee that sets `command` may only carry params that equal the adapter defaults; any non-default param fails load. |
 | `command` | script: **yes** | Full agent argv (string or YAML list). Replaces `params`-based flag mapping. |
 | `post_exec` | no | Hook after AFK `bee run` and interactive `bee chat`. Failures are logged; they do not fail the bee run. |

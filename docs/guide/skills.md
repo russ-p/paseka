@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the slice that ships the store and its validation; selection, delivery, attribution, and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, and the committed ledger; delivery, attribution, and approval build on the same rules.
 
 ---
 
@@ -86,7 +86,64 @@ Fixed constants, not colony settings. They price context, not disk: an advertise
 
 A breach is a configuration error. The runtime never resolves a breach by dropping a reference silently.
 
-## 5. Validating
+## 5. Selecting skills for a role
+
+A bee receives a skill only when its role lists it. The list is a gate, not a hint: a skill that is not listed for a bee does not reach it, whatever any client would discover on disk.
+
+`skills` is **presence-aware** — absent, empty, and non-empty mean three different things:
+
+| The configuration says | The role receives |
+| ---------------------- | ----------------- |
+| no `skills` key | the colony default (`defaults.skills` in `colony.yaml`) |
+| `skills: []` (explicit empty list) | nothing — the role opts out, including of the colony default |
+| `skills: [a, b]` | exactly `a` and `b`; the colony default does not apply |
+
+A role's list **replaces** the colony default rather than extending it, so "remove this procedure from this one role" is expressible. With neither a default nor a role list, a bee receives nothing: opting in costs one line in a reviewed file.
+
+```yaml
+# .paseka/colony.yaml
+defaults:
+  skills:
+    - paseka-release
+  skills_delivery: path   # path (default) or command
+```
+
+```yaml
+# .paseka/bees/builder.yaml
+skills:
+  - paseka-*        # a family pattern
+```
+
+A list entry is a bare name, a family pattern, or `*`. Resolution deduplicates the result and sorts it by name. A missing name, a non-`*` pattern that matches nothing, an invalid skill, or a role resolving to more than 32 skills is a configuration error: the run does not start and `doctor` fails. `*` is allowed on an empty store.
+
+`skills_delivery` selects how the runtime advertises the resolved set — `path` (default) advertises each `SKILL.md` location; `command` advertises `paseka skills load`. It is colony-wide, not per role.
+
+Profiles ([colony layout](colony-layout.md), [spec 027](../specs/027-config-profiles.md)) may override `skills` and `skills_delivery`, with the same tri-state, at the top level (the default list) and under `bees.<role>` (that role's list). Precedence is **home profile > colony profile > committed**. A profile chooses among skills that are in the committed store; it cannot add one from outside.
+
+`skills` in `<role>.local.yaml` is a **load error**, not a silent no-op. A profile is the supported per-machine override, and a misplaced key must not look like a gate.
+
+## 6. The committed ledger
+
+`.paseka/skills.index.json` records the one thing a skill file cannot: whether a skill is offered at all. It carries a schema version and, per skill name, when and why the skill was disabled:
+
+```json
+{
+  "schema_version": 1,
+  "disabled": {
+    "paseka-release": {
+      "at": "2026-11-06T12:00:00Z",
+      "reason": "release step 2 is wrong"
+    }
+  }
+}
+```
+
+- A **missing** ledger is an empty ledger.
+- A **corrupt** ledger — bad JSON, an unknown schema version, or a disabled record without `at`/`reason` — fails every skill command and `doctor`. It is never silently replaced.
+- A **disabled** skill stays in the store, keeps its history, and is never offered. A role that still lists it is skipped and reported, not failed: an emergency stop must not become a colony-wide outage.
+- Provenance lives in the skill's own `metadata`, and the inventory is the directory listing, so the ledger has no mirror to reconcile.
+
+## 7. Validating
 
 ```bash
 paseka skills validate          # the whole store
@@ -94,7 +151,7 @@ paseka skills validate paseka-* # the skills a pattern names
 paseka skills validate "*"      # every skill, explicitly
 ```
 
-The command resolves the live repository store and exits non-zero when anything is invalid: a broken skill, a reference that matches no skill, or a budget breach. It prints each finding beside the skill it belongs to, then the count.
+The command resolves the live repository store and exits non-zero when anything is invalid: a broken skill, a reference that matches no skill, a budget breach, or a ledger that cannot be read. It prints each finding beside the skill it belongs to, then the count.
 
 ```text
 skill "paseka-release": name "paseka-ship" does not match its directory "paseka-release"
@@ -111,13 +168,17 @@ Use it as a pre-commit hook or in CI; it needs no bus and no running colony.
 
 `paseka skills` **alone** prints the group's help. It is a namespace, not an action — the verbs that change the store are deliberate, and guessing which one was meant is not harmless.
 
-`paseka doctor` runs the same scan and reports the same findings as errors, so a broken procedure shows up in the colony's usual diagnostic before a bee needs it:
+`paseka doctor` runs the same scan and the same resolver, and reports their findings:
+
+- an unresolvable reference, an unmatched non-`*` pattern, an invalid skill, or the 32-skill breach is an **error**;
+- an explicitly empty `skills` list is a **warning** (it is a legitimate opt-out, but easy to lose in a diff);
+- a disabled skill is a **warning** naming the roles that still list it.
 
 ```bash
 paseka doctor
 ```
 
-## 6. Same rules everywhere
+## 8. Same rules everywhere
 
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 

@@ -43,12 +43,23 @@ func newDoctorCmd() *cobra.Command {
 			}
 			// The skill store is colony configuration, so a broken skill is an
 			// error here, not a warning: it is the same verdict `skills validate`
-			// prints, from the same scan.
-			if skillReport, skillErr := skills.ScanColony(ctxColony.ColonyRoot); skillErr != nil {
+			// prints, from the same scan. The ledger is loaded before the role
+			// gate is resolved: a corrupt ledger fails doctor rather than being
+			// read as "nothing is disabled".
+			skillReport, skillErr := skills.ScanColony(ctxColony.ColonyRoot)
+			ledger, ledgerErr := skills.LoadLedger(ctxColony.ColonyRoot)
+			if skillErr != nil {
 				report.Errors = append(report.Errors, skillErr.Error())
-			} else {
+			}
+			if ledgerErr != nil {
+				report.Errors = append(report.Errors, ledgerErr.Error())
+			}
+			if skillErr == nil {
 				for _, issue := range skillReport.Issues() {
 					report.Errors = append(report.Errors, issue.Error())
+				}
+				if ledgerErr == nil {
+					diagnoseSkillSelection(ctxColony, bees, skillReport, ledger, &report)
 				}
 			}
 			standing := cues.DiagnoseStanding(ctxColony.ColonyRoot, bees)

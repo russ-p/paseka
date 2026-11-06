@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -243,4 +244,120 @@ func repoTree(t *testing.T, repo string) string {
 		t.Fatal(err)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func writeCLIBee(t *testing.T, repo, role, body string) {
+	t.Helper()
+	path := filepath.Join(repo, ".paseka", "bees", role+".yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestDoctorReportsUnresolvedSkillReference pins that doctor's verdict is the
+// resolution verdict: a role naming a skill that is not in the store is an
+// error, not a silently empty set.
+func TestDoctorReportsUnresolvedSkillReference(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeCLIBee(t, repo, "scout", "role: scout\nadapter: cursor\nskills:\n  - missing\n")
+
+	out, err := runCLI(t, "doctor", "-C", repo)
+	if err == nil {
+		t.Fatalf("doctor must fail on an unresolvable reference:\n%s", out)
+	}
+	for _, want := range []string{`bee "scout"`, "matches no skill"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("doctor output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestDoctorReportsUnmatchedSkillPattern(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeCLIBee(t, repo, "scout", "role: scout\nadapter: cursor\nskills:\n  - other-*\n")
+
+	out, err := runCLI(t, "doctor", "-C", repo)
+	if err == nil {
+		t.Fatalf("doctor must fail on an unmatched pattern:\n%s", out)
+	}
+	if !strings.Contains(out, `reference "other-*" matches no skill`) {
+		t.Fatalf("doctor output = %q", out)
+	}
+}
+
+func TestDoctorWarnsExplicitEmptySkillList(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeCLIBee(t, repo, "scout", "role: scout\nadapter: cursor\nskills: []\n")
+
+	out, _ := runCLI(t, "doctor", "-C", repo)
+	if !strings.Contains(out, `bee "scout" declares an explicit empty skill list`) {
+		t.Fatalf("doctor output = %q", out)
+	}
+}
+
+func TestDoctorReportsDisabledSkillAndRoles(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeCLIBee(t, repo, "scout", "role: scout\nadapter: cursor\nskills:\n  - paseka-release\n")
+	ledger := `{
+  "schema_version": 1,
+  "disabled": {
+    "paseka-release": {"at": "2026-11-06T12:00:00Z", "reason": "broken step"}
+  }
+}`
+	if err := os.WriteFile(filepath.Join(repo, ".paseka", "skills.index.json"), []byte(ledger), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := runCLI(t, "doctor", "-C", repo)
+	for _, want := range []string{
+		`skill "paseka-release" is disabled`,
+		"broken step",
+		"bee(s): scout",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("doctor output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestDoctorReportsSkillBudgetBreach(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	for i := 0; i < skills.MaxSkillsPerRole+1; i++ {
+		name := "skill-" + fmt.Sprintf("%02d", i)
+		writeStoreSkill(t, repo, name, "name: "+name+"\ndescription: A valid skill.")
+	}
+	writeCLIBee(t, repo, "scout", "role: scout\nadapter: cursor\nskills:\n  - \"*\"\n")
+
+	out, err := runCLI(t, "doctor", "-C", repo)
+	if err == nil {
+		t.Fatalf("doctor must fail on the 33rd skill:\n%s", out)
+	}
+	if !strings.Contains(out, "limit is 32") {
+		t.Fatalf("doctor output = %q", out)
+	}
+}
+
+func TestSkillCommandsFailOnCorruptLedger(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	if err := os.WriteFile(filepath.Join(repo, ".paseka", "skills.index.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := runCLI(t, "skills", "validate", "-C", repo); err == nil {
+		t.Fatalf("skills validate must fail on a corrupt ledger:\n%s", out)
+	}
+	out, err := runCLI(t, "doctor", "-C", repo)
+	if err == nil {
+		t.Fatalf("doctor must fail on a corrupt ledger:\n%s", out)
+	}
+	if !strings.Contains(out, "corrupt") {
+		t.Fatalf("doctor output = %q", out)
+	}
 }

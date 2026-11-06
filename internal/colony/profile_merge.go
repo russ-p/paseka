@@ -53,6 +53,10 @@ func applySelectedProfile(ctx *Context, manifest Colony, name string) error {
 
 	ctx.Profile = name
 	ctx.colonyProfile = colonyOverlay
+	ctx.homeProfile = homeOverlay
+	if err := validateHomeProfileRoles(ctx.ColonyRoot, homeOverlay); err != nil {
+		return err
+	}
 
 	merged := MergedModelAliases(manifest.ModelAliases, colonyOverlay.ModelAliases)
 	merged = MergedModelAliases(merged, ctx.Home.ModelAliases)
@@ -105,6 +109,22 @@ func validateColonyProfileRoles(colonyRoot string, overlay ColonyProfile) error 
 	for role := range overlay.Bees {
 		if _, ok := bees[role]; !ok {
 			return fmt.Errorf("colony: profile bees.%s: role not found", role)
+		}
+	}
+	return nil
+}
+
+func validateHomeProfileRoles(colonyRoot string, overlay HomeProfileConfig) error {
+	if len(overlay.Bees) == 0 {
+		return nil
+	}
+	bees, err := LoadAllBees(colonyRoot)
+	if err != nil {
+		return err
+	}
+	for role := range overlay.Bees {
+		if _, ok := bees[role]; !ok {
+			return fmt.Errorf("colony: home profile bees.%s: role not found", role)
 		}
 	}
 	return nil

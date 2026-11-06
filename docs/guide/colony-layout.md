@@ -35,6 +35,10 @@ Version-controlled colony definition. Safe to commit; no secrets.
 ├── bees/                # per-bee adapter bindings and non-secret params
 │   ├── scout.yaml
 │   └── builder.yaml
+├── skills/              # colony skill store (committed); see skills.md
+│   └── paseka-release/
+│       └── SKILL.md
+├── skills.index.json    # committed enabled/disabled ledger, beside the store
 ├── prompts/             # prompt templates (committed); see §2.1
 │   ├── _partials/       # shared snippets (JSON contract, tone, etc.)
 │   ├── scout.md
@@ -98,7 +102,7 @@ identity and the events it owns, so a retried publish replays rather than mints.
 `resultRef`/`metricsRef` always point there, never at the replaceable
 `metrics.json`. `paseka purge --runs` removes all of it with the trail.
 
-**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`defaults.delivery`** (`local_merge` or `pull_request`; see [pull-request delivery](pull-request-delivery.md)), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)), and the optional **`closing`** / **`merge`** policy blocks (trail wrap-up rounds and merge-gate copy — see [spec 045](../specs/045-trail-closing-phase.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
+**`colony.yaml`** — colony identity, default branch, bee registry, optional **sectors** (module/subfolder workspace scopes), NATS subject prefixes (optional overrides), colony-wide defaults including per-trace honey reserve (`defaults.energy_budget`, default `12`), optional **`defaults.delivery`** (`local_merge` or `pull_request`; see [pull-request delivery](pull-request-delivery.md)), optional **`defaults.skills`** / **`defaults.skills_delivery`** (the colony skill default and its delivery mode — see [colony skills](skills.md)), optional **`model_aliases`** (stable names → vendor model ids for `params.model`; see [spec 019](../specs/019-model-aliases.md)), optional **`auto_invites`** (HITL choreography that publishes `session.invite` when bus events match — see [bee routing](../reference/bee-routing.md)), and the optional **`closing`** / **`merge`** policy blocks (trail wrap-up rounds and merge-gate copy — see [spec 045](../specs/045-trail-closing-phase.md)). Do **not** put `profile:` here — a sticky overlay belongs only in home `config.yaml`.
 
 ```yaml
 defaults:
@@ -107,6 +111,9 @@ defaults:
   energy_budget: 12
   default_bee: builder                 # task role when task.bee is omitted
   # delivery: pull_request             # isolated trails land as origin PRs; default is local_merge
+  # skills:                            # roles inherit this unless they declare their own
+  #   - paseka-release
+  # skills_delivery: path              # path (default) or command
 model_aliases:
   small: composer-2.5
   medium: cursor-grok-4.6-medium
@@ -211,7 +218,7 @@ Common environment overrides:
 | Active agent runs registry | pointer only | optional mirror in `state.json` |
 | Event replay cache | — | yes |
 
-A **profile** is an optional named overlay for the whole Queen Shell process (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`). `--no-profile` ignores sticky. Unknown names fail closed and list what exists on both layers. `paseka init` does not create profiles; Nuc does not pack `.paseka/profiles/`. Global `adapter:` replaces LLM bees without `command:`; `script` and custom argv stay committed unless `bees.<role>.adapter` is set. Details: [Bee config](bee-config.md), [CLI](cli.md).
+A **profile** is an optional named overlay for the whole Queen Shell process (`paseka --profile pi`, `PASEKA_PROFILE`, or sticky `profile:` in home `config.yaml`). `--no-profile` ignores sticky. Unknown names fail closed and list what exists on both layers. `paseka init` does not create profiles; Nuc does not pack `.paseka/profiles/`. Global `adapter:` replaces LLM bees without `command:`; `script` and custom argv stay committed unless `bees.<role>.adapter` is set. A colony or home profile may also override the skill default, a role's skill list, and `skills_delivery` (`skills`, `bees.<role>.skills`, `skills_delivery`), with home profile > colony profile > committed — see [colony skills](skills.md). Details: [Bee config](bee-config.md), [CLI](cli.md).
 
 ---
 
