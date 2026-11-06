@@ -16,6 +16,7 @@ import (
 	"github.com/russ-p/paseka/internal/hiveview"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/skills"
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
@@ -250,6 +251,95 @@ func TestExportSkillsOfferedNoneAndUnreadableSnapshot(t *testing.T) {
 	}
 	if strings.Contains(string(plainBody), "## Skills offered") {
 		t.Fatalf("default export carried the skills section:\n%s", plainBody)
+	}
+}
+
+func TestExportSkillsOfferedCorruptSnapshotOmission(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-skills-corrupt"
+	writeSkillsExportColony(t, repo, []string{"alpha"}, map[string]string{
+		"alpha": "Alpha procedure.",
+	})
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now().UTC().Add(-2 * time.Minute)
+	writeCompletedRunCfg(t, repo, traceID, started, completedRunCfg{
+		AgentID: "agent-corrupt", ConfigRef: manifest.InitialConfigRef, ConfigRevision: manifest.ConfigRevision,
+		ProviderSessionID: "sess-corrupt",
+	})
+
+	// The snapshot binds but does not resolve: the ledger was never an
+	// inventory entry, so writing it into the frozen tree after capture leaves
+	// every captured file matching its hash (trailconfig.BindRef succeeds) while
+	// skills.ResolveRun rejects the corrupt ledger. That is the second omission
+	// branch, which the unknown-ConfigRef case in the test above never reaches.
+	ledger := filepath.Join(trailconfig.SnapshotDir(repo, traceID), manifest.InitialConfigRef,
+		trailconfig.SnapshotTreeDirName, ".paseka", skills.LedgerName)
+	if err := os.WriteFile(ledger, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A readable transcript keeps the used half from reporting its own,
+	// unrelated transcript omission, so UsedOmitted must carry the offered
+	// set's reason rather than fall back to "no provider session".
+	lookup := usageLookup(map[string]adapters.Transcript{"sess-corrupt": toolCallTranscript()})
+
+	detail, ok, err := hiveview.GetTrace(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatalf("trace %q not found", traceID)
+	}
+	var run hiveview.RunView
+	for _, candidate := range detail.Runs {
+		if candidate.AgentID == "agent-corrupt" {
+			run = candidate
+		}
+	}
+	if run.AgentID == "" {
+		t.Fatalf("run agent-corrupt missing from the trace view: %+v", detail.Runs)
+	}
+
+	entry := loadRunSkillsExport(ctx, traceID, run, lookup, 0)
+	if entry.ConfigRef != manifest.InitialConfigRef {
+		t.Fatalf("ConfigRef = %q, want the pinned snapshot %q", entry.ConfigRef, manifest.InitialConfigRef)
+	}
+	if !strings.Contains(entry.Omitted, "corrupt") {
+		t.Fatalf("Omitted = %q, want the corrupt ledger's reason", entry.Omitted)
+	}
+	if entry.None || len(entry.Offered) != 0 {
+		t.Fatalf("a corrupt snapshot read as an offered set: none=%v offered=%v", entry.None, entry.Offered)
+	}
+	if entry.UsedOmitted != entry.Omitted {
+		t.Fatalf("UsedOmitted = %q, want the same reason as the offered omission %q", entry.UsedOmitted, entry.Omitted)
+	}
+
+	noneMessage := "none — the run's pinned configuration offered no skills."
+	for _, format := range []Format{FormatMarkdown, FormatHTML} {
+		text := exportSkills(t, ctx, traceID, format, lookup)
+		if !strings.Contains(text, "offered skills unavailable:") {
+			t.Fatalf("%s export omitted the corrupt-snapshot reason:\n%s", format, text)
+		}
+		if !strings.Contains(text, "used skills unavailable:") {
+			t.Fatalf("%s export omitted the used-skills reason:\n%s", format, text)
+		}
+		if strings.Contains(text, noneMessage) {
+			t.Fatalf("%s export read a corrupt snapshot as an empty set:\n%s", format, text)
+		}
+		if format == FormatMarkdown {
+			// Markdown renders the reason verbatim; HTML escapes it, so the
+			// exact text is asserted once and the labels above cover parity.
+			if !strings.Contains(text, "offered skills unavailable: "+entry.Omitted) {
+				t.Fatalf("markdown export missing the full omission reason %q:\n%s", entry.Omitted, text)
+			}
+			if !strings.Contains(text, "used skills unavailable: "+entry.UsedOmitted) {
+				t.Fatalf("markdown export missing the full used reason %q:\n%s", entry.UsedOmitted, text)
+			}
+		}
 	}
 }
 
