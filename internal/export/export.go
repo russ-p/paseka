@@ -49,6 +49,9 @@ type TraceExportData struct {
 	// Config carries the trail's retained configuration evidence. Private inputs
 	// are listed with their omission reason instead of their contents.
 	Config *ConfigExport
+	// Skills carries, per run, the set that run was offered, resolved from the
+	// run's own pinned configuration snapshot.
+	Skills []RunSkillsExport
 }
 
 // ArtifactExport is one inlined comb file for trace export.
@@ -207,6 +210,9 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 			return TraceExportData{}, err
 		}
 		data.Config = configExport
+	}
+	if include.Has(IncludeSkills) {
+		data.Skills = loadSkillsExport(ctx, detail.TraceID, runsView)
 	}
 	if include.Has(IncludePatches) {
 		patchExports, patchDiagnostics, err := loadPatchExports(ctx.ColonyRoot, detail.TraceID)

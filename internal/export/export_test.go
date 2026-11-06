@@ -45,10 +45,14 @@ func writeCompletedRun(t *testing.T, repo, traceID string, started time.Time, us
 
 type completedRunCfg struct {
 	AgentID           string
+	Bee               string
 	Adapter           string
 	ProviderSessionID string
 	State             protocol.RunStatus
 	Usage             *protocol.Usage
+	ConfigRef         string
+	ConfigRevision    int
+	Skills            []string
 }
 
 func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time, cfg completedRunCfg) {
@@ -65,6 +69,10 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 	if state == "" {
 		state = protocol.StatusCompleted
 	}
+	bee := cfg.Bee
+	if bee == "" {
+		bee = "scout"
+	}
 	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
 	if err := d.Prepare(); err != nil {
 		t.Fatal(err)
@@ -73,10 +81,13 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 		ProtocolVersion: protocol.Version,
 		TraceID:         traceID,
 		AgentID:         agentID,
-		Bee:             "scout",
+		Bee:             bee,
 		Adapter:         adapter,
 		Workspace:       repo,
 		ColonyRoot:      repo,
+		ConfigRef:       cfg.ConfigRef,
+		ConfigRevision:  cfg.ConfigRevision,
+		Skills:          cfg.Skills,
 		CreatedAt:       started,
 	}); err != nil {
 		t.Fatal(err)
@@ -112,6 +123,207 @@ func writeCompletedRunCfg(t *testing.T, repo, traceID string, started time.Time,
 		Payload:         []byte(`{"kind":"narrative","text":"hello export"}`),
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// writeSkillsExportColony writes a colony with one roles' skill gate and the
+// matching store entries. It is the fixture the export resolves from each run's
+// pinned snapshot.
+func writeSkillsExportColony(t *testing.T, repo string, refs []string, skills map[string]string) {
+	t.Helper()
+	files := map[string]string{
+		".paseka/colony.yaml":        "slug: export-test\n",
+		".paseka/prompts/scout.md":   "scout instructions\n",
+		".paseka/prompts/noskill.md": "no-skill instructions\n",
+		".paseka/bees/noskill.yaml":  "role: noskill\nadapter: script\nprompt_template: noskill.md\ncommand:\n  - echo\n",
+	}
+	bee := "role: scout\nadapter: script\nprompt_template: scout.md\ncommand:\n  - echo\n"
+	if len(refs) > 0 {
+		bee += "skills:\n"
+		for _, ref := range refs {
+			bee += "  - " + ref + "\n"
+		}
+	}
+	files[".paseka/bees/scout.yaml"] = bee
+	for name, description := range skills {
+		files[".paseka/skills/"+name+"/SKILL.md"] = "---\nname: " + name +
+			"\ndescription: " + description + "\n---\n\n" + name + " body\n"
+	}
+	for rel, content := range files {
+		path := filepath.Join(repo, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func removeSkillExportEntry(t *testing.T, repo, name string) {
+	t.Helper()
+	if err := os.RemoveAll(filepath.Join(repo, ".paseka", "skills", name)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExportSkillsOfferedNoneAndUnreadableSnapshot(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-skills"
+	writeSkillsExportColony(t, repo, []string{"alpha"}, map[string]string{
+		"alpha": "Alpha procedure.",
+	})
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now().UTC().Add(-3 * time.Minute)
+	writeCompletedRunCfg(t, repo, traceID, started, completedRunCfg{
+		AgentID: "agent-offered", ConfigRef: manifest.InitialConfigRef, ConfigRevision: manifest.ConfigRevision,
+	})
+	writeCompletedRunCfg(t, repo, traceID, started.Add(time.Minute), completedRunCfg{
+		AgentID: "agent-none", Bee: "noskill", ConfigRef: manifest.InitialConfigRef, ConfigRevision: manifest.ConfigRevision,
+	})
+	writeCompletedRunCfg(t, repo, traceID, started.Add(2*time.Minute), completedRunCfg{
+		AgentID: "agent-missing", ConfigRef: "sha256:" + strings.Repeat("0", 64), ConfigRevision: 9,
+	})
+
+	include := mustInclude(t, "skills")
+	md, err := ExportTrace(ctx, Options{TraceID: traceID, OutputDir: t.TempDir(), Format: FormatMarkdown, Include: include})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mdBody, err := os.ReadFile(md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(mdBody)
+	for _, want := range []string{
+		"## Skills offered",
+		"agent-offered",
+		"**alpha**",
+		"Alpha procedure.",
+		filepath.Join("skills", "alpha", "SKILL.md"),
+		"none — the run's pinned configuration offered no skills.",
+		"offered skills unavailable:",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("markdown skills export missing %q:\n%s", want, text)
+		}
+	}
+	if got := strings.Count(text, "none — the run's pinned configuration offered no skills."); got != 1 {
+		t.Fatalf("explicit none appears %d times, want once:\n%s", got, text)
+	}
+
+	htmlPath, err := ExportTrace(ctx, Options{TraceID: traceID, OutputDir: t.TempDir(), Format: FormatHTML, Include: include})
+	if err != nil {
+		t.Fatal(err)
+	}
+	htmlBody, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	htmlText := string(htmlBody)
+	for _, want := range []string{
+		"<h2>Skills offered</h2>",
+		"agent-offered",
+		"<strong>alpha</strong>",
+		"Alpha procedure.",
+		filepath.Join("skills", "alpha", "SKILL.md"),
+		"none — the run's pinned configuration offered no skills.",
+		"offered skills unavailable:",
+	} {
+		if !strings.Contains(htmlText, want) {
+			t.Fatalf("html skills export missing %q:\n%s", want, htmlText)
+		}
+	}
+
+	// The default report stays free of the section and its resolver work.
+	plain, err := ExportTrace(ctx, Options{TraceID: traceID, OutputDir: t.TempDir(), Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plainBody, err := os.ReadFile(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plainBody), "## Skills offered") {
+		t.Fatalf("default export carried the skills section:\n%s", plainBody)
+	}
+}
+
+func TestExportSkillsUsesEachRunsOwnPinnedSnapshot(t *testing.T) {
+	ctx, repo := setupExportColony(t)
+	traceID := "trace-skills-pinned"
+	writeSkillsExportColony(t, repo, []string{"alpha"}, map[string]string{
+		"alpha": "Alpha procedure.",
+	})
+	first, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-2*time.Minute), completedRunCfg{
+		AgentID: "agent-a", ConfigRef: first.InitialConfigRef, ConfigRevision: first.ConfigRevision,
+	})
+
+	// The trail changes mid-flight: the role now lists beta, and alpha is gone
+	// from the store. Only an explicit configuration application adopts it.
+	removeSkillExportEntry(t, repo, "alpha")
+	writeSkillsExportColony(t, repo, []string{"beta"}, map[string]string{
+		"beta": "Beta procedure.",
+	})
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: traceID, Source: trailconfig.SourceColony,
+		Actor: "operator", Reason: "mid-trail skills change",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.NewRef == first.InitialConfigRef {
+		t.Fatal("mid-trail configuration did not change")
+	}
+	writeCompletedRunCfg(t, repo, traceID, time.Now().UTC().Add(-time.Minute), completedRunCfg{
+		AgentID: "agent-b", ConfigRef: applied.Manifest.ActiveConfigRef, ConfigRevision: applied.Manifest.ConfigRevision,
+	})
+
+	path, err := ExportTrace(ctx, Options{
+		TraceID: traceID, OutputDir: t.TempDir(), Format: FormatMarkdown, Include: mustInclude(t, "skills"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	section := text[strings.Index(text, "## Skills offered"):]
+	if got := strings.Count(section, "**alpha**"); got != 1 {
+		t.Fatalf("alpha appears %d times, want once:\n%s", got, section)
+	}
+	if got := strings.Count(section, "**beta**"); got != 1 {
+		t.Fatalf("beta appears %d times, want once:\n%s", got, section)
+	}
+	aRun := strings.Index(section, "agent-a")
+	bRun := strings.Index(section, "agent-b")
+	alpha := strings.Index(section, "**alpha**")
+	beta := strings.Index(section, "**beta**")
+	if aRun < 0 || alpha < aRun || bRun < 0 || beta < bRun {
+		t.Fatalf("each run must carry its own offered set (agent-a=%d alpha=%d agent-b=%d beta=%d):\n%s",
+			aRun, alpha, bRun, beta, section)
+	}
+	if alpha > bRun {
+		t.Fatalf("run agent-b was exported against the old snapshot:\n%s", section)
+	}
+	if beta < aRun || beta < alpha {
+		t.Fatalf("run agent-a was exported against the new snapshot:\n%s", section)
+	}
+	for _, want := range []string{first.InitialConfigRef, applied.Manifest.ActiveConfigRef} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("skills export missing pinned ref %q:\n%s", want, text)
+		}
 	}
 }
 

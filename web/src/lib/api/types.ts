@@ -1285,7 +1285,8 @@ export type TraceExportInclude =
 	| 'transcript'
 	| 'reasoning'
 	| 'patches'
-	| 'config';
+	| 'config'
+	| 'skills';
 
 export interface TraceExportIncludeOption {
 	value: TraceExportInclude;
@@ -1325,6 +1326,11 @@ export const traceExportIncludes: TraceExportIncludeOption[] = [
 		value: 'config',
 		label: 'Trail configuration',
 		description: 'Retained configuration versions; private inputs are listed but never inlined'
+	},
+	{
+		value: 'skills',
+		label: 'Skills offered',
+		description: 'Per-run skills resolved from that run\'s own pinned configuration'
 	}
 ];
 

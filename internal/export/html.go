@@ -106,6 +106,8 @@ type htmlPageData struct {
 	IncludeArtifacts   bool
 	IncludePatches     bool
 	IncludeConfig      bool
+	IncludeSkills      bool
+	Skills             []RunSkillsExport
 	Config             *ConfigExport
 	ConfigOmissions    []string
 	ConfigOmitted      int
@@ -142,6 +144,8 @@ func RenderHTML(data TraceExportData) ([]byte, error) {
 		IncludeArtifacts: data.Include.Has(IncludeArtifacts),
 		IncludePatches:   data.Include.Has(IncludePatches),
 		IncludeConfig:    data.Include.Has(IncludeConfig),
+		IncludeSkills:    data.Include.Has(IncludeSkills),
+		Skills:           data.Skills,
 		Config:           data.Config,
 		ConfigOmissions:  configOmissions(data.Config),
 		ConfigOmitted:    configOmittedCount(data.Config),
@@ -790,6 +794,31 @@ code { font-family: var(--mono); font-size: 0.85em; }
     <p class="muted">No runs in this trace.</p>
     {{ end }}
   </section>
+
+  {{ if .IncludeSkills }}
+  <section class="panel">
+    <h2>Skills offered</h2>
+    {{ if .Skills }}
+    {{ range .Skills }}
+    <h3>{{ if .Bee }}{{ .Bee }}{{ else }}{{ .AgentID }}{{ end }} · <code>{{ .AgentID }}</code></h3>
+    {{ if .ConfigRef }}<p class="muted">Pinned configuration <code>{{ .ConfigRef }}</code></p>{{ end }}
+    {{ if .Omitted }}
+    <p class="muted">offered skills unavailable: {{ .Omitted }}</p>
+    {{ else if .None }}
+    <p class="muted">none — the run's pinned configuration offered no skills.</p>
+    {{ else }}
+    <ul>
+      {{ range .Offered }}
+      <li><strong>{{ .Name }}</strong>{{ if .Description }} — {{ .Description }}{{ end }}{{ if .Path }}<div class="id"><code>{{ .Path }}</code></div>{{ end }}</li>
+      {{ end }}
+    </ul>
+    {{ end }}
+    {{ end }}
+    {{ else }}
+    <p class="muted">No runs in this trace.</p>
+    {{ end }}
+  </section>
+  {{ end }}
 
   <section class="panel">
     <h2>Timeline <span class="muted" style="font-weight:400;font-size:0.85rem">({{ len .Events }} events, oldest first)</span></h2>

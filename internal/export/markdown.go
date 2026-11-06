@@ -24,6 +24,9 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 	writeMarkdownTrailEvidence(&buf, data.Trace)
 	writeMarkdownTasks(&buf, data.Trace.Tasks)
 	writeMarkdownRuns(&buf, data)
+	if data.Include.Has(IncludeSkills) {
+		writeMarkdownSkills(&buf, data.Skills)
+	}
 	writeMarkdownTimeline(&buf, data.Events)
 	writeMarkdownConfigSnapshots(&buf, data)
 	if data.Include.Has(IncludeConfig) {
@@ -195,6 +198,43 @@ func writeMarkdownRuns(buf *bytes.Buffer, data TraceExportData) {
 			writeMarkdownConversation(buf, conversationByAgentID(data.Conversations, run.AgentID))
 		}
 		buf.WriteString("\n")
+	}
+}
+
+func writeMarkdownSkills(buf *bytes.Buffer, runs []RunSkillsExport) {
+	buf.WriteString("## Skills offered\n\n")
+	if len(runs) == 0 {
+		buf.WriteString("_No runs in this trace._\n\n")
+		return
+	}
+	for _, run := range runs {
+		label := run.Bee
+		if label == "" {
+			label = run.AgentID
+		}
+		fmt.Fprintf(buf, "### %s — `%s`\n\n", label, run.AgentID)
+		if run.ConfigRef != "" {
+			fmt.Fprintf(buf, "- **Pinned configuration:** `%s`\n", run.ConfigRef)
+		}
+		switch {
+		case run.Omitted != "":
+			fmt.Fprintf(buf, "_offered skills unavailable: %s_\n\n", run.Omitted)
+		case run.None:
+			buf.WriteString("_none — the run's pinned configuration offered no skills._\n\n")
+		default:
+			buf.WriteString("\n")
+			for _, skill := range run.Offered {
+				fmt.Fprintf(buf, "- **%s**", skill.Name)
+				if skill.Description != "" {
+					fmt.Fprintf(buf, " — %s", skill.Description)
+				}
+				buf.WriteString("\n")
+				if skill.Path != "" {
+					fmt.Fprintf(buf, "  - path: `%s`\n", skill.Path)
+				}
+			}
+			buf.WriteString("\n")
+		}
 	}
 }
 

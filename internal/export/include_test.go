@@ -58,6 +58,11 @@ func TestParseInclude(t *testing.T) {
 			want: []IncludeKind{IncludePatches},
 		},
 		{
+			name: "skills",
+			in:   []string{"skills"},
+			want: []IncludeKind{IncludeSkills},
+		},
+		{
 			name: "dedupe",
 			in:   []string{"usage", "usage,colony"},
 			want: []IncludeKind{IncludeUsage, IncludeColony},
@@ -83,6 +88,9 @@ func TestParseInclude(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), "reasoning") {
 					t.Fatalf("error does not list reasoning: %v", err)
+				}
+				if !strings.Contains(err.Error(), "skills") {
+					t.Fatalf("error does not list skills: %v", err)
 				}
 				return
 			}

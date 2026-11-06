@@ -1403,7 +1403,7 @@ deletion uses `paseka purge`; `trail drop` refuses a trail without fork lineage.
 
 ## `paseka export`
 
-Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs, provider conversations) without changing the renderer.
+Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs, provider conversations, per-run offered skills) without changing the renderer.
 
 Pass the flight trail id as a positional argument, matching `paseka replay <traceId>`. `--trace` is kept as an alternative; passing both is fine when they match, and passing two different ids is an error.
 
@@ -1416,7 +1416,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | no | Flight trail id (alternative to the positional argument) |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `reasoning`, `patches`, `config` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `reasoning`, `patches`, `config`, `skills` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -1440,6 +1440,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | `reasoning` | The same per-run **Conversation** section with **thinking blocks**: the dialogue request asks for text and reasoning through the dialogue-with-reasoning preset. A bare `reasoning` implies `transcript`, and spelling both is equivalent and produces one section. Reasoning is capped at 16 000 runes per part and shares the shared redaction path with text; a capped reasoning block is marked `truncated`. System turns and tool payloads stay out. Cursor records no reasoning parts, so a Cursor session renders an ordinary dialogue with no blocks and no omission; providers whose readers record thinking show it here. Independent of `agent-logs` and `transcript`. |
 | `patches` | Proposal patches under `.paseka/runs/<traceId>/proposals/` — one record per proposal attempt, with run identity, bee, AFK/HITL mode, proposal kind, workspace, base SHA, summary, size, capture time, and publication state. Bodies are inlined within per-patch and aggregate budgets; oversized, unsuitable-for-text, or unreadable entries keep their metadata and ref and say why. Filesystem-only: no broker is required, and a trail without a proposals directory reads as an empty slice. |
 | `config` | The trail's retained configuration versions: policy, revision, initial/active `ConfigRef`, and each snapshot's files. Committed procedure files are inlined; private inputs (home-scoped adapter recipes and skills, and gitignored `*.local.yaml` overlays) are listed by path with `omitted: private configuration input is not exported`, and an **Export omissions** section repeats every gap. Oversized, binary, missing, or corrupt entries say why instead of disappearing. Filesystem-only: no broker is required. |
+| `skills` | A **Skills offered** section listing, per run, the procedures that run was offered, resolved from the run's own pinned configuration snapshot rather than the trail's current one. Each entry carries the name, description, and frozen `SKILL.md` path. A run that was offered nothing says `none` explicitly; a run whose snapshot is missing, corrupt, or absent says why its offered set is unavailable instead of showing an empty set. A later store edit or removal does not change an existing export. Filesystem-only: no broker is required. |
 
 Default export omits configuration contents. A `config` export carries the
 trail's own retained copies, so it still works after the worktree is pruned or
@@ -1459,6 +1460,7 @@ paseka export trace-abc123 --include agent-logs --format md
 paseka export trace-abc123 --include transcript --format md
 paseka export trace-abc123 --include reasoning --format md
 paseka export trace-abc123 --include patches --format md
+paseka export trace-abc123 --include skills --format md
 paseka export trace-abc123 -C /path/to/repo
 paseka export --trace trace-abc123
 ```

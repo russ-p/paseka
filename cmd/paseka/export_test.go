@@ -39,6 +39,16 @@ func TestResolveExportTraceID(t *testing.T) {
 	}
 }
 
+func TestExportCmdIncludeHelpListsSkills(t *testing.T) {
+	flag := newExportCmd().Flags().Lookup("include")
+	if flag == nil {
+		t.Fatal("export command has no --include flag")
+	}
+	if !strings.Contains(flag.Usage, "skills") {
+		t.Fatalf("--include help does not list skills: %q", flag.Usage)
+	}
+}
+
 func TestExportCmdAcceptsPositionalTraceID(t *testing.T) {
 	cmd := newExportCmd()
 	if cmd.Args == nil {
