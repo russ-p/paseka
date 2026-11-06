@@ -103,48 +103,61 @@ func (c Context) EffectiveSkills(role string, bee Bee) (EffectiveSkills, error) 
 			defaults = manifest.Defaults
 		}
 	}
+	return EffectiveSkillsFor(defaults, c.colonyProfile, c.homeProfile, role, bee), nil
+}
 
+// EffectiveSkillsFor resolves the gate from already-loaded layers. It exists so
+// a resolver that reads a trail's frozen configuration — where the profile
+// overlays come from the captured tree rather than the live context — can apply
+// exactly the same precedence without a second implementation.
+func EffectiveSkillsFor(
+	defaults Defaults,
+	colonyProfile ColonyProfile,
+	homeProfile HomeProfileConfig,
+	role string,
+	bee Bee,
+) EffectiveSkills {
 	out := EffectiveSkills{
 		Delivery:       SkillsDeliveryPath,
 		DeliverySource: "default",
 	}
 	switch {
-	case strings.TrimSpace(c.homeProfile.SkillsDelivery) != "":
-		out.Delivery = strings.TrimSpace(c.homeProfile.SkillsDelivery)
+	case strings.TrimSpace(homeProfile.SkillsDelivery) != "":
+		out.Delivery = strings.TrimSpace(homeProfile.SkillsDelivery)
 		out.DeliverySource = "home profile"
-	case strings.TrimSpace(c.colonyProfile.SkillsDelivery) != "":
-		out.Delivery = strings.TrimSpace(c.colonyProfile.SkillsDelivery)
+	case strings.TrimSpace(colonyProfile.SkillsDelivery) != "":
+		out.Delivery = strings.TrimSpace(colonyProfile.SkillsDelivery)
 		out.DeliverySource = "colony profile"
 	case strings.TrimSpace(defaults.SkillsDelivery) != "":
 		out.Delivery = strings.TrimSpace(defaults.SkillsDelivery)
 		out.DeliverySource = "defaults"
 	}
 
-	if sel, ok := c.homeProfile.roleSkills(role); ok {
+	if sel, ok := homeProfile.roleSkills(role); ok {
 		out.Refs = cloneRefs(sel.Refs)
 		out.Present = true
 		out.Source = "home profile"
-		return out, nil
+		return out
 	}
-	if sel, ok := c.colonyProfile.roleSkills(role); ok {
+	if sel, ok := colonyProfile.roleSkills(role); ok {
 		out.Refs = cloneRefs(sel.Refs)
 		out.Present = true
 		out.Source = "colony profile"
-		return out, nil
+		return out
 	}
 	if bee.Skills.Present {
 		out.Refs = cloneRefs(bee.Skills.Refs)
 		out.Present = true
 		out.Source = "bee"
-		return out, nil
+		return out
 	}
 	switch {
-	case c.homeProfile.Skills.Present:
-		out.Refs = cloneRefs(c.homeProfile.Skills.Refs)
+	case homeProfile.Skills.Present:
+		out.Refs = cloneRefs(homeProfile.Skills.Refs)
 		out.Present = true
 		out.Source = "home profile defaults"
-	case c.colonyProfile.Skills.Present:
-		out.Refs = cloneRefs(c.colonyProfile.Skills.Refs)
+	case colonyProfile.Skills.Present:
+		out.Refs = cloneRefs(colonyProfile.Skills.Refs)
 		out.Present = true
 		out.Source = "colony profile defaults"
 	case defaults.Skills.Present:
@@ -154,7 +167,7 @@ func (c Context) EffectiveSkills(role string, bee Bee) (EffectiveSkills, error) 
 	default:
 		out.Source = "none"
 	}
-	return out, nil
+	return out
 }
 
 // ValidateSkillsDelivery rejects unknown delivery modes. Absent is valid and

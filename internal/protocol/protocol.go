@@ -125,6 +125,11 @@ type Request struct {
 	ResultPath   string    `json:"resultPath"`
 	EventLogPath string    `json:"eventLogPath"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// Skills names the skills this run was offered, resolved from the trail's
+	// frozen configuration. It is written by both the unattended dispatcher and
+	// the interactive session manager so an AFK run and a HITL session carry the
+	// same field, and it stays readable after the role's list changes.
+	Skills []string `json:"skills,omitempty"`
 }
 
 // ArtifactRef points to a normalized output artifact.

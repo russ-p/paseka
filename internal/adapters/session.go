@@ -34,6 +34,10 @@ type SessionRequest struct {
 	Task          string
 	Intent        string
 	Insights      []string
+	// Skills names the resolved skill set this session was offered. A resumed
+	// provider session keeps its first turn's context, so the section is not
+	// re-injected; the field still records the set the session runs under.
+	Skills []string
 	protocol.Provenance
 	// ResumeSessionID, when set, asks the adapter to continue an existing
 	// provider chat instead of creating a new one. Cursor uses --resume and

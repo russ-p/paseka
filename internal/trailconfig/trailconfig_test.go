@@ -78,6 +78,65 @@ func TestEnsureCapturesCompleteBinding(t *testing.T) {
 	}
 }
 
+func TestEnsureCapturesSkillLedgerAndHomeProfileConfig(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	home := setupHome(t, "test")
+	writeFileHelper(t, filepath.Join(root, ".paseka", "skills.index.json"),
+		`{"schema_version":1,"disabled":{"example":{"at":"2026-11-06T12:00:00Z","reason":"wrong step"}}}`+"\n")
+	writeFileHelper(t, filepath.Join(home, "profiles", "pi", "config.yaml"),
+		"skills:\n  - example\nskills_delivery: path\n")
+
+	manifest, err := trailconfig.Ensure(testContext(root), "trace-skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := filepath.Join(root, ".paseka", "runs", "trace-skills", "config", "snapshots", manifest.InitialConfigRef, "tree")
+
+	ledgerPath := filepath.Join(tree, ".paseka", "skills.index.json")
+	ledger, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatalf("the store ledger must be frozen with the trail: %v", err)
+	}
+	if !strings.Contains(string(ledger), "wrong step") {
+		t.Fatalf("frozen ledger = %s", ledger)
+	}
+	profilePath := filepath.Join(tree, "home", "profiles", "pi", "config.yaml")
+	profile, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("the selected home profile's config.yaml must be frozen with the trail: %v", err)
+	}
+	if !strings.Contains(string(profile), "skills_delivery: path") {
+		t.Fatalf("frozen home profile = %s", profile)
+	}
+
+	inventory, _, err := trailconfig.ReadSnapshot(root, "trace-skills", manifest.InitialConfigRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range inventory.Entries {
+		switch entry.Path {
+		case ".paseka/skills.index.json":
+			if entry.Private {
+				t.Fatal("the store ledger is committed, not a private input")
+			}
+		case "home/profiles/pi/config.yaml":
+			if !entry.Private {
+				t.Fatal("a home profile config is a machine-local private input")
+			}
+		}
+	}
+}
+
+func writeFileHelper(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConfigRefIgnoresLocationAndTrailIdentity(t *testing.T) {
 	rootA := writeColony(t, "slug: first\nmodel_aliases:\n  builder: vendor/builder\n")
 	rootB := writeColony(t, "slug: first\nmodel_aliases:\n  builder: vendor/builder\n")

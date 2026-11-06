@@ -16,6 +16,7 @@ import (
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/skills"
 )
 
 // preparedDispatch holds everything needed after Prepare through Finalize.
@@ -29,6 +30,7 @@ type preparedDispatch struct {
 	adapterName    string
 	rendered       string
 	renderedSystem string
+	skills         []string
 	plan           launch.LaunchPlan
 	runDir         runs.Dir
 	baseline       adapters.WorkspaceBaseline
@@ -156,6 +158,30 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		return nil, fmt.Errorf("runtime: discover intents: %w", err)
 	}
 
+	// Resolve the skill gate before anything is rendered or launched: an
+	// invalid, missing, unmatched, or over-budget set stops the run here, before
+	// the adapter starts, and names the offending skill or reference. The set is
+	// resolved from the configuration tree in force — a bound trail reads its
+	// frozen snapshot, so a store edit after trail start cannot change it.
+	skillResolution, err := skills.ResolveRun(skills.RunInput{
+		ConfigRoot: configRoot,
+		Slug:       req.Slug,
+		Frozen:     req.ConfigRef != "",
+		Role:       req.Bee,
+		Profile:    req.Profile,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("runtime: %w", err)
+	}
+	for _, disabled := range skillResolution.Disabled {
+		runtimeLog.Warn("skill disabled and skipped",
+			logging.F("skill", disabled.Name),
+			logging.F("bee", bee.Role),
+			logging.F("trace", req.TraceID),
+			logging.F("reason", disabled.Reason),
+		)
+	}
+
 	promptCtx := prompts.PromptContext(prompts.Context{
 		Bee:            bee.Role,
 		TraceID:        req.TraceID,
@@ -191,6 +217,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		BeeLocalTemplate: overlay.SystemTemplate,
 		BeeTemplate:      bee.SystemTemplate,
 		DefaultTemplate:  manifest.Defaults.SystemTemplate,
+		SkillsSection:    skillResolution.Section(),
 	}, promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: render system prompt: %w", err)
@@ -272,6 +299,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		Model:                plan.ModelID,
 		ModelAlias:           plan.ModelAlias,
 		Profile:              req.Profile,
+		Skills:               skillResolution.Names(),
 		AttemptID:            req.AttemptID,
 		ConfigRef:            req.ConfigRef,
 		ConfigRevision:       req.ConfigRevision,
@@ -352,6 +380,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		adapterName:    adapterName,
 		rendered:       rendered,
 		renderedSystem: renderedSystem,
+		skills:         skillResolution.Names(),
 		plan:           plan,
 		runDir:         runDir,
 		baseline:       baseline,
@@ -404,6 +433,7 @@ func (d *Dispatcher) runPrepared(ctx context.Context, p *preparedDispatch) (*ada
 		Intent:       p.req.Intent,
 		Insights:     p.insights,
 		Profile:      p.req.Profile,
+		Skills:       p.skills,
 		Provenance:   p.req.provenance(),
 	})
 }

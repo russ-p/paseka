@@ -278,6 +278,34 @@ func formatAvailableProfiles(colonyNames, homeNames []string) string {
 	return fmt.Sprintf("colony: %s; home: %s", colonyPart, homePart)
 }
 
+// ColonyProfilePath returns the committed profile file for a colony root.
+func ColonyProfilePath(colonyRoot, name string) string {
+	return colonyProfilePath(colonyRoot, name)
+}
+
+// HomeProfileConfigPath returns the machine-local config.yaml of one home
+// profile. It is the file whose skill fields a trail captures, so a run can
+// resolve the effective selection from the frozen copy.
+func HomeProfileConfigPath(slug, name string) (string, error) {
+	dir, err := homeProfileDir(slug, name)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.yaml"), nil
+}
+
+// LoadColonyProfileFile reads one committed profile file. It serves the live
+// colony and a trail's frozen copy alike; only the path differs.
+func LoadColonyProfileFile(path string) (ColonyProfile, error) {
+	return loadColonyProfileFile(path)
+}
+
+// LoadHomeProfileConfigFile reads one home profile config. It serves the live
+// machine-local file and a trail's frozen copy alike.
+func LoadHomeProfileConfigFile(path string) (HomeProfileConfig, error) {
+	return loadHomeProfileConfig(path)
+}
+
 func loadColonyProfileFile(path string) (ColonyProfile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

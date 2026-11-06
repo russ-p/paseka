@@ -33,6 +33,10 @@ type RunRequest struct {
 	Intent       string
 	Insights     []string
 	Profile      string
+	// Skills names the resolved skill set this run was offered, in resolution
+	// order. The runtime advertises the same set in the system prompt; an
+	// adapter that can deliver skills natively may use these names later.
+	Skills []string
 	protocol.Provenance
 	// Raw is the runtime-owned `--raw` escape hatch: the adapter requests plain
 	// text instead of its structured mode, so usage and providerSessionId

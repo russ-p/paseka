@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, the reading commands (`list`, `show`, `validate`), and the store mutations (`disable`, `enable`, `remove`); delivery, attribution, and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record, the reading commands (`list`, `show`, `validate`), and the store mutations (`disable`, `enable`, `remove`); attribution and approval build on the same rules.
 
 ---
 
@@ -122,7 +122,29 @@ Profiles ([colony layout](colony-layout.md), [spec 027](../specs/027-config-prof
 
 `skills` in `<role>.local.yaml` is a **load error**, not a silent no-op. A profile is the supported per-machine override, and a misplaced key must not look like a gate.
 
-## 6. The committed ledger
+## 6. Delivery: the system-prompt advertisement
+
+Before a run starts, the runtime resolves the effective set once and renders it into the run's system prompt as a section of its own, appended after the role's instructions:
+
+```text
+## Available skills
+
+Each skill below is a reusable procedure this role may use. The procedure itself is not included here; read the file at its path when the task calls for it.
+
+- paseka-release: Run the colony release procedure. Use when shipping a version.
+  path: <frozen-config>/tree/.paseka/skills/paseka-release/SKILL.md
+```
+
+- The section carries metadata only — name, description, and the absolute path of the `SKILL.md`. A body is never inlined: progressive disclosure is what keeps a procedure cheap until a bee needs it.
+- The runtime appends the section; it is never written into a template file. A bee whose role declares no `system_template` receives the section as its whole system prompt, and a run whose effective set is empty receives no section at all.
+- The composed system prompt is written to `.paseka/runs/<traceId>/<agentId>/system.txt` before the adapter starts, so a script bee has the same auditable file even when its adapter writes no system prompt of its own.
+- The advertised path is inside the trail's **frozen configuration**, not the live store, so a running trail keeps reading the bytes it started with. A store or role-list edit after trail start changes the next trail, not this run; it reaches a trail only through an explicit configuration application.
+- The resolved names are recorded in the run's `request.json` as `skills` (omitted when the set is empty). Both the unattended dispatcher and the interactive session manager write it, so an AFK run and a HITL session carry the same field, and it stays readable after the role's list changes.
+- A resumed provider session keeps the first turn's context; the runtime records the set but does not re-inject the section. A configuration application changes later runs and new sessions only.
+
+A run that cannot resolve its declared set does not start the adapter: a missing reference, an invalid skill, a pattern that matches nothing, a 33rd skill, a skill file over 256 KiB, or a store over 8 MiB fails the dispatch and names the offending skill or reference. A disabled skill is the one skip: it is omitted and reported, because the disable is the Beekeeper's own recorded decision.
+
+## 7. The committed ledger
 
 `.paseka/skills.index.json` records the one thing a skill file cannot: whether a skill is offered at all. It carries a schema version and, per skill name, when and why the skill was disabled:
 
@@ -144,7 +166,7 @@ Profiles ([colony layout](colony-layout.md), [spec 027](../specs/027-config-prof
 - Provenance lives in the skill's own `metadata`, and the inventory is the directory listing, so the ledger has no mirror to reconcile.
 - The only writers are `paseka skills disable` and `paseka skills enable` (plus `remove`, which deletes a record). They write atomically and never commit: the change is left in the working tree for the Beekeeper.
 
-## 7. Listing the store
+## 8. Listing the store
 
 ```bash
 paseka skills list
@@ -192,7 +214,7 @@ A store-wide finding — a stray entry at the store root, or the 8 MiB budget �
 
 `skills` and `issues` are always arrays, `reason` is present only when there is one, and `state` never carries the reason — a script reads the fields, not prose.
 
-## 8. Showing one skill
+## 9. Showing one skill
 
 ```bash
 paseka skills show paseka-release          # metadata, provenance, and body
@@ -224,7 +246,7 @@ metadata:
 
 Both `list` and `show` read the **repository store**, never a trail's frozen copy: no trail is in scope when a Beekeeper runs a shell command.
 
-## 9. Validating
+## 10. Validating
 
 ```bash
 paseka skills validate          # the whole store
@@ -259,7 +281,7 @@ Use it as a pre-commit hook or in CI; it needs no bus and no running colony.
 paseka doctor
 ```
 
-## 10. Changing the store
+## 11. Changing the store
 
 Three verbs change the store. All three act on one procedure — a pattern (`paseka-*`, `*`) is refused — speak prose, and never write a commit. They read the committed ledger first, so a corrupt ledger fails the command instead of being replaced, and no store entry is touched.
 
@@ -276,7 +298,7 @@ paseka skills remove paseka-release --force
 
 A removal that must be shared is a change the Beekeeper commits. The commands write the working tree and stop there. Removing a skill does not delete a trail's decisions about it.
 
-## 11. Same rules everywhere
+## 12. Same rules everywhere
 
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 

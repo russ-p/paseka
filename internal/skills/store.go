@@ -175,6 +175,17 @@ func (r Report) Issues() []Issue {
 	return issues
 }
 
+// StoreIssues returns findings about the store itself — a stray entry at its
+// root, or the store-wide budget — without the per-skill findings. A run must
+// not start on a store that breaches a budget, while a bare reference must not
+// inherit an unrelated skill's problem.
+func (r Report) StoreIssues() []Issue {
+	issues := make([]Issue, len(r.store))
+	copy(issues, r.store)
+	sortIssues(issues)
+	return issues
+}
+
 // Valid reports whether the whole store passed the rule set.
 func (r Report) Valid() bool {
 	return len(r.Issues()) == 0

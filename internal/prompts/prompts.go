@@ -64,6 +64,12 @@ type SystemResolveInput struct {
 	BeeLocalTemplate string
 	BeeTemplate      string
 	DefaultTemplate  string
+	// SkillsSection is the runtime-owned advertisement appended after the
+	// role's rendered instructions. It is never written into a template file:
+	// templates render the role's instructions, and the runtime owns the block.
+	// When the bee has no system template the section is the whole system
+	// prompt; when it is empty the rendered instructions are unchanged.
+	SkillsSection string
 }
 
 // ResolveSystem picks a system template file.
@@ -80,16 +86,37 @@ func ResolveSystem(input SystemResolveInput) (templateFile string, err error) {
 	return "", nil
 }
 
-// RenderSystemResolved renders the configured system template, or empty when unset.
+// RenderSystemResolved renders the configured system template and appends the
+// runtime-owned skills advertisement after it. This is the one place a system
+// prompt is composed, so the unattended dispatcher and the interactive session
+// manager cannot advertise differently.
 func (l *Loader) RenderSystemResolved(input SystemResolveInput, ctx Context) (string, error) {
 	file, err := ResolveSystem(input)
 	if err != nil {
 		return "", err
 	}
-	if file == "" {
-		return "", nil
+	rendered := ""
+	if file != "" {
+		rendered, err = l.Render(file, ctx)
+		if err != nil {
+			return "", err
+		}
 	}
-	return l.Render(file, ctx)
+	return AppendSection(rendered, input.SkillsSection), nil
+}
+
+// AppendSection places a runtime-owned section after the role's instructions as
+// a distinct block. A bee with no system template gets the section as its whole
+// system prompt, and a run with no section keeps the instructions unchanged.
+func AppendSection(rendered, section string) string {
+	section = strings.TrimRight(section, "\n")
+	if section == "" {
+		return rendered
+	}
+	if strings.TrimSpace(rendered) == "" {
+		return section
+	}
+	return strings.TrimRight(rendered, "\n") + "\n\n" + section
 }
 
 type ResolveInput struct {
