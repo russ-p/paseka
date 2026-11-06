@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -359,5 +361,374 @@ func TestSkillCommandsFailOnCorruptLedger(t *testing.T) {
 	}
 	if !strings.Contains(out, "corrupt") {
 		t.Fatalf("doctor output = %q", out)
+	}
+}
+
+// writeStoreSkillBody writes one store entry with a given body, so a show test
+// can prove the body is printed without its frontmatter.
+func writeStoreSkillBody(t *testing.T, repo, name, frontmatter, body string) {
+	t.Helper()
+	dir := filepath.Join(skills.Dir(repo), name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\n" + frontmatter + "\n---\n" + body
+	if err := os.WriteFile(filepath.Join(dir, skills.ManifestName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeSkillLedger(t *testing.T, repo, disabledJSON string) {
+	t.Helper()
+	ledger := `{"schema_version": 1, "disabled": ` + disabledJSON + "}\n"
+	if err := os.WriteFile(filepath.Join(repo, ".paseka", "skills.index.json"), []byte(ledger), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// tableColumns splits a rendered table row on the two-or-more spaces tabwriter
+// leaves between columns. Descriptions are single-spaced in the fixtures, so the
+// last column stays whole.
+func tableColumns(line string) []string {
+	return regexp.MustCompile(`\s{2,}`).Split(strings.TrimSpace(line), -1)
+}
+
+// skillTableRows returns the table's rows keyed by skill name.
+func skillTableRows(t *testing.T, out string) map[string][]string {
+	t.Helper()
+	rows := map[string][]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cols := tableColumns(line)
+		if len(cols) < 4 || cols[0] == "NAME" {
+			continue
+		}
+		rows[cols[0]] = cols
+	}
+	return rows
+}
+
+// TestSkillsListTable pins the four columns and the roles column's computed
+// answer: a bare-name role, a family pattern, and `*` each appear against every
+// skill they resolve to, an invalid skill carries its reason in the state
+// column, and a disabled skill says so.
+func TestSkillsListTable(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeStoreSkill(t, repo, "paseka-ship", "name: paseka-shipped\ndescription: Run the ship procedure.")
+	writeStoreSkill(t, repo, "legacy", "name: legacy\ndescription: The old procedure.")
+	writeSkillLedger(t, repo, `{"legacy": {"at": "2026-11-06T12:00:00Z", "reason": "step 2 is wrong"}}`)
+
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+	writeCLIBee(t, repo, "shipper", "role: shipper\nadapter: cursor\nskills:\n  - \"paseka-*\"\n")
+	writeCLIBee(t, repo, "allrounder", "role: allrounder\nadapter: cursor\nskills:\n  - \"*\"\n")
+	writeCLIBee(t, repo, "optout", "role: optout\nadapter: cursor\nskills: []\n")
+
+	out, err := runCLI(t, "skills", "list", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "NAME") || !strings.Contains(out, "ROLES") || !strings.Contains(out, "DESCRIPTION") {
+		t.Fatalf("table header missing:\n%s", out)
+	}
+
+	rows := skillTableRows(t, out)
+	release, ok := rows["paseka-release"]
+	if !ok {
+		t.Fatalf("no row for paseka-release:\n%s", out)
+	}
+	if release[1] != "ok" {
+		t.Fatalf("state column = %q, want ok", release[1])
+	}
+	for _, role := range []string{"builder", "shipper", "allrounder"} {
+		if !strings.Contains(release[2], role) {
+			t.Fatalf("roles column %q missing %q:\n%s", release[2], role, out)
+		}
+	}
+	if strings.Contains(release[2], "optout") {
+		t.Fatalf("an explicit empty list must not name a role: %q", release[2])
+	}
+
+	ship, ok := rows["paseka-ship"]
+	if !ok {
+		t.Fatalf("no row for paseka-ship:\n%s", out)
+	}
+	if !strings.HasPrefix(ship[1], "invalid:") {
+		t.Fatalf("invalid state column = %q", ship[1])
+	}
+	if !strings.Contains(ship[1], "does not match its directory") {
+		t.Fatalf("invalid state is missing its reason: %q", ship[1])
+	}
+	// A pattern role is named against the skill it resolves to even when the
+	// skill itself is invalid: the gate still matches it.
+	if !strings.Contains(ship[2], "shipper") || !strings.Contains(ship[2], "allrounder") {
+		t.Fatalf("roles column %q missing pattern roles", ship[2])
+	}
+
+	legacy, ok := rows["legacy"]
+	if !ok {
+		t.Fatalf("no row for legacy:\n%s", out)
+	}
+	if !strings.HasPrefix(legacy[1], "disabled:") || !strings.Contains(legacy[1], "step 2 is wrong") {
+		t.Fatalf("disabled state column = %q", legacy[1])
+	}
+	if !strings.Contains(legacy[2], "allrounder") {
+		t.Fatalf("wildcard role must name a disabled skill it matches: %q", legacy[2])
+	}
+}
+
+// TestSkillsListJSON pins the machine contract: stable keys, arrays rather than
+// nulls, and the state and reason kept separate from the table's rendering.
+func TestSkillsListJSON(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeStoreSkill(t, repo, "paseka-ship", "name: paseka-shipped\ndescription: Run the ship procedure.")
+	writeStoreSkill(t, repo, "legacy", "name: legacy\ndescription: The old procedure.")
+	writeSkillLedger(t, repo, `{"legacy": {"at": "2026-11-06T12:00:00Z", "reason": "step 2 is wrong"}}`)
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+	writeCLIBee(t, repo, "allrounder", "role: allrounder\nadapter: cursor\nskills:\n  - \"*\"\n")
+
+	out, err := runCLI(t, "skills", "list", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list --json: %v\n%s", err, out)
+	}
+	var doc struct {
+		Store  string `json:"store"`
+		Skills []struct {
+			Name        string   `json:"name"`
+			State       string   `json:"state"`
+			Reason      string   `json:"reason"`
+			Roles       []string `json:"roles"`
+			Description string   `json:"description"`
+		} `json:"skills"`
+		Issues []string `json:"issues"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+	if doc.Store != skills.Dir(repo) {
+		t.Fatalf("store = %q, want %q", doc.Store, skills.Dir(repo))
+	}
+	if doc.Skills == nil || doc.Issues == nil {
+		t.Fatalf("skills and issues must be arrays, got %#v", doc)
+	}
+	if len(doc.Skills) != 3 {
+		t.Fatalf("got %d skills, want 3:\n%s", len(doc.Skills), out)
+	}
+	byName := map[string]int{}
+	for i, entry := range doc.Skills {
+		byName[entry.Name] = i
+	}
+	release := doc.Skills[byName["paseka-release"]]
+	if release.State != "ok" || release.Reason != "" {
+		t.Fatalf("paseka-release = %+v", release)
+	}
+	if strings.Join(release.Roles, ",") != "allrounder,builder" {
+		t.Fatalf("paseka-release roles = %v", release.Roles)
+	}
+	if release.Description != "Run the release procedure." {
+		t.Fatalf("paseka-release description = %q", release.Description)
+	}
+	ship := doc.Skills[byName["paseka-ship"]]
+	if ship.State != "invalid" || !strings.Contains(ship.Reason, "does not match its directory") {
+		t.Fatalf("paseka-ship = %+v", ship)
+	}
+	legacy := doc.Skills[byName["legacy"]]
+	if legacy.State != "disabled" || legacy.Reason != "step 2 is wrong" {
+		t.Fatalf("legacy = %+v", legacy)
+	}
+}
+
+// TestSkillsListEmptyStore pins that an empty store is a valid inventory with
+// an empty, parseable contract.
+func TestSkillsListEmptyStore(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	out, err := runCLI(t, "skills", "list", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list on an empty store: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, `"skills": []`) {
+		t.Fatalf("empty store must render an empty array:\n%s", out)
+	}
+}
+
+// TestSkillsShow pins metadata, provenance, and a body printed without its
+// frontmatter, for a skill with a provenance record and for a hand-written one.
+func TestSkillsShow(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkillBody(t, repo, "paseka-release",
+		"name: paseka-release\ndescription: Run the release procedure.\nmetadata:\n  source: proposal\n  trail: trace-abc123",
+		"# Release\n\n1. Run scripts/checks.sh.\n")
+	writeStoreSkillBody(t, repo, "docs-style",
+		"name: docs-style\ndescription: Write the docs.",
+		"# Docs\n\nShort sentences.\n")
+
+	out, err := runCLI(t, "skills", "show", "paseka-release", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills show: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"name: paseka-release",
+		"description: Run the release procedure.",
+		"provenance: proposal",
+		"metadata:",
+		"source: proposal",
+		"trail: trace-abc123",
+		"# Release",
+		"1. Run scripts/checks.sh.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("show output missing %q:\n%s", want, out)
+		}
+	}
+	// The frontmatter is not reprinted as a block: the body starts after it.
+	if strings.Contains(out, "---") {
+		t.Fatalf("show reprinted the frontmatter fence:\n%s", out)
+	}
+
+	out, err = runCLI(t, "skills", "show", "docs-style", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills show docs-style: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "provenance: hand") {
+		t.Fatalf("a skill with no provenance record must read as hand:\n%s", out)
+	}
+	if !strings.Contains(out, "metadata: (none)") {
+		t.Fatalf("show output missing empty metadata marker:\n%s", out)
+	}
+}
+
+// TestSkillsShowPath pins the path-only mode: one line, the resolved SKILL.md,
+// nothing else, so a script can consume it.
+func TestSkillsShowPath(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+
+	out, err := runCLI(t, "skills", "show", "paseka-release", "--path", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills show --path: %v\n%s", err, out)
+	}
+	want := filepath.Join(skills.Dir(repo), "paseka-release", skills.ManifestName)
+	if strings.TrimSpace(out) != want {
+		t.Fatalf("path output = %q, want %q", out, want)
+	}
+	if lines := strings.Split(strings.TrimSpace(out), "\n"); len(lines) != 1 {
+		t.Fatalf("path output must be one line, got %d:\n%s", len(lines), out)
+	}
+}
+
+// TestSkillsShowRefusesSet pins that show acts on one procedure: a pattern and
+// `*` are refused, and an unknown name is reported by name.
+func TestSkillsShowRefusesSet(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeStoreSkill(t, repo, "paseka-ship", "name: paseka-ship\ndescription: Run the ship procedure.")
+
+	for _, ref := range []string{"paseka-*", "*"} {
+		out, err := runCLI(t, "skills", "show", ref, "-C", repo)
+		if err == nil {
+			t.Fatalf("show %q was accepted:\n%s", ref, out)
+		}
+		if !strings.Contains(err.Error(), "acts on one skill") {
+			t.Fatalf("show %q error = %v", ref, err)
+		}
+	}
+
+	out, err := runCLI(t, "skills", "show", "nope", "-C", repo)
+	if err == nil {
+		t.Fatalf("show of an unknown name was accepted:\n%s", out)
+	}
+	for _, want := range []string{`"nope"`, "matches no skill"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("show error missing %q: %v", want, err)
+		}
+	}
+}
+
+// TestSkillsShowJSON pins the show contract a script consumes.
+func TestSkillsShowJSON(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkillBody(t, repo, "paseka-release",
+		"name: paseka-release\ndescription: Run the release procedure.\nmetadata:\n  source: nuc",
+		"# Release\n\nDo the thing.\n")
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+
+	out, err := runCLI(t, "skills", "show", "paseka-release", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills show --json: %v\n%s", err, out)
+	}
+	var doc struct {
+		Name        string            `json:"name"`
+		Description string            `json:"description"`
+		State       string            `json:"state"`
+		Roles       []string          `json:"roles"`
+		Path        string            `json:"path"`
+		Provenance  string            `json:"provenance"`
+		Metadata    map[string]string `json:"metadata"`
+		Body        string            `json:"body"`
+		Issues      []string          `json:"issues"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+	if doc.Name != "paseka-release" || doc.State != "ok" {
+		t.Fatalf("document = %+v", doc)
+	}
+	if doc.Provenance != "nuc" || doc.Metadata["source"] != "nuc" {
+		t.Fatalf("provenance = %q metadata = %v", doc.Provenance, doc.Metadata)
+	}
+	if strings.Join(doc.Roles, ",") != "builder" {
+		t.Fatalf("roles = %v", doc.Roles)
+	}
+	if doc.Path != filepath.Join(skills.Dir(repo), "paseka-release", skills.ManifestName) {
+		t.Fatalf("path = %q", doc.Path)
+	}
+	if doc.Body != "# Release\n\nDo the thing.\n" {
+		t.Fatalf("body = %q", doc.Body)
+	}
+}
+
+// TestSkillsListStoreWideIssue pins the two things that have no skill row: a
+// stray entry at the store root is reported after the table (and in the JSON
+// issues array), and a skill no role carries shows `-` rather than a blank.
+func TestSkillsListStoreWideIssue(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeStoreSkill(t, repo, "docs-style", "name: docs-style\ndescription: Write the docs.")
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+	if err := os.WriteFile(filepath.Join(skills.Dir(repo), "README.md"), []byte("not a skill\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runCLI(t, "skills", "list", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, `store: entry "README.md" is not a directory`) {
+		t.Fatalf("store-wide finding missing:\n%s", out)
+	}
+	rows := skillTableRows(t, out)
+	docs, ok := rows["docs-style"]
+	if !ok {
+		t.Fatalf("no row for docs-style:\n%s", out)
+	}
+	if docs[2] != "-" {
+		t.Fatalf("an uncarried skill's roles column = %q, want -", docs[2])
+	}
+
+	jsonOut, err := runCLI(t, "skills", "list", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list --json: %v\n%s", err, jsonOut)
+	}
+	var doc struct {
+		Issues []string `json:"issues"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &doc); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, jsonOut)
+	}
+	if len(doc.Issues) != 1 || !strings.Contains(doc.Issues[0], "README.md") {
+		t.Fatalf("issues = %v", doc.Issues)
 	}
 }

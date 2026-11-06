@@ -610,6 +610,40 @@ Standing cues seed honey on the first tick and replace remaining with `standing.
 
 Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, and budgets: [Colony skills](skills.md).
 
+### `paseka skills list`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--json` | | Emit the inventory as JSON on stdout |
+
+Lists every skill in the repository store as a table of **name, state, roles, description**. The state is `ok`, `invalid` (with the reason from the same rule set `validate` uses), or `disabled` (with the ledger's reason). The roles column is computed from the role configurations on every run: it names every role whose selection resolves to the skill, and a role that lists `*` or a matching pattern is named against every skill it actually receives. A store-wide finding is printed after the table as a `store: …` line. Needs no NATS.
+
+`--json` emits the stable machine contract — `store`, a `skills` array (`name`, `state`, optional `reason`, `roles`, `description`), and an `issues` array:
+
+```bash
+paseka skills list
+paseka skills list --json
+```
+
+### `paseka skills show <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--colony` | `-C` | Colony resolution start directory |
+| `--path` | | Print only the resolved `SKILL.md` path |
+| `--json` | | Emit the skill as JSON on stdout |
+
+Prints one skill's metadata, its provenance, and its body without the frontmatter. Provenance comes from the skill's own `metadata.source`; a skill with no provenance record is `hand`. The reference must name one procedure: a pattern (`paseka-*`, `*`) is refused because a pattern names a set, and an unknown name is reported by name. An invalid skill is still shown, with its findings under `issues:`.
+
+`--path` prints one line — the absolute `SKILL.md` path — so a script can consume the location without parsing prose. Because `--path` means the path-only mode here, this verb's colony flag is `-C`/`--colony` rather than the group's usual `--path`. Needs no NATS.
+
+```bash
+paseka skills show paseka-release
+paseka skills show paseka-release --path
+paseka skills show paseka-release --json
+```
+
 ### `paseka skills validate [reference|pattern|*]`
 
 | Flag | Short | Description |

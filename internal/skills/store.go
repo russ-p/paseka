@@ -211,14 +211,13 @@ func (r Report) Select(ref Reference) ([]Skill, error) {
 	return matched, nil
 }
 
-// matching returns every skill a reference names. A bare name and a pattern are
-// matched against the directory name and the declared name: those are the same
-// string in a valid skill, and checking both means a name mismatch is reported
-// whichever of the two a caller used.
+// matching returns every skill a reference names. The rule lives on Reference
+// so a listing, a resolution, and a command answer the same question the same
+// way.
 func (r Report) matching(ref Reference) []Skill {
 	var out []Skill
 	for _, skill := range r.Skills {
-		if ref.Matches(skill.Name) || (skill.DeclaredName != "" && ref.Matches(skill.DeclaredName)) {
+		if ref.Names(skill) {
 			out = append(out, skill)
 		}
 	}

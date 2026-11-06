@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, and the committed ledger; delivery, attribution, and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, and the reading commands (`list`, `show`, `validate`); delivery, attribution, and approval build on the same rules.
 
 ---
 
@@ -143,7 +143,87 @@ Profiles ([colony layout](colony-layout.md), [spec 027](../specs/027-config-prof
 - A **disabled** skill stays in the store, keeps its history, and is never offered. A role that still lists it is skipped and reported, not failed: an emergency stop must not become a colony-wide outage.
 - Provenance lives in the skill's own `metadata`, and the inventory is the directory listing, so the ledger has no mirror to reconcile.
 
-## 7. Validating
+## 7. Listing the store
+
+```bash
+paseka skills list
+paseka skills list --json
+```
+
+The table's columns are **name, state, roles, description**:
+
+```text
+NAME            STATE                                            ROLES                         DESCRIPTION
+legacy          disabled: step 2 is wrong                        allrounder                    The old procedure.
+paseka-release  ok                                               allrounder, builder, shipper  Run the colony release procedure.
+paseka-ship     invalid: name "paseka-shipped" does not match its directory "paseka-ship"  allrounder, shipper  Run the ship procedure.
+```
+
+- **state** is one of `ok`, `invalid` (with the reason from the same rule set `validate` uses), or `disabled` (with the ledger's reason). A disabled skill reads as disabled even if its bytes have since gone stale; `validate` and `doctor` still report the invalidity.
+- **roles** is computed from the role configurations on every run, never remembered: it names every role whose selection resolves to the skill. A role that lists `*` or a matching pattern (`paseka-*`) is named against every skill it actually resolves to, because that is what the gate does — so the column answers "who carries this procedure, and is removing it safe?" for a wildcard role too. A profile override is reflected, because the role lists are the effective ones. `-` means no role carries the skill.
+- **description** is the skill's `description`, the same line a bee sees in the advertisement.
+
+A store-wide finding — a stray entry at the store root, or the 8 MiB budget — has no row, so it is printed after the table as a `store: …` line. The per-skill findings are already in the state column.
+
+`--json` prints the same inventory as a stable contract:
+
+```json
+{
+  "store": "/repo/.paseka/skills",
+  "skills": [
+    {
+      "name": "paseka-release",
+      "state": "ok",
+      "roles": ["builder"],
+      "description": "Run the colony release procedure."
+    },
+    {
+      "name": "legacy",
+      "state": "disabled",
+      "reason": "step 2 is wrong",
+      "roles": ["allrounder"],
+      "description": "The old procedure."
+    }
+  ],
+  "issues": []
+}
+```
+
+`skills` and `issues` are always arrays, `reason` is present only when there is one, and `state` never carries the reason — a script reads the fields, not prose.
+
+## 8. Showing one skill
+
+```bash
+paseka skills show paseka-release          # metadata, provenance, and body
+paseka skills show paseka-release --path   # only the resolved SKILL.md path
+paseka skills show paseka-release --json   # the same facts as a contract
+```
+
+`show` resolves one procedure, so it refuses a pattern (`paseka-*`, `*`): a pattern names a set, and `list` or `validate` is the command for a set. An unknown name is reported by name.
+
+```text
+name: paseka-release
+description: Run the colony release procedure. Use when shipping a version.
+path: /repo/.paseka/skills/paseka-release/SKILL.md
+provenance: proposal
+metadata:
+  source: proposal
+  trail: trace-abc123
+
+# Release
+
+1. Run `scripts/checks.sh`.
+2. Tag after the merge, not before.
+```
+
+- **provenance** is read from the skill's own `metadata.source`; a skill with no provenance record is `hand`. It is not mirrored in the ledger.
+- The **body** is printed without its frontmatter, exactly as a bee would read it.
+- `--path` prints one line, the absolute `SKILL.md` path, so a script can consume the location without parsing prose. In this one command `-C`/`--colony` names the colony root, because `--path` is the path-only mode.
+- An invalid skill is still shown, with its findings under `issues:`, so a Beekeeper can read a broken procedure while fixing it.
+
+Both `list` and `show` read the **repository store**, never a trail's frozen copy: no trail is in scope when a Beekeeper runs a shell command.
+
+## 9. Validating
 
 ```bash
 paseka skills validate          # the whole store
@@ -178,7 +258,7 @@ Use it as a pre-commit hook or in CI; it needs no bus and no running colony.
 paseka doctor
 ```
 
-## 8. Same rules everywhere
+## 10. Same rules everywhere
 
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 

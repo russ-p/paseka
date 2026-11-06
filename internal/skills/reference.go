@@ -66,6 +66,16 @@ func (r Reference) Matches(name string) bool {
 	return matchGlob(r.text, name)
 }
 
+// Names reports whether the reference names this store entry. A bare name and a
+// pattern are matched against the directory name and the declared name: those
+// are the same string in a valid skill, and checking both means a name mismatch
+// is reported whichever of the two a caller used. Every path that answers "does
+// this reference name this skill" goes through here, so a listing cannot
+// disagree with a resolution.
+func (r Reference) Names(skill Skill) bool {
+	return r.Matches(skill.Name) || (skill.DeclaredName != "" && r.Matches(skill.DeclaredName))
+}
+
 // matchGlob implements the pattern dialect: `*` matches any run of characters
 // and every other character matches itself. The dialect is deliberately this
 // small — no `?`, no character classes, no alternation, no regexp.
