@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, and the reading commands (`list`, `show`, `validate`); delivery, attribution, and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, the reading commands (`list`, `show`, `validate`), and the store mutations (`disable`, `enable`, `remove`); delivery, attribution, and approval build on the same rules.
 
 ---
 
@@ -142,6 +142,7 @@ Profiles ([colony layout](colony-layout.md), [spec 027](../specs/027-config-prof
 - A **corrupt** ledger — bad JSON, an unknown schema version, or a disabled record without `at`/`reason` — fails every skill command and `doctor`. It is never silently replaced.
 - A **disabled** skill stays in the store, keeps its history, and is never offered. A role that still lists it is skipped and reported, not failed: an emergency stop must not become a colony-wide outage.
 - Provenance lives in the skill's own `metadata`, and the inventory is the directory listing, so the ledger has no mirror to reconcile.
+- The only writers are `paseka skills disable` and `paseka skills enable` (plus `remove`, which deletes a record). They write atomically and never commit: the change is left in the working tree for the Beekeeper.
 
 ## 7. Listing the store
 
@@ -258,7 +259,24 @@ Use it as a pre-commit hook or in CI; it needs no bus and no running colony.
 paseka doctor
 ```
 
-## 10. Same rules everywhere
+## 10. Changing the store
+
+Three verbs change the store. All three act on one procedure — a pattern (`paseka-*`, `*`) is refused — speak prose, and never write a commit. They read the committed ledger first, so a corrupt ledger fails the command instead of being replaced, and no store entry is touched.
+
+```bash
+paseka skills disable paseka-release --reason "release step 2 is wrong"
+paseka skills enable paseka-release
+paseka skills remove paseka-release --dry-run
+paseka skills remove paseka-release --force
+```
+
+- **`disable`** writes a disabled record (when and why) to `.paseka/skills.index.json`, names the roles whose resolved set changes, and leaves the skill in the store and in the listing. It is the emergency stop: it needs no preview.
+- **`enable`** clears that record and restores the offer. Disable then enable is a complete undo and leaves no record behind.
+- **`remove`** deletes the store entry and its ledger record, leaving no orphan. It refuses while a role still references the skill and names those roles, because the removal would silently strip a procedure from them; `--force` proceeds anyway. `--dry-run` prints the plan and leaves the store and ledger byte-identical.
+
+A removal that must be shared is a change the Beekeeper commits. The commands write the working tree and stop there. Removing a skill does not delete a trail's decisions about it.
+
+## 11. Same rules everywhere
 
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 

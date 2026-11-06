@@ -732,3 +732,283 @@ func TestSkillsListStoreWideIssue(t *testing.T) {
 		t.Fatalf("issues = %v", doc.Issues)
 	}
 }
+
+// pasekaFiles snapshots every file under .paseka with its bytes, so a mutating
+// command can be proved to have left the store and ledger byte-identical.
+func pasekaFiles(t *testing.T, repo string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	root := filepath.Join(repo, ".paseka")
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[rel] = string(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func sameFiles(before, after map[string]string) bool {
+	if len(before) != len(after) {
+		return false
+	}
+	for name, content := range before {
+		if after[name] != content {
+			return false
+		}
+	}
+	return true
+}
+
+// TestSkillsDisableEnableUndoEachOther pins the two reversible flips: disable
+// records when and why, names the affected roles, and leaves the skill in the
+// store and in the listing; enable removes the record and restores the offer.
+func TestSkillsDisableEnableUndoEachOther(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+	writeCLIBee(t, repo, "allrounder", "role: allrounder\nadapter: cursor\nskills:\n  - \"*\"\n")
+
+	out, err := runCLI(t, "skills", "disable", "paseka-release", "--reason", "step 2 is wrong", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills disable: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		`disabled "paseka-release"`,
+		"step 2 is wrong",
+		"affected roles: allrounder, builder",
+		"the skill stays in the store",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("disable output missing %q:\n%s", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(skills.Dir(repo), "paseka-release", skills.ManifestName)); err != nil {
+		t.Fatalf("disable deleted the store entry: %v", err)
+	}
+	ledger, err := skills.LoadLedger(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, ok := ledger.Record("paseka-release")
+	if !ok || record.Reason != "step 2 is wrong" || record.At == "" {
+		t.Fatalf("ledger record = %+v, ok = %v", record, ok)
+	}
+
+	// A disabled skill is not offered, but it is still listed and the decision
+	// is visible on the row.
+	listOut, err := runCLI(t, "skills", "list", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list: %v\n%s", err, listOut)
+	}
+	if !strings.Contains(listOut, `"state": "disabled"`) || !strings.Contains(listOut, "step 2 is wrong") {
+		t.Fatalf("disabled skill is missing from the listing:\n%s", listOut)
+	}
+	doctorOut, _ := runCLI(t, "doctor", "-C", repo)
+	if !strings.Contains(doctorOut, `skill "paseka-release" is disabled`) || !strings.Contains(doctorOut, "builder") {
+		t.Fatalf("doctor did not report the disabled skill and its roles:\n%s", doctorOut)
+	}
+
+	out, err = runCLI(t, "skills", "enable", "paseka-release", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills enable: %v\n%s", err, out)
+	}
+	for _, want := range []string{`enabled "paseka-release"`, "affected roles: allrounder, builder"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("enable output missing %q:\n%s", want, out)
+		}
+	}
+	ledger, err = skills.LoadLedger(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ledger.Record("paseka-release"); ok {
+		t.Fatal("enable left the disabled record behind")
+	}
+
+	listOut, err = runCLI(t, "skills", "list", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list: %v\n%s", err, listOut)
+	}
+	if !strings.Contains(listOut, `"state": "ok"`) {
+		t.Fatalf("enabled skill is not listed as ok:\n%s", listOut)
+	}
+}
+
+// TestSkillsRemoveRefusesReferencedRoleAndForce pins the refusal, its blast
+// radius, and the override: remove deletes the store entry and the ledger
+// record, and leaves no orphan.
+func TestSkillsRemoveRefusesReferencedRoleAndForce(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+	if out, err := runCLI(t, "skills", "disable", "paseka-release", "--reason", "broken", "-C", repo); err != nil {
+		t.Fatalf("skills disable: %v\n%s", err, out)
+	}
+
+	out, err := runCLI(t, "skills", "remove", "paseka-release", "-C", repo)
+	if err == nil {
+		t.Fatalf("remove was accepted while a role references the skill:\n%s", out)
+	}
+	for _, want := range []string{`remove "paseka-release"`, "affected roles: builder", "role(s) builder still reference it"} {
+		if !strings.Contains(out+err.Error(), want) {
+			t.Fatalf("refusal missing %q:\n%s", want, out+err.Error())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(skills.Dir(repo), "paseka-release")); err != nil {
+		t.Fatalf("a refused removal deleted the store entry: %v", err)
+	}
+
+	out, err = runCLI(t, "skills", "remove", "paseka-release", "--force", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills remove --force: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, `removed "paseka-release"`) || !strings.Contains(out, "affected roles: builder") {
+		t.Fatalf("forced removal output = %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(skills.Dir(repo), "paseka-release")); !os.IsNotExist(err) {
+		t.Fatalf("remove left the store entry behind: %v", err)
+	}
+	ledger, err := skills.LoadLedger(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ledger.Record("paseka-release"); ok {
+		t.Fatal("remove left the ledger record behind")
+	}
+	listOut, err := runCLI(t, "skills", "list", "--json", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills list: %v\n%s", err, listOut)
+	}
+	if strings.Contains(listOut, `"name": "paseka-release"`) {
+		t.Fatalf("a removed skill is still listed:\n%s", listOut)
+	}
+}
+
+// TestSkillsRemoveDryRunLeavesStoreIdentical pins that the preview prints the
+// plan and touches nothing: the store and ledger stay byte-identical.
+func TestSkillsRemoveDryRunLeavesStoreIdentical(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeCLIBee(t, repo, "builder", "role: builder\nadapter: cursor\nskills:\n  - paseka-release\n")
+	if out, err := runCLI(t, "skills", "disable", "paseka-release", "--reason", "broken", "-C", repo); err != nil {
+		t.Fatalf("skills disable: %v\n%s", err, out)
+	}
+	before := pasekaFiles(t, repo)
+
+	out, err := runCLI(t, "skills", "remove", "paseka-release", "--dry-run", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills remove --dry-run: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		`would remove "paseka-release"`,
+		"store entry:",
+		"ledger record: disabled at",
+		"affected roles: builder",
+		"would refuse",
+		"dry run: nothing was changed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("dry-run output missing %q:\n%s", want, out)
+		}
+	}
+	after := pasekaFiles(t, repo)
+	if !sameFiles(before, after) {
+		t.Fatalf("dry run changed the tree:\nbefore:\n%v\nafter:\n%v", before, after)
+	}
+
+	// A forced preview prints the plan too, still without acting.
+	out, err = runCLI(t, "skills", "remove", "paseka-release", "--dry-run", "--force", "-C", repo)
+	if err != nil {
+		t.Fatalf("skills remove --dry-run --force: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "would refuse") {
+		t.Fatalf("a forced preview must not report a refusal:\n%s", out)
+	}
+	if !sameFiles(before, pasekaFiles(t, repo)) {
+		t.Fatal("a forced dry run changed the tree")
+	}
+}
+
+// TestSkillsMutatingVerbsRefusePatterns pins that the three mutating verbs act
+// on one procedure and refuse a pattern, leaving the tree alone.
+func TestSkillsMutatingVerbsRefusePatterns(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeStoreSkill(t, repo, "paseka-ship", "name: paseka-ship\ndescription: Run the ship procedure.")
+	before := pasekaFiles(t, repo)
+
+	cases := [][]string{
+		{"skills", "disable", "paseka-*", "--reason", "why", "-C", repo},
+		{"skills", "disable", "*", "--reason", "why", "-C", repo},
+		{"skills", "enable", "paseka-*", "-C", repo},
+		{"skills", "remove", "paseka-*", "-C", repo},
+	}
+	for _, args := range cases {
+		out, err := runCLI(t, args...)
+		if err == nil {
+			t.Fatalf("%v was accepted:\n%s", args, out)
+		}
+		if !strings.Contains(err.Error(), "acts on one skill") {
+			t.Fatalf("%v error = %v", args, err)
+		}
+	}
+	if !sameFiles(before, pasekaFiles(t, repo)) {
+		t.Fatal("a refused pattern changed the tree")
+	}
+}
+
+// TestSkillsMutatingVerbsFailOnCorruptLedger pins that a corrupt ledger fails
+// the command instead of being replaced, and nothing is deleted.
+func TestSkillsMutatingVerbsFailOnCorruptLedger(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	ledgerPath := filepath.Join(repo, ".paseka", "skills.index.json")
+	if err := os.WriteFile(ledgerPath, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := [][]string{
+		{"skills", "disable", "paseka-release", "--reason", "why", "-C", repo},
+		{"skills", "enable", "paseka-release", "-C", repo},
+		{"skills", "remove", "paseka-release", "--force", "-C", repo},
+	}
+	for _, args := range cases {
+		out, err := runCLI(t, args...)
+		if err == nil {
+			t.Fatalf("%v accepted a corrupt ledger:\n%s", args, out)
+		}
+		if !strings.Contains(err.Error(), "corrupt") {
+			t.Fatalf("%v error = %v", args, err)
+		}
+	}
+	after, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("a corrupt ledger was replaced: %q -> %q", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(skills.Dir(repo), "paseka-release")); err != nil {
+		t.Fatalf("a refused command deleted the store entry: %v", err)
+	}
+}

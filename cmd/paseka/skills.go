@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/skills"
@@ -28,6 +29,9 @@ The group is a namespace, not an action: run a verb.`,
 	cmd.AddCommand(newSkillsListCmd())
 	cmd.AddCommand(newSkillsShowCmd())
 	cmd.AddCommand(newSkillsValidateCmd())
+	cmd.AddCommand(newSkillsDisableCmd())
+	cmd.AddCommand(newSkillsEnableCmd())
+	cmd.AddCommand(newSkillsRemoveCmd())
 	return cmd
 }
 
@@ -54,6 +58,36 @@ func loadSkillStore(startDir string) (colony.Context, skills.Report, skills.Ledg
 		return colony.Context{}, skills.Report{}, skills.Ledger{}, err
 	}
 	return ctxColony, store, ledger, nil
+}
+
+// selectSkillForMutation resolves one procedure for a verb that acts on one
+// skill. A pattern names a set, so it is refused with the verb's name rather
+// than silently acting on the first match. A bare name normally matches one
+// entry; it can match a second when a different directory declares this name in
+// broken frontmatter, so the entry actually named is preferred over the
+// declaration.
+func selectSkillForMutation(store skills.Report, raw, verb string) (skills.Skill, error) {
+	ref, err := skills.ParseReference(raw)
+	if err != nil {
+		return skills.Skill{}, err
+	}
+	if ref.IsPattern() {
+		return skills.Skill{}, fmt.Errorf(
+			"skills: %s acts on one skill; %q is a pattern (use list or validate for a set)", verb, ref,
+		)
+	}
+	matched, err := store.Select(ref)
+	if err != nil {
+		return skills.Skill{}, err
+	}
+	skill := matched[0]
+	for _, candidate := range matched {
+		if candidate.Name == ref.String() {
+			skill = candidate
+			break
+		}
+	}
+	return skill, nil
 }
 
 // skillRoles maps a skill's store name to every role whose selection names it.
@@ -288,33 +322,14 @@ without parsing prose. --json prints the same facts as a machine contract.`,
 			if pathOnly && jsonOut {
 				return fmt.Errorf("skills: --path and --json cannot be combined")
 			}
-			ref, err := skills.ParseReference(args[0])
-			if err != nil {
-				return err
-			}
-			if ref.IsPattern() {
-				return fmt.Errorf(
-					"skills: show acts on one skill; %q is a pattern (use list or validate for a set)", ref,
-				)
-			}
 
 			ctxColony, store, ledger, err := loadSkillStore(startDir)
 			if err != nil {
 				return err
 			}
-			matched, err := store.Select(ref)
+			skill, err := selectSkillForMutation(store, args[0], "show")
 			if err != nil {
 				return err
-			}
-			// A bare name normally matches one entry. It can match a second when
-			// a different directory declares this name in broken frontmatter, so
-			// the entry actually named is preferred over the declaration.
-			skill := matched[0]
-			for _, candidate := range matched {
-				if candidate.Name == ref.String() {
-					skill = candidate
-					break
-				}
 			}
 
 			out := cmd.OutOrStdout()
@@ -468,6 +483,206 @@ guard a commit.`,
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	return cmd
+}
+
+// skillAffectedRoles renders the blast radius of a store mutation. An empty
+// list is said plainly rather than left blank: "no role carries this" is the
+// answer that makes a removal safe, and a blank line reads as a formatting
+// accident.
+func skillAffectedRoles(roles []string) string {
+	if len(roles) == 0 {
+		return "no role carries this skill"
+	}
+	return strings.Join(roles, ", ")
+}
+
+func newSkillsDisableCmd() *cobra.Command {
+	var (
+		startDir string
+		reason   string
+	)
+	cmd := &cobra.Command{
+		Use:   "disable <name>",
+		Short: "Record that a skill must not be offered",
+		Long: `Neutralise one skill without deleting it.
+
+The skill stays in the store and keeps its history; the committed ledger
+records when it was disabled and why, and the runtime skips it from then on. A
+role that still lists it is not a configuration error: the disable is the
+Beekeeper's own recorded decision, so the skill is reported as skipped rather
+than turning an emergency stop into a colony-wide outage.
+
+The verb acts on one procedure, so a pattern is refused. It names the roles
+whose resolved set changes, and it never commits: the ledger change is left in
+the working tree for the Beekeeper. Run ` + "`paseka skills enable <name>`" + ` to undo it.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.SilenceUsage = true
+			ctxColony, store, ledger, err := loadSkillStore(startDir)
+			if err != nil {
+				return err
+			}
+			skill, err := selectSkillForMutation(store, args[0], "disable")
+			if err != nil {
+				return err
+			}
+			roles, err := skillRoles(ctxColony, store)
+			if err != nil {
+				return err
+			}
+			if err := ledger.Disable(skill.Name, reason, time.Now()); err != nil {
+				return err
+			}
+			if err := skills.SaveLedger(ctxColony.ColonyRoot, ledger); err != nil {
+				return err
+			}
+			record, _ := ledger.Record(skill.Name)
+
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "disabled %q\n", skill.Name)
+			fmt.Fprintf(out, "  ledger: %s (uncommitted; the Beekeeper commits it)\n", skills.LedgerPath(ctxColony.ColonyRoot))
+			fmt.Fprintf(out, "  at: %s\n", record.At)
+			fmt.Fprintf(out, "  reason: %s\n", record.Reason)
+			fmt.Fprintf(out, "  affected roles: %s\n", skillAffectedRoles(roles[skill.Name]))
+			fmt.Fprintf(out, "  the skill stays in the store; `paseka skills enable %s` restores it\n", skill.Name)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().StringVarP(&reason, "reason", "r", "", "why the skill must not be offered (required)")
+	return cmd
+}
+
+func newSkillsEnableCmd() *cobra.Command {
+	var startDir string
+	cmd := &cobra.Command{
+		Use:   "enable <name>",
+		Short: "Clear a skill's disabled record",
+		Long: `Restore one disabled skill to the offer.
+
+The ledger record is removed, so the next resolution offers the skill again.
+The verb acts on one procedure, so a pattern is refused. It names the roles
+whose resolved set changes and never commits: the ledger change is left in the
+working tree for the Beekeeper.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.SilenceUsage = true
+			ctxColony, store, ledger, err := loadSkillStore(startDir)
+			if err != nil {
+				return err
+			}
+			skill, err := selectSkillForMutation(store, args[0], "enable")
+			if err != nil {
+				return err
+			}
+			roles, err := skillRoles(ctxColony, store)
+			if err != nil {
+				return err
+			}
+			changed, err := ledger.Enable(skill.Name)
+			if err != nil {
+				return err
+			}
+			if changed {
+				if err := skills.SaveLedger(ctxColony.ColonyRoot, ledger); err != nil {
+					return err
+				}
+			}
+
+			out := cmd.OutOrStdout()
+			if !changed {
+				fmt.Fprintf(out, "%q was not disabled; nothing changed\n", skill.Name)
+				return nil
+			}
+			fmt.Fprintf(out, "enabled %q\n", skill.Name)
+			fmt.Fprintf(out, "  ledger: %s (uncommitted; the Beekeeper commits it)\n", skills.LedgerPath(ctxColony.ColonyRoot))
+			fmt.Fprintf(out, "  affected roles: %s\n", skillAffectedRoles(roles[skill.Name]))
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	return cmd
+}
+
+func newSkillsRemoveCmd() *cobra.Command {
+	var (
+		startDir string
+		force    bool
+		dryRun   bool
+	)
+	cmd := &cobra.Command{
+		Use:   "remove <name>",
+		Short: "Delete a skill from the store and its ledger record",
+		Long: `Delete one skill's store entry and its enabled/disabled record.
+
+Removal refuses while a role still references the skill, because deleting it
+would silently strip a procedure from that role; the refusal names the roles,
+and --force proceeds anyway. --dry-run prints the same plan — the store entry,
+the ledger record, and the affected roles — without touching either.
+
+The verb acts on one procedure, so a pattern is refused. It never commits: the
+deleted directory and the ledger change are a working-tree change the Beekeeper
+commits. Removing a skill does not delete a trail's decisions about it.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.SilenceUsage = true
+			ctxColony, store, ledger, err := loadSkillStore(startDir)
+			if err != nil {
+				return err
+			}
+			skill, err := selectSkillForMutation(store, args[0], "remove")
+			if err != nil {
+				return err
+			}
+			roles, err := skillRoles(ctxColony, store)
+			if err != nil {
+				return err
+			}
+			referencing := roles[skill.Name]
+			record, disabled := ledger.Record(skill.Name)
+
+			out := cmd.OutOrStdout()
+			if dryRun {
+				fmt.Fprintf(out, "would remove %q\n", skill.Name)
+			} else {
+				fmt.Fprintf(out, "remove %q\n", skill.Name)
+			}
+			fmt.Fprintf(out, "  store entry: %s\n", skill.Dir)
+			if disabled {
+				fmt.Fprintf(out, "  ledger record: disabled at %s (%s)\n", record.At, record.Reason)
+			} else {
+				fmt.Fprintln(out, "  ledger record: none")
+			}
+			fmt.Fprintf(out, "  affected roles: %s\n", skillAffectedRoles(referencing))
+
+			if len(referencing) > 0 && !force {
+				if dryRun {
+					fmt.Fprintf(out, "  would refuse: use --force to remove it anyway\n")
+					fmt.Fprintln(out, "dry run: nothing was changed")
+					return nil
+				}
+				return fmt.Errorf(
+					"skills: remove %q: role(s) %s still reference it; use --force to remove it anyway",
+					skill.Name, strings.Join(referencing, ", "),
+				)
+			}
+			if dryRun {
+				fmt.Fprintln(out, "dry run: nothing was changed")
+				return nil
+			}
+
+			if _, err := skills.RemoveSkill(ctxColony.ColonyRoot, skill.Name); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "removed %q from the store and the ledger\n", skill.Name)
+			fmt.Fprintln(out, "  the working-tree change is uncommitted; the Beekeeper commits it")
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
+	cmd.Flags().BoolVar(&force, "force", false, "remove even while roles still reference the skill")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the plan without touching the store")
 	return cmd
 }
 

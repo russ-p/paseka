@@ -64,7 +64,7 @@ Non-empty **`PASEKA_PROFILE`** selects a profile when the flags are omitted (fla
 
 | Command | NATS required? |
 | ------- | -------------- |
-| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage`, `inspect metrics` | No |
+| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage`, `inspect metrics`, `skills` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
 | `paseka run`, `doctor`, `replay`, `verify`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
@@ -112,7 +112,12 @@ paseka
 │   ├── list
 │   └── run <id> <text>
 ├── skills
-│   └── validate [reference|pattern|*]
+│   ├── list
+│   ├── show <name>
+│   ├── validate [reference|pattern|*]
+│   ├── disable <name> --reason <why>
+│   ├── enable <name>
+│   └── remove <name> [--force] [--dry-run]
 ├── signal
 ├── proposal
 │   ├── approve
@@ -659,6 +664,55 @@ paseka skills validate
 paseka skills validate "paseka-*"
 paseka skills validate "*"
 ```
+
+### `paseka skills disable <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--reason` | `-r` | Why the skill must not be offered (required) |
+
+Neutralises one skill without deleting it. The store entry stays in place, with its history, and the runtime stops offering it. The command writes a disabled record to the committed ledger, `.paseka/skills.index.json`, carrying the time and the reason; a role that still lists the skill is skipped and reported by `doctor` rather than failing the role, because the disable is the Beekeeper's own recorded decision.
+
+`disable` is a reversible flip: `paseka skills enable <name>` removes the record and restores the offer. It needs no preview, but it names the roles whose resolved set changes as it runs — a wildcard or pattern role appears against every skill it actually resolves to. The verb acts on one procedure, so a pattern (`paseka-*`, `*`) is refused. It never commits: the ledger change is left in the working tree for the Beekeeper.
+
+```bash
+paseka skills disable paseka-release --reason "release step 2 is wrong"
+```
+
+### `paseka skills enable <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+
+Clears a skill's disabled record from `.paseka/skills.index.json`, so the next resolution offers it again. It is the exact undo of `disable`: disable then enable leaves no ledger record behind. It names the roles whose resolved set changes and never commits. A pattern is refused; a skill that was not disabled is reported as unchanged.
+
+```bash
+paseka skills enable paseka-release
+```
+
+### `paseka skills remove <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--force` | | Remove even while roles still reference the skill |
+| `--dry-run` | | Print the plan without touching the store |
+
+Deletes one skill's store entry and its ledger record, leaving no orphan. It refuses while any role still references the skill and names those roles, because deleting it would silently strip a procedure from them; `--force` proceeds anyway and still reports the blast radius. It does not delete a trail's decisions about the skill.
+
+`--dry-run` prints the same plan — the store entry, the disabled record if there is one, the affected roles, and a refusal the real command would make — and leaves the store and ledger byte-identical. The verb acts on one procedure, so a pattern is refused.
+
+A removal that must be shared is a change the Beekeeper commits: `remove` deletes the directory and updates the ledger in the working tree, and never writes a commit.
+
+```bash
+paseka skills remove paseka-release             # refuses if a role references it
+paseka skills remove paseka-release --dry-run   # prints the plan, changes nothing
+paseka skills remove paseka-release --force     # proceeds and names the roles
+```
+
+The three mutating verbs read the committed ledger before they write. A **corrupt** ledger — bad JSON, an unknown schema version, or a record without `at`/`reason` — fails the command rather than being replaced, and no store entry is touched. A missing ledger is an empty one. See [Colony skills](skills.md#6-the-committed-ledger) for the record shape.
 
 ---
 
