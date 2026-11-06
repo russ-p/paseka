@@ -362,3 +362,16 @@ A removal that must be shared is a change the Beekeeper commits. The commands wr
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 
 An invalid skill is an error even when nothing else mentions it, so a typo in frontmatter cannot sit in the store unnoticed.
+
+## 14. Attribution and the trail export
+
+`paseka export --include skills` carries both halves of a run's skill story, and both are read from that run's pinned configuration snapshot, so a later store edit or removal cannot rewrite an old export.
+
+- **Skills offered** — the procedures the run's role resolved to, with the frozen `SKILL.md` path.
+- **Skills used** — the union of transcript evidence and the run's load records, deduplicated by name with the first load winning.
+
+A transcript attributes a skill when a tool call names a file under the run's frozen skill directory: its `SKILL.md`, a `scripts/` entry, or a `references/` or `assets/` file. The export reads the raw tool input beside the Agent log's summarized projection, so a path the summary would drop is still seen; the Agent log itself is unchanged.
+
+The section shows the evidence that attributed each used skill and the body read from the frozen copy. If the body cannot be read, the entry says why instead of disappearing. A run whose usage cannot be determined reports the capability's own reason — `no providerSessionId`, `unsupported`, `store not found`, `parse error`, `resolve error`, or `timeout` — rather than an empty set, because absence of evidence is not absence of use. A run with a load record still attributes in command mode and on adapters without a transcript capability; a note says when the used set came from load records alone.
+
+Attribution is a measurement, not a proof: a recorded read is evidence that a skill's file was reached for, not that its instructions were followed.

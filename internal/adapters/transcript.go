@@ -409,6 +409,39 @@ func decodeTurnCursor(cursor string) (int, bool) {
 	return offset, true
 }
 
+// RawToolInput is one tool call's unsummarized input, as the provider recorded
+// it. It is the lossless counterpart to ToolCall: usage attribution needs the
+// path a tool was given, and the Agent log's summary keeps only the first of
+// path, url, or command.
+type RawToolInput struct {
+	Name      string
+	CallID    string
+	Input     string
+	Timestamp time.Time
+}
+
+// ProjectToolInputs flattens a transcript into raw tool inputs in provider
+// order. Like ProjectToolCalls it reads only tool parts and performs no IO, but
+// it never summarizes or trims the input. Consumers that must keep the Agent
+// log's projection untouched read this beside it.
+func ProjectToolInputs(t Transcript) []RawToolInput {
+	inputs := make([]RawToolInput, 0)
+	for _, turn := range t.Turns {
+		for _, part := range turn.Parts {
+			if part.Kind != PartTool || part.Tool == nil {
+				continue
+			}
+			inputs = append(inputs, RawToolInput{
+				Name:      part.Tool.Name,
+				CallID:    part.Tool.CallID,
+				Input:     part.Tool.Input,
+				Timestamp: turn.Timestamp,
+			})
+		}
+	}
+	return inputs
+}
+
 // ProjectToolCalls flattens a transcript into Agent log rows in provider order.
 // It reads only tool parts and performs no IO, so it is the shared tool-call
 // projection rather than a reader variant.

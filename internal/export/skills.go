@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/hiveview"
@@ -35,25 +36,36 @@ type RunSkillsExport struct {
 	Offered   []SkillExport
 	None      bool
 	Omitted   string
+
+	// Used is the union of transcript evidence and load records, deduplicated by
+	// name. None is true only when both readings ran and neither named a
+	// procedure; Omitted carries the capability's reason when the run's usage
+	// cannot be determined. Note qualifies a partial measurement.
+	Used        []SkillUseExport
+	UsedNone    bool
+	UsedOmitted string
+	Note        string
 }
 
-// loadSkillsExport resolves every run's offered set from the configuration
-// snapshot the run itself pinned. It never reads the live store, so a later
-// store edit or removal cannot rewrite what an old export says.
-func loadSkillsExport(ctx colony.Context, traceID string, runsView []hiveview.RunView) []RunSkillsExport {
+// loadSkillsExport resolves every run's offered and used sets from the
+// configuration snapshot the run itself pinned. It never reads the live store,
+// so a later store edit or removal cannot rewrite what an old export says.
+func loadSkillsExport(ctx colony.Context, traceID string, runsView []hiveview.RunView, lookup TranscriptLookup, timeout time.Duration) []RunSkillsExport {
 	out := make([]RunSkillsExport, 0, len(runsView))
 	for _, run := range runsView {
-		out = append(out, loadRunSkillsExport(ctx, traceID, run))
+		out = append(out, loadRunSkillsExport(ctx, traceID, run, lookup, timeout))
 	}
 	return out
 }
 
-func loadRunSkillsExport(ctx colony.Context, traceID string, run hiveview.RunView) RunSkillsExport {
+func loadRunSkillsExport(ctx colony.Context, traceID string, run hiveview.RunView, lookup TranscriptLookup, timeout time.Duration) RunSkillsExport {
 	entry := RunSkillsExport{AgentID: run.AgentID, Bee: run.Bee}
 
 	req, err := (runs.Dir{ColonyRoot: ctx.ColonyRoot, TraceID: traceID, AgentID: run.AgentID}).ReadRequest()
 	if err != nil {
-		entry.Omitted = fmt.Sprintf("run request is unreadable: %v", err)
+		reason := fmt.Sprintf("run request is unreadable: %v", err)
+		entry.Omitted = reason
+		applyRunUsage(&entry, resolveRunUsage(ctx.ColonyRoot, traceID, run, nil, reason, lookup, timeout))
 		return entry
 	}
 	if entry.Bee == "" {
@@ -61,13 +73,16 @@ func loadRunSkillsExport(ctx colony.Context, traceID string, run hiveview.RunVie
 	}
 	entry.ConfigRef = strings.TrimSpace(req.ConfigRef)
 	if entry.ConfigRef == "" {
-		entry.Omitted = "the run records no configuration snapshot; its offered skills are unavailable"
+		reason := "the run records no configuration snapshot; its offered skills are unavailable"
+		entry.Omitted = reason
+		applyRunUsage(&entry, resolveRunUsage(ctx.ColonyRoot, traceID, run, nil, reason, lookup, timeout))
 		return entry
 	}
 
 	bound, err := trailconfig.BindRef(colony.Context{ColonyRoot: ctx.ColonyRoot}, traceID, entry.ConfigRef, req.ConfigRevision)
 	if err != nil {
 		entry.Omitted = err.Error()
+		applyRunUsage(&entry, resolveRunUsage(ctx.ColonyRoot, traceID, run, nil, entry.Omitted, lookup, timeout))
 		return entry
 	}
 
@@ -79,6 +94,7 @@ func loadRunSkillsExport(ctx colony.Context, traceID string, run hiveview.RunVie
 	})
 	if err != nil {
 		entry.Omitted = err.Error()
+		applyRunUsage(&entry, resolveRunUsage(ctx.ColonyRoot, traceID, run, nil, entry.Omitted, lookup, timeout))
 		return entry
 	}
 
@@ -97,5 +113,13 @@ func loadRunSkillsExport(ctx colony.Context, traceID string, run hiveview.RunVie
 		})
 	}
 	entry.None = len(entry.Offered) == 0
+	applyRunUsage(&entry, resolveRunUsage(ctx.ColonyRoot, traceID, run, resolved.Skills, "", lookup, timeout))
 	return entry
+}
+
+func applyRunUsage(entry *RunSkillsExport, usage runUsage) {
+	entry.Used = usage.Used
+	entry.UsedNone = usage.None
+	entry.UsedOmitted = usage.Omitted
+	entry.Note = usage.Note
 }

@@ -26,6 +26,7 @@ func RenderMarkdown(data TraceExportData) ([]byte, error) {
 	writeMarkdownRuns(&buf, data)
 	if data.Include.Has(IncludeSkills) {
 		writeMarkdownSkills(&buf, data.Skills)
+		writeMarkdownSkillsUsed(&buf, data.Skills)
 	}
 	writeMarkdownTimeline(&buf, data.Events)
 	writeMarkdownConfigSnapshots(&buf, data)
@@ -236,6 +237,60 @@ func writeMarkdownSkills(buf *bytes.Buffer, runs []RunSkillsExport) {
 			buf.WriteString("\n")
 		}
 	}
+}
+
+func writeMarkdownSkillsUsed(buf *bytes.Buffer, runs []RunSkillsExport) {
+	buf.WriteString("## Skills used\n\n")
+	if len(runs) == 0 {
+		buf.WriteString("_No runs in this trace._\n\n")
+		return
+	}
+	for _, run := range runs {
+		label := run.Bee
+		if label == "" {
+			label = run.AgentID
+		}
+		fmt.Fprintf(buf, "### %s — `%s`\n\n", label, run.AgentID)
+		if run.Note != "" {
+			fmt.Fprintf(buf, "_%s_\n\n", run.Note)
+		}
+		switch {
+		case run.UsedOmitted != "":
+			fmt.Fprintf(buf, "_used skills unavailable: %s_\n\n", run.UsedOmitted)
+		case run.UsedNone:
+			buf.WriteString("_none — the run's transcript and load records reference no skills._\n\n")
+		default:
+			buf.WriteString("\n")
+			for _, use := range run.Used {
+				fmt.Fprintf(buf, "- **%s**\n", use.Name)
+				for _, evidence := range use.Evidence {
+					fmt.Fprintf(buf, "  - %s\n", evidence)
+				}
+				if use.Omitted != "" {
+					fmt.Fprintf(buf, "  - body omitted: %s\n", use.Omitted)
+					continue
+				}
+				buf.WriteString("\n")
+				writeMarkdownBodyFence(buf, use.Body)
+			}
+			buf.WriteString("\n")
+		}
+	}
+}
+
+// writeMarkdownBodyFence writes a skill body in a fence the body cannot
+// terminate itself.
+func writeMarkdownBodyFence(buf *bytes.Buffer, content string) {
+	fence := "```"
+	for strings.Contains(content, fence) {
+		fence += "`"
+	}
+	buf.WriteString(fence)
+	buf.WriteString("\n")
+	buf.WriteString(strings.TrimRight(content, "\n"))
+	buf.WriteString("\n")
+	buf.WriteString(fence)
+	buf.WriteString("\n\n")
 }
 
 func writeMarkdownAgentLog(buf *bytes.Buffer, log AgentLogExport) {

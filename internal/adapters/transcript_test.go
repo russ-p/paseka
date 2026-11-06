@@ -476,6 +476,28 @@ func TestProjectToolCallsSummarizesArguments(t *testing.T) {
 	}
 }
 
+// TestProjectToolInputsKeepsRawArguments pins the lossless reading beside the
+// Agent log projection: the raw input a tool was given survives, including the
+// part the summary drops.
+func TestProjectToolInputsKeepsRawArguments(t *testing.T) {
+	inputs := ProjectToolInputs(sampleTranscript())
+	if len(inputs) != 1 {
+		t.Fatalf("inputs = %+v", inputs)
+	}
+	if inputs[0].Name != "Read" || inputs[0].CallID != "call-1" {
+		t.Fatalf("input identity = %+v", inputs[0])
+	}
+	if inputs[0].Input != `{"path":"main.go"}` {
+		t.Fatalf("input = %q, want the raw arguments", inputs[0].Input)
+	}
+	if !inputs[0].Timestamp.Equal(time.Unix(101, 0).UTC()) {
+		t.Fatalf("timestamp = %v", inputs[0].Timestamp)
+	}
+	if got := ProjectToolInputs(Transcript{}); got == nil || len(got) != 0 {
+		t.Fatalf("empty projection = %+v", got)
+	}
+}
+
 func TestSummarizeToolInputFallsBackToJSON(t *testing.T) {
 	if got := summarizeToolInput(`{"pattern":"foo","glob":"*.go"}`); !strings.Contains(got, `"pattern":"foo"`) {
 		t.Fatalf("args = %q", got)

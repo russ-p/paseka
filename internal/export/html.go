@@ -818,6 +818,32 @@ code { font-family: var(--mono); font-size: 0.85em; }
     <p class="muted">No runs in this trace.</p>
     {{ end }}
   </section>
+
+  <section class="panel">
+    <h2>Skills used</h2>
+    {{ if .Skills }}
+    {{ range .Skills }}
+    <h3>{{ if .Bee }}{{ .Bee }}{{ else }}{{ .AgentID }}{{ end }} · <code>{{ .AgentID }}</code></h3>
+    {{ if .Note }}<p class="muted">{{ .Note }}</p>{{ end }}
+    {{ if .UsedOmitted }}
+    <p class="muted">used skills unavailable: {{ .UsedOmitted }}</p>
+    {{ else if .UsedNone }}
+    <p class="muted">none — the run's transcript and load records reference no skills.</p>
+    {{ else }}
+    <ul>
+      {{ range .Used }}
+      <li><strong>{{ .Name }}</strong>
+        {{ if .Evidence }}<div class="id">{{ range .Evidence }}<div>{{ . }}</div>{{ end }}</div>{{ end }}
+        {{ if .Omitted }}<div class="muted">body omitted: {{ .Omitted }}</div>{{ else }}<pre>{{ .Body }}</pre>{{ end }}
+      </li>
+      {{ end }}
+    </ul>
+    {{ end }}
+    {{ end }}
+    {{ else }}
+    <p class="muted">No runs in this trace.</p>
+    {{ end }}
+  </section>
   {{ end }}
 
   <section class="panel">

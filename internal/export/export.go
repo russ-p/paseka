@@ -212,7 +212,7 @@ func buildTraceExportData(ctx colony.Context, detail hiveview.TraceDetailView, r
 		data.Config = configExport
 	}
 	if include.Has(IncludeSkills) {
-		data.Skills = loadSkillsExport(ctx, detail.TraceID, runsView)
+		data.Skills = loadSkillsExport(ctx, detail.TraceID, runsView, opts.Transcripts, opts.TranscriptTimeout)
 	}
 	if include.Has(IncludePatches) {
 		patchExports, patchDiagnostics, err := loadPatchExports(ctx.ColonyRoot, detail.TraceID)
