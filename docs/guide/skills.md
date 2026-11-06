@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record, the reading commands (`list`, `show`, `validate`), and the store mutations (`disable`, `enable`, `remove`); attribution and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the reading commands (`list`, `show`, `load`, `validate`), and the store mutations (`disable`, `enable`, `remove`); attribution and approval build on the same rules.
 
 ---
 
@@ -124,7 +124,9 @@ Profiles ([colony layout](colony-layout.md), [spec 027](../specs/027-config-prof
 
 ## 6. Delivery: the system-prompt advertisement
 
-Before a run starts, the runtime resolves the effective set once and renders it into the run's system prompt as a section of its own, appended after the role's instructions:
+Before a run starts, the runtime resolves the effective set once and renders it into the run's system prompt as a section of its own, appended after the role's instructions. `defaults.skills_delivery` chooses which of two forms the section carries.
+
+**`path`** (the default) advertises the frozen `SKILL.md` location, and the bee reads the file itself:
 
 ```text
 ## Available skills
@@ -135,12 +137,32 @@ Each skill below is a reusable procedure this role may use. The procedure itself
   path: <frozen-config>/tree/.paseka/skills/paseka-release/SKILL.md
 ```
 
-- The section carries metadata only — name, description, and the absolute path of the `SKILL.md`. A body is never inlined: progressive disclosure is what keeps a procedure cheap until a bee needs it.
+**`command`** advertises the runtime command instead, and no path at all:
+
+```text
+## Available skills
+
+Each skill below is a reusable procedure this role may use. Load one with the command shown when the task calls for it: the command prints the procedure body.
+
+- paseka-release: Run the colony release procedure. Use when shipping a version.
+  load: paseka skills load paseka-release --trace trace-abc123 --agent agent-7f2c
+```
+
+```yaml
+# .paseka/colony.yaml
+defaults:
+  skills_delivery: command   # path (default) or command
+```
+
+- `command` mode makes the runtime the only route to a body: a load is a deterministic fact, recorded on the run, rather than an inference from a client transcript. `path` mode keeps the file readable directly. Both modes are the same advertisement otherwise.
+- The mode is colony-wide, not per role. It is validated at load (`path` or `command`; anything else fails the configuration), read from the trail's **frozen manifest**, and a profile may override it — the selected profile is frozen with the trail, so a running trail cannot change mode. A configuration application changes it for later runs only.
+- The section carries metadata only — name, description, and per mode either the absolute path or the load command. A body is never inlined: progressive disclosure is what keeps a procedure cheap until a bee needs it.
 - The runtime appends the section; it is never written into a template file. A bee whose role declares no `system_template` receives the section as its whole system prompt, and a run whose effective set is empty receives no section at all.
 - The composed system prompt is written to `.paseka/runs/<traceId>/<agentId>/system.txt` before the adapter starts, so a script bee has the same auditable file even when its adapter writes no system prompt of its own.
-- The advertised path is inside the trail's **frozen configuration**, not the live store, so a running trail keeps reading the bytes it started with. A store or role-list edit after trail start changes the next trail, not this run; it reaches a trail only through an explicit configuration application.
+- In `path` mode the advertised path is inside the trail's **frozen configuration**, not the live store, so a running trail keeps reading the bytes it started with. A store or role-list edit after trail start changes the next trail, not this run; it reaches a trail only through an explicit configuration application.
 - The resolved names are recorded in the run's `request.json` as `skills` (omitted when the set is empty). Both the unattended dispatcher and the interactive session manager write it, so an AFK run and a HITL session carry the same field, and it stays readable after the role's list changes.
 - A resumed provider session keeps the first turn's context; the runtime records the set but does not re-inject the section. A configuration application changes later runs and new sessions only.
+- `load` works in either mode: a `path`-mode run that loads is still recorded, and its used set is the union of transcript attribution and load records, deduplicated by name.
 
 A run that cannot resolve its declared set does not start the adapter: a missing reference, an invalid skill, a pattern that matches nothing, a 33rd skill, a skill file over 256 KiB, or a store over 8 MiB fails the dispatch and names the offending skill or reference. A disabled skill is the one skip: it is omitted and reported, because the disable is the Beekeeper's own recorded decision.
 
@@ -244,9 +266,45 @@ metadata:
 - `--path` prints one line, the absolute `SKILL.md` path, so a script can consume the location without parsing prose. In this one command `-C`/`--colony` names the colony root, because `--path` is the path-only mode.
 - An invalid skill is still shown, with its findings under `issues:`, so a Beekeeper can read a broken procedure while fixing it.
 
-Both `list` and `show` read the **repository store**, never a trail's frozen copy: no trail is in scope when a Beekeeper runs a shell command.
+Both `list` and `show` read the **repository store**, never a trail's frozen copy: no trail is in scope when a Beekeeper runs a shell command. `load` is the deliberate exception — it takes a run's identifiers and reads that run's frozen copy (section 10).
 
-## 10. Validating
+## 10. Loading a skill
+
+A bee in `command` mode gets the body by calling the runtime:
+
+```bash
+paseka skills load paseka-release --trace trace-abc123 --agent agent-7f2c
+```
+
+The reference is resolved against the configuration the run was **offered**, read from the run's recorded configuration reference — not the live store. A store edit or configuration application after the run started therefore cannot make `load` disagree with the advertisement the run received.
+
+On success it prints the absolute `SKILL.md` path, the skill directory, and the body without frontmatter:
+
+```text
+path: /repo/.paseka/runs/trace-abc123/config/tree/.paseka/skills/paseka-release/SKILL.md
+dir:  /repo/.paseka/runs/trace-abc123/config/tree/.paseka/skills/paseka-release
+
+# Release
+
+1. Run `scripts/checks.sh`.
+2. Tag after the merge, not before.
+```
+
+- The **directory** is printed so a body that refers to `scripts/`, `references/`, or `assets/` can be followed. The files are reachable under `dir`, and an agent learns the location only by loading — which is what keeps the path out of the advertisement in `command` mode without making a bundled procedure unusable.
+- A reference the run's role does not carry is refused with exit **2** and `skill_not_offered`. A pattern (`paseka-*`, `*`) is refused the same way: it names a set, and `load` serves one procedure. An invalid reference is also a refusal.
+- Each successful load appends one `{name, contentHash, at}` line to `.paseka/runs/<traceId>/<agentId>/skills-used.ndjson`, where `contentHash` is the SHA-256 of the served `SKILL.md` bytes, frontmatter included. It identifies the file as served; it is not the install-time provenance hash.
+- At finalize the runtime folds that file into the run's `result.json` as `skillsUsed`, deduplicated by name with the first load winning. The log keeps one line per load; only the result is a set.
+- `load` works in either delivery mode. It speaks prose, not JSON, because it prints a body for a model and has a side effect on the run's own record.
+
+**Resolving the colony.** The command is advertised by name, like `paseka event emit`; the colony does not promise an absolute binary path. It finds the colony root in this order:
+
+1. `-C <dir>` when given;
+2. `PASEKA_COLONY_ROOT`;
+3. the nearest ancestor of the working directory that holds **both** `.paseka/colony.yaml` and `.paseka/runs/<traceId>/<agentId>/`.
+
+The run directory is part of the test because a git worktree carries the committed `.paseka/` but not the gitignored runs; walking up from `.paseka/worktrees/<traceId>/` therefore reaches the primary checkout instead of stopping at the worktree. When no candidate holds the run, the command exits 1 and names the roots it tried, the trace and agent, and the `-C <colonyRoot>` that would fix it.
+
+## 11. Validating
 
 ```bash
 paseka skills validate          # the whole store
@@ -281,7 +339,7 @@ Use it as a pre-commit hook or in CI; it needs no bus and no running colony.
 paseka doctor
 ```
 
-## 11. Changing the store
+## 12. Changing the store
 
 Three verbs change the store. All three act on one procedure — a pattern (`paseka-*`, `*`) is refused — speak prose, and never write a commit. They read the committed ledger first, so a corrupt ledger fails the command instead of being replaced, and no store entry is touched.
 
@@ -298,7 +356,7 @@ paseka skills remove paseka-release --force
 
 A removal that must be shared is a change the Beekeeper commits. The commands write the working tree and stop there. Removing a skill does not delete a trail's decisions about it.
 
-## 12. Same rules everywhere
+## 13. Same rules everywhere
 
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 

@@ -52,7 +52,7 @@ func TestResolveRunSelection(t *testing.T) {
 		if len(resolved.Skills) != 0 {
 			t.Fatalf("skills = %v", resolved.Names())
 		}
-		if section := resolved.Section(); section != "" {
+		if section := resolved.Section(SectionContext{TraceID: "trace-t", AgentID: "agent-a"}); section != "" {
 			t.Fatalf("a run with no skills must have no section: %q", section)
 		}
 	})
@@ -116,7 +116,7 @@ func TestResolveRunSection(t *testing.T) {
 	writeRunSkill(t, root, "paseka-ship", "Ship a version.", "OTHER-BODY")
 
 	resolved := resolveFixture(t, root, "builder")
-	section := resolved.Section()
+	section := resolved.Section(SectionContext{TraceID: "trace-t", AgentID: "agent-a"})
 
 	if !strings.HasPrefix(section, SectionHeading) {
 		t.Fatalf("section must open with its heading:\n%s", section)
@@ -327,5 +327,69 @@ func TestResolveRunMissingFrozenRoleBlocks(t *testing.T) {
 
 	if _, err := ResolveRun(RunInput{ConfigRoot: frozen, Frozen: true, Role: "builder"}); err == nil {
 		t.Fatal("a missing frozen role must block")
+	}
+}
+
+func TestSectionCommandModeAdvertisesTheLoadCommandAndNoPath(t *testing.T) {
+	root := runFixture(t, "builder", "role: builder\nadapter: script\ncommand: [echo]\nskills:\n  - paseka-release\n")
+	writeRunFixtureFile(t, root, ".paseka/colony.yaml", "slug: run-test\ndefaults:\n  skills_delivery: command\n")
+	writeRunSkill(t, root, "paseka-release", "Run the release procedure.", "# Release\n\nSECRET-BODY-TEXT")
+
+	resolved := resolveFixture(t, root, "builder")
+	if resolved.Delivery != "command" {
+		t.Fatalf("delivery = %q, want command", resolved.Delivery)
+	}
+	ref := SectionContext{TraceID: "trace-t", AgentID: "agent-a"}
+	section := resolved.Section(ref)
+
+	want := LoadCommand("paseka-release", ref)
+	if !strings.Contains(section, want) {
+		t.Fatalf("section does not carry the load command %q:\n%s", want, section)
+	}
+	if !strings.Contains(section, "paseka-release") || !strings.Contains(section, "Run the release procedure.") {
+		t.Fatalf("section is missing the skill metadata:\n%s", section)
+	}
+	if strings.Contains(section, resolved.Skills[0].Path) || strings.Contains(section, "path:") {
+		t.Fatalf("command mode must not advertise the path:\n%s", section)
+	}
+	if strings.Contains(section, "SECRET-BODY-TEXT") {
+		t.Fatalf("the advertisement must not inline a body:\n%s", section)
+	}
+}
+
+func TestSectionPathModeIsUnchanged(t *testing.T) {
+	root := runFixture(t, "builder", "role: builder\nadapter: script\ncommand: [echo]\nskills:\n  - paseka-release\n")
+	writeRunSkill(t, root, "paseka-release", "Run the release procedure.", "# Release")
+
+	resolved := resolveFixture(t, root, "builder")
+	section := resolved.Section(SectionContext{TraceID: "trace-t", AgentID: "agent-a"})
+	if resolved.Delivery != "path" && resolved.Delivery != "" {
+		t.Fatalf("delivery = %q, want path", resolved.Delivery)
+	}
+	if !strings.Contains(section, "  path: "+resolved.Skills[0].Path) {
+		t.Fatalf("path mode must advertise the frozen path:\n%s", section)
+	}
+	if strings.Contains(section, "paseka skills load") {
+		t.Fatalf("path mode must not advertise the load command:\n%s", section)
+	}
+}
+
+func TestSectionCommandModeFollowsAFrozenProfileOverride(t *testing.T) {
+	live := runFixture(t, "builder", "role: builder\nadapter: script\ncommand: [echo]\nskills:\n  - paseka-release\n")
+	writeRunSkill(t, live, "paseka-release", "Release procedure.", "# Release")
+	writeRunFixtureFile(t, live, "home/profiles/lab/config.yaml", "skills_delivery: command\n")
+
+	frozen := freezeTree(t, live)
+	resolved, err := ResolveRun(RunInput{
+		ConfigRoot: frozen, Frozen: true, Role: "builder", Profile: "lab",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Delivery != "command" || resolved.DeliverySource != "home profile" {
+		t.Fatalf("delivery = %q from %q, want the frozen profile's command mode", resolved.Delivery, resolved.DeliverySource)
+	}
+	if strings.Contains(resolved.Section(SectionContext{TraceID: "t", AgentID: "a"}), "path:") {
+		t.Fatalf("a frozen profile override must reach the advertisement:\n%s", resolved.Section(SectionContext{TraceID: "t", AgentID: "a"}))
 	}
 }

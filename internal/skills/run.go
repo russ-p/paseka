@@ -46,6 +46,9 @@ type RunResolution struct {
 	DeliverySource string
 	// Source names the layer that set the role's list.
 	Source string
+	// Role is the bee whose gate this is. A load refusal names it, so an agent
+	// can retry with the right role rather than guess.
+	Role string
 	// ExplicitEmpty reports an explicit `skills: []` opt-out.
 	ExplicitEmpty bool
 }
@@ -60,16 +63,50 @@ func (r RunResolution) Names() []string {
 	return names
 }
 
+// SectionContext names the run the advertisement addresses. In `command` mode
+// the load command carries these identifiers so a bee can call the runtime for
+// the body without being handed a path.
+type SectionContext struct {
+	TraceID string
+	AgentID string
+}
+
+// LoadCommand renders the command a bee runs to obtain one skill's body. It is
+// the one form the advertisement and the documentation share, so a colony
+// cannot advertise a command the shell does not provide.
+func LoadCommand(name string, ref SectionContext) string {
+	return fmt.Sprintf("paseka skills load %s --trace %s --agent %s", name, ref.TraceID, ref.AgentID)
+}
+
 // Section renders the advertisement the runtime appends after a role's
-// instructions. It carries the name, the description, and the absolute path of
-// the resolved SKILL.md — never the body. A run with no skills has no section.
-func (r RunResolution) Section() string {
+// instructions. It carries the name and description of every resolved skill
+// and, per the effective delivery mode, either the absolute path of the frozen
+// SKILL.md or the command that serves it — never the body.
+//
+// `path` mode leaves the advertisement unchanged from the original design.
+// `command` mode keeps the path out entirely, so the runtime is the only route
+// to the body and a load is a recorded fact rather than an inference. A run
+// with no skills has no section in either mode.
+func (r RunResolution) Section(ref SectionContext) string {
 	if len(r.Skills) == 0 {
 		return ""
 	}
+	delivery := strings.TrimSpace(r.Delivery)
+	if delivery == "" {
+		delivery = colony.SkillsDeliveryPath
+	}
+
 	var b strings.Builder
 	b.WriteString(SectionHeading)
 	b.WriteString("\n\n")
+	if delivery == colony.SkillsDeliveryCommand {
+		b.WriteString("Each skill below is a reusable procedure this role may use. Load one with the command shown when the task calls for it: the command prints the procedure body.\n")
+		for _, skill := range r.Skills {
+			fmt.Fprintf(&b, "\n- %s: %s\n  load: %s\n", skill.Name, skill.Description, LoadCommand(skill.Name, ref))
+		}
+		return strings.TrimRight(b.String(), "\n")
+	}
+
 	b.WriteString("Each skill below is a reusable procedure this role may use. The procedure itself is not included here; read the file at its path when the task calls for it.\n")
 	for _, skill := range r.Skills {
 		fmt.Fprintf(&b, "\n- %s: %s\n  path: %s\n", skill.Name, skill.Description, skill.Path)
@@ -139,6 +176,7 @@ func ResolveRun(in RunInput) (RunResolution, error) {
 		Delivery:       selection.Delivery,
 		DeliverySource: selection.DeliverySource,
 		Source:         selection.Source,
+		Role:           role,
 		ExplicitEmpty:  selection.ExplicitEmpty(),
 	}
 	if len(resolution.Issues) > 0 {

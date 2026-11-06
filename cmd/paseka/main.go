@@ -15,7 +15,7 @@ import (
 func main() {
 	if err := newRoot().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitStatus(err))
 	}
 }
 

@@ -147,6 +147,40 @@ func (d Dir) EnsureResultRecord(res protocol.Result) error {
 	return d.WriteResult(res)
 }
 
+// RecordSkillsUsed folds the run's observed loads into its persisted result as
+// the deduplicated set of names. It is a runtime-owned write like the gate and
+// contract records: finalize reads skills-used.ndjson and records what the run
+// actually opened, so the used set is a fact on the run rather than an
+// inference from a transcript.
+//
+// A run with no result record has nowhere to record usage, which is the legacy
+// and interactive-session shape; the caller decides whether that is acceptable.
+// Writing an unchanged set is a no-op, so a repeated finalization leaves the
+// record byte-identical.
+func (d Dir) RecordSkillsUsed(names []string) error {
+	res, err := d.ReadResultJSON()
+	if err != nil {
+		return err
+	}
+	if equalStrings(res.SkillsUsed, names) {
+		return nil
+	}
+	res.SkillsUsed = names
+	return d.WriteResult(res)
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // recordedPrimaryFailure reports whether the record already carries a terminal
 // failure that a later runtime verdict must not relabel. A cancelled run counts:
 // a timeout or a human cancel is a primary outcome of its own, and its reason is

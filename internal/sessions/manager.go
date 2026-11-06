@@ -422,7 +422,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			BeeLocalTemplate: overlay.SystemTemplate,
 			BeeTemplate:      bee.SystemTemplate,
 			DefaultTemplate:  manifest.Defaults.SystemTemplate,
-			SkillsSection:    skillResolution.Section(),
+			SkillsSection:    skillResolution.Section(skills.SectionContext{TraceID: traceID, AgentID: agentID}),
 		}, promptCtx)
 		if err != nil {
 			return nil, fmt.Errorf("sessions: render system prompt: %w", err)

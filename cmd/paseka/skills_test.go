@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/skills"
 )
 
@@ -20,6 +24,7 @@ func setupSkillsCLI(t *testing.T) string {
 	t.Helper()
 	t.Setenv("PASEKA_PROFILE", "")
 	t.Setenv("PASEKA_NATS_URL", "")
+	t.Setenv("PASEKA_COLONY_ROOT", "")
 	repo := t.TempDir()
 	runStatusGit(t, repo, "init")
 	runStatusGit(t, repo, "config", "user.email", "test@test.com")
@@ -1010,5 +1015,220 @@ func TestSkillsMutatingVerbsFailOnCorruptLedger(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(skills.Dir(repo), "paseka-release")); err != nil {
 		t.Fatalf("a refused command deleted the store entry: %v", err)
+	}
+}
+
+// writeSkillsBee writes a role that lists exactly refs.
+func writeSkillsBee(t *testing.T, repo, role string, refs ...string) {
+	t.Helper()
+	var b strings.Builder
+	fmt.Fprintf(&b, "role: %s\nadapter: script\ncommand: [echo]\n", role)
+	if refs != nil {
+		b.WriteString("skills:\n")
+		for _, ref := range refs {
+			fmt.Fprintf(&b, "  - %q\n", ref)
+		}
+	}
+	path := filepath.Join(repo, ".paseka", "bees", role+".yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeSkillsRun creates the run directory and request record a load resolves
+// against, as the dispatcher would have written it.
+func writeSkillsRun(t *testing.T, repo, traceID, agentID, role string) runs.Dir {
+	t.Helper()
+	dir := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
+	if err := dir.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := dir.WriteRequest(protocol.Request{
+		TraceID:    traceID,
+		AgentID:    agentID,
+		Bee:        role,
+		ColonyRoot: repo,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestSkillsLoadPrintsPathDirAndBodyAndRecordsTheLoad(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeSkillsBee(t, repo, "builder", "paseka-release")
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	manifestPath := filepath.Join(skills.Dir(repo), "paseka-release", skills.ManifestName)
+	scriptPath := filepath.Join(skills.Dir(repo), "paseka-release", "scripts", "step.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\necho step\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runDir := writeSkillsRun(t, repo, "trace-load", "agent-1", "builder")
+
+	out, err := runCLI(t, "skills", "load", "paseka-release",
+		"--trace", "trace-load", "--agent", "agent-1", "-C", repo)
+	if err != nil {
+		t.Fatalf("load failed: %v\n%s", err, out)
+	}
+
+	pathLine := outputLine(t, out, "path: ")
+	dirLine := outputLine(t, out, "dir:  ")
+	if pathLine != manifestPath {
+		t.Fatalf("path = %q, want %q", pathLine, manifestPath)
+	}
+	if dirLine != filepath.Dir(manifestPath) {
+		t.Fatalf("dir = %q, want %q", dirLine, filepath.Dir(manifestPath))
+	}
+	if !strings.Contains(out, "# paseka-release") {
+		t.Fatalf("load did not print the body:\n%s", out)
+	}
+	if strings.Contains(out, "description: Run the release procedure.") || strings.Contains(out, "\n---\n") {
+		t.Fatalf("load printed frontmatter:\n%s", out)
+	}
+
+	// The printed directory is the one that makes a bundled script reachable:
+	// the advertisement never named it, loading did.
+	if _, err := os.Stat(filepath.Join(dirLine, "scripts", "step.sh")); err != nil {
+		t.Fatalf("the printed directory does not resolve scripts/: %v", err)
+	}
+
+	data, err := os.ReadFile(runDir.SkillsUsedPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("load log lines = %d, want one per load:\n%s", len(lines), data)
+	}
+	var record skills.UsageRecord
+	if err := json.Unmarshal([]byte(lines[0]), &record); err != nil {
+		t.Fatal(err)
+	}
+	served, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(served)
+	if record.Name != "paseka-release" || record.ContentHash != hex.EncodeToString(sum[:]) || record.At == "" {
+		t.Fatalf("usage record = %+v, want the served file's hash and a timestamp", record)
+	}
+}
+
+func outputLine(t *testing.T, out, prefix string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	t.Fatalf("output has no %q line:\n%s", prefix, out)
+	return ""
+}
+
+func TestSkillsLoadRefusesWhatTheRunWasNotOffered(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeSkillsBee(t, repo, "builder", "paseka-release")
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeStoreSkill(t, repo, "paseka-ship", "name: paseka-ship\ndescription: Ship the release.")
+	writeSkillsRun(t, repo, "trace-load", "agent-1", "builder")
+
+	cases := []string{"paseka-ship", "paseka-*", "*", "shared:paseka-release"}
+	for _, ref := range cases {
+		out, err := runCLI(t, "skills", "load", ref,
+			"--trace", "trace-load", "--agent", "agent-1", "-C", repo)
+		if err == nil {
+			t.Fatalf("load %q was accepted:\n%s", ref, out)
+		}
+		if !strings.Contains(err.Error(), "skill_not_offered") {
+			t.Fatalf("load %q error = %v, want skill_not_offered", ref, err)
+		}
+		if got := exitStatus(err); got != skillLoadExitRefused {
+			t.Fatalf("load %q exit = %d, want %d through the typed exit path", ref, got, skillLoadExitRefused)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "runs", "trace-load", "agent-1", "skills-used.ndjson")); !os.IsNotExist(err) {
+		t.Fatalf("a refused load must not record usage: %v", err)
+	}
+}
+
+func TestExitStatusMapsTypedAndPlainErrors(t *testing.T) {
+	if got := exitStatus(newExitError(2, fmt.Errorf("refused"))); got != 2 {
+		t.Fatalf("typed exit = %d, want 2", got)
+	}
+	if got := exitStatus(fmt.Errorf("broken")); got != 1 {
+		t.Fatalf("plain exit = %d, want 1", got)
+	}
+}
+
+func TestSkillsLoadResolvesAColonyFromAWorktree(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeSkillsBee(t, repo, "builder", "paseka-release")
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeSkillsRun(t, repo, "trace-load", "agent-1", "builder")
+
+	// A worktree carries the committed .paseka/ but not the gitignored runs, so
+	// walking up from it must reach the primary checkout rather than stop here.
+	worktree := filepath.Join(repo, ".paseka", "worktrees", "trace-load")
+	if err := os.MkdirAll(filepath.Join(worktree, ".paseka"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, ".paseka", "colony.yaml"), []byte("slug: skills-fixture\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(worktree)
+
+	out, err := runCLI(t, "skills", "load", "paseka-release",
+		"--trace", "trace-load", "--agent", "agent-1")
+	if err != nil {
+		t.Fatalf("load from a worktree failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "path: "+filepath.Join(repo, ".paseka", "skills", "paseka-release", skills.ManifestName)) {
+		t.Fatalf("load from a worktree did not reach the primary checkout's store:\n%s", out)
+	}
+}
+
+func TestSkillsLoadUsesPASEKAColonyRootBeforeWalkingUp(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeSkillsBee(t, repo, "builder", "paseka-release")
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	writeSkillsRun(t, repo, "trace-load", "agent-1", "builder")
+
+	t.Setenv("PASEKA_COLONY_ROOT", repo)
+	t.Chdir(t.TempDir())
+	out, err := runCLI(t, "skills", "load", "paseka-release",
+		"--trace", "trace-load", "--agent", "agent-1")
+	if err != nil {
+		t.Fatalf("load through PASEKA_COLONY_ROOT failed: %v\n%s", err, out)
+	}
+}
+
+func TestSkillsLoadFailureNamesTheTriedRoots(t *testing.T) {
+	repo := setupSkillsCLI(t)
+	writeSkillsBee(t, repo, "builder", "paseka-release")
+	writeStoreSkill(t, repo, "paseka-release", "name: paseka-release\ndescription: Run the release procedure.")
+	// The run is in the repo, but the command is asked from somewhere else with
+	// a root that does not hold it.
+	elsewhere := t.TempDir()
+	t.Chdir(elsewhere)
+
+	out, err := runCLI(t, "skills", "load", "paseka-release",
+		"--trace", "trace-missing", "--agent", "agent-missing", "-C", repo)
+	if err == nil {
+		t.Fatalf("load without a colony holding the run was accepted:\n%s", out)
+	}
+	if got := exitStatus(err); got != 1 {
+		t.Fatalf("resolution failure exit = %d, want 1", got)
+	}
+	for _, want := range []string{"tried:", repo, elsewhere, "trace-missing", "agent-missing", "-C <colonyRoot>"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not name %q", err, want)
+		}
 	}
 }

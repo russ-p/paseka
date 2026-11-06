@@ -114,6 +114,7 @@ paseka
 ├── skills
 │   ├── list
 │   ├── show <name>
+│   ├── load <name> --trace <traceId> --agent <agentId>
 │   ├── validate [reference|pattern|*]
 │   ├── disable <name> --reason <why>
 │   ├── enable <name>
@@ -613,7 +614,9 @@ Standing cues seed honey on the first tick and replace remaining with `standing.
 
 ## `paseka skills`
 
-Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, and budgets: [Colony skills](skills.md).
+Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, budgets, and the two delivery modes: [Colony skills](skills.md).
+
+The reading verbs (`list`, `show`, `validate`) describe the live repository store. `load` is different: it serves a body to a named run from that run's frozen configuration, and it is the runtime route a `command`-mode advertisement points at.
 
 ### `paseka skills list`
 
@@ -647,6 +650,35 @@ Prints one skill's metadata, its provenance, and its body without the frontmatte
 paseka skills show paseka-release
 paseka skills show paseka-release --path
 paseka skills show paseka-release --json
+```
+
+### `paseka skills load <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony root, or a directory inside it |
+| `--trace` | | Flight trail id of the run (required) |
+| `--agent` | | Agent run id of the run (required) |
+
+Serves one procedure to a run and records that the run opened it. The reference is resolved against the configuration the run was offered — read from the run's recorded configuration reference — not the live store, so a later store edit or configuration application cannot make `load` disagree with what the run was advertised.
+
+On success it prints the absolute `SKILL.md` path, the skill directory, and the body without frontmatter:
+
+```text
+path: /repo/.paseka/runs/trace-abc123/config/tree/.paseka/skills/paseka-release/SKILL.md
+dir:  /repo/.paseka/runs/trace-abc123/config/tree/.paseka/skills/paseka-release
+
+# Release
+```
+
+The directory makes `scripts/`, `references/`, and `assets/` reachable while the path stays out of a `command`-mode advertisement. The command refuses a reference the run's role does not carry — including a pattern — with exit **2** and `skill_not_offered`.
+
+Each successful load appends `{name, contentHash, at}` to `.paseka/runs/<traceId>/<agentId>/skills-used.ndjson`, where `contentHash` is the SHA-256 of the served `SKILL.md` bytes. At finalize the runtime folds the log into `result.json` as the deduplicated `skillsUsed` set, first load winning.
+
+Colony resolution is `-C`, then `PASEKA_COLONY_ROOT`, then the nearest ancestor of the working directory holding both `.paseka/colony.yaml` and the run directory, so a run in a worktree is served by the primary checkout. With no candidate it exits 1 and names the roots tried, the trace, the agent, and the `-C` that fixes it. `load` speaks prose and works in either delivery mode.
+
+```bash
+paseka skills load paseka-release --trace trace-abc123 --agent agent-7f2c
 ```
 
 ### `paseka skills validate [reference|pattern|*]`
@@ -712,7 +744,7 @@ paseka skills remove paseka-release --dry-run   # prints the plan, changes nothi
 paseka skills remove paseka-release --force     # proceeds and names the roles
 ```
 
-The three mutating verbs read the committed ledger before they write. A **corrupt** ledger — bad JSON, an unknown schema version, or a record without `at`/`reason` — fails the command rather than being replaced, and no store entry is touched. A missing ledger is an empty one. See [Colony skills](skills.md#6-the-committed-ledger) for the record shape.
+The three mutating verbs read the committed ledger before they write. A **corrupt** ledger — bad JSON, an unknown schema version, or a record without `at`/`reason` — fails the command rather than being replaced, and no store entry is touched. A missing ledger is an empty one. See [Colony skills](skills.md#7-the-committed-ledger) for the record shape.
 
 ---
 

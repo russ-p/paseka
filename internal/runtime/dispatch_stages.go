@@ -217,7 +217,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		BeeLocalTemplate: overlay.SystemTemplate,
 		BeeTemplate:      bee.SystemTemplate,
 		DefaultTemplate:  manifest.Defaults.SystemTemplate,
-		SkillsSection:    skillResolution.Section(),
+		SkillsSection:    skillResolution.Section(skills.SectionContext{TraceID: req.TraceID, AgentID: agentID}),
 	}, promptCtx)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: render system prompt: %w", err)
@@ -450,6 +450,20 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 	// reconcile.
 	if err := p.runDir.EnsureResultRecord(p.resultRecord(result)); err != nil {
 		return result, fmt.Errorf("runtime: write result record: %w", err)
+	}
+
+	// Fold what the run actually opened into its persisted outcome. The loads
+	// are the runtime's own record (`paseka skills load` appended them), so a
+	// deduplicated used set is a fact independent of any adapter's transcript
+	// capability; the first load of a name wins and repeats are ignored.
+	loads, err := skills.ReadUsage(p.runDir.SkillsUsedPath())
+	if err != nil {
+		return result, fmt.Errorf("runtime: read skill loads: %w", err)
+	}
+	if names := skills.UsedNames(loads); len(names) > 0 {
+		if err := p.runDir.RecordSkillsUsed(names); err != nil {
+			return result, fmt.Errorf("runtime: record used skills: %w", err)
+		}
 	}
 
 	// The mechanical gate decides before anything leaves the run: it runs after

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/runtime"
@@ -265,5 +266,75 @@ func TestDispatchReadsSkillsFromTheFrozenTrail(t *testing.T) {
 	}
 	if !strings.Contains(string(system), "Run the colony release procedure.") {
 		t.Fatalf("system.txt does not carry the frozen description:\n%s", system)
+	}
+}
+
+// skillLoadAdapter writes the load records a real `paseka skills load` would
+// append while the adapter is running, so finalization folds them into the run
+// result exactly as it would for an agent that loaded procedures.
+type skillLoadAdapter struct {
+	lastReq adapters.RunRequest
+	loads   []skills.UsageRecord
+}
+
+func (a *skillLoadAdapter) Name() string { return "cursor" }
+
+func (a *skillLoadAdapter) Run(_ context.Context, req adapters.RunRequest) (*adapters.RunResult, error) {
+	a.lastReq = req
+	dir := runs.Dir{ColonyRoot: req.ColonyRoot, TraceID: req.TraceID, AgentID: req.AgentID}
+	for _, record := range a.loads {
+		if err := skills.AppendUsage(dir.SkillsUsedPath(), record); err != nil {
+			return nil, err
+		}
+	}
+	return &adapters.RunResult{Status: "completed", Output: "ok"}, nil
+}
+
+func TestFinalizeRecordsTheDeduplicatedUsedSet(t *testing.T) {
+	root := t.TempDir()
+	writeSkillDispatchColony(t, root)
+
+	adapter := &skillLoadAdapter{loads: []skills.UsageRecord{
+		{Name: "paseka-release", ContentHash: "first", At: "2026-11-07T10:00:00Z"},
+		{Name: "legacy", ContentHash: "legacy", At: "2026-11-07T10:00:01Z"},
+		{Name: "paseka-release", ContentHash: "second", At: "2026-11-07T10:00:02Z"},
+	}}
+	d := runtime.NewDispatcher()
+	d.RegisterAdapter("cursor", adapter)
+
+	if _, err := d.Dispatch(context.Background(), runtime.DispatchRequest{
+		ColonyRoot: root,
+		Bee:        "builder",
+		TraceID:    "trace-skills-used",
+		Task:       "ship it",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	runDir := runs.Dir{ColonyRoot: root, TraceID: "trace-skills-used", AgentID: adapter.lastReq.AgentID}
+	res, err := runDir.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"paseka-release", "legacy"}
+	if len(res.SkillsUsed) != len(want) {
+		t.Fatalf("skillsUsed = %v, want the deduplicated set %v", res.SkillsUsed, want)
+	}
+	for i := range want {
+		if res.SkillsUsed[i] != want[i] {
+			t.Fatalf("skillsUsed = %v, want first-load order %v", res.SkillsUsed, want)
+		}
+	}
+
+	// One record per load is kept; folding deduplicates the result, not the log.
+	records, err := skills.ReadUsage(runDir.SkillsUsedPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("load log holds %d records, want one per load", len(records))
+	}
+	if records[0].ContentHash != "first" || records[2].ContentHash != "second" {
+		t.Fatalf("load log = %+v, want every load kept in order", records)
 	}
 }

@@ -28,6 +28,7 @@ The group is a namespace, not an action: run a verb.`,
 	}
 	cmd.AddCommand(newSkillsListCmd())
 	cmd.AddCommand(newSkillsShowCmd())
+	cmd.AddCommand(newSkillsLoadCmd())
 	cmd.AddCommand(newSkillsValidateCmd())
 	cmd.AddCommand(newSkillsDisableCmd())
 	cmd.AddCommand(newSkillsEnableCmd())
