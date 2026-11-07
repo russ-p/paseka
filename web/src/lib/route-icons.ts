@@ -7,6 +7,7 @@ import {
 	LayoutDashboard,
 	ListTodo,
 	Route,
+	ScrollText,
 	Server,
 	Settings,
 	Share2,
@@ -24,9 +25,9 @@ import type { RouteGlyph } from '$lib/navigation';
  * because `RouteGlyph` is derived from it.
  *
  * `Hexagon` is the Bees roster's glyph because lucide has no `bee` (only `beef`): a comb
- * cell is also a truer picture of what the page lists than a cow is. `Zap` is a headless
- * run against `Terminal` for a session, since the two run things and only one has a
- * person in it.
+ * cell is also a truer picture of what the page lists than a cow is. `ScrollText` is the
+ * skill store's, because a skill is a written procedure. `Zap` is a headless run against
+ * `Terminal` for a session, since the two run things and only one has a person in it.
  */
 export const routeGlyphs: Record<RouteGlyph, typeof LayoutDashboard> = {
 	dashboard: LayoutDashboard,
@@ -37,6 +38,7 @@ export const routeGlyphs: Record<RouteGlyph, typeof LayoutDashboard> = {
 	fork: GitFork,
 	terminal: Terminal,
 	bees: Hexagon,
+	skills: ScrollText,
 	worktrees: FolderGit2,
 	runs: Zap,
 	git: GitBranch,

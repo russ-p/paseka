@@ -43,7 +43,8 @@ switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
 page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
 detail), **Tasks** (board and task detail), **Reviews** (queue, proposal, and
 merge preview), **Sessions** (list and session detail), **Worktrees**,
-**Bees**, and **Settings**. Every route under `/next/` is now migrated; a route
+**Bees**, **Skills**, and **Settings**. Every route under `/next/` is now
+migrated; a route
 that still renders a "migration pending" card is a bug. The legacy console at
 `/` remains the default until the redesign reaches an explicit cutover.
 
@@ -511,6 +512,23 @@ The rest of the page is committed configuration, so it is read once and does not
 refresh on a timer; press **Refresh** after a commit adds or changes a bee, or
 after a run lands and you want to see it. Nothing else here needs the Hive
 Runtime.
+
+### Skills
+
+Shows the colony skill store and the trails' skill proposals together. The
+inventory lists every skill with its state — `ok`, `invalid` with the rule it
+broke, or `disabled` with the Beekeeper's reason — the roles whose selection
+carries it, its description, and its provenance (`hand-written`, `proposed`, or
+`nuc`). The roles are the server's resolved gate, so a role that selects `*` or a
+pattern is named against every skill it actually receives.
+
+The proposals pane reads the trails' decision data: each row carries its source
+trail, the skill, when it was proposed, and a state of `pending`, `installed`,
+`refused` with the reason, `trialled` with the destination trail, or `missing`
+when the bundle is gone. Press **View** to read the proposal's `SKILL.md` and the
+reason it was proposed, read-only. Approving, refusing, and trialling remain
+shell verbs ([skills guide](skills.md#16-reviewing-proposals)); a missing bundle
+or an unreadable trail is reported on the page rather than hidden.
 
 ### Settings
 

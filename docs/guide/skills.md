@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), installation of an approved proposal (`approve`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, attribution, and the trial destination (`approve --into`). Approval writes the store; a trial writes one trail's pinned configuration instead.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), installation of an approved proposal (`approve`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, attribution, the trial destination (`approve --into`), and the read-only Queen Console skills page. Approval writes the store; a trial writes one trail's pinned configuration instead.
 
 ---
 
@@ -533,3 +533,13 @@ A portable Nuc pack may carry skills alongside bees, prompts, and cues ([nuc gui
 An imported skill gets `source: nuc` and a freshly computed `procedure_hash` in its own `metadata`. Proposal provenance — `trail`, `role`, and `approved_at` — is removed because it belongs to the colony the pack came from; every other metadata key is preserved. The hash covers the body and supporting files with the frontmatter excluded, so writing provenance cannot change it, and `doctor` reports a later hand edit as a `procedure hash mismatch`, exactly as it does for an approved proposal.
 
 The import follows the pack's conflict policy at skill-directory granularity: an existing skill of the same name is skipped without `--force`, and replaced whole with `--force`. `--dry-run` lists the skill files it would create or overwrite beside the bee, prompt, and cue actions and writes nothing.
+
+## 21. The Queen Console skills page
+
+`/next/skills` puts the store and the trails' proposals on one page.
+
+- **The inventory is the shell's inventory.** The server calls the same `skills.BuildInventory` that `paseka skills list` uses, so the state (`ok`, `invalid` with its reason, or `disabled` with its reason), the roles, the description, and the provenance (`hand-written`, `proposed`, or `nuc`) cannot differ between the two readers. A role that selects `*` or a pattern is named against every skill it resolves to; the page never shows `*` in the roles column.
+- **The proposals pane is the trails' decision data.** Each row carries the source trail, the skill, when it was proposed, and its state: `pending`, `installed`, `refused` with the reason, `trialled` with the destination trail, or `missing` when the bundle has disappeared. The source trail links to its page.
+- **A proposal opens read-only.** Viewing a row fetches its `SKILL.md` body and the reason the Archivist gave for proposing it. A missing bundle is reported where the body would be, and an unreadable trail is named above the rows rather than hidden.
+- **The page is read-only.** Approving, refusing, and trialling remain shell verbs (`paseka skills approve`, `reject`, and `approve --into`), as do `disable` and `remove`; the console is where an operator reads the store and the queue before deciding.
+- **Empty is explained.** A colony with no store says no skill is in it yet, and a colony with no proposals says what would put one there, rather than showing a blank table.

@@ -1418,3 +1418,67 @@ export interface ColonyConfig {
 	telegram: ConfigTelegram;
 	terminal: ConfigTerminal;
 }
+
+/**
+ * Mirrors `console.SkillRowView`: one skill in the colony store.
+ *
+ * `state` is the listing's verdict (`ok`, `invalid`, `disabled`) and `reason`
+ * carries the verdict's own explanation — the broken rule for an invalid skill,
+ * the Beekeeper's decision for a disabled one. `roles` is already resolved by
+ * the server: a wildcard or pattern role is named for every skill it actually
+ * receives, never as `*`.
+ */
+export interface SkillRow {
+	name: string;
+	state: string;
+	reason?: string;
+	roles: string[];
+	description: string;
+	/** `hand`, `proposal`, or `nuc`, read from the skill's own metadata. */
+	provenance: string;
+}
+
+/**
+ * Mirrors `console.SkillProposalView`: one `skill.proposed` discovery with the
+ * decision its trail records. `reason` is the decision's reason, while
+ * `proposedReason` is the evidence the Archivist gave for proposing the skill.
+ */
+export interface SkillProposal {
+	trail: string;
+	name: string;
+	description?: string;
+	proposedReason?: string;
+	/** RFC 3339, or empty when the trail record carries no time. */
+	proposedAt: string;
+	/** `pending`, `installed`, `refused`, `trialled`, or `missing`. */
+	state: string;
+	reason?: string;
+	/** The trail a trial was applied to; `store` for an install. */
+	destination?: string;
+	decidedAt?: string;
+	bundle: string;
+	bundleMissing: boolean;
+	valid: boolean;
+	validation: string[];
+}
+
+/** Mirrors `console.SkillProposalDetailView`: the row plus the procedure body. */
+export interface SkillProposalDetail extends SkillProposal {
+	body: string;
+	/** Why the bundle body could not be read; a missing bundle is reported here. */
+	bodyError?: string;
+}
+
+/**
+ * Mirrors `console.SkillsInventoryView` from GET /api/skills. Every list is
+ * always an array, so a client can range over it without a nil check.
+ */
+export interface SkillsInventory {
+	store: string;
+	skills: SkillRow[];
+	/** Store-wide findings that have no row of their own. */
+	issues: string[];
+	proposals: SkillProposal[];
+	/** Unreadable trails and proposal records, reported beside the rows. */
+	proposalIssues: string[];
+}

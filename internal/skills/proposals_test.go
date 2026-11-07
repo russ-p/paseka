@@ -418,3 +418,41 @@ func TestProposalReferenceResolution(t *testing.T) {
 		t.Fatal("a pattern must be refused")
 	}
 }
+
+// TestProposalCarriesTheReasonAndReadsItsBody pins the two facts a reviewer
+// needs when opening a proposal: the evidence the Archivist gave, and the
+// procedure body exactly as the bundle holds it.
+func TestProposalCarriesTheReasonAndReadsItsBody(t *testing.T) {
+	root := t.TempDir()
+	addProposal(t, root, "trace-alpha", "paseka-release", proposalFixtureTime)
+
+	inventory, err := skills.ScanProposals(root)
+	if err != nil {
+		t.Fatalf("scan proposals: %v", err)
+	}
+	proposal := inventory.Proposals[0]
+	if proposal.ProposedReason == "" || !strings.Contains(proposal.ProposedReason, "Two runs") {
+		t.Fatalf("proposed reason = %q", proposal.ProposedReason)
+	}
+
+	body, err := skills.ReadProposalBody(root, proposal)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !strings.Contains(body, "1. Do the thing.") {
+		t.Fatalf("body = %q", body)
+	}
+	if strings.Contains(body, "description:") {
+		t.Fatalf("body still carries frontmatter: %q", body)
+	}
+}
+
+func TestReadProposalBodyReportsAMissingBundle(t *testing.T) {
+	root := t.TempDir()
+	proposal := skills.Proposal{Trail: "trace-alpha", Name: "gone", Bundle: "skill-proposals/gone"}
+	if _, err := skills.ReadProposalBody(root, proposal); err == nil {
+		t.Fatal("a missing bundle must be an error, not an empty body")
+	} else if !strings.Contains(err.Error(), "no bundle") {
+		t.Fatalf("error = %v", err)
+	}
+}

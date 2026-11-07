@@ -94,68 +94,6 @@ func selectSkillForMutation(store skills.Report, raw, verb string) (skills.Skill
 	return skill, nil
 }
 
-// skillRoles maps a skill's store name to every role whose selection names it.
-// The answer is computed from the role configurations on every run rather than
-// remembered, and a pattern or `*` is expanded here: a wildcard role is named
-// against every skill it actually resolves to, because that is what the gate
-// does. A reference that does not parse is skipped — doctor and validate report
-// it, and a listing must not invent a role from a name no resolver accepts.
-func skillRoles(ctx colony.Context, store skills.Report) (map[string][]string, error) {
-	bees, err := ctx.LoadAllBeesForDiagnosis()
-	if err != nil {
-		return nil, err
-	}
-	roles := map[string][]string{}
-	seen := map[string]map[string]bool{}
-	for _, role := range sortedBeeRoleNames(bees) {
-		effective, err := ctx.EffectiveSkills(role, bees[role])
-		if err != nil {
-			return nil, err
-		}
-		if !effective.Present {
-			continue
-		}
-		for _, raw := range effective.Refs {
-			ref, err := skills.ParseReference(raw)
-			if err != nil {
-				continue
-			}
-			for _, skill := range store.Skills {
-				if !ref.Names(skill) {
-					continue
-				}
-				if seen[skill.Name] == nil {
-					seen[skill.Name] = map[string]bool{}
-				}
-				if seen[skill.Name][role] {
-					continue
-				}
-				seen[skill.Name][role] = true
-				roles[skill.Name] = append(roles[skill.Name], role)
-			}
-		}
-	}
-	return roles, nil
-}
-
-// skillState is the listing's verdict for one skill: `ok`, `invalid` with the
-// reason, or `disabled`. A disabled skill is a recorded human decision, so it
-// reads as disabled even if its bytes have since gone stale; validate and
-// doctor still report the invalidity.
-func skillState(skill skills.Skill, ledger skills.Ledger) (state, reason string) {
-	if record, disabled := ledger.Record(skill.Name); disabled {
-		return "disabled", record.Reason
-	}
-	if issues := skill.Issues; len(issues) > 0 {
-		reasons := make([]string, 0, len(issues))
-		for _, issue := range issues {
-			reasons = append(reasons, issue.Reason)
-		}
-		return "invalid", strings.Join(reasons, "; ")
-	}
-	return "ok", ""
-}
-
 // skillListEntry is one row of `paseka skills list --json`. The field set is
 // the contract: state and reason are separate here, while the table folds them
 // into one column, so a script never has to parse prose.
@@ -197,41 +135,29 @@ own metadata: ` + "`proposal`" + `, ` + "`nuc`" + `, or ` + "`hand`" + `.
 --json prints the same inventory as a stable machine contract.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctxColony, store, ledger, err := loadSkillStore(startDir)
+			ctxColony, err := colony.ResolveContext(startDir)
 			if err != nil {
 				return err
 			}
-			roles, err := skillRoles(ctxColony, store)
+			inventory, err := skills.BuildInventory(ctxColony)
 			if err != nil {
 				return err
 			}
 
 			doc := skillListDocument{
-				Store:  store.Root,
-				Skills: make([]skillListEntry, 0, len(store.Skills)),
-				Issues: make([]string, 0, len(store.Issues())),
+				Store:  inventory.Root,
+				Skills: make([]skillListEntry, 0, len(inventory.Skills)),
+				Issues: append([]string{}, inventory.Issues...),
 			}
-			for _, skill := range store.Skills {
-				state, reason := skillState(skill, ledger)
-				names := roles[skill.Name]
-				if names == nil {
-					names = []string{}
-				}
+			for _, row := range inventory.Skills {
 				doc.Skills = append(doc.Skills, skillListEntry{
-					Name:        skill.Name,
-					State:       state,
-					Reason:      reason,
-					Roles:       names,
-					Description: skill.Description,
-					Provenance:  skillProvenance(skill.Metadata),
+					Name:        row.Name,
+					State:       row.State,
+					Reason:      row.Reason,
+					Roles:       row.Roles,
+					Description: row.Description,
+					Provenance:  row.Provenance,
 				})
-			}
-			for _, issue := range store.Issues() {
-				// A per-skill finding is already the row's state; only the
-				// store-wide ones have nowhere else to appear.
-				if issue.Skill == "" {
-					doc.Issues = append(doc.Issues, issue.Error())
-				}
 			}
 
 			out := cmd.OutOrStdout()
@@ -345,8 +271,8 @@ without parsing prose. --json prints the same facts as a machine contract.`,
 				return err
 			}
 
-			state, reason := skillState(skill, ledger)
-			roles, err := skillRoles(ctxColony, store)
+			state, reason := skills.State(skill, ledger)
+			roles, err := skills.RoleMembership(ctxColony, store)
 			if err != nil {
 				return err
 			}
@@ -354,7 +280,7 @@ without parsing prose. --json prints the same facts as a machine contract.`,
 			if names == nil {
 				names = []string{}
 			}
-			provenance := skillProvenance(skill.Metadata)
+			provenance := skills.Provenance(skill.Metadata)
 			issues := make([]string, 0, len(skill.Issues))
 			for _, issue := range skill.Issues {
 				issues = append(issues, issue.Reason)
@@ -434,15 +360,6 @@ without parsing prose. --json prints the same facts as a machine contract.`,
 	cmd.Flags().BoolVar(&pathOnly, "path", false, "print only the resolved SKILL.md path")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit the skill as JSON on stdout")
 	return cmd
-}
-
-// skillProvenance reads provenance from the skill's own metadata. The store has
-// no mirror to reconcile, and a skill with no record was written by hand.
-func skillProvenance(metadata map[string]string) string {
-	if source := strings.TrimSpace(metadata["source"]); source != "" {
-		return source
-	}
-	return "hand"
 }
 
 func newSkillsValidateCmd() *cobra.Command {
@@ -534,7 +451,7 @@ the working tree for the Beekeeper. Run ` + "`paseka skills enable <name>`" + ` 
 			if err != nil {
 				return err
 			}
-			roles, err := skillRoles(ctxColony, store)
+			roles, err := skills.RoleMembership(ctxColony, store)
 			if err != nil {
 				return err
 			}
@@ -583,7 +500,7 @@ working tree for the Beekeeper.`,
 			if err != nil {
 				return err
 			}
-			roles, err := skillRoles(ctxColony, store)
+			roles, err := skills.RoleMembership(ctxColony, store)
 			if err != nil {
 				return err
 			}
@@ -642,7 +559,7 @@ commits. Removing a skill does not delete a trail's decisions about it.`,
 			if err != nil {
 				return err
 			}
-			roles, err := skillRoles(ctxColony, store)
+			roles, err := skills.RoleMembership(ctxColony, store)
 			if err != nil {
 				return err
 			}

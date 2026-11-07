@@ -13,6 +13,7 @@ export const consoleRoutes = [
 	{ path: '/forks', label: 'Forks', shortcut: 'f', group: 'Work', glyph: 'fork' },
 	{ path: '/sessions', label: 'Sessions', shortcut: 'i', group: 'Work', glyph: 'terminal' },
 	{ path: '/bees', label: 'Bees', shortcut: 'b', group: 'Colony', glyph: 'bees' },
+	{ path: '/skills', label: 'Skills', shortcut: 'c', group: 'Colony', glyph: 'skills' },
 	{ path: '/worktrees', label: 'Worktrees', shortcut: 'w', group: 'Colony', glyph: 'worktrees' },
 	{ path: '/runs', label: 'Runs', shortcut: 'u', group: 'Colony', glyph: 'runs' },
 	{ path: '/git', label: 'Git', shortcut: 'o', group: 'Colony', glyph: 'git' },

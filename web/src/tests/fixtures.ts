@@ -33,6 +33,9 @@ import type {
 	TraceDetail,
 	Invite,
 	Session,
+	SkillProposal,
+	SkillRow,
+	SkillsInventory,
 	TrailCollection,
 	TrailConfigApplyResult,
 	TraceSummary,
@@ -1017,6 +1020,58 @@ export function colonyConfig(overrides: Partial<ColonyConfig> = {}): ColonyConfi
 			notify: configNotify()
 		},
 		terminal: { terminal: 'default', ghosttyBinary: 'ghostty', configured: false },
+		...overrides
+	};
+}
+
+export function skillRow(overrides: Partial<SkillRow> = {}): SkillRow {
+	return {
+		name: 'paseka-release',
+		state: 'ok',
+		roles: ['builder', 'docs'],
+		description: 'Run the release procedure.',
+		provenance: 'proposal',
+		...overrides
+	};
+}
+
+export function skillProposal(overrides: Partial<SkillProposal> = {}): SkillProposal {
+	return {
+		trail: 'trace-01a0bd6963faa14f',
+		name: 'paseka-release',
+		description: 'Run the release procedure.',
+		proposedReason: 'Two runs repeated this by hand; see task 002.',
+		proposedAt: '2026-11-07T10:00:00Z',
+		state: 'pending',
+		bundle: 'skill-proposals/paseka-release',
+		bundleMissing: false,
+		valid: true,
+		validation: [],
+		...overrides
+	};
+}
+
+/**
+ * One of each state the skills page has to tell apart: a servable proposed
+ * skill, a disabled hand-written one, and a pending proposal from a trail.
+ */
+export function skillsInventory(overrides: Partial<SkillsInventory> = {}): SkillsInventory {
+	return {
+		store: '/colony/.paseka/skills',
+		skills: [
+			skillRow(),
+			skillRow({
+				name: 'paseka-ship',
+				state: 'disabled',
+				reason: 'wrong step',
+				roles: ['docs'],
+				description: 'Ship a version.',
+				provenance: 'hand'
+			})
+		],
+		issues: [],
+		proposals: [skillProposal()],
+		proposalIssues: [],
 		...overrides
 	};
 }

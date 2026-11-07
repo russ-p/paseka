@@ -65,6 +65,19 @@ const statusTones: Record<string, StatusTone> = {
 	// or `completed`, because it is none of them.
 	skipped: 'neutral',
 	unknown: 'neutral',
+	// Skill store verdicts. `ok` is the servable state; `invalid` is a broken
+	// procedure and must pop; `disabled` is a recorded human decision, so it stays
+	// quiet rather than reading as a failure.
+	ok: 'success',
+	invalid: 'error',
+	disabled: 'neutral',
+	// Proposal verdicts. `refused` is terminal but it is also a Beekeeper's
+	// decision, so it is neutral; `missing` is a bundle the trail lost, which is
+	// a fact the reviewer has to act on.
+	installed: 'success',
+	refused: 'neutral',
+	trialled: 'info',
+	missing: 'error',
 	// A Telegram push mode, read as "will this interrupt me": sound is the only
 	// mode that alerts, silent delivers without noise, and off is the absence of
 	// a push. They take the in-flight and idle tones the table already uses, so

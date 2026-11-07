@@ -121,12 +121,16 @@ func (i ProposalIssue) Error() string {
 // one skill rule set, every entry is a regular file, and the recomputed
 // procedure hash matches the discovery.
 type Proposal struct {
-	Trail         string
-	Name          string
-	Description   string
-	ProposedAt    time.Time
-	Bundle        string
-	ProcedureHash string
+	Trail       string
+	Name        string
+	Description string
+	// ProposedReason is the evidence the Archivist gave for proposing the
+	// skill. It is shown when a proposal is opened for review, so a decision
+	// can be made on the argument rather than on the bundle alone.
+	ProposedReason string
+	ProposedAt     time.Time
+	Bundle         string
+	ProcedureHash  string
 	// AgentID is the producer recorded on the discovery event. It is resolved
 	// to the proposing bee's role at install time, so the provenance record can
 	// name the role without the discovery payload carrying a second identity.
@@ -376,13 +380,14 @@ func scanTrailProposals(colonyRoot, traceID string, issues *[]ProposalIssue) []P
 	for _, name := range names {
 		discovered := discoveries[name]
 		proposal := Proposal{
-			Trail:         traceID,
-			Name:          name,
-			Description:   strings.TrimSpace(discovered.payload.Description),
-			ProposedAt:    discovered.at,
-			Bundle:        discovered.payload.Bundle,
-			ProcedureHash: strings.TrimSpace(discovered.payload.ProcedureHash),
-			AgentID:       discovered.agentID,
+			Trail:          traceID,
+			Name:           name,
+			Description:    strings.TrimSpace(discovered.payload.Description),
+			ProposedReason: strings.TrimSpace(discovered.payload.Reason),
+			ProposedAt:     discovered.at,
+			Bundle:         discovered.payload.Bundle,
+			ProcedureHash:  strings.TrimSpace(discovered.payload.ProcedureHash),
+			AgentID:        discovered.agentID,
 		}
 
 		verdict := evaluateProposalBundle(trailRoot, proposal.Bundle)
@@ -553,6 +558,46 @@ func evaluateProposalBundle(trailRoot, bundle string) bundleVerdict {
 	}
 	verdict.issues = dedupeStrings(verdict.issues)
 	return verdict
+}
+
+// ReadProposalBody returns one proposal's `SKILL.md` body without its
+// frontmatter — exactly the procedure a Beekeeper reviews before deciding. It
+// reads the bundle from the source trail's comb, so the console shows the
+// proposal that trail holds rather than a copy in the store.
+func ReadProposalBody(colonyRoot string, proposal Proposal) (string, error) {
+	clean, ok := protocol.CombRelativeBundle(proposal.Bundle)
+	if !ok {
+		return "", fmt.Errorf(
+			"skills: proposal %s/%s bundle %q is not a path inside the trail artifact comb",
+			proposal.Trail, proposal.Name, proposal.Bundle,
+		)
+	}
+	dir := filepath.Join(runs.Trail{ColonyRoot: colonyRoot, TraceID: proposal.Trail}.Root(), "artifacts", filepath.FromSlash(clean))
+	info, err := os.Lstat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("skills: proposal %s/%s has no bundle at %q", proposal.Trail, proposal.Name, proposal.Bundle)
+		}
+		return "", fmt.Errorf("skills: inspect proposal %s/%s bundle: %w", proposal.Trail, proposal.Name, err)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return "", fmt.Errorf("skills: proposal %s/%s bundle is a symbolic link", proposal.Trail, proposal.Name)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("skills: proposal %s/%s bundle is not a directory", proposal.Trail, proposal.Name)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ManifestName))
+	if err != nil {
+		return "", fmt.Errorf("skills: read proposal %s/%s %s: %w", proposal.Trail, proposal.Name, ManifestName, err)
+	}
+	_, body, ok := splitFrontmatter(string(data))
+	if !ok {
+		return "", fmt.Errorf(
+			"skills: proposal %s/%s %s must begin with a --- frontmatter block closed by ---",
+			proposal.Trail, proposal.Name, ManifestName,
+		)
+	}
+	return body, nil
 }
 
 // bundleEntryIssues reports bundle entries that a procedure cannot consist of.

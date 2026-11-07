@@ -39,6 +39,8 @@ import type {
 	RunSummary,
 	RuntimeStatus,
 	Session,
+	SkillProposalDetail,
+	SkillsInventory,
 	StartTaskResult,
 	StopSessionResult,
 	SystemView,
@@ -608,4 +610,28 @@ export function acceptInvite(inviteId: string): Promise<AcceptInviteResult> {
 
 export function rejectInvite(inviteId: string): Promise<Invite> {
 	return post<Invite>(`/invites/${encodeURIComponent(inviteId)}/reject`, {});
+}
+
+/**
+ * The colony skill store and every proposal the trails hold, read together.
+ *
+ * The inventory half is the server's shared `skills.BuildInventory` — the same
+ * read `paseka skills list` makes — so the console cannot disagree with the
+ * shell about a skill's state, the roles that carry it, or its provenance. The
+ * proposals half is the trails' discovery and decision data; an unreadable trail
+ * arrives on `proposalIssues` rather than vanishing.
+ */
+export function getSkills(): Promise<SkillsInventory> {
+	return request<SkillsInventory>('/skills');
+}
+
+/**
+ * One proposal opened read-only: its row, the `SKILL.md` body, and — when the
+ * bundle cannot be read — the reason it could not be. A missing bundle is a
+ * proposal state, so it arrives on `bodyError` rather than as a failed request.
+ */
+export function getSkillProposal(trail: string, name: string): Promise<SkillProposalDetail> {
+	return request<SkillProposalDetail>(
+		`/skills/proposals/${encodeURIComponent(trail)}/${encodeURIComponent(name)}`
+	);
 }

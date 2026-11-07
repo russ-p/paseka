@@ -103,6 +103,8 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/events", apiHandler.handleEvents)
 	mux.HandleFunc("/api/bees", apiHandler.handleBees)
 	mux.HandleFunc("/api/bees/", apiHandler.handleBeeByID)
+	mux.HandleFunc("/api/skills", apiHandler.handleSkills)
+	mux.HandleFunc("/api/skills/proposals/", apiHandler.handleSkillProposal)
 	mux.HandleFunc("/api/config", apiHandler.handleConfig)
 	mux.HandleFunc("/api/colony/topology", apiHandler.handleColonyTopology)
 	mux.HandleFunc("/api/sessions", apiHandler.handleSessions)
