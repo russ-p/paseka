@@ -25,16 +25,17 @@ func newNucCmd() *cobra.Command {
 
 func newNucExportCmd() *cobra.Command {
 	var (
-		startDir    string
-		outPath     string
-		beesFilter  string
-		cuesFilter  string
-		name        string
-		description string
+		startDir     string
+		outPath      string
+		beesFilter   string
+		cuesFilter   string
+		skillsFilter string
+		name         string
+		description  string
 	)
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export colony bees, prompts, and cues into a nuc file",
+		Short: "Export colony bees, prompts, cues, and skills into a nuc file",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := colony.ResolveContext(startDir)
 			if err != nil {
@@ -42,12 +43,14 @@ func newNucExportCmd() *cobra.Command {
 			}
 			bees := splitCommaList(beesFilter)
 			cues := splitCommaList(cuesFilter)
+			skillRefs := splitCommaList(skillsFilter)
 			doc, err := nuc.ExportFromColony(nuc.ExportOptions{
 				ColonyRoot:  ctx.ColonyRoot,
 				Name:        name,
 				Description: description,
 				Bees:        bees,
 				Cues:        cues,
+				Skills:      skillRefs,
 			})
 			if err != nil {
 				return err
@@ -71,6 +74,7 @@ func newNucExportCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&outPath, "output", "o", "", "write nuc file (default: stdout)")
 	cmd.Flags().StringVar(&beesFilter, "bees", "", "comma-separated bee roles to export (default: all)")
 	cmd.Flags().StringVar(&cuesFilter, "cues", "", "comma-separated cue ids to export (default: all when present)")
+	cmd.Flags().StringVar(&skillsFilter, "skills", "", "comma-separated skill references added to the roles' resolved set")
 	cmd.Flags().StringVar(&name, "name", "", "nuc metadata.name (default: colony slug)")
 	cmd.Flags().StringVar(&description, "description", "", "nuc metadata.description")
 	return cmd
@@ -113,7 +117,7 @@ func newNucImportCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing bee, prompt, and cue files")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing bee, prompt, cue, and skill entries")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show import plan without writing files")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "list created, skipped, and overwritten paths")
 	return cmd

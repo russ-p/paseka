@@ -484,6 +484,14 @@ func hashInstallContent(body string, files []installFile) (string, error) {
 // writeProvenance adds or replaces the provenance keys in a skill's metadata
 // while preserving every other frontmatter key and the body byte-for-byte.
 func writeProvenance(manifest []byte, provenance map[string]string) ([]byte, error) {
+	return writeProvenanceEdits(manifest, provenance, nil)
+}
+
+// writeProvenanceEdits sets and removes metadata keys while preserving every
+// other frontmatter key and the body byte-for-byte. Removal exists for a nuc
+// install: a carried proposal's trail, role, and approval time describe the
+// colony it came from, not this one.
+func writeProvenanceEdits(manifest []byte, provenance map[string]string, remove []string) ([]byte, error) {
 	front, body, ok := splitFrontmatter(string(manifest))
 	if !ok {
 		return nil, fmt.Errorf("%s must begin with a --- frontmatter block closed by ---", ManifestName)
@@ -513,6 +521,9 @@ func writeProvenance(manifest []byte, provenance map[string]string) ([]byte, err
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	for _, key := range remove {
+		removeMappingKey(metadata, key)
+	}
 	for _, key := range keys {
 		setMappingString(metadata, key, provenance[key])
 	}
@@ -539,6 +550,16 @@ func mappingChild(mapping *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+// removeMappingKey drops a mapping entry when it is present.
+func removeMappingKey(mapping *yaml.Node, key string) {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+			return
+		}
+	}
 }
 
 // setMappingString replaces a mapping entry's value with a string scalar, or

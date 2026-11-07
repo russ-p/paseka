@@ -523,3 +523,13 @@ The command refuses:
 - a trail with another configuration change pending, or one where an execution blocker holds activation, because a queued trial is not a result.
 
 `--dry-run` prints the same plan — destination, revision, file diff, and the exact decision lines — and writes nothing. The store and the working tree are byte-identical before and after either form.
+
+## 20. Skills from a Nuc
+
+A portable Nuc pack may carry skills alongside bees, prompts, and cues ([nuc guide](nuc.md)). Export packs the skills the exported roles resolve to, plus any `--skills` reference; a role with no skills adds no skills section, so a pack without skills imports exactly as before.
+
+`paseka nuc import` installs every carried skill directory into `.paseka/skills/<name>/` with its `SKILL.md` and every supporting file. The whole pack is validated with the same rule set a store scan uses before the first byte is written, so one invalid skill refuses the pack and leaves the colony untouched. A skill name or relative path that would escape the store is refused.
+
+An imported skill gets `source: nuc` and a freshly computed `procedure_hash` in its own `metadata`. Proposal provenance — `trail`, `role`, and `approved_at` — is removed because it belongs to the colony the pack came from; every other metadata key is preserved. The hash covers the body and supporting files with the frontmatter excluded, so writing provenance cannot change it, and `doctor` reports a later hand edit as a `procedure hash mismatch`, exactly as it does for an approved proposal.
+
+The import follows the pack's conflict policy at skill-directory granularity: an existing skill of the same name is skipped without `--force`, and replaced whole with `--force`. `--dry-run` lists the skill files it would create or overwrite beside the bee, prompt, and cue actions and writes nothing.

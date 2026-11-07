@@ -66,5 +66,25 @@ func (d Document) Validate() error {
 			return fmt.Errorf("nuc: cue %q body is empty", id)
 		}
 	}
+	for name, files := range d.Spec.Skills {
+		if err := validateSkillName(name); err != nil {
+			return err
+		}
+		if len(files) == 0 {
+			return fmt.Errorf("nuc: skill %q carries no files", name)
+		}
+		manifest, ok := files["SKILL.md"]
+		if !ok {
+			return fmt.Errorf("nuc: skill %q has no SKILL.md", name)
+		}
+		if strings.TrimSpace(manifest) == "" {
+			return fmt.Errorf("nuc: skill %q SKILL.md is empty", name)
+		}
+		for rel := range files {
+			if err := validateSkillFilePath(rel); err != nil {
+				return fmt.Errorf("nuc: skill %q: %w", name, err)
+			}
+		}
+	}
 	return nil
 }
