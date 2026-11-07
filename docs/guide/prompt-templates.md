@@ -60,6 +60,8 @@ defaults:
 
 When `system_template` is unset, behavior matches the previous single-template model (full prompt as positional argv only).
 
+The runtime appends its own skills advertisement after the rendered system template — a distinct section the runtime owns, never a template file. See [colony skills §6](skills.md#6-delivery-the-system-prompt-advertisement): a bee with no `system_template` still receives that section as its whole system prompt.
+
 ---
 
 ## 3. Supported variables

@@ -1,6 +1,7 @@
 package launch_test
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -275,6 +276,37 @@ func TestResolveScriptEnvLayersPasekaContract(t *testing.T) {
 		if env[k] != v {
 			t.Fatalf("env %s = %q, want %q", k, env[k], v)
 		}
+	}
+}
+
+// TestResolveScriptEnvCarriesSkillManifest pins that the launch plan hands the
+// resolved skill set to the script child as data: one entry per skill with the
+// name, description, and absolute frozen path, in one JSON value.
+func TestResolveScriptEnvCarriesSkillManifest(t *testing.T) {
+	req := baseRequest(t, "script", launch.AFK)
+	req.Bee.Command = parseCommand(t, "[/bin/true]")
+	req.SkillRefs = []adapters.SkillRef{
+		{
+			Name:        "paseka-release",
+			Description: "Run the colony release procedure.",
+			Path:        "/colony/.paseka/skills/paseka release/SKILL.md",
+		},
+	}
+
+	plan, err := launch.ResolveLaunch(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := envMap(plan.Env)[adapters.SkillManifestEnv]
+	if value == "" {
+		t.Fatalf("%s missing from plan env: %v", adapters.SkillManifestEnv, plan.Env)
+	}
+	var got []adapters.SkillRef
+	if err := json.Unmarshal([]byte(value), &got); err != nil {
+		t.Fatalf("manifest is not JSON: %v\n%s", err, value)
+	}
+	if len(got) != 1 || got[0] != req.SkillRefs[0] {
+		t.Fatalf("manifest = %+v, want %+v", got, req.SkillRefs)
 	}
 }
 

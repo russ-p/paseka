@@ -69,6 +69,10 @@ type Request struct {
 	// Prompt is the trimmed continue line.
 	Prompt       string
 	SystemPrompt string
+	// SkillRefs carries the resolved skill set as data for adapters that
+	// receive it through the environment (the script adapter). It is the same
+	// set the advertisement describes, with absolute frozen paths.
+	SkillRefs []adapters.SkillRef
 	// Resume suppresses the provider prompt join and the command template
 	// override, matching interactive resume semantics.
 	Resume bool
@@ -299,6 +303,7 @@ func resolveEnv(req Request, params adapters.RunParams, spec adapters.LaunchSpec
 			TraceID:    req.RunDir.TraceID,
 			AgentID:    req.RunDir.AgentID,
 			TaskID:     req.TaskID,
+			SkillRefs:  req.SkillRefs,
 		}, req.RunDir)
 	}
 	sort.Strings(redacted)

@@ -190,6 +190,69 @@ func TestRenderSystemResolved(t *testing.T) {
 	}
 }
 
+func TestRenderSystemResolvedAppendsSkillsSection(t *testing.T) {
+	root := t.TempDir()
+	writePromptTree(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".paseka/prompts/scout-system.md"),
+		[]byte("Role instructions: {{.Bee}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader, err := prompts.NewLoader(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("section follows the role instructions", func(t *testing.T) {
+		got, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
+			BeeTemplate:   "scout-system.md",
+			SkillsSection: "## Available skills\n\n- paseka-release: Release.",
+		}, prompts.Context{Bee: "scout"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		instructions := strings.Index(got, "Role instructions: scout")
+		section := strings.Index(got, "## Available skills")
+		if instructions < 0 || section < 0 || section < instructions {
+			t.Fatalf("section is not after the role instructions:\n%s", got)
+		}
+	})
+
+	t.Run("no system template makes the section the whole prompt", func(t *testing.T) {
+		got, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
+			SkillsSection: "## Available skills\n\n- paseka-release: Release.",
+		}, prompts.Context{Bee: "scout"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(got, "## Available skills") {
+			t.Fatalf("system prompt = %q", got)
+		}
+	})
+
+	t.Run("no section leaves the role instructions unchanged", func(t *testing.T) {
+		got, err := loader.RenderSystemResolved(prompts.SystemResolveInput{
+			BeeTemplate: "scout-system.md",
+		}, prompts.Context{Bee: "scout"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "Role instructions: scout" {
+			t.Fatalf("system prompt = %q", got)
+		}
+	})
+
+	t.Run("no template and no section stays empty", func(t *testing.T) {
+		got, err := loader.RenderSystemResolved(prompts.SystemResolveInput{}, prompts.Context{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "" {
+			t.Fatalf("system prompt = %q", got)
+		}
+	})
+}
+
 func TestRenderInsights(t *testing.T) {
 	root := t.TempDir()
 	writePromptTree(t, root)

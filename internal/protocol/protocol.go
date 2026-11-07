@@ -125,6 +125,11 @@ type Request struct {
 	ResultPath   string    `json:"resultPath"`
 	EventLogPath string    `json:"eventLogPath"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// Skills names the skills this run was offered, resolved from the trail's
+	// frozen configuration. It is written by both the unattended dispatcher and
+	// the interactive session manager so an AFK run and a HITL session carry the
+	// same field, and it stays readable after the role's list changes.
+	Skills []string `json:"skills,omitempty"`
 }
 
 // ArtifactRef points to a normalized output artifact.
@@ -190,6 +195,11 @@ type Result struct {
 	// Contract is the runtime-owned completion-contract verdict, absent when
 	// the bee declares no contract or the run was never finalized.
 	Contract *ContractRecord `json:"contract,omitempty"`
+	// SkillsUsed is the deduplicated set of skills the run loaded through
+	// `paseka skills load`, folded in from the run's skills-used.ndjson at
+	// finalize. It is absent when the runtime could not observe a load: that is
+	// "not available", never "none", and usage attribution may still add to it.
+	SkillsUsed []string `json:"skillsUsed,omitempty"`
 	Provenance
 }
 

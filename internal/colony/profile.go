@@ -48,22 +48,53 @@ type ProfileLayers struct {
 
 // ColonyProfile is the committed overlay schema (.paseka/profiles/<name>.yaml).
 type ColonyProfile struct {
-	Adapter      string
-	Params       map[string]any
-	ModelAliases map[string]string
-	Bees         map[string]BeeProfileOverlay
+	Adapter        string
+	Params         map[string]any
+	ModelAliases   map[string]string
+	Skills         SkillSelection
+	SkillsDelivery string
+	Bees           map[string]BeeProfileOverlay
 }
 
-// BeeProfileOverlay is a per-role adapter/params exception.
+// BeeProfileOverlay is a per-role adapter/params/skills exception.
 type BeeProfileOverlay struct {
 	Adapter string
 	Params  map[string]any
+	Skills  SkillSelection
 }
 
-// HomeProfileConfig overlays nats and model_aliases from a home profile.
+// HomeProfileConfig overlays nats, model_aliases, skill selection, and
+// per-role skill exceptions from a home profile.
 type HomeProfileConfig struct {
-	NATS         NATSConfig        `yaml:"nats"`
-	ModelAliases map[string]string `yaml:"model_aliases"`
+	NATS           NATSConfig                       `yaml:"nats"`
+	ModelAliases   map[string]string                `yaml:"model_aliases"`
+	Skills         SkillSelection                   `yaml:"skills"`
+	SkillsDelivery string                           `yaml:"skills_delivery"`
+	Bees           map[string]HomeBeeProfileOverlay `yaml:"bees"`
+}
+
+// HomeBeeProfileOverlay is a per-role home-profile skill exception.
+type HomeBeeProfileOverlay struct {
+	Skills SkillSelection `yaml:"skills"`
+}
+
+// roleSkills returns the profile's own skill list for a role, when the profile
+// declared one. An absent entry, or an entry without `skills`, leaves the lower
+// layer in force.
+func (p ColonyProfile) roleSkills(role string) (SkillSelection, bool) {
+	entry, ok := p.Bees[role]
+	if !ok || !entry.Skills.Present {
+		return SkillSelection{}, false
+	}
+	return entry.Skills, true
+}
+
+func (p HomeProfileConfig) roleSkills(role string) (SkillSelection, bool) {
+	entry, ok := p.Bees[role]
+	if !ok || !entry.Skills.Present {
+		return SkillSelection{}, false
+	}
+	return entry.Skills, true
 }
 
 // ProfileApplyInfo is per-bee remap/skip result for doctor.
@@ -247,6 +278,34 @@ func formatAvailableProfiles(colonyNames, homeNames []string) string {
 	return fmt.Sprintf("colony: %s; home: %s", colonyPart, homePart)
 }
 
+// ColonyProfilePath returns the committed profile file for a colony root.
+func ColonyProfilePath(colonyRoot, name string) string {
+	return colonyProfilePath(colonyRoot, name)
+}
+
+// HomeProfileConfigPath returns the machine-local config.yaml of one home
+// profile. It is the file whose skill fields a trail captures, so a run can
+// resolve the effective selection from the frozen copy.
+func HomeProfileConfigPath(slug, name string) (string, error) {
+	dir, err := homeProfileDir(slug, name)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.yaml"), nil
+}
+
+// LoadColonyProfileFile reads one committed profile file. It serves the live
+// colony and a trail's frozen copy alike; only the path differs.
+func LoadColonyProfileFile(path string) (ColonyProfile, error) {
+	return loadColonyProfileFile(path)
+}
+
+// LoadHomeProfileConfigFile reads one home profile config. It serves the live
+// machine-local file and a trail's frozen copy alike.
+func LoadHomeProfileConfigFile(path string) (HomeProfileConfig, error) {
+	return loadHomeProfileConfig(path)
+}
+
 func loadColonyProfileFile(path string) (ColonyProfile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -257,10 +316,12 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 		return ColonyProfile{}, fmt.Errorf("colony: parse profile %s: %w", path, err)
 	}
 	allowed := map[string]struct{}{
-		"adapter":       {},
-		"params":        {},
-		"model_aliases": {},
-		"bees":          {},
+		"adapter":         {},
+		"params":          {},
+		"model_aliases":   {},
+		"skills":          {},
+		"skills_delivery": {},
+		"bees":            {},
 	}
 	for _, k := range keys {
 		if _, ok := allowed[k]; !ok {
@@ -269,10 +330,12 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 	}
 
 	var raw struct {
-		Adapter      string                    `yaml:"adapter"`
-		Params       map[string]any            `yaml:"params"`
-		ModelAliases map[string]string         `yaml:"model_aliases"`
-		Bees         map[string]map[string]any `yaml:"bees"`
+		Adapter        string                    `yaml:"adapter"`
+		Params         map[string]any            `yaml:"params"`
+		ModelAliases   map[string]string         `yaml:"model_aliases"`
+		Skills         SkillSelection            `yaml:"skills"`
+		SkillsDelivery string                    `yaml:"skills_delivery"`
+		Bees           map[string]map[string]any `yaml:"bees"`
 	}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return ColonyProfile{}, fmt.Errorf("colony: parse profile %s: %w", path, err)
@@ -280,12 +343,17 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 	if err := validateProfileAdapter(raw.Adapter); err != nil {
 		return ColonyProfile{}, fmt.Errorf("colony: profile %s: %w", path, err)
 	}
+	if err := ValidateSkillsDelivery(raw.SkillsDelivery); err != nil {
+		return ColonyProfile{}, fmt.Errorf("colony: profile %s: %w", path, err)
+	}
 
 	out := ColonyProfile{
-		Adapter:      strings.TrimSpace(raw.Adapter),
-		Params:       raw.Params,
-		ModelAliases: NormalizeModelAliases(raw.ModelAliases),
-		Bees:         map[string]BeeProfileOverlay{},
+		Adapter:        strings.TrimSpace(raw.Adapter),
+		Params:         raw.Params,
+		ModelAliases:   NormalizeModelAliases(raw.ModelAliases),
+		Skills:         raw.Skills,
+		SkillsDelivery: strings.TrimSpace(raw.SkillsDelivery),
+		Bees:           map[string]BeeProfileOverlay{},
 	}
 	if err := ValidateRunParams(out.Params); err != nil {
 		return ColonyProfile{}, fmt.Errorf("colony: profile %s: %w", path, err)
@@ -293,7 +361,7 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 	if err := ValidateModelAliases(out.ModelAliases); err != nil {
 		return ColonyProfile{}, fmt.Errorf("colony: profile %s: %w", path, err)
 	}
-	beeAllowed := map[string]struct{}{"adapter": {}, "params": {}}
+	beeAllowed := map[string]struct{}{"adapter": {}, "params": {}, "skills": {}}
 	for role, entry := range raw.Bees {
 		if err := validateRole(role); err != nil {
 			return ColonyProfile{}, fmt.Errorf("colony: profile %s: %w", path, err)
@@ -324,6 +392,13 @@ func loadColonyProfileFile(path string) (ColonyProfile, error) {
 			}
 			overlay.Params = params
 		}
+		if v, ok := entry["skills"]; ok {
+			skills, err := skillSelectionFromAny(v)
+			if err != nil {
+				return ColonyProfile{}, fmt.Errorf("colony: profile %s: bees.%s.skills: %w", path, role, err)
+			}
+			overlay.Skills = skills
+		}
 		out.Bees[role] = overlay
 	}
 	return out, nil
@@ -338,21 +413,61 @@ func loadHomeProfileConfig(path string) (HomeProfileConfig, error) {
 	if err != nil {
 		return HomeProfileConfig{}, fmt.Errorf("colony: parse profile %s: %w", path, err)
 	}
-	allowed := map[string]struct{}{"nats": {}, "model_aliases": {}}
+	allowed := map[string]struct{}{
+		"nats":            {},
+		"model_aliases":   {},
+		"skills":          {},
+		"skills_delivery": {},
+		"bees":            {},
+	}
 	for _, k := range keys {
 		if _, ok := allowed[k]; !ok {
 			return HomeProfileConfig{}, fmt.Errorf("colony: home profile %s: forbidden key %q", path, k)
 		}
 	}
-	var raw HomeProfileConfig
+	var raw struct {
+		NATS           NATSConfig                `yaml:"nats"`
+		ModelAliases   map[string]string         `yaml:"model_aliases"`
+		Skills         SkillSelection            `yaml:"skills"`
+		SkillsDelivery string                    `yaml:"skills_delivery"`
+		Bees           map[string]map[string]any `yaml:"bees"`
+	}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return HomeProfileConfig{}, fmt.Errorf("colony: parse profile %s: %w", path, err)
 	}
-	raw.ModelAliases = NormalizeModelAliases(raw.ModelAliases)
-	if err := ValidateModelAliases(raw.ModelAliases); err != nil {
+	if err := ValidateSkillsDelivery(raw.SkillsDelivery); err != nil {
 		return HomeProfileConfig{}, fmt.Errorf("colony: home profile %s: %w", path, err)
 	}
-	return raw, nil
+	out := HomeProfileConfig{
+		NATS:           raw.NATS,
+		ModelAliases:   NormalizeModelAliases(raw.ModelAliases),
+		Skills:         raw.Skills,
+		SkillsDelivery: strings.TrimSpace(raw.SkillsDelivery),
+		Bees:           map[string]HomeBeeProfileOverlay{},
+	}
+	if err := ValidateModelAliases(out.ModelAliases); err != nil {
+		return HomeProfileConfig{}, fmt.Errorf("colony: home profile %s: %w", path, err)
+	}
+	for role, entry := range raw.Bees {
+		if err := validateRole(role); err != nil {
+			return HomeProfileConfig{}, fmt.Errorf("colony: home profile %s: %w", path, err)
+		}
+		for k := range entry {
+			if k != "skills" {
+				return HomeProfileConfig{}, fmt.Errorf("colony: home profile %s: bees.%s: forbidden key %q", path, role, k)
+			}
+		}
+		overlay := HomeBeeProfileOverlay{}
+		if v, ok := entry["skills"]; ok {
+			skills, err := skillSelectionFromAny(v)
+			if err != nil {
+				return HomeProfileConfig{}, fmt.Errorf("colony: home profile %s: bees.%s.skills: %w", path, role, err)
+			}
+			overlay.Skills = skills
+		}
+		out.Bees[role] = overlay
+	}
+	return out, nil
 }
 
 func yamlTopLevelKeys(data []byte) ([]string, error) {

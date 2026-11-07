@@ -24,6 +24,7 @@ const (
 	StatusFileName       = "status.json"
 	RequestFileName      = "request.json"
 	EventsFileName       = "events.ndjson"
+	SkillsUsedFileName   = "skills-used.ndjson"
 	ResultJSONFileName   = "result.json"
 	SessionFileName      = "session.json"
 	TranscriptFileName   = "transcript.ndjson"
@@ -50,6 +51,7 @@ func (d Dir) MetaPath() string         { return filepath.Join(d.Root(), MetaFile
 func (d Dir) StatusPath() string       { return filepath.Join(d.Root(), StatusFileName) }
 func (d Dir) RequestPath() string      { return filepath.Join(d.Root(), RequestFileName) }
 func (d Dir) EventsPath() string       { return filepath.Join(d.Root(), EventsFileName) }
+func (d Dir) SkillsUsedPath() string   { return filepath.Join(d.Root(), SkillsUsedFileName) }
 func (d Dir) ResultJSONPath() string   { return filepath.Join(d.Root(), ResultJSONFileName) }
 func (d Dir) SessionPath() string      { return filepath.Join(d.Root(), SessionFileName) }
 func (d Dir) TranscriptPath() string   { return filepath.Join(d.Root(), TranscriptFileName) }
@@ -82,7 +84,7 @@ func (d Dir) Prepare() error {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return fmt.Errorf("runs: mkdir %s: %w", root, err)
 	}
-	for _, path := range []string{d.ResultPath(), d.legacyResultPath(), d.ResultJSONPath(), d.EventsPath(), d.CheckLogPath()} {
+	for _, path := range []string{d.ResultPath(), d.legacyResultPath(), d.ResultJSONPath(), d.EventsPath(), d.SkillsUsedPath(), d.CheckLogPath()} {
 		_ = os.Remove(path)
 	}
 	return nil

@@ -231,6 +231,7 @@ func (d *Dispatcher) DispatchColonyBee(ctx context.Context, ctxColony colony.Con
 		TrailInventory:       req.TrailInventory,
 		PolicyParams:         req.PolicyParams,
 		Profile:              execColony.Profile,
+		Slug:                 execColony.Slug,
 		Raw:                  req.Raw,
 		ProfileApply:         profileApply,
 		Registry:             registry,

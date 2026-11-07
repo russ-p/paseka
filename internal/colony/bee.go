@@ -36,6 +36,11 @@ type Defaults struct {
 	EnergyBudget   int    `yaml:"energy_budget,omitempty"`
 	DefaultBee     string `yaml:"default_bee,omitempty"`
 	Delivery       string `yaml:"delivery,omitempty"`
+	// Skills is the colony default skill list. A bee that omits `skills`
+	// inherits it; a bee with an explicit list replaces it.
+	Skills SkillSelection `yaml:"skills,omitempty"`
+	// SkillsDelivery is `path` or `command`; absent means `path`.
+	SkillsDelivery string `yaml:"skills_delivery,omitempty"`
 }
 
 const (
@@ -85,6 +90,7 @@ type Bee struct {
 	Worktree           bool               `yaml:"worktree"`
 	Intents            []string           `yaml:"intents,omitempty"`
 	DefaultIntent      string             `yaml:"default_intent,omitempty"`
+	Skills             SkillSelection     `yaml:"skills,omitempty"`
 	Command            Command            `yaml:"command,omitempty"`
 	PostExec           Command            `yaml:"post_exec,omitempty"`
 	Checks             *Checks            `yaml:"checks,omitempty"`
@@ -121,6 +127,9 @@ func LoadColony(colonyRoot string) (Colony, error) {
 	}
 	if err := ValidateDelivery(c.Defaults.Delivery); err != nil {
 		return Colony{}, err
+	}
+	if err := ValidateSkillsDelivery(c.Defaults.SkillsDelivery); err != nil {
+		return Colony{}, fmt.Errorf("colony: defaults: %w", err)
 	}
 	if err := c.ValidatePolicies(colonyRoot); err != nil {
 		return Colony{}, err
@@ -237,6 +246,9 @@ func loadBee(colonyRoot, role string, mode beeLoadMode) (Bee, BeeLocalOverlay, e
 	localPath := filepath.Join(colonyRoot, pasekaDir, "bees", role+".local.yaml")
 	localData, err := os.ReadFile(localPath)
 	if err == nil {
+		if err := rejectBeeLocalSkills(localData, localPath); err != nil {
+			return Bee{}, BeeLocalOverlay{}, err
+		}
 		if err := yaml.Unmarshal(localData, &overlay); err != nil {
 			return Bee{}, BeeLocalOverlay{}, fmt.Errorf("colony: parse bee local %q: %w", role, err)
 		}
@@ -245,6 +257,26 @@ func loadBee(colonyRoot, role string, mode beeLoadMode) (Bee, BeeLocalOverlay, e
 	}
 
 	return bee, overlay, nil
+}
+
+// rejectBeeLocalSkills refuses a `skills` key in the machine-local bee overlay.
+// A profile is the supported per-machine override; a misplaced key must not
+// look like a gate, because the committed list would silently not be what the
+// host runs with.
+func rejectBeeLocalSkills(data []byte, path string) error {
+	keys, err := yamlTopLevelKeys(data)
+	if err != nil {
+		return nil // the parse error is reported by the caller's unmarshal
+	}
+	for _, key := range keys {
+		if key == "skills" {
+			return fmt.Errorf(
+				"colony: bee local %s: key %q is not allowed; a profile is the supported per-machine skill override",
+				path, key,
+			)
+		}
+	}
+	return nil
 }
 
 func validateRole(role string) error {

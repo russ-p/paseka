@@ -51,6 +51,10 @@ type DispatchRequest struct {
 	// closing round can name a stronger model without a second bee definition.
 	PolicyParams map[string]any
 	Profile      string
+	// Slug identifies the machine-local home directory. It is used to resolve a
+	// selected profile's skills for an unbound run; a bound run reads the
+	// profile from its frozen configuration instead.
+	Slug         string
 	ProfileApply func(colony.Bee) (colony.Bee, error)
 	// Registry is the trail-scoped bee registry, when the caller has one.
 	Registry *BeeRegistry

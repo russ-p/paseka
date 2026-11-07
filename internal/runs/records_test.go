@@ -297,3 +297,49 @@ func TestReconcileRunRecordsNeverRelabelsRecordedPrimaryFailure(t *testing.T) {
 		t.Fatalf("contract = %+v, want failed recorded with its own message", res.Contract)
 	}
 }
+
+func TestRecordSkillsUsedWritesTheDeduplicatedSetIdempotently(t *testing.T) {
+	root := t.TempDir()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-used", AgentID: "agent-1"}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteResult(protocol.Result{
+		TraceID: "trace-used",
+		AgentID: "agent-1",
+		Status:  protocol.StatusCompleted,
+		Summary: "done",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	names := []string{"paseka-release", "docs-style"}
+	if err := d.RecordSkillsUsed(names); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(d.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RecordSkillsUsed(names); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(d.ResultJSONPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("a repeated fold rewrote the record:\n%s\n---\n%s", before, after)
+	}
+
+	res, err := d.ReadResultJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.SkillsUsed) != 2 || res.SkillsUsed[0] != "paseka-release" || res.SkillsUsed[1] != "docs-style" {
+		t.Fatalf("skillsUsed = %v", res.SkillsUsed)
+	}
+	if res.Summary != "done" {
+		t.Fatalf("summary = %q, want the adapter's outcome preserved", res.Summary)
+	}
+}

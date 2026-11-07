@@ -29,6 +29,7 @@ import (
 	"github.com/russ-p/paseka/internal/prompts"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/skills"
 	"github.com/russ-p/paseka/internal/tasks"
 	"github.com/russ-p/paseka/internal/trailconfig"
 	"github.com/russ-p/paseka/internal/trailfork"
@@ -355,6 +356,30 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		return nil, err
 	}
 
+	// The session resolves the same gate as an unattended run, from the same
+	// frozen configuration, and fails before the PTY starts when the set is
+	// invalid. A resumed provider session keeps the advertisement its first turn
+	// received: the set is still resolved for the run record, but the section is
+	// not re-injected.
+	skillResolution, err := skills.ResolveRun(skills.RunInput{
+		ConfigRoot: execColony.ConfigRootPath(),
+		Slug:       ctxColony.Slug,
+		Frozen:     execColony.BoundConfig(),
+		Role:       req.Bee,
+		Profile:    execColony.Profile,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sessions: %w", err)
+	}
+	for _, disabled := range skillResolution.Disabled {
+		logging.Component("sessions").Warn("skill disabled and skipped",
+			logging.F("skill", disabled.Name),
+			logging.F("bee", bee.Role),
+			logging.F("trace", traceID),
+			logging.F("reason", disabled.Reason),
+		)
+	}
+
 	var rendered, renderedSystem string
 	if resuming {
 		rendered = strings.TrimSpace(req.Task)
@@ -397,6 +422,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 			BeeLocalTemplate: overlay.SystemTemplate,
 			BeeTemplate:      bee.SystemTemplate,
 			DefaultTemplate:  manifest.Defaults.SystemTemplate,
+			SkillsSection:    skillResolution.Section(skills.SectionContext{TraceID: traceID, AgentID: agentID}),
 		}, promptCtx)
 		if err != nil {
 			return nil, fmt.Errorf("sessions: render system prompt: %w", err)
@@ -429,6 +455,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		TaskID:       req.TaskID,
 		Prompt:       rendered,
 		SystemPrompt: renderedSystem,
+		SkillRefs:    skillResolution.AdapterSkills(),
 		Resume:       resuming,
 		RunDir:       runDir,
 	})
@@ -486,6 +513,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Model:                plan.ModelID,
 		ModelAlias:           plan.ModelAlias,
 		Profile:              execColony.Profile,
+		Skills:               skillResolution.Names(),
 		AttemptID:            provenance.AttemptID,
 		ConfigRef:            execColony.ConfigRef,
 		ConfigRevision:       execColony.ConfigRevision,
@@ -548,6 +576,7 @@ func (m *Manager) launch(ctx context.Context, req RunRequest, detached bool) (*a
 		Task:            req.Task,
 		Intent:          req.Intent,
 		Insights:        req.Insights,
+		Skills:          skillResolution.Names(),
 		ResumeSessionID: req.resumeProviderID,
 		Provenance:      provenance,
 	}

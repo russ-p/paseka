@@ -26,6 +26,7 @@ import (
 	"github.com/russ-p/paseka/internal/filelock"
 	"github.com/russ-p/paseka/internal/gitroot"
 	"github.com/russ-p/paseka/internal/runs"
+	"github.com/russ-p/paseka/internal/skills"
 	"gopkg.in/yaml.v3"
 )
 
@@ -974,6 +975,12 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 	if err := addTree(".paseka/skills", colony.PasekaPath(root, "skills"), nil); err != nil {
 		return nil, err
 	}
+	// The ledger is frozen with the store: a disable is part of the effective
+	// selection, so a running trail must keep the state it started with. It sits
+	// beside the store, so it is added as one file rather than through the tree.
+	if err := addFile(filepath.Join(".paseka", skills.LedgerName), skills.LedgerPath(root)); err != nil {
+		return nil, err
+	}
 	if err := addTree(".agents/skills", filepath.Join(root, ".agents", "skills"), nil); err != nil {
 		return nil, err
 	}
@@ -991,6 +998,16 @@ func collectSources(ctx colony.Context) ([]sourceFile, error) {
 			if profile != "" {
 				adapters := filepath.Join(home, "profiles", profile, "adapters")
 				if err := addTree(filepath.Join("home", "profiles", profile, "adapters"), adapters, yamlFile); err != nil {
+					return nil, err
+				}
+				// The selected home profile's config.yaml carries the skill
+				// selection and delivery mode. Freezing it is what makes the
+				// effective set reproducible, and it is a private input because
+				// home config never lives in the repository.
+				if err := addFile(
+					filepath.Join("home", "profiles", profile, "config.yaml"),
+					filepath.Join(home, "profiles", profile, "config.yaml"),
+				); err != nil {
 					return nil, err
 				}
 			}

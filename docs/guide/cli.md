@@ -64,7 +64,7 @@ Non-empty **`PASEKA_PROFILE`** selects a profile when the flags are omitted (fla
 
 | Command | NATS required? |
 | ------- | -------------- |
-| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage`, `inspect metrics` | No |
+| `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage`, `inspect metrics`, `skills` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
 | `paseka run`, `doctor`, `replay`, `verify`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
@@ -111,6 +111,14 @@ paseka
 ├── cue
 │   ├── list
 │   └── run <id> <text>
+├── skills
+│   ├── list
+│   ├── show <name>
+│   ├── load <name> --trace <traceId> --agent <agentId>
+│   ├── validate [reference|pattern|*]
+│   ├── disable <name> --reason <why>
+│   ├── enable <name>
+│   └── remove <name> [--force] [--dry-run]
 ├── signal
 ├── proposal
 │   ├── approve
@@ -507,7 +515,7 @@ Check NATS connectivity, JetStream resources, and colony bee wiring for the colo
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 
-**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning); **task dependencies** (warnings for a trail with a planned task whose `dependsOn` names an unknown, cancelled, or blocked task, or forms a cycle — the state that keeps the final gate closed).
+**Reports:** connection, JetStream, event stream, task-ledger KV bucket, object store bucket; **config profile** (effective name or none, layers loaded, remapped roles, skipped `script` / `command:` bees, available names); **code proposal wiring** (worktree ↔ kind mismatches as errors, bare `code.proposal` alias as warnings, missing subscribers / verification publishes as advisories); **standing trails** (warnings when a standing SIGNAL kind has only `worktree: true` subscribers, a standing tick bee publishes isolated `code.proposal`, or an isolated proposal already sits on a standing trail); **pull-request delivery** (unknown `defaults.delivery` is an error; `pull_request` without origin or home `forge.command` is a warning); **task dependencies** (warnings for a trail with a planned task whose `dependsOn` names an unknown, cancelled, or blocked task, or forms a cycle — the state that keeps the final gate closed); **skills** (the same store scan `paseka skills validate` uses — an invalid `SKILL.md`, a stray entry at the store root, or a budget breach — as errors).
 
 Exits with an error if any check fails.
 
@@ -601,6 +609,142 @@ paseka cue run daily-triage "tick $(date -I)"
 ```
 
 Standing cues seed honey on the first tick and replace remaining with `standing.stipend` on later ticks (`SIGNAL` / `energy.stipend`). The first seed also sets `INSIGHT/trace.title` from the cue description (or cue id) when the trail has no title yet. A killed standing trail refuses the run. A busy standing trail (open ledger task or live AFK on that id) refuses the run without burning stipend.
+
+---
+
+## `paseka skills`
+
+Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, budgets, and the two delivery modes: [Colony skills](skills.md).
+
+The reading verbs (`list`, `show`, `validate`) describe the live repository store. `load` is different: it serves a body to a named run from that run's frozen configuration, and it is the runtime route a `command`-mode advertisement points at.
+
+### `paseka skills list`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--json` | | Emit the inventory as JSON on stdout |
+
+Lists every skill in the repository store as a table of **name, state, roles, description**. The state is `ok`, `invalid` (with the reason from the same rule set `validate` uses), or `disabled` (with the ledger's reason). The roles column is computed from the role configurations on every run: it names every role whose selection resolves to the skill, and a role that lists `*` or a matching pattern is named against every skill it actually receives. A store-wide finding is printed after the table as a `store: …` line. Needs no NATS.
+
+`--json` emits the stable machine contract — `store`, a `skills` array (`name`, `state`, optional `reason`, `roles`, `description`), and an `issues` array:
+
+```bash
+paseka skills list
+paseka skills list --json
+```
+
+### `paseka skills show <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--colony` | `-C` | Colony resolution start directory |
+| `--path` | | Print only the resolved `SKILL.md` path |
+| `--json` | | Emit the skill as JSON on stdout |
+
+Prints one skill's metadata, its provenance, and its body without the frontmatter. Provenance comes from the skill's own `metadata.source`; a skill with no provenance record is `hand`. The reference must name one procedure: a pattern (`paseka-*`, `*`) is refused because a pattern names a set, and an unknown name is reported by name. An invalid skill is still shown, with its findings under `issues:`.
+
+`--path` prints one line — the absolute `SKILL.md` path — so a script can consume the location without parsing prose. Because `--path` means the path-only mode here, this verb's colony flag is `-C`/`--colony` rather than the group's usual `--path`. Needs no NATS.
+
+```bash
+paseka skills show paseka-release
+paseka skills show paseka-release --path
+paseka skills show paseka-release --json
+```
+
+### `paseka skills load <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony root, or a directory inside it |
+| `--trace` | | Flight trail id of the run (required) |
+| `--agent` | | Agent run id of the run (required) |
+
+Serves one procedure to a run and records that the run opened it. The reference is resolved against the configuration the run was offered — read from the run's recorded configuration reference — not the live store, so a later store edit or configuration application cannot make `load` disagree with what the run was advertised.
+
+On success it prints the absolute `SKILL.md` path, the skill directory, and the body without frontmatter:
+
+```text
+path: /repo/.paseka/runs/trace-abc123/config/tree/.paseka/skills/paseka-release/SKILL.md
+dir:  /repo/.paseka/runs/trace-abc123/config/tree/.paseka/skills/paseka-release
+
+# Release
+```
+
+The directory makes `scripts/`, `references/`, and `assets/` reachable while the path stays out of a `command`-mode advertisement. The command refuses a reference the run's role does not carry — including a pattern — with exit **2** and `skill_not_offered`.
+
+Each successful load appends `{name, contentHash, at}` to `.paseka/runs/<traceId>/<agentId>/skills-used.ndjson`, where `contentHash` is the SHA-256 of the served `SKILL.md` bytes. At finalize the runtime folds the log into `result.json` as the deduplicated `skillsUsed` set, first load winning.
+
+Colony resolution is `-C`, then `PASEKA_COLONY_ROOT`, then the nearest ancestor of the working directory holding both `.paseka/colony.yaml` and the run directory, so a run in a worktree is served by the primary checkout. With no candidate it exits 1 and names the roots tried, the trace, the agent, and the `-C` that fixes it. `load` speaks prose and works in either delivery mode.
+
+```bash
+paseka skills load paseka-release --trace trace-abc123 --agent agent-7f2c
+```
+
+### `paseka skills validate [reference|pattern|*]`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+
+Validates the live repository store with the one rule set the runtime uses. With no argument the whole store is checked; with a reference only the skills it names are checked, plus the store-wide budgets. A pattern that matches nothing is itself a failure. `*` alone is allowed to match an empty store. Needs no NATS.
+
+Exits non-zero on any invalid skill, unmatched reference, or budget breach, so it can guard a commit:
+
+```bash
+paseka skills validate
+paseka skills validate "paseka-*"
+paseka skills validate "*"
+```
+
+### `paseka skills disable <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--reason` | `-r` | Why the skill must not be offered (required) |
+
+Neutralises one skill without deleting it. The store entry stays in place, with its history, and the runtime stops offering it. The command writes a disabled record to the committed ledger, `.paseka/skills.index.json`, carrying the time and the reason; a role that still lists the skill is skipped and reported by `doctor` rather than failing the role, because the disable is the Beekeeper's own recorded decision.
+
+`disable` is a reversible flip: `paseka skills enable <name>` removes the record and restores the offer. It needs no preview, but it names the roles whose resolved set changes as it runs — a wildcard or pattern role appears against every skill it actually resolves to. The verb acts on one procedure, so a pattern (`paseka-*`, `*`) is refused. It never commits: the ledger change is left in the working tree for the Beekeeper.
+
+```bash
+paseka skills disable paseka-release --reason "release step 2 is wrong"
+```
+
+### `paseka skills enable <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+
+Clears a skill's disabled record from `.paseka/skills.index.json`, so the next resolution offers it again. It is the exact undo of `disable`: disable then enable leaves no ledger record behind. It names the roles whose resolved set changes and never commits. A pattern is refused; a skill that was not disabled is reported as unchanged.
+
+```bash
+paseka skills enable paseka-release
+```
+
+### `paseka skills remove <name>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--force` | | Remove even while roles still reference the skill |
+| `--dry-run` | | Print the plan without touching the store |
+
+Deletes one skill's store entry and its ledger record, leaving no orphan. It refuses while any role still references the skill and names those roles, because deleting it would silently strip a procedure from them; `--force` proceeds anyway and still reports the blast radius. It does not delete a trail's decisions about the skill.
+
+`--dry-run` prints the same plan — the store entry, the disabled record if there is one, the affected roles, and a refusal the real command would make — and leaves the store and ledger byte-identical. The verb acts on one procedure, so a pattern is refused.
+
+A removal that must be shared is a change the Beekeeper commits: `remove` deletes the directory and updates the ledger in the working tree, and never writes a commit.
+
+```bash
+paseka skills remove paseka-release             # refuses if a role references it
+paseka skills remove paseka-release --dry-run   # prints the plan, changes nothing
+paseka skills remove paseka-release --force     # proceeds and names the roles
+```
+
+The three mutating verbs read the committed ledger before they write. A **corrupt** ledger — bad JSON, an unknown schema version, or a record without `at`/`reason` — fails the command rather than being replaced, and no store entry is touched. A missing ledger is an empty one. See [Colony skills](skills.md#7-the-committed-ledger) for the record shape.
 
 ---
 
@@ -1259,7 +1403,7 @@ deletion uses `paseka purge`; `trail drop` refuses a trail without fork lineage.
 
 ## `paseka export`
 
-Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs, provider conversations) without changing the renderer.
+Write a self-contained report for one flight trail to the current working directory. The file includes trace overview, tasks, runs (oldest first), and the full event timeline (oldest first). Use `--format html` (default) for a styled HTML page, or `--format md` for Markdown suitable for agent chats. Use `--include` to add optional analysis slices (usage, durations, committed config snapshots, agent logs, provider conversations, per-run offered and used skills) without changing the renderer.
 
 Pass the flight trail id as a positional argument, matching `paseka replay <traceId>`. `--trace` is kept as an alternative; passing both is fine when they match, and passing two different ids is an error.
 
@@ -1272,7 +1416,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | ---- | ----- | -------- | ----------- |
 | `--trace` | | no | Flight trail id (alternative to the positional argument) |
 | `--format` | | | Export renderer: `html` (default) or `md` |
-| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `reasoning`, `patches`, `config` (repeatable or comma-separated) |
+| `--include` | | | Optional payload slices: `usage`, `durations`, `bees`, `colony`, `cues`, `artifacts`, `agent-logs`, `transcript`, `reasoning`, `patches`, `config`, `skills` (repeatable or comma-separated) |
 | `--path` | `-C` | | Colony resolution start directory |
 
 **Output file:** `paseka-export-<slug>-<traceId>.html` or `.md` (extension matches `--format`) in the current working directory.
@@ -1296,6 +1440,7 @@ paseka export --trace <traceId> [--format html|md] [--include ...] [-C <dir>]
 | `reasoning` | The same per-run **Conversation** section with **thinking blocks**: the dialogue request asks for text and reasoning through the dialogue-with-reasoning preset. A bare `reasoning` implies `transcript`, and spelling both is equivalent and produces one section. Reasoning is capped at 16 000 runes per part and shares the shared redaction path with text; a capped reasoning block is marked `truncated`. System turns and tool payloads stay out. Cursor records no reasoning parts, so a Cursor session renders an ordinary dialogue with no blocks and no omission; providers whose readers record thinking show it here. Independent of `agent-logs` and `transcript`. |
 | `patches` | Proposal patches under `.paseka/runs/<traceId>/proposals/` — one record per proposal attempt, with run identity, bee, AFK/HITL mode, proposal kind, workspace, base SHA, summary, size, capture time, and publication state. Bodies are inlined within per-patch and aggregate budgets; oversized, unsuitable-for-text, or unreadable entries keep their metadata and ref and say why. Filesystem-only: no broker is required, and a trail without a proposals directory reads as an empty slice. |
 | `config` | The trail's retained configuration versions: policy, revision, initial/active `ConfigRef`, and each snapshot's files. Committed procedure files are inlined; private inputs (home-scoped adapter recipes and skills, and gitignored `*.local.yaml` overlays) are listed by path with `omitted: private configuration input is not exported`, and an **Export omissions** section repeats every gap. Oversized, binary, missing, or corrupt entries say why instead of disappearing. Filesystem-only: no broker is required. |
+| `skills` | Two sections, both resolved from the run's own pinned configuration snapshot rather than the trail's current one. **Skills offered** lists, per run, the procedures that run was offered, with the name, description, and frozen `SKILL.md` path; a run that was offered nothing says `none` explicitly, and a run whose snapshot is missing, corrupt, or absent says why. **Skills used** lists, per run, the union of transcript evidence and the run's `skills-used.ndjson` load records, deduplicated by name with the first load winning. A tool call whose arguments name a file under the run's frozen skill directory — its `SKILL.md`, a `scripts/` entry, or a `references/`/`assets/` file — attributes that skill; the reading is lossless and separate from the Agent log's summarized arguments. Each used skill carries the evidence that attributed it and the body read from the frozen copy, with an omission reason when the body is unreadable. A command-mode run attributes from its load record even when its adapter has no transcript capability. A run whose usage cannot be determined says why (`no providerSessionId`, `unsupported`, `store not found`, …) rather than showing an empty set, because absence of evidence is not absence of use. Runs are isolated: one run's evidence never attributes another run's copy. A later store edit or removal does not change an existing export. Filesystem-only: no broker is required. |
 
 Default export omits configuration contents. A `config` export carries the
 trail's own retained copies, so it still works after the worktree is pruned or
@@ -1315,6 +1460,7 @@ paseka export trace-abc123 --include agent-logs --format md
 paseka export trace-abc123 --include transcript --format md
 paseka export trace-abc123 --include reasoning --format md
 paseka export trace-abc123 --include patches --format md
+paseka export trace-abc123 --include skills --format md
 paseka export trace-abc123 -C /path/to/repo
 paseka export --trace trace-abc123
 ```

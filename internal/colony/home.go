@@ -126,17 +126,20 @@ func (c OpenCodeAdapterConfig) Options() map[string]string {
 
 // Context binds project-local colony config with machine-local home config.
 type Context struct {
-	ColonyRoot    string
-	Slug          string
-	Home          HomeConfig
-	ModelAliases  map[string]string
-	Cursor        CursorAdapterConfig
-	Pi            PiAdapterConfig
-	Claude        ClaudeAdapterConfig
-	OpenCode      OpenCodeAdapterConfig
-	Profile       string
-	ProfileLayers ProfileLayers
-	colonyProfile ColonyProfile
+	ColonyRoot     string
+	Slug           string
+	Home           HomeConfig
+	ModelAliases   map[string]string
+	Cursor         CursorAdapterConfig
+	Pi             PiAdapterConfig
+	Claude         ClaudeAdapterConfig
+	OpenCode       OpenCodeAdapterConfig
+	Profile        string
+	ProfileLayers  ProfileLayers
+	colonyProfile  ColonyProfile
+	homeProfile    HomeProfileConfig
+	defaults       Defaults
+	manifestLoaded bool
 	// ConfigRoot, when set, is the materialized configuration tree an execution
 	// is bound to. It replaces ColonyRoot for configuration-file reads only.
 	ConfigRoot     string
@@ -214,14 +217,16 @@ func ResolveContext(startDir string) (Context, error) {
 	}
 
 	ctx := Context{
-		ColonyRoot:   colonyRoot,
-		Slug:         slug,
-		Home:         home,
-		ModelAliases: merged,
-		Cursor:       cursor,
-		Pi:           pi,
-		Claude:       claude,
-		OpenCode:     opencode,
+		ColonyRoot:     colonyRoot,
+		Slug:           slug,
+		Home:           home,
+		ModelAliases:   merged,
+		Cursor:         cursor,
+		Pi:             pi,
+		Claude:         claude,
+		OpenCode:       opencode,
+		defaults:       manifest.Defaults,
+		manifestLoaded: true,
 	}
 
 	name, err := selectedProfileName(ProcessProfile(), home.Profile)

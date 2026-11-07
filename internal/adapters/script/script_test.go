@@ -2,6 +2,7 @@ package script_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,5 +168,88 @@ func TestScriptAdapterRequiresCommand(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "command is required") {
 		t.Fatalf("err = %v, want command required", err)
+	}
+}
+
+func TestScriptAdapterExportsSkillManifest(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+
+	outPath := filepath.Join(root, "skills.json")
+	scriptPath := filepath.Join(root, "capture-skills.sh")
+	body := "#!/bin/sh\n" +
+		"printf '%s' \"$PASEKA_SKILLS\" > \"" + outPath + "\"\n" +
+		"echo done\n"
+	if err := os.WriteFile(scriptPath, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	refs := []adapters.SkillRef{
+		{
+			Name:        "paseka-release",
+			Description: "Run the colony release procedure.",
+			Path:        filepath.Join(root, ".paseka", "skills", "paseka release", "SKILL.md"),
+		},
+	}
+	a := script.New()
+	if _, err := a.Run(context.Background(), adapters.RunRequest{
+		Bee:        "oracle-guard",
+		ColonyRoot: root,
+		Workspace:  root,
+		TraceID:    "trace-skills",
+		AgentID:    "agent-skills",
+		Command:    []string{scriptPath},
+		SkillRefs:  refs,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []adapters.SkillRef
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("PASEKA_SKILLS is not JSON: %v\n%s", err, data)
+	}
+	if len(got) != 1 || got[0] != refs[0] {
+		t.Fatalf("manifest = %+v, want %+v", got, refs)
+	}
+	if !filepath.IsAbs(got[0].Path) {
+		t.Fatalf("manifest path is not absolute: %q", got[0].Path)
+	}
+}
+
+func TestScriptAdapterOmitsManifestWhenNoSkills(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+
+	outPath := filepath.Join(root, "skills.out")
+	scriptPath := filepath.Join(root, "capture-skills.sh")
+	body := "#!/bin/sh\n" +
+		"if [ \"${PASEKA_SKILLS+x}\" = x ]; then printf 'set' > \"" + outPath + "\"; else printf 'unset' > \"" + outPath + "\"; fi\n" +
+		"echo done\n"
+	if err := os.WriteFile(scriptPath, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	a := script.New()
+	if _, err := a.Run(context.Background(), adapters.RunRequest{
+		Bee:        "oracle-guard",
+		ColonyRoot: root,
+		Workspace:  root,
+		TraceID:    "trace-no-skills",
+		AgentID:    "agent-no-skills",
+		Command:    []string{scriptPath},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "unset" {
+		t.Fatalf("PASEKA_SKILLS = %q, want it absent for an empty set", data)
 	}
 }

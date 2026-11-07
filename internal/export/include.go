@@ -23,6 +23,10 @@ const (
 	IncludeReasoning IncludeKind = "reasoning"
 	IncludePatches   IncludeKind = "patches"
 	IncludeConfig    IncludeKind = "config"
+	// IncludeSkills adds the per-run offered-skills section. The set is resolved
+	// from each run's own pinned configuration snapshot, so a later store edit
+	// or removal does not change what an old export says.
+	IncludeSkills IncludeKind = "skills"
 )
 
 // IncludeSet is a normalized, deduplicated list of include tokens.
@@ -62,7 +66,7 @@ func ParseInclude(flags []string) (IncludeSet, error) {
 			}
 			kind := IncludeKind(part)
 			if !kind.valid() {
-				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs, transcript, reasoning, patches, config)", part)
+				return nil, fmt.Errorf("invalid --include %q (supported: usage, durations, bees, colony, cues, artifacts, agent-logs, transcript, reasoning, patches, config, skills)", part)
 			}
 			if _, ok := seen[kind]; ok {
 				continue
@@ -102,7 +106,7 @@ func normalizeInclude(in IncludeSet) IncludeSet {
 
 func (k IncludeKind) valid() bool {
 	switch k {
-	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs, IncludeTranscript, IncludeReasoning, IncludePatches, IncludeConfig:
+	case IncludeUsage, IncludeDurations, IncludeBees, IncludeColony, IncludeCues, IncludeArtifacts, IncludeAgentLogs, IncludeTranscript, IncludeReasoning, IncludePatches, IncludeConfig, IncludeSkills:
 		return true
 	default:
 		return false

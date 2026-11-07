@@ -15,7 +15,7 @@ import (
 func main() {
 	if err := newRoot().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitStatus(err))
 	}
 }
 
@@ -72,6 +72,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newVerifyCmd())
 	root.AddCommand(newSignalCmd())
 	root.AddCommand(newCueCmd())
+	root.AddCommand(newSkillsCmd())
 	root.AddCommand(newEventCmd())
 	root.AddCommand(newProposalCmd())
 	root.AddCommand(newEnergyCmd())
