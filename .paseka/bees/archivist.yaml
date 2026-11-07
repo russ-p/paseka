@@ -9,9 +9,18 @@ worktree: false
 publishes:
   - type: INSIGHT
     kind: context.note
+  - type: INSIGHT
+    kind: skill.proposed
 completion_contract:
   required:
     - type: INSIGHT
       kind_one_of:
         - context.note
       count: 1
+  intents:
+    skill:
+      required:
+        - type: INSIGHT
+          kind_one_of:
+            - skill.proposed
+          count: 1

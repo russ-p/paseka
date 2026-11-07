@@ -59,6 +59,7 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | Type | `payload.kind` | Required payload | Main producer / consumer |
 | ---- | -------------- | ---------------- | ------------------------ |
 | `INSIGHT` | `task.plan` | non-empty `tasks[]`; each task has `taskId`, `title`, optional `phase` | planner → task ledger |
+| `INSIGHT` | `skill.proposed` | `name`, `description`, `reason`, comb-relative `bundle`, `procedureHash` | archivist → proposal inventory / approval |
 | `SIGNAL` | `task.ready` | `taskId` | CLI/reactor → task dispatcher |
 | `SIGNAL` | `task.status` | `taskId`, `status` | runtime → task ledger |
 | `VERIFICATION` | `task.completed` | `taskId` | runtime/reviewer → task ledger |
@@ -83,6 +84,8 @@ These kinds have stable type and payload validation in `internal/protocol`.
 | `SIGNAL` | `trail.fork.approve` | `requestId` | reserved operator sender → fork creation |
 | `SIGNAL` | `trail.fork.reject` | `requestId` | reserved operator sender → pending request refused |
 | `SIGNAL` | `trail.fork.cancel` | `requestId` | reserved operator sender → pending request cancelled |
+
+`INSIGHT/skill.proposed` is a proposal discovery, not an install. It names the `SKILL.md` bundle the Archivist wrote into the trail's artifact comb: `bundle` is a path relative to `.paseka/runs/<traceId>/artifacts/`, and `procedureHash` is the bundle's procedure-content hash (the `SKILL.md` body plus supporting files in a stable order, frontmatter excluded). The runtime — never the Bee — writes the store after a Beekeeper decision. The kind is operational and never enters prompt memory.
 
 Narrative and operational `INSIGHT` kinds are catalogued separately in
 [INSIGHT kinds](insight-kinds.md) (`pr.body` is operational pull-request copy;

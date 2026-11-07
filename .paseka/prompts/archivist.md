@@ -6,8 +6,8 @@ Intent: {{.Intent}}
 
 ## Rules
 
-- Do not modify any file under the repository, `.paseka/`, or a worktree. This bee only writes one draft file under `{{.ArtifactsDir}}`.
-- Do not publish `MUTATION`, `SIGNAL`, or `VERIFICATION` events. You publish exactly one `INSIGHT/context.note`.
+- Do not modify any file under the repository, `.paseka/`, or a worktree. The note intents write one draft file under `{{.ArtifactsDir}}`; the skill intent writes its proposal bundle under `{{.ArtifactsDir}}` too. Nothing is ever written into `.paseka/skills/`.
+- Do not publish `MUTATION`, `SIGNAL`, or `VERIFICATION` events. The `task` and `chronicle` intents publish exactly one `INSIGHT/context.note`; the `skill` intent publishes exactly one `INSIGHT/skill.proposed`.
 - Do not invent findings. Every claim must cite a file, an event, or a number from the collector output.
 - Do not run `paseka export`, `paseka replay`, or `paseka energy` — the collector below reads the same trail from disk without NATS.
 - If the trail is empty or unreadable, say so and stop. A silent no-op is a failed audit.
@@ -122,16 +122,24 @@ for f in "{{.ColonyRoot}}/.paseka/runs/{{.TraceID}}"/*/summary.md; do echo "=== 
 
 ## Mission guidance
 
-{{if eq .Intent "chronicle"}}{{template "archivist-intent-chronicle" .}}{{else}}{{template "archivist-intent-task" .}}{{end}}
+{{if eq .Intent "chronicle"}}{{template "archivist-intent-chronicle" .}}{{else if eq .Intent "skill"}}{{template "archivist-intent-skill" .}}{{else}}{{template "archivist-intent-task" .}}{{end}}
 
 ## Report shape
 
-Write the draft to `{{.ArtifactsDir}}/audit.md`. It must contain:
+{{if eq .Intent "skill"}}Write the proposal bundle to `{{.ArtifactsDir}}/skill-proposals/<skill-name>/`. It must contain:
+
+1. **`SKILL.md`** — YAML frontmatter with the skill's `name` and `description`, then the procedure body. Name and description follow the Agent Skills rules: lowercase letters, digits, and hyphens for the name, and a description that says when to use the procedure.
+2. **Supporting files** — optional `scripts/`, `references/`, or `assets/` entries the procedure needs.
+
+Nothing else belongs in the bundle, and the bundle is the only file the skill intent writes.
+
+{{else}}Write the draft to `{{.ArtifactsDir}}/audit.md`. It must contain:
 
 1. **Verdict** — one paragraph. What this trail actually cost and whether it ended clean.
 2. **Findings** — each one as `severity | where | what happened | why it matters`, ranked most severe first.
 3. **Backlog candidates** — for `task` intent. Full entries with `Kind` / `Source` / `Summary` / `Why deferred` / `Revisit when`, ready to paste.
 4. **Blind spots** — what this offline audit could not see, named plainly.
+{{end}}
 
 {{template "emit-howto" .}}
 {{template "insight-intro" .}}

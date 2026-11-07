@@ -28,6 +28,7 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 | `trace.summary` | `INSIGHT` | Human-readable Flight Trail description for Console subtitle and merge commit body |
 | `pr.body` | `INSIGHT` | Markdown pull-request description (last-write-wins; not prompt memory) |
 | `worktree.branch` | `INSIGHT` | Git branch name for the trace isolated worktree (path stays `.paseka/worktrees/<traceId>/`) |
+| `skill.proposed` | `INSIGHT` | Proposed skill bundle written into a trail's artifact comb |
 
 `task.plan` is consumed by the Task Ledger and reactor. It is **not** auto-included in `{{.Insights}}` because it is structured queue data, not narrative memory.
 
@@ -38,6 +39,8 @@ This document defines the `INSIGHT` event taxonomy, how narrative insights diffe
 `pr.body` is operational pull-request copy (last-write-wins). It is **not** projected into `{{.Insights}}`. Payload `{ "kind": "pr.body", "body": "<markdown>" }` (non-empty after trim, max 8000). Publish uses latest `pr.body`, else `trace.summary`. Last AFK work task gets must-emit guidance via `{{.IsLastWorkTask}}` in init emit partials (prompt-level, not a completion contract). Do not subscribe with `dispatch: direct`. See [pull-request delivery](../guide/pull-request-delivery.md).
 
 `worktree.branch` is operational git metadata (last-write-wins). It is **not** projected into `{{.Insights}}`. Runtime resolves the branch for ensure, rename, merge, merge-diff, and PR head: latest valid insight, else default `paseka/<traceId>`. Scout/Drone emit when planning isolated work. See [specs/020-worktree-branch.md](../specs/020-worktree-branch.md).
+
+`skill.proposed` is the Archivist's proposal discovery. It is **not** projected into `{{.Insights}}` and does not route workflow: a proposal waits for a Beekeeper decision. Payload `{ "kind": "skill.proposed", "name": "...", "description": "...", "reason": "...", "bundle": "skill-proposals/<name>", "procedureHash": "<sha256>" }`, where `bundle` is relative to the trail's artifact comb and `procedureHash` is the bundle's procedure-content hash. A discovery that omits any of the five fields is refused at emit. See [skills](../guide/skills.md#15-proposing-a-skill) and [spec 041](../specs/041-skills-layer.md).
 
 ### Narrative (projected into `{{.Insights}}`)
 

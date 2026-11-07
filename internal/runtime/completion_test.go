@@ -148,6 +148,22 @@ func contractInsightEvent(t *testing.T, kind protocol.InsightKind) protocol.Even
 	return ev
 }
 
+func contractSkillProposedEvent(t *testing.T, name string) protocol.Event {
+	t.Helper()
+	ev, err := protocol.NewEvent("trace-contract", "agent-contract", 1, protocol.EventInsight, protocol.SkillProposedPayload{
+		Kind:          protocol.InsightSkillProposed,
+		Name:          name,
+		Description:   "Proposed procedure.",
+		Reason:        "Evidence from two runs.",
+		Bundle:        "skill-proposals/" + name,
+		ProcedureHash: "9f2c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
 func TestEnforceCompletionContractUsesDefaultIntent(t *testing.T) {
 	d := NewDispatcher()
 	dir := newContractTestRunDir(t)
@@ -218,6 +234,71 @@ func TestEnforceCompletionContractIntentOverridePasses(t *testing.T) {
 	}
 	if result.Contract == nil || result.Contract.Status != protocol.ContractPassed {
 		t.Fatalf("contract = %+v, want passed", result.Contract)
+	}
+}
+
+func TestEnforceCompletionContractChroniclePublishesNote(t *testing.T) {
+	d := NewDispatcher()
+	dir := newContractTestRunDir(t)
+	result := &adapters.RunResult{Status: string(protocol.StatusCompleted)}
+	if err := d.enforceCompletionContract(dir, intentContractTestBee(), "chronicle", []protocol.Event{
+		contractInsightEvent(t, protocol.InsightContextNote),
+	}, nil, result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusCompleted) {
+		t.Fatalf("status = %q, want completed", result.Status)
+	}
+	if result.Contract == nil || result.Contract.Status != protocol.ContractPassed {
+		t.Fatalf("contract = %+v, want passed", result.Contract)
+	}
+	if result.Contract.Intent != "chronicle" {
+		t.Fatalf("contract intent = %q, want chronicle", result.Contract.Intent)
+	}
+}
+
+func TestEnforceCompletionContractSkillPublishingNothingFails(t *testing.T) {
+	d := NewDispatcher()
+	dir := newContractTestRunDir(t)
+	result := &adapters.RunResult{Status: string(protocol.StatusCompleted)}
+	if err := d.enforceCompletionContract(dir, intentContractTestBee(), "skill", nil, nil, result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+	if result.Contract == nil || result.Contract.Status != protocol.ContractFailed {
+		t.Fatalf("contract = %+v, want failed", result.Contract)
+	}
+}
+
+func TestEnforceCompletionContractSkillPublishingTwoProposalsFails(t *testing.T) {
+	d := NewDispatcher()
+	dir := newContractTestRunDir(t)
+	proposal := contractSkillProposedEvent(t, "paseka-release")
+	other := contractSkillProposedEvent(t, "paseka-ship")
+	result := &adapters.RunResult{Status: string(protocol.StatusCompleted)}
+	if err := d.enforceCompletionContract(dir, intentContractTestBee(), "skill", []protocol.Event{
+		proposal, other,
+	}, nil, result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
+	}
+}
+
+func TestEnforceCompletionContractTaskPublishingProposalFails(t *testing.T) {
+	d := NewDispatcher()
+	dir := newContractTestRunDir(t)
+	result := &adapters.RunResult{Status: string(protocol.StatusCompleted)}
+	if err := d.enforceCompletionContract(dir, intentContractTestBee(), "task", []protocol.Event{
+		contractSkillProposedEvent(t, "paseka-release"),
+	}, nil, result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != string(protocol.StatusFailed) || result.Reason != protocol.ReasonCompletionContract {
+		t.Fatalf("result = %s/%s, want failed/%s", result.Status, result.Reason, protocol.ReasonCompletionContract)
 	}
 }
 

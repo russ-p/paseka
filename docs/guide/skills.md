@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`), and the store mutations (`disable`, `enable`, `remove`); attribution and approval build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`), the store mutations (`disable`, `enable`, `remove`), the Archivist's proposal intent, and attribution. Approval and the trial destination build on the same rules.
 
 ---
 
@@ -375,3 +375,32 @@ A transcript attributes a skill when a tool call names a file under the run's fr
 The section shows the evidence that attributed each used skill and the body read from the frozen copy. If the body cannot be read, the entry says why instead of disappearing. A run whose usage cannot be determined reports the capability's own reason — `no providerSessionId`, `unsupported`, `store not found`, `parse error`, `resolve error`, or `timeout` — rather than an empty set, because absence of evidence is not absence of use. A run with a load record still attributes in command mode and on adapters without a transcript capability; a note says when the used set came from load records alone.
 
 Attribution is a measurement, not a proof: a recorded read is evidence that a skill's file was reached for, not that its instructions were followed.
+
+## 15. Proposing a skill
+
+The Archivist Bee can turn a finished trail's friction into a proposed procedure. That is the `skill` intent, run deliberately against one trail rather than on every flight, because a proposal waits for a human anyway:
+
+```bash
+paseka bee run archivist --trace trace-abc123 --intent skill \
+  --body "Propose the skill this trail proved the colony needs"
+```
+
+- The intent is discovered from `.paseka/prompts/_partials/archivist-intent-skill.md`, the same way the role's other intents are discovered. `--intent skill` renders the skill guidance instead of the `task` or `chronicle` guidance.
+- The role reads the named trail's runs, tasks, verdicts, and review notes and applies three tests: the shape is **recurring**, **procedural**, and **not already written down** in the store or `docs/`. If none survives, it publishes nothing and its contract fails the run — a skill intent that produced no skill did not do its job.
+- The bundle lives in that trail's artifact comb, never in the store:
+
+  ```text
+  .paseka/runs/<traceId>/artifacts/
+  └── skill-proposals/
+      └── <name>/
+          ├── SKILL.md          # required
+          ├── scripts/          # optional
+          ├── references/       # optional
+          └── assets/           # optional
+  ```
+
+- The run publishes exactly one `INSIGHT/skill.proposed` discovery. It carries the skill `name`, its `description`, a `reason` citing the runs, files, and events that motivated it inline, the comb-relative `bundle` path, and the bundle's `procedureHash`. The hash covers the `SKILL.md` body and the supporting files in a stable order with the frontmatter excluded, so writing provenance later does not change the proposal's identity.
+- **The role never writes `.paseka/skills/`.** Nothing installs a proposal on its own; approval is a Beekeeper action, and the runtime is the store's only writer.
+- The completion contract is per intent: `task` and `chronicle` must publish exactly one `context.note`, and `skill` must publish exactly one `skill.proposed`. A skill-intent run that publishes nothing, a note, or more than one proposal fails, and a note-intent run that publishes a proposal fails.
+
+Proposals are operational `INSIGHT` events: the trail timeline and export summarize them with the skill name and its reason, and the kind is never projected into `{{.Insights}}` prompt memory.
