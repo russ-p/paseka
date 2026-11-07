@@ -1662,7 +1662,6 @@ export function versionTooltip(build: BuildView | null): string {
 	return lines.join('\n');
 }
 
-
 /**
  * The store's state as one phrase: `ok`, or the state and the reason it carries.
  * An invalid skill without its reason tells an operator to look but not where,
