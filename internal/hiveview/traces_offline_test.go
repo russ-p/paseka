@@ -370,6 +370,40 @@ func TestEmptyProjectionsAreEmptyListsNotNil(t *testing.T) {
 	}
 }
 
+func TestRenderEventSummarySkillProposed(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "agent-1", 1, protocol.EventInsight, protocol.SkillProposedPayload{
+		Kind:          protocol.InsightSkillProposed,
+		Name:          "paseka-release",
+		Description:   "Run the release procedure.",
+		Reason:        "Two runs re-ran the checklist by hand.",
+		Bundle:        "skill-proposals/paseka-release",
+		ProcedureHash: "9f2c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := RenderEventSummary(ev)
+	if !ok {
+		t.Fatal("skill.proposed event has no summary")
+	}
+	want := "Skill proposed: paseka-release — Two runs re-ran the checklist by hand."
+	if got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+}
+
+func TestRenderEventSummarySkillProposedWithoutName(t *testing.T) {
+	ev, err := protocol.NewEvent("trace-1", "agent-1", 1, protocol.EventInsight, protocol.SkillProposedPayload{
+		Kind: protocol.InsightSkillProposed,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := RenderEventSummary(ev); ok {
+		t.Fatal("nameless skill.proposed rendered a summary")
+	}
+}
+
 func TestCollectRecentInsightsExcludesTraceSummary(t *testing.T) {
 	repo := t.TempDir()
 	traceID := "trace-insights"

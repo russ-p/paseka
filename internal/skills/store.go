@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/protocol"
 )
 
 const (
@@ -32,11 +33,14 @@ const (
 	// always a skill and never a bookkeeping file a client might load.
 	LedgerName = "skills.index.json"
 
-	// MaxNameLength is the standard's bound on a skill name.
-	MaxNameLength = 64
+	// MaxNameLength is the standard's bound on a skill name. It aliases the
+	// protocol bound so the store and a `skill.proposed` event cannot drift
+	// apart on what the format allows.
+	MaxNameLength = protocol.MaxSkillNameLen
 	// MaxDescriptionLength is the standard's bound on a description, in
-	// characters rather than bytes.
-	MaxDescriptionLength = 1024
+	// characters rather than bytes. It aliases the protocol bound for the same
+	// reason.
+	MaxDescriptionLength = protocol.MaxSkillDescriptionLen
 	// MaxSkillFileBytes bounds one file inside a skill directory — the
 	// `SKILL.md` or a supporting file.
 	MaxSkillFileBytes = 256 << 10 // 256 KiB

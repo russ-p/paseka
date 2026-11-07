@@ -38,7 +38,7 @@ Read these before making architectural or naming decisions:
 - [docs/reference/event-contracts.md](docs/reference/event-contracts.md) — Domain event kinds and authoring rules.
 - [docs/architecture/overview.md](docs/architecture/overview.md) — Adapters, worktrees, package layout.
 - [docs/guide/interactive-sessions.md](docs/guide/interactive-sessions.md) — Interactive agent sessions (HITL), `bee chat`, session registry, Ghostty attach.
-- [docs/guide/skills.md](docs/guide/skills.md) — Colony skill store (`.paseka/skills/`), `SKILL.md` rules, references, budgets, `paseka skills list` / `show` / `validate`.
+- [docs/guide/skills.md](docs/guide/skills.md) — Colony skill store (`.paseka/skills/`), `SKILL.md` rules, references, budgets, `paseka skills list` / `show` / `proposals` / `validate`.
 - [docs/guide/bee-config.md](docs/guide/bee-config.md) — Bee role YAML: adapter, params, command/post_exec, routing and completion fields.
 - [docs/guide/homelab-deployment.md](docs/guide/homelab-deployment.md) — Server/apiary container + Queen Console.
 - [docs/architecture/queen-console-design-system.md](docs/architecture/queen-console-design-system.md) — Queen Console UI contract (themes, component inventory, hard rules) — read before writing any console UI.

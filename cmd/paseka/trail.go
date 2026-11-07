@@ -943,6 +943,12 @@ func printApplyResult(result trailconfig.ApplyResult) {
 				len(result.RemainingWork.Checked), strings.Join(result.RemainingWork.Checked, ", "))
 		}
 	}
+	if len(result.SkillWarnings) > 0 {
+		fmt.Println("Skill warnings:")
+		for _, warning := range result.SkillWarnings {
+			fmt.Println("  - " + warning)
+		}
+	}
 	if result.DryRun {
 		fmt.Printf("Dry run: %s -> %s\n", change.OldConfigRef, result.NewRef)
 	} else {

@@ -28,6 +28,8 @@ import type {
 	RuntimeStatus,
 	Session,
 	SignalSummary,
+	SkillProposal,
+	SkillRow,
 	TaskDetail,
 	TaskListItem,
 	TaskRun,
@@ -1660,3 +1662,83 @@ export function versionTooltip(build: BuildView | null): string {
 	return lines.join('\n');
 }
 
+/**
+ * The store's state as one phrase: `ok`, or the state and the reason it carries.
+ * An invalid skill without its reason tells an operator to look but not where,
+ * so the two are never printed apart.
+ */
+export function skillStateLabel(row: Pick<SkillRow, 'state' | 'reason'>): string {
+	const state = row.state.trim() || 'unknown';
+	const reason = row.reason?.trim();
+	return reason ? `${state}: ${reason}` : state;
+}
+
+/**
+ * The roles column. A skill no role carries says so with a dash rather than a
+ * blank cell, which would read as a formatting accident instead of an answer.
+ * The server has already expanded patterns and `*`, so this only joins names.
+ */
+export function skillRolesLabel(roles: string[] | null | undefined): string {
+	return roles?.length ? roles.join(', ') : '—';
+}
+
+/**
+ * Where a skill came from, in the words an operator reads. The store's own
+ * vocabulary is `hand`; the page says `hand-written` because it is a claim about
+ * who wrote the procedure, and `proposed` rather than `proposal` for the same
+ * reason. `nuc` is a proper name and stays as it is.
+ */
+export function skillProvenanceLabel(provenance: string): string {
+	switch (provenance.trim().toLowerCase()) {
+		case 'hand':
+			return 'hand-written';
+		case 'proposal':
+			return 'proposed';
+		case '':
+			return 'hand-written';
+		default:
+			return provenance;
+	}
+}
+
+/** The store pane's headline: a missing store is a fact, not a failed read. */
+export function skillStoreHeadline(count: number): string {
+	if (count === 0) return 'No skill is in the store yet.';
+	if (count === 1) return 'One procedure the colony can offer a role.';
+	return `${count} procedures the colony can offer a role.`;
+}
+
+/**
+ * A proposal's state as one phrase. A trial names the trail it went to and a
+ * refusal names its reason, because those are the two decisions whose meaning
+ * is not in the state word alone.
+ */
+export function skillProposalStateLabel(
+	proposal: Pick<SkillProposal, 'state' | 'reason' | 'destination'>
+): string {
+	const state = proposal.state.trim() || 'unknown';
+	switch (state) {
+		case 'refused': {
+			const reason = proposal.reason?.trim();
+			return reason ? `${state}: ${reason}` : state;
+		}
+		case 'trialled': {
+			const destination = proposal.destination?.trim();
+			return destination ? `${state}: ${destination}` : state;
+		}
+		default:
+			return state;
+	}
+}
+
+/** A proposal timestamp, with the table's own formatter and its dash for absence. */
+export function skillProposalTimeLabel(value: string | undefined): string {
+	return formatTimestamp(value);
+}
+
+/** The proposals pane's headline: empty here means nothing has been proposed. */
+export function skillProposalsHeadline(count: number): string {
+	if (count === 0) return 'No proposal is on record.';
+	if (count === 1) return 'One proposal from the trails.';
+	return `${count} proposals from the trails.`;
+}

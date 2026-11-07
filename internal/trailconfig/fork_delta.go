@@ -132,10 +132,10 @@ func PrepareForkDelta(opts ForkDeltaOptions) (ForkDelta, error) {
 		}
 		resolvedInput := *opts.TaskInput
 		resolvedInput.Bee = taskBee
-		if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, &resolvedInput); err != nil {
+		if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, &resolvedInput, inventory.Resolved.Profile); err != nil {
 			return ForkDelta{}, err
 		}
-	} else if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, nil); err != nil {
+	} else if err := ValidateForkCandidateTree(sourceTree, tree, opts.TaskID, nil, inventory.Resolved.Profile); err != nil {
 		return ForkDelta{}, err
 	}
 
@@ -158,7 +158,7 @@ func PrepareForkDelta(opts ForkDeltaOptions) (ForkDelta, error) {
 // whole. The check covers colony identity policy, bee roles, prompt templates,
 // skills, adapters, event/completion contracts, sectors, and the carried task's
 // review policy.
-func ValidateForkCandidateTree(baseTree, candidateTree, taskID string, input *TaskInputEvidence) error {
+func ValidateForkCandidateTree(baseTree, candidateTree, taskID string, input *TaskInputEvidence, profile ...string) error {
 	baseColony, err := colony.LoadColony(baseTree)
 	if err != nil {
 		return fmt.Errorf("trailconfig: source configuration is unreadable: %w", err)
@@ -177,7 +177,7 @@ func ValidateForkCandidateTree(baseTree, candidateTree, taskID string, input *Ta
 			Review: protocol.TaskReviewPolicy(input.Review),
 		})
 	}
-	return ValidateProcedure(candidateTree, baseColony, work)
+	return ValidateProcedure(candidateTree, baseColony, work, profile...)
 }
 
 func validatePolicyUnchanged(base, candidate colony.Colony) error {
@@ -216,37 +216,6 @@ func validatePromptTemplateFile(root, ref string) error {
 	}
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("prompt template %q is not a regular file", ref)
-	}
-	return nil
-}
-
-func validateSkillReferences(root string) error {
-	roots := []string{
-		filepath.Join(root, ".paseka", "skills"),
-		filepath.Join(root, ".agents", "skills"),
-		filepath.Join(root, "home", "skills"),
-	}
-	for _, skillsRoot := range roots {
-		entries, err := os.ReadDir(skillsRoot)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return fmt.Errorf("trailconfig: read skills: %w", err)
-		}
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			skill := filepath.Join(skillsRoot, entry.Name(), "SKILL.md")
-			info, err := os.Stat(skill)
-			if err != nil {
-				return fmt.Errorf("trailconfig: skill %q is missing SKILL.md", entry.Name())
-			}
-			if !info.Mode().IsRegular() {
-				return fmt.Errorf("trailconfig: skill %q has a non-regular SKILL.md", entry.Name())
-			}
-		}
 	}
 	return nil
 }

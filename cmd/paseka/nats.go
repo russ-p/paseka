@@ -58,6 +58,13 @@ func newDoctorCmd() *cobra.Command {
 				for _, issue := range skillReport.Issues() {
 					report.Errors = append(report.Errors, issue.Error())
 				}
+				// A skill installed from a proposal records the procedure hash it
+				// was approved with. A hand edit to the body or a supporting file
+				// is a fact `doctor` can see and a scan cannot: the file is still
+				// well-formed, but it is no longer the approved procedure.
+				for _, issue := range skillReport.ProvenanceIssues() {
+					report.Errors = append(report.Errors, issue.Error())
+				}
 				if ledgerErr == nil {
 					diagnoseSkillSelection(ctxColony, bees, skillReport, ledger, &report)
 				}

@@ -226,6 +226,24 @@ completion_contract:
       count: 1
 ```
 
+An intent may override the default rules, so one role can require different output per intent:
+
+```yaml
+completion_contract:
+  required:
+    - type: INSIGHT
+      kind_one_of:
+        - context.note
+  intents:
+    skill:
+      required:
+        - type: INSIGHT
+          kind_one_of:
+            - skill.proposed
+```
+
+Finalization selects the contract by the run's normalized intent: an empty or unknown `--intent` falls back to the role's `default_intent`, and an intent without an override uses the default `required` list. Load-time validation rejects an empty intent key, an override with no rules, and any invalid rule.
+
 Narrative `INSIGHT` events are optional and do not satisfy completion contracts. See [insight kinds](insight-kinds.md).
 
 ### Recorded verdict
@@ -236,6 +254,7 @@ Finalization persists the verdict before a successful outcome is exposed or publ
 {
   "contract": {
     "status": "failed",
+    "intent": "review",
     "rules": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "count": 1}],
     "observations": [{"type": "VERIFICATION", "kindOneOf": ["verification.success", "verification.failed"], "want": 1, "got": 0, "satisfied": false}],
     "error": "runtime: completion contract: expected at least 1 VERIFICATION event(s) with kind in [verification.success verification.failed], got 0"
@@ -245,7 +264,7 @@ Finalization persists the verdict before a successful outcome is exposed or publ
 
 - `status` is `passed`, `failed`, or `unavailable`. An unreadable `events.ndjson` is `unavailable` (with `error`) and never a pass; an otherwise completed run then fails with reason `completion_contract`. A run already failed by the adapter, the gate, or another runtime check keeps its own reason and still records the verdict.
   - `error` carries the contract's own message: the evaluation error when the verdict is `unavailable`, and the violated-rule message when it is `failed`. This is where the contract's reason stays visible when an earlier primary failure owns the run's error text.
-- `rules` are the effective declared rules (a missing `count` is recorded as `1`); `observations` carry the measured `got` per rule when the contract was evaluated.
+- `intent` is the run's normalized intent, which selected the contract; `rules` are the effective declared rules for that intent (a missing `count` is recorded as `1`); `observations` carry the measured `got` per rule when the contract was evaluated.
 - A bee without a contract omits the field entirely, so "no declared contract" stays distinguishable from "contract passed". Legacy records without it read as unknown.
 - Only events the run's own bee emitted count; runtime-authored events, including the check gate's rejection, never satisfy a contract.
 - A missing required `run.summary` is a separate runtime check: it fails the run with reason `run_summary_missing`, never `completion_contract`.

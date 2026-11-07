@@ -2,12 +2,14 @@ package nuc
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/skills"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,12 +32,13 @@ func ExportFromColony(opts ExportOptions) (Document, error) {
 		return Document{}, err
 	}
 
+	manifest, err := colony.LoadColony(opts.ColonyRoot)
+	if err != nil {
+		return Document{}, err
+	}
+
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {
-		manifest, err := colony.LoadColony(opts.ColonyRoot)
-		if err != nil {
-			return Document{}, err
-		}
 		name = strings.TrimSpace(manifest.Slug)
 	}
 	if name == "" {
@@ -77,6 +80,14 @@ func ExportFromColony(opts ExportOptions) (Document, error) {
 		if err := exportPrompts(opts.ColonyRoot, promptPaths, doc.Spec.Prompts); err != nil {
 			return Document{}, err
 		}
+	}
+
+	skillFiles, err := exportSkills(opts.ColonyRoot, manifest, allBees, roles, opts.Skills)
+	if err != nil {
+		return Document{}, err
+	}
+	if len(skillFiles) > 0 {
+		doc.Spec.Skills = skillFiles
 	}
 
 	allCues, err := listColonyCues(opts.ColonyRoot)
@@ -231,6 +242,107 @@ func exportPrompts(colonyRoot string, promptPaths map[string]struct{}, out map[s
 		out[ref] = string(data)
 	}
 	return nil
+}
+
+// exportSkills packs every skill the exported roles resolve to, plus any named
+// explicitly. A pack whose roles carry no skills has no skills section. The
+// store's resolver is reused, so a role's pattern expands here exactly as it
+// would at run time and an invalid reference refuses the export rather than
+// silently omitting a procedure.
+func exportSkills(
+	colonyRoot string,
+	manifest colony.Colony,
+	allBees map[string]colony.Bee,
+	roles []string,
+	explicit []string,
+) (map[string]map[string]string, error) {
+	refs := make([]string, 0, len(explicit)+len(roles))
+	for _, role := range roles {
+		effective := colony.EffectiveSkillsFor(
+			manifest.Defaults,
+			colony.ColonyProfile{},
+			colony.HomeProfileConfig{},
+			role,
+			allBees[role],
+		)
+		refs = append(refs, effective.Refs...)
+	}
+	refs = append(refs, explicit...)
+	if len(refs) == 0 {
+		return nil, nil
+	}
+
+	store, err := skills.ScanColony(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	ledger, err := skills.LoadLedger(colonyRoot)
+	if err != nil {
+		return nil, err
+	}
+	resolution := skills.Resolve(store, ledger, refs)
+	if !resolution.Valid() {
+		reasons := make([]string, 0, len(resolution.Issues))
+		for _, issue := range resolution.Issues {
+			reasons = append(reasons, issue.Error())
+		}
+		return nil, fmt.Errorf("nuc: resolve skills: %s", strings.Join(reasons, "; "))
+	}
+	if len(resolution.Skills) == 0 {
+		return nil, nil
+	}
+
+	out := make(map[string]map[string]string, len(resolution.Skills))
+	for _, skill := range resolution.Skills {
+		files, err := readSkillFiles(skill.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("nuc: read skill %q: %w", skill.Name, err)
+		}
+		out[skill.Name] = files
+	}
+	return out, nil
+}
+
+// readSkillFiles reads one store entry into slash-form relative paths. Links
+// are followed the way the store scan follows them, so an exported pack carries
+// the bytes the store advertises.
+func readSkillFiles(dir string) (map[string]string, error) {
+	out := make(map[string]string)
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == dir {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			info, err = os.Stat(path)
+			if err != nil {
+				return err
+			}
+		}
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		out[filepath.ToSlash(rel)] = string(data)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // BeeTemplatePaths returns prompt_template and system_template paths from raw bee YAML.

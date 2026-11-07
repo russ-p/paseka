@@ -409,7 +409,31 @@ completion_contract:
 | `kind_one_of` | Allowed `payload.kind` values (required, non-empty) |
 | `count` | Exact match count among those kinds (default `1`) |
 
-A bee that declares a contract gets an additive `contract` record on `result.json` with the verdict (`passed` / `failed` / `unavailable`), the effective rules, and the per-rule observations (or the evaluation error when the event record was unreadable). An unreadable event record is always `unavailable`, never a pass; it fails an otherwise completed run with reason `completion_contract`, while a run the adapter, the gate, or another runtime check already failed keeps its own reason and still records the verdict. Bees without a contract omit it. A gate rejection keeps reason `checks_failed` and still records the contract verdict.
+### Per-intent contracts
+
+A role whose output differs by intent can override the default `required` rules per intent. `completion_contract.intents` maps an intent name to its own `required` list; an intent with no entry uses the default contract.
+
+```yaml
+completion_contract:
+  required:                      # default contract, used by every other intent
+    - type: INSIGHT
+      kind_one_of:
+        - context.note
+      count: 1
+  intents:
+    skill:                       # override for the skill intent
+      required:
+        - type: INSIGHT
+          kind_one_of:
+            - skill.proposed
+          count: 1
+```
+
+Finalization selects the contract by the run's **normalized** intent, the same value the prompt renderer uses. An empty or unknown `--intent` therefore falls back to the role's `default_intent` and, unless that intent is itself overridden, to the default contract. The persisted contract record names the selected intent in `contract.intent` and lists the effective rules that were applied, so a reader does not need to replay the configuration.
+
+Load-time validation rejects an empty intent key, an override with no rules, a duplicate intent name, and any rule that is invalid in the default contract. A contract without `intents` loads and behaves exactly as before.
+
+A bee that declares a contract gets an additive `contract` record on `result.json` with the verdict (`passed` / `failed` / `unavailable`), the selected intent, the effective rules, and the per-rule observations (or the evaluation error when the event record was unreadable). An unreadable event record is always `unavailable`, never a pass; it fails an otherwise completed run with reason `completion_contract`, while a run the adapter, the gate, or another runtime check already failed keeps its own reason and still records the verdict. Bees without a contract omit it. A gate rejection keeps reason `checks_failed` and still records the contract verdict.
 
 Narrative INSIGHTs do not satisfy contracts unless listed. Full routing semantics: [bee routing](../reference/bee-routing.md) §6.
 

@@ -1,6 +1,7 @@
 package colony
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -55,6 +56,101 @@ func TestCompletionContractRejectsDuplicateEmit(t *testing.T) {
 	})
 	if err := contract.ValidateRunEvents([]protocol.Event{ev1, ev2}); err == nil {
 		t.Fatal("expected error for duplicate emits")
+	}
+}
+
+func TestCompletionContractForIntentDefaults(t *testing.T) {
+	contract := CompletionContract{
+		Required: []CompletionRule{{
+			Type:      "INSIGHT",
+			KindOneOf: []string{"context.note"},
+		}},
+	}
+	for _, intent := range []string{"", "task", "unknown"} {
+		got := contract.ForIntent(intent)
+		if len(got.Required) != 1 || got.Required[0].KindOneOf[0] != "context.note" {
+			t.Fatalf("ForIntent(%q) = %+v, want the default contract", intent, got)
+		}
+	}
+}
+
+func TestCompletionContractForIntentSelectsOverride(t *testing.T) {
+	contract := CompletionContract{
+		Required: []CompletionRule{{
+			Type:      "INSIGHT",
+			KindOneOf: []string{"context.note"},
+		}},
+		Intents: map[string]CompletionOverride{
+			"skill": {Required: []CompletionRule{{
+				Type:      "INSIGHT",
+				KindOneOf: []string{"skill.proposed"},
+			}}},
+		},
+	}
+	got := contract.ForIntent("SKILL")
+	if len(got.Required) != 1 || got.Required[0].KindOneOf[0] != "skill.proposed" {
+		t.Fatalf("skill contract = %+v, want the override", got)
+	}
+	if got.Required[0].KindOneOf[0] == contract.Required[0].KindOneOf[0] {
+		t.Fatal("override selection returned the default contract")
+	}
+}
+
+func TestCompletionContractValidatesIntentOverrides(t *testing.T) {
+	rule := CompletionRule{Type: "INSIGHT", KindOneOf: []string{"context.note"}}
+	tests := []struct {
+		name     string
+		contract CompletionContract
+		want     string
+	}{
+		{
+			name: "empty intent key",
+			contract: CompletionContract{Intents: map[string]CompletionOverride{
+				" ": {Required: []CompletionRule{rule}},
+			}},
+			want: "intent key is required",
+		},
+		{
+			name: "override without rules",
+			contract: CompletionContract{Intents: map[string]CompletionOverride{
+				"skill": {},
+			}},
+			want: "at least one rule is required",
+		},
+		{
+			name: "override with invalid type",
+			contract: CompletionContract{Intents: map[string]CompletionOverride{
+				"skill": {Required: []CompletionRule{{Type: "BOGUS", KindOneOf: []string{"skill.proposed"}}}},
+			}},
+			want: "invalid type",
+		},
+		{
+			name: "override without kinds",
+			contract: CompletionContract{Intents: map[string]CompletionOverride{
+				"skill": {Required: []CompletionRule{{Type: "INSIGHT"}}},
+			}},
+			want: "kind_one_of is required",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.contract.ValidateCompletionContract("archivist")
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCompletionContractWithoutOverridesValidates(t *testing.T) {
+	contract := CompletionContract{Required: []CompletionRule{
+		{Type: "INSIGHT", KindOneOf: []string{"context.note"}},
+	}}
+	if err := contract.ValidateCompletionContract("archivist"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -46,7 +46,11 @@ type ContractObservation struct {
 // primary failure (a gate rejection, an adapter failure, a timeout, or a
 // cancellation) owns the run's status and error text.
 type ContractRecord struct {
-	Status       string                `json:"status"`
+	Status string `json:"status"`
+	// Intent is the run's normalized intent, which selected the contract whose
+	// rules are recorded below. It lets a reader tell which contract was
+	// applied without replaying the bee configuration.
+	Intent       string                `json:"intent,omitempty"`
 	Rules        []ContractRule        `json:"rules,omitempty"`
 	Observations []ContractObservation `json:"observations,omitempty"`
 	Error        string                `json:"error,omitempty"`

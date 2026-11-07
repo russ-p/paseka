@@ -33,6 +33,11 @@ import type {
 	TraceDetail,
 	Invite,
 	Session,
+	SkillApprovalPlan,
+	SkillDecisionResult,
+	SkillProposal,
+	SkillRow,
+	SkillsInventory,
 	TrailCollection,
 	TrailConfigApplyResult,
 	TraceSummary,
@@ -1017,6 +1022,89 @@ export function colonyConfig(overrides: Partial<ColonyConfig> = {}): ColonyConfi
 			notify: configNotify()
 		},
 		terminal: { terminal: 'default', ghosttyBinary: 'ghostty', configured: false },
+		...overrides
+	};
+}
+
+export function skillRow(overrides: Partial<SkillRow> = {}): SkillRow {
+	return {
+		name: 'paseka-release',
+		state: 'ok',
+		roles: ['builder', 'docs'],
+		description: 'Run the release procedure.',
+		provenance: 'proposal',
+		...overrides
+	};
+}
+
+export function skillProposal(overrides: Partial<SkillProposal> = {}): SkillProposal {
+	return {
+		trail: 'trace-01a0bd6963faa14f',
+		name: 'paseka-release',
+		description: 'Run the release procedure.',
+		proposedReason: 'Two runs repeated this by hand; see task 002.',
+		proposedAt: '2026-11-07T10:00:00Z',
+		state: 'pending',
+		bundle: 'skill-proposals/paseka-release',
+		bundleMissing: false,
+		valid: true,
+		validation: [],
+		...overrides
+	};
+}
+
+/**
+ * One of each state the skills page has to tell apart: a servable proposed
+ * skill, a disabled hand-written one, and a pending proposal from a trail.
+ */
+export function skillsInventory(overrides: Partial<SkillsInventory> = {}): SkillsInventory {
+	return {
+		store: '/colony/.paseka/skills',
+		skills: [
+			skillRow(),
+			skillRow({
+				name: 'paseka-ship',
+				state: 'disabled',
+				reason: 'wrong step',
+				roles: ['docs'],
+				description: 'Ship a version.',
+				provenance: 'hand'
+			})
+		],
+		issues: [],
+		proposals: [skillProposal()],
+		proposalIssues: [],
+		...overrides
+	};
+}
+
+/** The server's validated install plan, as the confirmation dialog receives it. */
+export function skillApprovalPlan(overrides: Partial<SkillApprovalPlan> = {}): SkillApprovalPlan {
+	return {
+		trail: 'trace-01a0bd6963faa14f',
+		name: 'paseka-release',
+		destination: 'store',
+		store: '.paseka/skills',
+		target: '.paseka/skills/paseka-release',
+		files: ['.paseka/skills/paseka-release/SKILL.md'],
+		procedureHash: 'abc123',
+		provenance: { source: 'proposal' },
+		replaced: false,
+		disabled: false,
+		workingTree:
+			'Writes 1 new untracked file path(s) under .paseka/skills/paseka-release in the working tree. Committing is yours; this action never commits.',
+		...overrides
+	};
+}
+
+/** The receipt and refreshed inventory a completed decision returns. */
+export function skillDecisionResult(
+	overrides: Partial<SkillDecisionResult> = {}
+): SkillDecisionResult {
+	return {
+		inventory: skillsInventory(),
+		proposal: skillProposal({ state: 'installed', destination: 'store' }),
+		message: 'Installed trace-01a0bd6963faa14f/paseka-release into the store. Nothing was committed.',
 		...overrides
 	};
 }

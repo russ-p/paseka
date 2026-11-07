@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/colony"
@@ -26,8 +27,8 @@ import (
 // A failing contract's message is carried by the contract record itself. It is
 // appended to the primary error only when the contract caused the downgrade; on
 // a run another layer already failed, the primary error text is left alone.
-func (d *Dispatcher) enforceCompletionContract(runDir runs.Dir, bee colony.Bee, runEvents []protocol.Event, readErr error, result *adapters.RunResult) error {
-	record, message := contractVerdict(bee, runEvents, readErr)
+func (d *Dispatcher) enforceCompletionContract(runDir runs.Dir, bee colony.Bee, intent string, runEvents []protocol.Event, readErr error, result *adapters.RunResult) error {
+	record, message := contractVerdict(bee, intent, runEvents, readErr)
 	if record == nil || result == nil {
 		return nil
 	}
@@ -54,17 +55,24 @@ func (d *Dispatcher) enforceCompletionContract(runDir runs.Dir, bee colony.Bee, 
 // contractVerdict builds the persisted contract verdict for a bee that declares
 // one, together with the human-readable message a failed or unavailable verdict
 // carries onto the outcome records. It returns a nil record when the bee
-// declares no contract, so "no declared contract" stays distinguishable from
-// "contract passed".
+// declares no contract for the run's intent, so "no declared contract" stays
+// distinguishable from "contract passed".
+//
+// intent is the run's normalized intent, not the raw caller value: an unknown
+// raw intent has already fallen back to the role's default intent, and the
+// contract that applies is the one declared for that normalized name.
 //
 // An unreadable event record yields unavailable — never a pass — with the
 // evaluation error, because an absent verdict must not be readable as success.
-func contractVerdict(bee colony.Bee, runEvents []protocol.Event, readErr error) (*protocol.ContractRecord, string) {
-	if len(bee.CompletionContract.Required) == 0 {
+func contractVerdict(bee colony.Bee, intent string, runEvents []protocol.Event, readErr error) (*protocol.ContractRecord, string) {
+	contract := bee.CompletionContract.ForIntent(intent)
+	if len(contract.Required) == 0 {
 		return nil, ""
 	}
+	intent = strings.TrimSpace(strings.ToLower(intent))
 	record := &protocol.ContractRecord{
-		Rules: effectiveContractRules(bee.CompletionContract),
+		Intent: intent,
+		Rules:  effectiveContractRules(contract),
 	}
 	if readErr != nil {
 		message := fmt.Sprintf("runtime: completion contract unavailable: %s", readErr.Error())
@@ -74,7 +82,7 @@ func contractVerdict(bee colony.Bee, runEvents []protocol.Event, readErr error) 
 	}
 
 	domain := contractEvents(runEvents)
-	for _, obs := range bee.CompletionContract.ObserveRunEvents(domain) {
+	for _, obs := range contract.ObserveRunEvents(domain) {
 		record.Observations = append(record.Observations, protocol.ContractObservation{
 			Type:      obs.Type,
 			KindOneOf: obs.KindOneOf,
@@ -84,7 +92,7 @@ func contractVerdict(bee colony.Bee, runEvents []protocol.Event, readErr error) 
 		})
 	}
 
-	if err := bee.CompletionContract.ValidateRunEvents(domain); err != nil {
+	if err := contract.ValidateRunEvents(domain); err != nil {
 		record.Status = protocol.ContractFailed
 		// The message lives in the contract evidence. When the contract is the
 		// reason the run failed, finalization appends the same message to the

@@ -5,6 +5,13 @@ package runs
 // this package for path layout, and a run-listing rule must not be a dependency cycle.
 const proposalsDir = "proposals"
 
+// SkillProposalsDirName is the runtime-owned directory holding the decisions about a
+// trail's skill proposals. It is duplicated as a string rather than imported from
+// internal/skills because internal/skills reads trails through this package, and a
+// run-listing rule must not be a dependency cycle. It shares its name with the
+// artifact comb's bundle directory; the two live under different roots.
+const SkillProposalsDirName = "skill-proposals"
+
 // ReservedTraceSubdirs are non-agent directories under .paseka/runs/<traceId>/.
 // They must not be treated as bee run directories.
 var ReservedTraceSubdirs = map[string]struct{}{
@@ -21,6 +28,9 @@ var ReservedTraceSubdirs = map[string]struct{}{
 	CueInvocationsDirName: {},
 	// Analysis admissions are durable reaction identities, not agent runs.
 	AnalysisDirName: {},
+	// Skill proposal decisions are the runtime's record of what a Beekeeper
+	// decided, not a run output.
+	SkillProposalsDirName: {},
 	// Immutable work-completion checkpoints, result evidence, and metrics
 	// snapshots are trail records, not bee runs.
 	WorkCompletionDirName: {},
@@ -38,6 +48,7 @@ var skipTraceEventSubdirs = map[string]struct{}{
 	"fork-requests":       {},
 	CueInvocationsDirName: {},
 	AnalysisDirName:       {},
+	SkillProposalsDirName: {},
 	WorkCompletionDirName: {},
 }
 

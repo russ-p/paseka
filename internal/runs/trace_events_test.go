@@ -1,6 +1,7 @@
 package runs
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,5 +78,47 @@ func TestProposalStoreIsNotARunOrATrailEventSource(t *testing.T) {
 
 	if !IsReservedTraceSubdir("proposals") {
 		t.Fatal("proposals must be a reserved trace subdirectory")
+	}
+}
+
+// Skill proposal decisions are a runtime-owned trail record: the directory must
+// never be read as a Bee run, and an event-shaped file inside it must never be
+// merged into the trail's event feed.
+func TestSkillProposalDecisionsAreNotARunOrATrailEventSource(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-skill-proposals"
+	decisionDir := filepath.Join(root, ".paseka", "runs", traceID, SkillProposalsDirName)
+	if err := os.MkdirAll(decisionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := protocol.NewEvent(traceID, "agent-1", 0, protocol.EventInsight, map[string]any{
+		"kind": "skill.proposed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(decisionDir, EventsFileName), append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(decisionDir, "decisions.ndjson"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !IsReservedTraceSubdir(SkillProposalsDirName) {
+		t.Fatalf("%s must be a reserved trace subdirectory", SkillProposalsDirName)
+	}
+	if !skipTraceEventDir(SkillProposalsDirName) {
+		t.Fatalf("%s must not be read as a run event source", SkillProposalsDirName)
+	}
+	events, err := ReadTraceEvents(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("a decision directory event leaked into the trail: %+v", events)
 	}
 }

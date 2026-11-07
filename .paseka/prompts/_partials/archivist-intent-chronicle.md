@@ -19,6 +19,6 @@ A finding becomes a skill candidate only when it satisfies **all three**:
 
 1. It is **recurring** — the same shape could happen on the next trail, not just this one.
 2. It is **procedural** — the answer is a sequence of steps or a rule to follow, not a fact to record.
-3. It is **not already written down** — check `docs/` and `.agents/skills/` before proposing. A finding that duplicates an existing spec, guide, or skill is a *pointer*, not a skill.
+3. It is **not already written down** — check `docs/` and `.paseka/skills/` before proposing. A finding that duplicates an existing spec, guide, or skill is a *pointer*, not a skill.
 
-When all three hold, draft the skill as `name`, one-line `description` with trigger conditions, and an ordered procedure with the evidence from this trail cited inline. Where a finding fails test 1 or 2, report it as a one-off observation in the audit draft and do not propose a skill.
+When all three hold, record the candidate in the audit draft as `name`, one-line `description` with trigger conditions, and an ordered procedure with the evidence from this trail cited inline. That is a *candidate* for the Beekeeper to act on: the chronicle intent does not write a proposal bundle and does not publish `skill.proposed`. The dedicated `skill` intent does that, run deliberately against one finished trail. Where a finding fails test 1 or 2, report it as a one-off observation in the audit draft and do not propose a skill.

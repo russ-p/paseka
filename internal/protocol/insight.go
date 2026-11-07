@@ -18,6 +18,10 @@ const (
 	InsightTraceSummary   InsightKind = "trace.summary"
 	InsightWorktreeBranch InsightKind = "worktree.branch"
 	InsightPRBody         InsightKind = "pr.body"
+	// InsightSkillProposed is the Archivist's proposal discovery. It names a
+	// skill bundle written into a trail's artifact comb; it is not the store
+	// install, which only a Beekeeper decision performs.
+	InsightSkillProposed InsightKind = "skill.proposed"
 )
 
 // Review note severities form a closed vocabulary so a human threshold such as
@@ -125,6 +129,32 @@ type PRBodyPayload struct {
 	Kind InsightKind `json:"kind"`
 	Body string      `json:"body"`
 }
+
+// SkillProposedPayload is emitted as INSIGHT with payload.kind=skill.proposed.
+//
+// It announces a proposed skill bundle the Archivist wrote into a trail's
+// artifact comb. The payload is the machine-readable identity of that bundle:
+// Bundle is the bundle directory relative to the comb, and ProcedureHash is the
+// content hash of the procedure (the SKILL.md body and supporting files in a
+// stable order, frontmatter excluded). The role never writes the store; this
+// discovery is what a Beekeeper later approves or refuses.
+type SkillProposedPayload struct {
+	Kind          InsightKind `json:"kind"`
+	Name          string      `json:"name"`
+	Description   string      `json:"description"`
+	Reason        string      `json:"reason"`
+	Bundle        string      `json:"bundle"`
+	ProcedureHash string      `json:"procedureHash"`
+}
+
+// MaxSkillDescriptionLen mirrors the description bound the Agent Skills format
+// applies to a SKILL.md, so a proposal cannot announce a bundle the store
+// validator would refuse for size.
+const MaxSkillDescriptionLen = 1024
+
+// MaxSkillNameLen mirrors the name bound the Agent Skills format applies to a
+// SKILL.md.
+const MaxSkillNameLen = 64
 
 // NormalizeReviewSeverity trims and lowercases raw and reports whether the
 // result belongs to the closed review.note vocabulary. An absent or

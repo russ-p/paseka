@@ -842,6 +842,16 @@ func RenderEventSummary(ev protocol.Event) (string, bool) {
 			return "", false
 		}
 		return fmt.Sprintf("Worktree branch: %s", strings.TrimSpace(p.Branch)), true
+	case string(protocol.InsightSkillProposed):
+		var p protocol.SkillProposedPayload
+		if err := json.Unmarshal(ev.Payload, &p); err != nil || strings.TrimSpace(p.Name) == "" {
+			return "", false
+		}
+		reason := strings.TrimSpace(p.Reason)
+		if reason == "" {
+			return fmt.Sprintf("Skill proposed: %s", strings.TrimSpace(p.Name)), true
+		}
+		return fmt.Sprintf("Skill proposed: %s — %s", strings.TrimSpace(p.Name), reason), true
 	case string(protocol.TaskEventReady):
 		var p protocol.TaskReadyPayload
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {

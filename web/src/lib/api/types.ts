@@ -1418,3 +1418,104 @@ export interface ColonyConfig {
 	telegram: ConfigTelegram;
 	terminal: ConfigTerminal;
 }
+
+/**
+ * Mirrors `console.SkillRowView`: one skill in the colony store.
+ *
+ * `state` is the listing's verdict (`ok`, `invalid`, `disabled`) and `reason`
+ * carries the verdict's own explanation — the broken rule for an invalid skill,
+ * the Beekeeper's decision for a disabled one. `roles` is already resolved by
+ * the server: a wildcard or pattern role is named for every skill it actually
+ * receives, never as `*`.
+ */
+export interface SkillRow {
+	name: string;
+	state: string;
+	reason?: string;
+	roles: string[];
+	description: string;
+	/** `hand`, `proposal`, or `nuc`, read from the skill's own metadata. */
+	provenance: string;
+}
+
+/**
+ * Mirrors `console.SkillProposalView`: one `skill.proposed` discovery with the
+ * decision its trail records. `reason` is the decision's reason, while
+ * `proposedReason` is the evidence the Archivist gave for proposing the skill.
+ */
+export interface SkillProposal {
+	trail: string;
+	name: string;
+	description?: string;
+	proposedReason?: string;
+	/** RFC 3339, or empty when the trail record carries no time. */
+	proposedAt: string;
+	/** `pending`, `installed`, `refused`, `trialled`, or `missing`. */
+	state: string;
+	reason?: string;
+	/** The trail a trial was applied to; `store` for an install. */
+	destination?: string;
+	decidedAt?: string;
+	bundle: string;
+	bundleMissing: boolean;
+	valid: boolean;
+	validation: string[];
+}
+
+/** Mirrors `console.SkillProposalDetailView`: the row plus the procedure body. */
+export interface SkillProposalDetail extends SkillProposal {
+	body: string;
+	/** Why the bundle body could not be read; a missing bundle is reported here. */
+	bodyError?: string;
+}
+
+/**
+ * Mirrors `console.SkillsInventoryView` from GET /api/skills. Every list is
+ * always an array, so a client can range over it without a nil check.
+ */
+export interface SkillsInventory {
+	store: string;
+	skills: SkillRow[];
+	/** Store-wide findings that have no row of their own. */
+	issues: string[];
+	proposals: SkillProposal[];
+	/** Unreadable trails and proposal records, reported beside the rows. */
+	proposalIssues: string[];
+}
+
+/**
+ * Mirrors `console.SkillApprovalPlanView` from
+ * GET /api/skills/proposals/:trail/:name/plan. The plan comes from the same
+ * validated batch path as `paseka skills approve --dry-run`, so the dialog can
+ * name the destination, every file, and the working-tree consequence before a
+ * human confirms it.
+ */
+export interface SkillApprovalPlan {
+	trail: string;
+	name: string;
+	/** `store` for an install. */
+	destination: string;
+	/** The store root, repository-relative. */
+	store: string;
+	/** The directory the install writes, repository-relative. */
+	target: string;
+	/** Every path the install would create or replace, repository-relative. */
+	files: string[];
+	procedureHash: string;
+	provenance: Record<string, string>;
+	replaced: boolean;
+	disabled: boolean;
+	disableReason?: string;
+	/** What this action does to the working tree, in the server's words. */
+	workingTree: string;
+}
+
+/** Mirrors `console.SkillDecisionResultView`: the receipt and the refreshed inventory. */
+export interface SkillDecisionResult {
+	/** The inventory after the action, so the page updates without a second read. */
+	inventory: SkillsInventory;
+	/** The decided row in its new state. */
+	proposal: SkillProposal;
+	/** The sentence the console shows as the receipt. */
+	message: string;
+}

@@ -116,6 +116,9 @@ paseka
 │   ├── show <name>
 │   ├── load <name> --trace <traceId> --agent <agentId>
 │   ├── validate [reference|pattern|*]
+│   ├── proposals [reference...]
+│   ├── approve <reference>... [--trail <trace>] [--force] [--dry-run]
+│   ├── reject <reference> [--reason <why>] [--dry-run]
 │   ├── disable <name> --reason <why>
 │   ├── enable <name>
 │   └── remove <name> [--force] [--dry-run]
@@ -616,7 +619,7 @@ Standing cues seed honey on the first tick and replace remaining with `standing.
 
 Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, budgets, and the two delivery modes: [Colony skills](skills.md).
 
-The reading verbs (`list`, `show`, `validate`) describe the live repository store. `load` is different: it serves a body to a named run from that run's frozen configuration, and it is the runtime route a `command`-mode advertisement points at.
+The reading verbs (`list`, `show`, `proposals`, `validate`) describe the live repository store or the trails' retained records. `load` is different: it serves a body to a named run from that run's frozen configuration, and it is the runtime route a `command`-mode advertisement points at.
 
 ### `paseka skills list`
 
@@ -625,13 +628,85 @@ The reading verbs (`list`, `show`, `validate`) describe the live repository stor
 | `--path` | `-C` | Colony resolution start directory |
 | `--json` | | Emit the inventory as JSON on stdout |
 
-Lists every skill in the repository store as a table of **name, state, roles, description**. The state is `ok`, `invalid` (with the reason from the same rule set `validate` uses), or `disabled` (with the ledger's reason). The roles column is computed from the role configurations on every run: it names every role whose selection resolves to the skill, and a role that lists `*` or a matching pattern is named against every skill it actually receives. A store-wide finding is printed after the table as a `store: …` line. Needs no NATS.
+Lists every skill in the repository store as a table of **name, state, roles, description, provenance**. The state is `ok`, `invalid` (with the reason from the same rule set `validate` uses), or `disabled` (with the ledger's reason). The roles column is computed from the role configurations on every run: it names every role whose selection resolves to the skill, and a role that lists `*` or a matching pattern is named against every skill it actually receives. Provenance comes from the skill's own `metadata.source` (`proposal`, `nuc`, or `hand`). A store-wide finding is printed after the table as a `store: …` line. Needs no NATS.
 
-`--json` emits the stable machine contract — `store`, a `skills` array (`name`, `state`, optional `reason`, `roles`, `description`), and an `issues` array:
+`--json` emits the stable machine contract — `store`, a `skills` array (`name`, `state`, optional `reason`, `roles`, `description`, `provenance`), and an `issues` array:
 
 ```bash
 paseka skills list
 paseka skills list --json
+```
+
+### `paseka skills proposals [reference...]`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--trail` | | Trail id for bare references, or the trail to list |
+| `--json` | | Emit the inventory as JSON on stdout |
+
+Lists every skill proposal the trails hold, one row per proposal: source trail, skill, proposal time, state, and the bundle's verdict. The state is `pending` (no decision), `installed`, `refused` (with the reason; terminal for the exact bundle), `trialled` (with the destination trail), or `missing` when the bundle is gone. The bundle column re-reads the bytes — a `SKILL.md` that fails the rule set, a non-regular entry, or a procedure hash that no longer matches the discovery is reported with its reason and the row is not valid.
+
+Decisions are read from the runtime-owned, machine-local `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson`; the newest line per destination is shown. Nothing is stored in the committed ledger, so deleting a trail deletes its proposals and their decisions. A malformed decision line or an unreadable trail is printed after the table rather than skipped.
+
+A reference is a bare skill name or `<trail>/<skill>`. A bare name that matches more than one trail is refused and names the candidates; `--trail` selects one, and with no reference it filters the listing to that trail. A pattern is refused. `--json` emits `proposals` and `issues` arrays with the same facts, including `valid`, `validation`, and `decisions`:
+
+```bash
+paseka skills proposals
+paseka skills proposals paseka-release
+paseka skills proposals trace-abc123/paseka-release
+paseka skills proposals --trail trace-abc123 --json
+```
+
+### `paseka skills approve <reference>...`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--trail` | | Trail id for bare references |
+| `--into` | | Trial the batch on one trail's pinned configuration instead of the store |
+| `--role` | | Role that must resolve the trialled skills (repeatable, required with `--into`) |
+| `--force` | | Replace an existing store entry (a disable record is kept) |
+| `--dry-run` | | Print the plan without touching the store or the decisions |
+
+Installs one or more proposed skills into the repository store. Each reference is `<skill>` or `<trail>/<skill>`; `--trail` supplies the trail for a bare name, and a bare name that matches more than one trail is refused with every candidate named. A pattern is refused because a reference names one procedure.
+
+The batch is atomic. Every bundle is resolved, hash-verified against its discovery, and validated against the destination name before anything is written, so one invalid, missing, refused, already-installed, or conflicting reference writes none of the good ones. The installed `SKILL.md` and all supporting files pass the same rule set `validate` uses.
+
+Installation writes provenance into the skill's own `metadata` — `source: proposal`, the source `trail`, the proposing `role`, `approved_at`, and the procedure-content `procedure_hash` — preserving every other metadata key and the body. The hash covers the body and supporting files in a stable order and excludes the frontmatter, so writing provenance cannot change it. `paseka doctor` reports a skill whose body or supporting file no longer matches its recorded hash; a hand-authored skill without a hash is not checked.
+
+An existing store entry is refused without `--force`. With `--force` the whole batch still validates before the replacement, and an existing disable record is kept: the skill remains disabled and the command says so. Approval makes the procedure available, not active — it reaches a bee only when that bee's role lists it.
+
+The command appends one `installed` decision to each source trail's `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson` with the destination (`store`), skill, procedure hash, and time. It names every path it wrote in the working tree and states that committing is the Beekeeper's decision: it never writes a commit. `--dry-run` prints the same plan, including the exact decision line it would append, and leaves the store, ledger, and decision files byte-identical.
+
+With `--into <trace>`, the same batch is trialled on that one trail's pinned configuration instead of installed in the store, and `--role` (repeatable) names the roles that must resolve it. The command validates the whole candidate and applies exactly one new configuration revision. The active snapshot, the live store, and the working tree are untouched; each source trail gets one `trialled` decision naming the destination trail, the roles, the procedure hash, and the time, and the proposal stays pending for the store because a trial is evidence, not a store approval. The command refuses a trial without `--role`, a proposal that was already refused, is missing, invalid, or no longer hashes to its discovery, a candidate that fails the shared skill rules or procedure validation, and a trail with another configuration change pending or an execution blocker holding activation. The role-list change and the full refusal reasons: [Colony skills](skills.md) §19.
+
+```bash
+paseka skills approve paseka-release
+paseka skills approve paseka-release --trail trace-abc123
+paseka skills approve trace-abc123/paseka-release trace-abc456/another-skill
+paseka skills approve paseka-release --force
+paseka skills approve trace-abc123/paseka-release --dry-run
+paseka skills approve trace-abc123/paseka-release --into trace-def456 --role builder
+```
+
+### `paseka skills reject <reference>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--trail` | | Trail id for a bare reference |
+| `--reason` | `-r` | Why the proposal is refused (optional) |
+| `--dry-run` | | Print the decision line and change nothing |
+
+Records a refusal for exactly one proposal. The reference is `<skill>` or `<trail>/<skill>`; `--trail` supplies the trail for a bare name, and a bare name that matches more than one trail is refused with the candidates named. A pattern is refused because a decision names one procedure.
+
+The command appends one `refused` line to the proposing trail's `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson` with the trail, skill, bundle procedure hash, `store` destination, reason, and time, serialized under the trail's proposal-decision lock. It refuses a missing or invalid bundle, a proposal already marked `installed`, and a name the store already holds. A refusal is terminal for that exact bundle: the same bytes cannot be approved or trialled, and rejecting them again reports the existing decision without adding a second line. A re-proposed bundle with a different hash is a new proposal and can still be decided. `--dry-run` prints the exact line it would append and leaves the store, ledger, decision file, and lock untouched. Nothing is committed.
+
+```bash
+paseka skills reject paseka-release --reason "not a procedure"
+paseka skills reject trace-abc123/paseka-release --trail trace-abc123
+paseka skills reject trace-abc123/paseka-release --dry-run
 ```
 
 ### `paseka skills show <name>`
@@ -744,7 +819,7 @@ paseka skills remove paseka-release --dry-run   # prints the plan, changes nothi
 paseka skills remove paseka-release --force     # proceeds and names the roles
 ```
 
-The three mutating verbs read the committed ledger before they write. A **corrupt** ledger — bad JSON, an unknown schema version, or a record without `at`/`reason` — fails the command rather than being replaced, and no store entry is touched. A missing ledger is an empty one. See [Colony skills](skills.md#7-the-committed-ledger) for the record shape.
+The store mutations read the committed ledger before they write. A **corrupt** ledger — bad JSON, an unknown schema version, or a record without `at`/`reason` — fails the command rather than being replaced, and no store entry is touched. A missing ledger is an empty one. See [Colony skills](skills.md#7-the-committed-ledger) for the record shape.
 
 ---
 

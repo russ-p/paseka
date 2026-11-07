@@ -164,6 +164,81 @@ func TestReviewNoteSeverityVocabularyIsNotSharedWithOtherNarrativeKinds(t *testi
 	}
 }
 
+func TestValidateSkillProposed(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"skill.proposed","name":"paseka-release","description":"Run the release procedure. Use when shipping a version.","reason":"Two runs re-ran the checklist by hand; see run 01a1 and verification.failed on task 002.","bundle":"skill-proposals/paseka-release","procedureHash":"9f2c"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if details := in.Validate(); len(details) != 0 {
+		t.Fatalf("details = %#v", details)
+	}
+}
+
+func TestValidateSkillProposedRequiresEveryField(t *testing.T) {
+	base := map[string]any{
+		"kind":          "skill.proposed",
+		"name":          "paseka-release",
+		"description":   "Run the release procedure.",
+		"reason":        "Two runs re-ran the checklist by hand.",
+		"bundle":        "skill-proposals/paseka-release",
+		"procedureHash": "9f2c",
+	}
+	for _, field := range []string{"name", "description", "reason", "bundle", "procedureHash"} {
+		t.Run(field, func(t *testing.T) {
+			payload := make(map[string]any, len(base))
+			for key, value := range base {
+				payload[key] = value
+			}
+			delete(payload, field)
+			raw, err := json.Marshal(map[string]any{
+				"traceId": "trace-1",
+				"type":    "INSIGHT",
+				"payload": payload,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			in, err := ParseEventInput(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			details := in.Validate()
+			if len(details) != 1 || details[0].Path != "payload."+field {
+				t.Fatalf("details = %#v, want one payload.%s detail", details, field)
+			}
+		})
+	}
+}
+
+func TestValidateSkillProposedRefusesBundleOutsideComb(t *testing.T) {
+	for _, bundle := range []string{"../escape", "/tmp/escape", "skill-proposals/../../escape"} {
+		t.Run(bundle, func(t *testing.T) {
+			raw := []byte(`{"traceId":"trace-1","type":"INSIGHT","payload":{"kind":"skill.proposed","name":"paseka-release","description":"Run the release procedure.","reason":"Evidence.","bundle":"` + bundle + `","procedureHash":"9f2c"}}`)
+			in, err := ParseEventInput(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			details := in.Validate()
+			if len(details) != 1 || details[0].Path != "payload.bundle" {
+				t.Fatalf("details = %#v, want a payload.bundle detail", details)
+			}
+		})
+	}
+}
+
+func TestValidateSkillProposedRequiresInsightType(t *testing.T) {
+	raw := []byte(`{"traceId":"trace-1","type":"SIGNAL","payload":{"kind":"skill.proposed","name":"paseka-release","description":"Run the release procedure.","reason":"Evidence.","bundle":"skill-proposals/paseka-release","procedureHash":"9f2c"}}`)
+	in, err := ParseEventInput(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := in.Validate()
+	if len(details) != 1 || details[0].Path != "type" {
+		t.Fatalf("details = %#v, want a type detail", details)
+	}
+}
+
 func TestProjectInsightsExcludesTraceSummary(t *testing.T) {
 	now := time.Now().UTC()
 	events := []Event{
@@ -200,6 +275,21 @@ func TestProjectInsightsExcludesWorktreeBranch(t *testing.T) {
 	got := ProjectInsights(events, DefaultInsightProjectionOptions("task-1"))
 	if len(got) != 1 {
 		t.Fatalf("got %d insights, want 1: %#v", len(got), got)
+	}
+}
+
+func TestProjectInsightsExcludesSkillProposed(t *testing.T) {
+	now := time.Now().UTC()
+	events := []Event{
+		mustInsightEvent(t, now, `{"kind":"skill.proposed","name":"paseka-release","description":"Release procedure.","reason":"run 01a1","bundle":"skill-proposals/paseka-release","procedureHash":"abc123"}`),
+		mustInsightEvent(t, now.Add(time.Second), `{"kind":"run.summary","summary":"Task run outcome","taskId":"task-1"}`),
+	}
+	got := ProjectInsights(events, DefaultInsightProjectionOptions("task-1"))
+	if len(got) != 1 {
+		t.Fatalf("got %d insights, want 1: %#v", len(got), got)
+	}
+	if got[0] != "Summary (agent-1): Task run outcome" {
+		t.Fatalf("got %q", got[0])
 	}
 }
 

@@ -24,6 +24,10 @@ type Spec struct {
 	Bees    map[string]string `yaml:"bees"`
 	Prompts map[string]string `yaml:"prompts"`
 	Cues    map[string]string `yaml:"cues,omitempty"`
+	// Skills maps a skill name to its files, keyed by slash-form path relative
+	// to the skill directory. `SKILL.md` is required; supporting files such as
+	// `scripts/` and `references/` travel with it.
+	Skills map[string]map[string]string `yaml:"skills,omitempty"`
 }
 
 // ExportOptions configures colony → nuc export.
@@ -33,6 +37,7 @@ type ExportOptions struct {
 	Description string
 	Bees        []string // empty = all roles
 	Cues        []string // empty = all cues when present
+	Skills      []string // explicit skill references added to the roles' resolved set
 }
 
 // ImportOptions configures nuc → colony import.

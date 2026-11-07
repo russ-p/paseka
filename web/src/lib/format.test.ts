@@ -14,6 +14,8 @@ import {
 	protocolEvent,
 	runSummary,
 	session,
+	skillProposal,
+	skillRow,
 	taskDetail,
 	taskListItem,
 	systemView,
@@ -50,6 +52,13 @@ import {
 	sessionResumeBlocker,
 	sessionRowMeta,
 	sessionStateLabel,
+	skillProposalStateLabel,
+	skillProposalTimeLabel,
+	skillProposalsHeadline,
+	skillProvenanceLabel,
+	skillRolesLabel,
+	skillStateLabel,
+	skillStoreHeadline,
 	dashboardFailedRuns,
 	formatTimestamp,
 	insightTime,
@@ -1699,5 +1708,60 @@ describe('build stamp', () => {
 		expect(tooltip).toContain('not a tagged release');
 		expect(tooltip).toContain('dirty tree');
 		expect(versionTooltip(null)).toBe('');
+	});
+});
+
+describe('skill formatting', () => {
+	it('folds a state and its reason into one phrase that cannot lose the reason', () => {
+		expect(skillStateLabel(skillRow())).toBe('ok');
+		expect(skillStateLabel(skillRow({ state: 'invalid', reason: 'SKILL.md is missing' }))).toBe(
+			'invalid: SKILL.md is missing'
+		);
+		expect(skillStateLabel({ state: 'disabled', reason: '' })).toBe('disabled');
+		// An empty state from an older server is legible rather than blank.
+		expect(skillStateLabel({ state: '', reason: '' })).toBe('unknown');
+	});
+
+	it('joins the resolved roles and dashes an unassigned skill', () => {
+		expect(skillRolesLabel(['builder', 'docs'])).toBe('builder, docs');
+		// The server expands patterns, so a `*` here would mean the resolver leaked
+		// a pattern into the listing; the formatter must not invent one either.
+		expect(skillRolesLabel([])).toBe('—');
+		expect(skillRolesLabel(null)).toBe('—');
+	});
+
+	it('says provenance the way an operator reads it', () => {
+		expect(skillProvenanceLabel('hand')).toBe('hand-written');
+		expect(skillProvenanceLabel('proposal')).toBe('proposed');
+		expect(skillProvenanceLabel('nuc')).toBe('nuc');
+		expect(skillProvenanceLabel('')).toBe('hand-written');
+	});
+
+	it('names a trial destination and a refusal reason in the state cell', () => {
+		expect(skillProposalStateLabel(skillProposal())).toBe('pending');
+		expect(
+			skillProposalStateLabel(skillProposal({ state: 'trialled', destination: 'trace-beta' }))
+		).toBe('trialled: trace-beta');
+		expect(skillProposalStateLabel(skillProposal({ state: 'refused', reason: 'not a procedure' }))).toBe(
+			'refused: not a procedure'
+		);
+		// A reason or destination that is absent leaves the state word alone.
+		expect(skillProposalStateLabel({ state: 'trialled', destination: '' })).toBe('trialled');
+	});
+
+	it('formats proposal times locally and dashes an absent one', () => {
+		expect(skillProposalTimeLabel('2026-11-07T10:00:00Z')).toMatch(
+			/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
+		);
+		expect(skillProposalTimeLabel(undefined)).toBe('—');
+	});
+
+	it('gives the empty store and the empty proposal pane a sentence each', () => {
+		expect(skillStoreHeadline(0)).toBe('No skill is in the store yet.');
+		expect(skillStoreHeadline(1)).toContain('One procedure');
+		expect(skillStoreHeadline(3)).toContain('3 procedures');
+		expect(skillProposalsHeadline(0)).toBe('No proposal is on record.');
+		expect(skillProposalsHeadline(1)).toContain('One proposal');
+		expect(skillProposalsHeadline(2)).toContain('2 proposals');
 	});
 });

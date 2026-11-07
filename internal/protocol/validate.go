@@ -3,7 +3,9 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
+	"unicode/utf8"
 )
 
 // ValidationDetail describes one schema validation failure.
@@ -187,6 +189,8 @@ func validatePayloadKind(eventType EventType, kind string, payload json.RawMessa
 		return validateWorktreeBranch(payload)
 	case InsightPRBody:
 		return validatePRBody(payload)
+	case InsightSkillProposed:
+		return validateSkillProposed(payload)
 	}
 
 	switch InviteEventKind(kind) {
@@ -525,6 +529,70 @@ func validatePRBody(payload json.RawMessage) []ValidationDetail {
 		return []ValidationDetail{{Path: "payload.body", Message: fmt.Sprintf("must be at most %d characters", MaxPRBodyLen)}}
 	}
 	return nil
+}
+
+// validateSkillProposed requires the proposal's machine-readable identity: the
+// name, description, reason, comb-relative bundle reference, and procedure
+// content hash. A discovery missing any of them cannot be approved later, so it
+// is refused at emit instead of sitting in the trail as an unusable proposal.
+func validateSkillProposed(payload json.RawMessage) []ValidationDetail {
+	var p SkillProposedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return []ValidationDetail{{Path: "payload", Message: "invalid skill.proposed payload"}}
+	}
+	var details []ValidationDetail
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		details = append(details, ValidationDetail{Path: "payload.name", Message: "required"})
+	} else if n := utf8.RuneCountInString(name); n > MaxSkillNameLen {
+		details = append(details, ValidationDetail{
+			Path:    "payload.name",
+			Message: fmt.Sprintf("must be at most %d characters", MaxSkillNameLen),
+		})
+	}
+	description := strings.TrimSpace(p.Description)
+	if description == "" {
+		details = append(details, ValidationDetail{Path: "payload.description", Message: "required"})
+	} else if n := utf8.RuneCountInString(description); n > MaxSkillDescriptionLen {
+		details = append(details, ValidationDetail{
+			Path:    "payload.description",
+			Message: fmt.Sprintf("must be at most %d characters", MaxSkillDescriptionLen),
+		})
+	}
+	if strings.TrimSpace(p.Reason) == "" {
+		details = append(details, ValidationDetail{Path: "payload.reason", Message: "required"})
+	}
+	if strings.TrimSpace(p.Bundle) == "" {
+		details = append(details, ValidationDetail{Path: "payload.bundle", Message: "required"})
+	} else if _, ok := CombRelativeBundle(p.Bundle); !ok {
+		details = append(details, ValidationDetail{
+			Path:    "payload.bundle",
+			Message: "must be a path relative to the trail artifact comb",
+		})
+	}
+	if strings.TrimSpace(p.ProcedureHash) == "" {
+		details = append(details, ValidationDetail{Path: "payload.procedureHash", Message: "required"})
+	}
+	return details
+}
+
+// CombRelativeBundle normalizes a proposal's bundle reference and refuses
+// anything that could escape the trail's artifact comb. A proposal is written
+// into the comb, so its reference is always a relative path inside it.
+//
+// It is exported because a reader of a proposal event must apply the same rule
+// as the validator: a hand-edited or older record cannot be trusted to name a
+// path inside the comb just because it was stored.
+func CombRelativeBundle(raw string) (string, bool) {
+	ref := strings.ReplaceAll(strings.TrimSpace(raw), "\\", "/")
+	if ref == "" || strings.HasPrefix(ref, "/") {
+		return "", false
+	}
+	clean := path.Clean(ref)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", false
+	}
+	return clean, true
 }
 
 func validateTraceSummary(payload json.RawMessage) []ValidationDetail {
