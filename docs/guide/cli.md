@@ -616,7 +616,7 @@ Standing cues seed honey on the first tick and replace remaining with `standing.
 
 Inspect the colony-owned Agent Skills store at `.paseka/skills/`. The group is a namespace: bare `paseka skills` prints its help and changes nothing. Layout, `SKILL.md` rules, reference syntax, budgets, and the two delivery modes: [Colony skills](skills.md).
 
-The reading verbs (`list`, `show`, `validate`) describe the live repository store. `load` is different: it serves a body to a named run from that run's frozen configuration, and it is the runtime route a `command`-mode advertisement points at.
+The reading verbs (`list`, `show`, `proposals`, `validate`) describe the live repository store or the trails' retained records. `load` is different: it serves a body to a named run from that run's frozen configuration, and it is the runtime route a `command`-mode advertisement points at.
 
 ### `paseka skills list`
 
@@ -632,6 +632,27 @@ Lists every skill in the repository store as a table of **name, state, roles, de
 ```bash
 paseka skills list
 paseka skills list --json
+```
+
+### `paseka skills proposals [reference...]`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--trail` | | Trail id for bare references, or the trail to list |
+| `--json` | | Emit the inventory as JSON on stdout |
+
+Lists every skill proposal the trails hold, one row per proposal: source trail, skill, proposal time, state, and the bundle's verdict. The state is `pending` (no decision), `installed`, `refused` (with the reason; terminal for the exact bundle), `trialled` (with the destination trail), or `missing` when the bundle is gone. The bundle column re-reads the bytes — a `SKILL.md` that fails the rule set, a non-regular entry, or a procedure hash that no longer matches the discovery is reported with its reason and the row is not valid.
+
+Decisions are read from the runtime-owned, machine-local `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson`; the newest line per destination is shown. Nothing is stored in the committed ledger, so deleting a trail deletes its proposals and their decisions. A malformed decision line or an unreadable trail is printed after the table rather than skipped.
+
+A reference is a bare skill name or `<trail>/<skill>`. A bare name that matches more than one trail is refused and names the candidates; `--trail` selects one, and with no reference it filters the listing to that trail. A pattern is refused. `--json` emits `proposals` and `issues` arrays with the same facts, including `valid`, `validation`, and `decisions`:
+
+```bash
+paseka skills proposals
+paseka skills proposals paseka-release
+paseka skills proposals trace-abc123/paseka-release
+paseka skills proposals --trail trace-abc123 --json
 ```
 
 ### `paseka skills show <name>`

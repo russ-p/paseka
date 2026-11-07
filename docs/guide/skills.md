@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`), the store mutations (`disable`, `enable`, `remove`), the Archivist's proposal intent, and attribution. Approval and the trial destination build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), the store mutations (`disable`, `enable`, `remove`), the Archivist's proposal intent, and attribution. Approval and the trial destination build on the same rules.
 
 ---
 
@@ -404,3 +404,33 @@ paseka bee run archivist --trace trace-abc123 --intent skill \
 - The completion contract is per intent: `task` and `chronicle` must publish exactly one `context.note`, and `skill` must publish exactly one `skill.proposed`. A skill-intent run that publishes nothing, a note, or more than one proposal fails, and a note-intent run that publishes a proposal fails.
 
 Proposals are operational `INSIGHT` events: the trail timeline and export summarize them with the skill name and its reason, and the kind is never projected into `{{.Insights}}` prompt memory.
+
+## 16. Reviewing proposals
+
+```bash
+paseka skills proposals                          # every proposal every trail holds
+paseka skills proposals paseka-release           # a bare name, across trails
+paseka skills proposals trace-abc123/paseka-release
+paseka skills proposals --trail trace-abc123     # every proposal on one trail
+paseka skills proposals --json
+```
+
+A proposal exists because an Archivist skill-intent run published `INSIGHT/skill.proposed` and wrote a bundle into that trail's comb (section 15). `proposals` is the inventory of those discoveries: one row per proposal with the source trail, the skill, when it was proposed, its state, and the bundle's verdict.
+
+| State | Meaning |
+| ----- | ------- |
+| `pending` | no decision yet; a matching, valid bundle is marked `valid` |
+| `installed` | a Beekeeper approved the bundle into the shared store |
+| `refused` | a Beekeeper turned it down; the reason is shown, and the refusal is terminal for that exact bundle |
+| `trialled` | the bundle was applied to a trail's candidate configuration; the destination trail is named |
+| `missing` | the discovery exists but its bundle is gone; it is reported, never hidden and never pending |
+
+The **bundle** column re-reads the bytes rather than trusting the discovery: the bundle must contain a `SKILL.md` that passes the one rule set, every entry must be a regular file, and the recomputed procedure hash must equal the discovery's `procedureHash`. A hash mismatch, an invalid `SKILL.md`, or a symbolic link is reported with its reason and the row is not valid; a matching valid bundle reads `pending` and `valid`.
+
+Decisions come from the runtime-owned, machine-local `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson` — one line per decision carrying `skill`, `trail`, `procedureHash`, `destination`, `decision`, optional `reason` and `roles`, and `at`. Nothing about proposals is in the committed store ledger: the decision is a recorded state beside the proposal, not an absence, and the file is not shared through git. It disappears with the trail. A decision is keyed by the bundle's procedure hash, so a changed bundle is a new proposal and an earlier decision does not apply to it. The newest line per destination is the one the row shows, so a trial and a later store install both remain visible, while a refusal is terminal for the exact bundle.
+
+A reference is a bare skill name or `<trail>/<skill>`; `--trail` supplies the trail for a bare name and, with no reference, filters the listing to one trail. A bare name that matches more than one trail is refused, naming every candidate as `<trail>/<skill>`, because choosing between two trails is not a listing's decision. A pattern is refused — a decision names one procedure — and a named selection that matches nothing is an error.
+
+A malformed decision line, an unreadable event record, and an unreadable trail are printed after the table (and carried in the JSON `issues` array); none is silently skipped.
+
+`--json` emits the same rows as a contract: `trail`, `name`, `description`, `proposedAt`, `state`, optional `reason`/`destination`/`decidedAt`, `bundle`, `bundleMissing`, `procedureHash`, `recomputedHash`, `valid`, `validation`, and `decisions` (the newest line per destination). `proposals` and `issues` are always arrays.

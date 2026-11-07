@@ -564,7 +564,7 @@ func validateSkillProposed(payload json.RawMessage) []ValidationDetail {
 	}
 	if strings.TrimSpace(p.Bundle) == "" {
 		details = append(details, ValidationDetail{Path: "payload.bundle", Message: "required"})
-	} else if _, ok := combRelativeBundle(p.Bundle); !ok {
+	} else if _, ok := CombRelativeBundle(p.Bundle); !ok {
 		details = append(details, ValidationDetail{
 			Path:    "payload.bundle",
 			Message: "must be a path relative to the trail artifact comb",
@@ -576,10 +576,14 @@ func validateSkillProposed(payload json.RawMessage) []ValidationDetail {
 	return details
 }
 
-// combRelativeBundle normalizes a bundle reference and refuses anything that
-// could escape the trail's artifact comb. A proposal is written into the comb,
-// so its reference is always a relative path inside it.
-func combRelativeBundle(raw string) (string, bool) {
+// CombRelativeBundle normalizes a proposal's bundle reference and refuses
+// anything that could escape the trail's artifact comb. A proposal is written
+// into the comb, so its reference is always a relative path inside it.
+//
+// It is exported because a reader of a proposal event must apply the same rule
+// as the validator: a hand-edited or older record cannot be trusted to name a
+// path inside the comb just because it was stored.
+func CombRelativeBundle(raw string) (string, bool) {
 	ref := strings.ReplaceAll(strings.TrimSpace(raw), "\\", "/")
 	if ref == "" || strings.HasPrefix(ref, "/") {
 		return "", false
