@@ -664,6 +664,8 @@ paseka skills proposals --trail trace-abc123 --json
 | ---- | ----- | ----------- |
 | `--path` | `-C` | Colony resolution start directory |
 | `--trail` | | Trail id for bare references |
+| `--into` | | Trial the batch on one trail's pinned configuration instead of the store |
+| `--role` | | Role that must resolve the trialled skills (repeatable, required with `--into`) |
 | `--force` | | Replace an existing store entry (a disable record is kept) |
 | `--dry-run` | | Print the plan without touching the store or the decisions |
 
@@ -677,12 +679,15 @@ An existing store entry is refused without `--force`. With `--force` the whole b
 
 The command appends one `installed` decision to each source trail's `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson` with the destination (`store`), skill, procedure hash, and time. It names every path it wrote in the working tree and states that committing is the Beekeeper's decision: it never writes a commit. `--dry-run` prints the same plan, including the exact decision line it would append, and leaves the store, ledger, and decision files byte-identical.
 
+With `--into <trace>`, the same batch is trialled on that one trail's pinned configuration instead of installed in the store, and `--role` (repeatable) names the roles that must resolve it. The command validates the whole candidate and applies exactly one new configuration revision. The active snapshot, the live store, and the working tree are untouched; each source trail gets one `trialled` decision naming the destination trail, the roles, the procedure hash, and the time, and the proposal stays pending for the store because a trial is evidence, not a store approval. The command refuses a trial without `--role`, a proposal that was already refused, is missing, invalid, or no longer hashes to its discovery, a candidate that fails the shared skill rules or procedure validation, and a trail with another configuration change pending or an execution blocker holding activation. The role-list change and the full refusal reasons: [Colony skills](skills.md) §19.
+
 ```bash
 paseka skills approve paseka-release
 paseka skills approve paseka-release --trail trace-abc123
 paseka skills approve trace-abc123/paseka-release trace-abc456/another-skill
 paseka skills approve paseka-release --force
 paseka skills approve trace-abc123/paseka-release --dry-run
+paseka skills approve trace-abc123/paseka-release --into trace-def456 --role builder
 ```
 
 ### `paseka skills reject <reference>`
