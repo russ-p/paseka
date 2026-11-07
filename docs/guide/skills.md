@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), the store mutations (`disable`, `enable`, `remove`), the Archivist's proposal intent, and attribution. Approval and the trial destination build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, and attribution. Approval and the trial destination build on the same rules.
 
 ---
 
@@ -434,3 +434,19 @@ A reference is a bare skill name or `<trail>/<skill>`; `--trail` supplies the tr
 A malformed decision line, an unreadable event record, and an unreadable trail are printed after the table (and carried in the JSON `issues` array); none is silently skipped.
 
 `--json` emits the same rows as a contract: `trail`, `name`, `description`, `proposedAt`, `state`, optional `reason`/`destination`/`decidedAt`, `bundle`, `bundleMissing`, `procedureHash`, `recomputedHash`, `valid`, `validation`, and `decisions` (the newest line per destination). `proposals` and `issues` are always arrays.
+
+## 17. Refusing a proposal
+
+```bash
+paseka skills reject paseka-release --reason "not a procedure"
+paseka skills reject trace-abc123/paseka-release --trail trace-abc123
+paseka skills reject trace-abc123/paseka-release --dry-run
+```
+
+`reject` records a Beekeeper's refusal for exactly one proposal. It resolves its reference the same way `proposals` does — `<skill>` or `<trail>/<skill>`, with `--trail` supplying the trail for a bare name — so a pattern, an unknown name, and a bare name that appears in more than one trail are refused, and an ambiguity names every candidate as `<trail>/<skill>`.
+
+The command appends one `refused` line to the proposing trail's `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson`, carrying the trail, the skill, the bundle's procedure hash, the destination (`store`), the decision, the optional `--reason`, and the time. It refuses a bundle that is missing or invalid, a proposal already marked `installed`, and a name the live store already holds. The append is serialized under the trail's proposal-decision lock, so a concurrent writer cannot interleave a partial line. The decision is machine-local trail data: nothing is committed and it disappears with the trail.
+
+A refusal is terminal for that exact bundle. The same bytes cannot later be approved or trialled, and rejecting them again reports the existing decision and time without adding a second line. A re-proposed bundle with a different `procedureHash` is a new proposal and can still be decided.
+
+`--dry-run` prints the exact line that would be appended and changes nothing: the store, the ledger, the decision file, and the lock file are untouched. `paseka skills proposals` then shows the row as `refused` with the reason and the decision time.

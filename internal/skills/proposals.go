@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/russ-p/paseka/internal/filelock"
 	"github.com/russ-p/paseka/internal/protocol"
 	"github.com/russ-p/paseka/internal/runs"
 )
@@ -44,6 +45,15 @@ const (
 	ProposalMissing = "missing"
 
 	maxDecisionLineBytes = 1 << 20
+
+	// proposalLockFileName serializes writes to one trail's decision log. The
+	// lock lives beside the log rather than inside a reader's path, and it is a
+	// different lock from the trail's configuration lock: a decision append must
+	// not queue behind a configuration snapshot, and a refusal with a dry run
+	// must not create any file at all.
+	proposalLockFileName   = ".lock"
+	proposalLockBudget     = 10 * time.Second
+	proposalLockStaleAfter = 30 * time.Second
 )
 
 // ProposalDecision is one line in a trail's decision log. The runtime alone
@@ -66,6 +76,28 @@ type ProposalDecision struct {
 // disappears with the trail.
 func ProposalDecisionsPath(colonyRoot, traceID string) string {
 	return filepath.Join(colonyRoot, ".paseka", "runs", traceID, ProposalsDirName, DecisionsFileName)
+}
+
+// ProposalDecisionsLockPath returns the lock that serializes appends to one
+// trail's decision log. Every writer takes it, so two decisions cannot
+// interleave bytes in the append-only file.
+func ProposalDecisionsLockPath(colonyRoot, traceID string) string {
+	return filepath.Join(filepath.Dir(ProposalDecisionsPath(colonyRoot, traceID)), proposalLockFileName)
+}
+
+// lockProposalDecisions acquires one trail's decision lock. The caller releases
+// it when the append (and, for a rejection, the re-read that makes the command
+// idempotent) is complete.
+func lockProposalDecisions(colonyRoot, traceID string) (func(), error) {
+	path := ProposalDecisionsLockPath(colonyRoot, traceID)
+	lock, err := filelock.Acquire(path, filelock.Options{
+		Budget:     proposalLockBudget,
+		StaleAfter: proposalLockStaleAfter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("skills: lock %s: %w", path, err)
+	}
+	return lock.Release, nil
 }
 
 // ProposalIssue is one finding from the proposal scan. Trail is set when the
@@ -676,20 +708,42 @@ func supportingFiles(dir string) ([]string, error) {
 
 // AppendProposalDecision validates and appends one decision line. The runtime
 // is its only writer; a refusal, an install, and a trial all go through this
-// function so the file has one shape.
+// function so the file has one shape and every append takes the trail's
+// decision lock.
 func AppendProposalDecision(colonyRoot, traceID string, decision ProposalDecision) error {
 	if reason := validateProposalDecision(decision, traceID); reason != "" {
 		return fmt.Errorf("skills: cannot record proposal decision: %s", reason)
 	}
-	path := ProposalDecisionsPath(colonyRoot, traceID)
+	line, err := EncodeProposalDecision(decision)
+	if err != nil {
+		return err
+	}
+	release, err := lockProposalDecisions(colonyRoot, traceID)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return appendProposalDecisionLine(ProposalDecisionsPath(colonyRoot, traceID), line)
+}
+
+// EncodeProposalDecision renders one decision exactly as the log stores it,
+// including the trailing newline. A dry run prints these bytes, so what an
+// operator previews is byte-for-byte what the append would write.
+func EncodeProposalDecision(decision ProposalDecision) ([]byte, error) {
+	data, err := json.Marshal(decision)
+	if err != nil {
+		return nil, fmt.Errorf("skills: encode proposal decision: %w", err)
+	}
+	return append(data, '\n'), nil
+}
+
+// appendProposalDecisionLine writes one already-encoded decision line. The
+// caller holds the trail's decision lock, so the open-append-close sequence is
+// the only writer in flight.
+func appendProposalDecisionLine(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("skills: create decision directory: %w", err)
 	}
-	data, err := json.Marshal(decision)
-	if err != nil {
-		return fmt.Errorf("skills: encode proposal decision: %w", err)
-	}
-	data = append(data, '\n')
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("skills: append %s: %w", path, err)
@@ -702,6 +756,154 @@ func AppendProposalDecision(colonyRoot, traceID string, decision ProposalDecisio
 		return fmt.Errorf("skills: append %s: %w", path, err)
 	}
 	return nil
+}
+
+// ProposalRejection is the outcome of refusing one proposal. Line is the exact
+// decision line the command would append, so a dry run can print it without
+// writing; AlreadyRefused means the same bundle already carries a refusal and
+// nothing was appended.
+type ProposalRejection struct {
+	Proposal       Proposal
+	Decision       ProposalDecision
+	Line           []byte
+	AlreadyRefused bool
+}
+
+// RejectProposal records a refusal for exactly one proposal. The reference is
+// resolved with the same rules as the `proposals` inventory, so a pattern, an
+// unknown name, and an ambiguous bare name are refused here too.
+//
+// A refusal is terminal for the exact bundle: the same bundle cannot be
+// approved or trialled afterwards, and rejecting it again reports the existing
+// decision without appending a second line. A re-proposed bundle with a
+// different procedure hash is a new proposal and can be decided on its own. A
+// bundle that is missing or invalid, a proposal already installed into the
+// store, and a name the store already holds are all refused rather than
+// recorded as a refusal of something that was not a candidate anymore.
+func RejectProposal(colonyRoot, raw, defaultTrail, reason string, at time.Time, dryRun bool) (ProposalRejection, error) {
+	ref, err := ParseProposalReference(raw, defaultTrail)
+	if err != nil {
+		return ProposalRejection{}, err
+	}
+	inventory, err := ScanProposals(colonyRoot)
+	if err != nil {
+		return ProposalRejection{}, err
+	}
+	matched, err := inventory.Resolve(ref)
+	if err != nil {
+		return ProposalRejection{}, err
+	}
+	proposal := matched[0]
+
+	switch proposal.State {
+	case ProposalInstalled:
+		return ProposalRejection{}, fmt.Errorf(
+			"skills: proposal %s/%s is already installed into the store; its refusal cannot be recorded",
+			proposal.Trail, proposal.Name,
+		)
+	case ProposalRefused:
+		return ProposalRejection{Proposal: proposal, AlreadyRefused: true}, nil
+	}
+	if proposal.BundleMissing || proposal.State == ProposalMissing {
+		return ProposalRejection{}, fmt.Errorf(
+			"skills: proposal %s/%s has no bundle at %q; there is nothing to refuse",
+			proposal.Trail, proposal.Name, proposal.Bundle,
+		)
+	}
+	if !proposal.Valid {
+		validation := "invalid bundle"
+		if len(proposal.Validation) > 0 {
+			validation = strings.Join(proposal.Validation, "; ")
+		}
+		return ProposalRejection{}, fmt.Errorf(
+			"skills: proposal %s/%s cannot be refused: %s",
+			proposal.Trail, proposal.Name, validation,
+		)
+	}
+	if held, err := storeHoldsSkill(colonyRoot, proposal.Name); err != nil {
+		return ProposalRejection{}, err
+	} else if held {
+		return ProposalRejection{}, fmt.Errorf(
+			"skills: the store already holds a skill named %q; proposal %s/%s is already installed",
+			proposal.Name, proposal.Trail, proposal.Name,
+		)
+	}
+
+	if strings.TrimSpace(reason) == "" {
+		reason = ""
+	} else {
+		reason = strings.TrimSpace(reason)
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	decision := ProposalDecision{
+		Skill:         proposal.Name,
+		Trail:         proposal.Trail,
+		ProcedureHash: proposal.ProcedureHash,
+		Destination:   ProposalStoreDestination,
+		Decision:      ProposalRefused,
+		Reason:        reason,
+		At:            at.UTC(),
+	}
+	line, err := EncodeProposalDecision(decision)
+	if err != nil {
+		return ProposalRejection{}, err
+	}
+	result := ProposalRejection{Proposal: proposal, Decision: decision, Line: line}
+	if dryRun {
+		return result, nil
+	}
+
+	release, err := lockProposalDecisions(colonyRoot, proposal.Trail)
+	if err != nil {
+		return ProposalRejection{}, err
+	}
+	defer release()
+
+	// Re-read under the lock: a concurrent reject of the same bundle must not
+	// append a second terminal decision, and a concurrent install must win over
+	// a refusal that was computed from a stale inventory.
+	decisions, _, err := ReadProposalDecisions(ProposalDecisionsPath(colonyRoot, proposal.Trail), proposal.Trail)
+	if err != nil {
+		return ProposalRejection{}, fmt.Errorf("skills: read decisions for trail %s: %w", proposal.Trail, err)
+	}
+	for _, decision := range applicableDecisions(decisions, proposal) {
+		switch decision.Decision {
+		case ProposalRefused:
+			refused := result.Proposal
+			refused.State = ProposalRefused
+			refused.Reason = decision.Reason
+			refused.Destination = decision.Destination
+			refused.DecidedAt = decision.At
+			return ProposalRejection{Proposal: refused, AlreadyRefused: true}, nil
+		case ProposalInstalled:
+			return ProposalRejection{}, fmt.Errorf(
+				"skills: proposal %s/%s is already installed into the store; its refusal cannot be recorded",
+				proposal.Trail, proposal.Name,
+			)
+		}
+	}
+	if err := appendProposalDecisionLine(ProposalDecisionsPath(colonyRoot, proposal.Trail), line); err != nil {
+		return ProposalRejection{}, err
+	}
+	return result, nil
+}
+
+// storeHoldsSkill reports whether the live store already contains an entry named
+// name. It is the second half of "already installed": a decision records an
+// approval, while a hand-copied directory records the same fact with no line.
+func storeHoldsSkill(colonyRoot, name string) (bool, error) {
+	report, err := ScanColony(colonyRoot)
+	if err != nil {
+		return false, err
+	}
+	for _, skill := range report.Skills {
+		if skill.Name == name {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ReadProposalDecisions reads one trail's decision log. The second result names

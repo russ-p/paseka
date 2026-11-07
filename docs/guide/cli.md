@@ -655,6 +655,25 @@ paseka skills proposals trace-abc123/paseka-release
 paseka skills proposals --trail trace-abc123 --json
 ```
 
+### `paseka skills reject <reference>`
+
+| Flag | Short | Description |
+| ---- | ----- | ----------- |
+| `--path` | `-C` | Colony resolution start directory |
+| `--trail` | | Trail id for a bare reference |
+| `--reason` | `-r` | Why the proposal is refused (optional) |
+| `--dry-run` | | Print the decision line and change nothing |
+
+Records a refusal for exactly one proposal. The reference is `<skill>` or `<trail>/<skill>`; `--trail` supplies the trail for a bare name, and a bare name that matches more than one trail is refused with the candidates named. A pattern is refused because a decision names one procedure.
+
+The command appends one `refused` line to the proposing trail's `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson` with the trail, skill, bundle procedure hash, `store` destination, reason, and time, serialized under the trail's proposal-decision lock. It refuses a missing or invalid bundle, a proposal already marked `installed`, and a name the store already holds. A refusal is terminal for that exact bundle: the same bytes cannot be approved or trialled, and rejecting them again reports the existing decision without adding a second line. A re-proposed bundle with a different hash is a new proposal and can still be decided. `--dry-run` prints the exact line it would append and leaves the store, ledger, decision file, and lock untouched. Nothing is committed.
+
+```bash
+paseka skills reject paseka-release --reason "not a procedure"
+paseka skills reject trace-abc123/paseka-release --trail trace-abc123
+paseka skills reject trace-abc123/paseka-release --dry-run
+```
+
 ### `paseka skills show <name>`
 
 | Flag | Short | Description |
