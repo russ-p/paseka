@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, and attribution. Approval and the trial destination build on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), installation of an approved proposal (`approve`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, and attribution. Approval writes the store; the trial destination builds on the same rules.
 
 ---
 
@@ -196,18 +196,19 @@ paseka skills list
 paseka skills list --json
 ```
 
-The table's columns are **name, state, roles, description**:
+The table's columns are **name, state, roles, description, provenance**:
 
 ```text
-NAME            STATE                                            ROLES                         DESCRIPTION
-legacy          disabled: step 2 is wrong                        allrounder                    The old procedure.
-paseka-release  ok                                               allrounder, builder, shipper  Run the colony release procedure.
-paseka-ship     invalid: name "paseka-shipped" does not match its directory "paseka-ship"  allrounder, shipper  Run the ship procedure.
+NAME            STATE                                            ROLES                         DESCRIPTION                       PROVENANCE
+legacy          disabled: step 2 is wrong                        allrounder                    The old procedure.                hand
+paseka-release  ok                                               allrounder, builder, shipper  Run the colony release procedure. proposal
+paseka-ship     invalid: name "paseka-shipped" does not match its directory "paseka-ship"  allrounder, shipper  Run the ship procedure.  hand
 ```
 
 - **state** is one of `ok`, `invalid` (with the reason from the same rule set `validate` uses), or `disabled` (with the ledger's reason). A disabled skill reads as disabled even if its bytes have since gone stale; `validate` and `doctor` still report the invalidity.
 - **roles** is computed from the role configurations on every run, never remembered: it names every role whose selection resolves to the skill. A role that lists `*` or a matching pattern (`paseka-*`) is named against every skill it actually resolves to, because that is what the gate does — so the column answers "who carries this procedure, and is removing it safe?" for a wildcard role too. A profile override is reflected, because the role lists are the effective ones. `-` means no role carries the skill.
 - **description** is the skill's `description`, the same line a bee sees in the advertisement.
+- **provenance** is read from the skill's own `metadata.source`: `proposal` for a skill installed by `approve` (§18), `nuc` for an imported Nuc, and `hand` when there is no record. It is not mirrored in the ledger.
 
 A store-wide finding — a stray entry at the store root, or the 8 MiB budget — has no row, so it is printed after the table as a `store: …` line. The per-skill findings are already in the state column.
 
@@ -221,14 +222,16 @@ A store-wide finding — a stray entry at the store root, or the 8 MiB budget �
       "name": "paseka-release",
       "state": "ok",
       "roles": ["builder"],
-      "description": "Run the colony release procedure."
+      "description": "Run the colony release procedure.",
+      "provenance": "proposal"
     },
     {
       "name": "legacy",
       "state": "disabled",
       "reason": "step 2 is wrong",
       "roles": ["allrounder"],
-      "description": "The old procedure."
+      "description": "The old procedure.",
+      "provenance": "hand"
     }
   ],
   "issues": []
@@ -342,7 +345,7 @@ paseka doctor
 
 ## 12. Changing the store
 
-Three verbs change the store. All three act on one procedure — a pattern (`paseka-*`, `*`) is refused — speak prose, and never write a commit. They read the committed ledger first, so a corrupt ledger fails the command instead of being replaced, and no store entry is touched.
+Four verbs change the store. `approve` installs a proposed procedure (§18); `disable`, `enable`, and `remove` change one already in the store. All four act on one procedure — a pattern (`paseka-*`, `*`) is refused — speak prose, and never write a commit. They read the committed ledger first, so a corrupt ledger fails the command instead of being replaced, and no store entry is touched.
 
 ```bash
 paseka skills disable paseka-release --reason "release step 2 is wrong"
@@ -362,6 +365,8 @@ A removal that must be shared is a change the Beekeeper commits. The commands wr
 Validation is one rule set, exposed once and reused by every later path — the store scan, dispatch, a trail's frozen copy, approval, and `doctor`. The shell and the runtime call the same scan, so they cannot report a different verdict about the same bytes; a second copy of these rules would drift.
 
 An invalid skill is an error even when nothing else mentions it, so a typo in frontmatter cannot sit in the store unnoticed.
+
+`doctor` also re-checks an installed procedure's **recorded hash**: a skill approved from a proposal carries `metadata.procedure_hash`, and a hand edit to the body or a supporting file changes the recomputed hash. That is an error, because the file is still well-formed but no longer the procedure the Beekeeper approved. A hand-authored skill without a recorded hash is not checked — there is no approved identity for it to disagree with.
 
 ## 14. Attribution and the trail export
 
@@ -450,3 +455,39 @@ The command appends one `refused` line to the proposing trail's `.paseka/runs/<t
 A refusal is terminal for that exact bundle. The same bytes cannot later be approved or trialled, and rejecting them again reports the existing decision and time without adding a second line. A re-proposed bundle with a different `procedureHash` is a new proposal and can still be decided.
 
 `--dry-run` prints the exact line that would be appended and changes nothing: the store, the ledger, the decision file, and the lock file are untouched. `paseka skills proposals` then shows the row as `refused` with the reason and the decision time.
+
+## 18. Approving a proposal into the store
+
+```bash
+paseka skills approve paseka-release
+paseka skills approve paseka-release --trail trace-abc123
+paseka skills approve trace-abc123/paseka-release trace-abc456/another-skill
+paseka skills approve trace-abc123/paseka-release --dry-run
+paseka skills approve paseka-release --force
+```
+
+`approve` installs one or more proposed skills into the repository store. It resolves every reference the same way `proposals` does — `<skill>` or `<trail>/<skill>`, with `--trail` supplying the trail for a bare name — so a pattern, an unknown name, and a bare name that appears in more than one trail are refused, and an ambiguity names every candidate as `<trail>/<skill>`.
+
+**The batch is atomic.** Every reference is resolved, every bundle is re-read and hash-verified against its discovery, and every `SKILL.md` is validated against the destination name before a single byte is written. One invalid, missing, refused, already-installed, or conflicting reference writes none of the good ones. Two proposals in one batch that would install the same store name are a conflict, because the store has one directory per name.
+
+The command installs the bundle's `SKILL.md` and every supporting file, then runs the shared rule set over the result before it becomes visible. An existing store entry of the same name is refused without `--force`; with `--force` the whole batch still validates first, the old entry is replaced as a unit, and an existing disable record is **kept**: the replaced skill remains disabled and the command says so. `doctor` and `skills list` keep reporting it as disabled.
+
+Installation writes provenance into the skill's own `metadata`, preserving every other metadata key and the body byte-for-byte:
+
+| Key | Value |
+| --- | ----- |
+| `source` | `proposal` |
+| `trail` | the trail that proposed the skill |
+| `role` | the proposing bee's role (the discovery producer, resolved through its run record) |
+| `approved_at` | the approval time in RFC 3339 |
+| `procedure_hash` | the procedure-content hash the bundle was approved with |
+
+The hash covers the `SKILL.md` body and the supporting files in a stable order and excludes the frontmatter, so writing provenance cannot change it. It is the identity `doctor` checks later: an installed skill whose body or supporting file was edited by hand is reported as a `procedure hash mismatch`, while a hand-authored skill without a recorded hash is not checked.
+
+The command appends one `installed` decision to each source trail's `.paseka/runs/<traceId>/skill-proposals/decisions.ndjson`, carrying the destination (`store`), the skill, the bundle's procedure hash, and the time. The decision is machine-local trail data and disappears with the trail; the skill itself is a repository change. `proposals` then shows the row as `installed`.
+
+Approval makes the procedure **available**, not active: it reaches a bee only when that bee's role lists it (§5).
+
+`--dry-run` prints the same plan — source trail, destination, procedure hash, provenance, every path that would be written, and the exact decision line it would append — and leaves the store, the ledger, and the decision files byte-identical. It validates the real batch, so a reference the real command would refuse is refused here too.
+
+An install leaves **untracked files in the working tree**. The command names every path it wrote and says that committing is still the Beekeeper's decision; it never writes a commit.

@@ -127,6 +127,10 @@ type Proposal struct {
 	ProposedAt    time.Time
 	Bundle        string
 	ProcedureHash string
+	// AgentID is the producer recorded on the discovery event. It is resolved
+	// to the proposing bee's role at install time, so the provenance record can
+	// name the role without the discovery payload carrying a second identity.
+	AgentID string
 	// RecomputedHash is the hash read from the bundle now. It is empty when the
 	// bundle is missing or its SKILL.md cannot be parsed.
 	RecomputedHash string
@@ -345,6 +349,7 @@ func scanTrailProposals(colonyRoot, traceID string, issues *[]ProposalIssue) []P
 			payload: payload,
 			name:    name,
 			at:      event.CreatedAt,
+			agentID: event.AgentID,
 		}
 	}
 
@@ -377,6 +382,7 @@ func scanTrailProposals(colonyRoot, traceID string, issues *[]ProposalIssue) []P
 			ProposedAt:    discovered.at,
 			Bundle:        discovered.payload.Bundle,
 			ProcedureHash: strings.TrimSpace(discovered.payload.ProcedureHash),
+			AgentID:       discovered.agentID,
 		}
 
 		verdict := evaluateProposalBundle(trailRoot, proposal.Bundle)
@@ -409,6 +415,7 @@ type discovery struct {
 	payload protocol.SkillProposedPayload
 	name    string
 	at      time.Time
+	agentID string
 }
 
 // applicableDecisions returns the decision lines that name this exact proposal:
@@ -723,6 +730,24 @@ func AppendProposalDecision(colonyRoot, traceID string, decision ProposalDecisio
 		return err
 	}
 	defer release()
+	return appendProposalDecisionLine(ProposalDecisionsPath(colonyRoot, traceID), line)
+}
+
+// appendProposalDecisionLocked validates and appends one decision while the
+// caller already holds that trail's decision lock. A batch that spans trails
+// takes every lock before it writes and then uses this function, so the one
+// validation and encoding path is still the only writer without lock recursion.
+func appendProposalDecisionLocked(colonyRoot, traceID string, decision ProposalDecision, line []byte) error {
+	if reason := validateProposalDecision(decision, traceID); reason != "" {
+		return fmt.Errorf("skills: cannot record proposal decision: %s", reason)
+	}
+	if line == nil {
+		encoded, err := EncodeProposalDecision(decision)
+		if err != nil {
+			return err
+		}
+		line = encoded
+	}
 	return appendProposalDecisionLine(ProposalDecisionsPath(colonyRoot, traceID), line)
 }
 

@@ -31,6 +31,7 @@ The group is a namespace, not an action: run a verb.`,
 	cmd.AddCommand(newSkillsLoadCmd())
 	cmd.AddCommand(newSkillsValidateCmd())
 	cmd.AddCommand(newSkillsProposalsCmd())
+	cmd.AddCommand(newSkillsApproveCmd())
 	cmd.AddCommand(newSkillsRejectCmd())
 	cmd.AddCommand(newSkillsDisableCmd())
 	cmd.AddCommand(newSkillsEnableCmd())
@@ -164,6 +165,7 @@ type skillListEntry struct {
 	Reason      string   `json:"reason,omitempty"`
 	Roles       []string `json:"roles"`
 	Description string   `json:"description"`
+	Provenance  string   `json:"provenance"`
 }
 
 // skillListDocument is the whole machine contract of `list`. `skills` and
@@ -185,11 +187,12 @@ func newSkillsListCmd() *cobra.Command {
 		Short: "List the skills in the store with their state and roles",
 		Long: `List every skill in the repository store.
 
-The columns are name, state, roles, and description. The state is one of ok,
-invalid (with the reason), or disabled. The roles column names every role whose
-selection resolves to the skill, computed from the role configurations: a role
-that lists ` + "`*`" + ` or a matching pattern is named against every skill it
-actually receives.
+The columns are name, state, roles, description, and provenance. The state is
+one of ok, invalid (with the reason), or disabled. The roles column names every
+role whose selection resolves to the skill, computed from the role
+configurations: a role that lists ` + "`*`" + ` or a matching pattern is named
+against every skill it actually receives. Provenance is read from the skill's
+own metadata: ` + "`proposal`" + `, ` + "`nuc`" + `, or ` + "`hand`" + `.
 
 --json prints the same inventory as a stable machine contract.`,
 		Args: cobra.NoArgs,
@@ -220,6 +223,7 @@ actually receives.
 					Reason:      reason,
 					Roles:       names,
 					Description: skill.Description,
+					Provenance:  skillProvenance(skill.Metadata),
 				})
 			}
 			for _, issue := range store.Issues() {
@@ -238,10 +242,10 @@ actually receives.
 			}
 
 			w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-			_, _ = fmt.Fprintln(w, "NAME\tSTATE\tROLES\tDESCRIPTION")
+			_, _ = fmt.Fprintln(w, "NAME\tSTATE\tROLES\tDESCRIPTION\tPROVENANCE")
 			for _, entry := range doc.Skills {
-				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-					entry.Name, stateColumn(entry), rolesColumn(entry.Roles), entry.Description)
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+					entry.Name, stateColumn(entry), rolesColumn(entry.Roles), entry.Description, entry.Provenance)
 			}
 			if err := w.Flush(); err != nil {
 				return err
