@@ -90,6 +90,9 @@ type ApplyResult struct {
 	ShadowedDiff []string
 	// RemainingWork reports candidate compatibility with unstarted tasks.
 	RemainingWork RemainingWorkPreview
+	// SkillWarnings reports skills a role still lists that the ledger disables.
+	// They are skipped, not fatal, and the candidate stays valid.
+	SkillWarnings []string
 	DryRun        bool
 }
 
@@ -215,7 +218,8 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	// Preparation validates the complete candidate procedure, not only the
 	// roles needed by remaining work: a missing template, skill, adapter, or
 	// policy mismatch must be refused before anything is recorded or activated.
-	if err := ValidateProcedure(candidate.tree, baseColony, RemainingProcedureWork(snapshot)); err != nil {
+	skillReport, err := validateProcedure(candidate.tree, baseColony, RemainingProcedureWork(snapshot), candidate.inventory.Resolved.Profile)
+	if err != nil {
 		return ApplyResult{}, err
 	}
 	remaining := EvaluateRemaining(candidate.tree, snapshot)
@@ -231,6 +235,7 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 		EffectiveDiff: effective,
 		ShadowedDiff:  shadowed,
 		RemainingWork: remaining,
+		SkillWarnings: skillReport.Warnings,
 		DryRun:        opts.DryRun,
 	}
 
@@ -762,11 +767,19 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 	if err != nil {
 		return Manifest{}, false, fmt.Errorf("trailconfig: active configuration is unreadable: %w", err)
 	}
-	tree := filepath.Join(SnapshotDir(colonyRoot, traceID), change.NewConfigRef, SnapshotTreeDirName)
+	snapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), change.NewConfigRef)
+	tree := filepath.Join(snapshotDir, SnapshotTreeDirName)
+	// The profile normally comes from the verified resolved view, but validation
+	// must still describe a candidate whose snapshot has lost a file, so the
+	// view is read best-effort here and the full load follows validation.
+	profile := inferCandidateProfile(tree)
+	if inventory, loadErr := loadVerifiedSnapshot(snapshotDir, change.NewConfigRef); loadErr == nil {
+		profile = inventory.Resolved.Profile
+	}
 	// The prepared content is revalidated in full: a candidate that was valid
 	// when it was captured can lose a template, skill, role, or policy fit while
 	// it waits for a safe boundary.
-	if err := ValidateProcedure(tree, activeColony, RemainingProcedureWork(snapshot)); err != nil {
+	if err := ValidateProcedure(tree, activeColony, RemainingProcedureWork(snapshot), profile); err != nil {
 		change.Outcome = OutcomeRejected
 		change.Detail = err.Error()
 		manifest.Pending = nil
@@ -777,10 +790,7 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 		}
 		return manifest, false, nil
 	}
-	candidateInventory, err := loadVerifiedSnapshot(
-		filepath.Join(SnapshotDir(colonyRoot, traceID), change.NewConfigRef),
-		change.NewConfigRef,
-	)
+	candidateInventory, err := loadVerifiedSnapshot(snapshotDir, change.NewConfigRef)
 	if err != nil {
 		return Manifest{}, false, err
 	}

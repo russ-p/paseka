@@ -59,42 +59,58 @@ func RemainingProcedureWork(snapshot taskledger.TraceSnapshot) []ProcedureWork {
 // replaces; the candidate may change the procedure but not identity, transport,
 // energy, or delivery. The check reads the candidate tree only: live colony
 // files never fill a gap in a retained snapshot.
-func ValidateProcedure(candidateRoot string, policy colony.Colony, work []ProcedureWork) error {
+//
+// profile is the selected configuration profile, when the caller knows it. A
+// candidate captured from a live colony freezes only the selected profile, so
+// callers that have the captured resolved view pass its name; a direct call
+// without one falls back to the single profile the tree contains.
+func ValidateProcedure(candidateRoot string, policy colony.Colony, work []ProcedureWork, profile ...string) error {
+	_, err := validateProcedure(candidateRoot, policy, work, profile...)
+	return err
+}
+
+func validateProcedure(candidateRoot string, policy colony.Colony, work []ProcedureWork, profile ...string) (candidateSkillReport, error) {
+	var report candidateSkillReport
 	root := strings.TrimSpace(candidateRoot)
 	if root == "" {
-		return fmt.Errorf("trailconfig: candidate root is required")
+		return report, fmt.Errorf("trailconfig: candidate root is required")
 	}
 	manifestPath := colony.PasekaPath(root, "colony.yaml")
 	if _, err := os.Stat(manifestPath); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("trailconfig: candidate is missing .paseka/colony.yaml")
+			return report, fmt.Errorf("trailconfig: candidate is missing .paseka/colony.yaml")
 		}
-		return fmt.Errorf("trailconfig: inspect candidate colony manifest: %w", err)
+		return report, fmt.Errorf("trailconfig: inspect candidate colony manifest: %w", err)
 	}
 	candidate, err := colony.LoadColony(root)
 	if err != nil {
-		return fmt.Errorf("trailconfig: candidate colony manifest is invalid: %w", err)
+		return report, fmt.Errorf("trailconfig: candidate colony manifest is invalid: %w", err)
 	}
 	if err := validatePolicyUnchanged(policy, candidate); err != nil {
-		return err
+		return report, err
 	}
 
 	bees, err := colony.LoadAllBees(root)
 	if err != nil {
-		return fmt.Errorf("trailconfig: candidate bee definitions are invalid: %w", err)
+		return report, fmt.Errorf("trailconfig: candidate bee definitions are invalid: %w", err)
 	}
 	if err := validateBeeTemplates(root, candidate, bees); err != nil {
-		return err
+		return report, err
 	}
-	if err := validateSkillReferences(root); err != nil {
-		return err
+	selectedProfile := ""
+	if len(profile) > 0 {
+		selectedProfile = profile[0]
+	}
+	report, err = validateCandidateSkills(root, bees, selectedProfile)
+	if err != nil {
+		return report, err
 	}
 	for _, item := range work {
 		if err := validateProcedureWork(candidate, bees, item); err != nil {
-			return err
+			return report, err
 		}
 	}
-	return nil
+	return report, nil
 }
 
 // validateBeeTemplates checks the prompt and system templates dispatch will
