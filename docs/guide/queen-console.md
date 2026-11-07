@@ -526,9 +526,29 @@ The proposals pane reads the trails' decision data: each row carries its source
 trail, the skill, when it was proposed, and a state of `pending`, `installed`,
 `refused` with the reason, `trialled` with the destination trail, or `missing`
 when the bundle is gone. Press **View** to read the proposal's `SKILL.md` and the
-reason it was proposed, read-only. Approving, refusing, and trialling remain
-shell verbs ([skills guide](skills.md#16-reviewing-proposals)); a missing bundle
-or an unreadable trail is reported on the page rather than hidden.
+reason it was proposed. A missing bundle or an unreadable trail is reported on
+the page rather than hidden.
+
+A pending or trialled proposal can be decided here, as a deliberate act:
+
+- **Approve** shows the validated install plan first — the skill, its source
+  trail, the destination (`store`) and target directory, every file the install
+  would write, and the working-tree consequence (new untracked paths, and that
+  committing is still yours). Nothing is written until **Install skill** is
+  pressed. The action calls the same atomic, hash-verified batch path as
+  `paseka skills approve`, so a plan cannot disagree with the shell.
+- **Refuse** asks for an optional reason and says in the dialog that the refusal
+  is terminal for that exact bundle: it cannot be approved or trialled
+  afterwards. Confirming records one `refused` decision beside the proposal.
+- **Cancel** returns to the review and changes nothing.
+- A failed action shows the server's reason and leaves the store, ledger, and
+  decision files untouched. Only one decision runs at a time: a second click
+  while one is in flight is refused as busy rather than queued.
+- A successful action answers with the refreshed inventory, so the row and the
+  store update together without pressing **Refresh**.
+- No console route accepts a skill body, and no action writes a commit.
+  Trialling a proposal on one trail (`approve --into`), and `disable` and
+  `remove`, remain shell verbs ([skills guide](skills.md#16-reviewing-proposals)).
 
 ### Settings
 

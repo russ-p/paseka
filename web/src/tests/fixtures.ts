@@ -33,6 +33,8 @@ import type {
 	TraceDetail,
 	Invite,
 	Session,
+	SkillApprovalPlan,
+	SkillDecisionResult,
 	SkillProposal,
 	SkillRow,
 	SkillsInventory,
@@ -1072,6 +1074,37 @@ export function skillsInventory(overrides: Partial<SkillsInventory> = {}): Skill
 		issues: [],
 		proposals: [skillProposal()],
 		proposalIssues: [],
+		...overrides
+	};
+}
+
+/** The server's validated install plan, as the confirmation dialog receives it. */
+export function skillApprovalPlan(overrides: Partial<SkillApprovalPlan> = {}): SkillApprovalPlan {
+	return {
+		trail: 'trace-01a0bd6963faa14f',
+		name: 'paseka-release',
+		destination: 'store',
+		store: '.paseka/skills',
+		target: '.paseka/skills/paseka-release',
+		files: ['.paseka/skills/paseka-release/SKILL.md'],
+		procedureHash: 'abc123',
+		provenance: { source: 'proposal' },
+		replaced: false,
+		disabled: false,
+		workingTree:
+			'Writes 1 new untracked file path(s) under .paseka/skills/paseka-release in the working tree. Committing is yours; this action never commits.',
+		...overrides
+	};
+}
+
+/** The receipt and refreshed inventory a completed decision returns. */
+export function skillDecisionResult(
+	overrides: Partial<SkillDecisionResult> = {}
+): SkillDecisionResult {
+	return {
+		inventory: skillsInventory(),
+		proposal: skillProposal({ state: 'installed', destination: 'store' }),
+		message: 'Installed trace-01a0bd6963faa14f/paseka-release into the store. Nothing was committed.',
 		...overrides
 	};
 }

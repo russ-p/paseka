@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSkillsStore } from './skills.svelte';
-import { skillsInventory } from '../../tests/fixtures';
-import type { SkillsInventory } from '$lib/api/types';
+import { skillDecisionResult, skillProposal, skillsInventory } from '../../tests/fixtures';
+import type { SkillDecisionResult, SkillsInventory } from '$lib/api/types';
 
 /** The store's own reader, so the endpoint on the default path is assertable. */
 const getSkills = vi.fn(async (): Promise<SkillsInventory> => skillsInventory());
-vi.mock('$lib/api/client', () => ({ getSkills: () => getSkills() }));
+vi.mock('$lib/api/client', () => ({
+	getSkills: () => getSkills(),
+	getSkillProposal: vi.fn(),
+	getSkillApprovalPlan: vi.fn(),
+	approveSkillProposal: vi.fn(),
+	rejectSkillProposal: vi.fn()
+}));
 
 function harness(inventory: SkillsInventory = skillsInventory()) {
 	const loadSkills = vi.fn(async () => inventory);
@@ -80,5 +86,49 @@ describe('createSkillsStore', () => {
 		expect(store.lastError).toBe('');
 		// Before the first read, emptiness is unknown rather than false.
 		expect(createSkillsStore().isEmpty).toBe(false);
+	});
+
+	it('applies the server inventory of a decision without a second read', async () => {
+		const pending = skillsInventory({ proposals: [skillProposal()] });
+		const installedProposal = skillProposal({ state: 'installed', destination: 'store' });
+		const after = skillsInventory({
+			proposals: [installedProposal]
+		});
+		const loadSkills = vi.fn(async () => pending);
+		const store = createSkillsStore({
+			loadSkills,
+			approveProposal: async () =>
+				skillDecisionResult({
+					inventory: after,
+					proposal: installedProposal,
+					message: 'Installed the proposal. Nothing was committed.'
+				})
+		});
+		await store.start();
+
+		await store.approve('trace-a', 'paseka-release');
+
+		expect(store.proposals[0].state).toBe('installed');
+		expect(store.lastMessage).toBe('Installed the proposal. Nothing was committed.');
+		expect(loadSkills).toHaveBeenCalledTimes(1);
+	});
+
+	it('refuses a second decision while one is in flight rather than queueing it', async () => {
+		let release: ((result: SkillDecisionResult) => void) | undefined;
+		const gate = new Promise<SkillDecisionResult>((resolve) => (release = resolve));
+		const approveProposal = vi.fn(() => gate);
+		const store = createSkillsStore({
+			loadSkills: async () => skillsInventory({ proposals: [skillProposal()] }),
+			approveProposal
+		});
+		await store.start();
+
+		const first = store.approve('trace-a', 'paseka-release');
+		await expect(store.approve('trace-a', 'paseka-release')).rejects.toThrow(/in flight/);
+		expect(approveProposal).toHaveBeenCalledTimes(1);
+
+		release?.(skillDecisionResult());
+		await first;
+		expect(store.mutating).toBe(false);
 	});
 });

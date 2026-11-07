@@ -1482,3 +1482,40 @@ export interface SkillsInventory {
 	/** Unreadable trails and proposal records, reported beside the rows. */
 	proposalIssues: string[];
 }
+
+/**
+ * Mirrors `console.SkillApprovalPlanView` from
+ * GET /api/skills/proposals/:trail/:name/plan. The plan comes from the same
+ * validated batch path as `paseka skills approve --dry-run`, so the dialog can
+ * name the destination, every file, and the working-tree consequence before a
+ * human confirms it.
+ */
+export interface SkillApprovalPlan {
+	trail: string;
+	name: string;
+	/** `store` for an install. */
+	destination: string;
+	/** The store root, repository-relative. */
+	store: string;
+	/** The directory the install writes, repository-relative. */
+	target: string;
+	/** Every path the install would create or replace, repository-relative. */
+	files: string[];
+	procedureHash: string;
+	provenance: Record<string, string>;
+	replaced: boolean;
+	disabled: boolean;
+	disableReason?: string;
+	/** What this action does to the working tree, in the server's words. */
+	workingTree: string;
+}
+
+/** Mirrors `console.SkillDecisionResultView`: the receipt and the refreshed inventory. */
+export interface SkillDecisionResult {
+	/** The inventory after the action, so the page updates without a second read. */
+	inventory: SkillsInventory;
+	/** The decided row in its new state. */
+	proposal: SkillProposal;
+	/** The sentence the console shows as the receipt. */
+	message: string;
+}

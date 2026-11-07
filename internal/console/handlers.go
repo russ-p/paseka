@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/russ-p/paseka/internal/adapters"
 	"github.com/russ-p/paseka/internal/bus"
@@ -36,6 +37,27 @@ type api struct {
 	chrome   *chromeHub
 	beeRun   BeeRunFunc
 	probe    *adapterProber
+	// skillMutations lets one proposal decision run at a time. A second click
+	// while one is in flight is refused as busy rather than queued: the decision
+	// log is append-only and a queued refusal could land after the first action
+	// changed the state under it.
+	skillMutations skillMutationGate
+}
+
+// skillMutationGate is a try-lock, not a queue. The caller that loses the race
+// is told the console is busy and can try again itself.
+type skillMutationGate struct {
+	mu sync.Mutex
+}
+
+// tryBegin takes the gate when it is free. A second decision in flight returns
+// false immediately, without waiting for the first to finish.
+func (g *skillMutationGate) tryBegin() bool {
+	return g.mu.TryLock()
+}
+
+func (g *skillMutationGate) end() {
+	g.mu.Unlock()
 }
 
 func (a *api) handleRuntime(w http.ResponseWriter, r *http.Request) {

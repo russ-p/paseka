@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -295,9 +296,263 @@ func TestSkillsAPIIsReadOnly(t *testing.T) {
 		}
 	}
 
+	// The plan is a read; only a decision is a write.
 	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/skills/proposals/trace-a/name/plan", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST plan status = %d, want 405", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/skills/proposals/trace-a/name/approve", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET approve status = %d, want 405", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/skills/proposals/trace-a/name", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown proposal status = %d, want 404 (body=%s)", rec.Code, rec.Body.String())
+	}
+	// There is no route that accepts or returns a skill body.
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/skills/proposals/trace-a/name/body", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("body route status = %d, want 404", rec.Code)
+	}
+}
+
+func skillDecisionRequest(t *testing.T, srv *console.Server, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var reader *strings.Reader
+	if body == "" {
+		reader = strings.NewReader("")
+	} else {
+		reader = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func decodeSkillDecision(t *testing.T, rec *httptest.ResponseRecorder) console.SkillDecisionResultView {
+	t.Helper()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("decision status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var result console.SkillDecisionResultView
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func gitHead(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestSkillsAPIPlansAndApprovesAProposal drives the whole deliberate act: the
+// plan writes nothing, cancelling would change nothing, and the approval
+// installs through the same validated path the shell uses.
+func TestSkillsAPIPlansAndApprovesAProposal(t *testing.T) {
+	repo := initConsoleRepo(t)
+	at := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
+	writeProposal(t, repo, "trace-alpha", "paseka-release", "Two runs repeated this by hand.", at)
+	srv := skillsServer(t, repo)
+	head := gitHead(t, repo)
+
+	rec := skillDecisionRequest(t, srv, http.MethodGet,
+		"/api/skills/proposals/trace-alpha/paseka-release/plan", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("plan status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var plan console.SkillApprovalPlanView
+	if err := json.NewDecoder(rec.Body).Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Trail != "trace-alpha" || plan.Name != "paseka-release" {
+		t.Fatalf("plan identity = %+v", plan)
+	}
+	if plan.Destination != skills.ProposalStoreDestination {
+		t.Fatalf("destination = %q, want store", plan.Destination)
+	}
+	if plan.Target != ".paseka/skills/paseka-release" {
+		t.Fatalf("target = %q", plan.Target)
+	}
+	if len(plan.Files) != 1 || plan.Files[0] != ".paseka/skills/paseka-release/SKILL.md" {
+		t.Fatalf("files = %v", plan.Files)
+	}
+	if plan.ProcedureHash == "" || plan.Replaced || plan.Disabled {
+		t.Fatalf("plan details = %+v", plan)
+	}
+	if !strings.Contains(plan.WorkingTree, "untracked") || !strings.Contains(plan.WorkingTree, "never commits") {
+		t.Fatalf("working tree consequence = %q", plan.WorkingTree)
+	}
+
+	// Reading the plan is not a decision: the store and the decision file are
+	// still absent.
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "skills", "paseka-release")); !os.IsNotExist(err) {
+		t.Fatalf("plan wrote the store entry: %v", err)
+	}
+	if _, err := os.Stat(skills.ProposalDecisionsPath(repo, "trace-alpha")); !os.IsNotExist(err) {
+		t.Fatalf("plan wrote a decision: %v", err)
+	}
+	if now := gitHead(t, repo); now != head {
+		t.Fatalf("plan moved HEAD from %s to %s", head, now)
+	}
+
+	// A body in the request must be ignored: the console path installs the
+	// bundle's bytes and accepts no procedure body.
+	rec = skillDecisionRequest(t, srv, http.MethodPost,
+		"/api/skills/proposals/trace-alpha/paseka-release/approve", `{"body":"# not the procedure"}`)
+	result := decodeSkillDecision(t, rec)
+	if result.Proposal.State != skills.ProposalInstalled {
+		t.Fatalf("approved row = %+v", result.Proposal)
+	}
+	if !strings.Contains(result.Message, "Nothing was committed") {
+		t.Fatalf("receipt = %q", result.Message)
+	}
+	if now := gitHead(t, repo); now != head {
+		t.Fatalf("approval moved HEAD from %s to %s", head, now)
+	}
+
+	installed := skillRow(t, result.Inventory, "paseka-release")
+	if installed.Provenance != skills.ProvenanceProposal {
+		t.Fatalf("installed provenance = %q", installed.Provenance)
+	}
+	body, err := os.ReadFile(filepath.Join(repo, ".paseka", "skills", "paseka-release", skills.ManifestName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "1. Do the thing.") {
+		t.Fatalf("installed body = %q", body)
+	}
+	if strings.Contains(string(body), "not the procedure") {
+		t.Fatalf("request body reached the store: %q", body)
+	}
+
+	decisions, issues, err := skills.ReadProposalDecisions(
+		skills.ProposalDecisionsPath(repo, "trace-alpha"), "trace-alpha",
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("read decisions: %v %v", err, issues)
+	}
+	if len(decisions) != 1 || decisions[0].Decision != skills.ProposalInstalled {
+		t.Fatalf("decisions = %+v", decisions)
+	}
+}
+
+// TestSkillsAPIRejectsWithAndWithoutAReason records one terminal decision per
+// bundle, with the optional reason, and refuses a later approval.
+func TestSkillsAPIRejectsWithAndWithoutAReason(t *testing.T) {
+	repo := initConsoleRepo(t)
+	at := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
+	writeProposal(t, repo, "trace-alpha", "paseka-release", "One incident.", at)
+	writeProposal(t, repo, "trace-beta", "paseka-ship", "Not a procedure.", at)
+	srv := skillsServer(t, repo)
+
+	rec := skillDecisionRequest(t, srv, http.MethodPost,
+		"/api/skills/proposals/trace-alpha/paseka-release/reject", `{"reason":"one incident, not a procedure"}`)
+	withReason := decodeSkillDecision(t, rec)
+	if withReason.Proposal.State != skills.ProposalRefused ||
+		withReason.Proposal.Reason != "one incident, not a procedure" {
+		t.Fatalf("refused row = %+v", withReason.Proposal)
+	}
+	if !strings.Contains(withReason.Message, "terminal") {
+		t.Fatalf("receipt = %q", withReason.Message)
+	}
+
+	rec = skillDecisionRequest(t, srv, http.MethodPost,
+		"/api/skills/proposals/trace-beta/paseka-ship/reject", "")
+	withoutReason := decodeSkillDecision(t, rec)
+	if withoutReason.Proposal.State != skills.ProposalRefused || withoutReason.Proposal.Reason != "" {
+		t.Fatalf("refused row = %+v", withoutReason.Proposal)
+	}
+
+	// Rejecting the same bundle again reports the existing decision without
+	// appending a second line.
+	rec = skillDecisionRequest(t, srv, http.MethodPost,
+		"/api/skills/proposals/trace-alpha/paseka-release/reject", `{"reason":"a different reason"}`)
+	repeat := decodeSkillDecision(t, rec)
+	if repeat.Proposal.State != skills.ProposalRefused ||
+		repeat.Proposal.Reason != "one incident, not a procedure" {
+		t.Fatalf("repeated refusal row = %+v", repeat.Proposal)
+	}
+	if !strings.Contains(repeat.Message, "already refused") {
+		t.Fatalf("repeat receipt = %q", repeat.Message)
+	}
+	for _, tc := range []struct{ trail, name string }{
+		{"trace-alpha", "paseka-release"},
+		{"trace-beta", "paseka-ship"},
+	} {
+		decisions, issues, err := skills.ReadProposalDecisions(
+			skills.ProposalDecisionsPath(repo, tc.trail), tc.trail,
+		)
+		if err != nil || len(issues) != 0 {
+			t.Fatalf("read decisions for %s: %v %v", tc.trail, err, issues)
+		}
+		if len(decisions) != 1 || decisions[0].Decision != skills.ProposalRefused {
+			t.Fatalf("%s decisions = %+v", tc.trail, decisions)
+		}
+	}
+
+	// A refusal is terminal: approving the same bytes is refused and writes no
+	// store entry.
+	rec = skillDecisionRequest(t, srv, http.MethodPost,
+		"/api/skills/proposals/trace-alpha/paseka-release/approve", "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("approve after refusal status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "already refused") {
+		t.Fatalf("approve after refusal body = %q", rec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "skills", "paseka-release")); !os.IsNotExist(err) {
+		t.Fatalf("refused approval wrote the store: %v", err)
+	}
+}
+
+// TestSkillsAPIFailedActionReportsTheReasonAndWritesNothing checks the server's
+// reason reaches the operator and the failure leaves every file alone.
+func TestSkillsAPIFailedActionReportsTheReasonAndWritesNothing(t *testing.T) {
+	repo := initConsoleRepo(t)
+	at := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
+	// A discovery whose bundle is gone: there is nothing to install or refuse.
+	writeProposalDiscovery(t, repo, "trace-gamma", "paseka-gone", "The bundle was cleaned.", at, "deadbeef")
+	srv := skillsServer(t, repo)
+
+	for _, path := range []string{
+		"/api/skills/proposals/trace-gamma/paseka-gone/plan",
+	} {
+		rec := skillDecisionRequest(t, srv, http.MethodGet, path, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("GET %s status = %d body=%s", path, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "no bundle") {
+			t.Fatalf("GET %s body = %q", path, rec.Body.String())
+		}
+	}
+	for _, action := range []string{"approve", "reject"} {
+		rec := skillDecisionRequest(t, srv, http.MethodPost,
+			"/api/skills/proposals/trace-gamma/paseka-gone/"+action, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d body=%s", action, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "no bundle") {
+			t.Fatalf("%s body = %q", action, rec.Body.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".paseka", "skills")); !os.IsNotExist(err) {
+		t.Fatalf("a failed action wrote the store: %v", err)
+	}
+	if _, err := os.Stat(skills.ProposalDecisionsPath(repo, "trace-gamma")); !os.IsNotExist(err) {
+		t.Fatalf("a failed action wrote a decision: %v", err)
 	}
 }

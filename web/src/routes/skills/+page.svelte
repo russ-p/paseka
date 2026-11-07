@@ -117,8 +117,9 @@
 				selection carries each one, and the proposals the trails hold.
 			</p>
 			<p class="text-xs text-base-content/50">
-				Read-only. Approving, refusing, and trialling a proposal — and disabling or removing a
-				skill — are shell verbs; this page is where you see what is on offer and why.
+				A proposal is reviewed here and decided here: Approve shows the validated install
+				plan before anything is written, and Refuse records the decision. Neither writes a
+				commit; trialling, disabling, and removing remain shell verbs.
 			</p>
 		</div>
 		<div class="flex items-center gap-2">
@@ -137,6 +138,17 @@
 
 	{#if store.lastError}
 		<div class="alert alert-error" role="alert"><span>{store.lastError}</span></div>
+	{/if}
+
+	{#if store.lastMessage}
+		<!-- The decision's receipt: installing is a working-tree change the operator
+		     has to commit, and refusing is a terminal decision on the bundle. -->
+		<div class="alert alert-success" role="status">
+			<span>{store.lastMessage}</span>
+			<button type="button" class="btn btn-ghost btn-xs" onclick={() => store.clearMessage()}>
+				Dismiss
+			</button>
+		</div>
 	{/if}
 
 	{#if store.showSkeletons}
@@ -219,5 +231,6 @@
 	open={selected !== null}
 	trail={selected?.trail ?? ''}
 	name={selected?.name ?? ''}
+	{store}
 	onclose={() => (selected = null)}
 />

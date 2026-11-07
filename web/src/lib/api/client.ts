@@ -39,6 +39,8 @@ import type {
 	RunSummary,
 	RuntimeStatus,
 	Session,
+	SkillApprovalPlan,
+	SkillDecisionResult,
 	SkillProposalDetail,
 	SkillsInventory,
 	StartTaskResult,
@@ -634,4 +636,34 @@ export function getSkillProposal(trail: string, name: string): Promise<SkillProp
 	return request<SkillProposalDetail>(
 		`/skills/proposals/${encodeURIComponent(trail)}/${encodeURIComponent(name)}`
 	);
+}
+
+function skillProposalPath(trail: string, name: string, action: string): string {
+	return `/skills/proposals/${encodeURIComponent(trail)}/${encodeURIComponent(name)}/${action}`;
+}
+
+/**
+ * The install plan for one proposal. It is the server's dry run of the same
+ * validated batch the shell command uses, so what the confirmation shows is what
+ * the real action would write.
+ */
+export function getSkillApprovalPlan(trail: string, name: string): Promise<SkillApprovalPlan> {
+	return request<SkillApprovalPlan>(skillProposalPath(trail, name, 'plan'));
+}
+
+/** Install one proposal into the store; the request carries no skill body. */
+export function approveSkillProposal(
+	trail: string,
+	name: string
+): Promise<SkillDecisionResult> {
+	return post<SkillDecisionResult>(skillProposalPath(trail, name, 'approve'));
+}
+
+/** Record a refusal for one proposal, with the optional reason. */
+export function rejectSkillProposal(
+	trail: string,
+	name: string,
+	reason: string
+): Promise<SkillDecisionResult> {
+	return post<SkillDecisionResult>(skillProposalPath(trail, name, 'reject'), { reason });
 }

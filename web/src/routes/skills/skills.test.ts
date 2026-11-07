@@ -3,16 +3,18 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Skills from './+page.svelte';
 import { createSkillsStore } from '$lib/stores/skills.svelte';
-import { skillProposal, skillRow, skillsInventory } from '../../tests/fixtures';
+import { skillProposal, skillRow, skillsInventory, skillApprovalPlan, skillDecisionResult } from '../../tests/fixtures';
 import type { SkillsInventory } from '$lib/api/types';
+
+type StoreOptions = NonNullable<Parameters<typeof createSkillsStore>[0]>;
 
 afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-function harness(inventory: SkillsInventory = skillsInventory()) {
+function harness(inventory: SkillsInventory = skillsInventory(), extra: StoreOptions = {}) {
 	const loadSkills = vi.fn(async () => inventory);
-	return createSkillsStore({ loadSkills });
+	return createSkillsStore({ loadSkills, ...extra });
 }
 
 function storeTable(): HTMLElement {
@@ -240,5 +242,207 @@ describe('skills route', () => {
 		render(Skills, { store: failed });
 		await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('permission denied'));
 		expect(screen.queryByRole('region', { name: 'Store inventory' })).not.toBeInTheDocument();
+	});
+
+	it('shows the validated install plan first, and cancelling writes nothing', async () => {
+		const user = userEvent.setup();
+		const proposal = skillProposal();
+		const approveProposal = vi.fn();
+		const loadApprovalPlan = vi.fn(async () => skillApprovalPlan());
+		const store = harness(skillsInventory({ proposals: [proposal] }), {
+			loadProposal: async () => ({ ...proposal, body: '# paseka-release\n\n1. Do the thing.\n' }),
+			loadApprovalPlan,
+			approveProposal
+		});
+		render(Skills, { store });
+		await waitFor(() =>
+			expect(screen.getByRole('region', { name: 'Proposal inventory' })).toBeInTheDocument()
+		);
+
+		await user.click(
+			within(proposalsTable()).getByRole('button', {
+				name: `View ${proposal.trail}/${proposal.name}`
+			})
+		);
+		const dialog = await screen.findByRole('dialog');
+		await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+
+		// The confirmation names the skill, its source, the destination, the files,
+		// and what happens to the working tree.
+		await waitFor(() => expect(within(dialog).getByText('Source trail')).toBeInTheDocument());
+		expect(within(dialog).getByText(proposal.trail)).toBeInTheDocument();
+		expect(within(dialog).getByText(/untracked file path/)).toHaveTextContent(
+			'Committing is yours; this action never commits.'
+		);
+		expect(within(dialog).getByText('.paseka/skills/paseka-release/SKILL.md')).toBeInTheDocument();
+		expect(loadApprovalPlan).toHaveBeenCalledWith(proposal.trail, proposal.name);
+
+		await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+		expect(approveProposal).not.toHaveBeenCalled();
+		expect(cellOf(proposalsTable(), proposal.trail, 'State')).toHaveTextContent('pending');
+	});
+
+	it('updates the decided row and the inventory from the server result, without a re-read', async () => {
+		const user = userEvent.setup();
+		const proposal = skillProposal();
+		const installed = skillProposal({ state: 'installed', destination: 'store' });
+		const before = skillsInventory({
+			skills: [skillRow({ name: 'paseka-ship', provenance: 'hand' })],
+			proposals: [proposal]
+		});
+		const after = skillsInventory({
+			skills: [skillRow(), skillRow({ name: 'paseka-ship', provenance: 'hand' })],
+			proposals: [installed]
+		});
+		const loadSkills = vi.fn(async () => before);
+		const approveProposal = vi.fn(async () =>
+			skillDecisionResult({
+				inventory: after,
+				proposal: installed,
+				message: 'Installed the proposal. Nothing was committed.'
+			})
+		);
+		const store = createSkillsStore({
+			loadSkills,
+			loadProposal: async () => ({ ...proposal, body: '# paseka-release\n' }),
+			loadApprovalPlan: async () => skillApprovalPlan(),
+			approveProposal
+		});
+		render(Skills, { store });
+		await waitFor(() => expect(screen.getByText('paseka-ship')).toBeInTheDocument());
+
+		await user.click(
+			within(proposalsTable()).getByRole('button', {
+				name: `View ${proposal.trail}/${proposal.name}`
+			})
+		);
+		const dialog = await screen.findByRole('dialog');
+		await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+		await user.click(await within(dialog).findByRole('button', { name: 'Install skill' }));
+
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+		expect(cellOf(proposalsTable(), proposal.trail, 'State')).toHaveTextContent('installed');
+		// The new skill appears in the store pane and the receipt says what the
+		// action did; neither needed a second read.
+		expect(cellOf(storeTable(), 'paseka-release', 'Provenance')).toHaveTextContent('proposed');
+		expect(screen.getByText(/Nothing was committed/)).toBeInTheDocument();
+		expect(loadSkills).toHaveBeenCalledTimes(1);
+	});
+
+	it('refuses with a reason and shows the decision is terminal', async () => {
+		const user = userEvent.setup();
+		const proposal = skillProposal();
+		const refused = skillProposal({ state: 'refused', reason: 'one incident, not a procedure' });
+		const rejectProposal = vi.fn(async () =>
+			skillDecisionResult({
+				inventory: skillsInventory({ proposals: [refused] }),
+				proposal: refused,
+				message: 'Refused the proposal; the decision is terminal.'
+			})
+		);
+		const store = harness(skillsInventory({ proposals: [proposal] }), {
+			loadProposal: async () => ({ ...proposal, body: '# paseka-release\n' }),
+			rejectProposal
+		});
+		render(Skills, { store });
+		await waitFor(() =>
+			expect(screen.getByRole('region', { name: 'Proposal inventory' })).toBeInTheDocument()
+		);
+
+		await user.click(
+			within(proposalsTable()).getByRole('button', {
+				name: `View ${proposal.trail}/${proposal.name}`
+			})
+		);
+		const dialog = await screen.findByRole('dialog');
+		await user.click(within(dialog).getByRole('button', { name: 'Refuse' }));
+
+		// The dialog says the decision is terminal for the bundle before it is taken.
+		expect(within(dialog).getByText(/terminal for this bundle/)).toBeInTheDocument();
+		await user.type(
+			within(dialog).getByRole('textbox', { name: 'Reason (optional)' }),
+			'one incident, not a procedure'
+		);
+		await user.click(within(dialog).getByRole('button', { name: 'Refuse proposal' }));
+
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+		expect(rejectProposal).toHaveBeenCalledWith(
+			proposal.trail,
+			proposal.name,
+			'one incident, not a procedure'
+		);
+		expect(cellOf(proposalsTable(), proposal.trail, 'State')).toHaveTextContent(
+			'refused: one incident, not a procedure'
+		);
+	});
+
+	it('refuses without a reason, which is still one decided bundle', async () => {
+		const user = userEvent.setup();
+		const proposal = skillProposal();
+		const refused = skillProposal({ state: 'refused' });
+		const rejectProposal = vi.fn(async () =>
+			skillDecisionResult({
+				inventory: skillsInventory({ proposals: [refused] }),
+				proposal: refused,
+				message: 'Refused the proposal; the decision is terminal.'
+			})
+		);
+		const store = harness(skillsInventory({ proposals: [proposal] }), {
+			loadProposal: async () => ({ ...proposal, body: '# paseka-release\n' }),
+			rejectProposal
+		});
+		render(Skills, { store });
+		await waitFor(() =>
+			expect(screen.getByRole('region', { name: 'Proposal inventory' })).toBeInTheDocument()
+		);
+
+		await user.click(
+			within(proposalsTable()).getByRole('button', {
+				name: `View ${proposal.trail}/${proposal.name}`
+			})
+		);
+		const dialog = await screen.findByRole('dialog');
+		await user.click(within(dialog).getByRole('button', { name: 'Refuse' }));
+		await user.click(within(dialog).getByRole('button', { name: 'Refuse proposal' }));
+
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+		expect(rejectProposal).toHaveBeenCalledWith(proposal.trail, proposal.name, '');
+		expect(cellOf(proposalsTable(), proposal.trail, 'State')).toHaveTextContent('refused');
+	});
+
+	it('reports the server reason for a failed action and keeps the programme as it was', async () => {
+		const user = userEvent.setup();
+		const proposal = skillProposal();
+		const store = harness(skillsInventory({ proposals: [proposal] }), {
+			loadProposal: async () => ({ ...proposal, body: '# paseka-release\n' }),
+			loadApprovalPlan: async () => skillApprovalPlan(),
+			approveProposal: async () => {
+				throw new Error('skills: the store already holds a skill named "paseka-release"');
+			}
+		});
+		render(Skills, { store });
+		await waitFor(() =>
+			expect(screen.getByRole('region', { name: 'Proposal inventory' })).toBeInTheDocument()
+		);
+
+		await user.click(
+			within(proposalsTable()).getByRole('button', {
+				name: `View ${proposal.trail}/${proposal.name}`
+			})
+		);
+		const dialog = await screen.findByRole('dialog');
+		await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+		await user.click(await within(dialog).findByRole('button', { name: 'Install skill' }));
+
+		await waitFor(() =>
+			expect(within(dialog).getByRole('alert')).toHaveTextContent(
+				'the store already holds a skill named "paseka-release"'
+			)
+		);
+		// The failure is not a decision: the dialog stays on the plan and the row
+		// is still pending.
+		expect(screen.getByRole('dialog')).toBeInTheDocument();
+		expect(cellOf(proposalsTable(), proposal.trail, 'State')).toHaveTextContent('pending');
 	});
 });
