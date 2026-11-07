@@ -262,52 +262,19 @@ func prepareInstallPlan(colonyRoot string, store Report, ledger Ledger, proposal
 		}
 	}
 
-	plan, err := readBundlePlan(colonyRoot, proposal)
+	plan, hash, err := readValidatedBundle(colonyRoot, proposal)
 	if err != nil {
 		return installPlan{}, err
 	}
 	plan.target = target
 	plan.replaced = replaced
 
-	// The destination name is the store's identity. The bundle's own directory
-	// name need not match it, so the planned bytes are validated against the
-	// name the store will use rather than against where the bundle happens to
-	// live.
 	manifestIndex := -1
 	for i, file := range plan.files {
 		if file.Rel == ManifestName {
 			manifestIndex = i
 			break
 		}
-	}
-	if manifestIndex < 0 {
-		return installPlan{}, fmt.Errorf(
-			"skills: proposal %s/%s bundle %q has no %s", proposal.Trail, proposal.Name, proposal.Bundle, ManifestName,
-		)
-	}
-	doc, body, reason := parseDocument(plan.files[manifestIndex].Data)
-	if reason != "" {
-		return installPlan{}, fmt.Errorf("skills: proposal %s/%s cannot be approved: %s", proposal.Trail, proposal.Name, reason)
-	}
-	if issues := validateDocument(proposal.Name, doc); len(issues) > 0 {
-		reasons := make([]string, 0, len(issues))
-		for _, issue := range issues {
-			reasons = append(reasons, issue.Reason)
-		}
-		return installPlan{}, fmt.Errorf(
-			"skills: proposal %s/%s cannot be approved: %s",
-			proposal.Trail, proposal.Name, strings.Join(reasons, "; "),
-		)
-	}
-	hash, err := hashInstallContent(body, plan.files)
-	if err != nil {
-		return installPlan{}, fmt.Errorf("skills: proposal %s/%s: %w", proposal.Trail, proposal.Name, err)
-	}
-	if hash != strings.TrimSpace(proposal.ProcedureHash) {
-		return installPlan{}, fmt.Errorf(
-			"skills: proposal %s/%s cannot be approved: procedure hash mismatch: discovery says %s, the bundle hashes to %s",
-			proposal.Trail, proposal.Name, proposal.ProcedureHash, hash,
-		)
 	}
 
 	plan.provenance = map[string]string{
@@ -350,6 +317,56 @@ func prepareInstallPlan(colonyRoot string, store Report, ledger Ledger, proposal
 		plan.repoFiles = append(plan.repoFiles, filepath.ToSlash(rel))
 	}
 	return plan, nil
+}
+
+// readValidatedBundle reads a proposal bundle into the files a destination
+// would receive and returns the procedure hash the planned bytes carry. The
+// planned `SKILL.md` is validated against the destination name, not against
+// the directory the bundle happens to live in, and the recomputed hash must
+// match the discovery: a changed bundle is a different proposal.
+func readValidatedBundle(colonyRoot string, proposal Proposal) (installPlan, string, error) {
+	plan, err := readBundlePlan(colonyRoot, proposal)
+	if err != nil {
+		return installPlan{}, "", err
+	}
+
+	manifestIndex := -1
+	for i, file := range plan.files {
+		if file.Rel == ManifestName {
+			manifestIndex = i
+			break
+		}
+	}
+	if manifestIndex < 0 {
+		return installPlan{}, "", fmt.Errorf(
+			"skills: proposal %s/%s bundle %q has no %s", proposal.Trail, proposal.Name, proposal.Bundle, ManifestName,
+		)
+	}
+	doc, body, reason := parseDocument(plan.files[manifestIndex].Data)
+	if reason != "" {
+		return installPlan{}, "", fmt.Errorf("skills: proposal %s/%s cannot be approved: %s", proposal.Trail, proposal.Name, reason)
+	}
+	if issues := validateDocument(proposal.Name, doc); len(issues) > 0 {
+		reasons := make([]string, 0, len(issues))
+		for _, issue := range issues {
+			reasons = append(reasons, issue.Reason)
+		}
+		return installPlan{}, "", fmt.Errorf(
+			"skills: proposal %s/%s cannot be approved: %s",
+			proposal.Trail, proposal.Name, strings.Join(reasons, "; "),
+		)
+	}
+	hash, err := hashInstallContent(body, plan.files)
+	if err != nil {
+		return installPlan{}, "", fmt.Errorf("skills: proposal %s/%s: %w", proposal.Trail, proposal.Name, err)
+	}
+	if hash != strings.TrimSpace(proposal.ProcedureHash) {
+		return installPlan{}, "", fmt.Errorf(
+			"skills: proposal %s/%s cannot be approved: procedure hash mismatch: discovery says %s, the bundle hashes to %s",
+			proposal.Trail, proposal.Name, proposal.ProcedureHash, hash,
+		)
+	}
+	return plan, hash, nil
 }
 
 // readBundlePlan reads a proposal bundle into the files an install would write.

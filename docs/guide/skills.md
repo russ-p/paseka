@@ -2,7 +2,7 @@
 
 A **skill** is a reusable procedure the colony owns: a portable [Agent Skills](https://agentskills.io) directory, version-controlled in the repository, that a bee may be given when its role lists it. The format is the industry's, not Paseka's, so a skill written here is readable by Cursor, OpenCode, and Claude Code, and a skill written for one of them can be dropped in unchanged.
 
-Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), installation of an approved proposal (`approve`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, and attribution. Approval writes the store; the trial destination builds on the same rules.
+Design record: [spec 041](../specs/041-skills-layer.md). This guide covers the store, its validation, the per-role selection gate, the committed ledger, delivery through the run's system prompt and run record in both delivery modes, the script bee's environment manifest, the reading commands (`list`, `show`, `load`, `validate`, `proposals`), installation of an approved proposal (`approve`), the store mutations (`disable`, `enable`, `remove`), the proposal decision (`reject`), the Archivist's proposal intent, attribution, and the trial destination (`approve --into`). Approval writes the store; a trial writes one trail's pinned configuration instead.
 
 ---
 
@@ -491,3 +491,35 @@ Approval makes the procedure **available**, not active: it reaches a bee only wh
 `--dry-run` prints the same plan — source trail, destination, procedure hash, provenance, every path that would be written, and the exact decision line it would append — and leaves the store, the ledger, and the decision files byte-identical. It validates the real batch, so a reference the real command would refuse is refused here too.
 
 An install leaves **untracked files in the working tree**. The command names every path it wrote and says that committing is still the Beekeeper's decision; it never writes a commit.
+
+## 19. Trialling a proposal on one trail
+
+```bash
+paseka skills approve trace-abc123/paseka-release --into trace-def456 --role builder
+paseka skills approve trace-abc123/paseka-release --into trace-def456 --role builder --role shipper
+paseka skills approve trace-abc123/paseka-release --into trace-def456 --role builder --dry-run
+```
+
+`--into <trace>` sends the same batch to one trail's **pinned configuration** instead of the store. The command builds one candidate from that trail's active snapshot, adds the bundles under the candidate's store, and makes every named role resolve them in the same candidate. It validates the whole candidate with the same skill rule set and with the configuration procedure validation, then applies exactly one new configuration revision. It never edits the active snapshot, the live store, or the working tree.
+
+The role-list change is part of the trial's diff, and it is deliberately narrow:
+
+| The role currently… | The candidate writes |
+| --- | --- |
+| inherits the colony default | the resolved default list plus the skill, as the role's own list |
+| has its own list | that list with the skill appended |
+| has an explicit empty list | the one-skill list |
+| lists `*` or a pattern that matches the skill | nothing — the gate already resolves the skill and is not narrowed |
+
+All skills in one invocation go to the same role set; a different mapping is a separate invocation. Several references in one invocation are the recommended form: one candidate, one validation, one revision, all or nothing. Two sequential trials work when each applies, because each builds from the then-active snapshot; a second trial is refused while a configuration change is pending.
+
+A trial appends one `trialled` decision to each proposing trail's decision file, naming the **destination trail**, the roles, the procedure hash, and the time. The proposal stays pending for the store: a trial is evidence, not a store approval. A later `approve` into the store records `installed` and leaves the trial record in place, so `proposals` shows both destinations.
+
+The command refuses:
+
+- without `--role`, because a trial that adds a skill no role carries changes nothing;
+- a proposal that was already refused, is missing, invalid, or no longer hashes to its discovery;
+- a candidate that fails the shared skill rules or procedure validation, before any revision or decision is recorded;
+- a trail with another configuration change pending, or one where an execution blocker holds activation, because a queued trial is not a result.
+
+`--dry-run` prints the same plan — destination, revision, file diff, and the exact decision lines — and writes nothing. The store and the working tree are byte-identical before and after either form.

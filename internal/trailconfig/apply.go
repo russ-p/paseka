@@ -22,9 +22,10 @@ import (
 
 // Apply sources select where a candidate configuration comes from.
 const (
-	SourceColony    = "colony"
-	SourceOverrides = "overrides"
-	SourceSnapshot  = "snapshot"
+	SourceColony     = "colony"
+	SourceOverrides  = "overrides"
+	SourceSnapshot   = "snapshot"
+	SourceSkillTrial = "skill-trial"
 )
 
 // Apply outcomes distinguish a queued action from one that already changed the
@@ -53,16 +54,24 @@ type ApplyOptions struct {
 	Source      string
 	SnapshotRef string
 	Overrides   []Override
-	Actor       string
-	Reason      string
-	RequestID   string
+	// SkillTrial is the candidate mutation for SourceSkillTrial: validated
+	// proposal bundles to add under the candidate store plus the roles that must
+	// resolve them in the same candidate.
+	SkillTrial *SkillTrial
+	Actor      string
+	Reason     string
+	RequestID  string
 	// ExpectedRevision, when set, refuses the request unless the trail is still
 	// at that revision.
 	ExpectedRevision *int
 	// Blockers hold activation when current execution still needs the old
 	// configuration. They are recorded with a pending action.
 	Blockers []string
-	DryRun   bool
+	// RequireImmediate refuses the request instead of recording a pending action
+	// when another change is pending or execution blockers hold activation. A
+	// trial uses it because a queued trial is not a result.
+	RequireImmediate bool
+	DryRun           bool
 }
 
 // RemainingWorkPreview reports how a candidate matches the unstarted accepted
@@ -177,9 +186,21 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	}
 
 	if opts.ExpectedRevision != nil && *opts.ExpectedRevision != manifest.ConfigRevision {
+		if opts.RequireImmediate {
+			return ApplyResult{}, fmt.Errorf(
+				"trailconfig: trail %s is at revision %d; expected revision %d",
+				opts.TraceID, manifest.ConfigRevision, *opts.ExpectedRevision,
+			)
+		}
 		return recordRejection(opts, manifest, fmt.Sprintf("expected revision %d, trail is at %d", *opts.ExpectedRevision, manifest.ConfigRevision))
 	}
 	if manifest.Pending != nil {
+		if opts.RequireImmediate {
+			return ApplyResult{}, fmt.Errorf(
+				"trailconfig: trail %s cannot activate immediately: another configuration change is pending",
+				opts.TraceID,
+			)
+		}
 		return recordRejection(opts, manifest, "another configuration change is pending")
 	}
 
@@ -192,6 +213,12 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 		return ApplyResult{}, err
 	}
 	blockers = uniqueBlockers(append(blockers, observed...))
+	if opts.RequireImmediate && len(blockers) > 0 {
+		return ApplyResult{}, fmt.Errorf(
+			"trailconfig: trail %s cannot activate immediately: %s",
+			opts.TraceID, strings.Join(blockers, "; "),
+		)
+	}
 
 	candidate, err := prepareCandidate(opts, manifest.ActiveConfigRef)
 	if err != nil {
@@ -339,6 +366,16 @@ func validateApplySource(opts ApplyOptions) error {
 		if opts.SnapshotRef != "" {
 			return fmt.Errorf("trailconfig: overrides derive from the active snapshot and cannot name another snapshot")
 		}
+	case SourceSkillTrial:
+		if opts.SkillTrial == nil || len(opts.SkillTrial.Bundles) == 0 {
+			return fmt.Errorf("trailconfig: a skill trial needs at least one skill bundle")
+		}
+		if len(normalizeRoleList(opts.SkillTrial.Roles)) == 0 {
+			return fmt.Errorf("trailconfig: a skill trial needs at least one role")
+		}
+		if opts.SnapshotRef != "" || len(opts.Overrides) > 0 {
+			return fmt.Errorf("trailconfig: a skill trial derives from the active snapshot and cannot be combined with a snapshot or overrides")
+		}
 	default:
 		return fmt.Errorf("trailconfig: unknown apply source %q", opts.Source)
 	}
@@ -374,44 +411,58 @@ func prepareCandidate(opts ApplyOptions, activeRef string) (preparedCandidate, e
 			tree:      filepath.Join(snapshotPath, SnapshotTreeDirName),
 		}, nil
 	case SourceOverrides:
-		baseDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), activeRef)
-		inventory, err := loadVerifiedSnapshot(baseDir, activeRef)
-		if err != nil {
-			return preparedCandidate{}, err
-		}
-		contents, err := readSnapshotContents(baseDir, inventory)
-		if err != nil {
-			return preparedCandidate{}, err
-		}
-		tmpDir, err := os.MkdirTemp("", "paseka-config-overrides-")
-		if err != nil {
-			return preparedCandidate{}, fmt.Errorf("trailconfig: create candidate temp: %w", err)
-		}
-		cleanup := func() { _ = os.RemoveAll(tmpDir) }
-		if err := materializeSnapshot(tmpDir, activeRef, contents, inventory); err != nil {
-			cleanup()
-			return preparedCandidate{}, err
-		}
-		tree := filepath.Join(tmpDir, SnapshotsDirName, activeRef, SnapshotTreeDirName)
-		if err := applyOverrides(tree, opts.Overrides); err != nil {
-			cleanup()
-			return preparedCandidate{}, err
-		}
-		updated, err := readCapturedTree(tree)
-		if err != nil {
-			cleanup()
-			return preparedCandidate{}, err
-		}
-		updatedInventory := buildInventory(updated, inventory.Resolved)
-		ref, err := configRef(updatedInventory)
-		if err != nil {
-			cleanup()
-			return preparedCandidate{}, err
-		}
-		return preparedCandidate{ref: ref, inventory: updatedInventory, contents: updated, tree: tree, cleanup: cleanup}, nil
+		return prepareCandidateFromActive(opts, activeRef, func(tree string, _ Inventory) error {
+			return applyOverrides(tree, opts.Overrides)
+		})
+	case SourceSkillTrial:
+		return prepareCandidateFromActive(opts, activeRef, func(tree string, inventory Inventory) error {
+			return applySkillTrial(tree, inventory.Resolved.Profile, opts.SkillTrial)
+		})
 	default:
 		return preparedCandidate{}, fmt.Errorf("trailconfig: unknown apply source %q", opts.Source)
 	}
+}
+
+// prepareCandidateFromActive derives one candidate from the active snapshot and
+// applies a tree mutation. The active snapshot stays immutable: the mutation
+// writes into a temporary materialization, which the caller records as a new
+// snapshot only after the whole candidate validates.
+func prepareCandidateFromActive(opts ApplyOptions, activeRef string, mutate func(tree string, inventory Inventory) error) (preparedCandidate, error) {
+	baseDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), activeRef)
+	inventory, err := loadVerifiedSnapshot(baseDir, activeRef)
+	if err != nil {
+		return preparedCandidate{}, err
+	}
+	contents, err := readSnapshotContents(baseDir, inventory)
+	if err != nil {
+		return preparedCandidate{}, err
+	}
+	tmpDir, err := os.MkdirTemp("", "paseka-config-candidate-")
+	if err != nil {
+		return preparedCandidate{}, fmt.Errorf("trailconfig: create candidate temp: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
+	if err := materializeSnapshot(tmpDir, activeRef, contents, inventory); err != nil {
+		cleanup()
+		return preparedCandidate{}, err
+	}
+	tree := filepath.Join(tmpDir, SnapshotsDirName, activeRef, SnapshotTreeDirName)
+	if err := mutate(tree, inventory); err != nil {
+		cleanup()
+		return preparedCandidate{}, err
+	}
+	updated, err := readCapturedTree(tree)
+	if err != nil {
+		cleanup()
+		return preparedCandidate{}, err
+	}
+	updatedInventory := buildInventory(updated, inventory.Resolved)
+	ref, err := configRef(updatedInventory)
+	if err != nil {
+		cleanup()
+		return preparedCandidate{}, err
+	}
+	return preparedCandidate{ref: ref, inventory: updatedInventory, contents: updated, tree: tree, cleanup: cleanup}, nil
 }
 
 func materializeCandidateTree(ref string, contents []capturedFile, inventory Inventory) (string, func(), error) {
@@ -1183,13 +1234,15 @@ func (o ApplyOptions) requestFingerprint() string {
 	// contents: a retried delivery may arrive after the revision advanced and
 	// still must return the recorded result.
 	payload := struct {
-		Source      string     `json:"source"`
-		SnapshotRef string     `json:"snapshotRef,omitempty"`
-		Overrides   []Override `json:"overrides,omitempty"`
+		Source      string      `json:"source"`
+		SnapshotRef string      `json:"snapshotRef,omitempty"`
+		Overrides   []Override  `json:"overrides,omitempty"`
+		SkillTrial  *SkillTrial `json:"skillTrial,omitempty"`
 	}{
 		Source:      o.Source,
 		SnapshotRef: o.SnapshotRef,
 		Overrides:   o.Overrides,
+		SkillTrial:  o.SkillTrial,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

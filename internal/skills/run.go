@@ -204,6 +204,14 @@ func ResolveRun(in RunInput) (RunResolution, error) {
 	return out, nil
 }
 
+// FrozenProfileLayers reads the profile overlays a frozen configuration tree
+// carries. It is the same read a frozen run makes, exposed so configuration
+// tooling can reason about the selected layer without a second precedence
+// implementation.
+func FrozenProfileLayers(configRoot, profile string) (colony.ColonyProfile, colony.HomeProfileConfig, error) {
+	return loadSelectedProfile(RunInput{ConfigRoot: configRoot, Frozen: true, Profile: profile}, configRoot)
+}
+
 // loadSelectedProfile reads the selected profile's overlays from the
 // configuration tree in force. A frozen run reads the captured home profile
 // config, so a later machine-local edit cannot change it; an unbound run reads
