@@ -38,7 +38,9 @@ const (
 // observations. The reader does not assume a contract passed because it cannot
 // see one, and it does not rewrite the record to add the field.
 type ContractEvidence struct {
-	Status       string                         `json:"status"`
+	Status string `json:"status"`
+	// Intent is the normalized intent whose contract produced these rules.
+	Intent       string                         `json:"intent,omitempty"`
 	Rules        []protocol.ContractRule        `json:"rules,omitempty"`
 	Observations []protocol.ContractObservation `json:"observations,omitempty"`
 	Error        string                         `json:"error,omitempty"`
@@ -173,6 +175,7 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		if res.Contract != nil && res.Contract.Status != "" {
 			meta.Contract = ContractEvidence{
 				Status:       res.Contract.Status,
+				Intent:       res.Contract.Intent,
 				Rules:        res.Contract.Rules,
 				Observations: res.Contract.Observations,
 				Error:        res.Contract.Error,

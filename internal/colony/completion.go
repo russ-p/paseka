@@ -2,6 +2,7 @@ package colony
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/russ-p/paseka/internal/protocol"
@@ -15,25 +16,83 @@ type CompletionRule struct {
 }
 
 // CompletionContract declares post-run event requirements for a bee.
+//
+// Required is the default contract, applied to every intent without an
+// override. Intents maps a normalized intent name to the contract that run
+// must satisfy instead, so one role can demand a different output per intent
+// without the runtime special-casing that role.
 type CompletionContract struct {
+	Required []CompletionRule              `yaml:"required,omitempty"`
+	Intents  map[string]CompletionOverride `yaml:"intents,omitempty"`
+}
+
+// CompletionOverride is the contract a run under one intent must satisfy.
+type CompletionOverride struct {
 	Required []CompletionRule `yaml:"required,omitempty"`
 }
 
 // ValidateCompletionContract checks event rules at load time.
 func (c CompletionContract) ValidateCompletionContract(beeRole string) error {
-	for i, rule := range c.Required {
-		if strings.TrimSpace(rule.Type) == "" {
-			return fmt.Errorf("colony: bee %q completion_contract.required[%d]: type is required", beeRole, i)
+	if err := validateCompletionRules(c.Required, fmt.Sprintf("colony: bee %q completion_contract.required", beeRole)); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(c.Intents))
+	for key := range c.Intents {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		normalized := strings.TrimSpace(strings.ToLower(key))
+		if normalized == "" {
+			return fmt.Errorf("colony: bee %q completion_contract.intents: intent key is required", beeRole)
 		}
-		typ := protocol.EventType(rule.Type)
-		if !protocol.IsDomainEvent(typ) {
-			return fmt.Errorf("colony: bee %q completion_contract.required[%d]: invalid type %q", beeRole, i, rule.Type)
+		if _, ok := seen[normalized]; ok {
+			return fmt.Errorf("colony: bee %q completion_contract.intents: duplicate intent %q", beeRole, normalized)
 		}
-		if len(rule.KindOneOf) == 0 {
-			return fmt.Errorf("colony: bee %q completion_contract.required[%d]: kind_one_of is required", beeRole, i)
+		seen[normalized] = struct{}{}
+		override := c.Intents[key]
+		if len(override.Required) == 0 {
+			return fmt.Errorf("colony: bee %q completion_contract.intents[%q]: at least one rule is required", beeRole, normalized)
+		}
+		prefix := fmt.Sprintf("colony: bee %q completion_contract.intents[%q].required", beeRole, normalized)
+		if err := validateCompletionRules(override.Required, prefix); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func validateCompletionRules(rules []CompletionRule, prefix string) error {
+	for i, rule := range rules {
+		if strings.TrimSpace(rule.Type) == "" {
+			return fmt.Errorf("%s[%d]: type is required", prefix, i)
+		}
+		typ := protocol.EventType(rule.Type)
+		if !protocol.IsDomainEvent(typ) {
+			return fmt.Errorf("%s[%d]: invalid type %q", prefix, i, rule.Type)
+		}
+		if len(rule.KindOneOf) == 0 {
+			return fmt.Errorf("%s[%d]: kind_one_of is required", prefix, i)
+		}
+	}
+	return nil
+}
+
+// ForIntent returns the contract a run with the given normalized intent must
+// satisfy. An intent without an override falls back to the role's default
+// contract, and an empty intent name cannot select an override because the
+// runtime always passes the run's normalized intent.
+func (c CompletionContract) ForIntent(intent string) CompletionContract {
+	intent = strings.TrimSpace(strings.ToLower(intent))
+	if intent != "" {
+		for key, override := range c.Intents {
+			if strings.TrimSpace(strings.ToLower(key)) == intent {
+				return CompletionContract{Required: override.Required}
+			}
+		}
+	}
+	return CompletionContract{Required: c.Required}
 }
 
 // ValidateRunEvents checks whether emitted domain events satisfy the contract.

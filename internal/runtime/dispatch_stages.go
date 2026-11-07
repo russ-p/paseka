@@ -25,6 +25,7 @@ type preparedDispatch struct {
 	colonyRoot     string
 	workspace      string
 	agentID        string
+	intent         string
 	bee            colony.Bee
 	adapter        adapters.Adapter
 	adapterName    string
@@ -377,6 +378,7 @@ func (d *Dispatcher) prepareDispatch(ctx context.Context, req DispatchRequest) (
 		colonyRoot:     colonyRoot,
 		workspace:      workspace,
 		agentID:        agentID,
+		intent:         promptCtx.Intent,
 		bee:            bee,
 		adapter:        adapter,
 		adapterName:    adapterName,
@@ -556,7 +558,7 @@ func (d *Dispatcher) finalizeDispatch(ctx context.Context, p *preparedDispatch, 
 			contractEvents = strict
 		}
 	}
-	if err := d.enforceCompletionContract(p.runDir, p.bee, contractEvents, contractErr, result); err != nil {
+	if err := d.enforceCompletionContract(p.runDir, p.bee, p.intent, contractEvents, contractErr, result); err != nil {
 		return result, err
 	}
 
