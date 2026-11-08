@@ -155,6 +155,52 @@ describe('trace detail', () => {
 		expect(within(header()).getByText('active')).toBeInTheDocument();
 	});
 
+	it('labels the header with the open-failure count and keeps a record problem as a detail flag', async () => {
+		const { unmount } = render(TraceDetail, {
+			traceId,
+			...harness({
+				detail: async () =>
+					traceDetail({ hasActive: false, hasFailures: true, openFailures: 2, recordProblem: true })
+			})
+		});
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		// Both axes: the count is the badge and the integrity problem is not a
+		// second header badge.
+		expect(within(header()).getByText('2 failures')).toHaveClass('badge-error');
+		expect(within(header()).queryByText('record error')).not.toBeInTheDocument();
+		// The Trail block's Flags row carries both, the count first.
+		expect(await section('trace-trail')).toHaveTextContent('2 failures, record error');
+		unmount();
+
+		// A record-only trail names the integrity problem in its badge.
+		renderDetail({
+			detail: async () =>
+				traceDetail({ hasActive: false, hasFailures: true, openFailures: 0, recordProblem: true })
+		});
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		expect(within(header()).getByText('record error')).toHaveClass('badge-error');
+		expect(await section('trace-trail')).toHaveTextContent('record error');
+	});
+
+	it('stays quiet in the header for a healed trail and keeps a quiet resolved hint in its flags', async () => {
+		renderDetail({
+			detail: async () => traceDetail({ hasActive: false, hasFailures: true, openFailures: 0 })
+		});
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+
+		// The historical flag is no longer a badge anywhere on the page.
+		expect(within(header()).queryByText(/failure/)).not.toBeInTheDocument();
+		expect(within(header()).queryByText('record error')).not.toBeInTheDocument();
+
+		const block = await section('trace-trail');
+		expect(block).toHaveTextContent('resolved failures');
+		// The hint is ordinary text, never a badge and never the failure colour.
+		const hint = within(block).getByText('resolved failures');
+		expect(hint).not.toHaveClass('badge');
+		expect(hint).not.toHaveClass('badge-error');
+		expect(hint).not.toHaveClass('text-error');
+	});
+
 	it('offers the honey top-ups and reports the outcome through a toast', async () => {
 		const user = userEvent.setup();
 		const topUpEnergy = vi.fn(async () => ({

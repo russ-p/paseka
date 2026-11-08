@@ -131,7 +131,11 @@ import {
 	traceMeta,
 	tracePrimaryLabel,
 	traceState,
+	traceStateBadge,
 	traceStateLabel,
+	traceRecordProblem,
+	traceRecordErrorLabel,
+	traceResolvedHint,
 	traceBees,
 	traceFlags,
 	energyAvailable,
@@ -389,14 +393,52 @@ describe('dashboard projections', () => {
 		expect(taskCountEntries(undefined)).toEqual([]);
 	});
 
-	it('reads a trace as active, failed, or idle', () => {
-		const active = traceSummary({ hasActive: true, hasFailures: true, runCount: 6 });
+	it('reads a trace as active, failed, or idle from the open attention axes', () => {
+		const active = traceSummary({ hasActive: true, hasFailures: true, openFailures: 2, runCount: 6 });
 		expect(traceState(active)).toBe('active');
 		expect(traceStateLabel(active)).toBe('active');
 
-		const failed = traceSummary({ hasActive: false, hasFailures: true, runCount: 6 });
+		const failed = traceSummary({ hasActive: false, hasFailures: true, openFailures: 2, runCount: 6 });
 		expect(traceState(failed)).toBe('failed');
-		expect(traceStateLabel(failed)).toBe('failures');
+		expect(traceStateLabel(failed)).toBe('2 failures');
+
+		const one = traceSummary({ hasActive: false, hasFailures: true, openFailures: 1, runCount: 6 });
+		expect(traceState(one)).toBe('failed');
+		expect(traceStateLabel(one)).toBe('1 failure');
+
+		// A record problem is an open attention item of its own: it reads failed
+		// with the integrity label when no work failure is open.
+		const recordOnly = traceSummary({
+			hasActive: false,
+			hasFailures: true,
+			openFailures: 0,
+			recordProblem: true,
+			runCount: 4
+		});
+		expect(traceState(recordOnly)).toBe('failed');
+		expect(traceStateLabel(recordOnly)).toBe('record error');
+		expect(traceStateBadge(recordOnly)).toEqual({ status: 'failed', label: 'record error' });
+
+		// Both axes: the count labels the badge and the integrity problem is a
+		// separate detail flag.
+		const both = traceSummary({
+			hasActive: false,
+			hasFailures: true,
+			openFailures: 2,
+			recordProblem: true,
+			runCount: 4
+		});
+		expect(traceState(both)).toBe('failed');
+		expect(traceStateLabel(both)).toBe('2 failures');
+		expect(traceFlags(both)).toEqual(['2 failures', 'record error']);
+
+		// A healed trail keeps the historical flag and reads idle: the badge went
+		// quiet even though the record still remembers the failure.
+		const healed = traceSummary({ hasActive: false, hasFailures: true, openFailures: 0, runCount: 3 });
+		expect(traceState(healed)).toBe('idle');
+		expect(traceStateLabel(healed)).toBe('3 runs');
+		expect(traceStateBadge(healed)).toBeNull();
+		expect(traceResolvedHint(healed)).toBe('resolved failures');
 
 		expect(traceState(traceSummary({ hasActive: false, hasFailures: false, runCount: 3 }))).toBe('idle');
 		expect(traceStateLabel(traceSummary({ hasActive: false, hasFailures: false, runCount: 3 }))).toBe(
@@ -405,6 +447,36 @@ describe('dashboard projections', () => {
 		expect(traceStateLabel(traceSummary({ hasActive: false, hasFailures: false, runCount: 1 }))).toBe(
 			'1 run'
 		);
+		expect(traceResolvedHint(traceSummary({ hasActive: false, hasFailures: false }))).toBeNull();
+	});
+
+	it('keeps the record-integrity axis apart from the work-failure count', () => {
+		expect(traceRecordProblem(traceSummary())).toBe(false);
+		expect(traceRecordProblem(traceSummary({ recordProblem: true }))).toBe(true);
+		expect(traceRecordErrorLabel(traceSummary())).toBeNull();
+		expect(traceRecordErrorLabel(traceSummary({ recordProblem: true }))).toBe('record error');
+		// A later success does not repair a damaged pair, so the hint never replaces
+		// the record problem.
+		expect(
+			traceResolvedHint(
+				traceSummary({ hasFailures: true, openFailures: 0, recordProblem: true })
+			)
+		).toBeNull();
+	});
+
+	it('declines the state badge for an idle trail and labels open failures', () => {
+		expect(traceStateBadge(traceSummary({ hasActive: true }))).toEqual({
+			status: 'active',
+			label: 'active'
+		});
+		expect(traceStateBadge(traceSummary({ hasActive: false, openFailures: 1 }))).toEqual({
+			status: 'failed',
+			label: '1 failure'
+		});
+		expect(
+			traceStateBadge(traceSummary({ hasActive: false, openFailures: 0, recordProblem: true }))
+		).toEqual({ status: 'failed', label: 'record error' });
+		expect(traceStateBadge(traceSummary({ hasActive: false, openFailures: 0 }))).toBeNull();
 	});
 
 	it('prefers the trace title and falls back to the id', () => {
@@ -614,11 +686,23 @@ describe('trace row and comb formatting', () => {
 	});
 
 	it('lists the flags a trail actually carries', () => {
-		expect(traceFlags(traceSummary({ standing: true, hasActive: true, hasFailures: true }))).toEqual([
-			'standing',
-			'active',
-			'failures'
+		expect(
+			traceFlags(traceSummary({ standing: true, hasActive: true, hasFailures: true, openFailures: 2 }))
+		).toEqual(['standing', 'active', '2 failures']);
+		expect(traceFlags(traceSummary({ standing: false, hasActive: false, openFailures: 1 }))).toEqual([
+			'1 failure'
 		]);
+		// A record-only trail names the integrity problem as its detail flag.
+		expect(
+			traceFlags(
+				traceSummary({ standing: false, hasActive: false, hasFailures: true, openFailures: 0, recordProblem: true })
+			)
+		).toEqual(['record error']);
+		// A healed trail keeps the historical flag and carries only the quiet
+		// resolved hint, never an attention flag.
+		expect(
+			traceFlags(traceSummary({ standing: false, hasActive: false, hasFailures: true, openFailures: 0 }))
+		).toEqual(['resolved failures']);
 		expect(traceFlags(traceSummary({ standing: false, hasActive: false, hasFailures: false }))).toEqual([]);
 	});
 

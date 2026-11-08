@@ -33,8 +33,7 @@
 		traceFlags,
 		tracePendingLabel,
 		tracePrimaryLabel,
-		traceState,
-		traceStateLabel,
+		traceStateBadge,
 		trailStageLabel,
 		usageRows
 	} from '$lib/format';
@@ -85,6 +84,8 @@
 	const pullRequest = $derived(detail?.pullRequest ?? null);
 	const usage = $derived(usageRows(detail?.usage));
 	const flags = $derived(detail ? traceFlags(detail) : []);
+	/** The one attention badge: active, or the open-failure count; quiet when healed. */
+	const stateBadge = $derived(detail ? traceStateBadge(detail) : null);
 	/** Work waiting behind the trail's pause: a label, not a task status. */
 	const pending = $derived(detail ? tracePendingLabel(detail) : null);
 	/** The collapsed block is a preview; the timeline is the full feed. */
@@ -197,8 +198,8 @@
 						{#if pending}
 							<StatusBadge status="pending" label={pending} />
 						{/if}
-						{#if detail.hasActive || detail.hasFailures}
-							<StatusBadge status={traceState(detail)} label={traceState(detail)} />
+						{#if stateBadge}
+							<StatusBadge status={stateBadge.status} label={stateBadge.label} />
 						{/if}
 						<!-- The stage is the ledger's phase machine, not a run state: `closing`
 						     can sit beside `active`, and `gate` appears precisely when nothing is

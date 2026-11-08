@@ -23,15 +23,30 @@ type UsageAggregate struct {
 
 // TraceSummary is a filesystem projection of activity under one trace directory.
 type TraceSummary struct {
-	TraceID        string          `json:"traceId"`
-	LastActivityAt time.Time       `json:"lastActivityAt"`
-	RunCount       int             `json:"runCount"`
-	TaskCount      int             `json:"taskCount"`
-	EventCount     int             `json:"eventCount"`
-	Bees           []string        `json:"bees,omitempty"`
-	HasFailures    bool            `json:"hasFailures"`
-	HasActive      bool            `json:"hasActive"`
-	Usage          *UsageAggregate `json:"usage,omitempty"`
+	TraceID        string    `json:"traceId"`
+	LastActivityAt time.Time `json:"lastActivityAt"`
+	RunCount       int       `json:"runCount"`
+	TaskCount      int       `json:"taskCount"`
+	EventCount     int       `json:"eventCount"`
+	Bees           []string  `json:"bees,omitempty"`
+	HasFailures    bool      `json:"hasFailures"`
+	HasActive      bool      `json:"hasActive"`
+	// OpenFailures is the current attention input: how many tasks still carry a
+	// failed run that no later success of the same task superseded. HasFailures
+	// stays the historical "anything ever went wrong" flag beside it, so a
+	// healed trail reads HasFailures true with OpenFailures zero. Both are
+	// additive on the wire and absent when nothing is open.
+	OpenFailures int `json:"openFailures,omitempty"`
+	// NewestOpenFailureAt is the completion instant of the newest run still
+	// counted by OpenFailures. Nil when nothing is open.
+	NewestOpenFailureAt *time.Time `json:"newestOpenFailureAt,omitempty"`
+	// RecordProblem marks a run whose status/result pair is conflicting or
+	// incomplete. It is an open attention item that never resolves: a later
+	// success of the same task repairs the task, not the damaged evidence. It
+	// is kept apart from OpenFailures so the count speaks only about work.
+	// Additive on the wire; absent when every outcome pair is sound.
+	RecordProblem bool            `json:"recordProblem,omitempty"`
+	Usage         *UsageAggregate `json:"usage,omitempty"`
 }
 
 // ScannedEvent pairs a protocol event with its producer attribution: the bee
@@ -309,6 +324,7 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 
 	bees := map[string]struct{}{}
 	var usageAgg UsageAggregate
+	var outcomes []trailRunOutcome
 	for _, ent := range entries {
 		if !ent.IsDir() {
 			continue
@@ -356,6 +372,10 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 		switch {
 		case meta.Records != nil:
 			summary.HasFailures = true
+			// A conflicting or incomplete pair is a record problem. It stays
+			// open for the life of the trail: a later success proves the new
+			// attempt is sound, it does not repair the old evidence.
+			summary.RecordProblem = true
 		case meta.State == string(protocol.StatusFailed) || meta.State == string(protocol.StatusCancelled):
 			summary.HasFailures = true
 		case meta.Contract.Status == protocol.ContractFailed || meta.Contract.Status == protocol.ContractUnavailable:
@@ -363,7 +383,58 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 		case meta.State == string(protocol.StatusRunning) || meta.State == string(protocol.StatusQueued):
 			summary.HasActive = true
 		}
+		// The current attention projection is built from the same walk. Only a
+		// terminal outcome participates: an in-flight run neither resolves an
+		// earlier failure nor adds one. A cancelled run is unfinished work
+		// rather than an error, but it still counts as an open failure until a
+		// later success of the same task clears it. A failing or unavailable
+		// completion contract is likewise a failure even when the run itself
+		// projected completed. A later success of the same task is what closes
+		// an earlier failure; see openFailuresOf.
+		//
+		// Analysis is excluded before grouping, in both directions: its failure
+		// does not raise the trail and its success does not clear work. The
+		// classification is the admission-time purpose on the run record — not
+		// the closing phase, the derived trail stage, the Bee name, or
+		// AnalysisOf. Closing is work-like and groups by its own task id. A
+		// legacy record with no purpose participates as work-like, because
+		// excluding an unknown purpose would hide the only evidence it has.
+		if meta.Purpose != protocol.PurposeAnalysis {
+			outcomeAt := meta.FinishedAt
+			if outcomeAt.IsZero() {
+				outcomeAt = meta.StartedAt
+			}
+			terminal := meta.State == string(protocol.StatusCompleted) ||
+				meta.State == string(protocol.StatusFailed) ||
+				meta.State == string(protocol.StatusCancelled)
+			contractBroken := meta.Contract.Status == protocol.ContractFailed ||
+				meta.Contract.Status == protocol.ContractUnavailable
+			switch {
+			case meta.Records != nil:
+				// Record problems are tracked on the trail itself and never
+				// enter the resolvable outcome list: a later success of the
+				// same task must not clear damaged evidence.
+			case terminal && (meta.State == string(protocol.StatusFailed) ||
+				meta.State == string(protocol.StatusCancelled) || contractBroken):
+				outcomes = append(outcomes, trailRunOutcome{
+					TaskID:  meta.TaskID,
+					AgentID: meta.AgentID,
+					At:      outcomeAt,
+					Failed:  true,
+				})
+			case terminal && meta.State == string(protocol.StatusCompleted) &&
+				meta.Records == nil && !contractBroken:
+				outcomes = append(outcomes, trailRunOutcome{
+					TaskID:    meta.TaskID,
+					AgentID:   meta.AgentID,
+					At:        outcomeAt,
+					Succeeded: true,
+				})
+			}
+		}
 	}
+
+	summary.OpenFailures, summary.NewestOpenFailureAt = openFailuresOf(outcomes)
 
 	if usageAgg.RunCountWithUsage > 0 {
 		summary.Usage = &usageAgg

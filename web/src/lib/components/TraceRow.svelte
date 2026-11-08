@@ -5,8 +5,7 @@
 		traceMeta,
 		tracePendingLabel,
 		tracePrimaryLabel,
-		traceState,
-		traceStateLabel
+		traceStateBadge
 	} from '$lib/format';
 	import type { TraceSummary } from '$lib/api/types';
 
@@ -21,7 +20,7 @@
 		selected?: boolean;
 	} = $props();
 
-	const state = $derived(traceState(trace));
+	const stateBadge = $derived(traceStateBadge(trace));
 	const meta = $derived(traceMeta(trace));
 	const pending = $derived(tracePendingLabel(trace));
 </script>
@@ -55,7 +54,9 @@
 			{#if pending}
 				<StatusBadge status="pending" label={pending} />
 			{/if}
-			<StatusBadge status={state} label={traceStateLabel(trace)} />
+			{#if stateBadge}
+				<StatusBadge status={stateBadge.status} label={stateBadge.label} />
+			{/if}
 		</div>
 	</div>
 	{#if trace.summary}

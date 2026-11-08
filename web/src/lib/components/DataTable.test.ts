@@ -5,7 +5,7 @@ import type { Component } from 'svelte';
 import DataTable from './DataTable.svelte';
 import type { DataColumn } from './DataTable.svelte';
 import { runSummary, traceSummary } from '../../tests/fixtures';
-import { tracePrimaryLabel, traceState, traceStateLabel } from '$lib/format';
+import { tracePrimaryLabel, traceStateBadge, traceStateLabel } from '$lib/format';
 import type { RunSummary, TraceSummary } from '$lib/api/types';
 
 const columns: DataColumn<RunSummary>[] = [
@@ -285,10 +285,7 @@ describe('DataTable cell intents', () => {
 			key: 'state',
 			label: 'State',
 			text: (trace) => traceStateLabel(trace),
-			badge: (trace) =>
-				trace.hasActive || trace.hasFailures
-					? { status: traceState(trace), label: traceState(trace) }
-					: null
+			badge: (trace) => traceStateBadge(trace)
 		}
 	];
 	const traceRows = [

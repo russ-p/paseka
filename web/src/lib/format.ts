@@ -519,10 +519,59 @@ export function taskCountEntries(counts: Record<string, number> | undefined): Ar
 	return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-/** A trace reads as active, failed, or idle; the raw status never invents a new word. */
+/**
+ * The number of failures a trail currently carries: a failed run that no later
+ * success of the same task superseded. The server computes this in the one trail
+ * walk, so the client never re-derives the grouping from the run list. An absent
+ * field is the additive default an older payload reads as zero.
+ */
+export function traceOpenFailures(trace: Pick<TraceSummary, 'openFailures'>): number {
+	const count = trace.openFailures ?? 0;
+	return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+/** `1 failure` / `N failures`, so the badge agrees in number; `null` when healed. */
+export function traceFailureLabel(trace: Pick<TraceSummary, 'openFailures'>): string | null {
+	const count = traceOpenFailures(trace);
+	if (count === 0) return null;
+	return `${count} failure${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * The record-integrity axis: a conflicting or incomplete outcome pair. It never
+ * resolves, so it stays on the trail even after every later run succeeds. An
+ * absent field is the additive default an older payload reads as sound.
+ */
+export function traceRecordProblem(trace: Pick<TraceSummary, 'recordProblem'>): boolean {
+	return trace.recordProblem === true;
+}
+
+/** The integrity label, kept apart from the work-failure count. */
+export function traceRecordErrorLabel(
+	trace: Pick<TraceSummary, 'recordProblem'>
+): string | null {
+	return traceRecordProblem(trace) ? 'record error' : null;
+}
+
+/**
+ * A healed trail keeps its history on the detail as a quiet hint. It is not a
+ * badge: nothing is open, so the list and Dashboard stay quiet.
+ */
+export function traceResolvedHint(trace: TraceSummary): string | null {
+	if (!trace.hasFailures) return null;
+	if (traceOpenFailures(trace) > 0 || traceRecordProblem(trace)) return null;
+	return 'resolved failures';
+}
+
+/**
+ * A trace reads as active, failed, or idle. Active outranks failed — the
+ * in-flight retry is the primary fact and the open count survives on the data —
+ * and a trail whose failures were all superseded is idle again. A record
+ * problem is an open attention item even when the work-failure count is zero.
+ */
 export function traceState(trace: TraceSummary): 'active' | 'failed' | 'idle' {
 	if (trace.hasActive) return 'active';
-	if (trace.hasFailures) return 'failed';
+	if (traceOpenFailures(trace) > 0 || traceRecordProblem(trace)) return 'failed';
 	return 'idle';
 }
 
@@ -531,10 +580,22 @@ export function traceStateLabel(trace: TraceSummary): string {
 		case 'active':
 			return 'active';
 		case 'failed':
-			return 'failures';
+			// The count names work failures; a record-only trail names the
+			// integrity problem instead. When both exist the count is the label
+			// and the record problem is a separate detail flag.
+			return traceFailureLabel(trace) ?? traceRecordErrorLabel(trace) ?? 'failed';
 		default:
 			return plural(trace.runCount, 'run');
 	}
+}
+
+/** The state badge for a row, or `null` when the trail has nothing to say. */
+export function traceStateBadge(
+	trace: TraceSummary
+): { status: 'active' | 'failed'; label: string } | null {
+	const state = traceState(trace);
+	if (state === 'idle') return null;
+	return { status: state, label: traceStateLabel(trace) };
 }
 
 export function tracePrimaryLabel(trace: TraceSummary): string {
@@ -585,12 +646,22 @@ export function dashboardFailedRuns(dashboard: DashboardSummary | null): RunSumm
 	return (dashboard?.failedRuns ?? []).filter(runNeedsAttention);
 }
 
-/** `standing`, `active`, `failures` — the flags the trace summary carries, or nothing. */
+/**
+ * `standing`, `active`, `1 failure`, `record error` — the flags the trace
+ * summary carries, or nothing. Failures are the open ones; a record problem is
+ * a separate detail flag beside the count. A healed trail's history appears as
+ * the quiet `resolved failures` hint, never as an attention flag.
+ */
 export function traceFlags(trace: TraceSummary): string[] {
 	const flags: string[] = [];
 	if (trace.standing) flags.push('standing');
 	if (trace.hasActive) flags.push('active');
-	if (trace.hasFailures) flags.push('failures');
+	const failures = traceFailureLabel(trace);
+	if (failures) flags.push(failures);
+	const recordError = traceRecordErrorLabel(trace);
+	if (recordError) flags.push(recordError);
+	const resolved = traceResolvedHint(trace);
+	if (resolved) flags.push(resolved);
 	return flags;
 }
 

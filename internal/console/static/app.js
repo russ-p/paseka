@@ -1207,6 +1207,76 @@ function standingBadge(trace) {
   return trace?.standing ? '<span class="badge standing">standing</span>' : '';
 }
 
+// One rule for trail attention, shared by the trace list row, the Dashboard
+// trail row, and the trail detail. It reads the server-side additive
+// projection: openFailures counts work failures no later success of the same
+// task superseded, recordProblem is the never-resolving integrity axis, and
+// hasFailures stays the historical flag that only feeds the quiet detail hint.
+// The browser never groups runs or re-derives resolution.
+function traceOpenFailures(trace) {
+  const count = trace?.openFailures ?? 0;
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function traceFailureLabel(trace) {
+  const count = traceOpenFailures(trace);
+  if (count === 0) return null;
+  return `${count} failure${count === 1 ? '' : 's'}`;
+}
+
+function traceRecordErrorLabel(trace) {
+  return trace?.recordProblem === true ? 'record error' : null;
+}
+
+// A healed trail keeps its history as a quiet hint on the detail only: nothing
+// is open, so the list and Dashboard stay quiet.
+function traceResolvedHint(trace) {
+  if (!trace?.hasFailures) return null;
+  if (traceOpenFailures(trace) > 0 || traceRecordErrorLabel(trace)) return null;
+  return 'resolved failures';
+}
+
+// State, label, and detail flags in one place. Active outranks failed, the open
+// count names the badge, and a record problem becomes the label only when the
+// count is zero. The flags list both axes when both exist, plus the standing
+// axis and the quiet historical hint.
+function traceAttention(trace) {
+  const flags = [];
+  if (trace?.standing) flags.push('standing');
+  if (trace?.hasActive) flags.push('active');
+  const failures = traceFailureLabel(trace);
+  if (failures) flags.push(failures);
+  const recordError = traceRecordErrorLabel(trace);
+  if (recordError) flags.push(recordError);
+  const resolved = traceResolvedHint(trace);
+  if (resolved) flags.push(resolved);
+
+  if (trace?.hasActive) return { state: 'active', label: 'active', flags };
+  if (failures || recordError) return { state: 'failed', label: failures || recordError, flags };
+  return { state: '', label: '', flags };
+}
+
+// The quiet state badge for a detail header: nothing when the trail is idle,
+// including a healed trail.
+function traceAttentionBadge(trace) {
+  const attention = traceAttention(trace);
+  if (!attention.state) return '';
+  return `<span class="badge ${attention.state}">${escapeHtml(attention.label)}</span>`;
+}
+
+// A list row keeps its run count when there is no attention state, so an idle
+// or healed trail still reads as the same neutral row it did before.
+function traceRowBadge(trace) {
+  const attention = traceAttention(trace);
+  const label = attention.label || `${trace?.runCount ?? 0} runs`;
+  return `<span class="badge ${attention.state}">${escapeHtml(label)}</span>`;
+}
+
+// The detail's flags come from the same rule as the badge.
+function traceAttentionFlags(trace) {
+  return traceAttention(trace).flags;
+}
+
 function setTab(tab) {
   closeReviewMergePreview();
   state.tab = tab;
@@ -2776,7 +2846,7 @@ function renderDashboard() {
   renderDashboardList(el.dashboardTraces, d.recentTraces, (trace) => `
     <div class="top">
       <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
-      <span class="trace-badges">${standingBadge(trace)}<span class="badge ${trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '')}">${trace.runCount} runs</span></span>
+      <span class="trace-badges">${standingBadge(trace)}${traceRowBadge(trace)}</span>
     </div>
     ${traceSummarySubline(trace)}
     ${traceIdSubline(trace)}
@@ -2996,13 +3066,11 @@ function renderTraces() {
     if (trace.traceId === state.selectedTraceId) {
       li.classList.add('selected');
     }
-    const badge = trace.hasActive ? 'active' : (trace.hasFailures ? 'failed' : '');
-    const badgeLabel = trace.hasActive ? 'active' : (trace.hasFailures ? 'failures' : `${trace.runCount} runs`);
     const bees = (trace.bees || []).join(', ') || '—';
     li.innerHTML = `
       <div class="top">
         <span class="bee">${escapeHtml(tracePrimaryLabel(trace))}</span>
-        <span class="trace-badges">${standingBadge(trace)}<span class="badge ${badge}">${escapeHtml(badgeLabel)}</span></span>
+        <span class="trace-badges">${standingBadge(trace)}${traceRowBadge(trace)}</span>
       </div>
       ${traceSummarySubline(trace)}
       ${traceIdSubline(trace)}
@@ -3038,17 +3106,15 @@ function renderTraceDetail(detail) {
 
   el.traceDetailBody.classList.remove('hidden');
   const bees = (detail.bees || []).join(', ') || '—';
-  const flags = [];
-  if (detail.standing) flags.push('standing');
-  if (detail.hasActive) flags.push('active');
-  if (detail.hasFailures) flags.push('failures');
+  const flags = traceAttentionFlags(detail);
   el.traceDetailMeta.innerHTML = `
-    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)} ${standingBadge(detail)}${traceSummarySubline(detail)}</dd>` : (detail.summary ? `<dt>Summary</dt><dd class="muted">${escapeHtml(detail.summary)}</dd>` : '')}
+    ${detail.title ? `<dt>Title</dt><dd>${escapeHtml(detail.title)} ${standingBadge(detail)}${traceAttentionBadge(detail)}${traceSummarySubline(detail)}</dd>` : (detail.summary ? `<dt>Summary</dt><dd class="muted">${escapeHtml(detail.summary)}</dd>` : '')}
     <dt>Trace</dt><dd>${escapeHtml(detail.traceId)}</dd>
     <dt>Last activity</dt><dd>${formatTime(detail.lastActivityAt)}</dd>
     <dt>Runs</dt><dd>${detail.runCount ?? (detail.runs || []).length}</dd>
     <dt>Tasks</dt><dd>${detail.taskCount ?? (detail.tasks || []).length}</dd>
     <dt>Bees</dt><dd>${escapeHtml(bees)}</dd>
+    ${detail.newestOpenFailureAt ? `<dt>Newest open failure</dt><dd>${formatTime(detail.newestOpenFailureAt)}</dd>` : ''}
     <dt>Flags</dt><dd>${flags.length ? escapeHtml(flags.join(', ')) : '—'}</dd>
   `;
 

@@ -29,12 +29,14 @@ func TestFormatTracesListRendersStatusHintsAndTimes(t *testing.T) {
 			LastActivityAt: now.Add(-30 * time.Minute),
 			RunCount:       2,
 			HasActive:      true,
+			OpenFailures:   1,
 		},
 		{
-			TraceID:        "trace-failed",
+			TraceID:        "trace-open",
 			LastActivityAt: now.Add(-2 * time.Hour),
-			RunCount:       1,
+			RunCount:       3,
 			HasFailures:    true,
+			OpenFailures:   1,
 		},
 		{
 			TraceID:        "trace-idle",
@@ -46,12 +48,79 @@ func TestFormatTracesListRendersStatusHintsAndTimes(t *testing.T) {
 	for _, want := range []string{
 		"Recent traces",
 		"trace-active · 30m ago · active",
-		"trace-failed · 2h ago · failed",
+		"trace-open · 2h ago · 1 failure",
 		"trace-idle · 2d ago · 4 runs",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in:\n%s", want, text)
 		}
+	}
+}
+
+func TestFormatTracesListReadsSharedAttentionState(t *testing.T) {
+	now := time.Date(2026, 7, 19, 15, 0, 0, 0, time.UTC)
+	text := tggate.FormatTracesList(tggate.Config{}, []hiveview.TraceSummaryView{
+		{
+			// Active outranks the open failure: the in-flight retry is the
+			// primary fact.
+			TraceID:        "trace-active",
+			LastActivityAt: now,
+			RunCount:       2,
+			HasActive:      true,
+			OpenFailures:   2,
+		},
+		{
+			TraceID:        "trace-one-failure",
+			LastActivityAt: now,
+			RunCount:       3,
+			HasFailures:    true,
+			OpenFailures:   1,
+		},
+		{
+			TraceID:        "trace-many-failures",
+			LastActivityAt: now,
+			RunCount:       5,
+			HasFailures:    true,
+			OpenFailures:   3,
+		},
+		{
+			// A healed trail keeps the historical flag but reads its run count.
+			TraceID:        "trace-healed",
+			LastActivityAt: now,
+			RunCount:       4,
+			HasFailures:    true,
+		},
+		{
+			TraceID:        "trace-record-only",
+			LastActivityAt: now,
+			RunCount:       2,
+			HasFailures:    true,
+			RecordProblem:  true,
+		},
+		{
+			TraceID:        "trace-both",
+			LastActivityAt: now,
+			RunCount:       6,
+			HasFailures:    true,
+			OpenFailures:   2,
+			RecordProblem:  true,
+		},
+	}, now)
+
+	for _, want := range []string{
+		"trace-active · just now · active",
+		"trace-one-failure · just now · 1 failure",
+		"trace-many-failures · just now · 3 failures",
+		"trace-healed · just now · 4 runs",
+		"trace-record-only · just now · record error",
+		"trace-both · just now · 2 failures · record error",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "trace-healed · just now · failed") {
+		t.Fatalf("healed trail must not read failed:\n%s", text)
 	}
 }
 

@@ -463,6 +463,62 @@ func TestTracesTabStaticContract(t *testing.T) {
 	}
 }
 
+func TestLegacyConsoleTrailAttentionParity(t *testing.T) {
+	js, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	src := string(js)
+
+	// One local rule over the additive server projection, shared by all three
+	// surfaces: the trace list row, the Dashboard trail row, and the detail.
+	for _, needle := range []string{
+		"function traceOpenFailures(trace)",
+		"function traceFailureLabel(trace)",
+		"function traceRecordErrorLabel(trace)",
+		"function traceResolvedHint(trace)",
+		"function traceAttention(trace)",
+		"function traceAttentionBadge(trace)",
+		"function traceRowBadge(trace)",
+		"function traceAttentionFlags(trace)",
+		"trace?.openFailures ?? 0",
+		"trace?.recordProblem === true",
+		"`${count} failure${count === 1 ? '' : 's'}`",
+		"resolved failures",
+	} {
+		if !strings.Contains(src, needle) {
+			t.Fatalf("app.js missing %q", needle)
+		}
+	}
+
+	// The two row surfaces share the row badge; the detail header badge and the
+	// detail flags come from the same rule.
+	if got := strings.Count(src, "${traceRowBadge(trace)}"); got != 2 {
+		t.Fatalf("traceRowBadge row call sites = %d, want the trace list and Dashboard", got)
+	}
+	if !strings.Contains(src, "${traceAttentionBadge(detail)}") {
+		t.Fatal("trace detail header must render traceAttentionBadge(detail)")
+	}
+	if !strings.Contains(src, "const flags = traceAttentionFlags(detail);") {
+		t.Fatal("trace detail flags must come from traceAttentionFlags(detail)")
+	}
+
+	// The historical flag feeds only the quiet resolved hint; it is never the
+	// list or Dashboard attention badge.
+	if got := strings.Count(src, ".hasFailures"); got != 1 {
+		t.Fatalf("app.js reads hasFailures %d times, want only the resolved hint", got)
+	}
+	for _, banned := range []string{
+		"trace.hasFailures ? 'failed'",
+		"trace.hasFailures ? 'failures'",
+		"detail.hasFailures",
+	} {
+		if strings.Contains(src, banned) {
+			t.Fatalf("app.js must not use the historical flag as an attention badge: found %q", banned)
+		}
+	}
+}
+
 func TestReviewMergeDiffStaticContract(t *testing.T) {
 	html, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {

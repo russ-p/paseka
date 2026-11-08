@@ -49,12 +49,28 @@ func formatTraceListLine(cfg Config, trace hiveview.TraceSummaryView, now time.T
 	return line
 }
 
+// formatTraceStatusHint renders the trail's current attention state from the
+// shared hiveview projection. The resolution rule lives in the runs walk, so
+// this reads the open count and the record-problem flag rather than deciding
+// from the historical HasFailures flag: a healed trail falls through to its run
+// count instead of reading failed forever.
 func formatTraceStatusHint(trace hiveview.TraceSummaryView) string {
 	if trace.HasActive {
 		return "active"
 	}
-	if trace.HasFailures {
-		return "failed"
+	hints := make([]string, 0, 2)
+	if trace.OpenFailures > 0 {
+		if trace.OpenFailures == 1 {
+			hints = append(hints, "1 failure")
+		} else {
+			hints = append(hints, fmt.Sprintf("%d failures", trace.OpenFailures))
+		}
+	}
+	if trace.RecordProblem {
+		hints = append(hints, "record error")
+	}
+	if len(hints) > 0 {
+		return strings.Join(hints, " · ")
 	}
 	if trace.RunCount > 0 {
 		if trace.RunCount == 1 {

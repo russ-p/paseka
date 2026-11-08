@@ -78,16 +78,26 @@ type EventFilter struct {
 
 // TraceSummaryView is a projection of one trace.
 type TraceSummaryView struct {
-	TraceID         string               `json:"traceId"`
-	Title           string               `json:"title,omitempty"`
-	Summary         string               `json:"summary,omitempty"`
-	LastActivityAt  time.Time            `json:"lastActivityAt"`
-	RunCount        int                  `json:"runCount"`
-	TaskCount       int                  `json:"taskCount"`
-	EventCount      int                  `json:"eventCount"`
-	Bees            []string             `json:"bees,omitempty"`
-	HasFailures     bool                 `json:"hasFailures"`
-	HasActive       bool                 `json:"hasActive"`
+	TraceID        string    `json:"traceId"`
+	Title          string    `json:"title,omitempty"`
+	Summary        string    `json:"summary,omitempty"`
+	LastActivityAt time.Time `json:"lastActivityAt"`
+	RunCount       int       `json:"runCount"`
+	TaskCount      int       `json:"taskCount"`
+	EventCount     int       `json:"eventCount"`
+	Bees           []string  `json:"bees,omitempty"`
+	HasFailures    bool      `json:"hasFailures"`
+	HasActive      bool      `json:"hasActive"`
+	// OpenFailures is the current attention input — failures with no later
+	// success of the same task — and HasFailures stays the historical flag.
+	// NewestOpenFailureAt is when the newest open failure finished. Both are
+	// additive; an older client that ignores them still decodes the payload.
+	OpenFailures        int        `json:"openFailures,omitempty"`
+	NewestOpenFailureAt *time.Time `json:"newestOpenFailureAt,omitempty"`
+	// RecordProblem is the record-integrity axis from the same walk: a
+	// conflicting or incomplete outcome pair that never resolves. It is kept
+	// apart from OpenFailures, which counts only work failures.
+	RecordProblem   bool                 `json:"recordProblem,omitempty"`
 	EnergyBudget    int                  `json:"energyBudget,omitempty"`
 	EnergyRemaining int                  `json:"energyRemaining,omitempty"`
 	EnergyAdded     int                  `json:"energyAdded,omitempty"`
@@ -607,15 +617,18 @@ func CollectRecentInsights(ctx colony.Context, limit int) ([]InsightHighlight, e
 
 func TraceSummaryFromRuns(s runs.TraceSummary) TraceSummaryView {
 	return TraceSummaryView{
-		TraceID:        s.TraceID,
-		LastActivityAt: s.LastActivityAt,
-		RunCount:       s.RunCount,
-		TaskCount:      s.TaskCount,
-		EventCount:     s.EventCount,
-		Bees:           append([]string(nil), s.Bees...),
-		HasFailures:    s.HasFailures,
-		HasActive:      s.HasActive,
-		Usage:          s.Usage,
+		TraceID:             s.TraceID,
+		LastActivityAt:      s.LastActivityAt,
+		RunCount:            s.RunCount,
+		TaskCount:           s.TaskCount,
+		EventCount:          s.EventCount,
+		Bees:                append([]string(nil), s.Bees...),
+		HasFailures:         s.HasFailures,
+		HasActive:           s.HasActive,
+		OpenFailures:        s.OpenFailures,
+		NewestOpenFailureAt: s.NewestOpenFailureAt,
+		RecordProblem:       s.RecordProblem,
+		Usage:               s.Usage,
 	}
 }
 

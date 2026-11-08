@@ -9,7 +9,7 @@
 		traceBees,
 		tracePendingLabel,
 		tracePrimaryLabel,
-		traceState,
+		traceStateBadge,
 		traceStateLabel
 	} from '$lib/format';
 	import type { TraceSummary } from '$lib/api/types';
@@ -36,14 +36,13 @@
 			grow: true
 		},
 		{
-			// The run count already has a column, so this only speaks when it has news.
+			// The run count already has a column, so this only speaks when it has
+			// news: a healed trail keeps the historical flag but shows no badge,
+			// and one with open failures names the count.
 			key: 'state',
 			label: 'State',
 			text: (trace) => traceStateLabel(trace),
-			badge: (trace) =>
-				trace.hasActive || trace.hasFailures
-					? { status: traceState(trace), label: traceState(trace) }
-					: null
+			badge: (trace) => traceStateBadge(trace)
 		},
 		{
 			// Energy admission is the trail's axis, so it sits beside the trail and never
