@@ -23,15 +23,24 @@ type UsageAggregate struct {
 
 // TraceSummary is a filesystem projection of activity under one trace directory.
 type TraceSummary struct {
-	TraceID        string          `json:"traceId"`
-	LastActivityAt time.Time       `json:"lastActivityAt"`
-	RunCount       int             `json:"runCount"`
-	TaskCount      int             `json:"taskCount"`
-	EventCount     int             `json:"eventCount"`
-	Bees           []string        `json:"bees,omitempty"`
-	HasFailures    bool            `json:"hasFailures"`
-	HasActive      bool            `json:"hasActive"`
-	Usage          *UsageAggregate `json:"usage,omitempty"`
+	TraceID        string    `json:"traceId"`
+	LastActivityAt time.Time `json:"lastActivityAt"`
+	RunCount       int       `json:"runCount"`
+	TaskCount      int       `json:"taskCount"`
+	EventCount     int       `json:"eventCount"`
+	Bees           []string  `json:"bees,omitempty"`
+	HasFailures    bool      `json:"hasFailures"`
+	HasActive      bool      `json:"hasActive"`
+	// OpenFailures is the current attention input: how many tasks still carry a
+	// failed run that no later success of the same task superseded. HasFailures
+	// stays the historical "anything ever went wrong" flag beside it, so a
+	// healed trail reads HasFailures true with OpenFailures zero. Both are
+	// additive on the wire and absent when nothing is open.
+	OpenFailures int `json:"openFailures,omitempty"`
+	// NewestOpenFailureAt is the completion instant of the newest run still
+	// counted by OpenFailures. Nil when nothing is open.
+	NewestOpenFailureAt *time.Time      `json:"newestOpenFailureAt,omitempty"`
+	Usage               *UsageAggregate `json:"usage,omitempty"`
 }
 
 // ScannedEvent pairs a protocol event with its producer attribution: the bee
@@ -309,6 +318,7 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 
 	bees := map[string]struct{}{}
 	var usageAgg UsageAggregate
+	var outcomes []trailRunOutcome
 	for _, ent := range entries {
 		if !ent.IsDir() {
 			continue
@@ -363,7 +373,34 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 		case meta.State == string(protocol.StatusRunning) || meta.State == string(protocol.StatusQueued):
 			summary.HasActive = true
 		}
+		// The current attention projection is built from the same walk. Only a
+		// terminal outcome participates: an in-flight run neither resolves an
+		// earlier failure nor adds one, and a cancelled run is unfinished work
+		// rather than a failure here. A later success of the same task is what
+		// closes an earlier failure; see openFailuresOf.
+		outcomeAt := meta.FinishedAt
+		if outcomeAt.IsZero() {
+			outcomeAt = meta.StartedAt
+		}
+		switch {
+		case meta.State == string(protocol.StatusFailed):
+			outcomes = append(outcomes, trailRunOutcome{
+				TaskID:  meta.TaskID,
+				AgentID: meta.AgentID,
+				At:      outcomeAt,
+				Failed:  true,
+			})
+		case meta.State == string(protocol.StatusCompleted) && meta.Records == nil:
+			outcomes = append(outcomes, trailRunOutcome{
+				TaskID:    meta.TaskID,
+				AgentID:   meta.AgentID,
+				At:        outcomeAt,
+				Succeeded: true,
+			})
+		}
 	}
+
+	summary.OpenFailures, summary.NewestOpenFailureAt = openFailuresOf(outcomes)
 
 	if usageAgg.RunCountWithUsage > 0 {
 		summary.Usage = &usageAgg

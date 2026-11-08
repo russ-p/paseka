@@ -127,6 +127,36 @@ describe('dashboard route', () => {
 		expect(within(table).queryByText('guard')).not.toBeInTheDocument();
 	});
 
+	it('badges a trail row with its open failures and leaves a healed trail quiet', () => {
+		const { store, toasts } = harness(
+			dashboardSummary({
+				recentTraces: [
+					traceSummary({
+						traceId: 'trace-open',
+						title: 'Open trail',
+						hasActive: false,
+						hasFailures: true,
+						openFailures: 2
+					}),
+					// Healed: still historically failed, nothing open to act on.
+					traceSummary({
+						traceId: 'trace-healed',
+						title: 'Healed trail',
+						hasActive: false,
+						hasFailures: true,
+						openFailures: 0
+					})
+				]
+			})
+		);
+		render(Dashboard, { store, toasts });
+
+		const traces = document.querySelector('#dashboard-traces') as HTMLElement;
+		expect(within(traces).getByText('2 failures')).toBeInTheDocument();
+		const healed = within(traces).getByText('Healed trail').closest('li') as HTMLElement;
+		expect(within(healed).queryByText(/failure/)).not.toBeInTheDocument();
+	});
+
 	it('renders skeletons before the first poll and empty states after it', () => {
 		const store = createConsoleStatusStore({ pollIntervalMs: 0 });
 		const { container, unmount } = render(Dashboard, { store, toasts: createToastStore(0) });

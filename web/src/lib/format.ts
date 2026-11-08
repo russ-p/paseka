@@ -519,10 +519,32 @@ export function taskCountEntries(counts: Record<string, number> | undefined): Ar
 	return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-/** A trace reads as active, failed, or idle; the raw status never invents a new word. */
+/**
+ * The number of failures a trail currently carries: a failed run that no later
+ * success of the same task superseded. The server computes this in the one trail
+ * walk, so the client never re-derives the grouping from the run list. An absent
+ * field is the additive default an older payload reads as zero.
+ */
+export function traceOpenFailures(trace: Pick<TraceSummary, 'openFailures'>): number {
+	const count = trace.openFailures ?? 0;
+	return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+/** `1 failure` / `N failures`, so the badge agrees in number; `null` when healed. */
+export function traceFailureLabel(trace: Pick<TraceSummary, 'openFailures'>): string | null {
+	const count = traceOpenFailures(trace);
+	if (count === 0) return null;
+	return `${count} failure${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * A trace reads as active, failed, or idle. Active outranks failed — the
+ * in-flight retry is the primary fact and the open count survives on the data —
+ * and a trail whose failures were all superseded is idle again.
+ */
 export function traceState(trace: TraceSummary): 'active' | 'failed' | 'idle' {
 	if (trace.hasActive) return 'active';
-	if (trace.hasFailures) return 'failed';
+	if (traceOpenFailures(trace) > 0) return 'failed';
 	return 'idle';
 }
 
@@ -531,10 +553,19 @@ export function traceStateLabel(trace: TraceSummary): string {
 		case 'active':
 			return 'active';
 		case 'failed':
-			return 'failures';
+			return traceFailureLabel(trace) ?? 'failed';
 		default:
 			return plural(trace.runCount, 'run');
 	}
+}
+
+/** The state badge for a row, or `null` when the trail has nothing to say. */
+export function traceStateBadge(
+	trace: TraceSummary
+): { status: 'active' | 'failed'; label: string } | null {
+	const state = traceState(trace);
+	if (state === 'idle') return null;
+	return { status: state, label: traceStateLabel(trace) };
 }
 
 export function tracePrimaryLabel(trace: TraceSummary): string {
@@ -585,12 +616,17 @@ export function dashboardFailedRuns(dashboard: DashboardSummary | null): RunSumm
 	return (dashboard?.failedRuns ?? []).filter(runNeedsAttention);
 }
 
-/** `standing`, `active`, `failures` — the flags the trace summary carries, or nothing. */
+/**
+ * `standing`, `active`, `1 failure` — the flags the trace summary carries, or
+ * nothing. Failures are the open ones; a healed trail's history is the detail's
+ * resolved hint (a later spec), not an attention flag.
+ */
 export function traceFlags(trace: TraceSummary): string[] {
 	const flags: string[] = [];
 	if (trace.standing) flags.push('standing');
 	if (trace.hasActive) flags.push('active');
-	if (trace.hasFailures) flags.push('failures');
+	const failures = traceFailureLabel(trace);
+	if (failures) flags.push(failures);
 	return flags;
 }
 

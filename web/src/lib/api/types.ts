@@ -385,6 +385,15 @@ export interface TraceSummary extends HoneyReserve {
 	bees?: string[];
 	hasFailures: boolean;
 	hasActive: boolean;
+	/**
+	 * The current attention input: tasks whose failed run has no later success.
+	 * `hasFailures` is the historical "anything ever failed" flag beside it, so a
+	 * healed trail keeps `hasFailures: true` with no open failures. Absent when
+	 * nothing is open.
+	 */
+	openFailures?: number;
+	/** Completion instant of the newest open failure; absent when none is open. */
+	newestOpenFailureAt?: string;
 	usage?: UsageAggregate;
 
 	/**

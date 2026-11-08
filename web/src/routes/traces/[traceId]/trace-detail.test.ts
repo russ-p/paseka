@@ -155,6 +155,29 @@ describe('trace detail', () => {
 		expect(within(header()).getByText('active')).toBeInTheDocument();
 	});
 
+	it('labels the header with the open-failure count and stays quiet for a healed trail', async () => {
+		const { unmount } = render(TraceDetail, {
+			traceId,
+			...harness({
+				detail: async () =>
+					traceDetail({ hasActive: false, hasFailures: true, openFailures: 1 })
+			})
+		});
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		expect(within(header()).getByText('1 failure')).toHaveClass('badge-error');
+		// The Trail block's Flags row reads the same projection.
+		expect(within(await section('trace-trail')).getByText('1 failure')).toBeInTheDocument();
+		unmount();
+
+		// Healed: the historical flag is set, but no badge and no attention flag.
+		renderDetail({
+			detail: async () => traceDetail({ hasActive: false, hasFailures: true, openFailures: 0 })
+		});
+		await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 });
+		expect(within(header()).queryByText(/failure/)).not.toBeInTheDocument();
+		expect(within(await section('trace-trail')).queryByText(/failure/)).not.toBeInTheDocument();
+	});
+
 	it('offers the honey top-ups and reports the outcome through a toast', async () => {
 		const user = userEvent.setup();
 		const topUpEnergy = vi.fn(async () => ({

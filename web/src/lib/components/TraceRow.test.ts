@@ -25,15 +25,18 @@ describe('TraceRow', () => {
 		unmount();
 
 		const failed = render(TraceRow, {
-			trace: traceSummary({ hasActive: false, hasFailures: true })
+			trace: traceSummary({ hasActive: false, hasFailures: true, openFailures: 2 })
 		});
-		expect(screen.getByText('failures')).toHaveClass('badge-error');
+		expect(screen.getByText('2 failures')).toHaveClass('badge-error');
 		failed.unmount();
 
-		const idle = render(TraceRow, {
-			trace: traceSummary({ hasActive: false, hasFailures: false, runCount: 2 })
+		// A healed trail keeps the historical failure flag and shows no state badge:
+		// the run count already lives on the meta line.
+		render(TraceRow, {
+			trace: traceSummary({ hasActive: false, hasFailures: true, openFailures: 0, runCount: 2 })
 		});
-		expect(screen.getByText('2 runs')).toHaveClass('badge-neutral');
+		expect(screen.queryByText(/failure/)).not.toBeInTheDocument();
+		expect(screen.queryByText('2 runs')).not.toBeInTheDocument();
 	});
 
 	it('badges the trail\'s pause and pending count beside the trail, not as a run state', () => {

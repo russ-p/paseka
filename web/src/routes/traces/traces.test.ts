@@ -51,6 +51,21 @@ describe('traces route', () => {
 			loadTraces: async () => [
 				traceSummary({ traceId: 'trace-standing', title: 'Standing', standing: true, hasActive: false }),
 				traceSummary({ traceId: 'trace-busy', title: 'Busy', hasActive: true }),
+				traceSummary({
+					traceId: 'trace-failing',
+					title: 'Failing',
+					hasActive: false,
+					hasFailures: true,
+					openFailures: 2
+				}),
+				// Healed: the historical flag is still set, but nothing is open.
+				traceSummary({
+					traceId: 'trace-healed',
+					title: 'Healed',
+					hasActive: false,
+					hasFailures: true,
+					openFailures: 0
+				}),
 				traceSummary({ traceId: 'trace-quiet', title: 'Quiet', hasActive: false })
 			],
 			pageSize: 50,
@@ -61,9 +76,15 @@ describe('traces route', () => {
 
 		expect(screen.getByText('standing')).toBeInTheDocument();
 		expect(screen.getByText('active')).toBeInTheDocument();
-		const quiet = screen.getByRole('link', { name: 'Quiet' }).closest('tr');
-		const cells = within(quiet as HTMLElement).getAllByRole('cell');
-		expect(cells[1]).toBeEmptyDOMElement();
+		expect(screen.getByText('2 failures')).toBeInTheDocument();
+
+		const stateCell = (title: string) => {
+			const row = screen.getByRole('link', { name: title }).closest('tr');
+			return within(row as HTMLElement).getAllByRole('cell')[1];
+		};
+		expect(stateCell('Quiet')).toBeEmptyDOMElement();
+		expect(stateCell('Healed')).toBeEmptyDOMElement();
+		expect(stateCell('Failing')).toHaveTextContent('2 failures');
 	});
 
 	it('badges a trail\'s pause and its pending count in the trail\'s dispatch column', async () => {
