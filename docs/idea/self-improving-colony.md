@@ -1,6 +1,6 @@
 # Self-improving colonies
 
-> An idea note. What a colony could learn from its own trails, where the line runs between the platform and the methodology that uses it, and which specs carry the work.
+> An idea note. What a colony could learn from its own trails, where the line runs between the platform and the methodology that uses it, and which specs carry the work. The applied half — commands, thresholds, and a worked loop — is [Self-improving colonies in practice](../guide/self-improving-colonies.md).
 
 ## The gap
 
@@ -59,8 +59,8 @@ A Nuc pack can only be written against a stable list of what the platform offers
 | R2 | A "this trail is finished" signal | to start work when a trail ends instead of polling |
 | R3 | The trail's artifacts, events and trajectories, exportable | to locate the moment a run went wrong |
 | R4 | A proposed change as a reviewable artifact (`MUTATION/code.proposal.root` + patch record) | to propose a change without writing into the colony |
-| R5 | A fork: a new trail from a chosen base with a chosen `.paseka/` delta, recorded as a commit | to test a proposed change against the same task |
-| R6 | A plane: a separate bus, home and checkout for one experiment | to run an experiment beside the live colony |
+| R5 | A fork: a new trail from a chosen base with a chosen `.paseka/` delta, recorded as a pinned configuration and lineage | to test a proposed change against the same task |
+| R6 | A plane: a separate bus, home and checkout for one experiment — shipped as a pinned same-colony trail with its own configuration, worktree, and honey, not a separate bus or home | to run an experiment beside the live colony |
 | R7 | A budget per trail, with a cap | to keep an experiment from spending the colony's honey |
 | R8 | A skill store with a per-role list and a deterministic load | to deliver a procedure and to know it was reached for |
 
@@ -68,7 +68,7 @@ R1–R3 are the [observability specs](../specs/043b-trail-metrics-and-work-compl
 
 ### What the platform guarantees, and what it does not
 
-The platform guarantees **comparability**: a fork and the trail it came from carry the same task specification and the same base commit, and differ only by the recorded delta — which is a commit, so the difference is inspectable as a git range. It also guarantees **isolation**: a fork runs on its own plane, with its own bus, home and checkout, and never touches the live colony.
+The platform guarantees **comparability**: a fork and the trail it came from carry the same task specification and the same base commit, and differ only by the recorded delta — which is a commit, so the difference is inspectable as a git range. It also guarantees **isolation**: a fork runs with its own pinned configuration, worktree, branch, and honey reserve, and never edits the live colony's committed state. It shares the colony's bus and Reactor; spec 042 supersedes the earlier separate-plane shape.
 
 The platform does **not** decide whether the delta was an improvement. That judgement needs a quality criterion — the same accepted result, a cheaper median, a smaller rework count — and a criterion is a methodology's business. This is the whole contract in one sentence: *the platform makes the comparison fair; the methodology decides what better means.*
 
@@ -93,7 +93,7 @@ The platform does **not** decide whether the delta was an improvement. That judg
     human approves the change, or the methodology proposes it as a hypothesis
           │
           ▼
-      R5/R6  fork: same task, same base, changed .paseka/, isolated bus
+      R5/R6  fork: same task, same base, pinned configuration delta
           │
           ▼
       R7   the fork spends its own budget and stops
@@ -135,6 +135,7 @@ The order is 043a → 043b → 041 → 042 → 034 → the pack. The observabili
 
 | Goal | Doc |
 | --- | --- |
+| Run the loop on a colony today | [Self-improving colonies in practice](../guide/self-improving-colonies.md) |
 | Vocabulary | [Glossary](glossary.md) |
 | Principles of the runtime | [Principles](principles.md) |
 | The skills store and the per-role gate | [Spec 041](../specs/041-skills-layer.md) |

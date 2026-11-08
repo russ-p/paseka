@@ -85,6 +85,7 @@ nav:
       - Queen Console: guide/queen-console.md
       - Forage Cues: guide/cues.md
       - Colony skills: guide/skills.md
+      - Self-improving colonies in practice: guide/self-improving-colonies.md
       - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
       - Homelab deployment: guide/homelab-deployment.md
