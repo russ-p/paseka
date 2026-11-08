@@ -2,6 +2,24 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — A trail's failure badge now answers what needs attention now
+
+A trail that failed an attempt and then completed the same task still read `failed` forever, because the badge was built from "any run ever failed". On a busy colony that stopped discriminating: `failed` became the normal state, a healed trail could not be told from a broken one, and the Traces list and Dashboard even used different words for the same condition. The badge is now current: a failure stays open only until a later successful run of the same task supersedes it.
+
+- **Current attention from unresolved failures.** A terminal `failed` or `cancelled` run, or a run whose completion contract is `failed` or `unavailable`, stays open until a later successful run of the same task exists. A success on task A never clears a failure on task B, and retries within one task collapse into one open failure.
+- **Per-task resolution with a total order.** Runs group by the task id recorded on the run; the empty id is one trail-level group for direct runs, and a closing task keeps its own group, so its success cannot clear a work failure. Groups are ordered by completion instant (start instant as fallback), then agent id, so the answer does not depend on directory read order.
+- **Record problems never resolve.** A conflicting or incomplete `status`/`result` pair is a separate `recordProblem` axis. A later success proves the new attempt is sound; it does not repair the old evidence. Record problems stay outside the open count, so the count speaks only about work.
+- **Analysis is excluded in both directions.** An analysis run, classified by the admission-time purpose on the run record, neither raises the trail nor clears a failed work attempt. A closing run is work-like and is never excluded. Legacy records with no purpose participate as work-like. A damaged analysis pair is still a record problem, because the evidence itself is damaged.
+- **A cancelled run is unfinished work, not an error.** It counts as an open failure and is cleared by a later success of the same task, so a deliberate stop or timeout followed by a retry leaves no open failure. The run row still carries the recorded reason.
+- **One state and one label.** Trail state is `active`, then `failed` when the open count or a record problem exists, then `idle`. The label is `1 failure` / `N failures`; a record-only trail reads `record error`, and a trail with both shows the count with `record error` as a separate detail flag (Telegram joins the two hints). Running and queued runs only set `active`; they neither resolve nor add an open failure.
+- **A healed trail stays quiet, with its history demoted.** A trail whose failures were all superseded shows no state badge in the Traces list or Dashboard; its detail flags keep a plain `resolved failures` hint, never a badge and never the failure colour.
+- **Every surface reads one projection.** The Traces list, Dashboard rows, trail detail header and flags, Telegram `/traces`, and the legacy Console read the shared runs summary; no client re-groups runs or re-derives resolution. The historical `hasFailures` flag keeps its exact meaning for export, inspect, and older clients.
+
+- Spec: [050-trail-attention-state](../specs/050-trail-attention-state.md)
+- Canonical: [Queen Console](../guide/queen-console.md), [Console design system](../architecture/queen-console-design-system.md), [Telegram gateway](../guide/telegram-gateway.md), [Specs index](specs-index.md)
+
+Not in this ship: there is no migration, backfill, or new endpoint — the projection is computed on read in the walk that already visits the run directories. The closing/merge stage is unchanged, `paseka status` attention stays task-based, and a resolved failure is never resurfaced as a notification; that policy remains an operator decision, recorded in [Backlog](backlog.md).
+
 ## 2026-11 — The colony owns its procedures, and one rule set says what a skill is
 
 A colony's procedures lived in prompt templates and in a Beekeeper's head: unconditional per role, growing without bound, and invisible to the clients a bee actually runs under. The colony now has a skill store of its own, in the portable Agent Skills format, and one validation rule set that every later path reuses. A bee receives only the procedures its role lists, every run says what it was offered and which ones it loaded, and a trail export carries both halves.

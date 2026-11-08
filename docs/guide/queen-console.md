@@ -190,10 +190,21 @@ status; honey is a trail condition and never appears as a task `blocked`.
 
 The list shows the most recent trails and stops at what the server sends; **Load
 older trails** pulls the next page when there is more history. A trail with
-something to say — running now, or carrying failures — is badged in the State
-column; a settled trail leaves it empty, so the eye lands on the rows that need
-you. Opening a trail goes to its own page (`/next/traces/<traceId>`), so the URL
-can be shared and the browser back button works. From there: **+1 / +5 / +12**
+something to say — running now, carrying open failures, or holding a damaged
+outcome record — is badged in the State column: `active` for work in flight,
+`1 failure` / `N failures` for failures that no later success of the same task
+has superseded, and `record error` when the outcome pair itself is conflicting
+or incomplete. A record problem never clears on a later success and never
+inflates the count; when both axes exist the count is the badge and `record
+error` is a separate detail flag. A settled trail leaves the cell empty, and so
+does a trail whose failures were all superseded — its detail flags keep a quiet
+`resolved failures` hint, so the history is demoted rather than erased. The
+badge is a server-side projection shared by this console, the redesign, and
+Telegram; the historical `hasFailures` flag still exists for export and inspect
+but no longer decides what the badge says. The closing/merge stage and `paseka
+status` attention are separate answers and are unchanged. Opening a trail goes
+to its own page (`/next/traces/<traceId>`), so the URL can be shared and the
+browser back button works. From there: **+1 / +5 / +12**
 top up the honey reserve, **View** on a comb file opens it in a dialog,
 **Open timeline** jumps to the event feed for that trail, and **Run bee** starts
 a headless run *on this trail* — the same form as the one on the **Bees** page,

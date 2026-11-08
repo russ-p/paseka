@@ -2,8 +2,12 @@
 
 ## Status
 
-**Approved**
+**(Implemented)**
 Chosen direction "B" from the trail-state discussion: a failure stays open only until a later successful run of the same task supersedes it. Amends the trail-state input described in [045-trail-closing-phase](045-trail-closing-phase.md); the axis itself keeps its meaning.
+
+Shipped in the existing trail walk, with no migration and no new endpoint. `runs.TraceSummary`, `trailview.Trail`, and `hiveview.TraceSummaryView` now carry `openFailures`, `newestOpenFailureAt`, and `recordProblem` as additive fields beside the untouched historical `hasFailures` flag. A terminal failed or cancelled run, or a run whose completion contract is failed or unavailable, stays open until a later successful run of the same task supersedes it; runs group by the task id recorded on the run, with the empty id forming one direct-run group, closing tasks keeping their own group, and completion instant plus agent id giving a total order independent of directory read order. Retries on one task collapse into one open failure. Record-integrity problems are a separate, never-resolving axis and never enter the open count. Analysis is excluded from the work-failure count in both directions by admission-time purpose, while a damaged outcome pair remains a record problem; legacy runs with no purpose stay work-like. Trail state is `active`, then `failed` when the open count or a record problem exists, then `idle`; rows read `1 failure` / `N failures`, record-only trails read `record error`, and a healed trail leaves list rows quiet while its detail flags keep a plain `resolved failures` hint. The Queen Console, the legacy Console, and Telegram `/traces` all read the same projection; `hasFailures` remains the historical flag for export, inspect, and older clients.
+
+Out of scope in this ship: there is no new endpoint and no backfill of existing trails; the closing/merge stage is unchanged; `paseka status` attention remains task-based and untouched; and a resolved failure is not resurfaced as a notification — that remains an operator decision, recorded in [Backlog](../plans/backlog.md).
 
 ## Problem Statement
 

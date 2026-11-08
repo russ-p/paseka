@@ -38,6 +38,26 @@ Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The 
 - **Why deferred:** The at-most-once choice is deliberate — redelivering on every restart would duplicate expensive analysis — and the failure mode loses one retrospective, not work. Changing it needs a policy for when a `running` record is stale and a test that pins restart behavior.
 - **Revisit when:** An operator expects an analysis that never appears, or reactor restarts mid-analysis become routine (homelab redeploy, laptop sleep).
 
+### Trail attention state
+
+Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.md). The projection and every read surface shipped; what is left is notification policy and one semantic edge on damaged analysis records.
+
+#### Resurfacing a resolved failure as a notification is an operator decision
+
+- **Kind:** idea
+- **Source:** [050-trail-attention-state](../specs/050-trail-attention-state.md) § Further Notes; implementation trail `trace-01a1b9851c0161f5`
+- **Summary:** A healed trail's badge goes quiet, and its detail keeps a plain `resolved failures` hint. Nothing tells the operator that a previously failing task recovered, and the spec deliberately leaves that out: whether a recovery should ever be a push, for which surfaces, and at what threshold is an operator decision rather than a badge rule. Implementing it needs a notification policy (per failure, per trail, first recovery only, quiet mode) and a way to distinguish "resolved since the last notification" from "resolved long ago" — the current `hasFailures`/`openFailures` pair says what is open now, not what changed since a prior poll.
+- **Why deferred:** Spec 050 puts notification rules beyond the badge out of scope. The quieter badge is the shipped behavior, and adding a recovery push before anyone asks for it would recreate the noise the change removed.
+- **Revisit when:** An operator asks to be told when a trail recovers, or a failed task's recovery is missed because the trail row simply went quiet.
+
+#### A record-damaged analysis run still paints the trail
+
+- **Kind:** follow-up
+- **Source:** guard review note on task 003 (`01a1b9bf16a7cfb4`), [050-trail-attention-state](../specs/050-trail-attention-state.md) § "Analysis is excluded from attention"
+- **Summary:** `recordProblem` is set from the run's conflicting/incomplete outcome pair before the purpose filter, so a damaged analysis record raises the never-resolving `record error` even though ordinary analysis failures and successes are excluded from work attention. That is defensible — a contradictory pair cannot prove what the run was — but it means a trail whose work is healthy can carry a work-looking `record error` because an analysis record is damaged. Decide whether the integrity axis should also be purpose-filtered, and on what evidence, or whether record damage stays trail-wide by definition.
+- **Why deferred:** The shipped behavior preserves the truthful-record guarantee, the pair really is damaged, and no surface or test currently contradicts it. Changing it needs a policy on whether record damage is evidence about the run or about the trail.
+- **Revisit when:** A damaged analysis record puts `record error` on a trail with healthy work, or analysis records become common enough that their integrity noise matters.
+
 ### Adapter catalog
 
 #### The Agent CLI roster is duplicated across the Go/TS boundary
