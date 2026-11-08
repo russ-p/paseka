@@ -394,6 +394,12 @@ export interface TraceSummary extends HoneyReserve {
 	openFailures?: number;
 	/** Completion instant of the newest open failure; absent when none is open. */
 	newestOpenFailureAt?: string;
+	/**
+	 * A run whose status/result pair is conflicting or incomplete. It is a
+	 * record problem that never resolves, kept apart from the open-failure
+	 * count, which speaks only about work. Absent when every pair is sound.
+	 */
+	recordProblem?: boolean;
 	usage?: UsageAggregate;
 
 	/**

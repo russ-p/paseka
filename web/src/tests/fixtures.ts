@@ -59,6 +59,9 @@ export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummar
 		// The current attention input: no open failure by default, so a fixture that
 		// sets `hasFailures` is a healed trail until it also sets this.
 		openFailures: 0,
+		// The record-integrity axis is quiet by default; a fixture opts into a
+		// conflicting or incomplete pair explicitly.
+		recordProblem: false,
 		// A trail that is admitting work with an empty queue: the defaults every
 		// fixture starts from, so a test opts into a pause explicitly.
 		paused: false,

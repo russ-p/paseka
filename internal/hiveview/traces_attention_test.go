@@ -103,6 +103,50 @@ func writeAttentionAnalysisRun(
 	}
 }
 
+// writeAttentionConflictRun writes one run whose outcome pair conflicts, so the
+// trail carries a record problem.
+func writeAttentionConflictRun(
+	t *testing.T,
+	repo, traceID, agentID, taskID string,
+	started, finished time.Time,
+) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Bee:             "builder",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		TaskID:          taskID,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           protocol.StatusFailed,
+		StartedAt:       started,
+		FinishedAt:      finished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Status:          protocol.StatusCompleted,
+		FinishedAt:      finished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func attentionViewContext(t *testing.T, repo string) colony.Context {
 	t.Helper()
 	slug := "trace-attention"
@@ -139,6 +183,10 @@ func TestTraceViewsCarryOpenFailureProjection(t *testing.T) {
 	// Analysis is filtered before grouping: a successful analysis on the same
 	// task does not clear the work failure it studied.
 	writeAttentionAnalysisRun(t, repo, traceID, "agent-5", "task-b", protocol.StatusCompleted, at(8), at(9))
+	// A conflicting pair is a record problem: a later success of the same task
+	// leaves it open and does not add to the work-failure count.
+	writeAttentionConflictRun(t, repo, traceID, "agent-6", "task-d", at(10), at(11))
+	writeAttentionViewRun(t, repo, traceID, "agent-7", "task-d", protocol.StatusCompleted, at(12), at(13))
 
 	page, err := ListTraces(ctx, 10)
 	if err != nil {
@@ -163,12 +211,16 @@ func TestTraceViewsCarryOpenFailureProjection(t *testing.T) {
 	if row.NewestOpenFailureAt == nil || !row.NewestOpenFailureAt.Equal(at(7)) {
 		t.Fatalf("newestOpenFailureAt = %v, want %s", row.NewestOpenFailureAt, at(7))
 	}
+	if !row.RecordProblem {
+		t.Fatalf("row = %+v, want the record problem carried through", row)
+	}
 
 	detail, ok, err := GetTrace(ctx, traceID)
 	if err != nil || !ok {
 		t.Fatalf("GetTrace() = ok=%v err=%v", ok, err)
 	}
-	if detail.HasFailures != row.HasFailures || detail.OpenFailures != row.OpenFailures {
+	if detail.HasFailures != row.HasFailures || detail.OpenFailures != row.OpenFailures ||
+		detail.RecordProblem != row.RecordProblem {
 		t.Fatalf("detail = %+v, want it to agree with the list row %+v", detail, row)
 	}
 	if detail.NewestOpenFailureAt == nil || !detail.NewestOpenFailureAt.Equal(*row.NewestOpenFailureAt) {

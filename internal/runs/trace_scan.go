@@ -39,8 +39,14 @@ type TraceSummary struct {
 	OpenFailures int `json:"openFailures,omitempty"`
 	// NewestOpenFailureAt is the completion instant of the newest run still
 	// counted by OpenFailures. Nil when nothing is open.
-	NewestOpenFailureAt *time.Time      `json:"newestOpenFailureAt,omitempty"`
-	Usage               *UsageAggregate `json:"usage,omitempty"`
+	NewestOpenFailureAt *time.Time `json:"newestOpenFailureAt,omitempty"`
+	// RecordProblem marks a run whose status/result pair is conflicting or
+	// incomplete. It is an open attention item that never resolves: a later
+	// success of the same task repairs the task, not the damaged evidence. It
+	// is kept apart from OpenFailures so the count speaks only about work.
+	// Additive on the wire; absent when every outcome pair is sound.
+	RecordProblem bool            `json:"recordProblem,omitempty"`
+	Usage         *UsageAggregate `json:"usage,omitempty"`
 }
 
 // ScannedEvent pairs a protocol event with its producer attribution: the bee
@@ -366,6 +372,10 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 		switch {
 		case meta.Records != nil:
 			summary.HasFailures = true
+			// A conflicting or incomplete pair is a record problem. It stays
+			// open for the life of the trail: a later success proves the new
+			// attempt is sound, it does not repair the old evidence.
+			summary.RecordProblem = true
 		case meta.State == string(protocol.StatusFailed) || meta.State == string(protocol.StatusCancelled):
 			summary.HasFailures = true
 		case meta.Contract.Status == protocol.ContractFailed || meta.Contract.Status == protocol.ContractUnavailable:
@@ -400,6 +410,10 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 			contractBroken := meta.Contract.Status == protocol.ContractFailed ||
 				meta.Contract.Status == protocol.ContractUnavailable
 			switch {
+			case meta.Records != nil:
+				// Record problems are tracked on the trail itself and never
+				// enter the resolvable outcome list: a later success of the
+				// same task must not clear damaged evidence.
 			case terminal && (meta.State == string(protocol.StatusFailed) ||
 				meta.State == string(protocol.StatusCancelled) || contractBroken):
 				outcomes = append(outcomes, trailRunOutcome{

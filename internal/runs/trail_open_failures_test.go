@@ -28,6 +28,13 @@ type attentionRunFixture struct {
 	// contract is the completion-contract verdict. Empty means no declared
 	// contract, which the run projection reads as unknown.
 	contract string
+	// resultState overrides the result half of the outcome pair; empty means
+	// the same state as status.json. A differing terminal state makes the pair
+	// conflicting.
+	resultState protocol.RunStatus
+	// omitResult leaves result.json absent, making a terminal status.json an
+	// incomplete pair.
+	omitResult bool
 }
 
 func writeAttentionRun(t *testing.T, root, traceID string, run attentionRunFixture) {
@@ -59,15 +66,22 @@ func writeAttentionRun(t *testing.T, root, traceID string, run attentionRunFixtu
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if run.omitResult {
+		return
+	}
 	switch run.state {
 	case protocol.StatusCompleted, protocol.StatusFailed, protocol.StatusCancelled:
-		// A terminal run needs both halves of the outcome pair; otherwise the
-		// reader reports it as an incomplete record rather than an outcome.
+		// A terminal run normally needs both halves of the outcome pair; a
+		// fixture can override the result state to damage the pair on purpose.
+		resultState := run.resultState
+		if resultState == "" {
+			resultState = run.state
+		}
 		result := protocol.Result{
 			ProtocolVersion: protocol.Version,
 			TraceID:         traceID,
 			AgentID:         run.agentID,
-			Status:          run.state,
+			Status:          resultState,
 			FinishedAt:      run.finished,
 		}
 		if run.contract != "" {
@@ -93,6 +107,7 @@ func TestLoadTraceSummaryProjectsOpenFailures(t *testing.T) {
 		wantOpen        int
 		wantNewest      time.Time
 		wantActive      bool
+		wantRecord      bool
 	}{
 		{
 			name: "failure then completion of the same task is healed",
@@ -307,6 +322,38 @@ func TestLoadTraceSummaryProjectsOpenFailures(t *testing.T) {
 			wantOpen:        1,
 			wantNewest:      at(2),
 		},
+		{
+			name: "a conflicting pair is a record problem that a later success does not clear",
+			runs: []attentionRunFixture{
+				// status.json says failed, result.json says completed: the pair
+				// cannot prove one outcome.
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, resultState: protocol.StatusCompleted, started: at(0), finished: at(1)},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3)},
+			},
+			wantHasFailures: true,
+			wantRecord:      true,
+		},
+		{
+			name: "an incomplete pair is a record problem that a later success does not clear",
+			runs: []attentionRunFixture{
+				// A terminal status.json with no result.json.
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCompleted, omitResult: true, started: at(0), finished: at(1)},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3)},
+			},
+			wantHasFailures: true,
+			wantRecord:      true,
+		},
+		{
+			name: "a record problem is kept apart from the open-failure count",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, resultState: protocol.StatusCompleted, started: at(0), finished: at(1)},
+				{agentID: "agent-2", taskID: "task-b", state: protocol.StatusFailed, started: at(2), finished: at(3)},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(3),
+			wantRecord:      true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -329,6 +376,9 @@ func TestLoadTraceSummaryProjectsOpenFailures(t *testing.T) {
 			}
 			if summary.HasActive != tc.wantActive {
 				t.Fatalf("hasActive = %v, want %v", summary.HasActive, tc.wantActive)
+			}
+			if summary.RecordProblem != tc.wantRecord {
+				t.Fatalf("recordProblem = %v, want %v", summary.RecordProblem, tc.wantRecord)
 			}
 			if tc.wantNewest.IsZero() {
 				if summary.NewestOpenFailureAt != nil {
@@ -415,7 +465,8 @@ func TestTraceSummaryAttentionFieldsAreAdditiveOnTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(quiet), "openFailures") || strings.Contains(string(quiet), "newestOpenFailureAt") {
+	if strings.Contains(string(quiet), "openFailures") || strings.Contains(string(quiet), "newestOpenFailureAt") ||
+		strings.Contains(string(quiet), "recordProblem") {
 		t.Fatalf("payload = %s, want the new fields absent when nothing is open", quiet)
 	}
 
@@ -425,13 +476,15 @@ func TestTraceSummaryAttentionFieldsAreAdditiveOnTheWire(t *testing.T) {
 		HasFailures:         true,
 		OpenFailures:        2,
 		NewestOpenFailureAt: &newest,
+		RecordProblem:       true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(payload), `"openFailures":2`) ||
-		!strings.Contains(string(payload), `"newestOpenFailureAt":"2026-09-25T12:00:00Z"`) {
-		t.Fatalf("payload = %s, want the open-failure fields present", payload)
+		!strings.Contains(string(payload), `"newestOpenFailureAt":"2026-09-25T12:00:00Z"`) ||
+		!strings.Contains(string(payload), `"recordProblem":true`) {
+		t.Fatalf("payload = %s, want the attention fields present", payload)
 	}
 
 	var older struct {

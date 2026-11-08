@@ -55,6 +55,10 @@ type Trail struct {
 	// them: a healed trail is HasFailures true with OpenFailures zero.
 	OpenFailures        int        `json:"openFailures,omitempty"`
 	NewestOpenFailureAt *time.Time `json:"newestOpenFailureAt,omitempty"`
+	// RecordProblem is the record-integrity axis: a run whose outcome pair is
+	// conflicting or incomplete. It never resolves and is kept apart from the
+	// open-failure count, which speaks only about work.
+	RecordProblem bool `json:"recordProblem,omitempty"`
 
 	// Configuration binding. Config is the complete manifest; the flattened
 	// fields keep list rows cheap to consume without dropping the history.
@@ -239,6 +243,7 @@ func TrailFromSummary(ctx colony.Context, summary runs.TraceSummary, pending []t
 		HasActive:           summary.HasActive,
 		OpenFailures:        summary.OpenFailures,
 		NewestOpenFailureAt: summary.NewestOpenFailureAt,
+		RecordProblem:       summary.RecordProblem,
 		AdmissionState:      AdmissionOrdinary,
 		PendingForkRequests: len(pending),
 	}

@@ -138,6 +138,24 @@ describe('dashboard route', () => {
 						hasFailures: true,
 						openFailures: 2
 					}),
+					// A record-only trail names the integrity problem in its badge.
+					traceSummary({
+						traceId: 'trace-record',
+						title: 'Record trail',
+						hasActive: false,
+						hasFailures: true,
+						openFailures: 0,
+						recordProblem: true
+					}),
+					// Both axes: the count is the badge.
+					traceSummary({
+						traceId: 'trace-both',
+						title: 'Both trail',
+						hasActive: false,
+						hasFailures: true,
+						openFailures: 1,
+						recordProblem: true
+					}),
 					// Healed: still historically failed, nothing open to act on.
 					traceSummary({
 						traceId: 'trace-healed',
@@ -153,8 +171,13 @@ describe('dashboard route', () => {
 
 		const traces = document.querySelector('#dashboard-traces') as HTMLElement;
 		expect(within(traces).getByText('2 failures')).toBeInTheDocument();
+		expect(within(traces).getByText('record error')).toBeInTheDocument();
+		const both = within(traces).getByText('Both trail').closest('li') as HTMLElement;
+		expect(within(both).getByText('1 failure')).toBeInTheDocument();
+		expect(within(both).queryByText('record error')).not.toBeInTheDocument();
 		const healed = within(traces).getByText('Healed trail').closest('li') as HTMLElement;
 		expect(within(healed).queryByText(/failure/)).not.toBeInTheDocument();
+		expect(within(healed).queryByText('record error')).not.toBeInTheDocument();
 	});
 
 	it('renders skeletons before the first poll and empty states after it', () => {

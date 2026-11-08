@@ -92,15 +92,19 @@ type TraceSummaryView struct {
 	// success of the same task — and HasFailures stays the historical flag.
 	// NewestOpenFailureAt is when the newest open failure finished. Both are
 	// additive; an older client that ignores them still decodes the payload.
-	OpenFailures        int                  `json:"openFailures,omitempty"`
-	NewestOpenFailureAt *time.Time           `json:"newestOpenFailureAt,omitempty"`
-	EnergyBudget        int                  `json:"energyBudget,omitempty"`
-	EnergyRemaining     int                  `json:"energyRemaining,omitempty"`
-	EnergyAdded         int                  `json:"energyAdded,omitempty"`
-	EnergyAllocated     int                  `json:"energyAllocated,omitempty"`
-	LowEnergy           bool                 `json:"lowEnergy,omitempty"`
-	Standing            bool                 `json:"standing,omitempty"`
-	Usage               *runs.UsageAggregate `json:"usage,omitempty"`
+	OpenFailures        int        `json:"openFailures,omitempty"`
+	NewestOpenFailureAt *time.Time `json:"newestOpenFailureAt,omitempty"`
+	// RecordProblem is the record-integrity axis from the same walk: a
+	// conflicting or incomplete outcome pair that never resolves. It is kept
+	// apart from OpenFailures, which counts only work failures.
+	RecordProblem   bool                 `json:"recordProblem,omitempty"`
+	EnergyBudget    int                  `json:"energyBudget,omitempty"`
+	EnergyRemaining int                  `json:"energyRemaining,omitempty"`
+	EnergyAdded     int                  `json:"energyAdded,omitempty"`
+	EnergyAllocated int                  `json:"energyAllocated,omitempty"`
+	LowEnergy       bool                 `json:"lowEnergy,omitempty"`
+	Standing        bool                 `json:"standing,omitempty"`
+	Usage           *runs.UsageAggregate `json:"usage,omitempty"`
 
 	// Energy admission comes from the shared trail collection: a trail pauses
 	// when its reserve cannot admit a dispatch, and PendingCount names the
@@ -623,6 +627,7 @@ func TraceSummaryFromRuns(s runs.TraceSummary) TraceSummaryView {
 		HasActive:           s.HasActive,
 		OpenFailures:        s.OpenFailures,
 		NewestOpenFailureAt: s.NewestOpenFailureAt,
+		RecordProblem:       s.RecordProblem,
 		Usage:               s.Usage,
 	}
 }

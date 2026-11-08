@@ -58,6 +58,25 @@ describe('traces route', () => {
 					hasFailures: true,
 					openFailures: 2
 				}),
+				// A record-only trail names the integrity problem.
+				traceSummary({
+					traceId: 'trace-record',
+					title: 'Record damage',
+					hasActive: false,
+					hasFailures: true,
+					openFailures: 0,
+					recordProblem: true
+				}),
+				// Both axes: the count is the badge, the record problem stays a
+				// detail flag and does not appear on the list row.
+				traceSummary({
+					traceId: 'trace-both',
+					title: 'Both axes',
+					hasActive: false,
+					hasFailures: true,
+					openFailures: 1,
+					recordProblem: true
+				}),
 				// Healed: the historical flag is still set, but nothing is open.
 				traceSummary({
 					traceId: 'trace-healed',
@@ -77,6 +96,7 @@ describe('traces route', () => {
 		expect(screen.getByText('standing')).toBeInTheDocument();
 		expect(screen.getByText('active')).toBeInTheDocument();
 		expect(screen.getByText('2 failures')).toBeInTheDocument();
+		expect(screen.getByText('record error')).toBeInTheDocument();
 
 		const stateCell = (title: string) => {
 			const row = screen.getByRole('link', { name: title }).closest('tr');
@@ -85,6 +105,10 @@ describe('traces route', () => {
 		expect(stateCell('Quiet')).toBeEmptyDOMElement();
 		expect(stateCell('Healed')).toBeEmptyDOMElement();
 		expect(stateCell('Failing')).toHaveTextContent('2 failures');
+		expect(stateCell('Record damage')).toHaveTextContent('record error');
+		// Both axes: the count is shown and the integrity label stays off the row.
+		expect(stateCell('Both axes')).toHaveTextContent('1 failure');
+		expect(stateCell('Both axes')).not.toHaveTextContent('record error');
 	});
 
 	it('badges a trail\'s pause and its pending count in the trail\'s dispatch column', async () => {
