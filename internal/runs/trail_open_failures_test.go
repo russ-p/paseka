@@ -12,14 +12,22 @@ import (
 )
 
 // attentionRunFixture is one run directory described by what the attention
-// projection reads: the task recorded on it, its outcome pair, and when it
-// started and finished.
+// projection reads: the task recorded on it, its outcome pair, when it started
+// and finished, and the admission-time purpose and contract verdict that shape
+// its participation.
 type attentionRunFixture struct {
 	agentID  string
 	taskID   string
 	state    protocol.RunStatus
 	started  time.Time
 	finished time.Time
+	// purpose is the admission-time execution purpose. Empty is a legacy
+	// record that never recorded one.
+	purpose    protocol.ExecutionPurpose
+	analysisOf string
+	// contract is the completion-contract verdict. Empty means no declared
+	// contract, which the run projection reads as unknown.
+	contract string
 }
 
 func writeAttentionRun(t *testing.T, root, traceID string, run attentionRunFixture) {
@@ -37,6 +45,8 @@ func writeAttentionRun(t *testing.T, root, traceID string, run attentionRunFixtu
 		Workspace:       root,
 		ColonyRoot:      root,
 		TaskID:          run.taskID,
+		Purpose:         run.purpose,
+		AnalysisOf:      run.analysisOf,
 		CreatedAt:       run.started,
 	}); err != nil {
 		t.Fatal(err)
@@ -53,13 +63,17 @@ func writeAttentionRun(t *testing.T, root, traceID string, run attentionRunFixtu
 	case protocol.StatusCompleted, protocol.StatusFailed, protocol.StatusCancelled:
 		// A terminal run needs both halves of the outcome pair; otherwise the
 		// reader reports it as an incomplete record rather than an outcome.
-		if err := d.WriteResult(protocol.Result{
+		result := protocol.Result{
 			ProtocolVersion: protocol.Version,
 			TraceID:         traceID,
 			AgentID:         run.agentID,
 			Status:          run.state,
 			FinishedAt:      run.finished,
-		}); err != nil {
+		}
+		if run.contract != "" {
+			result.Contract = &protocol.ContractRecord{Status: run.contract}
+		}
+		if err := d.WriteResult(result); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -140,9 +154,19 @@ func TestLoadTraceSummaryProjectsOpenFailures(t *testing.T) {
 			wantActive:      true,
 		},
 		{
-			name: "a cancelled run is not an open failure",
+			name: "a cancelled run is an open failure read as unfinished work",
 			runs: []attentionRunFixture{
-				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCancelled, started: at(0), finished: at(1)},
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCancelled, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "a later success of the same task clears a cancelled run",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCancelled, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3), purpose: protocol.PurposeWork},
 			},
 			wantHasFailures: true,
 		},
@@ -151,6 +175,122 @@ func TestLoadTraceSummaryProjectsOpenFailures(t *testing.T) {
 			runs: []attentionRunFixture{
 				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1)},
 				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCancelled, started: at(2), finished: at(3)},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			// The cancelled attempt is itself the newest open failure; it
+			// supersedes nothing, it only adds a fresh unfinished attempt.
+			wantNewest: at(3),
+		},
+		{
+			name: "a contract-failed run is an open failure",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCompleted, started: at(0), finished: at(1), contract: protocol.ContractFailed},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "a later success of the same task clears a contract failure",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCompleted, started: at(0), finished: at(1), contract: protocol.ContractFailed},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3), contract: protocol.ContractPassed},
+			},
+			wantHasFailures: true,
+		},
+		{
+			name: "a contract-unavailable run is an open failure",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCompleted, started: at(0), finished: at(1), contract: protocol.ContractUnavailable},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "a later success of the same task clears a contract-unavailable run",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCompleted, started: at(0), finished: at(1), contract: protocol.ContractUnavailable},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3), contract: protocol.ContractPassed},
+			},
+			wantHasFailures: true,
+		},
+		{
+			name: "a failed analysis run does not raise the trail",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1), purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1"},
+			},
+			// The historical flag still records the analysis failure; only the
+			// attention projection excludes it.
+			wantHasFailures: true,
+		},
+		{
+			name: "a successful analysis run does not clear a work failure",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3), purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1"},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "a failed analysis run does not resolve a work failure",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusFailed, started: at(2), finished: at(3), purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1"},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "a successful analysis run alone leaves the trail quiet",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusCompleted, started: at(0), finished: at(1), purpose: protocol.PurposeAnalysis, analysisOf: "completion-r1"},
+			},
+		},
+		{
+			name: "a closing success does not clear a work failure",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+				{agentID: "agent-2", taskID: "closing-1", state: protocol.StatusCompleted, started: at(2), finished: at(3), purpose: protocol.PurposeClosing},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "direct runs share one trail-level group and a later success heals it",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", state: protocol.StatusFailed, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+				{agentID: "agent-2", state: protocol.StatusCompleted, started: at(2), finished: at(3), purpose: protocol.PurposeWork},
+			},
+			wantHasFailures: true,
+		},
+		{
+			name: "a direct failure is not cleared by a task success",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", state: protocol.StatusFailed, started: at(0), finished: at(1), purpose: protocol.PurposeWork},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3), purpose: protocol.PurposeWork},
+			},
+			wantHasFailures: true,
+			wantOpen:        1,
+			wantNewest:      at(1),
+		},
+		{
+			name: "a legacy run with no recorded purpose participates as work-like",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1)},
+				{agentID: "agent-2", taskID: "task-a", state: protocol.StatusCompleted, started: at(2), finished: at(3)},
+			},
+			wantHasFailures: true,
+		},
+		{
+			name: "a lone legacy failure is open",
+			runs: []attentionRunFixture{
+				{agentID: "agent-1", taskID: "task-a", state: protocol.StatusFailed, started: at(0), finished: at(1)},
 			},
 			wantHasFailures: true,
 			wantOpen:        1,

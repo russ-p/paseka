@@ -56,6 +56,53 @@ func writeAttentionViewRun(
 	}
 }
 
+// writeAttentionAnalysisRun writes one analysis attempt: the admission-time
+// purpose is what excludes it from attention, never its Bee name or task id.
+func writeAttentionAnalysisRun(
+	t *testing.T,
+	repo, traceID, agentID, taskID string,
+	state protocol.RunStatus,
+	started, finished time.Time,
+) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: repo, TraceID: traceID, AgentID: agentID}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Bee:             "builder",
+		Adapter:         "cursor",
+		Workspace:       repo,
+		ColonyRoot:      repo,
+		TaskID:          taskID,
+		Purpose:         protocol.PurposeAnalysis,
+		AnalysisOf:      "completion-r1",
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteStatusSnapshot(protocol.StatusSnapshot{
+		ProtocolVersion: protocol.Version,
+		State:           state,
+		StartedAt:       started,
+		FinishedAt:      finished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         traceID,
+		AgentID:         agentID,
+		Status:          state,
+		FinishedAt:      finished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func attentionViewContext(t *testing.T, repo string) colony.Context {
 	t.Helper()
 	slug := "trace-attention"
@@ -87,6 +134,11 @@ func TestTraceViewsCarryOpenFailureProjection(t *testing.T) {
 	writeAttentionViewRun(t, repo, traceID, "agent-1", "task-a", protocol.StatusFailed, at(0), at(1))
 	writeAttentionViewRun(t, repo, traceID, "agent-2", "task-a", protocol.StatusCompleted, at(2), at(3))
 	writeAttentionViewRun(t, repo, traceID, "agent-3", "task-b", protocol.StatusFailed, at(4), at(5))
+	// A cancelled attempt is unfinished work and reads as open here too.
+	writeAttentionViewRun(t, repo, traceID, "agent-4", "task-c", protocol.StatusCancelled, at(6), at(7))
+	// Analysis is filtered before grouping: a successful analysis on the same
+	// task does not clear the work failure it studied.
+	writeAttentionAnalysisRun(t, repo, traceID, "agent-5", "task-b", protocol.StatusCompleted, at(8), at(9))
 
 	page, err := ListTraces(ctx, 10)
 	if err != nil {
@@ -105,11 +157,11 @@ func TestTraceViewsCarryOpenFailureProjection(t *testing.T) {
 	if !row.HasFailures {
 		t.Fatalf("row = %+v, want the historical failure flag kept", row)
 	}
-	if row.OpenFailures != 1 {
-		t.Fatalf("openFailures = %d, want 1", row.OpenFailures)
+	if row.OpenFailures != 2 {
+		t.Fatalf("openFailures = %d, want 2 (the failed and the cancelled work attempts)", row.OpenFailures)
 	}
-	if row.NewestOpenFailureAt == nil || !row.NewestOpenFailureAt.Equal(at(5)) {
-		t.Fatalf("newestOpenFailureAt = %v, want %s", row.NewestOpenFailureAt, at(5))
+	if row.NewestOpenFailureAt == nil || !row.NewestOpenFailureAt.Equal(at(7)) {
+		t.Fatalf("newestOpenFailureAt = %v, want %s", row.NewestOpenFailureAt, at(7))
 	}
 
 	detail, ok, err := GetTrace(ctx, traceID)

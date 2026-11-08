@@ -375,28 +375,48 @@ func loadTraceSummaryFrom(colonyRoot, traceID string, trailEvents []protocol.Eve
 		}
 		// The current attention projection is built from the same walk. Only a
 		// terminal outcome participates: an in-flight run neither resolves an
-		// earlier failure nor adds one, and a cancelled run is unfinished work
-		// rather than a failure here. A later success of the same task is what
-		// closes an earlier failure; see openFailuresOf.
-		outcomeAt := meta.FinishedAt
-		if outcomeAt.IsZero() {
-			outcomeAt = meta.StartedAt
-		}
-		switch {
-		case meta.State == string(protocol.StatusFailed):
-			outcomes = append(outcomes, trailRunOutcome{
-				TaskID:  meta.TaskID,
-				AgentID: meta.AgentID,
-				At:      outcomeAt,
-				Failed:  true,
-			})
-		case meta.State == string(protocol.StatusCompleted) && meta.Records == nil:
-			outcomes = append(outcomes, trailRunOutcome{
-				TaskID:    meta.TaskID,
-				AgentID:   meta.AgentID,
-				At:        outcomeAt,
-				Succeeded: true,
-			})
+		// earlier failure nor adds one. A cancelled run is unfinished work
+		// rather than an error, but it still counts as an open failure until a
+		// later success of the same task clears it. A failing or unavailable
+		// completion contract is likewise a failure even when the run itself
+		// projected completed. A later success of the same task is what closes
+		// an earlier failure; see openFailuresOf.
+		//
+		// Analysis is excluded before grouping, in both directions: its failure
+		// does not raise the trail and its success does not clear work. The
+		// classification is the admission-time purpose on the run record — not
+		// the closing phase, the derived trail stage, the Bee name, or
+		// AnalysisOf. Closing is work-like and groups by its own task id. A
+		// legacy record with no purpose participates as work-like, because
+		// excluding an unknown purpose would hide the only evidence it has.
+		if meta.Purpose != protocol.PurposeAnalysis {
+			outcomeAt := meta.FinishedAt
+			if outcomeAt.IsZero() {
+				outcomeAt = meta.StartedAt
+			}
+			terminal := meta.State == string(protocol.StatusCompleted) ||
+				meta.State == string(protocol.StatusFailed) ||
+				meta.State == string(protocol.StatusCancelled)
+			contractBroken := meta.Contract.Status == protocol.ContractFailed ||
+				meta.Contract.Status == protocol.ContractUnavailable
+			switch {
+			case terminal && (meta.State == string(protocol.StatusFailed) ||
+				meta.State == string(protocol.StatusCancelled) || contractBroken):
+				outcomes = append(outcomes, trailRunOutcome{
+					TaskID:  meta.TaskID,
+					AgentID: meta.AgentID,
+					At:      outcomeAt,
+					Failed:  true,
+				})
+			case terminal && meta.State == string(protocol.StatusCompleted) &&
+				meta.Records == nil && !contractBroken:
+				outcomes = append(outcomes, trailRunOutcome{
+					TaskID:    meta.TaskID,
+					AgentID:   meta.AgentID,
+					At:        outcomeAt,
+					Succeeded: true,
+				})
+			}
 		}
 	}
 

@@ -7,9 +7,13 @@ import (
 
 // trailRunOutcome is one terminal run as the trail's attention projection sees
 // it: the task it belongs to, when it finished, and which side of the resolution
-// rule it sits on. A run that is neither a failure nor a success — cancelled,
-// or still in flight — is not one of these and participates in neither
-// direction.
+// rule it sits on. A run that is neither a failure nor a success — still in
+// flight — is not one of these and participates in neither direction.
+//
+// A cancelled run is a failure here: it did not deliver, but it is unfinished
+// work rather than an error, so a later success of the same task clears it. An
+// analysis run never becomes one of these; the walk filters it out before
+// grouping.
 type trailRunOutcome struct {
 	// TaskID is the task recorded on the run. An empty id is the trail-level
 	// group for direct runs, which have no finer identity than the trail.
