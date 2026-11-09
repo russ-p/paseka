@@ -85,8 +85,8 @@ Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.m
 - **Kind:** follow-up
 - **Source:** guard review of `011-deprecation-cleanup-docs` (spec 038 Phase 8)
 - **Summary:** Phase 8 keeps `trust`, `force`, `thinking`, `provider`, and `output_format` in the bee `params` schema for one full release so an operator upgrading from the previous release has a migration path — `paseka doctor` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). Once a release has shipped with the keys deprecated, remove them: move each out of `RunParamKeys` into `RemovedRunParamKeys` (`internal/colony/params.go`), drop the legacy mappings in `LayerFromBee`, the `provider` fold in `launch.MapModel`, and the deprecation warnings in `params_diagnose.go`. The `ValidateRunParamKeys` removed-key branch then names the replacement instead of failing as a bare typo.
-- **Why deferred:** Release-gated by design — the aliases must survive one full release before removal, or an operator goes straight from "these keys work" to "the colony fails to load" with no released warning.
-- **Revisit when:** A release has shipped with the deprecated aliases and the following release is being cut.
+- **Why deferred:** Release-gated by design — the aliases must survive one full release before removal, or an operator goes straight from "these keys work" to "the colony fails to load" with no released warning. v0.6.0 deprecated them and v0.7.0 shipped with them still working, so the migration window is spent: the removal belongs to the release after v0.7.0.
+- **Revisit when:** The next release after v0.7.0 is being cut.
 
 #### Project the recorded model alias into the console and exports
 
@@ -421,6 +421,14 @@ Follow-ups from [046-bee-check-gate](../specs/046-bee-check-gate.md), shipped as
 - **Revisit when:** An operator has to read `runs/<agentId>/status.json` to say why a proposal never appeared, or a colony ships a gate command that is missing on the runtime host.
 
 ### Releases
+
+#### Release binaries carry a `dirty` version stamp
+
+- **Kind:** bug
+- **Source:** release verification of v0.7.0 (v0.6.0 shows the same)
+- **Summary:** `paseka version` on the published archives prints `0.7.0+6bf5729.dirty` while still reporting `channel: release`, and the v0.6.0 archive prints `0.6.0+24af68d.dirty` too. GoReleaser stamps `-X …internal/version.dirty={{.IsGitDirty}}`, so its git-status probe sees a modified or untracked, non-ignored file on the runner after the `before` hooks (`pnpm --dir web install --frozen-lockfile`, `pnpm --dir web build`, `go mod tidy`). Replaying those hooks in a clean local checkout leaves `git status --porcelain` empty and `git describe --dirty` clean, so the trigger is CI-specific — most likely a file that one hook or the pinned pnpm/Node versions write only on the runner. The commit in the stamp is correct, but `dirty` normally means "built from unknown edits", so an operator cannot use the stamp to tell a published archive from a hand-built one.
+- **Why deferred:** The release itself is correct and the defect predates v0.7.0; finding the trigger needs a CI reproduction (a workflow step printing `git status --porcelain` and `git ls-files --others --exclude-standard` after the hooks, or a `goreleaser build --snapshot` on the runner), which is pipeline work rather than a code change.
+- **Revisit when:** The next release is cut — add the diagnostic step, then either make the tree clean before the build or stamp a value CI can prove, so published archives report no `dirty`.
 
 #### Windows release builds
 
