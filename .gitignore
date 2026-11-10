@@ -16,3 +16,9 @@ docker/dev/.env
 # Not committed: `next/fallback.html` alone is what a source-only Go build
 # embeds, and release / container builds produce the bundle before compiling Go.
 /internal/console/next/dist/
+
+# GoReleaser's artifact directory. It exists before the binaries are compiled,
+# and an untracked path makes the toolchain stamp `vcs.modified=true`, which
+# reaches the release binary as a `.dirty` version — so the tree a release is cut
+# from has to look clean to git.
+/dist/

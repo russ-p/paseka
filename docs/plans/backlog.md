@@ -422,14 +422,6 @@ Follow-ups from [046-bee-check-gate](../specs/046-bee-check-gate.md), shipped as
 
 ### Releases
 
-#### Release binaries carry a `dirty` version stamp
-
-- **Kind:** bug
-- **Source:** release verification of v0.7.0 (v0.6.0 shows the same)
-- **Summary:** `paseka version` on the published archives prints `0.7.0+6bf5729.dirty` while still reporting `channel: release`, and the v0.6.0 archive prints `0.6.0+24af68d.dirty` too. GoReleaser stamps `-X …internal/version.dirty={{.IsGitDirty}}`, so its git-status probe sees a modified or untracked, non-ignored file on the runner after the `before` hooks (`pnpm --dir web install --frozen-lockfile`, `pnpm --dir web build`, `go mod tidy`). Replaying those hooks in a clean local checkout leaves `git status --porcelain` empty and `git describe --dirty` clean, so the trigger is CI-specific — most likely a file that one hook or the pinned pnpm/Node versions write only on the runner. The commit in the stamp is correct, but `dirty` normally means "built from unknown edits", so an operator cannot use the stamp to tell a published archive from a hand-built one.
-- **Why deferred:** The release itself is correct and the defect predates v0.7.0; finding the trigger needs a CI reproduction (a workflow step printing `git status --porcelain` and `git ls-files --others --exclude-standard` after the hooks, or a `goreleaser build --snapshot` on the runner), which is pipeline work rather than a code change.
-- **Revisit when:** The next release is cut — add the diagnostic step, then either make the tree clean before the build or stamp a value CI can prove, so published archives report no `dirty`.
-
 #### Windows release builds
 
 - **Kind:** idea

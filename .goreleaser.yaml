@@ -7,6 +7,11 @@ before:
     - pnpm --dir web install --frozen-lockfile
     - pnpm --dir web build
     - go mod tidy
+    # The stamp's `dirty` flag is read from git, so any file a hook leaves behind
+    # (or one that is not gitignored) marks every published archive. This runs
+    # before `dist/` exists, so it judges the hooks, and fails with the paths
+    # instead of shipping a stamp an operator cannot trust.
+    - sh -c 'paths=$(git status --porcelain --untracked-files=all); if [ -n "$paths" ]; then printf "release tree is dirty:\n%s\n" "$paths"; exit 1; fi'
 
 builds:
   - id: paseka

@@ -676,6 +676,8 @@ internal/
 
 A module pseudo-version contributes **no version**: `v0.5.1-0.20261001054351-67730c4` is 53 commits past `v0.5.0`, and its base names the *next* release. Such a build reports `dev` plus its commit, which is the honest answer and keeps it off the same line as a shipped tag. `released` is what tells the two apart in the API and the UI.
 
+A released binary must not report `dirty`, and that flag is read from git twice: GoReleaser stamps `{{.IsGitDirty}}`, and the toolchain stamps `vcs.modified`, whose answer wins. Both count untracked files, and GoReleaser's own `dist/` exists before any binary is compiled, so `dist/` is gitignored and a final `before` hook fails the release, naming the paths, when the preceding hooks leave anything untracked. A build artifact in the tree is not an edit, and an archive stamped `dirty` cannot be told from a hand-built one.
+
 Builds from outside the module (a Docker context without `.git`, `-buildvcs=false`) answer `dev` with no commit rather than failing: an endpoint that cannot name its build is worse than one that admits it has none.
 
 `version.Repository` is a stamped constant rather than something derived from the module path: the module path is not the repository URL, and a fork shipping its own binary must not have its console offer a link into upstream. `BuildView` carries `repository` and a per-build `commitUrl`, which is what the console links instead of guessing.
