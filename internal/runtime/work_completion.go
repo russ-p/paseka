@@ -196,6 +196,22 @@ func (r *Reactor) maybeCompleteWork(ctx context.Context, traceID string) error {
 		// evidence: an async dispatch may still land after its caller returned.
 		return nil
 	}
+	// A ledger written before first-sight admission can hold accepted work with
+	// no revision, and the capture below cannot certify it. Adopt revision 1
+	// once so the trail heals instead of retrying its events forever.
+	if snap.WorkRevision < 1 {
+		repaired, changed, err := r.ledger.EnsureWorkRevision(traceID)
+		if err != nil {
+			return err
+		}
+		if changed {
+			runtimeLog.Warn("work revision adopted for legacy ledger",
+				logging.F("trace", traceID),
+				logging.F("revision", fmt.Sprintf("%d", repaired.WorkRevision)),
+			)
+			snap = repaired
+		}
+	}
 	r.retainWorkRevision(snap)
 
 	// A recorded completion is the durable identity for its revision. Retrying

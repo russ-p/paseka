@@ -2,6 +2,16 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — One unappliable event can no longer spin the runtime
+
+A session run, a direct reaction, or an importer can name a task for the first time in `task.completed` or `task.status` rather than `task.plan`. The ledger created the work task but left `workRevision` at 0, so the completion boundary refused to certify the trail ("has no accepted work revision") and returned the error to the bus handler. That handler NAKed the message immediately — without a delay, a log line, or a retry limit — so one `task.status` discard from the Queen Console was redelivered forever, burning CPU and filling the log with receive lines while the cause stayed invisible.
+
+- **First sight opens the revision.** A work task whose first lifecycle status arrives through `task.completed` or `task.status` opens `workRevision` exactly as a plan would, so the completion predicate and the completion identity agree about whether the trail accepted work.
+- **Legacy ledgers are adopted once.** A ledger already holding accepted work with revision 0 is advanced to revision 1 at the completion boundary through the same compare-and-set path; a positive revision is never lowered or reselected.
+- **The bus stops a poisoned event.** A handler failure is logged with the event id, trace, kind, and delivery count, retried with exponential backoff (1 s, 2 s, 4 s, 8 s), and terminated after five attempts in one process. The terminal delivery is recorded in `.paseka/runs/<traceId>/rejected-events.ndjson`, and `paseka doctor` lists the trail with the last error instead of leaving a silent gap. The retry budget is per process, so a message left spinning by an older binary gets a fresh window after the upgrade instead of being terminated before the fix can run.
+
+- Canonical: [Task ledger](../reference/task-ledger.md#work-revision-and-completion-workrevision-workcompletion), [Bee event routing](../reference/bee-routing.md#1-principles), [Colony layout](../guide/colony-layout.md)
+
 ## 2026-11 — A trail's failure badge now answers what needs attention now
 
 A trail that failed an attempt and then completed the same task still read `failed` forever, because the badge was built from "any run ever failed". On a busy colony that stopped discriminating: `failed` became the normal state, a healed trail could not be told from a broken one, and the Traces list and Dashboard even used different words for the same condition. The badge is now current: a failure stays open only until a later successful run of the same task supersedes it.

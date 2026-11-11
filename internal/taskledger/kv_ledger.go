@@ -58,6 +58,26 @@ func (l *KVLedger) Apply(event protocol.Event) (ApplyResult, error) {
 	})
 }
 
+// EnsureWorkRevision adopts a legacy ledger whose accepted work never opened a
+// revision. The mutation is compare-and-set like every other ledger write, so
+// concurrent adopters converge on revision 1.
+func (l *KVLedger) EnsureWorkRevision(traceID string) (TraceSnapshot, bool, error) {
+	if traceID == "" {
+		return TraceSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	var snapshot TraceSnapshot
+	changed := false
+	_, err := l.mutateCAS(traceID, func(trace TraceSnapshot) (TraceSnapshot, ApplyResult, error) {
+		updated, adopted := EnsureWorkRevision(trace)
+		snapshot, changed = updated, adopted
+		return updated, ApplyResult{Trace: updated, Changed: adopted}, nil
+	})
+	if err != nil {
+		return TraceSnapshot{}, false, err
+	}
+	return snapshot, changed, nil
+}
+
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *KVLedger) SeedEnergy(traceID string, budget int) error {
 	_, _, err := l.EnsureEnergySeed(traceID, budget)

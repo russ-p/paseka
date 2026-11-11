@@ -231,6 +231,35 @@ func TestKVLedgerSeedEnergyPreservesPriorAdd(t *testing.T) {
 	}
 }
 
+func TestKVLedgerEnsureWorkRevisionAdoptsLegacySnapshot(t *testing.T) {
+	kv := newFakeKV()
+	legacy := taskledger.TraceSnapshot{
+		TraceID: "trace-1",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"verify": {TaskID: "verify", Status: protocol.TaskStatusCompleted},
+		},
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kv.Create("trace-1", data); err != nil {
+		t.Fatal(err)
+	}
+	ledger := taskledger.NewKVLedger(kv)
+
+	snap, changed, err := ledger.EnsureWorkRevision("trace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || snap.WorkRevision != 1 {
+		t.Fatalf("adopted = %+v, changed = %v; want revision 1", snap, changed)
+	}
+	if _, changed, err := ledger.EnsureWorkRevision("trace-1"); err != nil || changed {
+		t.Fatalf("second adoption: changed=%v err=%v", changed, err)
+	}
+}
+
 func TestEnsureEnergySeededPreservesPriorAdd(t *testing.T) {
 	trace := taskledger.TraceSnapshot{
 		TraceID:         "trace-1",

@@ -50,6 +50,7 @@ Version-controlled colony definition. Safe to commit; no secrets.
 ├── runs/                # gitignored — per-agent file IPC, trail records, and retained configuration
 │   └── <traceId>/
 │       ├── trail-events.ndjson   # the trail's own record — every domain event the colony published for it
+│       ├── rejected-events.ndjson # bus events the runtime stopped retrying, with the handler's error
 │       ├── origin.json           # where the trail came from, recorded once (cue invocation, manual, fork)
 │       ├── work.json             # accepted work revision and the current completion, readable offline
 │       ├── metrics.json          # replaceable trail metrics projection (`inspect metrics --write`, runtime)

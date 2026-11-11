@@ -71,6 +71,10 @@ func (f failingLedger) MarkWorkCompletionPublished(string, string) error {
 	return f.err
 }
 
+func (f failingLedger) EnsureWorkRevision(string) (taskledger.TraceSnapshot, bool, error) {
+	return taskledger.TraceSnapshot{}, false, f.err
+}
+
 func TestWriteEventApplyBeforePublish(t *testing.T) {
 	ledger := taskledger.NewMemoryLedger()
 	pub := &recordingPublisher{}

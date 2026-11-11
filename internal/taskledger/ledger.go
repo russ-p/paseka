@@ -267,4 +267,10 @@ type Ledger interface {
 	// MarkWorkCompletionPublished records that the completion's milestone
 	// reached the publisher. It is idempotent and refuses a different identity.
 	MarkWorkCompletionPublished(traceID, completionID string) error
+
+	// EnsureWorkRevision adopts a legacy ledger whose accepted work never
+	// opened a revision. It advances revision 0 to 1 when the trace holds work
+	// and returns whether it changed anything. A positive revision is never
+	// lowered or reselected, so the call is idempotent at every boundary.
+	EnsureWorkRevision(traceID string) (TraceSnapshot, bool, error)
 }

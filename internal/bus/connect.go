@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runs"
 )
 
 // ConnectColony connects to NATS using resolved colony context.
@@ -50,6 +51,7 @@ func Diagnose(ctx colony.Context) (DoctorReport, error) {
 		URL:           cfg.URL,
 		SubjectPrefix: cfg.SubjectPrefix,
 	}
+	report.Warnings = append(report.Warnings, rejectedEventWarnings(cfg.ColonyRoot)...)
 	if !cfg.Enabled() {
 		report.Errors = append(report.Errors, "nats url not configured in home config")
 		return report, nil
@@ -90,4 +92,25 @@ func Diagnose(ctx colony.Context) (DoctorReport, error) {
 	}
 	report.Warnings = append(report.Warnings, colony.DiagnoseDelivery(ctx, manifest)...)
 	return report, nil
+}
+
+// rejectedEventWarnings reports trails whose bus events exhausted their retry
+// budget. The record is written by the subscriber when it terminates a delivery,
+// so this is the operator-facing surface for an event the runtime could not
+// apply instead of a silent gap in the trail.
+func rejectedEventWarnings(colonyRoot string) []string {
+	if colonyRoot == "" {
+		return nil
+	}
+	rejections, err := runs.ListTrailRejections(colonyRoot)
+	if err != nil {
+		return []string{fmt.Sprintf("rejected-event records: %v", err)}
+	}
+	warnings := make([]string, 0, len(rejections))
+	for _, rejection := range rejections {
+		warnings = append(warnings, fmt.Sprintf(
+			"trail %s rejected %d bus event(s); last error: %s",
+			rejection.TraceID, rejection.Count, rejection.LastError))
+	}
+	return warnings
 }

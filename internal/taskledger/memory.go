@@ -127,6 +127,25 @@ func (l *MemoryLedger) MarkPendingDispatchUnresolved(traceID, dispatchID, diagno
 	return nil
 }
 
+// EnsureWorkRevision adopts a legacy ledger whose accepted work never opened a
+// revision. In-memory locking makes concurrent adopters observe one revision.
+func (l *MemoryLedger) EnsureWorkRevision(traceID string) (TraceSnapshot, bool, error) {
+	if traceID == "" {
+		return TraceSnapshot{}, false, fmt.Errorf("taskledger: traceId is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	trace, ok := l.traces[traceID]
+	if !ok {
+		trace = TraceSnapshot{TraceID: traceID, Tasks: map[string]TaskSnapshot{}}
+	}
+	updated, changed := EnsureWorkRevision(trace)
+	if changed {
+		l.traces[traceID] = updated
+	}
+	return updated, changed, nil
+}
+
 // SeedEnergy initializes the honey reserve when not yet seeded.
 func (l *MemoryLedger) SeedEnergy(traceID string, budget int) error {
 	_, _, err := l.EnsureEnergySeed(traceID, budget)

@@ -152,6 +152,77 @@ func decodeCompletion(t *testing.T, ev protocol.Event) protocol.TrailWorkComplet
 	return payload
 }
 
+// legacyRevisionLedger reproduces a ledger written before a work task could
+// open a revision through task.completed: every snapshot reports revision 0
+// until the completion boundary adopts one.
+type legacyRevisionLedger struct {
+	*taskledger.MemoryLedger
+	mu      sync.Mutex
+	adopted bool
+}
+
+func (l *legacyRevisionLedger) Snapshot(traceID string) (taskledger.TraceSnapshot, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	snap, err := l.MemoryLedger.Snapshot(traceID)
+	if err == nil && !l.adopted {
+		snap.WorkRevision = 0
+	}
+	return snap, err
+}
+
+func (l *legacyRevisionLedger) EnsureWorkRevision(traceID string) (taskledger.TraceSnapshot, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	snap, changed, err := l.MemoryLedger.EnsureWorkRevision(traceID)
+	if err != nil {
+		return snap, changed, err
+	}
+	if l.adopted {
+		return snap, false, nil
+	}
+	l.adopted = true
+	snap.WorkRevision = 1
+	return snap, true, nil
+}
+
+func TestWorkCompletionAdoptsLegacyRevision(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestColony(t, root, map[string]colony.Bee{"builder": {Role: "builder"}})
+	if err := os.WriteFile(filepath.Join(root, ".paseka/colony.yaml"), []byte(workCompletionColony), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ledger := &legacyRevisionLedger{MemoryLedger: taskledger.NewMemoryLedger()}
+	d := runtime.NewDispatcher()
+	reg := runtime.NewBeeRegistryFromBees(map[string]colony.Bee{"builder": {Role: "builder"}})
+	d.SetBeeRegistry(reg)
+	pub := &workPublisher{}
+	d.SetPublisher(pub, false)
+	r := runtime.NewTestReactor(runtime.TestReactorOptions{
+		ColonyRoot: root,
+		Dispatcher: d,
+		Registry:   reg,
+		Ledger:     ledger,
+		Publisher:  pub,
+	})
+	traceID := "trace-legacy-revision"
+
+	// No task.plan: the task first appears through task.completed, exactly as a
+	// session run or a direct reaction can produce it.
+	completionDone(t, r, traceID, "guard", "verify-testcontainers")
+
+	if !ledger.adopted {
+		t.Fatal("completion boundary did not adopt the legacy work revision")
+	}
+	signals := pub.published(protocol.SignalTrailWorkCompleted)
+	if len(signals) != 1 {
+		t.Fatalf("completion signals = %d, want 1", len(signals))
+	}
+	if payload := decodeCompletion(t, signals[0]); payload.WorkRevision != 1 {
+		t.Fatalf("completion revision = %d, want 1", payload.WorkRevision)
+	}
+}
+
 func TestWorkCompletionFiresWhenWorkAndChecksAreDone(t *testing.T) {
 	r, pub, _ := newWorkCompletionReactor(t, workCompletionColony, map[string]colony.Bee{
 		"builder": {Role: "builder"},

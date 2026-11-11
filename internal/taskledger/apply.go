@@ -351,6 +351,7 @@ func reduceVerification(trace TraceSnapshot, event protocol.Event, now time.Time
 	}
 
 	task := taskOrNew(trace, payload.TaskID)
+	hadStatus := task.Status != ""
 	task = withCreatedAt(task, now)
 	status := payload.Status
 	if status == "" {
@@ -368,6 +369,7 @@ func reduceVerification(trace TraceSnapshot, event protocol.Event, now time.Time
 		task.UpdatedAt = payload.CompletedAt
 	}
 	trace.Tasks[payload.TaskID] = task
+	trace = admitFirstStatus(trace, task, hadStatus)
 	step := reduceStep{trace: trace, changed: true}
 
 	var promoted []TaskSnapshot
@@ -433,6 +435,7 @@ func reduceTaskStatus(trace TraceSnapshot, event protocol.Event, now time.Time) 
 	}
 
 	task := taskOrNew(trace, payload.TaskID)
+	hadStatus := task.Status != ""
 	task = withCreatedAt(task, now)
 	previous := task.Status
 	task.Status = payload.Status
@@ -441,6 +444,7 @@ func reduceTaskStatus(trace TraceSnapshot, event protocol.Event, now time.Time) 
 	task.Summary = payload.Summary
 	task.UpdatedAt = now
 	trace.Tasks[payload.TaskID] = task
+	trace = admitFirstStatus(trace, task, hadStatus)
 	if isAcceptedWorkTask(task) && isReworkReturn(previous) &&
 		(payload.Status == protocol.TaskStatusReady || payload.Status == protocol.TaskStatusRunning) {
 		// A task returning to the working set is accepted rework: the previous

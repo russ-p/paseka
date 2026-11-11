@@ -88,6 +88,93 @@ func TestWorkRevisionAdvancesForAcceptedWorkOnly(t *testing.T) {
 	}
 }
 
+// A work task can enter the ledger through task.completed instead of task.plan
+// — a session run, a direct reaction, or an importer can name a task that was
+// never planned. The completion predicate treats it as accepted work, so the
+// revision must open on that first sight or the trail can never certify the
+// work it just accepted.
+func TestWorkRevisionOpensWhenTaskFirstAppearsCompleted(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1", Tasks: map[string]taskledger.TaskSnapshot{}}
+	ev, err := protocol.NewEvent("trace-1", "guard", 0, protocol.EventVerification, protocol.TaskCompletedPayload{
+		Kind:   protocol.TaskEventCompleted,
+		TaskID: "verify-testcontainers",
+		Status: protocol.TaskStatusCompleted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := taskledger.ApplyEvent(trace, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Trace.WorkRevision != 1 {
+		t.Fatalf("revision after first completion = %d, want 1", res.Trace.WorkRevision)
+	}
+	if got := res.Trace.Tasks["verify-testcontainers"].Status; got != protocol.TaskStatusCompleted {
+		t.Fatalf("task status = %q, want completed", got)
+	}
+}
+
+func TestWorkRevisionOpensWhenTaskFirstAppearsWithStatus(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1", Tasks: map[string]taskledger.TaskSnapshot{}}
+	trace = applyStatus(t, trace, "session-task", protocol.TaskStatusRunning)
+	if trace.WorkRevision != 1 {
+		t.Fatalf("revision after first status = %d, want 1", trace.WorkRevision)
+	}
+}
+
+func TestWorkRevisionDoesNotReopenForPlannedTaskCompletion(t *testing.T) {
+	trace := taskledger.TraceSnapshot{TraceID: "trace-1", Tasks: map[string]taskledger.TaskSnapshot{}}
+	trace = planWork(t, trace, "scout", protocol.TaskSpec{TaskID: "task-1", Title: "work"})
+	if trace.WorkRevision != 1 {
+		t.Fatalf("revision after plan = %d, want 1", trace.WorkRevision)
+	}
+	trace = applyStatus(t, trace, "task-1", protocol.TaskStatusCompleted)
+	if trace.WorkRevision != 1 {
+		t.Fatalf("revision after completion = %d, want 1", trace.WorkRevision)
+	}
+}
+
+func TestEnsureWorkRevisionAdoptsLegacyLedger(t *testing.T) {
+	legacy := taskledger.TraceSnapshot{
+		TraceID: "trace-legacy",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+		},
+	}
+	adopted, changed := taskledger.EnsureWorkRevision(legacy)
+	if !changed || adopted.WorkRevision != 1 {
+		t.Fatalf("adopted = %+v, changed = %v; want revision 1", adopted, changed)
+	}
+	if _, changed := taskledger.EnsureWorkRevision(adopted); changed {
+		t.Fatal("adoption is not idempotent")
+	}
+	if adopted.WorkRevision != 1 {
+		t.Fatalf("revision after second adoption = %d, want 1", adopted.WorkRevision)
+	}
+
+	positive := taskledger.TraceSnapshot{
+		TraceID:      "trace-positive",
+		WorkRevision: 3,
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"task-1": {TaskID: "task-1", Status: protocol.TaskStatusCompleted},
+		},
+	}
+	if updated, changed := taskledger.EnsureWorkRevision(positive); changed || updated.WorkRevision != 3 {
+		t.Fatalf("positive revision changed: %+v, %v", updated, changed)
+	}
+
+	mergeOnly := taskledger.TraceSnapshot{
+		TraceID: "trace-merge",
+		Tasks: map[string]taskledger.TaskSnapshot{
+			"_review": {TaskID: "_review", Review: protocol.TaskReviewFinal, Status: protocol.TaskStatusCompleted},
+		},
+	}
+	if _, changed := taskledger.EnsureWorkRevision(mergeOnly); changed {
+		t.Fatal("a merge-only trail has no accepted work to adopt")
+	}
+}
+
 func TestEvaluateWorkCompletion(t *testing.T) {
 	cases := []struct {
 		name     string

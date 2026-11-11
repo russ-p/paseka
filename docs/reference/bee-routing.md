@@ -11,6 +11,7 @@ For a static graph of how these rules connect in your colony config, see [spec 0
 ## 1. Principles
 
 - **One reactor** — `paseka run` keeps a single JetStream consumer (`Reactor`) that applies routing rules from all bee configs.
+- **Failure is bounded** — a handler error is logged with the event identity and delivery count, retried with exponential backoff, and terminated after five attempts with a durable `.paseka/runs/<traceId>/rejected-events.ndjson` record (also surfaced by `paseka doctor`). One deterministic failure can no longer be redelivered forever.
 - **Task ledger stays canonical** — `task.plan` → `task.ready` → `task.completed` still drives dependency-aware work queues.
 - **Hybrid dispatch** — some subscriptions trigger task-ledger dispatches; others trigger **direct** bee runs on domain events (e.g. code review).
 - **Advisory publishes** — `publishes` documents expected output; runtime logs warnings for undeclared domain events but does not block them (MVP).

@@ -122,6 +122,40 @@ func isAcceptedWorkTask(task TaskSnapshot) bool {
 	return !IsAnalysisTask(task) && TaskPhaseOf(task) == protocol.TaskPhaseWork
 }
 
+// admitFirstStatus opens the work revision for a task that first appears in the
+// ledger with a lifecycle status. A work task can enter through task.completed
+// or task.status — a session run, a direct reaction, or an importer — without a
+// task.plan, and the completion predicate already treats it as accepted work.
+// Opening the revision here keeps the completion identity in step with that
+// predicate: a completed task cannot block completion while the trail claims it
+// never accepted work.
+func admitFirstStatus(trace TraceSnapshot, task TaskSnapshot, hadStatus bool) TraceSnapshot {
+	if hadStatus || !isAcceptedWorkTask(task) {
+		return trace
+	}
+	return AdvanceWorkRevision(trace)
+}
+
+// EnsureWorkRevision adopts a legacy ledger whose accepted work never opened a
+// revision. Ledgers written before first-sight admission could hold a completed
+// work task with revision 0; the completion boundary cannot certify that work,
+// and a bus handler that surfaced the failure was retried forever.
+//
+// Adoption is idempotent and never lowers or reselects a positive revision, so
+// it is safe to call on every completion boundary.
+func EnsureWorkRevision(trace TraceSnapshot) (TraceSnapshot, bool) {
+	if trace.WorkRevision >= 1 {
+		return trace, false
+	}
+	for _, task := range trace.Tasks {
+		if isAcceptedWorkTask(task) {
+			trace.WorkRevision = 1
+			return trace, true
+		}
+	}
+	return trace, false
+}
+
 // isReworkReturn reports whether a previous status means the task had already
 // entered, or tried to enter, the accepted working set. A return from one of
 // these to ready/running is substantive rework, not the first start of a task.

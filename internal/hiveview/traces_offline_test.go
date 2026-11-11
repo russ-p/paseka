@@ -63,6 +63,10 @@ func (failingLedger) MarkWorkCompletionPublished(string, string) error {
 	return fmt.Errorf("kv unavailable")
 }
 
+func (failingLedger) EnsureWorkRevision(string) (taskledger.TraceSnapshot, bool, error) {
+	return taskledger.TraceSnapshot{}, false, fmt.Errorf("kv unavailable")
+}
+
 func TestResolveTraceTasksFallsBackOnLoadTraceError(t *testing.T) {
 	repo := t.TempDir()
 	traceID := "trace-kv-fail"
