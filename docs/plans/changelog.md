@@ -2,6 +2,16 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — The machine-local registry is written atomically and under one lock
+
+`~/.config/paseka/<slug>/state.json` is shared by the console, `paseka run`, and CLI commands. Two defects met there: the file was replaced by truncate-then-write, so a concurrent reader could parse an empty or half-written file, and most mutators read and wrote without the lock the runtime registry already used, so a heartbeat or session registration could drop a worktree entry.
+
+- **Atomic replacement.** Every save writes a same-directory temp file, syncs it, and renames it over `state.json`, so a reader sees either the previous complete state or the next complete state, never a torn one.
+- **One writer at a time.** Worktree, pull-request, session, and invite mutations now go through the same exclusive `flock` as the runtime registry. The lock lives on a dedicated `state.lock` file, not on the replaced `state.json` inode.
+- **A zero-length file reads as an empty registry.** A state file left truncated by an older binary no longer fails every status command with `unexpected end of JSON input`.
+
+- Canonical: [Colony layout](../guide/colony-layout.md), [Architecture overview](../architecture/overview.md)
+
 ## 2026-11 — One unappliable event can no longer spin the runtime
 
 A session run, a direct reaction, or an importer can name a task for the first time in `task.completed` or `task.status` rather than `task.plan`. The ledger created the work task but left `workRevision` at 0, so the completion boundary refused to certify the trail ("has no accepted work revision") and returned the error to the bus handler. That handler NAKed the message immediately — without a delay, a log line, or a retry limit — so one `task.status` discard from the Queen Console was redelivered forever, burning CPU and filling the log with receive lines while the cause stayed invisible.

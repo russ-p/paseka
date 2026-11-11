@@ -94,6 +94,13 @@ func LoadState(slug string) (State, error) {
 		}
 		return State{}, err
 	}
+	// A zero-length file is a fresh registry, not a parse failure. Older
+	// binaries could leave one behind by truncating the file in place, and the
+	// writers below no longer do, but a read must not turn that history into a
+	// hard error for every status command.
+	if len(bytes.TrimSpace(data)) == 0 {
+		return State{}, nil
+	}
 	var st State
 	if err := json.Unmarshal(data, &st); err != nil {
 		return State{}, fmt.Errorf("homestate: parse state: %w", err)
@@ -112,42 +119,76 @@ func SaveState(slug string, st State) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+	return writeStateFile(path, data)
+}
+
+// writeStateFile replaces state.json with a complete file in one step.
+//
+// The registry is read by other processes without a lock — status, the
+// console dashboard, worktree listing — and an in-place truncate exposes an
+// empty or half-written file to them. A same-directory temp file renamed over
+// the target means a reader sees either the previous complete state or the next
+// complete state, never a torn one.
+func writeStateFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("homestate: mkdir %s: %w", dir, err)
+	}
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	f, err := os.CreateTemp(dir, ".state-*.tmp")
+	if err != nil {
+		return fmt.Errorf("homestate: create temp state: %w", err)
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if err := f.Chmod(mode); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("homestate: chmod temp state: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("homestate: write temp state: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("homestate: sync temp state: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("homestate: close temp state: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("homestate: replace %s: %w", path, err)
+	}
+	return nil
 }
 
 // RegisterWorktree appends a worktree entry if the traceId is new.
 func RegisterWorktree(slug string, entry WorktreeEntry) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	for _, w := range st.Worktrees {
-		if w.TraceID == entry.TraceID {
-			return nil
+	return withStateLock(slug, func(st *State) bool {
+		for _, w := range st.Worktrees {
+			if w.TraceID == entry.TraceID {
+				return false
+			}
 		}
-	}
-	st.Worktrees = append(st.Worktrees, entry)
-	return SaveState(slug, st)
+		st.Worktrees = append(st.Worktrees, entry)
+		return true
+	})
 }
 
 // UpdateWorktreeBranch sets the branch field for an existing worktree registry entry.
 func UpdateWorktreeBranch(slug, traceID, branch string) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	found := false
-	for i, w := range st.Worktrees {
-		if w.TraceID == traceID {
-			st.Worktrees[i].Branch = branch
-			found = true
-			break
+	return withStateLock(slug, func(st *State) bool {
+		for i, w := range st.Worktrees {
+			if w.TraceID == traceID {
+				st.Worktrees[i].Branch = branch
+				return true
+			}
 		}
-	}
-	if !found {
-		return nil
-	}
-	return SaveState(slug, st)
+		return false
+	})
 }
 
 // FindPullRequest returns the machine-local PR identity for a trace, if any.
@@ -169,24 +210,22 @@ func UpsertPullRequest(slug string, entry PullRequestEntry) error {
 	if strings.TrimSpace(entry.TraceID) == "" {
 		return fmt.Errorf("homestate: pull request traceId is required")
 	}
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	if entry.UpdatedAt.IsZero() {
-		entry.UpdatedAt = time.Now().UTC()
-	}
-	for i, pr := range st.PullRequests {
-		if pr.TraceID == entry.TraceID {
-			if entry.LastNotifiedState == "" {
-				entry.LastNotifiedState = pr.LastNotifiedState
-			}
-			st.PullRequests[i] = entry
-			return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		if entry.UpdatedAt.IsZero() {
+			entry.UpdatedAt = time.Now().UTC()
 		}
-	}
-	st.PullRequests = append(st.PullRequests, entry)
-	return SaveState(slug, st)
+		for i, pr := range st.PullRequests {
+			if pr.TraceID == entry.TraceID {
+				if entry.LastNotifiedState == "" {
+					entry.LastNotifiedState = pr.LastNotifiedState
+				}
+				st.PullRequests[i] = entry
+				return true
+			}
+		}
+		st.PullRequests = append(st.PullRequests, entry)
+		return true
+	})
 }
 
 // ListPullRequests returns all machine-local PR identities.
@@ -200,81 +239,89 @@ func ListPullRequests(slug string) ([]PullRequestEntry, error) {
 
 // MarkPullRequestNotified records the last Telegram/notify state for a published PR.
 func MarkPullRequestNotified(slug, traceID, state string) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	for i, pr := range st.PullRequests {
-		if pr.TraceID == traceID {
-			st.PullRequests[i].LastNotifiedState = state
-			return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		for i, pr := range st.PullRequests {
+			if pr.TraceID == traceID {
+				st.PullRequests[i].LastNotifiedState = state
+				return true
+			}
 		}
-	}
-	return nil
+		return false
+	})
 }
 
 // RemovePullRequest drops machine-local PR identity after the trail is closed.
 func RemovePullRequest(slug, traceID string) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	out := st.PullRequests[:0]
-	for _, pr := range st.PullRequests {
-		if pr.TraceID != traceID {
+	return withStateLock(slug, func(st *State) bool {
+		out := make([]PullRequestEntry, 0, len(st.PullRequests))
+		removed := false
+		for _, pr := range st.PullRequests {
+			if pr.TraceID == traceID {
+				removed = true
+				continue
+			}
 			out = append(out, pr)
 		}
-	}
-	st.PullRequests = out
-	return SaveState(slug, st)
+		if !removed {
+			return false
+		}
+		st.PullRequests = out
+		return true
+	})
 }
 
 // UnregisterWorktree removes a worktree entry for a trace.
 func UnregisterWorktree(slug, traceID string) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	out := st.Worktrees[:0]
-	for _, w := range st.Worktrees {
-		if w.TraceID != traceID {
+	return withStateLock(slug, func(st *State) bool {
+		out := make([]WorktreeEntry, 0, len(st.Worktrees))
+		removed := false
+		for _, w := range st.Worktrees {
+			if w.TraceID == traceID {
+				removed = true
+				continue
+			}
 			out = append(out, w)
 		}
-	}
-	st.Worktrees = out
-	return SaveState(slug, st)
+		if !removed {
+			return false
+		}
+		st.Worktrees = out
+		return true
+	})
 }
 
 // RegisterSession records an active interactive session.
 func RegisterSession(slug string, entry SessionEntry) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	for i, s := range st.Sessions {
-		if s.SessionID == entry.SessionID {
-			st.Sessions[i] = entry
-			return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		for i, s := range st.Sessions {
+			if s.SessionID == entry.SessionID {
+				st.Sessions[i] = entry
+				return true
+			}
 		}
-	}
-	st.Sessions = append(st.Sessions, entry)
-	return SaveState(slug, st)
+		st.Sessions = append(st.Sessions, entry)
+		return true
+	})
 }
 
 // UnregisterSession removes a session from the registry.
 func UnregisterSession(slug, sessionID string) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	out := st.Sessions[:0]
-	for _, s := range st.Sessions {
-		if s.SessionID != sessionID {
+	return withStateLock(slug, func(st *State) bool {
+		out := make([]SessionEntry, 0, len(st.Sessions))
+		removed := false
+		for _, s := range st.Sessions {
+			if s.SessionID == sessionID {
+				removed = true
+				continue
+			}
 			out = append(out, s)
 		}
-	}
-	st.Sessions = out
-	return SaveState(slug, st)
+		if !removed {
+			return false
+		}
+		st.Sessions = out
+		return true
+	})
 }
 
 // ListSessions returns persisted session entries.
@@ -287,44 +334,43 @@ func ListSessions(slug string) ([]SessionEntry, error) {
 }
 
 // withStateLock serializes read-modify-write access to state.json across
-// processes. The hive runtime heartbeat (paseka run) and the console
-// supervisor mutate the shared runtime registry concurrently; without a lock a
-// lost update can resurrect status:"running" in the middle of a stop. mutate
-// reports whether the state changed and must be written back.
+// processes. The hive runtime heartbeat (paseka run), the console supervisor,
+// and CLI commands mutate the shared registry concurrently; without a lock a
+// lost update can resurrect status:"running" in the middle of a stop or drop a
+// worktree entry. mutate reports whether the state changed and must be written
+// back.
+//
+// The lock lives on a dedicated state.lock file, not on state.json itself: the
+// writer replaces state.json by rename, and a lock held on the replaced inode
+// would stop excluding the next writer that opened the old file. Readers stay
+// lock-free because every write publishes a complete file.
 func withStateLock(slug string, mutate func(st *State) bool) error {
 	path, err := statePath(slug)
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("homestate: mkdir %s: %w", filepath.Dir(path), err)
+	}
+	lockPath := path + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
-		return err
+		return fmt.Errorf("homestate: lock %s: %w", lockPath, err)
 	}
-	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("homestate: lock %s: %w", path, err)
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("homestate: lock %s: %w", lockPath, err)
 	}
-	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
 
-	data, err := os.ReadFile(path)
+	st, err := LoadState(slug)
 	if err != nil {
 		return err
-	}
-	var st State
-	if len(bytes.TrimSpace(data)) > 0 {
-		if err := json.Unmarshal(data, &st); err != nil {
-			return fmt.Errorf("homestate: parse state: %w", err)
-		}
 	}
 	if !mutate(&st) {
 		return nil
 	}
-	out, err := json.MarshalIndent(st, "", "  ")
-	if err != nil {
-		return err
-	}
-	out = append(out, '\n')
-	return os.WriteFile(path, out, 0o644)
+	return SaveState(slug, st)
 }
 
 // RegisterRuntime records the active hive runtime process.
@@ -400,28 +446,26 @@ func FindSession(slug, sessionID string) (SessionEntry, error) {
 
 // UpsertInvite stores or updates an invite entry by inviteId.
 func UpsertInvite(slug string, entry InviteEntry) error {
-	st, err := LoadState(slug)
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	if entry.CreatedAt.IsZero() {
-		entry.CreatedAt = now
-	}
-	entry.UpdatedAt = now
-	for i, inv := range st.Invites {
-		if inv.InviteID == entry.InviteID {
-			if st.Invites[i].CreatedAt.IsZero() {
-				entry.CreatedAt = now
-			} else {
-				entry.CreatedAt = st.Invites[i].CreatedAt
-			}
-			st.Invites[i] = entry
-			return SaveState(slug, st)
+	return withStateLock(slug, func(st *State) bool {
+		now := time.Now().UTC()
+		if entry.CreatedAt.IsZero() {
+			entry.CreatedAt = now
 		}
-	}
-	st.Invites = append(st.Invites, entry)
-	return SaveState(slug, st)
+		entry.UpdatedAt = now
+		for i, inv := range st.Invites {
+			if inv.InviteID == entry.InviteID {
+				if st.Invites[i].CreatedAt.IsZero() {
+					entry.CreatedAt = now
+				} else {
+					entry.CreatedAt = st.Invites[i].CreatedAt
+				}
+				st.Invites[i] = entry
+				return true
+			}
+		}
+		st.Invites = append(st.Invites, entry)
+		return true
+	})
 }
 
 // ListInvites returns invite entries, optionally filtered by status and traceId.
@@ -459,15 +503,20 @@ func FindInviteBySessionID(slug, sessionID string) (InviteEntry, error) {
 
 // MarkInviteIncompleteOnSessionEnd marks an accepted invite incomplete when its session ends.
 func MarkInviteIncompleteOnSessionEnd(slug, sessionID string) error {
-	inv, err := FindInviteBySessionID(slug, sessionID)
-	if err != nil {
-		return nil
-	}
-	if inv.Status != protocol.InviteStatusAccepted {
-		return nil
-	}
-	inv.Status = protocol.InviteStatusIncomplete
-	return UpsertInvite(slug, inv)
+	return withStateLock(slug, func(st *State) bool {
+		for i, inv := range st.Invites {
+			if inv.SessionID != sessionID {
+				continue
+			}
+			if inv.Status != protocol.InviteStatusAccepted {
+				return false
+			}
+			st.Invites[i].Status = protocol.InviteStatusIncomplete
+			st.Invites[i].UpdatedAt = time.Now().UTC()
+			return true
+		}
+		return false
+	})
 }
 
 // FindInvite returns one invite by ID.
