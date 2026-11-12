@@ -38,7 +38,6 @@ const (
 	FieldYolo      = "yolo"
 	FieldPlan      = "plan"
 	FieldReasoning = "reasoning"
-	FieldProvider  = "provider"
 	FieldEnv       = "env"
 	FieldEnvMode   = "env_mode"
 	FieldTimeout   = "timeout"
@@ -68,7 +67,6 @@ func (p LaunchPlan) Attribution() []AttributionField {
 		{FieldYolo, yoloValue(p.Params)},
 		{FieldPlan, boolValue(p.Params.Plan)},
 		{FieldReasoning, dashIfEmpty(p.Params.Reasoning)},
-		{FieldProvider, dashIfEmpty(p.Params.Provider)},
 		{FieldEnv, envValue(p.Params.Env)},
 		{FieldEnvMode, envModeValue(p.Params.EnvMode)},
 		{FieldTimeout, timeoutValue(p.Timeout)},
@@ -96,7 +94,6 @@ func attributeFields(base, over adapters.RunParamsLayer, aliasApplied bool) map[
 		FieldYolo:      declaredLayer(base, over, "trust", "force"),
 		FieldPlan:      declaredLayer(base, over, "plan"),
 		FieldReasoning: declaredLayer(base, over, "reasoning"),
-		FieldProvider:  declaredLayer(base, over, "provider"),
 		FieldEnv:       declaredLayer(base, over, "env"),
 		FieldEnvMode:   declaredLayer(base, over, "env_mode"),
 		FieldTimeout:   declaredLayer(base, over, "timeout"),

@@ -100,10 +100,10 @@ params:
 	}
 }
 
-// TestColonyProfileAcceptsLegacyParams pins that the deprecated params keys are
-// still accepted on a profile while the window is open, so a colony mid-migration
-// keeps loading.
-func TestColonyProfileAcceptsLegacyParams(t *testing.T) {
+// TestColonyProfileRejectsRetiredParams pins that the retired params keys are
+// rejected on a profile with their replacement named, so a colony mid-migration
+// gets the one-edit fix from the profile file itself.
+func TestColonyProfileRejectsRetiredParams(t *testing.T) {
 	repo, _ := setupProfileColony(t)
 	writeColonyProfile(t, repo, "legacy", `adapter: pi
 params:
@@ -114,16 +114,19 @@ params:
 `)
 	resetProcessProfile(t)
 	colony.SetProcessProfile(colony.ProfileSelection{Name: "legacy", FlagSet: true})
-	ctx, err := colony.ResolveContext(repo)
-	if err != nil {
-		t.Fatal(err)
+	_, err := colony.ResolveContext(repo)
+	if err == nil {
+		t.Fatal("retired profile params must fail the load")
 	}
-	scout, _, err := ctx.LoadBee("scout")
-	if err != nil {
-		t.Fatalf("legacy profile params should load: %v", err)
-	}
-	if scout.Params["provider"] != "google" || scout.Params["thinking"] != "high" {
-		t.Fatalf("params = %+v", scout.Params)
+	for _, want := range []string{
+		"params.trust was removed; use params.yolo",
+		"params.thinking was removed; use params.reasoning",
+		"params.provider was removed; use params.model",
+		"params.output_format was removed (the runtime owns it now)",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %v, missing %q", err, want)
+		}
 	}
 }
 

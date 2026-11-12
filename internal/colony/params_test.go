@@ -90,63 +90,50 @@ func TestRunParamsFromBeeParsesSharedParams(t *testing.T) {
 	}
 }
 
-// TestLegacyTrustForceMapToRunParams pins that the trust/force aliases still
-// map onto the internal pair the adapters take, and record their declared keys
-// so layering stays tri-state while the window is open.
-func TestLegacyTrustForceMapToRunParams(t *testing.T) {
+// TestRetiredTrustForceDoNotMapToRunParams pins the closed window: the pair
+// left the valid set with yolo as its replacement, so the mapper neither reads
+// them nor records a declared key for them.
+func TestRetiredTrustForceDoNotMapToRunParams(t *testing.T) {
 	layer := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"trust": false, "force": true}})
-	if layer.Params.Trust {
-		t.Fatal("trust = true, want the legacy false preserved")
+	if !layer.Params.Trust || !layer.Params.Force {
+		t.Fatalf("retired trust/force must not reach RunParams: %+v", layer.Params)
 	}
-	if !layer.Params.Force {
-		t.Fatal("force = false, want the legacy true preserved")
-	}
-	if !layer.Declares("trust") || !layer.Declares("force") {
-		t.Fatalf("declared = %+v, want trust and force recorded", layer.Declared)
+	if layer.Declares("trust") || layer.Declares("force") {
+		t.Fatalf("declared = %+v, want no trust/force from a retired key", layer.Declared)
 	}
 }
 
-// TestYoloWinsOverLegacyTrustForce pins the precedence the review called out:
-// yolo is the semantic key, the legacy pair is only a fallback.
-func TestYoloWinsOverLegacyTrustForce(t *testing.T) {
-	layer := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{
-		"yolo": false, "trust": true, "force": true,
-	}})
-	if layer.Params.Trust || layer.Params.Force {
-		t.Fatalf("yolo false should beat legacy trust/force: %+v", layer.Params)
-	}
-}
-
-// TestThinkingAliasesReasoning pins that thinking maps to reasoning only when
-// reasoning is unset, and that reasoning wins when both appear.
-func TestThinkingAliasesReasoning(t *testing.T) {
+// TestRetiredThinkingDoesNotMapToReasoning pins the closed window: thinking has
+// no fallback into reasoning any more, so only the semantic key reaches the plan.
+func TestRetiredThinkingDoesNotMapToReasoning(t *testing.T) {
 	alias := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"thinking": "high"}})
-	if alias.Params.Reasoning != "high" || !alias.Declares("reasoning") {
-		t.Fatalf("thinking should map to reasoning: %+v declared=%v", alias.Params, alias.Declared)
+	if alias.Params.Reasoning != "" || alias.Declares("reasoning") {
+		t.Fatalf("retired thinking must not set reasoning: %+v declared=%v", alias.Params, alias.Declared)
 	}
 
 	both := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"reasoning": "low", "thinking": "high"}})
 	if both.Params.Reasoning != "low" {
-		t.Fatalf("reasoning = %q, want the semantic key to win", both.Params.Reasoning)
+		t.Fatalf("reasoning = %q, want the semantic key", both.Params.Reasoning)
 	}
 }
 
-// TestProviderMapsToRunParams pins that the deprecated provider key still lands
-// on RunParams.Provider for the launch mapping to fold into the model.
-func TestProviderMapsToRunParams(t *testing.T) {
+// TestRetiredProviderDoesNotMapToRunParams pins that the retired provider key
+// contributes nothing: RunParams.Provider is derived from the model id by the
+// launch resolver, never declared by a bee.
+func TestRetiredProviderDoesNotMapToRunParams(t *testing.T) {
 	layer := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"provider": "openai"}})
-	if layer.Params.Provider != "openai" {
-		t.Fatalf("provider = %q, want openai", layer.Params.Provider)
+	if layer.Params.Provider != "" {
+		t.Fatalf("provider = %q, want empty", layer.Params.Provider)
 	}
-	if !layer.Declares("provider") {
-		t.Fatalf("declared = %+v, want provider recorded", layer.Declared)
+	if layer.Declares("provider") {
+		t.Fatalf("declared = %+v, want provider absent", layer.Declared)
 	}
 }
 
-// TestOutputFormatIsAcceptedAndIgnored pins that the runtime-owned
-// output_format key loads without contributing a RunParams field or a declared
-// key.
-func TestOutputFormatIsAcceptedAndIgnored(t *testing.T) {
+// TestRetiredOutputFormatDoesNotMapToRunParams pins that output_format is gone:
+// the runtime owns structured output, so a bee carrying the key contributes no
+// RunParams field and no declared key.
+func TestRetiredOutputFormatDoesNotMapToRunParams(t *testing.T) {
 	layer := colony.LayerFromBee(colony.Bee{Role: "builder", Params: map[string]any{"output_format": "json"}})
 	if layer.Declares("output_format") {
 		t.Fatalf("output_format must not be declared: %+v", layer.Declared)
@@ -196,10 +183,10 @@ func TestDiagnoseBeeParams(t *testing.T) {
 	warnings := colony.DiagnoseBeeParams(bees)
 	joined := strings.Join(warnings, "\n")
 	for _, want := range []string{
-		`bee "builder": params.trust is deprecated; use params.yolo`,
-		`bee "builder": params.force is deprecated; use params.yolo`,
+		`bee "builder": params.trust was removed; use params.yolo`,
+		`bee "builder": params.force was removed; use params.yolo`,
 		`bee "planner": params.reasoning has no mapping on adapter cursor`,
-		`bee "thinker": params.thinking is deprecated; use params.reasoning`,
+		`bee "thinker": params.thinking was removed; use params.reasoning`,
 		`bee "typo": unknown params key "modle"`,
 		`bee "scout": adapter pi has no yolo equivalent`,
 	} {
@@ -207,46 +194,103 @@ func TestDiagnoseBeeParams(t *testing.T) {
 			t.Fatalf("missing warning %q in:\n%s", want, joined)
 		}
 	}
+	if strings.Contains(joined, "deprecated") {
+		t.Fatalf("doctor must not use deprecation wording after the removal:\n%s", joined)
+	}
 	if strings.Contains(joined, `bee "clean"`) {
 		t.Fatalf("clean bee should produce no warnings:\n%s", joined)
 	}
 }
 
-// TestDiagnoseBeeParamsFlagsDeprecatedProvider pins the doctor half of the open
-// window: params.provider still loads, so doctor must name the migration.
-func TestDiagnoseBeeParamsFlagsDeprecatedProvider(t *testing.T) {
+// TestDiagnoseBeeParamsFlagsRemovedProvider pins the doctor half of the closed
+// window: a leftover params.provider fails strict load, and doctor names the
+// replacement in the same sentence.
+func TestDiagnoseBeeParamsFlagsRemovedProvider(t *testing.T) {
 	bees := map[string]colony.Bee{
 		"builder": {Role: "builder", Adapter: "pi", Params: map[string]any{"model": "gemini/gpt-4", "provider": "gemini"}},
 	}
 	warnings := colony.DiagnoseBeeParams(bees)
 	joined := strings.Join(warnings, "\n")
-	if !strings.Contains(joined, `bee "builder": params.provider is deprecated; put the vendor in params.model`) {
-		t.Fatalf("missing provider deprecation warning:\n%s", joined)
+	if !strings.Contains(joined, `bee "builder": params.provider was removed; use params.model`) {
+		t.Fatalf("missing provider removal warning:\n%s", joined)
 	}
 }
 
-// TestDiagnoseBeeParamsFlagsDeprecatedOutputFormat pins that the runtime-owned
-// output_format key warns rather than failing the load.
-func TestDiagnoseBeeParamsFlagsDeprecatedOutputFormat(t *testing.T) {
+// TestDiagnoseBeeParamsFlagsRemovedOutputFormat pins the runtime-owned key's
+// removal sentence, which has no replacement to point at.
+func TestDiagnoseBeeParamsFlagsRemovedOutputFormat(t *testing.T) {
 	bees := map[string]colony.Bee{
 		"builder": {Role: "builder", Adapter: "cursor", Params: map[string]any{"output_format": "json"}},
 	}
 	warnings := colony.DiagnoseBeeParams(bees)
 	joined := strings.Join(warnings, "\n")
-	if !strings.Contains(joined, `bee "builder": params.output_format is deprecated; the runtime owns structured output`) {
-		t.Fatalf("missing output_format deprecation warning:\n%s", joined)
+	if !strings.Contains(joined, `bee "builder": params.output_format was removed (the runtime owns it now)`) {
+		t.Fatalf("missing output_format removal warning:\n%s", joined)
 	}
 }
 
-// TestValidateRunParamKeysAcceptsLegacyAliases pins the schema half of the open
-// window: every legacy key still loads (the removal is deferred one release)
-// and is advertised in the valid-key list, so a colony from the old surface is
-// not rejected.
-func TestValidateRunParamKeysAcceptsLegacyAliases(t *testing.T) {
-	for _, key := range []string{"trust", "force", "thinking", "provider", "output_format"} {
-		if err := colony.ValidateRunParamKeys(map[string]any{key: "x"}); err != nil {
-			t.Fatalf("params.%s should be accepted while the window is open, got %v", key, err)
+// TestValidateRunParamKeysRejectsRetiredAliases pins the schema half of the
+// closed window: every retired key fails load naming its replacement, so an
+// operator migrating from the previous release gets one edit rather than a
+// bare typo.
+func TestValidateRunParamKeysRejectsRetiredAliases(t *testing.T) {
+	want := map[string]string{
+		"trust":         "params.trust was removed; use params.yolo",
+		"force":         "params.force was removed; use params.yolo",
+		"thinking":      "params.thinking was removed; use params.reasoning",
+		"provider":      "params.provider was removed; use params.model",
+		"output_format": "params.output_format was removed (the runtime owns it now)",
+	}
+	for key, sentence := range want {
+		err := colony.ValidateRunParamKeys(map[string]any{key: "x"})
+		if err == nil {
+			t.Fatalf("params.%s should be rejected after the removal", key)
 		}
+		if !strings.Contains(err.Error(), sentence) {
+			t.Fatalf("params.%s error = %v, want %q", key, err, sentence)
+		}
+	}
+}
+
+// TestDoctorMatchesStrictLoadWording pins that doctor and the strict loader use
+// the same removal sentence: a fix read from one applies to the other, and the
+// two surfaces cannot drift apart.
+func TestDoctorMatchesStrictLoadWording(t *testing.T) {
+	for key := range colony.RemovedRunParamKeys {
+		err := colony.ValidateRunParamKeys(map[string]any{key: "x"})
+		if err == nil {
+			t.Fatalf("params.%s should fail the strict load", key)
+		}
+		bees := map[string]colony.Bee{
+			"builder": {Role: "builder", Adapter: "cursor", Params: map[string]any{key: "x"}},
+		}
+		warnings := colony.DiagnoseBeeParams(bees)
+		if len(warnings) == 0 {
+			t.Fatalf("doctor reported nothing for params.%s", key)
+		}
+		want := " " + err.Error()
+		if i := strings.Index(want, " (valid keys:"); i >= 0 {
+			want = want[:i]
+		}
+		if !strings.HasSuffix(warnings[0], want) {
+			t.Fatalf("doctor %q does not carry the strict-load sentence %q", warnings[0], want)
+		}
+	}
+}
+
+// TestValidateRunParamKeysAcceptsSemanticKeys pins the surviving surface: the
+// semantic keys still load after the retired aliases left the schema.
+func TestValidateRunParamKeysAcceptsSemanticKeys(t *testing.T) {
+	params := map[string]any{
+		"binary":    "/usr/bin/agent",
+		"model":     "anthropic/claude-sonnet-4",
+		"yolo":      true,
+		"plan":      false,
+		"reasoning": "high",
+		"timeout":   "90s",
+	}
+	if err := colony.ValidateRunParams(params); err != nil {
+		t.Fatalf("semantic keys should load: %v", err)
 	}
 }
 
@@ -444,22 +488,26 @@ func TestValidateRunParamKeysRejectsUnknown(t *testing.T) {
 	}
 }
 
-// TestValidateRunParamKeysAcceptsOutputFormat pins that output_format is still
-// accepted for one release: the runtime owns structured output, so the key
-// loads, but doctor warns (see TestDiagnoseBeeParamsFlagsDeprecatedOutputFormat).
-func TestValidateRunParamKeysAcceptsOutputFormat(t *testing.T) {
+// TestValidateRunParamKeysRejectsOutputFormat pins that output_format left the
+// valid set: it is neither accepted nor advertised, and its removal sentence
+// says the runtime owns the behavior now.
+func TestValidateRunParamKeysRejectsOutputFormat(t *testing.T) {
 	err := colony.ValidateRunParamKeys(map[string]any{"output_format": "json"})
-	if err != nil {
-		t.Fatalf("output_format should be accepted while the window is open: %v", err)
+	if err == nil {
+		t.Fatal("output_format should be rejected after the removal")
 	}
-	if !strings.Contains(strings.Join(colony.RunParamKeys, ", "), "output_format") {
-		t.Fatalf("output_format should be advertised in the valid-key list: %v", colony.RunParamKeys)
+	if !strings.Contains(err.Error(), "params.output_format was removed (the runtime owns it now)") {
+		t.Fatalf("err = %v, want the runtime-owned sentence", err)
+	}
+	if strings.Contains(strings.Join(colony.RunParamKeys, ", "), "output_format") {
+		t.Fatalf("output_format should not be advertised: %v", colony.RunParamKeys)
 	}
 }
 
-// TestLoadBeeAcceptsLegacyParams pins the schema half of the open window: a bee
-// that still carries any legacy key loads without error.
-func TestLoadBeeAcceptsLegacyParams(t *testing.T) {
+// TestLoadBeeRejectsRetiredParams pins the schema half of the closed window: a
+// bee that still carries any retired key fails load, and the error names the
+// replacement for each so the migration is one edit.
+func TestLoadBeeRejectsRetiredParams(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".paseka", "bees")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -469,14 +517,27 @@ func TestLoadBeeAcceptsLegacyParams(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "builder.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := colony.LoadBee(root, "builder"); err != nil {
-		t.Fatalf("legacy keys should load while the window is open: %v", err)
+	_, _, err := colony.LoadBee(root, "builder")
+	if err == nil {
+		t.Fatal("retired keys must fail load after the removal")
+	}
+	for _, want := range []string{
+		"params.trust was removed; use params.yolo",
+		"params.force was removed; use params.yolo",
+		"params.thinking was removed; use params.reasoning",
+		"params.provider was removed; use params.model",
+		"params.output_format was removed (the runtime owns it now)",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %v, missing %q", err, want)
+		}
 	}
 }
 
-// TestDiagnosisLoaderToleratesLegacyAlias pins the doctor half: the diagnosis
-// loader sees a bee with a legacy key and DiagnoseBeeParams names the migration.
-func TestDiagnosisLoaderToleratesLegacyAlias(t *testing.T) {
+// TestDiagnosisLoaderReportsRetiredAlias pins the doctor half: the diagnosis
+// loader still loads the bee leniently so one leftover key does not hide every
+// other finding, and DiagnoseBeeParams names the removal and the replacement.
+func TestDiagnosisLoaderReportsRetiredAlias(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".paseka", "bees")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -488,10 +549,10 @@ func TestDiagnosisLoaderToleratesLegacyAlias(t *testing.T) {
 	}
 	bees, err := colony.LoadAllBeesForDiagnosis(root)
 	if err != nil {
-		t.Fatalf("diagnosis load should tolerate a legacy key: %v", err)
+		t.Fatalf("diagnosis load should tolerate a retired key: %v", err)
 	}
 	warnings := strings.Join(colony.DiagnoseBeeParams(bees), "\n")
-	if !strings.Contains(warnings, `params.trust is deprecated; use params.yolo`) {
+	if !strings.Contains(warnings, `params.trust was removed; use params.yolo`) {
 		t.Fatalf("doctor did not flag the leftover:\n%s", warnings)
 	}
 }

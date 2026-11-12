@@ -43,7 +43,7 @@ func (b Bee) NonDefaultParamKeys() []string {
 
 func isDefaultParamValue(key string, value any) bool {
 	switch key {
-	case "trust", "force", "yolo":
+	case "yolo":
 		b, ok := value.(bool)
 		return ok && b
 	case "plan":
@@ -85,24 +85,19 @@ var RunParamKeys = []string{
 	"binary",
 	"env",
 	"env_mode",
-	"force",
 	"model",
 	"options",
-	"output_format",
 	"plan",
-	"provider",
 	"reasoning",
-	"thinking",
 	"timeout",
-	"trust",
 	"yolo",
 }
 
-// RemovedRunParamKeys is the list the *next* release removes: the legacy keys
-// the deprecation window still carries, with the semantic replacement for each.
-// The window is open for one full release, so these keys remain in
-// RunParamKeys and load without error; doctor warns so operators migrate before
-// removal. An empty replacement means the key is dropped outright (the runtime
+// RemovedRunParamKeys is the list of retired keys, with the semantic
+// replacement for each. They loaded for one full release as deprecated and are
+// now out of the valid set, so a colony still carrying one fails at load (and
+// `paseka doctor` reports it) with this migration sentence rather than a bare
+// typo. An empty replacement means the key was dropped outright (the runtime
 // owns the behavior now).
 var RemovedRunParamKeys = map[string]string{
 	"trust":         "yolo",
@@ -170,11 +165,9 @@ func ValidateRunParamValues(params map[string]any) error {
 // ValidateRunParamKeys rejects any key outside RunParamKeys and names the valid
 // set. It is applied to bee `params` and to profile `params` at load time.
 //
-// While the deprecation window is open the legacy keys are members of
-// RunParamKeys, so they load without error; the RemovedRunParamKeys branch below
-// is inert until the next release moves them out of the valid set, at which
-// point a leftover key is reported with its replacement rather than as a bare
-// typo.
+// A key in RemovedRunParamKeys is reported with its replacement rather than as
+// a bare typo, so a colony still carrying a retired key gets the one-edit
+// migration instead of "unknown params key".
 func ValidateRunParamKeys(params map[string]any) error {
 	if len(params) == 0 {
 		return nil
@@ -215,13 +208,19 @@ func ValidateRunParamKeys(params map[string]any) error {
 func removedParamMessage(keys []string) string {
 	msgs := make([]string, 0, len(keys))
 	for _, key := range keys {
-		if repl := RemovedRunParamKeys[key]; repl != "" {
-			msgs = append(msgs, fmt.Sprintf("params.%s was removed; use params.%s", key, repl))
-			continue
-		}
-		msgs = append(msgs, fmt.Sprintf("params.%s was removed (the runtime owns it now)", key))
+		msgs = append(msgs, removedParamSentence(key))
 	}
 	return strings.Join(msgs, "; ")
+}
+
+// removedParamSentence is the one migration sentence for a retired key. The
+// strict loader and `paseka doctor` both render it, so an operator reads the
+// same words whether the colony fails to load or doctor reports the leftover.
+func removedParamSentence(key string) string {
+	if repl := RemovedRunParamKeys[key]; repl != "" {
+		return fmt.Sprintf("params.%s was removed; use params.%s", key, repl)
+	}
+	return fmt.Sprintf("params.%s was removed (the runtime owns it now)", key)
 }
 
 func isRemovedRunParamKey(key string) bool {
@@ -281,18 +280,7 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Model = v
 		declared["model"] = true
 	}
-	// trust/force are the legacy one-release aliases for yolo.
-	if v, ok := boolParam(b.Params, "trust"); ok {
-		p.Trust = v
-		declared["trust"] = true
-	}
-	if v, ok := boolParam(b.Params, "force"); ok {
-		p.Force = v
-		declared["force"] = true
-	}
-	// yolo is the semantic collapse of trust/force and wins when both appear:
-	// the legacy keys are the deprecation fallback, not the other way around.
-	// It drives both the trust and force flags the adapters still take, and
+	// yolo drives both the trust and force flags the adapters still take, and
 	// the declared set records trust/force, which is the pair the merge and
 	// attribution work in.
 	if v, ok := boolParam(b.Params, "yolo"); ok {
@@ -309,24 +297,10 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		p.Binary = v
 		declared["binary"] = true
 	}
-	if v, ok := stringParam(b.Params, "provider"); ok {
-		p.Provider = v
-		declared["provider"] = true
-	}
-	// reasoning is the semantic key; thinking is a one-release deprecation
-	// alias for it. reasoning wins when both appear.
 	if v, ok := stringParam(b.Params, "reasoning"); ok {
 		p.Reasoning = v
 		declared["reasoning"] = true
 	}
-	if v, ok := stringParam(b.Params, "thinking"); ok {
-		if !declared["reasoning"] {
-			p.Reasoning = v
-			declared["reasoning"] = true
-		}
-	}
-	// output_format is accepted and ignored: the runtime owns structured output,
-	// so the legacy key never reaches RunParams and declares nothing.
 	if v, ok := envParam(b.Params, "env"); ok {
 		p.Env = v
 		declared["env"] = true
@@ -362,9 +336,6 @@ func MergeRunParamsLayers(base, over adapters.RunParamsLayer) adapters.RunParams
 	declared := over.Declared
 	if declared["model"] {
 		out.Model = over.Params.Model
-	}
-	if declared["provider"] {
-		out.Provider = over.Params.Provider
 	}
 	if declared["reasoning"] {
 		out.Reasoning = over.Params.Reasoning
