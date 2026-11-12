@@ -80,14 +80,6 @@ Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.m
 
 ### Adapter launch resolution
 
-#### Remove the legacy params aliases after a release ships with them deprecated
-
-- **Kind:** follow-up
-- **Source:** guard review of `011-deprecation-cleanup-docs` (spec 038 Phase 8)
-- **Summary:** Phase 8 keeps `trust`, `force`, `thinking`, `provider`, and `output_format` in the bee `params` schema for one full release so an operator upgrading from the previous release has a migration path — `paseka doctor` names the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). Once a release has shipped with the keys deprecated, remove them: move each out of `RunParamKeys` into `RemovedRunParamKeys` (`internal/colony/params.go`), drop the legacy mappings in `LayerFromBee`, the `provider` fold in `launch.MapModel`, and the deprecation warnings in `params_diagnose.go`. The `ValidateRunParamKeys` removed-key branch then names the replacement instead of failing as a bare typo.
-- **Why deferred:** Release-gated by design — the aliases must survive one full release before removal, or an operator goes straight from "these keys work" to "the colony fails to load" with no released warning. v0.6.0 deprecated them and v0.7.0 shipped with them still working, so the migration window is spent: the removal belongs to the release after v0.7.0.
-- **Revisit when:** The next release after v0.7.0 is being cut.
-
 #### Project the recorded model alias into the console and exports
 
 - **Kind:** follow-up

@@ -2,6 +2,17 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — The retired `params` aliases now fail load instead of loading quietly
+
+`v0.6.0` deprecated five bee `params` keys and `v0.7.0` shipped with them still working, so the migration window is spent. `trust`, `force`, `thinking`, `provider`, and `output_format` are no longer valid keys: a bee or profile that still declares one fails load, and `paseka doctor` reports it, both naming the replacement in one sentence.
+
+- **One sentence on both surfaces.** Strict load and doctor render `params.trust was removed; use params.yolo` (and `params.output_format was removed (the runtime owns it now)`), so the fix read in a failing run applies verbatim to `doctor`.
+- **What survives.** `yolo` still drives the internal trust/force pair the adapters take and still merges tri-state across bee, profile, and machine layers. `reasoning`, `model`, and the rest of the semantic surface are unchanged, and pi still receives `--provider` derived from a `vendor/model` id; a separate provider key no longer participates in the mapping.
+- **Breaking:** a colony that has not migrated fails to load until each retired key is replaced (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → drop it, the runtime owns structured output).
+
+- Spec: [038-adapter-launch-resolution](../specs/038-adapter-launch-resolution.md)
+- Canonical: [Bee config](../guide/bee-config.md), [Adapter launch resolution](../reference/adapter-launch-resolution.md)
+
 ## 2026-11 — The machine-local registry is written atomically and under one lock
 
 `~/.config/paseka/<slug>/state.json` is shared by the console, `paseka run`, and CLI commands. Two defects met there: the file was replaced by truncate-then-write, so a concurrent reader could parse an empty or half-written file, and most mutators read and wrote without the lock the runtime registry already used, so a heartbeat or session registration could drop a worktree entry.

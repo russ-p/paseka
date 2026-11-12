@@ -137,12 +137,12 @@ func TestAttributionNamesTheWinningLayerPerField(t *testing.T) {
 			wantLayer: launch.LayerBee,
 		},
 		{
-			name:      "deprecated thinking reports as a bee reasoning declaration",
+			name:      "retired thinking declares no reasoning",
 			bee:       beeWith(map[string]any{"thinking": "high"}),
 			extra:     extraWith(map[string]bool{}, adapters.RunParams{}),
 			field:     launch.FieldReasoning,
-			wantValue: "high",
-			wantLayer: launch.LayerBee,
+			wantValue: "-",
+			wantLayer: launch.LayerDefault,
 		},
 		{
 			name:      "machine timeout is attributed to the machine",
@@ -181,6 +181,18 @@ func TestAttributionReportsEveryFieldWithALayer(t *testing.T) {
 	for _, f := range fields {
 		if f.Layer == "" {
 			t.Fatalf("field %q has no layer", f.Field)
+		}
+	}
+}
+
+// `provider` left the attribution surface with its params key: the vendor is
+// derived from the model id, so a separate provider field would claim a source
+// that no file can set.
+func TestAttributionHasNoProviderField(t *testing.T) {
+	plan := resolveForAttribution(t, beeWith(nil), extraWith(map[string]bool{}, adapters.RunParams{}), nil)
+	for _, f := range plan.Attribution() {
+		if f.Field == "provider" {
+			t.Fatalf("provider must not be an attribution field: %+v", plan.Attribution())
 		}
 	}
 }

@@ -76,7 +76,7 @@ Bee-visible `params` carry **only colony-level decisions**; vendor flags are the
 
 Unknown keys fail at load time with the valid-key list (`ValidateRunParams`), so typos stop being silent no-ops. `LayerFromBee` maps the block and records the declared set so merging and attribution stay tri-state (`yolo` drives the internal `trust`/`force` pair the adapters still take).
 
-**Legacy keys are accepted for one release (deprecated, not removed).** `trust`/`force` alias `yolo`, `thinking` aliases `reasoning`, `provider` folds into the model id as `X/Y`, and `output_format` is accepted and ignored (the runtime owns structured output). A bee or profile that declares one loads; `paseka doctor` names the replacement so the migration is one edit. Removal is deferred to the next release — see [backlog](../plans/backlog.md#remove-the-legacy-params-aliases-after-a-release-ships-with-them-deprecated).
+**Legacy keys are removed.** `trust`/`force` (use `yolo`), `thinking` (use `reasoning`), `provider` (put the vendor in `model` as `<vendor>/<model>`), and `output_format` (runtime-owned) shipped deprecated for one full release and are now out of the valid set: a bee or profile that declares one fails strict load naming the replacement (`params.trust was removed; use params.yolo`), and `paseka doctor` reports the same sentence for a leftover key. `RemovedRunParamKeys` holds the retired keys and their replacements.
 
 **Runtime-owned output format.** The runtime always requests each adapter's structured mode, because usage, `providerSessionId`, and summary normalization are parsed from it:
 
@@ -89,13 +89,13 @@ Unknown keys fail at load time with the valid-key list (`ValidateRunParams`), so
 
 Debugging escape hatch: `paseka bee run --raw` (per invocation, never committed). When `--raw` costs a runtime feature — cursor loses `usage`/`providerSessionId`, session tracking degrades — the run log says so.
 
-**Migration window is open.** `trust`, `force`, `thinking`, `provider`, and `output_format` still load, deprecated for one release. `paseka doctor` reports each as a deprecation warning naming the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). The keys are slated for removal in the next release, after one ships with them deprecated; `RemovedRunParamKeys` holds that removal list and its `ValidateRunParamKeys` branch only fires once the keys leave the valid set.
+**Migration window is closed.** `trust`, `force`, `thinking`, `provider`, and `output_format` shipped deprecated for one full release and are now removed from the valid set. A colony that still declares one fails at load, and both the load error and `paseka doctor` render one sentence naming the replacement (`trust`/`force` → `yolo`, `thinking` → `reasoning`, `provider` → fold the vendor into `model`, `output_format` → runtime-owned). `RemovedRunParamKeys` keeps the retired keys so that sentence exists; `RunParamKeys` no longer lists them.
 
 **Attribution** is kept: `ResolveLaunch` returns which layer set each field, driving `paseka doctor --explain <bee>` and the Console adapter panel.
 
 ### Provider lives in the model id
 
-`provider` is the deprecated legacy key (accepted for one release); the vendor belongs in the model id. Provider and model are one atomic pair — switching vendor while keeping the id produces a broken combination — so the vendor moves into the alias value:
+`provider` is a removed legacy key: the vendor belongs in the model id. Provider and model are one atomic pair — switching vendor while keeping the id produces a broken combination — so the vendor moves into the alias value:
 
 - Alias values are full ids: `high: anthropic/claude-sonnet-4`, `small: openai/gpt-5.5` (`colony.yaml` / home / profile `model_aliases`). A bare id without `/` (`composer-2.5`) stays valid — no provider.
 - `launch.MapModel` (`internal/launch/modelid.go`) maps the resolved id per adapter: cursor/claude pass it through; opencode consumes `provider/model` natively; **pi splits at the first `/`** → `--provider <vendor> --model <rest>`, where the rest keeps inner slashes and colon suffixes.
@@ -178,7 +178,7 @@ Logs redact argv and the plan's `RedactedEnv` keys (`adapters/log.go`); the Cons
 | Provider | vendor lives in the model id (`vendor/model[:suffix]`); pi splits the first `/` (rest keeps suffixes), others pass through |
 | OpenCode majors | `opencode` detects and delegates; `opencodev1` / `opencodev2` pin a major; detection is cached and fail-closed |
 | Booleans | one semantic bool (`yolo`), tri-state across layers |
-| Unknown params | error at load with the valid-key list; legacy keys load with a deprecation warning |
+| Unknown params | error at load with the valid-key list; a retired key errors naming its replacement, which `doctor` repeats |
 | `command` + params | error unless params are defaults (timeout exempt) |
 | Env | assembled plan, declared pass-through, credentials recorded for redaction |
 | Timeout | opt-in `params.timeout` on AFK runs |
