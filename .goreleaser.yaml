@@ -2,7 +2,7 @@ version: 2
 
 before:
   hooks:
-    # The Queen Console Next bundle is a build artifact and is not committed, so
+    # The Queen Console bundle is a build artifact and is not committed, so
     # it must exist before any Go compile or the embed carries only the fallback.
     - pnpm --dir web install --frozen-lockfile
     - pnpm --dir web build

@@ -3,9 +3,9 @@
 # Build from repo root:
 #   docker build -f docker/dev/Dockerfile -t paseka-dev:local .
 #
-# The Queen Console Next bundle is a build artifact, not a committed file, so the
+# The Queen Console bundle is a build artifact, not a committed file, so the
 # web-builder stage below produces it inside the image before Go compiles. Nothing
-# from the host's internal/console/next/dist reaches the Go stage (.dockerignore).
+# from the host's internal/console/ui/dist reaches the Go stage (.dockerignore).
 
 ARG GO_VERSION=1.25.0
 ARG UBUNTU_VERSION=24.04
@@ -64,7 +64,7 @@ COPY . .
 # The only source of the embed tree: the bundle built above. The checked-in
 # fallback is all a build without it would have, so a missing one is a build error
 # rather than a silently legacy-only binary.
-COPY --from=web-builder /src/internal/console/next/dist ./internal/console/next/dist
+COPY --from=web-builder /src/internal/console/ui/dist ./internal/console/ui/dist
 # An empty stamp is left off the link rather than written as an empty string, so
 # the binary reads as unstamped instead of as a build with a blank version.
 RUN set -eu; \

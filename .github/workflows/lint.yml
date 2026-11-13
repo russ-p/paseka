@@ -27,8 +27,8 @@ jobs:
           version: v2.15
           args: --timeout=5m
 
-      # The console preview bundle is not committed, so this job is also the one
-      # that proves a source-only `go build` compiles and serves next/fallback.html
+      # The console bundle is not committed, so this job is also the one
+      # that proves a source-only `go build` compiles and serves ui/fallback.html
       # — the state `go install` ships.
       - name: Test console routes without a frontend build
         run: go test ./internal/console/...
@@ -61,8 +61,8 @@ jobs:
 
       # The bundle the previous step produced is what a release build embeds;
       # compiling Go here is the check that the two halves still meet.
-      - name: Build binary with the preview bundle
+      - name: Build binary with the console bundle
         run: go build -o "$RUNNER_TEMP/paseka" ./cmd/paseka
 
-      - name: Test console routes with the preview bundle
+      - name: Test console routes with the console bundle
         run: go test ./internal/console/...

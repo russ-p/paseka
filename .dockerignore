@@ -13,9 +13,9 @@ docs
 **/node_modules
 **/.svelte-kit
 web/build
-# Queen Console Next bundle: built by the Dockerfile's web-builder stage, so a
+# Queen Console bundle: built by the Dockerfile's web-builder stage, so a
 # stale local one must not reach the Go stage.
-internal/console/next/dist
+internal/console/ui/dist
 *.exe
 .env
 docker/dev/.env

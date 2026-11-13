@@ -8,7 +8,7 @@ import { loadEnv } from 'vite';
 // The console is served at the root, so the base is empty: menu entries, detail
 // links, landing redirects, and `_app` assets are all root-relative.
 const basePath = '';
-const outputPath = '../internal/console/next/dist';
+const outputPath = '../internal/console/ui/dist';
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, '.', '');

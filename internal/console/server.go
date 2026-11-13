@@ -118,8 +118,8 @@ func NewServer(opts Options) *Server {
 	// same handler until the permanent redirect lands, so an intermediate commit is
 	// never console-less; it is one UI, not two.
 	mux.Handle("/next", http.RedirectHandler("/next/", http.StatusPermanentRedirect))
-	mux.Handle("/next/", consoleSPAHandler(nextFiles, nextConsoleBasePath))
-	mux.Handle("/", consoleSPAHandler(nextFiles, "/"))
+	mux.Handle("/next/", consoleSPAHandler(uiFiles, nextConsoleBasePath))
+	mux.Handle("/", consoleSPAHandler(uiFiles, "/"))
 
 	s.http = &http.Server{
 		Addr:              addr,
@@ -200,11 +200,11 @@ const nextConsoleBasePath = "/next/"
 // looking like a broken page. The API prefix is left to the API and never answered
 // with console HTML.
 func consoleSPAHandler(consoleFiles fs.FS, prefix string) http.Handler {
-	distFS, err := fs.Sub(consoleFiles, "next/dist")
+	distFS, err := fs.Sub(consoleFiles, "ui/dist")
 	if err != nil {
 		panic(fmt.Sprintf("prepare console assets: %v", err))
 	}
-	fallbackHTML, err := fs.ReadFile(consoleFiles, "next/fallback.html")
+	fallbackHTML, err := fs.ReadFile(consoleFiles, "ui/fallback.html")
 	if err != nil {
 		panic(fmt.Sprintf("read console fallback: %v", err))
 	}

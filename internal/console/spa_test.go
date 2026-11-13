@@ -17,18 +17,18 @@ import (
 func builtConsoleTree(t *testing.T) fs.FS {
 	t.Helper()
 	return fstest.MapFS{
-		"next/fallback.html": &fstest.MapFile{Data: []byte(fallbackPage(t))},
-		"next/dist/200.html": &fstest.MapFile{Data: []byte(entryPage)},
-		"next/dist/_app/start.js": &fstest.MapFile{
+		"ui/fallback.html": &fstest.MapFile{Data: []byte(fallbackPage(t))},
+		"ui/dist/200.html": &fstest.MapFile{Data: []byte(entryPage)},
+		"ui/dist/_app/start.js": &fstest.MapFile{
 			Data: []byte(`console.start()`),
 		},
-		"next/dist/favicon.svg": &fstest.MapFile{
+		"ui/dist/favicon.svg": &fstest.MapFile{
 			Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`),
 		},
-		"next/dist/favicon.ico": &fstest.MapFile{
+		"ui/dist/favicon.ico": &fstest.MapFile{
 			Data: []byte("\x00\x00\x01\x00"),
 		},
-		"next/dist/apple-touch-icon.png": &fstest.MapFile{
+		"ui/dist/apple-touch-icon.png": &fstest.MapFile{
 			Data: []byte("\x89PNG"),
 		},
 	}
@@ -187,7 +187,7 @@ func TestLegacyConsoleNoLongerAnswersTheRoot(t *testing.T) {
 
 func TestConsoleRootFallsBackWithoutGeneratedBundle(t *testing.T) {
 	files := fstest.MapFS{
-		"next/fallback.html": &fstest.MapFile{Data: []byte("<h1>Console fallback</h1>")},
+		"ui/fallback.html": &fstest.MapFile{Data: []byte("<h1>Console fallback</h1>")},
 	}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -205,7 +205,7 @@ func TestConsoleRootFallsBackWithoutGeneratedBundle(t *testing.T) {
 // A source-only build — a fresh clone, or any `go install` binary — has no
 // generated bundle, and the root must say how to get one rather than serving a
 // page that looks like a broken console or resurrecting the legacy UI. This runs
-// against the real embedded tree, whose `next/dist` is absent from a fresh clone,
+// against the real embedded tree, whose `ui/dist` is absent from a fresh clone,
 // so it is the handler's production path and not a fixture of it.
 func TestBuildlessConsoleExplainsTheMissingBundle(t *testing.T) {
 	tests := []struct {
@@ -270,15 +270,15 @@ func TestBuildlessConsoleExplainsTheMissingBundle(t *testing.T) {
 func buildlessConsoleTree(t *testing.T) fs.FS {
 	t.Helper()
 	return fstest.MapFS{
-		"next/fallback.html": &fstest.MapFile{Data: []byte(fallbackPage(t))},
+		"ui/fallback.html": &fstest.MapFile{Data: []byte(fallbackPage(t))},
 	}
 }
 
 func fallbackPage(t *testing.T) string {
 	t.Helper()
-	data, err := fs.ReadFile(nextFiles, "next/fallback.html")
+	data, err := fs.ReadFile(uiFiles, "ui/fallback.html")
 	if err != nil {
-		t.Fatalf("read next/fallback.html: %v", err)
+		t.Fatalf("read ui/fallback.html: %v", err)
 	}
 	return string(data)
 }
