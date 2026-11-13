@@ -337,4 +337,4 @@ A status missing from the table falls through to `neutral` — that is a deliber
 
 ## Scope
 
-This contract covers the **new** Svelte-based console. The current vanilla-js console under `internal/console/static/` is being replaced per Spec 035 and is out of scope for new features. Operator-facing behavior of the console lives in [docs/guide/queen-console.md](../guide/queen-console.md).
+This contract covers the Queen Console, the Svelte application served at the root. Operator-facing behavior of the console lives in [docs/guide/queen-console.md](../guide/queen-console.md).

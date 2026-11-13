@@ -645,19 +645,14 @@ rather than polling. Nothing here needs the Hive Runtime.
 - **Header plaques freeze behind a reverse proxy:** disable response buffering
   for `/api/chrome/stream` (the Console already sends `X-Accel-Buffering: no`).
 - **Topology, Sessions, or merge preview load as HTML / fail as JS after
-  `go install`:** third-party Console files are served from `/lib/...`
-  (not `/vendor/...`). Module zips omit any `/vendor/` path, so an older
-  binary can embed the SPA without those bundles. Rebuild or reinstall a
-  version that ships `static/lib`.
+  `go install`:** the console bundle is a build artifact, so a binary built
+  without the frontend step has no `_app` assets to serve. Run
+  `pnpm --dir web build` before `go build`, use a release archive, or use the
+  container image — all three build the frontend first.
 - **The version reads `dev` with no commit:** the binary was built outside a git
   checkout, so nothing stamped it. The Docker image is the usual case — its build
   context excludes `.git` — and takes the stamp as build args instead; see
   [homelab deployment](homelab-deployment.md) and `docker/dev/.env.example`.
-- **`/next/` says the preview bundle was not built:** the redesigned console is
-  a build artifact and is not committed, and `go install` never carries it. Run
-  `pnpm --dir web build` before `go build`, use a release archive, or use the
-  container image — all three build the frontend first. The legacy console at
-  `/` is unaffected.
 
 The implemented API and UI baseline is recorded in
 [Spec 002](../specs/002-queen-console-mvp.md). Header chrome streaming is

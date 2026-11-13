@@ -2,13 +2,6 @@ package console
 
 import "embed"
 
-// Console SPA assets. Third-party files live under static/lib, not static/vendor:
-// module zips omit any path containing "/vendor/" (golang.org/x/mod/zip), so
-// go install would ship a binary whose SPA requests then miss those files.
-//
-//go:embed static/*
-var staticFiles embed.FS
-
 // Queen Console bundle. The production bundle under ui/dist is a build
 // artifact and is not committed, so a source-only `go build` embeds this tree as
 // it stands — ui/fallback.html and nothing else — and the console answers the

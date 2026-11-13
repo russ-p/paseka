@@ -36,7 +36,7 @@ func builtConsoleTree(t *testing.T) fs.FS {
 
 // entryPage is the SvelteKit static adapter's single-page entry, reduced to the
 // facts a route test can name: the product title, the mount point, the root
-// asset references, and the icon set the legacy shell used to declare.
+// asset references, and the icon set the console declares.
 const entryPage = `<!doctype html>
 <html lang="en">
 <head>
@@ -160,23 +160,6 @@ func TestConsoleServesTheBundleAtRoot(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// The legacy root handler stops answering `/`: its files stay on disk for the
-// deletion slice, but the root now belongs to the console. A source-only build
-// serves the buildless fallback there instead of the old console.
-func TestLegacyConsoleNoLongerAnswersTheRoot(t *testing.T) {
-	server := NewServer(Options{})
-
-	recorder := httptest.NewRecorder()
-	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
-	if strings.Contains(recorder.Body.String(), `id="tab-dashboard"`) {
-		t.Fatal("the legacy console still answers /")
 	}
 }
 
