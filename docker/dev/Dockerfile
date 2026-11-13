@@ -20,6 +20,8 @@ WORKDIR /src/web
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml web/.npmrc ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY web/ ./
+# `pnpm build` runs web/scripts/check-console-bundle.sh, so the image cannot ship
+# a bundle that still carries the retired /next base path.
 RUN pnpm build
 
 # ── build paseka once into the image ──────────────────────────────────────────
