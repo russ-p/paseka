@@ -114,6 +114,15 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
 
+	// The JSON API owns its whole prefix, the bare form included. A path no
+	// endpoint claimed is answered as an API error instead of falling through to
+	// the console below, so a client that mistyped an endpoint never receives
+	// HTML it cannot parse. Both forms are registered because the bare prefix is
+	// not a subtree of itself: without the exact pattern the mux would redirect
+	// `/api` to `/api/` rather than answer it.
+	mux.HandleFunc("/api", apiNotFound)
+	mux.HandleFunc("/api/", apiNotFound)
+
 	// The Svelte console answers the root. The retired preview prefix is handled
 	// before the SPA fallback so it covers routes, assets, and deep links without
 	// any frontend logic; the root below is the only mount.
@@ -215,11 +224,22 @@ func retiredConsoleRedirect() http.Handler {
 	})
 }
 
+// apiNotFound is what a path under the JSON API prefix gets when no endpoint
+// claimed it, including the bare prefix itself. It is deliberately the same
+// plain-text, nosniff 404 the API handlers already answer an unknown id with:
+// a mistyped endpoint is an API failure, not a page, so a client routing on the
+// status or reading the reason keeps working. In particular it never carries
+// the console shell.
+func apiNotFound(w http.ResponseWriter, r *http.Request) {
+	http.NotFound(w, r)
+}
+
 // consoleSPAHandler serves the embedded console bundle. It is the only console
 // route, mounted at the root. A path whose last segment has a file extension is
 // an asset request: a missing one is a real 404 rather than the app shell, which
-// keeps a missing script from looking like a broken page. The API prefix is left
-// to the API and never answered with console HTML.
+// keeps a missing script from looking like a broken page. The JSON API is not
+// this handler's business: the mux answers `/api` and `/api/` first, so no API
+// path is ever answered with console HTML here.
 func consoleSPAHandler(consoleFiles fs.FS) http.Handler {
 	distFS, err := fs.Sub(consoleFiles, "ui/dist")
 	if err != nil {
@@ -233,10 +253,6 @@ func consoleSPAHandler(consoleFiles fs.FS) http.Handler {
 	_, buildErr := fs.Stat(distFS, "200.html")
 	hasBuild := buildErr == nil
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
-			http.NotFound(w, r)
-			return
-		}
 		rel := strings.TrimPrefix(r.URL.Path, "/")
 		if hasBuild {
 			if rel == "" {

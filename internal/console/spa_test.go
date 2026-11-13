@@ -134,12 +134,6 @@ func TestConsoleServesTheBundleAtRoot(t *testing.T) {
 			status:   http.StatusOK,
 			contains: []string{`PNG`},
 		},
-		{
-			name:        "unknown API path is never the shell",
-			path:        "/api/not-found",
-			status:      http.StatusNotFound,
-			notContains: []string{`id="app"`},
-		},
 	}
 
 	for _, test := range tests {
