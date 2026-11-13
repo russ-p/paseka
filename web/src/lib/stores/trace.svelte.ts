@@ -61,7 +61,7 @@ function isNotYetStarted(error: unknown): boolean {
 }
 
 /**
- * One trace behind `/next/traces/:id`. The projection carries the summary, the
+ * One trace behind `/traces/:id`. The projection carries the summary, the
  * tasks, the runs, the worktree, and the last 20 events in one payload, so the
  * route makes a single request; the comb is a second endpoint and fails
  * independently — a trace with an unreadable comb still inspects its work.

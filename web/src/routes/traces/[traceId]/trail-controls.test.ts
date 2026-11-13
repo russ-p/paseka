@@ -195,7 +195,7 @@ describe('trail fork panel', () => {
 
 		expect(await screen.findByRole('link', { name: /Source trail trace-01a0bd6963faa14f/ })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01a0bd6963faa14f'
+			'/traces/trace-01a0bd6963faa14f'
 		);
 		expect(screen.getAllByText('patch').length).toBeGreaterThan(0);
 		expect(screen.getByText('guard.model: old -> new')).toBeInTheDocument();

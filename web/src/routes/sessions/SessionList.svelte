@@ -90,7 +90,7 @@
 </script>
 
 <svelte:head>
-	<title>Sessions · Queen Console Next</title>
+	<title>Sessions · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-4">

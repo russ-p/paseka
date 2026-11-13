@@ -42,7 +42,7 @@ describe('traces route', () => {
 		expect(screen.getByText('Trail 0')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'Trail 1' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01'
+			'/traces/trace-01'
 		);
 	});
 

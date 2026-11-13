@@ -2,7 +2,7 @@
 
 Minimal Ubuntu 24.04 image with:
 
-- prebuilt `paseka` (`/usr/local/bin/paseka`), including the Queen Console Next bundle
+- prebuilt `paseka` (`/usr/local/bin/paseka`), including the Queen Console bundle
 - Go toolchain (rebuild in-container if needed)
 - git
 - Cursor Agent CLI (`agent`)
@@ -37,10 +37,11 @@ docker compose run --rm --entrypoint bash paseka-dev -lc \
   'go build -o /home/dev/workspace/paseka ./cmd/paseka'
 ```
 
-That binary serves the legacy console at `/` only — the redesigned console at
-`/next/` is a gitignored build artifact, and the mounted repo does not carry it.
-Build it on the host with `pnpm --dir web build` first, or rebuild the image so
-its `web-builder` stage produces the bundle again.
+That binary carries no usable console — the bundle at `/` is a gitignored build
+artifact, and the mounted repo does not carry it, so the root answers with the
+page saying the bundle was not built. Build it on the host with
+`pnpm --dir web build` first, or rebuild the image so its `web-builder` stage
+produces the bundle again.
 
 Or rebuild the image so `/usr/local/bin/paseka` is refreshed.
 

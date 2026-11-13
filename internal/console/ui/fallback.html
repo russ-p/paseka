@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Queen Console Next</title>
+		<title>Queen Console</title>
 		<style>
 			body {
 				margin: 0;
@@ -49,22 +49,22 @@
 	</head>
 	<body>
 		<main>
-			<h1>Queen Console Next — preview bundle not built</h1>
+			<h1>Queen Console — console bundle not built</h1>
 			<p>
-				This <code>paseka</code> binary was compiled without the redesigned console. The
-				preview bundle is a build artifact and is not committed to the repository, so
-				<code>go install</code> never carries it — build the frontend first, then the Go
-				binary:
+				This <code>paseka</code> binary was compiled without the Queen Console bundle.
+				The bundle is a build artifact and is not committed to the repository, so
+				<code>go install</code> does not carry a usable console. Build the frontend
+				first, then the Go binary:
 			</p>
 			<pre><code>pnpm --dir web install --frozen-lockfile
 pnpm --dir web build
 go build -o paseka ./cmd/paseka</code></pre>
 			<p>
-				Release archives and the container image already do this. The legacy console at
-				<a href="/">/</a> is unaffected either way.
+				Release archives and the container image already build the frontend before the
+				Go binary, so the console they ship needs no extra step.
 			</p>
 			<p class="muted">
-				This page is served from <code>internal/console/next/fallback.html</code>.
+				This page is served from <code>internal/console/ui/fallback.html</code>.
 			</p>
 		</main>
 	</body>

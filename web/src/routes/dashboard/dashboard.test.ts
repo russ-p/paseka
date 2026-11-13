@@ -56,7 +56,7 @@ describe('dashboard route', () => {
 		// are listed on their own page and nothing else on the grid leads anywhere.
 		expect(within(worktrees as HTMLElement).getByRole('link')).toHaveAttribute(
 			'href',
-			'/next/worktrees'
+			'/worktrees'
 		);
 	});
 
@@ -277,7 +277,7 @@ describe('dashboard route', () => {
 
 		toasts.items[0].action?.onselect();
 
-		expect(goto).toHaveBeenCalledWith('/next/traces/trace-new');
+		expect(goto).toHaveBeenCalledWith('/traces/trace-new');
 	});
 
 	it('keeps the recent-trace list on the trace detail route', () => {
@@ -286,10 +286,10 @@ describe('dashboard route', () => {
 		);
 		render(Dashboard, { store, toasts });
 
-		expect(screen.getByRole('link', { name: 'All traces' })).toHaveAttribute('href', '/next/traces');
+		expect(screen.getByRole('link', { name: 'All traces' })).toHaveAttribute('href', '/traces');
 		expect(screen.getByRole('link', { name: 'Refactor the adapter seam' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01a0bd6963faa14f'
+			'/traces/trace-01a0bd6963faa14f'
 		);
 	});
 });

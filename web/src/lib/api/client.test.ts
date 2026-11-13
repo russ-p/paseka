@@ -46,8 +46,26 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Response): Retu
 	return mock;
 }
 
+/**
+ * The shell can be mounted under a base; the JSON API cannot. A deliberately
+ * non-root base makes that a test rather than a comment: a client that started
+ * joining `base` and `/api` would fail here instead of only in a browser, where
+ * the request would reach the console instead of the server.
+ */
+vi.mock('$app/paths', () => ({ base: '/console', assets: '/console' }));
+
 afterEach(() => {
 	vi.unstubAllGlobals();
+});
+
+describe('API root', () => {
+	it('never inherits the console base', async () => {
+		const mock = stubFetch(() => new Response('[]'));
+
+		await listTraces();
+
+		expect(mock).toHaveBeenCalledWith('/api/traces', undefined);
+	});
 });
 
 describe('ApiError', () => {
@@ -214,8 +232,8 @@ describe('config endpoint', () => {
 
 		await getConfig();
 
-		// The `/next` prefix belongs to frontend routes, never to the API, and this
-		// endpoint takes no parameters — a write would be a POST on the same path.
+		// The API is root-relative and has no console base, and this endpoint takes
+		// no parameters — a write would be a POST on the same path.
 		expect(mock).toHaveBeenCalledWith('/api/config', undefined);
 	});
 });

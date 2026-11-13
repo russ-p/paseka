@@ -32,11 +32,12 @@ pnpm --dir web build
 go build -o paseka ./cmd/paseka
 ```
 
-The Queen Console redesign is a SvelteKit app under `web/`, built into
-`internal/console/next/dist/` and embedded by the Go binary. Without that
-frontend build the binary still compiles, but `/next/` serves a placeholder
-instead of the new UI — which is also why `go install` does not carry the
-redesign. See [`web/README.md`](web/README.md) for the dev server and details.
+The Queen Console frontend is a SvelteKit app under `web/`, built into
+`internal/console/ui/dist/` and embedded by the Go binary at compile time.
+Without that frontend build the binary still compiles, but `/` serves a page
+saying the bundle was not built instead of the console — which is also why
+`go install` does not carry a usable console. See
+[`web/README.md`](web/README.md) for the dev server and details.
 
 3. Initialize the colony, authenticate the selected adapter, and start local
    NATS + JetStream:

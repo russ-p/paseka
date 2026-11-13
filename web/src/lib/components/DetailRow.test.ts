@@ -32,10 +32,10 @@ describe('DetailRow', () => {
 	});
 
 	it('links the title only when a destination surface exists', () => {
-		const { unmount } = render(DetailRowHarness, { href: '/next/tasks/task-a1' });
+		const { unmount } = render(DetailRowHarness, { href: '/tasks/task-a1' });
 		expect(screen.getByRole('link', { name: 'Prune implementation notes' })).toHaveAttribute(
 			'href',
-			'/next/tasks/task-a1'
+			'/tasks/task-a1'
 		);
 		unmount();
 

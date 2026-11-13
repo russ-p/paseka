@@ -105,7 +105,7 @@
 </script>
 
 <svelte:head>
-	<title>Skills · Queen Console Next</title>
+	<title>Skills · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-8">

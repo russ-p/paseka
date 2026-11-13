@@ -25,7 +25,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The colony skill store and the trails' proposals, behind `/next/skills`.
+ * The colony skill store and the trails' proposals, behind `/skills`.
  *
  * It does not poll, for the reason the Bees roster does not: the store is
  * committed configuration and the role lists that gate it live in committed bee

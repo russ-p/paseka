@@ -273,7 +273,7 @@ export function gitSyncLabel(git: GitPlaque | null): string {
 
 /**
  * Whether the badge leaves its success tone, and it answers the same question the word
- * does: is there something Fetch/Push/Pull on `/next/git` would do. A dirty tree is not
+ * does: is there something Fetch/Push/Pull on `/git` would do. A dirty tree is not
  * one of those things, and in this colony it is close to the resting state — a
  * `worktree: false` bee proposing on the root stages its edits and does not commit, and
  * a root proposal never merges on approve — so a tone that followed it would be lit for
@@ -1561,7 +1561,7 @@ export function beeNeedsTask(bee: Bee | null | undefined): boolean {
 /**
  * How many live adapter processes a bee holds, from the agents frame the topbar
  * already keeps. Joining here rather than reading `/api/agents` again is the
- * `/next/system` precedent: a read of a store this page does not own, which costs
+ * `/system` precedent: a read of a store this page does not own, which costs
  * no request and cannot disagree with the Live bees plaque.
  */
 export function beeLiveCount(items: AgentItem[] | undefined, role: string): number {

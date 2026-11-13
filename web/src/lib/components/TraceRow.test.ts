@@ -90,10 +90,10 @@ describe('TraceRow', () => {
 	});
 
 	it('links the title to a detail route only when one is given', () => {
-		const { unmount } = render(TraceRow, { trace: traceSummary(), href: '/next/traces/x' });
+		const { unmount } = render(TraceRow, { trace: traceSummary(), href: '/traces/x' });
 		expect(screen.getByRole('link', { name: 'Refactor the adapter seam' })).toHaveAttribute(
 			'href',
-			'/next/traces/x'
+			'/traces/x'
 		);
 		unmount();
 

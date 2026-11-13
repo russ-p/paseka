@@ -128,7 +128,7 @@ describe('git route', () => {
 		await waitFor(() => expect(screen.getByRole('heading', { name: 'Worktrees' })).toBeInTheDocument());
 
 		expect(screen.getByText(/2 isolated checkouts/)).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: 'Worktrees' })).toHaveAttribute('href', '/next/worktrees');
+		expect(screen.getByRole('link', { name: 'Worktrees' })).toHaveAttribute('href', '/worktrees');
 		// The table itself, and the destructive verb that goes with it, are the route's now.
 		expect(screen.queryByLabelText('Filter worktrees')).not.toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: 'Prune orphans' })).not.toBeInTheDocument();

@@ -87,7 +87,7 @@
 </script>
 
 <svelte:head>
-	<title>Worktrees · Queen Console Next</title>
+	<title>Worktrees · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

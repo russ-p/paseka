@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readListState, writeListState } from './list-state';
 
 function at(search: string): void {
-	window.history.replaceState(null, '', `/next/traces${search}`);
+	window.history.replaceState(null, '', `/traces${search}`);
 }
 
 describe('listState', () => {
@@ -53,10 +53,10 @@ describe('listState', () => {
 	});
 
 	it('leaves the path and the hash alone', () => {
-		window.history.replaceState(null, '', '/next/traces/x#events');
+		window.history.replaceState(null, '', '/traces/x#events');
 		writeListState({ q: 'scout', page: 0 });
 
-		expect(window.location.pathname).toBe('/next/traces/x');
+		expect(window.location.pathname).toBe('/traces/x');
 		expect(window.location.hash).toBe('#events');
 	});
 

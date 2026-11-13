@@ -105,7 +105,7 @@ describe('reviews queue', () => {
 		const row = within(screen.getByLabelText('Review queue')).getByText('Human review and merge');
 		expect(row.closest('tr')?.querySelector('a')).toHaveAttribute(
 			'href',
-			'/next/reviews/trace-01a0bd6963faa14f/_review'
+			'/reviews/trace-01a0bd6963faa14f/_review'
 		);
 	});
 
@@ -163,15 +163,15 @@ describe('review detail', () => {
 		const identity = await screen.findByLabelText('Proposal identity');
 		expect(within(identity).getByRole('link', { name: 'trace-01a0bd6963faa14f' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01a0bd6963faa14f'
+			'/traces/trace-01a0bd6963faa14f'
 		);
 		expect(screen.getByRole('link', { name: 'Task' })).toHaveAttribute(
 			'href',
-			'/next/tasks/trace-01a0bd6963faa14f/_review'
+			'/tasks/trace-01a0bd6963faa14f/_review'
 		);
 		expect(screen.getByRole('link', { name: 'Timeline' })).toHaveAttribute(
 			'href',
-			'/next/timeline?trace=trace-01a0bd6963faa14f'
+			'/timeline?trace=trace-01a0bd6963faa14f'
 		);
 	});
 
@@ -270,7 +270,7 @@ describe('review detail', () => {
 		const changes = await screen.findByText('Open merge preview');
 		expect(changes).toHaveAttribute(
 			'href',
-			'/next/reviews/trace-01a0bd6963faa14f/_review/preview'
+			'/reviews/trace-01a0bd6963faa14f/_review/preview'
 		);
 		expect(screen.getByText(/1 file changed/)).toBeInTheDocument();
 	});
@@ -328,7 +328,7 @@ describe('review detail', () => {
 		expect(await screen.findByText('Proposal not found')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'All reviews' })).toHaveAttribute(
 			'href',
-			'/next/reviews'
+			'/reviews'
 		);
 	});
 

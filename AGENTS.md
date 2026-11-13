@@ -62,7 +62,9 @@ The AFK builder's runtime gate ([`.paseka/bees/builder.yaml`](.paseka/bees/build
 
 ## After frontend changes
 
-The Queen Console Next bundle (`web/`) is a build artifact and is **not committed**: `pnpm --dir web build` writes it to `internal/console/next/dist/`, which the Go binary embeds at compile time. After changing anything under `web/`:
+The Queen Console bundle (`web/`) is a build artifact and is **not committed**:
+`pnpm --dir web build` writes it to `internal/console/ui/dist/`, which the Go
+binary embeds at compile time. After changing anything under `web/`:
 
 ```bash
 pnpm --dir web check
@@ -71,7 +73,13 @@ pnpm --dir web build
 go build -o paseka ./cmd/paseka
 ```
 
-A source-only `go build` still compiles and serves `internal/console/next/fallback.html` at `/next/`. Release archives (GoReleaser `before.hooks`) and `docker/dev/Dockerfile` (`web-builder` stage) run the frontend build themselves, so CI and the image never need a committed bundle. `go install` therefore does not carry the redesign and is not a supported path for it.
+A source-only `go build` still compiles and serves
+`internal/console/ui/fallback.html` at `/` — a page saying the bundle was not
+built, with the two-step build on it. Release archives (GoReleaser
+`before.hooks`) and `docker/dev/Dockerfile` (`web-builder` stage) run the
+frontend build themselves, so CI and the image never need a committed bundle.
+`go install` therefore does not carry a usable console and is not a supported
+path for it.
 
 `scripts/checks.sh` runs these three plus the Go checks, and decides from `git status` whether the UI half applies; `sh scripts/checks.sh` from any checkout checks that checkout. This is the same script the AFK gate runs.
 

@@ -398,7 +398,7 @@ describe('ReviewActions', () => {
 			expect(screen.getByText(/It does not start a rework task/)).toBeInTheDocument();
 			expect(screen.getByRole('link', { name: 'Request changes instead →' })).toHaveAttribute(
 				'href',
-				'/next/reviews/trace-01a0bd6963faa14f/_review/preview'
+				'/reviews/trace-01a0bd6963faa14f/_review/preview'
 			);
 			expect(screen.queryByLabelText('PR body')).not.toBeInTheDocument();
 		});

@@ -356,7 +356,7 @@ describe('agent CLIs block', () => {
 	it('keeps its filter out of the process table query', async () => {
 		// Two tables on one route means two URL namespaces: without one, typing here
 		// would overwrite the process filter an operator narrowed and shared.
-		window.history.replaceState(null, '', '/next/system');
+		window.history.replaceState(null, '', '/system');
 		const { store, status, adapters } = harness();
 		render(System, { store, status, adapters });
 		await waitFor(() => expect(screen.getByText('Memory')).toBeInTheDocument());

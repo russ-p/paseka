@@ -10,7 +10,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The Agent CLIs block's probe behind `/next/system`.
+ * The Agent CLIs block's probe behind `/system`.
  *
  * It is the console's one store that **does not read on mount**. The block is
  * folded, the probe execs four external binaries, and the server caches the

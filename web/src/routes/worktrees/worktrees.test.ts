@@ -98,7 +98,7 @@ describe('worktrees route', () => {
 		await waitFor(() =>
 			expect(screen.getByRole('link', { name: 'trace-01' })).toHaveAttribute(
 				'href',
-				'/next/traces/trace-01'
+				'/traces/trace-01'
 			)
 		);
 		const cells = cellsOf('paseka/orphan');
@@ -220,7 +220,7 @@ describe('worktrees route', () => {
 		await waitFor(() =>
 			expect(screen.getByText('No colony-managed worktrees.')).toBeInTheDocument()
 		);
-		expect(screen.queryByRole('link', { name: /\/next\/traces/ })).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: /\/traces/ })).not.toBeInTheDocument();
 	});
 
 	it('skeletons while the first read is in flight, and alerts when it fails', async () => {

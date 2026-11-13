@@ -6,10 +6,10 @@ import * as pageModule from './+page.ts';
 
 /**
  * The route module is two booleans, and they are the reason these two paths need a
- * test of their own at all: a deep link under the `/next` base is served by the
+ * test of their own at all: a deep link at the console root is served by the
  * static adapter's SPA fallback, which only resolves it if the route is neither
  * server-rendered nor prerendered. A `+page.svelte` that renders correctly in jsdom
- * says nothing about either, and a regression here breaks the preview build rather
+ * says nothing about either, and a regression here breaks the built console rather
  * than a screen.
  */
 vi.mock('$app/state', async () => {
@@ -96,15 +96,15 @@ describe('/reviews/:traceId/:taskId', () => {
 
 		expect(screen.getByRole('link', { name: 'Task' })).toHaveAttribute(
 			'href',
-			'/next/tasks/trace-deep-link/task-42'
+			'/tasks/trace-deep-link/task-42'
 		);
 		expect(screen.getByRole('link', { name: 'Timeline' })).toHaveAttribute(
 			'href',
-			'/next/timeline?trace=trace-deep-link'
+			'/timeline?trace=trace-deep-link'
 		);
 		expect(await screen.findByRole('link', { name: 'Open merge preview' })).toHaveAttribute(
 			'href',
-			'/next/reviews/trace-deep-link/task-42/preview'
+			'/reviews/trace-deep-link/task-42/preview'
 		);
 	});
 
@@ -151,6 +151,6 @@ describe('/reviews/:traceId/:taskId', () => {
 		const empty = screen.getByText('Proposal not found').closest('.card');
 		expect(empty).toHaveTextContent('task-gone');
 		expect(empty).toHaveTextContent('trace-gone');
-		expect(screen.getByRole('link', { name: 'All reviews' })).toHaveAttribute('href', '/next/reviews');
+		expect(screen.getByRole('link', { name: 'All reviews' })).toHaveAttribute('href', '/reviews');
 	});
 });

@@ -37,7 +37,7 @@
 	/**
 	 * Whether a bee is live is joined from the agents frame the topbar already
 	 * keeps, so the column costs no request and cannot disagree with the Live bees
-	 * plaque above it — the same read `/next/system` makes.
+	 * plaque above it — the same read `/system` makes.
 	 */
 	function liveCount(bee: Bee): number {
 		return beeLiveCount(status.agents?.items, bee.role);
@@ -124,7 +124,7 @@
 </script>
 
 <svelte:head>
-	<title>Bees · Queen Console Next</title>
+	<title>Bees · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

@@ -1,6 +1,6 @@
 # UI Migration Backlog
 
-Deferred UI decisions for the Queen Console redesign ([spec 035](../specs/035-queen-console-redesign.md)) — the dead ends, unbuilt transitions, and placeheld sections to return to while `/next/` is still a preview. Product and platform ideas belong in [Backlog](backlog.md); shipped work in [Changelog](changelog.md).
+Deferred UI decisions for the Queen Console redesign ([spec 035](../specs/035-queen-console-redesign.md)) — the dead ends, unbuilt transitions, and placeheld sections to return to from the console at `/`. Product and platform ideas belong in [Backlog](backlog.md); shipped work in [Changelog](changelog.md).
 
 Each item carries a **Kind**, a **Source**, what is pending, why it was set aside, and when to pick it up. Strike an item when the decision lands, not when it is discussed — a stale entry is worse than none. An item whose decision has landed but whose work has not goes to **Decided, not yet built**, which trades *what is pending* for the decision and what it was chosen over.
 
@@ -28,7 +28,7 @@ a fact for whoever curates the inventory rather than a promise an operator sees.
 
 - **Kind:** blocker
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Both row blocks are live. The run rows link to `/next/runs/:traceId/:agentId` and the task rows to `/next/tasks/:traceId/:taskId`, so the trail detail is the one place with no inert rows left, and it was a real target waiting rather than a nicety: a task row on a trail is how an operator walks from a trail to the work it produced.
+- **Summary:** Both row blocks are live. The run rows link to `/runs/:traceId/:agentId` and the task rows to `/tasks/:traceId/:taskId`, so the trail detail is the one place with no inert rows left, and it was a real target waiting rather than a nicety: a task row on a trail is how an operator walks from a trail to the work it produced.
 - **Why deferred:** A row that promises a destination and dead-ends is worse than a row that only shows state. The Dashboard set this precedent, the trail detail followed it, and Runs and Tasks have now landed so neither half of the block is mute.
 - **Revisit when:** Never. Tasks landed and the task rows link, which closes this; the run rows linked a route earlier. The precedent stands for any future list: a row that promises a destination and dead-ends is worse than one that only shows state, so a new column should link from its first commit rather than after a backlog item.
 
@@ -43,9 +43,9 @@ that needs a decision about what "back" and "last" mean rather than a mechanism.
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
-- **Summary:** All five detail routes render their back link as a plain link to the bare list path — `TraceDetail.svelte:130`, `RunDetail.svelte:47`, `TaskDetail.svelte:123`, `SessionDetail.svelte:154`, `ReviewDetail.svelte:118` — and none of them carries the list's query. `Escape` lands on the same bare path, because `owningListPath` resolves a list *root* and the list's `?q=&page=` is not part of one. So the failure this entry always described is now four routes wide and exactly reproducible: arrive from `/next/runs?page=3`, open a run, press `←`, and land on page one of an unfiltered list. **Traces no longer belongs to this item** — it is unpaged, so there is no page to lose; its `?q=` is the whole of what a back link would have to carry.
+- **Summary:** All five detail routes render their back link as a plain link to the bare list path — `TraceDetail.svelte:130`, `RunDetail.svelte:47`, `TaskDetail.svelte:123`, `SessionDetail.svelte:154`, `ReviewDetail.svelte:118` — and none of them carries the list's query. `Escape` lands on the same bare path, because `owningListPath` resolves a list *root* and the list's `?q=&page=` is not part of one. So the failure this entry always described is now four routes wide and exactly reproducible: arrive from `/runs?page=3`, open a run, press `←`, and land on page one of an unfiltered list. **Traces no longer belongs to this item** — it is unpaged, so there is no page to lose; its `?q=` is the whole of what a back link would have to carry.
 - **Why deferred:** The list's state being in the URL is what made this cheap — reproducing the operator's page is now a string, so the fix needs neither breadcrumbs nor a shared "last list query" module. The decision is still unmade, though, because `history.back()` is better in one case and worse in the other and this entry has always declined to pick. The narrow answer that serves both is to go back only when the previous history entry *is* the owning list and hard-link otherwise, which keeps a trail deep-linked from a chat landing on the list rather than out of the console.
-- **Revisit when:** An operator loses a page to a back link, or the root cutover lands — a back affordance that drops somebody on page one of a list they had narrowed is a first-impression bug, and `/` is still the legacy console.
+- **Revisit when:** An operator loses a page to a back link. The root cutover has landed and `/` is now the console, so a back affordance that drops somebody on page one of a list they had narrowed is a first-impression bug rather than a migration detail.
 
 #### Keyboard chords stop at the route root
 
@@ -61,13 +61,13 @@ that needs a decision about what "back" and "last" mean rather than a mechanism.
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #3)
 - **Summary:** User story #3 promises switching contexts "without losing scroll position". The half a list can keep by itself has shipped: `?q=&page=` is in the URL, so a table's page *is* its position. The other half has no home — SvelteKit scrolls to the top on a client-side navigation and nothing puts a reader back, and the pages the story is really about (the topology graph, a run's event log, a session transcript, a merge diff) are not paginated and have no URL to restore from.
 - **Why deferred:** Restoration is per surface, because each long page knows what "the same place" means for it: an offset for a transcript, a zoom and centre for the graph, a selected file for a diff. A blanket `history.scrollRestoration = 'manual'` plus a stored offset gets the scroll right and the open blocks wrong, and there is no page anybody has complained about yet.
-- **Revisit when:** The root cutover lands, and not before. `/` still serves the legacy console while `/next` redirects to the last menu root, so "I lost my place" becomes a first-impression bug the moment the preview *is* the console.
+- **Revisit when:** An operator loses their place on the console that now serves `/`, most likely on a long detail page they reload.
 
 #### The last route is never a trail detail
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** `rememberRoute` stores a path only when it is in `consoleRoutes` (`navigation.ts:143`), and `/next` redirects to it (`+page.ts:7`), so a trail, run, task, proposal, or session detail is never the landing page. A standing trail is the case this exists for, and it has become a path an operator *walks*: the cue toast's **Open trail** and the trail detail's own waiting notice make a cue a deliberate arrival rather than a link somebody pasted.
+- **Summary:** `rememberRoute` stores a path only when it is in `consoleRoutes` (`navigation.ts:143`), and `/` redirects to it (`+page.ts:7`), so a trail, run, task, proposal, or session detail is never the landing page. A standing trail is the case this exists for, and it has become a path an operator *walks*: the cue toast's **Open trail** and the trail detail's own waiting notice make a cue a deliberate arrival rather than a link somebody pasted.
 - **Why deferred:** Landing on a stale trail is worse than landing on the Dashboard, and a trail that finished while the console was closed is exactly that. This colony has no standing trail to decide with — `feature.yaml` and `hotfix.yaml` declare no `standingTrace`, so `cues.StandingTraceIDs` is empty and every trail's `Standing` flag is false. Deciding the landing rule for a case no operator here has would be a guess.
 - **Revisit when:** A cue in this colony declares `standingTrace`. The badge, the field, and the API all exist; only the decision is missing.
 
@@ -75,9 +75,9 @@ that needs a decision about what "back" and "last" mean rather than a mechanism.
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** None. Every route under `/next/` is migrated, so no page resolves to `PagePlaceholder` any more — the section is kept because the audit it tracks is the place a new placeheld surface would be recorded, and because two of the migrated routes arrived as a decision rather than a port and are worth finding again. Worktrees came as a split: the Git page's read-only table and its orphan prune moved to `/next/worktrees` together, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped from the inventory. Bees and Settings were both designed against a user story rather than against a tab, because the legacy console has neither.
+- **Summary:** None. Every console route is migrated, so no page resolves to `PagePlaceholder` any more — the section is kept because the audit it tracks is the place a new placeheld surface would be recorded, and because two of the migrated routes arrived as a decision rather than a port and are worth finding again. Worktrees came as a split: the Git page's read-only table and its orphan prune moved to `/worktrees` together, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped from the inventory. Bees and Settings were both designed against a user story rather than against a tab, because the legacy console has neither.
 - **Why deferred:** Nothing further is deferred here. The order was deliberate — the shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system was proven against real colony data before the rest depended on it, Git next because its page was the one whose actions were hardest to place well, System because it is the other read-mostly page whose format decisions every later list inherits, Timeline because it settled the feed-row contract and the folded-filter panel, Topology because it brought the first third-party imperative component and the one styling exception, Runs because it opened the Colony group and the first detail route that steps between siblings, Tasks because it closed the audit's other full-column form and was the first user of `Drawer`, and Reviews because it landed the audit's two named components.
-- **Revisit when:** A new surface needs a scope decision, or the root cutover is called.
+- **Revisit when:** A new surface needs a scope decision. The root cutover this entry also waited on has shipped — the console is served at `/` and no second UI remains — so a new surface is the only trigger left.
 
 ## Components the inventory promises
 
@@ -95,7 +95,7 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 - **Kind:** dropped
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
-- **Summary:** Proposed in the component inventory for `/next/bees`; never written, and now answered: the Bees route shipped as a `DataTable` and `BeeCard` is out of the inventory.
+- **Summary:** Proposed in the component inventory for `/bees`; never written, and now answered: the Bees route shipped as a `DataTable` and `BeeCard` is out of the inventory.
 - **Why dropped:** A bee row is one line of facts — a role, an adapter, a vocabulary, a workspace, a last run — which is the shape `DataTable` was built for, and a card per bee would give every row the same seven fields at three times the height. The same call `WorktreeCard` got.
 
 ## Polish on landed routes
@@ -112,7 +112,7 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Timeline migration)
-- **Summary:** `/next/timeline?trace=<id>` is a real deep link, but the other five filters live in the store and reset on reload, so `?type=VERIFICATION&bee=scout` cannot be shared or bookmarked.
+- **Summary:** `/timeline?trace=<id>` is a real deep link, but the other five filters live in the store and reset on reload, so `?type=VERIFICATION&bee=scout` cannot be shared or bookmarked.
 - **Why deferred:** The trace filter is the one that identifies *which trail* an operator is looking at, so it is a navigation target worth a URL. The rest are ad-hoc refinements, and mirroring them means the URL and the store are two sources of truth that must round-trip — including through every Back press.
 - **Revisit when:** Someone asks for a link to a filtered feed, or a run report wants to cite one. The fix is one `replaceState` per Apply plus reading the query back on entry, which is a small change once someone has asked for it.
 
@@ -178,9 +178,9 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Testing Decisions)
-- **Summary:** The spec commits to Playwright E2E (preview root → dashboard → traces filter → detail → comb modal → theme → reload) and to screenshot comparison on Dashboard, Traces list, and Settings. Playwright is not a dependency and neither suite exists. Coverage today is Vitest component and store tests plus Go route tests.
-- **Why deferred:** Vitest covers behaviour; it cannot catch a layout regression. The gap was accepted while the routes were still moving, and every layout decision since — the shared row, the `grow` column, the collapse defaults — was checked by hand in a browser rather than by a test.
-- **Revisit when:** The route set stops changing, or before the root cutover — a cutover with no visual guard is how a theme silently loses contrast.
+- **Summary:** The spec commits to Playwright E2E (root → dashboard → traces filter → detail → comb modal → theme → reload) and to screenshot comparison on Dashboard, Traces list, and Settings. Playwright is not a dependency and neither suite exists. Coverage today is Vitest component and store tests plus Go route tests, and the cutover's own manual browser pass — recorded in [Changelog](changelog.md) — is the closest thing to either suite.
+- **Why deferred:** Vitest covers behaviour; it cannot catch a layout regression. The gap was accepted while the routes were still moving, and every layout decision since — the shared row, the `grow` column, the collapse defaults — was checked by hand in a browser rather than by a test. The root cutover then shipped on that same manual pass plus the build-output guard, which catches a broken base path but not a layout or theme regression.
+- **Revisit when:** The next console change touches layout or theme. The route set has stopped changing and the cutover is recorded in [Changelog](changelog.md), so this entry no longer waits on either: the first visual change after the cutover is the first one with no automated guard behind it at all.
 
 #### No generated types from the Go contracts
 

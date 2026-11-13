@@ -107,7 +107,7 @@ describe('skills route', () => {
 
 		const table = proposalsTable();
 		const trailLink = within(cellOf(table, pending.trail, 'Trail')).getByRole('link');
-		expect(trailLink).toHaveAttribute('href', `/next/traces/${pending.trail}`);
+		expect(trailLink).toHaveAttribute('href', `/traces/${pending.trail}`);
 		expect(cellOf(table, pending.trail, 'Proposed')).toHaveTextContent(
 			/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
 		);

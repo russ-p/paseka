@@ -10,7 +10,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The colony topology behind `/next/topology`. It does not poll, like the event
+ * The colony topology behind `/topology`. It does not poll, like the event
  * feed: the projection is derived from committed bee YAML and colony
  * `auto_invites`, so it changes when a commit lands, not on a clock. Polling would
  * spend a filesystem walk and a YAML parse per operator for data that is static

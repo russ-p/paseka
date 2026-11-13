@@ -114,7 +114,7 @@ describe('DataTable', () => {
 describe('DataTable list state', () => {
 	/** The deep link an operator arrives on, which is the whole reason state is in the URL. */
 	function arriveAt(query: string): void {
-		window.history.replaceState(null, '', `/next/traces${query}`);
+		window.history.replaceState(null, '', `/traces${query}`);
 	}
 
 	function searchBox(): HTMLElement {
@@ -239,7 +239,7 @@ describe('DataTable list state', () => {
 
 	it('namespaces both params under a state key, so a second table cannot fight this one', async () => {
 		const user = userEvent.setup();
-		window.history.replaceState(null, '', '/next/runs?runs.q=guard&runs.page=1&q=ignored');
+		window.history.replaceState(null, '', '/runs?runs.q=guard&runs.page=1&q=ignored');
 		render(Table, {
 			columns,
 			rows,
@@ -277,7 +277,7 @@ describe('DataTable cell intents', () => {
 			label: 'Trace',
 			text: (trace) => tracePrimaryLabel(trace),
 			searchText: (trace) => `${trace.traceId} ${trace.standing ? 'standing' : ''}`,
-			href: (trace) => `/next/traces/${trace.traceId}`,
+			href: (trace) => `/traces/${trace.traceId}`,
 			badge: (trace) => (trace.standing ? { status: 'standing', label: 'standing' } : null),
 			grow: true
 		},
@@ -307,7 +307,7 @@ describe('DataTable cell intents', () => {
 
 		expect(screen.getByRole('link', { name: 'Alpha trail' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-a'
+			'/traces/trace-a'
 		);
 		expect(screen.getByText('standing')).toBeInTheDocument();
 		expect(screen.getByText('active')).toBeInTheDocument();
@@ -408,7 +408,7 @@ describe('DataTable conditional cells', () => {
 			key: 'trace',
 			label: 'Trace',
 			text: (row) => row.traceId || '—',
-			href: (row) => (row.traceId ? `/next/traces/${row.traceId}` : null)
+			href: (row) => (row.traceId ? `/traces/${row.traceId}` : null)
 		},
 		{
 			key: 'pr',
@@ -453,7 +453,7 @@ describe('DataTable conditional cells', () => {
 
 		expect(screen.getByRole('link', { name: 'trace-02' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-02'
+			'/traces/trace-02'
 		);
 		expect(screen.getByRole('link', { name: 'open' })).toHaveAttribute('href', 'https://example.test/2');
 	});

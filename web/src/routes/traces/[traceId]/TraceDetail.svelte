@@ -163,7 +163,7 @@
 </script>
 
 <svelte:head>
-	<title>{detail ? tracePrimaryLabel(detail) : 'Trace'} · Queen Console Next</title>
+	<title>{detail ? tracePrimaryLabel(detail) : 'Trace'} · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

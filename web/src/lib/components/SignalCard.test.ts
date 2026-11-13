@@ -22,11 +22,11 @@ describe('SignalCard', () => {
 	it('links the summary only when a target surface exists', () => {
 		const { unmount } = render(SignalCard, {
 			signal: insightHighlight(),
-			href: '/next/timeline'
+			href: '/timeline'
 		});
 		expect(
 			screen.getByRole('link', { name: 'The seam is now the only place that knows about providers.' })
-		).toHaveAttribute('href', '/next/timeline');
+		).toHaveAttribute('href', '/timeline');
 		unmount();
 
 		render(SignalCard, { signal: insightHighlight() });
@@ -81,12 +81,12 @@ describe('SignalCard feed rows', () => {
 	it('links the trace id rather than the headline when a trail target is known', () => {
 		render(SignalCard, {
 			signal: { ...eventFeedItem(), summary: 'A prose summary.' },
-			traceHref: '/next/traces/trace-01a0bd6963faa14f'
+			traceHref: '/traces/trace-01a0bd6963faa14f'
 		});
 
 		// Prose that reads as content, and an identifier that reads as clickable.
 		const link = screen.getByRole('link', { name: 'trace-01a0bd6963faa14f' });
-		expect(link).toHaveAttribute('href', '/next/traces/trace-01a0bd6963faa14f');
+		expect(link).toHaveAttribute('href', '/traces/trace-01a0bd6963faa14f');
 		expect(screen.getByText('A prose summary.').tagName).toBe('P');
 	});
 

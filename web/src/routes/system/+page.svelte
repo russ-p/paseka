@@ -124,7 +124,7 @@
 </script>
 
 <svelte:head>
-	<title>System · Queen Console Next</title>
+	<title>System · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">
@@ -283,7 +283,7 @@
 				// The processes table above keeps the default `?q=&page=`, so this one
 				// takes a namespace rather than letting two tables on one route fight
 				// over the same params — and rather than changing the links to
-				// `/next/system` an operator has already shared.
+				// `/system` an operator has already shared.
 				stateKey="agent-clis"
 				loading={adapters.loading && !adapters.probed}
 			/>

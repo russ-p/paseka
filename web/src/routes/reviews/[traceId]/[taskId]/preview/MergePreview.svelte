@@ -49,7 +49,7 @@
 </script>
 
 <svelte:head>
-	<title>Merge preview · Queen Console Next</title>
+	<title>Merge preview · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-4">

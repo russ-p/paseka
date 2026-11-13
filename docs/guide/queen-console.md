@@ -24,29 +24,36 @@ Queen Console does **not** enforce authentication. Keep it on localhost or a
 trusted private network. For a persistent container deployment, see
 [Homelab deployment](homelab-deployment.md).
 
-## Preview the redesign
+## One console at the root
 
-The Svelte-based Queen Console redesign is available at
-`http://127.0.0.1:8787/next/`. It is an in-progress preview; `/` continues to
-serve the legacy console until the redesign reaches feature parity and an
-explicit cutover. Both UIs use the same root-relative `/api/*` endpoints.
+Queen Console is served at `http://127.0.0.1:8787/`, and every route is a root
+path: `/dashboard`, `/traces`, `/traces/<traceId>`, `/timeline`, `/reviews`,
+`/settings`, and so on. There is no second console and no preview URL — the
+title, the shell, and the startup banner all name the product.
 
-The preview bundle is **not committed** — it is a build artifact the Go binary
-embeds at compile time. A binary built without it answers `/next/` with a
-"preview bundle not built" page and is otherwise identical. See
+`/next` and every path beneath it **permanently redirect** (308) to the same
+path at the root, query string included: an old `/next/traces/<traceId>?q=x`
+bookmark lands on `/traces/<traceId>?q=x`, and a browser tab still holding the
+retired shell resolves its cached `/next/_app/...` asset requests too. The
+redirect is a link-stability promise for addresses people already have, not a
+second mount point: there is no expiry and no way to switch back.
+
+The console bundle is **not committed** — it is a build artifact the Go binary
+embeds at compile time. A binary built without it answers every console route
+with a page saying the bundle was not built and how to build it, and answers a
+missing `_app` asset with 404 rather than the app shell, so a source-only
+`go install` carries no usable console. See
 [Queen Shell CLI reference](cli.md) for the two-step build, or
 [Rebuild `paseka` inside the container](homelab-deployment.md#rebuild-paseka-inside-the-container)
 for the container.
 
-The preview currently ships the shell (top status panel, side menu, theme
-switcher), the **Dashboard**, **Traces** (both the list and a trail's own detail
-page), **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and
-detail), **Tasks** (board and task detail), **Reviews** (queue, proposal, and
-merge preview), **Sessions** (list and session detail), **Worktrees**,
-**Bees**, **Skills**, and **Settings**. Every route under `/next/` is now
-migrated; a route
-that still renders a "migration pending" card is a bug. The legacy console at
-`/` remains the default until the redesign reaches an explicit cutover.
+The console ships the shell (top status panel, side menu, theme switcher), the
+**Dashboard**, **Traces** (both the list and a trail's own detail page),
+**Git**, **System**, **Timeline**, **Topology**, **Runs** (list and detail),
+**Tasks** (board and task detail), **Reviews** (queue, proposal, and merge
+preview), **Sessions** (list and session detail), **Worktrees**, **Bees**,
+**Skills**, and **Settings**. The JSON API stays root-relative at `/api/*`; it
+does not move with the shell.
 
 ## What requires the Hive Runtime
 
@@ -62,8 +69,8 @@ The Console process is separate from `paseka run`.
 
 ## Operator tour
 
-Every list under `/next/` — traces, runs, tasks, reviews, sessions, bees,
-worktrees, branches, adapters, processes — keeps its **filter in the URL**, as
+Every list — traces, runs, tasks, reviews, sessions, bees, worktrees,
+branches, adapters, processes — keeps its **filter in the URL**, as
 `?q=`, and most also keep their **page** there as `?page=`. Two things follow. A
 filtered list is a link you can paste to somebody, and **Back** from a trail,
 run, or task detail returns you to the view of the list you left rather than to
@@ -123,11 +130,11 @@ reviews, honey pressure, and other items that need beekeeper attention.
 Header plaques (Hive runtime, Live bees, Host, Git) and Reviews/Sessions tab
 badges stay current over one Server-Sent Event stream (`GET /api/chrome/stream`).
 The System and Git tabs still poll their full JSON APIs while those tabs are
-open — in the preview, a route's store starts its poll on mount and stops it on
-unmount, so an idle console holds none. Git status never fetches remotes on a
-timer. The System tab's **Agent CLIs** block is deliberately outside that poll:
-it execs external binaries, so it reads once when you open the folded block and
-then only when you press Refresh.
+open — a route's store starts its poll on mount and stops it on unmount, so an
+idle console holds none. Git status never fetches remotes on a timer. The
+System tab's **Agent CLIs** block is deliberately outside that poll: it execs
+external binaries, so it reads once when you open the folded block and then
+only when you press Refresh.
 
 The **Host**, **Live bees**, and **Git** labels are links. Host and Git open
 their own pages; **Live bees** opens **Runs**, or **Sessions** when only
@@ -161,12 +168,12 @@ a bee is running.
 **Timeline** exposes the event stream for diagnosing routing and handoffs.
 Use `paseka replay <traceId>` for the CLI equivalent.
 
-On `/next/timeline` the feed starts unscoped and the filter panel stays folded
+On **Timeline** the feed starts unscoped and the filter panel stays folded
 until something is in it, so the events own the screen. A trail's *Open
-timeline* button links to `/next/timeline?trace=<id>`, which arrives with the
-panel open and the feed already scoped — bookmarkable, unlike the legacy tab
-switch that set the filter in memory. Six filters (trace, task, bee, contract,
-payload kind, severity) apply on **Apply** rather than as you type, and
+timeline* button links to `/timeline?trace=<id>`, which arrives with the
+panel open and the feed already scoped, so a scoped feed is a link you can
+bookmark. Six filters (trace, task, bee, contract, payload kind, severity)
+apply on **Apply** rather than as you type, and
 **Clear N filters** in the header returns to the colony-wide feed. **Load more**
 pages strictly older events; if a page fails the button stays, so it is a retry.
 
@@ -199,11 +206,11 @@ inflates the count; when both axes exist the count is the badge and `record
 error` is a separate detail flag. A settled trail leaves the cell empty, and so
 does a trail whose failures were all superseded — its detail flags keep a quiet
 `resolved failures` hint, so the history is demoted rather than erased. The
-badge is a server-side projection shared by this console, the redesign, and
-Telegram; the historical `hasFailures` flag still exists for export and inspect
-but no longer decides what the badge says. The closing/merge stage and `paseka
+badge is a server-side projection shared by this console and Telegram; the
+historical `hasFailures` flag still exists for export and inspect but no
+longer decides what the badge says. The closing/merge stage and `paseka
 status` attention are separate answers and are unchanged. Opening a trail goes
-to its own page (`/next/traces/<traceId>`), so the URL can be shared and the
+to its own page (`/traces/<traceId>`), so the URL can be shared and the
 browser back button works. From there: **+1 / +5 / +12**
 top up the honey reserve, **View** on a comb file opens it in a dialog,
 **Open timeline** jumps to the event feed for that trail, and **Run bee** starts
@@ -311,12 +318,12 @@ equivalents are `paseka task list`, `paseka task show`, `paseka task start`, and
 **Runs** shows AFK and HITL run records, summaries, status, usage when the
 adapter reports it, and the provider session id when available.
 
-On `/next/runs` the list is compact: the state is badged, the trail and the run
+On **Runs** the list is compact: the state is badged, the trail and the run
 are both links, and the adapter is searchable rather than a column. Opening a run
 gives its metadata, the adapter's own summary, the task body, and the events it
 recorded. **Those events are a readable list** — contract, payload kind, and what
-was said — with the raw event folded away on each row, where the legacy console
-printed `[TYPE #seq] {json}`. An event whose payload carries no summary still says
+was said — with the raw event folded away on each row rather than printed as
+`[TYPE #seq] {json}`. An event whose payload carries no summary still says
 something, because the row falls back to the payload's own fields and an
 `artifact.written` shows the artifact it wrote.
 
@@ -362,7 +369,7 @@ Visualizes bee subscriptions, publications, dispatch mode, and automatic
 invites from colony YAML. Generate the same graph as Mermaid with
 `paseka colony topology`.
 
-On `/next/topology` the same graph is drawn, with bees in a left column and
+On **Topology** the same graph is drawn, with bees in a left column and
 event kinds wrapped beside them. Solid edges are subscriptions, dashed are
 declared publications, dotted are colony invites, and a faded edge is a
 subscription the bee never wrote down — an empty `subscribes` means any
@@ -384,7 +391,7 @@ container's PID namespace; no Docker API is queried. Read it, do not act on it:
 there are no kill, nice, or signal controls, and a process name is a hint that
 work is happening rather than a ledger of what the colony started.
 
-On `/next/system` the metrics lead the page, and the Host plaque in the topbar
+On **System** the metrics lead the page, and the Host plaque in the topbar
 links here. Three of them — available memory, the 5 and 15 minute load, and
 colony disk — are here precisely because the plaque has no room for them. A
 figure the server could not measure leaves its tile out instead of showing a
@@ -426,7 +433,7 @@ fast-forward-only; Push is explicit and never uses `--force`. This tab does
 **not** push worktree branches or open pull requests — that is Reviews publish
 when `defaults.delivery` is `pull_request`.
 
-On `/next/git` the same three actions sit as one compact group in the page
+On **Git** the same three actions sit as one compact group in the page
 header, with **Push** highlighted only while the clone has commits it has not
 published. **Delete N leftovers** removes local state, so it asks first and names
 every branch involved; a refusal (say, a branch a live worktree still holds) is
@@ -439,9 +446,9 @@ takes branches named `paseka/*` or a conventional `feature/`, `hotfix/`, or
 `fix/`; the per-row button is for the ones it skips, so a single settled branch
 does not need a shell. Both open the same confirmation, titled with what they
 are about to delete. The worktree table and **Prune orphans** moved to the
-**Worktrees** tab; the Git page keeps a count and a link to it. The preview
+**Worktrees** tab; the Git page keeps a count and a link to it. The page
 re-reads the clone after every action and otherwise refreshes on a 15-second
-timer — slower than the legacy tab because each read shells out to `git` several
+timer — slower than a rapid poll because each read shells out to `git` several
 times — and it runs one action at a time, so a second click is refused rather
 than queued behind a push. Nothing here needs the Hive Runtime.
 
@@ -644,20 +651,28 @@ rather than polling. Nothing here needs the Hive Runtime.
   and the header chrome stream intentionally do not contact the remote.
 - **Header plaques freeze behind a reverse proxy:** disable response buffering
   for `/api/chrome/stream` (the Console already sends `X-Accel-Buffering: no`).
-- **Topology, Sessions, or merge preview load as HTML / fail as JS after
-  `go install`:** third-party Console files are served from `/lib/...`
-  (not `/vendor/...`). Module zips omit any `/vendor/` path, so an older
-  binary can embed the SPA without those bundles. Rebuild or reinstall a
-  version that ships `static/lib`.
+- **The console says the bundle was not built:** this binary was compiled
+  without the frontend step, which is what `go install` and a bare
+  `go build ./cmd/paseka` produce. The page is the whole console in that state:
+  every console route answers with it, and requesting an `_app` asset returns
+  404 rather than the shell. Run `pnpm --dir web install --frozen-lockfile`,
+  `pnpm --dir web build`, then `go build`; release archives and the container
+  image already do this, so they need no extra step.
+- **A console route 404s a script or stylesheet:** the bundle is missing that
+  asset, not hiding it — the server answers a missing file with 404 rather than
+  the app shell, so a stale `_app` hash from an older bundle reads as a 404.
+  Rebuild the frontend and the binary together.
+- **An old `/next/...` bookmark or tab:** it redirects permanently to the same
+  root path with its query string intact. A redirect that lands on 404 means
+  that route no longer exists, not that the redirect is missing.
+- **The frontend build fails in the bundle guard:** the output still carries a
+  `/next` base path. `web/scripts/check-console-bundle.sh` rejects it before it
+  can ship links under the retired prefix; the SvelteKit base path belongs to
+  the root.
 - **The version reads `dev` with no commit:** the binary was built outside a git
   checkout, so nothing stamped it. The Docker image is the usual case — its build
   context excludes `.git` — and takes the stamp as build args instead; see
   [homelab deployment](homelab-deployment.md) and `docker/dev/.env.example`.
-- **`/next/` says the preview bundle was not built:** the redesigned console is
-  a build artifact and is not committed, and `go install` never carries it. Run
-  `pnpm --dir web build` before `go build`, use a release archive, or use the
-  container image — all three build the frontend first. The legacy console at
-  `/` is unaffected.
 
 The implemented API and UI baseline is recorded in
 [Spec 002](../specs/002-queen-console-mvp.md). Header chrome streaming is

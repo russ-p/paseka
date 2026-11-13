@@ -126,7 +126,7 @@ type ConfigNATSView struct {
 	SubjectPrefix ConfigValue `json:"subjectPrefix"`
 }
 
-// ConfigView is the effective colony configuration behind /next/settings.
+// ConfigView is the effective colony configuration behind /settings.
 type ConfigView struct {
 	Slug       string              `json:"slug"`
 	ColonyRoot string              `json:"colonyRoot"`

@@ -135,9 +135,8 @@ describe('SessionTerminal', () => {
 	it('opens the relay on the API, escaping the session id', () => {
 		renderTerminal();
 
-		// `/next` is a frontend prefix and the API has none, so the socket must not
-		// inherit it — and a session id with a slash in it would otherwise read as a
-		// different route.
+		// The API has no console base, so the socket must not inherit one — and a
+		// session id with a slash in it would otherwise read as a different route.
 		expect(FakeSocket.last?.url).toBe('ws://console.local/api/sessions/agent%2001%2Fa/pty');
 	});
 

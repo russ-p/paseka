@@ -10,7 +10,9 @@
 #
 # Covers Go formatting, lint, module build, and module tests. It adds the Queen
 # Console UI checks when the diff touches web/, and also when the changed paths
-# cannot be determined: an unscoped gate runs more, never less.
+# cannot be determined: an unscoped gate runs more, never less. The UI half ends
+# with the console bundle guard (web/scripts/check-console-bundle.sh), the same
+# file `pnpm --dir web build` runs for releases and the container image.
 set -u
 
 say() { printf 'checks: %s\n' "$*"; }
@@ -97,3 +99,16 @@ say "vitest clean"
 
 pnpm --dir web exec vite build || exit 1
 say "vite build clean"
+
+# The console is served at the root, so a bundle still carrying the retired
+# /next base ships broken links from every build path. The guard runs here as
+# well as inside `pnpm --dir web build` (release archives, the container image,
+# CI) because this gate invokes vite directly. It comes from the trusted colony
+# copy so a diff cannot weaken the check that judges it.
+guard=${PASEKA_COLONY_ROOT:-$workspace}/web/scripts/check-console-bundle.sh
+if [ ! -f "$guard" ]; then
+	say "console bundle guard missing: $guard"
+	exit 1
+fi
+sh "$guard" "$workspace/internal/console/ui/dist" || exit 1
+say "console bundle guard clean"

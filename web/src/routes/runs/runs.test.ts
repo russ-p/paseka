@@ -64,11 +64,11 @@ describe('runs list', () => {
 		const runLink = within(table).getByRole('link', { name: 'run-01' });
 		expect(runLink).toHaveAttribute(
 			'href',
-			'/next/runs/trace-01a0bd6963faa14f/run-01'
+			'/runs/trace-01a0bd6963faa14f/run-01'
 		);
 		expect(within(table).getAllByRole('link', { name: 'trace-01a0bd6963faa14f' })[0]).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01a0bd6963faa14f'
+			'/traces/trace-01a0bd6963faa14f'
 		);
 	});
 
@@ -170,7 +170,7 @@ describe('run detail', () => {
 		expect(screen.getByLabelText('Run identity')).toHaveTextContent('trace-01a0bd6963faa14f');
 		expect(screen.getAllByRole('link', { name: 'trace-01a0bd6963faa14f' })[0]).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01a0bd6963faa14f'
+			'/traces/trace-01a0bd6963faa14f'
 		);
 	});
 
@@ -288,11 +288,11 @@ describe('previous and next run in the same trail', () => {
 		expect(screen.getByText('2 of 3 in this trail')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'Previous run in this trail' })).toHaveAttribute(
 			'href',
-			'/next/runs/trace-01a0bd6963faa14f/run-01'
+			'/runs/trace-01a0bd6963faa14f/run-01'
 		);
 		expect(screen.getByRole('link', { name: 'Next run in this trail' })).toHaveAttribute(
 			'href',
-			'/next/runs/trace-01a0bd6963faa14f/run-03'
+			'/runs/trace-01a0bd6963faa14f/run-03'
 		);
 	});
 
@@ -359,6 +359,6 @@ describe('run detail without a run', () => {
 		await waitFor(() => expect(screen.getByText('Run not found')).toBeInTheDocument());
 
 		expect(screen.getByText(/older than the recent window/)).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: 'All runs' })).toHaveAttribute('href', '/next/runs');
+		expect(screen.getByRole('link', { name: 'All runs' })).toHaveAttribute('href', '/runs');
 	});
 });

@@ -114,10 +114,22 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
 
-	staticFS, _ := fs.Sub(staticFiles, "static")
-	mux.Handle("/next", http.RedirectHandler("/next/", http.StatusPermanentRedirect))
-	mux.Handle("/next/", nextSPAHandler(nextFiles))
-	mux.Handle("/", spaHandler(staticFS))
+	// The JSON API owns its whole prefix, the bare form included. A path no
+	// endpoint claimed is answered as an API error instead of falling through to
+	// the console below, so a client that mistyped an endpoint never receives
+	// HTML it cannot parse. Both forms are registered because the bare prefix is
+	// not a subtree of itself: without the exact pattern the mux would redirect
+	// `/api` to `/api/` rather than answer it.
+	mux.HandleFunc("/api", apiNotFound)
+	mux.HandleFunc("/api/", apiNotFound)
+
+	// The Svelte console answers the root. The retired preview prefix is handled
+	// before the SPA fallback so it covers routes, assets, and deep links without
+	// any frontend logic; the root below is the only mount.
+	retired := retiredConsoleRedirect()
+	mux.Handle(retiredConsolePrefix, retired)
+	mux.Handle(retiredConsolePrefix+"/", retired)
+	mux.Handle("/", consoleSPAHandler(uiFiles))
 
 	s.http = &http.Server{
 		Addr:              addr,
@@ -177,35 +189,71 @@ func boldYellow(s string) string {
 }
 
 // startupBanner is what a `paseka console` says when it takes the port: where to
-// open it, which build is answering, and that the redesigned console lives under
-// a second URL. The build sits in the banner rather than only in the UI because
-// the process about to hold a port is the one an operator will want to name in a
-// bug report an hour later, and a scrollback scroll is the last place they look.
+// open it and which build is answering. The build sits in the banner rather than
+// only in the UI because the process about to hold a port is the one an operator
+// will want to name in a bug report an hour later, and a scrollback scroll is the
+// last place they look.
 func startupBanner(host string) []string {
 	return []string{
 		fmt.Sprintf("%s listening at http://%s", boldYellow("Queen Console 🐝"), host),
 		fmt.Sprintf("  %s", buildLine()),
-		fmt.Sprintf("  Redesign preview: http://%s/next/", host),
 	}
 }
 
-const nextConsoleBasePath = "/next/"
+// retiredConsolePrefix is where the console was published while it was a
+// preview. The root cutover retired the mount, but bookmarks, chat links, and
+// documents still name it, and a browser tab left open on the old shell requests
+// its cached assets beneath the same prefix. Answering the whole prefix with one
+// permanent redirect keeps all of them working: `/next/_app/...` resolves to the
+// asset at the root instead of a 404 or the shell. Matching the whole prefix is
+// the mechanism, not a second mount — there is no expiry, flag, or environment
+// toggle that turns it off, because rollback is a release rollback.
+const retiredConsolePrefix = "/next"
 
-func nextSPAHandler(consoleFiles fs.FS) http.Handler {
-	distFS, err := fs.Sub(consoleFiles, "next/dist")
+// retiredConsoleRedirect sends any path beneath the retired prefix to the same
+// path at the root, query string included. The redirect is permanent (308) so a
+// browser and a search index converge on the real URL instead of asking again.
+func retiredConsoleRedirect() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.EscapedPath(), retiredConsolePrefix)
+		location := "/" + strings.TrimPrefix(rest, "/")
+		if r.URL.RawQuery != "" {
+			location += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, location, http.StatusPermanentRedirect)
+	})
+}
+
+// apiNotFound is what a path under the JSON API prefix gets when no endpoint
+// claimed it, including the bare prefix itself. It is deliberately the same
+// plain-text, nosniff 404 the API handlers already answer an unknown id with:
+// a mistyped endpoint is an API failure, not a page, so a client routing on the
+// status or reading the reason keeps working. In particular it never carries
+// the console shell.
+func apiNotFound(w http.ResponseWriter, r *http.Request) {
+	http.NotFound(w, r)
+}
+
+// consoleSPAHandler serves the embedded console bundle. It is the only console
+// route, mounted at the root. A path whose last segment has a file extension is
+// an asset request: a missing one is a real 404 rather than the app shell, which
+// keeps a missing script from looking like a broken page. The JSON API is not
+// this handler's business: the mux answers `/api` and `/api/` first, so no API
+// path is ever answered with console HTML here.
+func consoleSPAHandler(consoleFiles fs.FS) http.Handler {
+	distFS, err := fs.Sub(consoleFiles, "ui/dist")
 	if err != nil {
-		panic(fmt.Sprintf("prepare next console assets: %v", err))
+		panic(fmt.Sprintf("prepare console assets: %v", err))
 	}
-	fallbackHTML, err := fs.ReadFile(consoleFiles, "next/fallback.html")
+	fallbackHTML, err := fs.ReadFile(consoleFiles, "ui/fallback.html")
 	if err != nil {
-		panic(fmt.Sprintf("read next console fallback: %v", err))
+		panic(fmt.Sprintf("read console fallback: %v", err))
 	}
 	fileServer := http.FileServer(http.FS(distFS))
 	_, buildErr := fs.Stat(distFS, "200.html")
 	hasBuild := buildErr == nil
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rel := strings.TrimPrefix(r.URL.Path, nextConsoleBasePath)
-		rel = strings.TrimPrefix(rel, "/")
+		rel := strings.TrimPrefix(r.URL.Path, "/")
 		if hasBuild {
 			if rel == "" {
 				rel = "200.html"
@@ -230,23 +278,6 @@ func nextSPAHandler(consoleFiles fs.FS) http.Handler {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(fallbackHTML)
-	})
-}
-
-func spaHandler(staticFS fs.FS) http.Handler {
-	fileServer := http.FileServer(http.FS(staticFS))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && !strings.HasPrefix(r.URL.Path, "/api/") {
-			rel := strings.TrimPrefix(r.URL.Path, "/")
-			if _, err := fs.Stat(staticFS, rel); err != nil {
-				if looksLikeStaticAsset(rel) {
-					http.NotFound(w, r)
-					return
-				}
-				r.URL.Path = "/"
-			}
-		}
-		fileServer.ServeHTTP(w, r)
 	})
 }
 

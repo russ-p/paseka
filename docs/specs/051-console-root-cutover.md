@@ -2,8 +2,10 @@
 
 ## Status
 
-**Approved**
+**(Implemented)**
 Removes the legacy vanilla-JS console and serves the Svelte console at `/`. The `/next` prefix becomes a permanent redirect. This is the root cutover that [035-queen-console-redesign](035-queen-console-redesign.md) deliberately left as a human decision.
+
+Shipped as one change, so no release is left console-less: the Svelte application is mounted at `/` and the legacy root handler, its embed, and its contract tests are gone; `/next` and every path beneath it answer 308 to the same root path with the query string preserved, ahead of the SPA fallback; the favicons and `_app` assets are served from the built bundle; the checked-in buildless fallback lives in the embed tree and explains the two-step build at the root. `web/scripts/check-console-bundle.sh` runs from the frontend build step, which release archives, the container image, and CI all take, and rejects a bundle that still carries a `/next` base path. Rollback is a release revert; no runtime switch for the old console exists. The JSON API is unchanged. The manual browser pass is recorded as the release checklist in [Changelog](../plans/changelog.md), and the visual-regression and Playwright gap stays open in the [UI migration backlog](../plans/ui-migration-backlog.md#no-visual-regression-or-end-to-end-suite).
 
 ## Problem Statement
 

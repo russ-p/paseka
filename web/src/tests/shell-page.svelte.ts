@@ -7,7 +7,7 @@
  * untested, so this is `$state` for the reason `route-params.svelte.ts` is: a route test
  * drives the stand-in rather than remounting, and the reactivity in it is the point.
  */
-export const shellPage = $state({ url: new URL('http://localhost/next/traces') });
+export const shellPage = $state({ url: new URL('http://localhost/traces') });
 
 export function setShellPath(path: string): void {
 	shellPage.url = new URL(`http://localhost${path}`);

@@ -24,7 +24,7 @@ describe('forks route', () => {
 		expect(screen.getByText('task-b2')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'trace-01a0bd6963faa14f' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-01a0bd6963faa14f'
+			'/traces/trace-01a0bd6963faa14f'
 		);
 		expect(screen.getByText('pinned')).toBeInTheDocument();
 	});
@@ -58,7 +58,7 @@ describe('forks route', () => {
 		expect(screen.getByText('No fork request is waiting on an operator.')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'Forked' })).toHaveAttribute(
 			'href',
-			'/next/traces/trace-fork'
+			'/traces/trace-fork'
 		);
 	});
 });

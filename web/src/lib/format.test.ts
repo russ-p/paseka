@@ -1224,11 +1224,11 @@ describe('runDurationMs', () => {
 
 describe('runIdentityRows', () => {
 	it('names the run and links its trail through the caller href builder', () => {
-		const rows = runIdentityRows(runSummary(), (id) => `/next/traces/${id}`);
+		const rows = runIdentityRows(runSummary(), (id) => `/traces/${id}`);
 
 		expect(rows.find((row) => row.label === 'Trail')).toMatchObject({
 			value: 'trace-01a0bd6963faa14f',
-			href: '/next/traces/trace-01a0bd6963faa14f'
+			href: '/traces/trace-01a0bd6963faa14f'
 		});
 		// The agent id and the run directory are what an operator pastes elsewhere.
 		expect(rows.find((row) => row.label === 'Agent')?.copy).toBe(true);
@@ -1403,13 +1403,13 @@ describe('task formatters', () => {
 	});
 
 	it('offers the trail id a way out through the caller\'s builder', () => {
-		const rows = taskIdentityRows(taskDetail(), (id) => `/next/traces/${id}`);
+		const rows = taskIdentityRows(taskDetail(), (id) => `/traces/${id}`);
 
 		expect(rows[0]).toEqual({
 			label: 'Trail',
 			value: 'trace-01a0bd6963faa14f',
 			mono: true,
-			href: '/next/traces/trace-01a0bd6963faa14f'
+			href: '/traces/trace-01a0bd6963faa14f'
 		});
 		// The base path belongs to the caller, so a formatter never builds a URL.
 		expect(taskIdentityRows(taskDetail())[0].href).toBeUndefined();

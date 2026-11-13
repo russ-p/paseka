@@ -2,15 +2,8 @@
 
 `paseka` is the Queen Shell — a single binary for colony setup, one-shot bee runs, interactive sessions, NATS runtime, and housekeeping.
 
-Build from the repo root:
-
-```bash
-go build -o paseka ./cmd/paseka
-```
-
-This produces the legacy console at `/` only. The redesigned console under
-`/next/` is a separate Svelte bundle that is **not committed**; build it first
-to have it embedded:
+Build from the repo root — frontend first, then Go, which embeds the bundle at
+compile time:
 
 ```bash
 pnpm --dir web install --frozen-lockfile
@@ -18,10 +11,11 @@ pnpm --dir web build
 go build -o paseka ./cmd/paseka
 ```
 
-Without that step the binary still compiles, and `/next/` answers with a page
-explaining that the preview was not built. Release archives and the container
-image already build the frontend first, so `go install` is the only path that
-never carries the redesign.
+The frontend bundle is **not committed**. A bare
+`go build -o paseka ./cmd/paseka` still compiles, but `/` answers with a page
+saying the console bundle was not built and how to build it, and `_app` asset
+requests return 404. Release archives and the container image already run both
+steps, so `go install` is the only path that never carries a usable console.
 
 ---
 
@@ -1624,7 +1618,6 @@ Queen Console serves the same stamp at `GET /api/version` and shows it in the si
 ```text
 Queen Console 🐝 listening at http://127.0.0.1:8787
   Build: dev+67730c4.dirty (development build)
-  Redesign preview: http://127.0.0.1:8787/next/
 ```
 
 The channel is spelled out because that is the question a banner answers: `dev+67730c4.dirty` reads as a name until the words beside it say it is not a release.
