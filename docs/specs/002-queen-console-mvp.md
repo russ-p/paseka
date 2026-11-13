@@ -4,6 +4,8 @@
 
 **Implemented (MVP baseline).** Living baseline for Queen Console: `paseka console`, embedded SPA, JSON polling APIs, runtime controls, dashboard, timeline, traces, task board, reviews (including final merge-diff preview), sessions (same-process browser PTY), runs, Topology tab ([007](./007-colony-eda-topology.md)), Live bees header panel ([004](./004-live-bees-indicator.md)), Host/System ([022](./022-console-system-info.md)), and Git plaque/tab ([023](./023-console-git.md)).
 
+The vanilla-JS SPA this spec describes was retired by [051-console-root-cutover](051-console-root-cutover.md); the Svelte console at `/` is its replacement. The JSON API, runtime controls, and session behavior documented here remain the baseline.
+
 Still deferred from this baseline:
 
 - Cross-process browser attach

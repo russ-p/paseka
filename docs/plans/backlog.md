@@ -265,8 +265,8 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
 - **Summary:** Every `/next` route is migrated and no page resolves to `PagePlaceholder`; what is left is the explicit root cutover from the legacy bundle. Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/next/git` for `/next/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped. Bees shipped as the first route to need a **server** answer rather than only markup: `GET /api/bees` grew a `scope` because the endpoint the launch forms read is a picker that hides every non-interactive bee, and `BeeCard` was dropped for the seventh `DataTable`. Settings shipped as the second, on a new `GET /api/config`, and is the only route that is deliberately incomplete — its write half is [Spec 036](../specs/036-console-config-write.md).
-- **Why deferred:** The route set is complete, so only the cutover decision remains, and that one is explicitly gated on feature parity being called rather than inferred.
-- **Revisit when:** The cutover is called.
+- **Why deferred:** The route set is complete, so only the cutover decision remains, and that one is explicitly gated on feature parity being called rather than inferred. The cutover is now called and planned in [051-console-root-cutover](../specs/051-console-root-cutover.md); this entry stays open until that spec is implemented.
+- **Revisit when:** [051-console-root-cutover](../specs/051-console-root-cutover.md) lands and moves to [Changelog](changelog.md).
 
 #### A worktree registry state the console can see
 

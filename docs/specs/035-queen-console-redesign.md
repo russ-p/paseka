@@ -5,7 +5,7 @@
 **Implemented**
 The migration shipped: the bundle is a build artifact, the shell and all thirteen routes are live under `/next/`, and nothing resolves to `PagePlaceholder`. Worktrees arrived as a scope decision rather than a port — the worktree table and the orphan prune left the Git page for their own route — Bees was the first route to need a **server** answer rather than only markup, and Settings closed the group and is the one page that is read-only about the colony's own configuration, which is a scope decision rather than an unfinished route: writing config is a platform capability specified on its own in [036-console-config-write](036-console-config-write.md).
 
-Two things this status does **not** claim. The legacy console still serves `/` — the explicit root cutover is a human decision, not work, and is tracked in [Backlog](../plans/backlog.md). And three of the stories below were never built: the typed Go→TS contract generation (#14), a mutation queue for an offline console (#12, whose banner half did ship), and create-a-bee / create-a-worktree forms (#17). Each is recorded where it is tracked rather than quietly dropped.
+Two things this status does **not** claim. The legacy console still serves `/` — the explicit root cutover is a human decision, not work, and is now planned in [051-console-root-cutover](051-console-root-cutover.md). And three of the stories below were never built: the typed Go→TS contract generation (#14), a mutation queue for an offline console (#12, whose banner half did ship), and create-a-bee / create-a-worktree forms (#17). Each is recorded where it is tracked rather than quietly dropped.
 
 ## Problem Statement
 
