@@ -2,6 +2,21 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — The Queen Console is served at the root, and the legacy console is gone
+
+`paseka console` now opens the modern console at `http://127.0.0.1:8787/` — the address the legacy vanilla-JS console used to answer — so there is one interface to learn, one set of links to share, and no preview URL that means "not yet". The second console is deleted rather than retired behind a flag, and every route, asset, and link is a root path: `/dashboard`, `/traces`, `/traces/<traceId>`, `/timeline`, `/reviews`, `/settings`.
+
+- **The retired prefix is a permanent redirect.** `/next` and every path beneath it answer 308 to the same path at the root with the query string intact, handled by the Go server before the SPA fallback. An old `/next/traces/<id>?q=x` bookmark opens `/traces/<id>?q=x`, and a tab still holding the retired shell resolves its cached `/next/_app/...` asset requests. It is a stability promise for addresses people already have — no expiry and no way to switch back to a second mount.
+- **One console, one build path.** The bundle is produced by `pnpm --dir web build`, embedded at compile time, and served from `/`; the buildless fallback moved to the root with it, says the bundle was not built instead of promising a legacy UI, and answers a missing `_app` asset with 404 rather than the app shell. Release archives, the container image, and a source checkout all take that same two-step path, and `go install` is documented as carrying no usable console.
+- **The build output is guarded.** `web/scripts/check-console-bundle.sh` fails the frontend build when the emitted document or its assets still carry a `/next` base path, so a base-path regression cannot ship links under a retired prefix.
+- **Rollback is a release revert.** There is no `--legacy` flag, environment toggle, or second route, so "temporarily go back" cannot become an untested second product; reverting the release is the whole rollback story. The JSON API at `/api/*` is unchanged, so the CLI, Telegram, exports, and external scripts are untouched.
+- **The release checklist is a browser pass.** Every menu route at `/`, one detail route per family (trail, run, task, review, session), reload on a detail page, theme switching, `Escape` back to a list, a `g` chord, and an old `/next/traces/<id>` bookmark. Route tests, the Vitest suites, and the build-output guard cover the mechanical half of the cutover; this pass is what a release signs off on the half they cannot see.
+
+- Spec: [051-console-root-cutover](../specs/051-console-root-cutover.md)
+- Canonical: [Queen Console](../guide/queen-console.md#one-console-at-the-root), [Console design system](../architecture/queen-console-design-system.md), [CLI](../guide/cli.md), [Homelab deployment](../guide/homelab-deployment.md)
+
+Not in this ship: the visual-regression and Playwright suite the redesign still owes. The cutover moves paths rather than layouts, so the gap stays open in the [UI migration backlog](ui-migration-backlog.md#no-visual-regression-or-end-to-end-suite).
+
 ## 2026-11 — The retired `params` aliases now fail load instead of loading quietly
 
 `v0.6.0` deprecated five bee `params` keys and `v0.7.0` shipped with them still working, so the migration window is spent. `trust`, `force`, `thinking`, `provider`, and `output_format` are no longer valid keys: a bee or profile that still declares one fails load, and `paseka doctor` reports it, both naming the replacement in one sentence.

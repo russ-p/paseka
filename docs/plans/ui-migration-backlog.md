@@ -77,7 +77,7 @@ that needs a decision about what "back" and "last" mean rather than a mechanism.
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Current Section Design Audit)
 - **Summary:** None. Every console route is migrated, so no page resolves to `PagePlaceholder` any more — the section is kept because the audit it tracks is the place a new placeheld surface would be recorded, and because two of the migrated routes arrived as a decision rather than a port and are worth finding again. Worktrees came as a split: the Git page's read-only table and its orphan prune moved to `/worktrees` together, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped from the inventory. Bees and Settings were both designed against a user story rather than against a tab, because the legacy console has neither.
 - **Why deferred:** Nothing further is deferred here. The order was deliberate — the shell and the two highest-traffic surfaces (Dashboard, Traces) went first so the design system was proven against real colony data before the rest depended on it, Git next because its page was the one whose actions were hardest to place well, System because it is the other read-mostly page whose format decisions every later list inherits, Timeline because it settled the feed-row contract and the folded-filter panel, Topology because it brought the first third-party imperative component and the one styling exception, Runs because it opened the Colony group and the first detail route that steps between siblings, Tasks because it closed the audit's other full-column form and was the first user of `Drawer`, and Reviews because it landed the audit's two named components.
-- **Revisit when:** A new surface needs a scope decision, or the root cutover is called.
+- **Revisit when:** A new surface needs a scope decision. The root cutover this entry also waited on has shipped — the console is served at `/` and no second UI remains — so a new surface is the only trigger left.
 
 ## Components the inventory promises
 
@@ -178,9 +178,9 @@ The [design-system contract](../architecture/queen-console-design-system.md) lis
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Testing Decisions)
-- **Summary:** The spec commits to Playwright E2E (preview root → dashboard → traces filter → detail → comb modal → theme → reload) and to screenshot comparison on Dashboard, Traces list, and Settings. Playwright is not a dependency and neither suite exists. Coverage today is Vitest component and store tests plus Go route tests.
-- **Why deferred:** Vitest covers behaviour; it cannot catch a layout regression. The gap was accepted while the routes were still moving, and every layout decision since — the shared row, the `grow` column, the collapse defaults — was checked by hand in a browser rather than by a test.
-- **Revisit when:** The route set stops changing, or before the root cutover — a cutover with no visual guard is how a theme silently loses contrast.
+- **Summary:** The spec commits to Playwright E2E (root → dashboard → traces filter → detail → comb modal → theme → reload) and to screenshot comparison on Dashboard, Traces list, and Settings. Playwright is not a dependency and neither suite exists. Coverage today is Vitest component and store tests plus Go route tests, and the cutover's own manual browser pass — recorded in [Changelog](changelog.md) — is the closest thing to either suite.
+- **Why deferred:** Vitest covers behaviour; it cannot catch a layout regression. The gap was accepted while the routes were still moving, and every layout decision since — the shared row, the `grow` column, the collapse defaults — was checked by hand in a browser rather than by a test. The root cutover then shipped on that same manual pass plus the build-output guard, which catches a broken base path but not a layout or theme regression.
+- **Revisit when:** The next console change touches layout or theme. The route set has stopped changing and the cutover is recorded in [Changelog](changelog.md), so this entry no longer waits on either: the first visual change after the cutover is the first one with no automated guard behind it at all.
 
 #### No generated types from the Go contracts
 
