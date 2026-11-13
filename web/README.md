@@ -1,6 +1,6 @@
-# Queen Console Next
+# Queen Console UI
 
-Frontend foundation for the Svelte-based Queen Console redesign described in [Spec 035](../docs/specs/035-queen-console-redesign.md). The development and production app is mounted by the Go console at `/next/`; the legacy console remains at `/`.
+The Svelte frontend for Queen Console described in [Spec 035](../docs/specs/035-queen-console-redesign.md) and mounted by the Go console at `/`. The retired `/next` prefix permanently redirects to the root; every route and asset is root-relative.
 
 ## Layout
 
@@ -20,7 +20,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://localhost:5173/next/`. Vite proxies `/api/*` to `http://127.0.0.1:8787`; set `PASEKA_CONSOLE_API` to use another Go console address.
+Open `http://localhost:5173/`. Vite proxies `/api/*` to `http://127.0.0.1:8787`; set `PASEKA_CONSOLE_API` to use another Go console address.
 
 ## Verification
 
@@ -30,11 +30,11 @@ pnpm test
 pnpm build
 ```
 
-The production build is written to `internal/console/next/dist/`. **It is not
+The production build is written to `internal/console/ui/dist/`. **It is not
 committed** — it is a build artifact, and the Go binary embeds whatever is in
 that directory when it compiles. A binary built from a fresh clone therefore
-serves `internal/console/next/fallback.html` at `/next/` instead of the preview,
-which is also why `go install` does not carry the redesign: see
+serves `internal/console/ui/fallback.html` at `/` instead of the console, which
+is also why `go install` does not carry a usable console: see
 [Building the binary](#building-the-binary).
 
 ## Building the binary
@@ -50,13 +50,13 @@ go build -o paseka ./cmd/paseka
 Release archives and the container image do exactly this (GoReleaser
 `before.hooks`, and the `web-builder` stage in `docker/dev/Dockerfile`). A
 source-only `go build` still compiles — the embed pattern is satisfied by
-`next/fallback.html` alone — and the console answers `/next/` with that page
-instead of the preview.
+`ui/fallback.html` alone — and the console answers every route with that page
+instead of the app shell.
 
 ## Third-party runtime dependencies
 
 `lucide-svelte` for icons and `cytoscape` for the colony topology graph — that is
-the whole list. cytoscape is ~400 kB and only `/next/topology` draws a graph, so it
+the whole list. cytoscape is ~400 kB and only `/topology` draws a graph, so it
 is imported dynamically inside the graph component and lands in that route's chunk
 alone. Two consequences worth knowing before touching it:
 

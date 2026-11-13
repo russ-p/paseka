@@ -536,7 +536,7 @@ The import follows the pack's conflict policy at skill-directory granularity: an
 
 ## 21. The Queen Console skills page
 
-`/next/skills` puts the store and the trails' proposals on one page.
+The console's **Skills** page puts the store and the trails' proposals on one page.
 
 - **The inventory is the shell's inventory.** The server calls the same `skills.BuildInventory` that `paseka skills list` uses, so the state (`ok`, `invalid` with its reason, or `disabled` with its reason), the roles, the description, and the provenance (`hand-written`, `proposed`, or `nuc`) cannot differ between the two readers. A role that selects `*` or a pattern is named against every skill it resolves to; the page never shows `*` in the roles column.
 - **The proposals pane is the trails' decision data.** Each row carries the source trail, the skill, when it was proposed, and its state: `pending`, `installed`, `refused` with the reason, `trialled` with the destination trail, or `missing` when the bundle has disappeared. The source trail links to its page.

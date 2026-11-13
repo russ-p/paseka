@@ -65,7 +65,7 @@ Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.m
 - **Kind:** follow-up
 - **Source:** guard review note, deferred from the adapter-probe trail (`trace-01a10d602db8d6f6`)
 - **Summary:** `adapterCLINames` (`internal/console/adapters.go:84`) and `agentCLIAdapterNames` (`web/src/lib/api/types.ts:117`) list the same four adapters in the same order with no cross-language guard. Both sides are pinned by tests (`adapters_api_test.go:119` asserts the literal order, `format.test.ts` asserts the literal `not probed, 4 adapters`), so drift fails loudly rather than silently. Serving the roster from `GET /api/system/adapters` without probing would delete the second list.
-- **Why deferred:** The block is lazy by contract — arriving on `/next/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
+- **Why deferred:** The block is lazy by contract — arriving on `/system` must issue zero requests — so a roster in the first payload either breaks that rule or adds a second endpoint for four strings.
 - **Revisit when:** A fifth adapter is added, or the roster stops being a fixed set.
 
 ### Secret redaction
@@ -158,7 +158,7 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Source:** planning (`system.kill` / hard kill); [013-system-kill](../specs/013-system-kill.md)
 - **Summary:** After a hard kill (or late-stage avalanche), good early work may already live in `.paseka/worktrees/<traceId>/`. Need an operator path to start a **new** `traceId` that reuses that worktree (or grafts its branch/diff) instead of discarding progress and redoing from `HEAD`.
 - **Why deferred:** Orthogonal to kill protocol itself (`paseka kill` shipped); needs worktree registry + trace bootstrap design (identity, honey budget, which tasks/events to carry).
-- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path. The console surface is settled — `/next/worktrees` is where the interrupted checkout will be listed, and it will carry a trail link on every row — so the open half is the trace bootstrap, not the place to show it.
+- **Revisit when:** Operators hit “early stages were fine, last stage blew up” without a clean continue path. The console surface is settled — `/worktrees` is where the interrupted checkout will be listed, and it will carry a trail link on every row — so the open half is the trace bootstrap, not the place to show it.
 
 #### Energy gate on `paseka bee run` / `bee chat`
 
@@ -249,30 +249,30 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Kind:** idea
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #17)
 - **Summary:** User story #17 asked for forms to open in a drawer rather than a column, and named four: new task, new bee, new worktree, settings edits. The task form and the session launch form both shipped and proved the primitive; the new-bee and new-worktree forms never existed. Both write committed colony YAML (`bees/*.yaml`) and the worktree case also creates a git checkout, which is the same class of risk [036-console-config-write](../specs/036-console-config-write.md) refuses for project config — a browser writing a tracked file is a different decision from a browser writing this machine's configuration.
-- **Why deferred:** The routes that display both lists shipped read-only, and starting work has two supported paths today: a launch session, and **Run bee** on `/next/bees` for a headless run.
+- **Why deferred:** The routes that display both lists shipped read-only, and starting work has two supported paths today: a launch session, and **Run bee** on `/bees` for a headless run.
 - **Revisit when:** An operator hand-edits `bees/*.yaml` often enough to want a form for it, or the worktrees route needs a create path for work that has no trail yet.
 
 #### Bee local overlay is invisible and unwritable in Console
 
 - **Kind:** idea
 - **Source:** [036-console-config-write](../specs/036-console-config-write.md) (Out of Scope — per-bee editing)
-- **Summary:** `.paseka/bees/<role>.local.yaml` is the machine-local overlay (`prompt_template` and `system_template` only, prompt-only by design) that wins over the committed `<role>.yaml` at resolve time, and the console neither reads nor writes it. `BeeView` has no overlay field, so a bee whose prompt is overridden on this machine renders the committed value with no hint that an override exists — the same missing-`source` half that `/next/settings` reports for configuration values. Reporting it is a per-bee `{value, source}` pair on `GET /api/bees`; writing it is the 036 writer (merge one key, temp+rename, preserve mode) pointed at a two-key gitignored file, which is a smaller surface than a full bee form.
+- **Summary:** `.paseka/bees/<role>.local.yaml` is the machine-local overlay (`prompt_template` and `system_template` only, prompt-only by design) that wins over the committed `<role>.yaml` at resolve time, and the console neither reads nor writes it. `BeeView` has no overlay field, so a bee whose prompt is overridden on this machine renders the committed value with no hint that an override exists — the same missing-`source` half that `/settings` reports for configuration values. Reporting it is a per-bee `{value, source}` pair on `GET /api/bees`; writing it is the 036 writer (merge one key, temp+rename, preserve mode) pointed at a two-key gitignored file, which is a smaller surface than a full bee form.
 - **Why deferred:** 036 puts per-bee editing out of scope on the rule that the console writes what is this machine's and nothing the repository shares, and it never names `*.local.yaml` — so the overlay was left undecided rather than refused. It sits in the repository directory, only its `.gitignore` entry makes it machine-local, so making it writable needs that distinction argued rather than assumed. Until then the overlay is invisible in the product: `LoadAllBees` skips it, and export `--include bees` and Nuc omit it.
-- **Revisit when:** Per-bee or per-cue editing is reconsidered, or an operator is surprised by a prompt that is not the one `/next/bees` shows.
+- **Revisit when:** Per-bee or per-cue editing is reconsidered, or an operator is surprised by a prompt that is not the one `/bees` shows.
 
-#### Console redesign `/next` parity sweep
+#### Console redesign parity sweep
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md)
-- **Summary:** Every `/next` route is migrated and no page resolves to `PagePlaceholder`; what is left is the explicit root cutover from the legacy bundle. Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/next/git` for `/next/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped. Bees shipped as the first route to need a **server** answer rather than only markup: `GET /api/bees` grew a `scope` because the endpoint the launch forms read is a picker that hides every non-interactive bee, and `BeeCard` was dropped for the seventh `DataTable`. Settings shipped as the second, on a new `GET /api/config`, and is the only route that is deliberately incomplete — its write half is [Spec 036](../specs/036-console-config-write.md).
-- **Why deferred:** The route set is complete, so only the cutover decision remains, and that one is explicitly gated on feature parity being called rather than inferred. The cutover is now called and planned in [051-console-root-cutover](../specs/051-console-root-cutover.md); this entry stays open until that spec is implemented.
-- **Revisit when:** [051-console-root-cutover](../specs/051-console-root-cutover.md) lands and moves to [Changelog](changelog.md).
+- **Summary:** Every console route is migrated and no page resolves to `PagePlaceholder`; the explicit root cutover from the legacy bundle is the last step, specified in [051-console-root-cutover](../specs/051-console-root-cutover.md). Worktrees shipped as a split rather than a port: its worktree table and the orphan prune left `/git` for `/worktrees`, the data stayed on `GET /api/git`, and `WorktreeCard` was dropped. Bees shipped as the first route to need a **server** answer rather than only markup: `GET /api/bees` grew a `scope` because the endpoint the launch forms read is a picker that hides every non-interactive bee, and `BeeCard` was dropped for the seventh `DataTable`. Settings shipped as the second, on a new `GET /api/config`, and is the only route that is deliberately incomplete — its write half is [Spec 036](../specs/036-console-config-write.md).
+- **Why deferred:** The route set was complete, so only the cutover decision remained, and that one was explicitly gated on feature parity being called rather than inferred. The cutover is called and specified in [051-console-root-cutover](../specs/051-console-root-cutover.md); this entry closes when [Changelog](changelog.md) records the cutover.
+- **Revisit when:** [051-console-root-cutover](../specs/051-console-root-cutover.md) is recorded in [Changelog](changelog.md).
 
 #### A worktree registry state the console can see
 
 - **Kind:** follow-up
 - **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (Worktrees scope)
-- **Summary:** The worktree list is built from the home registry, `git worktree list --porcelain`, and the `.paseka/worktrees/` directory, and then every row that is no longer a checkout root is dropped. So the console cannot show registered-but-missing, on-disk-but-unregistered, or a branch that disagrees with the `worktree.branch` insight, and pressing prune is the only way to learn what it would remove. A per-row state (`registered` / `on disk` / `missing` / `orphaned`) plus a preview of what a prune would drop would make `/next/worktrees` the reconciliation surface its scope was argued to be.
+- **Summary:** The worktree list is built from the home registry, `git worktree list --porcelain`, and the `.paseka/worktrees/` directory, and then every row that is no longer a checkout root is dropped. So the console cannot show registered-but-missing, on-disk-but-unregistered, or a branch that disagrees with the `worktree.branch` insight, and pressing prune is the only way to learn what it would remove. A per-row state (`registered` / `on disk` / `missing` / `orphaned`) plus a preview of what a prune would drop would make `/worktrees` the reconciliation surface its scope was argued to be.
 - **Why deferred:** The route ships as a live-checkout inventory and the prune result names what it reconciled, so nothing is lost silently. A row for a checkout that does not exist also changes what the list's empty state means, and the disagreements are rare enough that a state machine is not yet earned.
 - **Revisit when:** An operator presses prune to find out what is lying around, or a stale registry row surfaces as a confusing trace error instead of a cleanup.
 
@@ -361,7 +361,7 @@ Leftovers from [023-console-git](../specs/023-console-git.md). The Git tab MVP c
 - **Kind:** follow-up
 - **Source:** [023-console-git](../specs/023-console-git.md)
 - **Summary:** Disable Push and branch-delete (not Fetch) while Live bees or a merge is in progress. Pull already refuses colony-root bees and in-progress merge in 023.
-- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API. The `/next/git` store serialises its own mutations so two clicks cannot race, but that is a UI guard against one page, not this lock — it sees nothing about live bees.
+- **Why deferred:** Push does not rewrite the working tree; isolated worktrees do not need a global lock for v1. Extra coupling to the agents API. The `/git` store serialises its own mutations so two clicks cannot race, but that is a UI guard against one page, not this lock — it sees nothing about live bees.
 - **Revisit when:** A Push or branch delete races an in-flight adapter in practice, or operators ask for a hard lock.
 
 #### Gitea (or origin host) commit links

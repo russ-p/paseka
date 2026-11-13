@@ -56,7 +56,7 @@ type SkillProposalDetailView struct {
 	BodyError string `json:"bodyError,omitempty"`
 }
 
-// SkillsInventoryView is the whole read-only surface behind /next/skills: the
+// SkillsInventoryView is the whole read-only surface behind /skills: the
 // store inventory with its role resolution, and every proposal the trails hold
 // with the decisions taken about it.
 type SkillsInventoryView struct {
