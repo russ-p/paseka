@@ -60,8 +60,8 @@ import type {
 } from '$lib/api/types';
 
 /**
- * Every console endpoint is root-relative: the `/next` prefix belongs to
- * frontend routes and assets only, never to the API.
+ * Every console endpoint is root-relative: the API has no console base, so a
+ * frontend prefix must never reach it.
  */
 const apiRoot = '/api';
 

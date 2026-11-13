@@ -88,7 +88,7 @@ describe('/reviews/:traceId/:taskId/preview', () => {
 
 		expect(screen.getByRole('link', { name: '← Back to review' })).toHaveAttribute(
 			'href',
-			'/next/reviews/trace-preview/_review'
+			'/reviews/trace-preview/_review'
 		);
 	});
 

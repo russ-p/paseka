@@ -112,7 +112,7 @@
 </script>
 
 <svelte:head>
-	<title>Forks · Queen Console Next</title>
+	<title>Forks · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

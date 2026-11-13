@@ -164,7 +164,7 @@
 </script>
 
 <svelte:head>
-	<title>Task {taskId || ''} · Queen Console Next</title>
+	<title>Task {taskId || ''} · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

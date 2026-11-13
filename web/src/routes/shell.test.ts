@@ -54,21 +54,21 @@ function listFilterOnScreen(): HTMLInputElement {
 afterEach(() => {
 	document.body.innerHTML = '';
 	vi.clearAllMocks();
-	at('/next/traces');
+	at('/traces');
 });
 
 describe('shell keys', () => {
 	it('takes Escape back to the list a detail belongs to', async () => {
-		at('/next/traces/trace-01a0bd6963faa14f');
+		at('/traces/trace-01a0bd6963faa14f');
 		renderShell();
 
 		await userEvent.keyboard('{Escape}');
 
-		expect(goto).toHaveBeenCalledWith('/next/traces');
+		expect(goto).toHaveBeenCalledWith('/traces');
 	});
 
 	it('leaves Escape alone on a list, because there is nowhere to go', async () => {
-		at('/next/traces');
+		at('/traces');
 		renderShell();
 
 		await userEvent.keyboard('{Escape}');
@@ -77,7 +77,7 @@ describe('shell keys', () => {
 	});
 
 	it('yields Escape to a dialog, which closes itself and is the only thing that should', async () => {
-		at('/next/traces/trace-01a0bd6963faa14f');
+		at('/traces/trace-01a0bd6963faa14f');
 		renderShell();
 		const dialog = openDialog();
 
@@ -89,7 +89,7 @@ describe('shell keys', () => {
 	});
 
 	it('yields Escape to an editable target, so a half-written note is never thrown away', async () => {
-		at('/next/reviews/trace-01a0bd6963faa14f/task-b2');
+		at('/reviews/trace-01a0bd6963faa14f/task-b2');
 		renderShell();
 		const note = document.createElement('textarea');
 		document.body.append(note);
@@ -103,7 +103,7 @@ describe('shell keys', () => {
 	it('yields Escape to a terminal, whose helper textarea is where the keystroke lands', async () => {
 		// xterm focuses an off-screen textarea, so the editable rule already covers the
 		// case the backlog named: the key never reaches the window to be claimed.
-		at('/next/sessions/session-01');
+		at('/sessions/session-01');
 		renderShell();
 		const helper = document.createElement('textarea');
 		document.body.append(helper);
@@ -127,7 +127,7 @@ describe('shell keys', () => {
 	});
 
 	it('says nothing on / where there is no list, rather than swallowing the key', async () => {
-		at('/next/topology');
+		at('/topology');
 		renderShell();
 
 		await userEvent.keyboard('/');
@@ -136,12 +136,12 @@ describe('shell keys', () => {
 	});
 
 	it('keeps the chord map working, because these two keys are not chords', async () => {
-		at('/next/traces');
+		at('/traces');
 		renderShell();
 
 		await userEvent.keyboard('gu');
 
-		expect(goto).toHaveBeenCalledWith('/next/runs');
+		expect(goto).toHaveBeenCalledWith('/runs');
 	});
 });
 
@@ -192,7 +192,7 @@ describe('shell navigation drawer', () => {
 	});
 
 	it('yields Escape to an open sheet, which is what closes it', async () => {
-		at('/next/traces/trace-01a0bd6963faa14f');
+		at('/traces/trace-01a0bd6963faa14f');
 		setViewportNarrow(true);
 		renderShell();
 		await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
@@ -206,14 +206,14 @@ describe('shell navigation drawer', () => {
 	});
 
 	it('leaves Escape to the list when the same flag only means the labels', async () => {
-		at('/next/traces/trace-01a0bd6963faa14f');
+		at('/traces/trace-01a0bd6963faa14f');
 		renderShell();
 
 		expect(document.getElementById('side-menu-drawer')).toBeChecked();
 
 		await userEvent.keyboard('{Escape}');
 
-		expect(goto).toHaveBeenCalledWith('/next/traces');
+		expect(goto).toHaveBeenCalledWith('/traces');
 	});
 });
 

@@ -128,7 +128,7 @@
 </script>
 
 <svelte:head>
-	<title>Git · Queen Console Next</title>
+	<title>Git · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

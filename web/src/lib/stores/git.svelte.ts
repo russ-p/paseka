@@ -31,7 +31,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The colony clone behind `/next/git`. It is a route-scoped poller for its own
+ * The colony clone behind `/git`. It is a route-scoped poller for its own
  * endpoint — the topbar's git plaque rides the chrome stream, not this — and it
  * starts on mount and stops on unmount, so an idle console runs no `git` shell
  * out at all.

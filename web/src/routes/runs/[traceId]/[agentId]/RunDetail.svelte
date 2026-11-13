@@ -39,7 +39,7 @@
 </script>
 
 <svelte:head>
-	<title>Run {agentId || ''} · Queen Console Next</title>
+	<title>Run {agentId || ''} · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

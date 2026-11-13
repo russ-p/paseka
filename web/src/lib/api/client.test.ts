@@ -214,8 +214,8 @@ describe('config endpoint', () => {
 
 		await getConfig();
 
-		// The `/next` prefix belongs to frontend routes, never to the API, and this
-		// endpoint takes no parameters — a write would be a POST on the same path.
+		// The API is root-relative and has no console base, and this endpoint takes
+		// no parameters — a write would be a POST on the same path.
 		expect(mock).toHaveBeenCalledWith('/api/config', undefined);
 	});
 });

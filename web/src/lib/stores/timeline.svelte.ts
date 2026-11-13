@@ -38,7 +38,7 @@ function prune(filters: TimelineFilterPatch): EventFilters {
 }
 
 /**
- * The event feed behind `/next/timeline`. It is the one route-scoped store whose
+ * The event feed behind `/timeline`. It is the one route-scoped store whose
  * poll is the operator's to arm: the feed is cursor-paginated history, so
  * prepending new events to a list someone is scrolling or has filtered is worse
  * than a deliberate refresh. A timer is offered, but its tick is the same reset

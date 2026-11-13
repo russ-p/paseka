@@ -164,7 +164,7 @@ describe('bees route', () => {
 		// output is actually read.
 		const link = within(cellNamed('builder', 'Last run')).getByRole('link');
 		expect(link).toHaveTextContent(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-		expect(link).toHaveAttribute('href', '/next/runs/trace-01a0bd6963faa14f/builder-1');
+		expect(link).toHaveAttribute('href', '/runs/trace-01a0bd6963faa14f/builder-1');
 		expect(cellNamed('builder', 'Last run')).toHaveTextContent('completed');
 
 		// A failed last run is the health signal the page exists for, so it is toned

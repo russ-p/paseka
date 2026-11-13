@@ -89,7 +89,7 @@ describe('timeline route', () => {
 		// prose, and a feed of underlined summaries reads as a wall of links.
 		const link = within(feed).getByRole('link');
 		expect(link).toHaveTextContent('trace-01a0bd6963faa14f');
-		expect(link).toHaveAttribute('href', '/next/traces/trace-01a0bd6963faa14f');
+		expect(link).toHaveAttribute('href', '/traces/trace-01a0bd6963faa14f');
 	});
 
 	it('applies a filter only on submit, so typing does not fire a request per keystroke', async () => {

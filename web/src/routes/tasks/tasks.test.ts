@@ -136,7 +136,7 @@ describe('tasks board', () => {
 		const card = screen.getByRole('link', { name: /Wire the export format flag/ });
 		expect(card).toHaveAttribute(
 			'href',
-			'/next/tasks/trace-01a0bd6963faa14f/task-01'
+			'/tasks/trace-01a0bd6963faa14f/task-01'
 		);
 	});
 
@@ -306,8 +306,8 @@ describe('tasks board', () => {
 
 		const links = within(screen.getByLabelText('ready tasks')).getAllByRole('link');
 		expect(links.map((link) => link.getAttribute('href'))).toEqual([
-			'/next/tasks/trace-01a0bd6963faa14f/_review',
-			'/next/tasks/trace-019f8d632b01bb1f/_review'
+			'/tasks/trace-01a0bd6963faa14f/_review',
+			'/tasks/trace-019f8d632b01bb1f/_review'
 		]);
 	});
 
@@ -551,10 +551,10 @@ describe('task detail', () => {
 	it('links back to the board and out to the trail', async () => {
 		await openTask();
 
-		expect(screen.getByRole('link', { name: '← Tasks' })).toHaveAttribute('href', '/next/tasks');
+		expect(screen.getByRole('link', { name: '← Tasks' })).toHaveAttribute('href', '/tasks');
 		const identity = screen.getByLabelText('Task identity');
 		const trail = within(identity).getByRole('link', { name: 'trace-01a0bd6963faa14f' });
-		expect(trail).toHaveAttribute('href', '/next/traces/trace-01a0bd6963faa14f');
+		expect(trail).toHaveAttribute('href', '/traces/trace-01a0bd6963faa14f');
 	});
 
 	it('folds the body, because reading a task is about what it did', async () => {
@@ -582,7 +582,7 @@ describe('task detail', () => {
 		const link = within(runs).getByRole('link', { name: /builder/ });
 		expect(link).toHaveAttribute(
 			'href',
-			'/next/runs/trace-01a0bd6963faa14f/run-02'
+			'/runs/trace-01a0bd6963faa14f/run-02'
 		);
 		expect(within(runs).getByText('completed')).toBeInTheDocument();
 	});
@@ -683,7 +683,7 @@ describe('task detail', () => {
 		});
 
 		expect(await screen.findByText('Task not found')).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: 'All tasks' })).toHaveAttribute('href', '/next/tasks');
+		expect(screen.getByRole('link', { name: 'All tasks' })).toHaveAttribute('href', '/tasks');
 	});
 
 	it('hides the review actions from a task no human is waiting on', async () => {
@@ -739,7 +739,7 @@ describe('task detail', () => {
 
 		expect(
 			await screen.findByRole('link', { name: /open review/i })
-		).toHaveAttribute('href', '/next/reviews/trace-01a0bd6963faa14f/task-06');
+		).toHaveAttribute('href', '/reviews/trace-01a0bd6963faa14f/task-06');
 		// The diff is behind the door, not on this page: the label names the
 		// destination and says so in the same words, rather than wearing a diff glyph
 		// that promises a patch an operator will only find one page later.
@@ -789,7 +789,7 @@ describe('task detail', () => {
 
 		expect(await screen.findByRole('link', { name: /open review/i })).toHaveAttribute(
 			'href',
-			'/next/reviews/trace-01a0bd6963faa14f/task-05'
+			'/reviews/trace-01a0bd6963faa14f/task-05'
 		);
 		expect(screen.getByText(/nothing merges here/)).toBeInTheDocument();
 		expect(screen.queryByText(/the diff this gate merges/)).not.toBeInTheDocument();

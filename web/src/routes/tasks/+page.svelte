@@ -58,7 +58,7 @@
 </script>
 
 <svelte:head>
-	<title>Tasks · Queen Console Next</title>
+	<title>Tasks · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

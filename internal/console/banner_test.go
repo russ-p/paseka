@@ -31,8 +31,10 @@ func TestBuildLineSpellsOutTheChannel(t *testing.T) {
 func TestStartupBannerCarriesTheBuild(t *testing.T) {
 	lines := startupBanner("127.0.0.1:8787")
 
-	if len(lines) != 3 {
-		t.Fatalf("banner = %q", lines)
+	// One console, one URL: the banner names where it listens and which build
+	// answers, and nothing tells the operator to open a second address.
+	if len(lines) != 2 {
+		t.Fatalf("banner = %q, want the listening URL and the build line", lines)
 	}
 	if !strings.Contains(lines[0], "Queen Console") || !strings.Contains(lines[0], "http://127.0.0.1:8787") {
 		t.Fatalf("first line = %q", lines[0])
@@ -46,7 +48,9 @@ func TestStartupBannerCarriesTheBuild(t *testing.T) {
 	if !strings.HasPrefix(lines[1], "  ") {
 		t.Fatalf("second line = %q, want it indented under the header", lines[1])
 	}
-	if lines[2] != "  Redesign preview: http://127.0.0.1:8787/next/" {
-		t.Fatalf("third line = %q", lines[2])
+	for _, line := range lines {
+		if strings.Contains(line, "/next") {
+			t.Fatalf("banner = %q, must not point at the retired preview URL", line)
+		}
 	}
 }

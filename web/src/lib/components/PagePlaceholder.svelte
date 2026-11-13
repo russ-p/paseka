@@ -18,7 +18,7 @@
 
 <svelte:head>
 	{#if setPageTitle}
-		<title>{title} · Queen Console Next</title>
+		<title>{title} · Queen Console</title>
 	{/if}
 </svelte:head>
 

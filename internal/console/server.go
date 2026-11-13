@@ -114,10 +114,12 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
 
-	staticFS, _ := fs.Sub(staticFiles, "static")
+	// The Svelte console answers the root. The preview prefix stays mounted on the
+	// same handler until the permanent redirect lands, so an intermediate commit is
+	// never console-less; it is one UI, not two.
 	mux.Handle("/next", http.RedirectHandler("/next/", http.StatusPermanentRedirect))
-	mux.Handle("/next/", nextSPAHandler(nextFiles))
-	mux.Handle("/", spaHandler(staticFS))
+	mux.Handle("/next/", consoleSPAHandler(nextFiles, nextConsoleBasePath))
+	mux.Handle("/", consoleSPAHandler(nextFiles, "/"))
 
 	s.http = &http.Server{
 		Addr:              addr,
@@ -177,34 +179,44 @@ func boldYellow(s string) string {
 }
 
 // startupBanner is what a `paseka console` says when it takes the port: where to
-// open it, which build is answering, and that the redesigned console lives under
-// a second URL. The build sits in the banner rather than only in the UI because
-// the process about to hold a port is the one an operator will want to name in a
-// bug report an hour later, and a scrollback scroll is the last place they look.
+// open it and which build is answering. The build sits in the banner rather than
+// only in the UI because the process about to hold a port is the one an operator
+// will want to name in a bug report an hour later, and a scrollback scroll is the
+// last place they look.
 func startupBanner(host string) []string {
 	return []string{
 		fmt.Sprintf("%s listening at http://%s", boldYellow("Queen Console 🐝"), host),
 		fmt.Sprintf("  %s", buildLine()),
-		fmt.Sprintf("  Redesign preview: http://%s/next/", host),
 	}
 }
 
 const nextConsoleBasePath = "/next/"
 
-func nextSPAHandler(consoleFiles fs.FS) http.Handler {
+// consoleSPAHandler serves the embedded console bundle beneath one prefix. At the
+// root it is the only UI; the preview mount exists only until the permanent
+// redirect replaces it and shares this handler, so there is one route contract.
+// A path whose last segment has a file extension is an asset request: a missing
+// one is a real 404 rather than the app shell, which keeps a missing script from
+// looking like a broken page. The API prefix is left to the API and never answered
+// with console HTML.
+func consoleSPAHandler(consoleFiles fs.FS, prefix string) http.Handler {
 	distFS, err := fs.Sub(consoleFiles, "next/dist")
 	if err != nil {
-		panic(fmt.Sprintf("prepare next console assets: %v", err))
+		panic(fmt.Sprintf("prepare console assets: %v", err))
 	}
 	fallbackHTML, err := fs.ReadFile(consoleFiles, "next/fallback.html")
 	if err != nil {
-		panic(fmt.Sprintf("read next console fallback: %v", err))
+		panic(fmt.Sprintf("read console fallback: %v", err))
 	}
 	fileServer := http.FileServer(http.FS(distFS))
 	_, buildErr := fs.Stat(distFS, "200.html")
 	hasBuild := buildErr == nil
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rel := strings.TrimPrefix(r.URL.Path, nextConsoleBasePath)
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+		rel := strings.TrimPrefix(r.URL.Path, prefix)
 		rel = strings.TrimPrefix(rel, "/")
 		if hasBuild {
 			if rel == "" {

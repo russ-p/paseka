@@ -88,9 +88,9 @@
 	}
 
 	/**
-	 * The relay is `/api/sessions/:id/pty` and nothing under the `/next` prefix: the
-	 * base path belongs to frontend routes, so deriving this from `location` rather than
-	 * from the router keeps the socket on the API and picks `wss` on a TLS host.
+	 * The relay is `/api/sessions/:id/pty` and has no console prefix: the frontend base
+	 * belongs to frontend routes, so deriving this from `location` rather than from the
+	 * router keeps the socket on the API and picks `wss` on a TLS host.
 	 */
 	function socketUrl(id: string): string {
 		const scheme = globalThis.location?.protocol === 'https:' ? 'wss' : 'ws';

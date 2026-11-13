@@ -55,10 +55,10 @@ describe('trace detail', () => {
 		renderDetail();
 
 		expect(await screen.findByRole('heading', { name: 'Refactor the adapter seam', level: 1 })).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: '← Traces' })).toHaveAttribute('href', '/next/traces');
+		expect(screen.getByRole('link', { name: '← Traces' })).toHaveAttribute('href', '/traces');
 		expect(screen.getByRole('link', { name: 'Open timeline' })).toHaveAttribute(
 			'href',
-			`/next/timeline?trace=${traceId}`
+			`/timeline?trace=${traceId}`
 		);
 		expect(screen.getByText(/Move adapter construction behind one interface/)).toBeInTheDocument();
 	});
@@ -465,11 +465,11 @@ describe('trace detail', () => {
 		const runs = await section('trace-runs');
 		expect(within(tasks).getAllByRole('link')[0]).toHaveAttribute(
 			'href',
-			expect.stringContaining('/next/tasks/trace-01a0bd6963faa14f/') as unknown as string
+			expect.stringContaining('/tasks/trace-01a0bd6963faa14f/') as unknown as string
 		);
 		expect(within(runs).getAllByRole('link')[0]).toHaveAttribute(
 			'href',
-			expect.stringContaining('/next/runs/trace-01a0bd6963faa14f/') as unknown as string
+			expect.stringContaining('/runs/trace-01a0bd6963faa14f/') as unknown as string
 		);
 	});
 

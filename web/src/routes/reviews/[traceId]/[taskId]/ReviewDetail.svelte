@@ -112,7 +112,7 @@
 </script>
 
 <svelte:head>
-	<title>{item ? `Review ${item.title}` : 'Review'} · Queen Console Next</title>
+	<title>{item ? `Review ${item.title}` : 'Review'} · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

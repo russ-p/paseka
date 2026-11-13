@@ -113,7 +113,7 @@ describe('sessions list', () => {
 		// not be selected with a keyboard and could not be linked to at all.
 		expect(within(table).getByRole('link', { name: 'builder · cursor' })).toHaveAttribute(
 			'href',
-			'/next/sessions/agent-01a0bd743c33d82c'
+			'/sessions/agent-01a0bd743c33d82c'
 		);
 	});
 
@@ -381,7 +381,7 @@ describe('session detail', () => {
 			expect(h.resumeSession).toHaveBeenCalledWith('agent-01a0bd743c33d82c', 'now the tests')
 		);
 		// And it goes to the session the resume *created*, not the one it continued.
-		await waitFor(() => expect(goto).toHaveBeenCalledWith('/next/sessions/agent-02'));
+		await waitFor(() => expect(goto).toHaveBeenCalledWith('/sessions/agent-02'));
 	});
 
 	it('explains an adapter that cannot be resumed, rather than hiding the control', async () => {

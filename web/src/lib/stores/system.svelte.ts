@@ -16,7 +16,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The host snapshot behind `/next/system`. It is a route-scoped poller for its
+ * The host snapshot behind `/system`. It is a route-scoped poller for its
  * own endpoint and starts on mount, stops on unmount, so an idle console reads
  * no `/proc` at all — the topbar's Host plaque rides the chrome stream, which
  * carries the same struct without the process list.

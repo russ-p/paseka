@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { ExternalLink, PanelLeftClose, PanelLeftOpen, X } from 'lucide-svelte';
+	import { PanelLeftClose, PanelLeftOpen, X } from 'lucide-svelte';
 	import {
 		consolePath,
 		consoleRoutes,
@@ -223,19 +223,5 @@
 				{stamp}
 			</a>
 		{/if}
-		<a
-			id="side-menu-legacy"
-			class="btn btn-ghost btn-sm w-full"
-			class:btn-square={!labelled}
-			href="/"
-			aria-label="Open legacy console"
-			title={labelled ? undefined : 'Open legacy console'}
-		>
-			{#if labelled}
-				Open legacy console
-			{:else}
-				<ExternalLink size={16} />
-			{/if}
-		</a>
 	</div>
 </aside>

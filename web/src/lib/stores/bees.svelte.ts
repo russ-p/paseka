@@ -10,7 +10,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The colony roster behind `/next/bees`, read at `?scope=colony` rather than the
+ * The colony roster behind `/bees`, read at `?scope=colony` rather than the
  * launch picker: a roster that hides a bee because its adapter cannot be
  * started as a session would not be a roster.
  *

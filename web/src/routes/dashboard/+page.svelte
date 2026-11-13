@@ -57,7 +57,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard · Queen Console Next</title>
+	<title>Dashboard · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">
@@ -135,7 +135,7 @@
 	<section id="dashboard-traces" class="space-y-3">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h2 class="text-xl font-semibold">Recent traces</h2>
-			<a class="link text-sm" href="/next/traces">All traces</a>
+			<a class="link text-sm" href={consolePath(base, '/traces')}>All traces</a>
 		</div>
 		{#if store.loading && !dashboard}
 			<ul class="space-y-2">

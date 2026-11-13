@@ -80,7 +80,7 @@
 </script>
 
 <svelte:head>
-	<title>Settings · Queen Console Next</title>
+	<title>Settings · Queen Console</title>
 </svelte:head>
 
 <div class="space-y-6">

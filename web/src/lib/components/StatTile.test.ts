@@ -26,8 +26,8 @@ describe('StatTile', () => {
 	});
 
 	it('links to a related route when one is given', () => {
-		render(StatTile, { label: 'Active traces', value: 1, href: '/next/traces' });
-		expect(screen.getByRole('link', { name: 'open' })).toHaveAttribute('href', '/next/traces');
+		render(StatTile, { label: 'Active traces', value: 1, href: '/traces' });
+		expect(screen.getByRole('link', { name: 'open' })).toHaveAttribute('href', '/traces');
 	});
 
 	it('forwards the id and merges extra classes so a tile can span a grid', () => {

@@ -10,7 +10,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The colony's effective configuration behind `/next/settings`.
+ * The colony's effective configuration behind `/settings`.
  *
  * **It polls nothing, and that is the finding rather than an omission.** A bee
  * roster is derived from committed YAML and the topology from `auto_invites`, so

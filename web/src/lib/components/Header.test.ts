@@ -115,7 +115,7 @@ describe('Header', () => {
 	});
 
 	// The badge answers the clone's stand against origin, which is the question
-	// Fetch/Push/Pull on /next/git acts on. A dirty tree is neither published nor
+	// Fetch/Push/Pull on /git acts on. A dirty tree is neither published nor
 	// behind, so it is a word on the panel — a colony stages root proposals without
 	// committing them, so a tone that followed the tree would be lit most of the time
 	// and would read as the reviews and invites badges further along the row.
@@ -149,8 +149,8 @@ describe('Header', () => {
 		const { store, toasts } = harness();
 		render(Header, { store, toasts });
 
-		expect(screen.getByRole('link', { name: 'Host' })).toHaveAttribute('href', '/next/system');
-		expect(screen.getByRole('link', { name: 'Git' })).toHaveAttribute('href', '/next/git');
+		expect(screen.getByRole('link', { name: 'Host' })).toHaveAttribute('href', '/system');
+		expect(screen.getByRole('link', { name: 'Git' })).toHaveAttribute('href', '/git');
 	});
 
 	// A bee is not addressable, so the Live bees plaque routes to the surface its
@@ -160,7 +160,7 @@ describe('Header', () => {
 		const { store, toasts } = harness();
 		render(Header, { store, toasts });
 
-		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/next/runs');
+		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/runs');
 	});
 
 	it('links the Live bees plaque to Sessions when only sessions are live', () => {
@@ -169,7 +169,7 @@ describe('Header', () => {
 		);
 		render(Header, { store, toasts });
 
-		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/next/sessions');
+		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/sessions');
 	});
 
 	it('links the Live bees plaque to Runs when no bee is live', () => {
@@ -179,7 +179,7 @@ describe('Header', () => {
 		);
 		render(Header, { store, toasts });
 
-		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/next/runs');
+		expect(screen.getByRole('link', { name: 'Live bees' })).toHaveAttribute('href', '/runs');
 	});
 
 	it('keeps the full text of every clipped line in a multi-line hint', () => {

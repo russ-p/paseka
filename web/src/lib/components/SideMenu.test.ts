@@ -84,18 +84,18 @@ async function clickRoute(user: ReturnType<typeof userEvent.setup>, name: string
 
 describe('SideMenu', () => {
 	it('names every route and draws it, which is what the icons-only state leaves behind', async () => {
-		const { container } = menuAt('/next/dashboard', { stored: { 'paseka:console:side-menu-expanded': 'mini' } });
+		const { container } = menuAt('/dashboard', { stored: { 'paseka:console:side-menu-expanded': 'mini' } });
 
 		const links = screen.getAllByRole('link');
 		for (const route of consoleRoutes) {
-			expect(screen.getByRole('link', { name: route.label })).toHaveAttribute('href', `/next${route.path}`);
+			expect(screen.getByRole('link', { name: route.label })).toHaveAttribute('href', route.path);
 		}
 		expect(container.querySelectorAll('svg[data-glyph]')).toHaveLength(consoleRoutes.length);
 		expect(links.every((link) => link.getAttribute('title') !== null)).toBe(true);
 	});
 
 	it('carries the app mark in the head, and names the panel rather than the console', async () => {
-		const { container, store } = menuAt('/next/dashboard');
+		const { container, store } = menuAt('/dashboard');
 
 		const head = container.querySelector('#console-navigation > div');
 		expect(head?.querySelector('img')?.getAttribute('src')).toBe('/favicon.svg');
@@ -111,7 +111,7 @@ describe('SideMenu', () => {
 
 	it('swaps one button between the two states and says which it offers', async () => {
 		const user = userEvent.setup();
-		const { store } = menuAt('/next/dashboard');
+		const { store } = menuAt('/dashboard');
 		const collapse = screen.getByRole('button', { name: 'Hide route labels' });
 
 		expect(collapse).toHaveAttribute('aria-pressed', 'true');
@@ -128,7 +128,7 @@ describe('SideMenu', () => {
 	});
 
 	it('shows the label and the chord when expanded, and neither when it does not', async () => {
-		const { container, store } = menuAt('/next/dashboard');
+		const { container, store } = menuAt('/dashboard');
 
 		expect(screen.getByText('g d')).toBeInTheDocument();
 		expect(container.querySelector('#console-navigation')?.className).toContain('w-56');
@@ -156,7 +156,7 @@ describe('SideMenu build stamp', () => {
 	}
 
 	it('names the build in the foot, because that is the one fact a report needs', async () => {
-		await stampedAt('/next/dashboard');
+		await stampedAt('/dashboard');
 
 		const stamp = screen.getByText('0.5.0+67730c4');
 		expect(stamp).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe('SideMenu build stamp', () => {
 	});
 
 	it('shows the commit alone in the rail, which is all 16 characters hold', async () => {
-		const { store } = await stampedAt('/next/dashboard');
+		const { store } = await stampedAt('/dashboard');
 
 		store.set(false);
 		await waitFor(() => expect(screen.queryByText('0.5.0+67730c4')).toBeNull());
@@ -177,7 +177,7 @@ describe('SideMenu build stamp', () => {
 	it('shows a development build as itself, dirty state included', async () => {
 		// `dev` with a commit is a build from main, not a broken install, and an
 		// operator has to be able to tell those two apart at a glance.
-		await stampedAt('/next/dashboard', { build: buildViewDev({ dirty: true, display: 'dev+67730c4.dirty' }) });
+		await stampedAt('/dashboard', { build: buildViewDev({ dirty: true, display: 'dev+67730c4.dirty' }) });
 
 		const stamp = screen.getByText('dev+67730c4.dirty');
 		expect(stamp.getAttribute('title')).toContain('not a tagged release');
@@ -185,7 +185,7 @@ describe('SideMenu build stamp', () => {
 	});
 
 	it('draws nothing at all when the stamp never arrives', async () => {
-		await stampedAt('/next/dashboard', { build: null });
+		await stampedAt('/dashboard', { build: null });
 
 		// Silence rather than a dash: the footer is where an operator confirms which
 		// build they are reading, and a placeholder there reads as an answer.
@@ -193,7 +193,7 @@ describe('SideMenu build stamp', () => {
 	});
 
 	it('makes the version itself the link, because a sha with nowhere to go is half an answer', async () => {
-		await stampedAt('/next/dashboard');
+		await stampedAt('/dashboard');
 
 		// One link, on the version, rather than a button beside it: the route list is
 		// the one part of the panel that scrolls, and a row the foot claims is a route
@@ -213,7 +213,7 @@ describe('SideMenu build stamp', () => {
 	it('falls back to the repository when the build has no commit to show', async () => {
 		// An unstamped binary names no commit, so there is no commit page to open; the
 		// repository is still the better answer than a link nowhere.
-		await stampedAt('/next/dashboard', {
+		await stampedAt('/dashboard', {
 			build: buildViewDev({ commit: undefined, shortCommit: undefined, commitUrl: undefined, display: 'dev' })
 		});
 
@@ -224,7 +224,7 @@ describe('SideMenu build stamp', () => {
 	});
 
 	it('keeps the rail version clickable under a name that still carries it', async () => {
-		const { store } = await stampedAt('/next/dashboard');
+		const { store } = await stampedAt('/dashboard');
 
 		store.set(false);
 		await waitFor(() => expect(screen.queryByText('0.5.0+67730c4')).toBeNull());
@@ -235,7 +235,7 @@ describe('SideMenu build stamp', () => {
 	});
 
 	it('draws no link at all when the console could not read its own build', async () => {
-		await stampedAt('/next/dashboard', { build: null });
+		await stampedAt('/dashboard', { build: null });
 
 		// A link built from a guess would send an operator into a repository this
 		// console was not built from, so an absent stamp leaves the footer empty.
@@ -243,39 +243,33 @@ describe('SideMenu build stamp', () => {
 		expect(screen.queryByRole('link', { name: /GitHub/ })).not.toBeInTheDocument();
 	});
 
-	it('keeps the legacy console link last in the sheet, so the trap wraps on real ends', async () => {
+	it('keeps the build link last in the sheet, so the trap wraps on real ends', async () => {
 		const user = userEvent.setup();
-		const { store } = await stampedAt('/next/dashboard', { narrow: true });
+		const { store } = await stampedAt('/dashboard', { narrow: true });
 		store.set(true);
 		await tick();
 
 		const close = screen.getByRole('button', { name: 'Close menu' });
 		const version = screen.getByRole('link', { name: /open on GitHub/ });
-		const legacy = screen.getByRole('link', { name: 'Open legacy console' });
-		legacy.focus();
+		version.focus();
 
 		await user.tab();
 		expect(close).toHaveFocus();
 
 		await user.tab({ shift: true });
-		expect(legacy).toHaveFocus();
-
-		// The version link sits between the two ends of the trap, not outside them.
-		version.focus();
-		await user.tab();
-		expect(legacy).toHaveFocus();
+		expect(version).toHaveFocus();
 	});
 });
 describe('SideMenu active route', () => {
 	it('keeps a parent entry active on a child route', async () => {
-		menuAt('/next/traces/trace-01a0bd6963faa14f');
+		menuAt('/traces/trace-01a0bd6963faa14f');
 
 		expect(screen.getByRole('link', { name: 'Traces' })).toHaveAttribute('aria-current', 'page');
 		expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
 	});
 
 	it('does not mistake a sibling route with a shared prefix for the entry', async () => {
-		menuAt('/next/timeline');
+		menuAt('/timeline');
 
 		expect(screen.getByRole('link', { name: 'Traces' })).not.toHaveAttribute('aria-current');
 		expect(screen.getByRole('link', { name: 'Timeline' })).toHaveAttribute('aria-current', 'page');
@@ -294,7 +288,7 @@ describe('SideMenu as the sheet below 768px', () => {
 	it('closes on Escape and hands focus back to the trigger', async () => {
 		const user = userEvent.setup();
 		const trigger = triggerOnScreen();
-		const { store } = await sheetAt('/next/dashboard');
+		const { store } = await sheetAt('/dashboard');
 
 		await user.keyboard('{Escape}');
 
@@ -304,7 +298,7 @@ describe('SideMenu as the sheet below 768px', () => {
 
 	it('closes on a route click, because the sheet covers the route it opens', async () => {
 		const user = userEvent.setup();
-		const { store } = await sheetAt('/next/dashboard');
+		const { store } = await sheetAt('/dashboard');
 
 		await clickRoute(user, 'Traces');
 
@@ -313,23 +307,25 @@ describe('SideMenu as the sheet below 768px', () => {
 
 	it('keeps Tab inside the sheet, wrapping through its own controls', async () => {
 		const user = userEvent.setup();
-		await sheetAt('/next/dashboard');
+		const { version: versionStore } = await sheetAt('/dashboard');
+		await versionStore.refresh();
+		await tick();
 
-		// The panel's own control is the first thing in it, and the legacy link the last,
+		// The panel's own control is the first thing in it, and the build link the last,
 		// so those are the two ends a Tab has to wrap between.
 		const close = screen.getByRole('button', { name: 'Close menu' });
-		const legacy = screen.getByRole('link', { name: 'Open legacy console' });
-		legacy.focus();
+		const version = screen.getByRole('link', { name: /open on GitHub/ });
+		version.focus();
 
 		await user.tab();
 		expect(close).toHaveFocus();
 
 		await user.tab({ shift: true });
-		expect(legacy).toHaveFocus();
+		expect(version).toHaveFocus();
 	});
 
 	it('shows the labels, because a phone is the one place the rail cannot be read', async () => {
-		await sheetAt('/next/dashboard');
+		await sheetAt('/dashboard');
 
 		expect(screen.getByText('g d')).toBeInTheDocument();
 		expect(screen.getByText('Navigate')).toBeInTheDocument();
@@ -337,7 +333,7 @@ describe('SideMenu as the sheet below 768px', () => {
 
 	it('closes from its own head control, and never offers to collapse on a phone', async () => {
 		const user = userEvent.setup();
-		const { store } = await sheetAt('/next/dashboard');
+		const { store } = await sheetAt('/dashboard');
 		const close = screen.getByRole('button', { name: 'Close menu' });
 
 		// A phone has no rail to collapse, so the control does not claim a pressed state
@@ -353,7 +349,7 @@ describe('SideMenu as the sheet below 768px', () => {
 describe('SideMenu as the column above 768px', () => {
 	it('leaves Escape to the page, which is the route that owns it there', async () => {
 		const user = userEvent.setup();
-		const { store } = menuAt('/next/dashboard');
+		const { store } = menuAt('/dashboard');
 
 		await user.keyboard('{Escape}');
 
@@ -362,7 +358,7 @@ describe('SideMenu as the column above 768px', () => {
 
 	it('does not collapse on a route click, so the column survives a navigation', async () => {
 		const user = userEvent.setup();
-		const { store } = menuAt('/next/dashboard', { stored: { 'paseka:console:side-menu-expanded': 'mini' } });
+		const { store } = menuAt('/dashboard', { stored: { 'paseka:console:side-menu-expanded': 'mini' } });
 
 		await clickRoute(user, 'Traces');
 
