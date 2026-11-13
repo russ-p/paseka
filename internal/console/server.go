@@ -114,12 +114,13 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
 
-	// The Svelte console answers the root. The preview prefix stays mounted on the
-	// same handler until the permanent redirect lands, so an intermediate commit is
-	// never console-less; it is one UI, not two.
-	mux.Handle("/next", http.RedirectHandler("/next/", http.StatusPermanentRedirect))
-	mux.Handle("/next/", consoleSPAHandler(uiFiles, nextConsoleBasePath))
-	mux.Handle("/", consoleSPAHandler(uiFiles, "/"))
+	// The Svelte console answers the root. The retired preview prefix is handled
+	// before the SPA fallback so it covers routes, assets, and deep links without
+	// any frontend logic; the root below is the only mount.
+	retired := retiredConsoleRedirect()
+	mux.Handle(retiredConsolePrefix, retired)
+	mux.Handle(retiredConsolePrefix+"/", retired)
+	mux.Handle("/", consoleSPAHandler(uiFiles))
 
 	s.http = &http.Server{
 		Addr:              addr,
@@ -190,16 +191,36 @@ func startupBanner(host string) []string {
 	}
 }
 
-const nextConsoleBasePath = "/next/"
+// retiredConsolePrefix is where the console was published while it was a
+// preview. The root cutover retired the mount, but bookmarks, chat links, and
+// documents still name it, and a browser tab left open on the old shell requests
+// its cached assets beneath the same prefix. Answering the whole prefix with one
+// permanent redirect keeps all of them working: `/next/_app/...` resolves to the
+// asset at the root instead of a 404 or the shell. Matching the whole prefix is
+// the mechanism, not a second mount — there is no expiry, flag, or environment
+// toggle that turns it off, because rollback is a release rollback.
+const retiredConsolePrefix = "/next"
 
-// consoleSPAHandler serves the embedded console bundle beneath one prefix. At the
-// root it is the only UI; the preview mount exists only until the permanent
-// redirect replaces it and shares this handler, so there is one route contract.
-// A path whose last segment has a file extension is an asset request: a missing
-// one is a real 404 rather than the app shell, which keeps a missing script from
-// looking like a broken page. The API prefix is left to the API and never answered
-// with console HTML.
-func consoleSPAHandler(consoleFiles fs.FS, prefix string) http.Handler {
+// retiredConsoleRedirect sends any path beneath the retired prefix to the same
+// path at the root, query string included. The redirect is permanent (308) so a
+// browser and a search index converge on the real URL instead of asking again.
+func retiredConsoleRedirect() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.EscapedPath(), retiredConsolePrefix)
+		location := "/" + strings.TrimPrefix(rest, "/")
+		if r.URL.RawQuery != "" {
+			location += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, location, http.StatusPermanentRedirect)
+	})
+}
+
+// consoleSPAHandler serves the embedded console bundle. It is the only console
+// route, mounted at the root. A path whose last segment has a file extension is
+// an asset request: a missing one is a real 404 rather than the app shell, which
+// keeps a missing script from looking like a broken page. The API prefix is left
+// to the API and never answered with console HTML.
+func consoleSPAHandler(consoleFiles fs.FS) http.Handler {
 	distFS, err := fs.Sub(consoleFiles, "ui/dist")
 	if err != nil {
 		panic(fmt.Sprintf("prepare console assets: %v", err))
@@ -216,8 +237,7 @@ func consoleSPAHandler(consoleFiles fs.FS, prefix string) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		rel := strings.TrimPrefix(r.URL.Path, prefix)
-		rel = strings.TrimPrefix(rel, "/")
+		rel := strings.TrimPrefix(r.URL.Path, "/")
 		if hasBuild {
 			if rel == "" {
 				rel = "200.html"

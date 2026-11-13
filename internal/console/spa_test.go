@@ -52,7 +52,7 @@ const entryPage = `<!doctype html>
 // The root is the console: the single-page entry, every deep route at its root
 // path, the bundle's own assets, and a real 404 when an asset is missing.
 func TestConsoleServesTheBundleAtRoot(t *testing.T) {
-	handler := consoleSPAHandler(builtConsoleTree(t), "/")
+	handler := consoleSPAHandler(builtConsoleTree(t))
 
 	tests := []struct {
 		name        string
@@ -180,10 +180,66 @@ func TestLegacyConsoleNoLongerAnswersTheRoot(t *testing.T) {
 	}
 }
 
-// The preview mount shares the console handler until the permanent redirect
-// replaces it, so the intermediate commit is not console-less. The mount is not
-// asserted here because a built tree and a buildless one answer with different
-// bytes; the redirect slice owns that route.
+// The preview prefix is retired rather than remounted: every path beneath it
+// answers one permanent redirect to the same path at the root, query string
+// included. The whole-prefix match is what keeps an open tab working, because a
+// browser still holding the preview shell asks for its cached `_app` assets
+// under the same prefix. This runs against the server's real mux, so it also
+// pins the ordering: the redirect has to answer before the root SPA fallback.
+func TestRetiredPreviewPrefixRedirectsToRoot(t *testing.T) {
+	handler := NewServer(Options{}).Handler()
+
+	tests := []struct {
+		name     string
+		path     string
+		location string
+	}{
+		{
+			name:     "the bare prefix",
+			path:     "/next",
+			location: "/",
+		},
+		{
+			name:     "the prefix with a trailing slash",
+			path:     "/next/",
+			location: "/",
+		},
+		{
+			name:     "a list route",
+			path:     "/next/traces",
+			location: "/traces",
+		},
+		{
+			name:     "a deep route keeps its query",
+			path:     "/next/traces/trace-01a1d62ac0c152e7?q=x",
+			location: "/traces/trace-01a1d62ac0c152e7?q=x",
+		},
+		{
+			name:     "a cached asset resolves at the root",
+			path:     "/next/_app/start.js",
+			location: "/_app/start.js",
+		},
+		{
+			name:     "a missing asset redirects instead of 404ing",
+			path:     "/next/_app/missing.js",
+			location: "/_app/missing.js",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
+
+			if recorder.Code != http.StatusPermanentRedirect {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusPermanentRedirect)
+			}
+			if got := recorder.Header().Get("Location"); got != test.location {
+				t.Fatalf("Location = %q, want %q", got, test.location)
+			}
+		})
+	}
+}
 
 func TestConsoleRootFallsBackWithoutGeneratedBundle(t *testing.T) {
 	files := fstest.MapFS{
@@ -192,7 +248,7 @@ func TestConsoleRootFallsBackWithoutGeneratedBundle(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	consoleSPAHandler(files, "/").ServeHTTP(recorder, request)
+	consoleSPAHandler(files).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -236,7 +292,7 @@ func TestBuildlessConsoleExplainsTheMissingBundle(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			handler := consoleSPAHandler(buildlessConsoleTree(t), "/")
+			handler := consoleSPAHandler(buildlessConsoleTree(t))
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
 
@@ -253,7 +309,7 @@ func TestBuildlessConsoleExplainsTheMissingBundle(t *testing.T) {
 
 	t.Run("missing asset still 404s", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		handler := consoleSPAHandler(buildlessConsoleTree(t), "/")
+		handler := consoleSPAHandler(buildlessConsoleTree(t))
 		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/_app/missing.js", nil))
 
 		if recorder.Code != http.StatusNotFound {
