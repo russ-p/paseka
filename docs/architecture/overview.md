@@ -133,11 +133,14 @@ Trail comb (trace-scoped handoff files; gitignored with `runs/`):
 
 ```
 .paseka/runs/<traceId>/artifacts/
-├── research.md        # bee-written draft notes (example)
-└── review-comments.md # human Console comb write (017 Slice B)
+├── research.md              # bee-written draft notes (example)
+├── review-comments.md       # human Console comb write (017 Slice B)
+└── skill-proposals/<name>/  # proposed skill bundle (041) — one row in the Console list
 ```
 
 Bees receive `{{.ArtifactsDir}}` (absolute path to the comb). Runtime announces **added/changed** comb files on successful AFK or interactive exit via `SIGNAL/artifact.written` (SHA-256 delta vs per-run baseline under `<agentId>/artifacts-baseline.json`). Human producers (`console`) write and publish immediately. Distinct from adapter `result.json` artifact blobs — see [Spec 014](../specs/014-artifacts-protocol.md).
+
+A proposed skill bundle is the one comb subtree the Console does not list file by file: its identity is an `INSIGHT/skill.proposed` discovery, so the trail's artifact list folds it into one row (skill name, file count, total size) that sends the decision to the Skills page. See [Spec 041](../specs/041-skills-layer.md).
 
 Proposal patches (trace-scoped, runtime-owned code history; gitignored with `runs/`):
 

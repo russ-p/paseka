@@ -17,6 +17,7 @@
 	import { toastStore, type ToastStore } from '$lib/stores/toast.svelte';
 	import { consolePath, runDetailPath, taskDetailPath, traceTimelinePath } from '$lib/navigation';
 	import {
+		artifactIsSkillProposal,
 		artifactLabel,
 		artifactMeta,
 		artifactState,
@@ -301,20 +302,26 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each store.artifacts as artifact (artifact.ref)}
+						{@const proposal = artifactIsSkillProposal(artifact)}
 						<DetailRow
 							title={artifactLabel(artifact)}
 							meta={artifactMeta(artifact)}
+							detail={proposal ? 'Proposed skill — approve, refuse, or trial it in Skills.' : undefined}
 							dataKey={artifact.ref}
 						>
 							{#snippet side()}
 								<StatusBadge status={artifactState(artifact)} label={artifactState(artifact)} />
-								<button
-									type="button"
-									class="btn btn-ghost btn-xs"
-									onclick={() => (viewing = artifact)}
-								>
-									View
-								</button>
+								{#if proposal}
+									<a class="btn btn-ghost btn-xs" href={consolePath(base, '/skills')}>Review</a>
+								{:else}
+									<button
+										type="button"
+										class="btn btn-ghost btn-xs"
+										onclick={() => (viewing = artifact)}
+									>
+										View
+									</button>
+								{/if}
 							{/snippet}
 						</DetailRow>
 					{/each}

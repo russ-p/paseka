@@ -116,6 +116,10 @@ Do NOT include specific file paths or code snippets. They may end up being outda
 
 Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
 
+## Changes
+
+Optional. Post-implementation changes to an **Implemented** spec: one numbered entry (`C1`, `C2`, …), dated, saying what changed, why the settled decision was experienced wrongly, and which alternatives were rejected. Omit the section until the spec has one. A change that reopens a decision, adds a capability, or moves a contract is a decision or an amendment, not a change entry.
+
 ## Testing Decisions
 
 A list of testing decisions that were made. Include:
@@ -143,6 +147,7 @@ Any further notes about the feature.
 6. **Out of Scope is explicit** — list non-goals so later work does not silently expand the spec.
 7. **Do not duplicate durable docs** — link to `docs/guide/`, `docs/reference/`, `docs/architecture/` for shipped behavior; the spec remains the design record.
 8. **Partial updates** — when editing an existing older-format spec, prefer migrating touched sections toward this template; full rewrite only when the user asks or the structure is mostly obsolete.
+9. **Small post-implementation changes go in `## Changes`** — a numbered, dated entry that says what an operator now experiences differently and what was rejected; not a new decision and not an amendment. Keep it to a few sentences, and leave the original decision text untouched so the spec still shows what was designed before it was refined.
 
 ## Checklist (create or major update)
 
@@ -155,6 +160,7 @@ Any further notes about the feature.
 - [ ] Implementation Decisions omit file paths/snippets (unless prototype exception)
 - [ ] [docs/plans/specs-index.md](../../../docs/plans/specs-index.md) row added or status/summary updated
 - [ ] If **Implemented**: changelog + durable docs updated (documentation skill)
+- [ ] Small refinements after implementation are under `## Changes` with a number and a date, not folded into a decision
 - [ ] If **Deprecated**: replacement or retirement called out
 
 ## Anti-patterns

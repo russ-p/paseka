@@ -1270,6 +1270,12 @@ export interface ArtifactView {
 	staged: boolean;
 	/** Size on disk. The preview refuses an oversized file, so this makes it legible first. */
 	bytes?: number;
+	/**
+	 * Set on a folded skill-proposal row: the proposed skill's name, and how many
+	 * files the bundle holds. One comb row for one proposal, not one per file.
+	 */
+	skill?: string;
+	files?: number;
 }
 
 /**

@@ -148,6 +148,7 @@ import {
 	artifactLabel,
 	artifactMeta,
 	artifactState,
+	artifactIsSkillProposal,
 	proposalPatchLabel,
 	proposalPatchNote,
 	runMeta,
@@ -657,6 +658,25 @@ describe('trace row and comb formatting', () => {
 	it('leaves the size out when the server could not measure it', () => {
 		// A `—` here would read as a file of no bytes, which is worse than a missing fact.
 		expect(artifactMeta({ ref: 'n.md', artifactKind: 'note', bytes: 0 })).toBe('note · n.md');
+	});
+
+	it('counts the files a folded bundle row stands for', () => {
+		expect(
+			artifactMeta({
+				ref: '.paseka/runs/t/artifacts/skill-proposals/paseka-release',
+				artifactKind: 'skill-proposal',
+				files: 3,
+				bytes: 4096
+			})
+		).toBe('skill-proposal · 3 files · 4 KiB · .paseka/runs/t/artifacts/skill-proposals/paseka-release');
+		expect(
+			artifactMeta({ ref: 'b', artifactKind: 'skill-proposal', files: 1 })
+		).toBe('skill-proposal · 1 file · b');
+	});
+
+	it('sends a proposal bundle to the surface that can decide it', () => {
+		expect(artifactIsSkillProposal({ artifactKind: 'skill-proposal' })).toBe(true);
+		expect(artifactIsSkillProposal({ artifactKind: 'note' })).toBe(false);
 	});
 
 	it('separates an announced comb file from a staged one', () => {

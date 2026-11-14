@@ -793,9 +793,12 @@ export function artifactLabel(artifact: Pick<ArtifactView, 'title' | 'artifactKi
  * that reads as a file of no bytes.
  */
 export function artifactMeta(
-	artifact: Pick<ArtifactView, 'artifactKind' | 'producer' | 'ref' | 'bytes'>
+	artifact: Pick<ArtifactView, 'artifactKind' | 'producer' | 'ref' | 'bytes' | 'files'>
 ): string {
 	const parts = [artifact.artifactKind];
+	// A folded proposal bundle stands for a directory, so the file count says what
+	// the row swallowed; a single file has nothing to count.
+	if (artifact.files) parts.push(`${artifact.files} file${artifact.files === 1 ? '' : 's'}`);
 	if (artifact.producer) parts.push(artifact.producer);
 	if (artifact.bytes) parts.push(formatSize(artifact.bytes) ?? '');
 	parts.push(artifact.ref);
@@ -805,6 +808,18 @@ export function artifactMeta(
 /** `announced` means the colony was told; `staged` means only the comb has it. */
 export function artifactState(artifact: Pick<ArtifactView, 'announced'>): 'announced' | 'staged' {
 	return artifact.announced ? 'announced' : 'staged';
+}
+
+/**
+ * A folded skill-proposal bundle: one comb row standing for a whole proposed
+ * directory. Its bytes are read, but the decision belongs on the Skills page —
+ * approving, refusing, or trialling it — so the row links there instead of
+ * opening a preview that could never approve anything.
+ */
+export function artifactIsSkillProposal(
+	artifact: Pick<ArtifactView, 'artifactKind'>
+): boolean {
+	return artifact.artifactKind === 'skill-proposal';
 }
 
 /**

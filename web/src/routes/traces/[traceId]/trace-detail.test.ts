@@ -265,6 +265,32 @@ describe('trace detail', () => {
 		expect(screen.getByText('staged')).toBeInTheDocument();
 	});
 
+	it('lists a folded proposal bundle as one row that leads to Skills', async () => {
+		renderDetail({
+			artifacts: async () => [
+				artifactView({
+					ref: '.paseka/runs/trace-01a0bd6963faa14f/artifacts/skill-proposals/paseka-release',
+					artifactKind: 'skill-proposal',
+					title: 'paseka-release',
+					skill: 'paseka-release',
+					files: 2,
+					bytes: 2048
+				})
+			]
+		});
+
+		const block = await section('trace-artifacts');
+		expect(within(block).getByText('paseka-release')).toBeInTheDocument();
+		expect(within(block).getByText(/2 files/)).toBeInTheDocument();
+		// The decision lives on Skills, so the row links there rather than opening a
+		// preview that could never approve anything.
+		expect(within(block).getByRole('link', { name: 'Review' })).toHaveAttribute(
+			'href',
+			'/skills'
+		);
+		expect(within(block).queryByRole('button', { name: 'View' })).not.toBeInTheDocument();
+	});
+
 	it('reports an unreadable comb apart from the trail', async () => {
 		renderDetail({
 			artifacts: async () => {
