@@ -346,11 +346,25 @@ export interface UsageWarning {
 	detail: string;
 }
 
+/**
+ * The record restriction a usage report was built with and echoes back. Mirrors
+ * `runs.UsageFilters`: values within one axis are alternatives, the axes
+ * combine, and an empty list is the empty set.
+ */
+export interface UsageFilters {
+	adapter: string[];
+	model: string[];
+	bee: string[];
+	purpose: string[];
+}
+
 /** The colony-wide usage report. Mirrors `runs.UsageReport`. */
 export interface UsageReport {
 	since: string;
 	until: string;
 	timezone: string;
+	/** The filter set the report applied; empty lists mean every record. */
+	filters: UsageFilters;
 	observedAt: string;
 	earliestRetainedAt?: string;
 	period: UsageTotals;

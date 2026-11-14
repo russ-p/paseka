@@ -434,19 +434,28 @@ export function getRun(traceId: string, agentId: string): Promise<RunSummary> {
  *
  * `since` is inclusive and `until` exclusive, both local midnights in
  * `timezone`; the server caps the range and answers an invalid one with a
- * plain-text 400. This is a history read, not a live stream: callers refresh it
- * explicitly rather than polling it.
+ * plain-text 400. Each filter axis is appended one value at a time, which is the
+ * repeated form the endpoint parses; an empty list sends nothing. This is a
+ * history read, not a live stream: callers refresh it explicitly rather than
+ * polling it.
  */
 export function fetchUsage(query: {
 	since: string;
 	until: string;
 	timezone: string;
+	adapter?: string[];
+	model?: string[];
+	bee?: string[];
+	purpose?: string[];
 }): Promise<UsageReport> {
 	const params = new URLSearchParams({
 		since: query.since,
 		until: query.until,
 		timezone: query.timezone
 	});
+	for (const axis of ['adapter', 'model', 'bee', 'purpose'] as const) {
+		for (const value of query[axis] ?? []) params.append(axis, value);
+	}
 	return request<UsageReport>(`/usage?${params.toString()}`);
 }
 

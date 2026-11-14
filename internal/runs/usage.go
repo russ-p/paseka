@@ -70,11 +70,37 @@ func IsUsageAxis(name string) bool {
 // UsageDefaultDays ending now; an empty Until means now. Timezone is an IANA
 // zone name; empty uses the host's local zone. Now is injectable so a report is
 // reproducible in a test; zero means time.Now().UTC().
+//
+// Adapters, Models, Bees, and Purposes restrict the records the report is built
+// from before aggregation. Values within one axis are alternatives (any match
+// passes) and the four axes are combined (a record must match every axis that
+// names a value). A filter never moves the range, the day boundaries, or the
+// zone: it only decides which records those buckets count.
 type UsageQuery struct {
 	Since    string
 	Until    string
 	Timezone string
 	Now      time.Time
+	Adapters []string
+	Models   []string
+	Bees     []string
+	Purposes []string
+}
+
+// UsageFilters is the restriction a report was built with, echoed back so a
+// caller can see what it asked for and a page can name the active chips without
+// remembering its own request. Values are trimmed, deduplicated, and sorted; an
+// empty list is the empty set, never a filter for the empty key.
+type UsageFilters struct {
+	Adapter []string `json:"adapter"`
+	Model   []string `json:"model"`
+	Bee     []string `json:"bee"`
+	Purpose []string `json:"purpose"`
+}
+
+// IsEmpty reports whether the report was built over every retained record.
+func (f UsageFilters) IsEmpty() bool {
+	return len(f.Adapter) == 0 && len(f.Model) == 0 && len(f.Bee) == 0 && len(f.Purpose) == 0
 }
 
 // UsageError is a request the reader refuses with a reason a caller can show.
@@ -255,10 +281,15 @@ type UsageDay struct {
 // are derived from the same records, and the period is summed from the days so
 // a headline cannot disagree with the table under it.
 type UsageReport struct {
-	Since              string      `json:"since"`
-	Until              string      `json:"until"`
-	Timezone           string      `json:"timezone"`
-	ObservedAt         time.Time   `json:"observedAt"`
+	Since string `json:"since"`
+	Until string `json:"until"`
+	// Timezone and the echoed range are the report's, not the filter's: a
+	// filtered report covers exactly the same days as an unfiltered one.
+	Timezone   string       `json:"timezone"`
+	Filters    UsageFilters `json:"filters"`
+	ObservedAt time.Time    `json:"observedAt"`
+	// EarliestRetainedAt is when the retained record begins, independent of the
+	// filters: a filter narrows what is counted, not what retention kept.
 	EarliestRetainedAt *time.Time  `json:"earliestRetainedAt,omitempty"`
 	Period             UsageTotals `json:"period"`
 	// Breakdown is the period ranking for every axis, derived from the day
@@ -699,6 +730,87 @@ func periodTrailCount(days []*usageTrailAccumulator) int {
 	return len(seen)
 }
 
+// normalizeUsageFilters turns the query's repeated flags into the set the
+// report echoes. Trimming and deduplication make the echo a set rather than a
+// transcript of the request, and sorting makes two equivalent requests produce
+// the same document.
+func normalizeUsageFilters(q UsageQuery) UsageFilters {
+	return UsageFilters{
+		Adapter: normalizeUsageFilterValues(q.Adapters),
+		Model:   normalizeUsageFilterValues(q.Models),
+		Bee:     normalizeUsageFilterValues(q.Bees),
+		Purpose: normalizeUsageFilterValues(q.Purposes),
+	}
+}
+
+func normalizeUsageFilterValues(values []string) []string {
+	normalized := []string{}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+// usageFilter is the pre-aggregation restriction over projected records. It
+// matches the same keys the report groups by, so filtering on `unknown` selects
+// the legacy group and filtering on an adapter name selects every implementation
+// of that adapter.
+type usageFilter struct {
+	adapters map[string]struct{}
+	models   map[string]struct{}
+	bees     map[string]struct{}
+	purposes map[string]struct{}
+}
+
+func newUsageFilter(filters UsageFilters) usageFilter {
+	return usageFilter{
+		adapters: usageFilterSet(filters.Adapter),
+		models:   usageFilterSet(filters.Model),
+		bees:     usageFilterSet(filters.Bee),
+		purposes: usageFilterSet(filters.Purpose),
+	}
+}
+
+func usageFilterSet(values []string) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	return set
+}
+
+// matches reports whether a record belongs in a filtered report. An empty axis
+// accepts every record; a named axis accepts any of its values.
+func (f usageFilter) matches(rec UsageRecord) bool {
+	adapter, _ := usageAdapterKey(rec)
+	model, _ := usageModelKey(rec)
+	return usageFilterMatches(f.adapters, adapter) &&
+		usageFilterMatches(f.models, model) &&
+		usageFilterMatches(f.bees, usageBeeKey(rec)) &&
+		usageFilterMatches(f.purposes, rec.Purpose)
+}
+
+func usageFilterMatches(set map[string]struct{}, value string) bool {
+	if len(set) == 0 {
+		return true
+	}
+	_, ok := set[value]
+	return ok
+}
+
 // ReadUsage builds the colony-wide report for one range. It reads retained run
 // records only: it changes no file, publishes no event, and needs no bus.
 func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
@@ -720,10 +832,13 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		return UsageReport{}, err
 	}
 
+	filters := normalizeUsageFilters(q)
+	filter := newUsageFilter(filters)
 	report := UsageReport{
 		Since:      since.Format(time.RFC3339),
 		Until:      until.Format(time.RFC3339),
 		Timezone:   zoneName,
+		Filters:    filters,
 		ObservedAt: now.UTC(),
 		Days:       []UsageDay{},
 		Warnings:   append([]UsageWarning{}, scan.Warnings...),
@@ -742,11 +857,21 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 	var earliest time.Time
 	for _, rec := range scan.Records {
 		if rec.StartedAt.IsZero() {
-			report.ExcludedUndated++
+			// An undated record that does not match the filter is not part of the
+			// filtered observation, so it is not counted as an exclusion either.
+			if filter.matches(rec) {
+				report.ExcludedUndated++
+			}
 			continue
 		}
+		// The retained-record start describes retention, not the filter: it is
+		// read before the filter so a filtered range still knows when the record
+		// it is observing begins.
 		if earliest.IsZero() || rec.StartedAt.Before(earliest) {
 			earliest = rec.StartedAt
+		}
+		if !filter.matches(rec) {
+			continue
 		}
 		// A record is placed by its start time, in whole: a run crossing
 		// midnight lands entirely on its start day rather than inventing a

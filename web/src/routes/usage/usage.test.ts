@@ -5,15 +5,25 @@ import Usage from './+page.svelte';
 import { createUsageStore, type UsageStore } from '$lib/stores/usage.svelte';
 import { usageAxisEntry, usageDay, usageReport, usageTrailEntry, usageTrails } from '../../tests/fixtures';
 import type { UsageReport } from '$lib/api/types';
+import type { UsageAxisChoice, UsageFilters } from '$lib/usage-view';
 
 const fixedNow = () => new Date(2026, 8, 30, 12, 0, 0);
 
-function harness(report: UsageReport = usageReport()): {
+function harness(
+	report: UsageReport = usageReport(),
+	initial: { filters?: Partial<UsageFilters>; axis?: UsageAxisChoice } = {}
+): {
 	store: UsageStore;
 	fetchUsage: ReturnType<typeof vi.fn>;
 } {
 	const fetchUsage = vi.fn(async () => report);
-	const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+	const store = createUsageStore({
+		fetchUsage,
+		now: fixedNow,
+		timezone: 'UTC',
+		initialFilters: initial.filters,
+		initialAxis: initial.axis
+	});
 	return { store, fetchUsage };
 }
 
@@ -155,7 +165,11 @@ describe('usage page', () => {
 		expect(fetchUsage).toHaveBeenLastCalledWith({
 			since: '2026-09-24',
 			until: '2026-10-01',
-			timezone: 'UTC'
+			timezone: 'UTC',
+			adapter: [],
+			model: [],
+			bee: [],
+			purpose: []
 		});
 	});
 
@@ -412,5 +426,186 @@ describe('usage page top trails', () => {
 		const singleRegion = await screen.findByRole('region', { name: 'Top trails' });
 		expect(within(singleRegion).getAllByRole('row')).toHaveLength(2); // header plus one trail
 		expect(singleRegion.textContent).toContain('Every trail that reported usage is listed');
+	});
+});
+
+/** A day whose model axis holds two keys, so a filter has a choice to make. */
+function modelDay() {
+	return usageDay({
+		breakdown: {
+			adapter: [usageAxisEntry({ key: 'opencode' })],
+			model: [
+				usageAxisEntry({ key: 'openai/gpt-5' }),
+				usageAxisEntry({ key: 'anthropic/claude-sonnet' })
+			],
+			bee: [usageAxisEntry({ key: 'builder' })],
+			purpose: [usageAxisEntry({ key: 'work' })]
+		}
+	});
+}
+
+describe('usage page filters', () => {
+	it('renders active filters as removable chips and offers the values still in view', async () => {
+		const { store, fetchUsage } = harness(usageReport({ days: [modelDay()] }), {
+			filters: { model: ['openai/gpt-5'] }
+		});
+		render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		const chips = screen.getByRole('list', { name: 'Active filters' });
+		expect(chips.textContent).toContain('Model: openai/gpt-5');
+
+		// The applied value is a chip, not a second choice in the picker.
+		const picker = screen.getByLabelText('Add Model filter') as HTMLSelectElement;
+		const offered = within(picker)
+			.getAllByRole('option')
+			.map((option) => option.textContent?.trim());
+		expect(offered).toContain('anthropic/claude-sonnet');
+		expect(offered).not.toContain('openai/gpt-5');
+
+		await userEvent.click(
+			screen.getByRole('button', { name: 'Remove model filter openai/gpt-5' })
+		);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage).toHaveBeenLastCalledWith({
+			since: '2026-09-01',
+			until: '2026-10-01',
+			timezone: 'UTC',
+			adapter: [],
+			model: [],
+			bee: [],
+			purpose: []
+		});
+		expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
+	});
+
+	it('adds a filter from the picker in one read', async () => {
+		const { store, fetchUsage } = harness(usageReport({ days: [modelDay()] }), {
+			axis: 'model'
+		});
+		render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		await userEvent.selectOptions(
+			screen.getByLabelText('Add Model filter'),
+			'openai/gpt-5'
+		);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ model: ['openai/gpt-5'] })
+		);
+		expect(
+			screen.getByRole('button', { name: 'Remove model filter openai/gpt-5' })
+		).toBeInTheDocument();
+	});
+
+	it('shows a distinct empty state when the filters match nothing, and keeps every chip removable', async () => {
+		const emptyDay = usageDay({
+			executions: 0,
+			reportedExecutions: 0,
+			distinctTrails: 0,
+			tokens: {
+				inputTokens: 0,
+				outputTokens: 0,
+				reasoningTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				totalTokens: 0
+			},
+			recordedCostUsd: 0,
+			costReportedExecutions: 0
+		});
+		const { store, fetchUsage } = harness(usageReport({ days: [emptyDay] }), {
+			filters: { adapter: ['opencode'], purpose: ['work'] }
+		});
+		render(Usage, { store });
+
+		expect(
+			await screen.findByText('No executions match the active filters')
+		).toBeInTheDocument();
+		expect(screen.queryByLabelText('Daily usage')).not.toBeInTheDocument();
+		expect(screen.queryByRole('region', { name: 'Token volume' })).not.toBeInTheDocument();
+
+		// Every active chip stays removable, including the ones that match nothing.
+		expect(
+			screen.getByRole('button', { name: 'Remove adapter filter opencode' })
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole('button', { name: 'Remove purpose filter work' })
+		).toBeInTheDocument();
+
+		await userEvent.click(
+			screen.getByRole('button', { name: 'Clear filters to see the range' })
+		);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ adapter: [], purpose: [] })
+		);
+		await waitFor(() =>
+			expect(screen.getByLabelText('Daily usage')).toBeInTheDocument()
+		);
+	});
+
+	it('writes the range, axis, and filters to the URL without adding history entries', async () => {
+		const { store, fetchUsage } = harness(usageReport({ days: [modelDay()] }));
+		const before = window.history.length;
+		render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		// Mount writes the exact range so a copied link names the days on screen.
+		expect(new URLSearchParams(window.location.search).get('since')).toBe('2026-09-01');
+
+		await userEvent.click(screen.getByRole('button', { name: 'Model' }));
+		expect(new URLSearchParams(window.location.search).get('axis')).toBe('model');
+		// Switching the stack is not a read.
+		expect(fetchUsage).toHaveBeenCalledTimes(1);
+
+		await userEvent.selectOptions(
+			screen.getByLabelText('Add Model filter'),
+			'anthropic/claude-sonnet'
+		);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(new URLSearchParams(window.location.search).getAll('model')).toEqual([
+			'anthropic/claude-sonnet'
+		]);
+		// Replace, never push: Back does not walk through the values added.
+		expect(window.history.length).toBe(before);
+	});
+
+	it('restores the view a link carries', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/usage?since=2026-09-10&until=2026-09-12&axis=model&model=openai%2Fgpt-5'
+		);
+		const { store, fetchUsage } = harness(
+			usageReport({
+				since: '2026-09-10T00:00:00Z',
+				until: '2026-09-12T00:00:00Z',
+				days: [modelDay()]
+			})
+		);
+		render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		expect(fetchUsage).toHaveBeenCalledWith({
+			since: '2026-09-10',
+			until: '2026-09-12',
+			timezone: 'UTC',
+			adapter: [],
+			model: ['openai/gpt-5'],
+			bee: [],
+			purpose: []
+		});
+		expect(screen.getByRole('button', { name: 'Model' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+		expect(
+			screen.getByRole('button', { name: 'Remove model filter openai/gpt-5' })
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/2026-09-10T00:00:00Z to 2026-09-12T00:00:00Z/)
+		).toBeInTheDocument();
 	});
 });

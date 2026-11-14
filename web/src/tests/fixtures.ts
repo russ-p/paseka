@@ -1317,6 +1317,7 @@ export function usageReport(overrides: Partial<UsageReport> = {}): UsageReport {
 		since: '2026-09-01T00:00:00Z',
 		until: '2026-10-01T00:00:00Z',
 		timezone: 'UTC',
+		filters: { adapter: [], model: [], bee: [], purpose: [] },
 		observedAt: '2026-09-30T18:00:00Z',
 		earliestRetainedAt: '2026-08-01T00:00:00Z',
 		period,

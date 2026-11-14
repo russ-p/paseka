@@ -23,6 +23,12 @@ func (a *api) handleUsage(w http.ResponseWriter, r *http.Request) {
 		Since:    query.Get("since"),
 		Until:    query.Get("until"),
 		Timezone: query.Get("timezone"),
+		// Repeated params are the filters: `?adapter=a&adapter=b` is the set {a,
+		// b}. The reader normalizes them and echoes the set it applied.
+		Adapters: query["adapter"],
+		Models:   query["model"],
+		Bees:     query["bee"],
+		Purposes: query["purpose"],
 	})
 	if err != nil {
 		var usageErr *runs.UsageError

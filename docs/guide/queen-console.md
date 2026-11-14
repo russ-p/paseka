@@ -393,11 +393,16 @@ the rows on screen plus that remainder are the period total. The trail name is
 the table's only link, and it opens the existing trail detail instead of
 repeating that report here.
 
+**Filters** narrow the same records before aggregation. Four pickers offer the adapter, model, Bee, and purpose values present in the current view, and each applied value becomes a **removable chip**: a filter that matches nothing is still a chip with an ×, so no view is a dead end. Values within one axis are alternatives, the axes combine, and the chips read the same key the breakdown does — filtering an adapter by name keeps every implementation of it, and `unknown` is a selectable value rather than a hidden one. A filter never moves the range or the day boundaries: the day table stays zero-filled across the same dates, every section (headline, chart, breakdown, top trails, coverage) counts only matching records, and the report echoes the filter set it applied. When the active filters match nothing, the page says so in its own empty state — distinct from a quiet range — and offers to clear them.
+
+The range, the selected breakdown axis, and every filter **live in the URL** (`?since=&until=&axis=&adapter=&model=&bee=&purpose=`), written with `replaceState`. Reload restores the view, a copied link shows the same days and filters, and Back does not walk backwards through the values that were added. Changing a filter or the range issues one read; changing the breakdown axis reads nothing, because all four axes are already on the report.
+
 This page deliberately has **no poller**: the report walks run directories, so it
-reads on mount, on a range change, and when you press **Refresh**. A failed
+reads on mount, on a range or filter change, and when you press **Refresh**. A failed
 refresh keeps the last good report on screen with its error above it.
 
-The JSON endpoint is `GET /api/usage?since=YYYY-MM-DD&until=YYYY-MM-DD&timezone=IANA/Zone`.
+The JSON endpoint is `GET /api/usage?since=YYYY-MM-DD&until=YYYY-MM-DD&timezone=IANA/Zone`,
+with each filter axis repeated once per value (`&adapter=opencode&adapter=cursor`).
 It is read-only: it changes no file, publishes no event, and needs no bus. An
 invalid date, an unknown zone, a reversed range, or a range over 366 days is a
 `400` with a plain-text reason; a colony with no `.paseka/runs` returns an empty

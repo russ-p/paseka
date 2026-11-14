@@ -1,99 +1,61 @@
 import { fetchUsage as requestUsage } from '$lib/api/client';
 import type { UsageReport } from '$lib/api/types';
+import {
+	browserTimezone,
+	clearUsageFilters,
+	hasUsageFilters,
+	readUsageView,
+	usageCustomRange,
+	usageFilterCount,
+	usagePresetRange,
+	withUsageFilter,
+	withoutUsageFilter,
+	writeUsageView,
+	type UsageAxisChoice,
+	type UsageFilterAxis,
+	type UsageFilters,
+	type UsagePreset,
+	type UsageRangeChoice,
+	type UsageViewDefaults
+} from '$lib/usage-view';
 
-/** The range presets the page offers. Custom is a separate choice. */
-export type UsagePreset = 7 | 30 | 90;
-export type UsageRangeChoice = UsagePreset | 'custom';
+export {
+	browserTimezone,
+	inclusiveEnd,
+	localDate,
+	parseLocalDate,
+	usageCustomRange,
+	usagePresetRange,
+	type UsageAxisChoice,
+	type UsageFilterAxis,
+	type UsageFilters,
+	type UsagePreset,
+	type UsageRangeChoice
+} from '$lib/usage-view';
+
+/** The query one read sends: the range, the zone, and the filter set. */
+export type UsageFetchQuery = {
+	since: string;
+	until: string;
+	timezone: string;
+} & UsageFilters;
 
 interface UsageStoreOptions {
-	fetchUsage?: (query: { since: string; until: string; timezone: string }) => Promise<UsageReport>;
+	fetchUsage?: (query: UsageFetchQuery) => Promise<UsageReport>;
 	/** Injectable clock, so a test's preset range is fixed rather than "today". */
 	now?: () => Date;
 	/** Injectable zone; the page uses the browser's. */
 	timezone?: string;
-	/** The first range, matching the server's own 30-day default. */
+	/** The preset a view falls back to when the URL names no range. */
 	initialPreset?: UsagePreset;
+	/** The axis a view falls back to when the URL names none. */
+	initialAxis?: UsageAxisChoice;
+	/** The filters a view falls back to when the URL carries none. */
+	initialFilters?: Partial<UsageFilters>;
 }
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
-}
-
-/** A local calendar date as `YYYY-MM-DD`, never shifted through UTC. */
-export function localDate(date: Date): string {
-	const year = date.getFullYear();
-	const month = String(date.getMonth() + 1).padStart(2, '0');
-	const day = String(date.getDate()).padStart(2, '0');
-	return `${year}-${month}-${day}`;
-}
-
-/** Parses `YYYY-MM-DD` as local midnight, or returns null. */
-export function parseLocalDate(value: string): Date | null {
-	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-	if (!match) return null;
-	const year = Number(match[1]);
-	const month = Number(match[2]);
-	const day = Number(match[3]);
-	const date = new Date(year, month - 1, day);
-	if (
-		date.getFullYear() !== year ||
-		date.getMonth() !== month - 1 ||
-		date.getDate() !== day
-	) {
-		return null;
-	}
-	return date;
-}
-
-/** The inclusive date before an exclusive `until` boundary. */
-export function inclusiveEnd(until: string): string {
-	const date = parseLocalDate(until);
-	if (!date) return until;
-	const previous = new Date(date);
-	previous.setDate(previous.getDate() - 1);
-	return localDate(previous);
-}
-
-/**
- * A preset range ending today: `days` local calendar days, with `until` the
- * exclusive midnight after today. Counting whole days is what keeps the range
- * identical across a daylight-saving transition.
- */
-export function usagePresetRange(
-	days: UsagePreset,
-	now: Date
-): { since: string; until: string } {
-	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	const since = new Date(today);
-	since.setDate(since.getDate() - (days - 1));
-	const until = new Date(today);
-	until.setDate(until.getDate() + 1);
-	return { since: localDate(since), until: localDate(until) };
-}
-
-/**
- * A custom range whose `to` date is inclusive, as the control says. The server
- * takes `until` as exclusive, so the day after `to` is what is sent.
- */
-export function usageCustomRange(
-	from: string,
-	to: string
-): { since: string; until: string } | null {
-	const start = parseLocalDate(from);
-	const end = parseLocalDate(to);
-	if (!start || !end || end.getTime() < start.getTime()) return null;
-	const until = new Date(end);
-	until.setDate(until.getDate() + 1);
-	return { since: localDate(start), until: localDate(until) };
-}
-
-/** The browser's IANA zone, or UTC when the runtime cannot name one. */
-export function browserTimezone(): string {
-	try {
-		return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-	} catch {
-		return 'UTC';
-	}
 }
 
 /**
@@ -101,20 +63,32 @@ export function browserTimezone(): string {
  *
  * This is a deliberate departure from the live routes: the report walks run
  * directories, so there is no timer here. It reads once on mount, and again on a
- * range change or an explicit refresh. A failed read keeps the last good report
- * on screen, because the numbers an operator is reading are still the last real
- * ones.
+ * range or filter change or an explicit refresh. Switching the breakdown axis
+ * reads nothing — all four axes are already in the report. A failed read keeps
+ * the last good report on screen, because the numbers an operator is reading are
+ * still the last real ones.
+ *
+ * The view lives in the URL: the store seeds itself from the address bar and
+ * publishes each change with `replaceState`, so reload and a shared link restore
+ * the same view and Back does not step through the values the operator added.
  */
 export function createUsageStore(options: UsageStoreOptions = {}) {
 	const readUsage = options.fetchUsage ?? requestUsage;
 	const clock = options.now ?? (() => new Date());
 	const zone = options.timezone ?? browserTimezone();
 
-	const initial = usagePresetRange(options.initialPreset ?? 30, clock());
+	const defaults: UsageViewDefaults = {
+		preset: options.initialPreset ?? 30,
+		axis: options.initialAxis,
+		filters: options.initialFilters
+	};
+	const initial = readUsageView(clock(), defaults);
 
-	let preset = $state<UsageRangeChoice>(options.initialPreset ?? 30);
+	let preset = $state(initial.preset);
 	let since = $state(initial.since);
 	let until = $state(initial.until);
+	let axis = $state<UsageAxisChoice>(initial.axis);
+	let filters = $state<UsageFilters>(initial.filters);
 	let report = $state<UsageReport | null>(null);
 	let loading = $state(true);
 	let error = $state('');
@@ -122,12 +96,24 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 	let started = false;
 	let generation = 0;
 
+	function publish(): void {
+		writeUsageView({ since, until, axis, filters });
+	}
+
 	async function load(): Promise<void> {
 		const request = ++generation;
 		loading = true;
 		try {
-			const next = await readUsage({ since, until, timezone: zone });
-			// A slow read for a range the operator already left must not replace
+			const next = await readUsage({
+				since,
+				until,
+				timezone: zone,
+				adapter: filters.adapter,
+				model: filters.model,
+				bee: filters.bee,
+				purpose: filters.purpose
+			});
+			// A slow read for a view the operator already left must not replace
 			// the answer they are waiting for.
 			if (request !== generation) return;
 			report = next;
@@ -145,6 +131,7 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		preset = days;
 		since = next.since;
 		until = next.until;
+		publish();
 		void load();
 	}
 
@@ -155,13 +142,49 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		preset = 'custom';
 		since = next.since;
 		until = next.until;
+		publish();
 		void load();
 		return true;
+	}
+
+	/** Changes the chart stack; all four axes are already loaded, so no read. */
+	function setAxis(next: UsageAxisChoice): void {
+		if (axis === next) return;
+		axis = next;
+		publish();
+	}
+
+	/** Adds one filter value; the same value twice is one value and no read. */
+	function addFilter(axisName: UsageFilterAxis, value: string): void {
+		const next = withUsageFilter(filters, axisName, value);
+		if (next === filters) return;
+		filters = next;
+		publish();
+		void load();
+	}
+
+	function removeFilter(axisName: UsageFilterAxis, value: string): void {
+		const next = withoutUsageFilter(filters, axisName, value);
+		if (next === filters) return;
+		filters = next;
+		publish();
+		void load();
+	}
+
+	function clearFilters(): void {
+		const next = clearUsageFilters(filters);
+		if (next === filters) return;
+		filters = next;
+		publish();
+		void load();
 	}
 
 	function start(): void {
 		if (started) return;
 		started = true;
+		// The address bar is made exact before the first read, so a copied link
+		// names the days on screen rather than the default of the day it opens.
+		publish();
 		void load();
 	}
 
@@ -186,6 +209,18 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		get timezone(): string {
 			return zone;
 		},
+		get axis(): UsageAxisChoice {
+			return axis;
+		},
+		get filters(): UsageFilters {
+			return filters;
+		},
+		get hasFilters(): boolean {
+			return hasUsageFilters(filters);
+		},
+		get filterCount(): number {
+			return usageFilterCount(filters);
+		},
 		get loading(): boolean {
 			return loading;
 		},
@@ -198,6 +233,10 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		},
 		applyPreset,
 		applyCustom,
+		setAxis,
+		addFilter,
+		removeFilter,
+		clearFilters,
 		refresh: load,
 		start,
 		stop

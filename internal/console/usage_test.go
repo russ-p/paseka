@@ -20,6 +20,13 @@ import (
 
 func writeUsageConsoleRun(t *testing.T, root, traceID, agentID string, started time.Time, usage *protocol.Usage) {
 	t.Helper()
+	writeUsageConsoleRunFor(t, root, traceID, agentID, started, "builder", "opencode", "anthropic/claude-sonnet", protocol.PurposeWork, usage)
+}
+
+// writeUsageConsoleRunFor writes one execution with the identity fields a
+// filter test varies.
+func writeUsageConsoleRunFor(t *testing.T, root, traceID, agentID string, started time.Time, bee, adapter, model string, purpose protocol.ExecutionPurpose, usage *protocol.Usage) {
+	t.Helper()
 	d := runs.Dir{ColonyRoot: root, TraceID: traceID, AgentID: agentID}
 	if err := d.Prepare(); err != nil {
 		t.Fatal(err)
@@ -28,13 +35,13 @@ func writeUsageConsoleRun(t *testing.T, root, traceID, agentID string, started t
 		ProtocolVersion: protocol.Version,
 		TraceID:         traceID,
 		AgentID:         agentID,
-		Bee:             "builder",
-		Adapter:         "opencode",
+		Bee:             bee,
+		Adapter:         adapter,
 		Workspace:       root,
 		ColonyRoot:      root,
-		Model:           "anthropic/claude-sonnet",
+		Model:           model,
 		ModelAlias:      "sonnet",
-		Purpose:         protocol.PurposeWork,
+		Purpose:         purpose,
 		CreatedAt:       started,
 	}); err != nil {
 		t.Fatal(err)
@@ -238,6 +245,69 @@ func TestUsageAPIMissingRunsDirectoryIsAnEmptyReport(t *testing.T) {
 	}
 	if len(report.Days) != 2 || report.Period.Executions != 0 {
 		t.Fatalf("report = %+v, want two zero-filled days and no executions", report)
+	}
+}
+
+func TestUsageAPIAcceptsRepeatedFilters(t *testing.T) {
+	repo := initConsoleRepo(t)
+	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	writeUsageConsoleRunFor(t, repo, "trace-opencode", "run-1", started,
+		"builder", "opencode", "anthropic/claude-sonnet", protocol.PurposeWork,
+		&protocol.Usage{InputTokens: 100, Source: protocol.UsageSourceOpenCodeRunJSON})
+	writeUsageConsoleRunFor(t, repo, "trace-cursor", "run-1", started.Add(time.Minute),
+		"guard", "cursor", "anthropic/claude-sonnet", protocol.PurposeClosing,
+		&protocol.Usage{InputTokens: 200, Source: protocol.UsageSourceCursorStreamJSON})
+	writeUsageConsoleRunFor(t, repo, "trace-compact", "run-1", started.Add(2*time.Minute),
+		"builder", "compact", "openai/gpt-5", protocol.PurposeWork,
+		&protocol.Usage{InputTokens: 50, Source: protocol.UsageSourceOpenCodeRunJSON})
+	srv := console.NewServer(console.Options{Addr: "127.0.0.1:0", Colony: setupConsoleHome(t, repo)})
+
+	read := func(target string) runs.UsageReport {
+		t.Helper()
+		rec := usageAPIRequest(t, srv, target)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d body=%s", target, rec.Code, rec.Body.String())
+		}
+		var report runs.UsageReport
+		if err := json.NewDecoder(rec.Body).Decode(&report); err != nil {
+			t.Fatal(err)
+		}
+		return report
+	}
+
+	// Repeated values are one filter set on that axis: both adapters pass, the
+	// third does not, and the range is the one that was asked for.
+	both := read("/api/usage?since=2026-03-01&until=2026-03-03&timezone=UTC&adapter=opencode&adapter=cursor")
+	if both.Period.Executions != 2 || both.Period.Tokens.InputTokens != 300 {
+		t.Fatalf("period = %+v, want the two named adapters", both.Period)
+	}
+	if len(both.Days) != 2 || both.Since != "2026-03-01T00:00:00Z" || both.Until != "2026-03-03T00:00:00Z" {
+		t.Fatalf("range = %s..%s days=%d, want the requested range unchanged", both.Since, both.Until, len(both.Days))
+	}
+	if len(both.Filters.Adapter) != 2 || both.Filters.Adapter[0] != "cursor" || both.Filters.Adapter[1] != "opencode" {
+		t.Fatalf("filter echo = %+v, want the normalized set", both.Filters.Adapter)
+	}
+	if len(both.Breakdown.Adapter) != 2 || len(both.Trails.Entries) != 2 {
+		t.Fatalf("breakdown/trails = %+v / %+v, want only the matching records", both.Breakdown.Adapter, both.Trails)
+	}
+
+	// Different axes combine.
+	narrow := read("/api/usage?since=2026-03-01&until=2026-03-03&timezone=UTC&adapter=opencode&bee=builder&purpose=work")
+	if narrow.Period.Executions != 1 || narrow.Period.Tokens.InputTokens != 100 {
+		t.Fatalf("period = %+v, want the one opencode/builder/work run", narrow.Period)
+	}
+	if len(narrow.Filters.Bee) != 1 || narrow.Filters.Bee[0] != "builder" {
+		t.Fatalf("bee echo = %+v", narrow.Filters.Bee)
+	}
+
+	// A filter that matches nothing answers a full, zero-filled report rather
+	// than an error: the empty view is the page's to explain.
+	empty := read("/api/usage?since=2026-03-01&until=2026-03-03&timezone=UTC&model=never-ran")
+	if empty.Period.Executions != 0 || len(empty.Days) != 2 {
+		t.Fatalf("empty report = %+v days=%d", empty.Period, len(empty.Days))
+	}
+	if len(empty.Filters.Model) != 1 || empty.Filters.Model[0] != "never-ran" {
+		t.Fatalf("empty filter echo = %+v", empty.Filters)
 	}
 }
 

@@ -372,6 +372,137 @@ func TestInspectUsageRangeRefusesAnUnknownGroupBy(t *testing.T) {
 	}
 }
 
+func TestInspectUsageRangeFiltersNarrowTheReportAndEchoTheSet(t *testing.T) {
+	root := initInspectFixtureRepo(t)
+	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	writeRankedInspectRun(t, root, "small", started, "guard", "cursor", "opencode/space-bunny-free", 100)
+	writeRankedInspectRun(t, root, "large", started.Add(time.Minute), "builder", "opencode", "anthropic/claude-sonnet", 300)
+
+	out, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--adapter", "opencode")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	if !strings.Contains(out, "Filters:     adapter=opencode\n") {
+		t.Fatalf("text does not echo the applied filter:\n%s", out)
+	}
+	if !strings.Contains(out, "Coverage: 1 executions (1 reported, 0 unmeasured) in 1 trail\n") {
+		t.Fatalf("filter did not restrict the report:\n%s", out)
+	}
+	if !strings.Contains(out, "  total:       300\n") {
+		t.Fatalf("filtered total is not the matching run's volume:\n%s", out)
+	}
+	// The range and its day boundaries are the requested ones.
+	if !strings.Contains(out, "Days (2):") {
+		t.Fatalf("filter moved the day boundaries:\n%s", out)
+	}
+	if strings.Contains(out, "opencode/space-bunny-free") {
+		t.Fatalf("a filtered-out model appears in the ranking:\n%s", out)
+	}
+
+	// Repeating a flag is the same axis's alternative values, echoed sorted.
+	both, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--adapter", "opencode", "--adapter", "cursor")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	if !strings.Contains(both, "Filters:     adapter=cursor,opencode\n") {
+		t.Fatalf("repeated flag echo = %q:\n%s", linePrefix(t, both, "Filters:"), both)
+	}
+	if !strings.Contains(both, "Coverage: 2 executions") {
+		t.Fatalf("repeated adapters did not widen the report back:\n%s", both)
+	}
+
+	// Different axes combine.
+	narrow, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--adapter", "opencode", "--bee", "builder", "--purpose", "work",
+		"--model", "anthropic/claude-sonnet")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	if !strings.Contains(narrow, "Coverage: 1 execution") {
+		t.Fatalf("combined filters did not narrow to one execution:\n%s", narrow)
+	}
+	if !strings.Contains(narrow, "Filters:     adapter=opencode; model=anthropic/claude-sonnet; bee=builder; purpose=work\n") {
+		t.Fatalf("combined echo = %q:\n%s", linePrefix(t, narrow, "Filters:"), narrow)
+	}
+
+	// A filter that matches nothing is an empty report, not a refusal.
+	empty, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--model", "never-ran")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	if !strings.Contains(empty, "Coverage: 0 executions") || !strings.Contains(empty, "Days (2):") {
+		t.Fatalf("unmatched filter did not keep the range:\n%s", empty)
+	}
+}
+
+func TestInspectUsageRangeFilterJSONEqualsTheAPIReport(t *testing.T) {
+	root := initInspectFixtureRepo(t)
+	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	writeRankedInspectRun(t, root, "small", started, "guard", "cursor", "opencode/space-bunny-free", 100)
+	writeRankedInspectRun(t, root, "large", started.Add(time.Minute), "builder", "opencode", "anthropic/claude-sonnet", 300)
+
+	const query = "since=2026-03-01&until=2026-03-03&timezone=UTC&adapter=opencode&bee=builder"
+	srv := console.NewServer(console.Options{
+		Addr:   "127.0.0.1:0",
+		Colony: colony.Context{ColonyRoot: root},
+	})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/usage?"+query, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("api status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	cliOut, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--adapter", "opencode", "--bee", "builder", "--json")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+
+	var apiReport, cliReport map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &apiReport); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(cliOut), &cliReport); err != nil {
+		t.Fatalf("decode cli report: %v\n%s", err, cliOut)
+	}
+	delete(apiReport, "observedAt")
+	delete(cliReport, "observedAt")
+	if !reflect.DeepEqual(apiReport, cliReport) {
+		t.Fatalf("filtered cli report differs from the API report\napi: %v\ncli: %v", apiReport, cliReport)
+	}
+	filters, _ := cliReport["filters"].(map[string]any)
+	if len(filters) != 4 {
+		t.Fatalf("cli report carries no echoed filter set: %v", cliReport["filters"])
+	}
+}
+
+func TestInspectUsageRangeRefusesFilterFlagsWithTrace(t *testing.T) {
+	repo := initInspectFixtureRepo(t)
+	for _, flag := range []string{"adapter", "model", "bee", "purpose"} {
+		t.Run(flag, func(t *testing.T) {
+			root := newRoot()
+			var stdout, stderr bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs([]string{"inspect", "usage", "-C", repo, "--trace", "trace-1", "--" + flag, "x"})
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("execute succeeded, want a refusal")
+			}
+			if !strings.Contains(err.Error(), "--"+flag+" applies only without --trace") {
+				t.Fatalf("refusal = %v", err)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("refusal wrote a report:\n%s", stdout.String())
+			}
+		})
+	}
+}
+
 func runInspectUsageCLI(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
 	root := newRoot()

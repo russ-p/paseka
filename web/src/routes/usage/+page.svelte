@@ -8,11 +8,16 @@
 	import {
 		USAGE_AXES,
 		usageAxisEntryLabel,
-		usageAxisTitle,
-		type UsageChartAxis
+		usageAxisTitle
 	} from '$lib/components/UsageChart.svelte';
 	import { formatShare, formatTimestamp, formatTokenCount } from '$lib/format';
 	import { traceDetailPath } from '$lib/navigation';
+	import {
+		USAGE_FILTER_AXES,
+		usageFilterValues,
+		type UsageAxisChoice,
+		type UsageFilterAxis
+	} from '$lib/usage-view';
 	import {
 		createUsageStore,
 		usageCustomRange,
@@ -35,9 +40,56 @@
 	let to = $state('');
 	let customError = $state('');
 	// The component stack is the default; the four axes are already in the
-	// payload, so switching this never triggers a read.
-	let chartAxis = $state<UsageChartAxis>('components');
+	// payload, so switching this never triggers a read. The store owns the
+	// choice because the URL carries it.
+	const chartAxis = $derived(store.axis);
 	const presets: UsagePreset[] = [7, 30, 90];
+
+	/** The human name of one breakdown or filter axis. */
+	function axisName(axis: UsageAxisChoice): string {
+		if (axis === 'components') return 'Components';
+		return USAGE_AXES.find((option) => option.key === axis)?.label ?? axis;
+	}
+
+	/** One active filter value, named by the axis it restricts. */
+	interface ActiveFilter {
+		axis: UsageFilterAxis;
+		value: string;
+	}
+
+	/**
+	 * The chips the operator can undo. They come from the store rather than the
+	 * report, so a filter that matched nothing is still a removable chip.
+	 */
+	const activeFilters = $derived.by((): ActiveFilter[] =>
+		USAGE_FILTER_AXES.flatMap((axis) =>
+			store.filters[axis].map((value) => ({ axis, value }))
+		)
+	);
+
+	/**
+	 * The values the current view offers for each axis. A value already applied
+	 * is a chip, not a second choice, so it is left out of the picker; the
+	 * remaining keys are exactly the ones this report contains.
+	 */
+	const filterOptions = $derived.by(() => {
+		const report = store.report;
+		return USAGE_FILTER_AXES.map((axis) => ({
+			axis,
+			label: axisName(axis),
+			values: (report ? usageFilterValues(report, axis) : []).filter(
+				(value) => !store.filters[axis].includes(value)
+			)
+		}));
+	});
+
+	/** Applies the value chosen in a filter picker, then resets the picker. */
+	function chooseFilter(axis: UsageFilterAxis, event: Event): void {
+		const select = event.currentTarget as HTMLSelectElement;
+		const value = select.value;
+		select.value = '';
+		if (value) store.addFilter(axis, value);
+	}
 
 	// The inputs follow the range the report actually covers, so the control and
 	// the table cannot name different dates. Written after the first payload
@@ -403,6 +455,67 @@
 		</div>
 	{/if}
 
+	<section class="space-y-3" aria-labelledby="usage-filters">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<h2 id="usage-filters" class="text-sm font-medium">Filters</h2>
+			{#if activeFilters.length > 0}
+				<button class="btn btn-ghost btn-xs" onclick={() => store.clearFilters()}>
+					Clear all filters
+				</button>
+			{/if}
+		</div>
+
+		<div class="flex flex-wrap items-end gap-3">
+			{#if store.report}
+				{#each filterOptions as option (option.axis)}
+					<label class="form-control">
+						<span class="label-text text-xs">{option.label}</span>
+						<select
+							class="select select-sm"
+							aria-label={`Add ${option.label} filter`}
+							value=""
+							onchange={(event) => chooseFilter(option.axis, event)}
+						>
+							<option value="">
+								{option.values.length > 0
+									? `Add ${option.label.toLowerCase()}`
+									: 'No values in this view'}
+							</option>
+							{#each option.values as value (value)}
+								<option value={value}>{value}</option>
+							{/each}
+						</select>
+					</label>
+				{/each}
+			{/if}
+		</div>
+
+		{#if activeFilters.length > 0}
+			<ul class="flex flex-wrap gap-2" aria-label="Active filters">
+				{#each activeFilters as chip (`${chip.axis}:${chip.value}`)}
+					<li class="badge badge-lg gap-1">
+						<span>
+							{axisName(chip.axis)}: <span class="font-mono">{chip.value}</span>
+						</span>
+						<button
+							type="button"
+							class="btn btn-ghost btn-xs"
+							aria-label={`Remove ${chip.axis} filter ${chip.value}`}
+							onclick={() => store.removeFilter(chip.axis, chip.value)}
+						>
+							×
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="text-xs text-base-content/60">
+				No filters. Add one above to isolate an adapter, model, Bee, or purpose; the range and
+				the day boundaries stay as they are.
+			</p>
+		{/if}
+	</section>
+
 	{#if store.showSkeletons}
 		<div class="space-y-3" aria-busy="true">
 			<span class="skeleton block h-3 w-1/3"></span>
@@ -415,49 +528,6 @@
 			run crossing midnight stays on its start day
 		</p>
 
-		<section class="space-y-3" aria-labelledby="usage-headline">
-			<h2 id="usage-headline" class="text-xl font-semibold">Token volume</h2>
-
-			<div class="rounded-box border border-base-300 bg-base-100 p-4">
-				<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-					{#each components as component (component.label)}
-						<div>
-							<p class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">
-								{component.label}
-							</p>
-							<p class="text-2xl leading-tight font-bold">{formatTokenCount(component.value)}</p>
-						</div>
-					{/each}
-					<div>
-						<p class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">Total</p>
-						<p class="text-2xl leading-tight font-bold">{formatTokenCount(period.tokens.totalTokens)}</p>
-					</div>
-				</div>
-				<p class="mt-3 text-xs text-base-content/60">
-					Total is the sum of these reported components. Reasoning is not folded into output, and
-					cache kinds are not folded into input.
-				</p>
-			</div>
-
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-				<StatTile
-					label="Executions"
-					value={String(period.executions)}
-					hint={[`${period.reportedExecutions} reported usage`, `${period.executions - period.reportedExecutions} did not`]}
-				/>
-				<StatTile label="Trails" value={String(period.distinctTrails)} />
-				<StatTile
-					label="Coverage"
-					value={coverage}
-					hint={[
-						store.report.earliestRetainedAt
-							? `Retained record begins ${formatTimestamp(store.report.earliestRetainedAt)}`
-							: 'No retained execution record is dated'
-					]}
-				/>
-			</div>
-		</section>
-
 		{#if store.report.warnings.length > 0}
 			<div class="alert alert-warning" role="status">
 				<ul class="list-disc space-y-1 pl-5">
@@ -468,105 +538,174 @@
 			</div>
 		{/if}
 
-		<div class="flex flex-wrap items-center gap-3">
-			<span id="usage-axis-label" class="text-sm font-medium">Breakdown</span>
-			<div class="join" role="group" aria-labelledby="usage-axis-label">
-				<button
-					class="btn join-item btn-sm"
-					class:btn-active={chartAxis === 'components'}
-					aria-pressed={chartAxis === 'components'}
-					onclick={() => (chartAxis = 'components')}
-				>
-					Components
+		{#if store.hasFilters && period.executions === 0}
+			{@const filtersLabel = activeFilters
+				.map((chip) => `${chip.axis} ${chip.value}`)
+				.join(', ')}
+			<section
+				class="alert"
+				role="status"
+				aria-labelledby="usage-empty-title"
+				data-usage-empty="filters"
+			>
+				<div class="space-y-1">
+					<h2 id="usage-empty-title" class="text-lg font-semibold">
+						No executions match the active filters
+					</h2>
+					<p class="text-sm">
+						Nothing retained in {store.report.since} to {store.report.until} matches
+						{filtersLabel}. The range and its {store.report.days.length} zero-filled days are
+						unchanged, so removing a filter restores what this range holds.
+					</p>
+				</div>
+				<button class="btn btn-sm" onclick={() => store.clearFilters()}>
+					Clear filters to see the range
 				</button>
-				{#each USAGE_AXES as option (option.key)}
+			</section>
+		{:else}
+			<section class="space-y-3" aria-labelledby="usage-headline">
+				<h2 id="usage-headline" class="text-xl font-semibold">Token volume</h2>
+
+				<div class="rounded-box border border-base-300 bg-base-100 p-4">
+					<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+						{#each components as component (component.label)}
+							<div>
+								<p class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+									{component.label}
+								</p>
+								<p class="text-2xl leading-tight font-bold">{formatTokenCount(component.value)}</p>
+							</div>
+						{/each}
+						<div>
+							<p class="text-xs font-semibold tracking-wide text-base-content/60 uppercase">Total</p>
+							<p class="text-2xl leading-tight font-bold">{formatTokenCount(period.tokens.totalTokens)}</p>
+						</div>
+					</div>
+					<p class="mt-3 text-xs text-base-content/60">
+						Total is the sum of these reported components. Reasoning is not folded into output, and
+						cache kinds are not folded into input.
+					</p>
+				</div>
+
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+					<StatTile
+						label="Executions"
+						value={String(period.executions)}
+						hint={[`${period.reportedExecutions} reported usage`, `${period.executions - period.reportedExecutions} did not`]}
+					/>
+					<StatTile label="Trails" value={String(period.distinctTrails)} />
+					<StatTile
+						label="Coverage"
+						value={coverage}
+						hint={[
+							store.report.earliestRetainedAt
+								? `Retained record begins ${formatTimestamp(store.report.earliestRetainedAt)}`
+								: 'No retained execution record is dated'
+						]}
+					/>
+				</div>
+			</section>
+
+			<div class="flex flex-wrap items-center gap-3">
+				<span id="usage-axis-label" class="text-sm font-medium">Breakdown</span>
+				<div class="join" role="group" aria-labelledby="usage-axis-label">
 					<button
 						class="btn join-item btn-sm"
-						class:btn-active={chartAxis === option.key}
-						aria-pressed={chartAxis === option.key}
-						onclick={() => (chartAxis = option.key)}
+						class:btn-active={chartAxis === 'components'}
+						aria-pressed={chartAxis === 'components'}
+						onclick={() => store.setAxis('components')}
 					>
-						{option.label}
+						Components
 					</button>
-				{/each}
+					{#each USAGE_AXES as option (option.key)}
+						<button
+							class="btn join-item btn-sm"
+							class:btn-active={chartAxis === option.key}
+							aria-pressed={chartAxis === option.key}
+							onclick={() => store.setAxis(option.key)}
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
 			</div>
-		</div>
 
-		<UsageChart report={store.report} axis={chartAxis} />
+			<UsageChart report={store.report} axis={chartAxis} />
 
-		<section class="space-y-3" aria-labelledby="usage-breakdown">
-			<h2 id="usage-breakdown" class="text-xl font-semibold">{breakdownTitle}</h2>
-			<DataTable
-				label="Breakdown keys"
-				columns={breakdownColumns}
-				rows={breakdownRows}
-				rowKey={(row) => row.key}
-				emptyMessage="No executions reported usage in this range."
-				filterLabel="Filter keys"
-				filterPlaceholder="key"
-				pageSize={0}
-				stateKey="breakdown"
-			/>
-			<p class="text-xs text-base-content/50">
-				Ranked by token volume. Share is the key's part of the {formatTokenCount(
-					axisTotalTokens
-				)} tokens reported in this period; the chart draws the top keys and groups the rest as
-				other, while this table lists every key. A component has no execution count or cost of its
-				own, because a run reports every component at once. Recorded cost appears only where an
-				execution reported it, with the count that did.
-			</p>
-		</section>
-
-		<section class="space-y-3" aria-labelledby="usage-trails">
-			<h2 id="usage-trails" class="text-xl font-semibold">Top trails</h2>
-			{#if trailRanking && trailRanking.entries.length > 0}
+			<section class="space-y-3" aria-labelledby="usage-breakdown">
+				<h2 id="usage-breakdown" class="text-xl font-semibold">{breakdownTitle}</h2>
 				<DataTable
-					label="Top trails table"
-					columns={trailColumns}
-					rows={trailRanking.entries}
-					rowKey={(trail) => trail.traceId}
-					emptyMessage="No trail reported usage in this range."
-					filterLabel="Filter trails"
-					filterPlaceholder="trail or title"
+					label="Breakdown keys"
+					columns={breakdownColumns}
+					rows={breakdownRows}
+					rowKey={(row) => row.key}
+					emptyMessage="No executions reported usage in this range."
+					filterLabel="Filter keys"
+					filterPlaceholder="key"
 					pageSize={0}
-					stateKey="trails"
+					stateKey="breakdown"
 				/>
 				<p class="text-xs text-base-content/50">
-					Ranked by reported tokens. The trail link opens its existing detail, where that trail's
-					usage already lives. A trail whose runs reported nothing is not listed as a zero-token
-					trail: that is a coverage gap, not a free one. {trailReconciliation}
+					Ranked by token volume. Share is the key's part of the {formatTokenCount(
+						axisTotalTokens
+					)} tokens reported in this period; the chart draws the top keys and groups the rest as
+					other, while this table lists every key. A component has no execution count or cost of its
+					own, because a run reports every component at once. Recorded cost appears only where an
+					execution reported it, with the count that did.
 				</p>
-			{:else}
-				<p class="text-base-content/70">
-					No trail reported usage in this range. A trail whose runs reported nothing is a coverage
-					gap, not a zero-token trail, so it is not listed.
-				</p>
-			{/if}
-		</section>
+			</section>
 
-		<section class="space-y-3" aria-labelledby="usage-daily">
-			<h2 id="usage-daily" class="text-xl font-semibold">Daily volume</h2>
-			{#if period.executions === 0}
-				<p class="text-base-content/70">
-					No executions in this range. The days below are still listed, zero-filled, so two ranges
-					share the same axis.
+			<section class="space-y-3" aria-labelledby="usage-trails">
+				<h2 id="usage-trails" class="text-xl font-semibold">Top trails</h2>
+				{#if trailRanking && trailRanking.entries.length > 0}
+					<DataTable
+						label="Top trails table"
+						columns={trailColumns}
+						rows={trailRanking.entries}
+						rowKey={(trail) => trail.traceId}
+						emptyMessage="No trail reported usage in this range."
+						filterLabel="Filter trails"
+						filterPlaceholder="trail or title"
+						pageSize={0}
+						stateKey="trails"
+					/>
+					<p class="text-xs text-base-content/50">
+						Ranked by reported tokens. The trail link opens its existing detail, where that trail's
+						usage already lives. A trail whose runs reported nothing is not listed as a zero-token
+						trail: that is a coverage gap, not a free one. {trailReconciliation}
+					</p>
+				{:else}
+					<p class="text-base-content/70">
+						No trail reported usage in this range. A trail whose runs reported nothing is a coverage
+						gap, not a zero-token trail, so it is not listed.
+					</p>
+				{/if}
+			</section>
+
+			<section class="space-y-3" aria-labelledby="usage-daily">
+				<h2 id="usage-daily" class="text-xl font-semibold">Daily volume</h2>
+				{#if period.executions === 0}
+					<p class="text-base-content/70">
+						No executions in this range. The days below are still listed, zero-filled, so two ranges
+						share the same axis.
+					</p>
+				{/if}
+				<DataTable
+					label="Daily usage"
+					columns={dayColumns}
+					rows={store.report.days}
+					rowKey={(day) => day.date}
+					emptyMessage="No days in this range."
+					filterLabel="Filter days"
+					filterPlaceholder="day or measurement"
+					pageSize={0}
+					stateKey="daily"
+				/>
+				<p class="text-xs text-base-content/50">
+					Recorded cost is the provider's own number, shown only where an adapter reported it, with
+					the count of executions that did. It is never estimated from tokens.
 				</p>
-			{/if}
-			<DataTable
-				label="Daily usage"
-				columns={dayColumns}
-				rows={store.report.days}
-				rowKey={(day) => day.date}
-				emptyMessage="No days in this range."
-				filterLabel="Filter days"
-				filterPlaceholder="day or measurement"
-				pageSize={0}
-				stateKey="daily"
-			/>
-			<p class="text-xs text-base-content/50">
-				Recorded cost is the provider's own number, shown only where an adapter reported it, with
-				the count of executions that did. It is never estimated from tokens.
-			</p>
-		</section>
+			</section>
+		{/if}
 	{/if}
 </div>

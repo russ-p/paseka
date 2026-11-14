@@ -32,6 +32,10 @@ func newInspectUsageCmd() *cobra.Command {
 		since    string
 		until    string
 		timezone string
+		adapters []string
+		models   []string
+		bees     []string
+		purposes []string
 		groupBy  string
 		jsonOut  bool
 	)
@@ -51,9 +55,13 @@ func newInspectUsageCmd() *cobra.Command {
 			"time.\n\n" +
 			"--group-by names the axis whose period ranking is printed: adapter (the\n" +
 			"default), model, bee, or purpose. The JSON report always carries all four\n" +
-			"axes, exactly as GET /api/usage returns them.",
+			"axes, exactly as GET /api/usage returns them.\n\n" +
+			"--adapter, --model, --bee, and --purpose restrict the report before\n" +
+			"aggregation and may each be repeated; values on one axis are alternatives\n" +
+			"and the axes combine. A filter never moves the range or the day boundaries.\n" +
+			"The echoed filter set is printed with the report and carried by --json.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rangeFlags := []string{"since", "until", "timezone", "group-by", "json"}
+			rangeFlags := []string{"since", "until", "timezone", "adapter", "model", "bee", "purpose", "group-by", "json"}
 			if traceID == "" {
 				if agentID != "" {
 					return fmt.Errorf("--agent requires --trace")
@@ -69,6 +77,10 @@ func newInspectUsageCmd() *cobra.Command {
 					Since:    since,
 					Until:    until,
 					Timezone: timezone,
+					Adapters: adapters,
+					Models:   models,
+					Bees:     bees,
+					Purposes: purposes,
 				}, groupBy, jsonOut)
 			}
 			for _, name := range rangeFlags {
@@ -92,6 +104,10 @@ func newInspectUsageCmd() *cobra.Command {
 	cmd.Flags().StringVar(&since, "since", "", "first day of the range, YYYY-MM-DD (default: 30 days before today)")
 	cmd.Flags().StringVar(&until, "until", "", "day after the last day of the range, YYYY-MM-DD (default: now)")
 	cmd.Flags().StringVar(&timezone, "timezone", "", "IANA zone for the day boundaries (default: the host's)")
+	cmd.Flags().StringArrayVar(&adapters, "adapter", nil, "restrict to an adapter name; repeat for several")
+	cmd.Flags().StringArrayVar(&models, "model", nil, "restrict to a resolved model id; repeat for several")
+	cmd.Flags().StringArrayVar(&bees, "bee", nil, "restrict to a Bee role; repeat for several")
+	cmd.Flags().StringArrayVar(&purposes, "purpose", nil, "restrict to an execution purpose (work, closing, analysis); repeat for several")
 	cmd.Flags().StringVar(&groupBy, "group-by", runs.UsageAxisAdapter, "axis ranked in the period breakdown: adapter, model, bee, or purpose")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the report exactly as GET /api/usage returns it")
 	return cmd
@@ -122,6 +138,11 @@ func printUsageRange(w io.Writer, colonyRoot string, query runs.UsageQuery, grou
 func printUsageReport(w io.Writer, report runs.UsageReport, groupBy string) error {
 	fmt.Fprintf(w, "Usage range: %s .. %s\n", report.Since, report.Until)
 	fmt.Fprintf(w, "Time zone:   %s\n", report.Timezone)
+	if filterLine := usageFilterLine(report.Filters); filterLine != "" {
+		// The echo is what the report actually applied, not what the flags said:
+		// duplicates and blanks are already gone.
+		fmt.Fprintf(w, "Filters:     %s\n", filterLine)
+	}
 	fmt.Fprintf(w, "Observed at: %s\n", report.ObservedAt.Format(time.RFC3339))
 	if report.EarliestRetainedAt != nil {
 		fmt.Fprintf(w, "Earliest retained: %s\n", report.EarliestRetainedAt.Format(time.RFC3339))
@@ -175,6 +196,26 @@ func printUsageReport(w io.Writer, report runs.UsageReport, groupBy string) erro
 		}
 	}
 	return nil
+}
+
+// usageFilterLine renders the echoed filter set as `axis=value,value` clauses,
+// or the empty string when the report was built over every retained record.
+func usageFilterLine(filters runs.UsageFilters) string {
+	clauses := make([]string, 0, 4)
+	for _, axis := range []struct {
+		name   string
+		values []string
+	}{
+		{runs.UsageAxisAdapter, filters.Adapter},
+		{runs.UsageAxisModel, filters.Model},
+		{runs.UsageAxisBee, filters.Bee},
+		{runs.UsageAxisPurpose, filters.Purpose},
+	} {
+		if len(axis.values) > 0 {
+			clauses = append(clauses, axis.name+"="+strings.Join(axis.values, ","))
+		}
+	}
+	return strings.Join(clauses, "; ")
 }
 
 // printUsageRanking prints the period breakdown of one axis, ranked by token
