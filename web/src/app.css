@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* LayerChart's official DaisyUI 5 bridge: the chart's surface variables resolve
+   from the theme's --color-base-* tokens, so a data-theme switch repaints the
+   chart and its tooltip with no theme object and no re-render (design system,
+   Charts section). Imported once, here, and nowhere else. */
+@import "layerchart/daisyui-5.css";
 
 @plugin "daisyui" {
 	themes:

@@ -3,6 +3,7 @@
 	import DataTable from '$lib/components/DataTable.svelte';
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
 	import StatTile from '$lib/components/StatTile.svelte';
+	import UsageChart from '$lib/components/UsageChart.svelte';
 	import { formatTimestamp, formatTokenCount } from '$lib/format';
 	import {
 		createUsageStore,
@@ -290,6 +291,8 @@
 				</ul>
 			</div>
 		{/if}
+
+		<UsageChart report={store.report} />
 
 		<section class="space-y-3" aria-labelledby="usage-daily">
 			<h2 id="usage-daily" class="text-xl font-semibold">Daily volume</h2>

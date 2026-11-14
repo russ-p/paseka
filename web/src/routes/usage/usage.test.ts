@@ -103,6 +103,45 @@ describe('usage page', () => {
 		expect(fetchUsage).toHaveBeenCalledTimes(1);
 	});
 
+	it('draws the report the page already holds, with no second read', async () => {
+		const { store, fetchUsage } = harness();
+		render(Usage, { store });
+		const chart = await screen.findByRole('region', { name: 'Token volume per day' });
+
+		// The chart is the page's report, not a reader of its own.
+		expect(within(chart).getByText(/from 2026-09-25 to 2026-09-25/)).toBeInTheDocument();
+		expect(within(chart).getByText(/2\.1k tokens in total/)).toBeInTheDocument();
+		expect(fetchUsage).toHaveBeenCalledTimes(1);
+
+		// The stack and the daily table report the same total for the day.
+		const table = screen.getByLabelText('Daily usage');
+		expect(within(table).getByText('2.1k')).toBeInTheDocument();
+	});
+
+	it('repaints the chart on a theme switch without a reload or a fetch', async () => {
+		const { store, fetchUsage } = harness();
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(container.querySelector('.lc-bar')).not.toBeNull());
+
+		const fills = [...container.querySelectorAll('.lc-bar')].map((bar) =>
+			bar.getAttribute('fill')
+		);
+		expect(fills.length).toBeGreaterThan(0);
+		// Marks carry token references; the theme, not the component, resolves them.
+		for (const fill of fills) expect(fill).toMatch(/^var\(--color-[a-z-]+\)$/);
+
+		document.documentElement.dataset.theme = 'catppuccin-mocha';
+		await waitFor(() =>
+			expect(document.documentElement.dataset.theme).toBe('catppuccin-mocha')
+		);
+		expect(
+			[...container.querySelectorAll('.lc-bar')].map((bar) => bar.getAttribute('fill'))
+		).toEqual(fills);
+		expect(fetchUsage).toHaveBeenCalledTimes(1);
+
+		delete document.documentElement.dataset.theme;
+	});
+
 	it('refreshes on request and reads the new range when the control changes', async () => {
 		const { store, fetchUsage } = harness();
 		render(Usage, { store });

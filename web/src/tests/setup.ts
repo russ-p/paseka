@@ -5,6 +5,23 @@ import { installMatchMedia, setViewportNarrow } from './viewport';
 installMatchMedia();
 
 /**
+ * jsdom implements no `ResizeObserver`, and Svelte's `clientWidth` binding and
+ * LayerChart's chart container both construct one. The stub reports nothing,
+ * which is the honest answer in an environment with no layout: the chart
+ * measures its container as zero wide, so a suite asserts the marks' structure
+ * and their theme tokens rather than their pixel geometry.
+ */
+class ResizeObserverStub implements ResizeObserver {
+	observe(): void {}
+	unobserve(): void {}
+	disconnect(): void {}
+}
+
+if (typeof globalThis.ResizeObserver === 'undefined') {
+	globalThis.ResizeObserver = ResizeObserverStub;
+}
+
+/**
  * A test renderer has no router, so `$app/navigation`'s `replaceState` throws
  * "before router is initialized" — and a table that keeps its filter and page in the URL
  * calls it on every keystroke. The stand-in delegates to the History API, which is the
