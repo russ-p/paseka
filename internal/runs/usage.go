@@ -19,6 +19,10 @@ const (
 	UsageMaxDays = 366
 	// UsageDefaultDays is the range used when a caller names no since date.
 	UsageDefaultDays = 30
+	// UsageTrailLimit is how many trails the period's top-trails ranking
+	// carries. The rest is stated as a count and a token sum rather than
+	// listed, so a colony with hundreds of trails stays one readable table.
+	UsageTrailLimit = 10
 )
 
 // Measurement states of one execution's recorded usage.
@@ -198,6 +202,40 @@ type UsageAxes struct {
 	Purpose []UsageAxisEntry `json:"purpose"`
 }
 
+// UsageTrailEntry is one trail's reported usage over the period: what its runs
+// in range reported, and how many of them carried a measurement. Only a trail
+// with at least one reported execution is ranked, so a trail that reported
+// nothing is absent rather than shown as a zero-token spend.
+//
+// Title is the trail's display title when one is recorded. A caller falls back
+// to TraceID; the report never invents a name.
+type UsageTrailEntry struct {
+	TraceID                string      `json:"traceId"`
+	Title                  string      `json:"title,omitempty"`
+	Executions             int         `json:"executions"`
+	ReportedExecutions     int         `json:"reportedExecutions"`
+	Tokens                 UsageTokens `json:"tokens"`
+	RecordedCost           float64     `json:"recordedCostUsd"`
+	CostReportedExecutions int         `json:"costReportedExecutions"`
+}
+
+// UsageTrailRanking is the period's trails ranked by reported tokens. Only the
+// top rows are carried; the remainder is measured in trails and tokens so the
+// shown rows plus the outside total are the period total exactly.
+type UsageTrailRanking struct {
+	// Entries are the highest-volume measured trails, largest first.
+	Entries []UsageTrailEntry `json:"entries"`
+	// MeasuredTrails is how many trails reported usage in the period and
+	// therefore were ranked. Trails whose runs reported nothing are not
+	// counted here.
+	MeasuredTrails int `json:"measuredTrails"`
+	// OutsideTrails is how many measured trails Entries does not show.
+	OutsideTrails int `json:"outsideTrails"`
+	// OutsideTokens is the reported tokens of those trails, so
+	// sum(Entries tokens) + OutsideTokens is the period total.
+	OutsideTokens int64 `json:"outsideTokens"`
+}
+
 // UsageDay is one zero-filled local calendar day in the requested range.
 type UsageDay struct {
 	Date string `json:"date"`
@@ -225,10 +263,14 @@ type UsageReport struct {
 	Period             UsageTotals `json:"period"`
 	// Breakdown is the period ranking for every axis, derived from the day
 	// entries rather than a second pass over the records.
-	Breakdown       UsageAxes      `json:"breakdown"`
-	Days            []UsageDay     `json:"days"`
-	ExcludedUndated int            `json:"excludedUndated"`
-	Warnings        []UsageWarning `json:"warnings"`
+	Breakdown UsageAxes `json:"breakdown"`
+	// Trails is the period's top trails, aggregated from the same day records.
+	// It is the ranking a page links from; the trail detail itself stays the
+	// trail surfaces' business.
+	Trails          UsageTrailRanking `json:"trails"`
+	Days            []UsageDay        `json:"days"`
+	ExcludedUndated int               `json:"excludedUndated"`
+	Warnings        []UsageWarning    `json:"warnings"`
 }
 
 // ScanUsageRecords walks .paseka/runs and projects every retained execution
@@ -548,6 +590,115 @@ func mergeUsageAxes(days []UsageDay) UsageAxes {
 	return merged.axes()
 }
 
+// usageTrailAccumulator collects one trail's executions across the days of a
+// range. It counts every execution for the trail's honesty line, but adds
+// tokens only for executions that reported usage.
+type usageTrailAccumulator struct {
+	groups map[string]*UsageTrailEntry
+}
+
+func newUsageTrailAccumulator() *usageTrailAccumulator {
+	return &usageTrailAccumulator{groups: map[string]*UsageTrailEntry{}}
+}
+
+func (a *usageTrailAccumulator) add(rec UsageRecord) {
+	entry := a.groups[rec.TraceID]
+	if entry == nil {
+		entry = &UsageTrailEntry{TraceID: rec.TraceID}
+		a.groups[rec.TraceID] = entry
+	}
+	entry.Executions++
+	if rec.Measurement != UsageReported {
+		return
+	}
+	entry.ReportedExecutions++
+	entry.Tokens.addTokens(rec.Tokens)
+	if rec.CostReported {
+		entry.RecordedCost += rec.RecordedCost
+		entry.CostReportedExecutions++
+	}
+}
+
+func (a *usageTrailAccumulator) addEntry(other UsageTrailEntry) {
+	entry := a.groups[other.TraceID]
+	if entry == nil {
+		entry = &UsageTrailEntry{TraceID: other.TraceID, Title: other.Title}
+		a.groups[other.TraceID] = entry
+	}
+	entry.Executions += other.Executions
+	entry.ReportedExecutions += other.ReportedExecutions
+	entry.Tokens.addTokens(other.Tokens)
+	entry.RecordedCost += other.RecordedCost
+	entry.CostReportedExecutions += other.CostReportedExecutions
+}
+
+// ranking turns the accumulated trails into the period's top rows. Only a trail
+// with reported usage is ranked: a silent trail is a coverage gap, not a zero.
+// Titles are resolved for the rows that survive the cut, because a title is a
+// display detail and the rest of the ranking is never shown.
+func (a *usageTrailAccumulator) ranking(colonyRoot string) UsageTrailRanking {
+	ranked := make([]UsageTrailEntry, 0, len(a.groups))
+	for _, entry := range a.groups {
+		if entry.ReportedExecutions == 0 {
+			continue
+		}
+		ranked = append(ranked, *entry)
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].Tokens.TotalTokens != ranked[j].Tokens.TotalTokens {
+			return ranked[i].Tokens.TotalTokens > ranked[j].Tokens.TotalTokens
+		}
+		return ranked[i].TraceID < ranked[j].TraceID
+	})
+
+	ranking := UsageTrailRanking{
+		Entries:        []UsageTrailEntry{},
+		MeasuredTrails: len(ranked),
+	}
+	shown := ranked
+	if len(shown) > UsageTrailLimit {
+		shown = shown[:UsageTrailLimit]
+	}
+	for _, entry := range ranked[len(shown):] {
+		ranking.OutsideTrails++
+		ranking.OutsideTokens += entry.Tokens.TotalTokens
+	}
+	for _, entry := range shown {
+		// A title is a display convenience: a trail whose events cannot be read
+		// keeps its id rather than failing the report over a heading.
+		if title, err := ResolveTraceTitle(colonyRoot, entry.TraceID); err == nil {
+			entry.Title = title
+		}
+		ranking.Entries = append(ranking.Entries, entry)
+	}
+	return ranking
+}
+
+// mergeUsageTrails builds the period trail ranking from the days' own
+// accumulators, for the same reason the axes are merged from days: the period
+// ranking must be the sum of the days above it.
+func mergeUsageTrails(days []*usageTrailAccumulator, colonyRoot string) UsageTrailRanking {
+	merged := newUsageTrailAccumulator()
+	for _, day := range days {
+		for _, entry := range day.groups {
+			merged.addEntry(*entry)
+		}
+	}
+	return merged.ranking(colonyRoot)
+}
+
+// periodTrailCount is how many distinct trails the days hold, measured or not.
+// It is the same number the day rows add up to.
+func periodTrailCount(days []*usageTrailAccumulator) int {
+	seen := map[string]struct{}{}
+	for _, day := range days {
+		for trail := range day.groups {
+			seen[trail] = struct{}{}
+		}
+	}
+	return len(seen)
+}
+
 // ReadUsage builds the colony-wide report for one range. It reads retained run
 // records only: it changes no file, publishes no event, and needs no bus.
 func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
@@ -578,13 +729,13 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		Warnings:   append([]UsageWarning{}, scan.Warnings...),
 	}
 	indexByDate := make(map[string]int, len(days))
-	dayTrails := make([]map[string]struct{}, len(days))
+	dayTrails := make([]*usageTrailAccumulator, len(days))
 	dayAxes := make([]*usageDayAxes, len(days))
 	for i, day := range days {
 		date := day.Format("2006-01-02")
 		indexByDate[date] = i
 		report.Days = append(report.Days, UsageDay{Date: date})
-		dayTrails[i] = map[string]struct{}{}
+		dayTrails[i] = newUsageTrailAccumulator()
 		dayAxes[i] = newUsageDayAxes()
 	}
 
@@ -607,7 +758,7 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		}
 		day := &report.Days[idx]
 		day.Executions++
-		dayTrails[idx][rec.TraceID] = struct{}{}
+		dayTrails[idx].add(rec)
 		// The same execution lands in all four axes, so each axis sums to the
 		// day's totals rather than to a subset of them.
 		dayAxes[idx].add(rec)
@@ -626,14 +777,13 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 
 	for i := range report.Days {
 		day := &report.Days[i]
-		day.DistinctTrails = len(dayTrails[i])
+		day.DistinctTrails = len(dayTrails[i].groups)
 		day.Breakdown = dayAxes[i].axes()
 		day.Unmeasured = day.Executions > 0 && day.ReportedExecutions == 0
 	}
 
 	// The period is the sum of the days rather than a second pass over the
 	// records, so a headline cannot disagree with the table beneath it.
-	periodTrails := map[string]struct{}{}
 	for i := range report.Days {
 		day := report.Days[i]
 		report.Period.Executions += day.Executions
@@ -641,14 +791,14 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		report.Period.Tokens.addTokens(day.Tokens)
 		report.Period.RecordedCost += day.RecordedCost
 		report.Period.CostReportedExecutions += day.CostReportedExecutions
-		for trail := range dayTrails[i] {
-			periodTrails[trail] = struct{}{}
-		}
 	}
-	report.Period.DistinctTrails = len(periodTrails)
+	report.Period.DistinctTrails = periodTrailCount(dayTrails)
 	// The ranking is derived from the day entries, not from a second pass over
 	// the records, so a period figure and the days under it cannot drift.
 	report.Breakdown = mergeUsageAxes(report.Days)
+	// The trail ranking follows the same rule, and only measured trails enter
+	// it; the remainder is a count and a token sum, not a row of zeroes.
+	report.Trails = mergeUsageTrails(dayTrails, colonyRoot)
 
 	if !earliest.IsZero() {
 		utc := earliest.UTC()

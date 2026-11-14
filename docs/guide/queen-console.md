@@ -382,6 +382,17 @@ period, and recorded cost with its own reporting count. The chart draws the top
 keys that fit the palette and groups the rest as **other**; the table still
 lists every key, so nothing is hidden, only the marks are bounded.
 
+A **Top trails** table ranks the period's trails by reported tokens. Each row
+names the trail by its recorded title, or by its id when no title exists, and
+carries its executions (with the number that reported usage), its component
+total, and recorded provider cost with the count that reported it. Only trails
+with reported usage are ranked: a trail whose runs reported nothing is a
+coverage gap, not a zero-token row. The table carries the top ten and states how
+many measured trails sit outside it and what token volume they account for, so
+the rows on screen plus that remainder are the period total. The trail name is
+the table's only link, and it opens the existing trail detail instead of
+repeating that report here.
+
 This page deliberately has **no poller**: the report walks run directories, so it
 reads on mount, on a range change, and when you press **Refresh**. A failed
 refresh keeps the last good report on screen with its error above it.

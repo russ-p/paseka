@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import Usage from './+page.svelte';
 import { createUsageStore, type UsageStore } from '$lib/stores/usage.svelte';
-import { usageAxisEntry, usageDay, usageReport } from '../../tests/fixtures';
+import { usageAxisEntry, usageDay, usageReport, usageTrailEntry, usageTrails } from '../../tests/fixtures';
 import type { UsageReport } from '$lib/api/types';
 
 const fixedNow = () => new Date(2026, 8, 30, 12, 0, 0);
@@ -311,5 +311,106 @@ describe('usage page component breakdown', () => {
 		expect(rows[0].textContent).toContain('58.3%');
 		// A component has no execution count or recorded cost of its own.
 		expect(rows[0].textContent).toContain('—');
+	});
+});
+
+describe('usage page top trails', () => {
+	it('links each trail to its existing detail and falls back to the id', async () => {
+		const day = usageDay({ tokens: inputTokens(800) });
+		const { store } = harness(
+			usageReport({
+				days: [day],
+				trails: usageTrails({
+					measuredTrails: 2,
+					entries: [
+						usageTrailEntry({
+							traceId: 'trace-titled',
+							title: 'Fix the cache split',
+							executions: 3,
+							reportedExecutions: 2,
+							tokens: inputTokens(600),
+							recordedCostUsd: 1.5,
+							costReportedExecutions: 1
+						}),
+						usageTrailEntry({
+							traceId: 'trace-untitled',
+							title: undefined,
+							executions: 1,
+							reportedExecutions: 1,
+							tokens: inputTokens(200),
+							recordedCostUsd: 0,
+							costReportedExecutions: 0
+						})
+					]
+				})
+			})
+		);
+		render(Usage, { store });
+		const region = await screen.findByRole('region', { name: 'Top trails' });
+		const table = within(region).getByRole('table');
+		const rows = within(table).getAllByRole('row').slice(1);
+
+		const titled = within(rows[0]).getByRole('link', { name: 'Fix the cache split' });
+		expect(titled).toHaveAttribute('href', '/traces/trace-titled');
+		expect(rows[0].textContent).toContain('3');
+		expect(rows[0].textContent).toContain('600');
+		// Recorded cost carries the count of executions that reported it.
+		expect(rows[0].textContent).toContain('$1.50 (1)');
+
+		// A trail with no recorded title is still a row, named by its id.
+		const untitled = within(rows[1]).getByRole('link', { name: 'trace-untitled' });
+		expect(untitled).toHaveAttribute('href', '/traces/trace-untitled');
+		expect(rows[1].textContent).toContain('—');
+	});
+
+	it('states how many trails remain outside the table so the rows reconcile with the period', async () => {
+		const day = usageDay({ tokens: inputTokens(1000) });
+		const { store } = harness(
+			usageReport({
+				days: [day],
+				trails: usageTrails({
+					measuredTrails: 4,
+					outsideTrails: 2,
+					outsideTokens: 100,
+					entries: [
+						usageTrailEntry({ traceId: 'trace-big', tokens: inputTokens(600) }),
+						usageTrailEntry({ traceId: 'trace-mid', tokens: inputTokens(300) })
+					]
+				})
+			})
+		);
+		render(Usage, { store });
+		const region = await screen.findByRole('region', { name: 'Top trails' });
+		const table = within(region).getByRole('table');
+		expect(within(table).getAllByRole('row')).toHaveLength(3); // header plus two rows
+
+		const note = region.querySelector('p')?.textContent ?? '';
+		expect(note).toContain('The rows above account for 900 tokens');
+		expect(note).toContain('2 measured trails outside this table account for 100');
+		// The shown rows plus the stated remainder are the period total.
+		expect(note).toContain("the period's 1.0k tokens in total");
+	});
+
+	it('renders an empty period without a table and a single trail without a remainder', async () => {
+		const emptyDay = usageDay({
+			executions: 0,
+			reportedExecutions: 0,
+			distinctTrails: 0,
+			tokens: inputTokens(0),
+			recordedCostUsd: 0,
+			costReportedExecutions: 0
+		});
+		const empty = harness(usageReport({ days: [emptyDay] }));
+		const first = render(Usage, { store: empty.store });
+		const emptyRegion = await screen.findByRole('region', { name: 'Top trails' });
+		expect(within(emptyRegion).queryByRole('table')).not.toBeInTheDocument();
+		expect(emptyRegion.textContent).toContain('No trail reported usage in this range.');
+		first.unmount();
+
+		const single = harness();
+		render(Usage, { store: single.store });
+		const singleRegion = await screen.findByRole('region', { name: 'Top trails' });
+		expect(within(singleRegion).getAllByRole('row')).toHaveLength(2); // header plus one trail
+		expect(singleRegion.textContent).toContain('Every trail that reported usage is listed');
 	});
 });

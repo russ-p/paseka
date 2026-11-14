@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { untrack } from 'svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
@@ -11,6 +12,7 @@
 		type UsageChartAxis
 	} from '$lib/components/UsageChart.svelte';
 	import { formatShare, formatTimestamp, formatTokenCount } from '$lib/format';
+	import { traceDetailPath } from '$lib/navigation';
 	import {
 		createUsageStore,
 		usageCustomRange,
@@ -18,7 +20,7 @@
 		type UsagePreset,
 		type UsageStore
 	} from '$lib/stores/usage.svelte';
-	import type { UsageDay } from '$lib/api/types';
+	import type { UsageDay, UsageTrailEntry } from '$lib/api/types';
 
 	let { store = createUsageStore() }: { store?: UsageStore } = $props();
 
@@ -232,6 +234,89 @@
 		}
 	]);
 
+	/**
+	 * A row's identity on screen: its recorded title, or the trail id when no
+	 * title exists. The id stays searchable either way, because that is what the
+	 * operator copied from a run or an event.
+	 */
+	function trailLabel(trail: UsageTrailEntry): string {
+		return trail.title?.trim() || trail.traceId;
+	}
+
+	const trailColumns: DataColumn<UsageTrailEntry>[] = [
+		{
+			key: 'trail',
+			label: 'Trail',
+			text: trailLabel,
+			searchText: (trail) => [trail.traceId, trail.title ?? ''].join(' '),
+			// The one navigation this page performs: the trail detail already
+			// owns that trail's usage, so the link goes there instead of
+			// re-implementing a second per-trail report here.
+			href: (trail) => traceDetailPath(base, trail.traceId),
+			grow: true
+		},
+		{
+			key: 'executions',
+			label: 'Executions',
+			text: (trail) => String(trail.executions),
+			align: 'right'
+		},
+		{
+			key: 'reported',
+			label: 'Reported',
+			text: (trail) => String(trail.reportedExecutions),
+			align: 'right',
+			secondary: true
+		},
+		{
+			key: 'tokens',
+			label: 'Total tokens',
+			text: (trail) => formatTokenCount(trail.tokens.totalTokens),
+			align: 'right'
+		},
+		{
+			// The provider's own number, shown only where an execution reported
+			// it, with the count that did. Never derived from tokens.
+			key: 'cost',
+			label: 'Recorded cost',
+			text: (trail) =>
+				trail.costReportedExecutions > 0
+					? `$${trail.recordedCostUsd.toFixed(2)} (${trail.costReportedExecutions})`
+					: '—',
+			align: 'right'
+		}
+	];
+
+	const trailRanking = $derived(store.report?.trails);
+	const shownTrailTokens = $derived(
+		trailRanking
+			? trailRanking.entries.reduce((sum, trail) => sum + trail.tokens.totalTokens, 0)
+			: 0
+	);
+	/**
+	 * The sentence that makes the table honest about its own depth: the rows on
+	 * screen plus the trails the table leaves out are the period total, so an
+	 * operator can see that the top ten are not the whole colony.
+	 */
+	const trailReconciliation = $derived.by((): string => {
+		if (!trailRanking || !store.report) return '';
+		const periodTokens = store.report.period.tokens.totalTokens;
+		if (trailRanking.outsideTrails > 0) {
+			const word =
+				trailRanking.outsideTrails === 1 ? 'measured trail' : 'measured trails';
+			return (
+				`The rows above account for ${formatTokenCount(shownTrailTokens)} tokens, and the ` +
+				`${trailRanking.outsideTrails} ${word} outside this table account for ` +
+				`${formatTokenCount(trailRanking.outsideTokens)}, the period's ` +
+				`${formatTokenCount(periodTokens)} tokens in total.`
+			);
+		}
+		return (
+			`Every trail that reported usage is listed, and the rows account for all ` +
+			`${formatTokenCount(periodTokens)} tokens reported in this period.`
+		);
+	});
+
 	const period = $derived(store.report?.period);
 	const components = $derived(
 		period
@@ -430,6 +515,33 @@
 				own, because a run reports every component at once. Recorded cost appears only where an
 				execution reported it, with the count that did.
 			</p>
+		</section>
+
+		<section class="space-y-3" aria-labelledby="usage-trails">
+			<h2 id="usage-trails" class="text-xl font-semibold">Top trails</h2>
+			{#if trailRanking && trailRanking.entries.length > 0}
+				<DataTable
+					label="Top trails table"
+					columns={trailColumns}
+					rows={trailRanking.entries}
+					rowKey={(trail) => trail.traceId}
+					emptyMessage="No trail reported usage in this range."
+					filterLabel="Filter trails"
+					filterPlaceholder="trail or title"
+					pageSize={0}
+					stateKey="trails"
+				/>
+				<p class="text-xs text-base-content/50">
+					Ranked by reported tokens. The trail link opens its existing detail, where that trail's
+					usage already lives. A trail whose runs reported nothing is not listed as a zero-token
+					trail: that is a coverage gap, not a free one. {trailReconciliation}
+				</p>
+			{:else}
+				<p class="text-base-content/70">
+					No trail reported usage in this range. A trail whose runs reported nothing is a coverage
+					gap, not a zero-token trail, so it is not listed.
+				</p>
+			{/if}
 		</section>
 
 		<section class="space-y-3" aria-labelledby="usage-daily">

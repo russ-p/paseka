@@ -46,7 +46,9 @@ import type {
 	UsageAxes,
 	UsageDay,
 	UsageReport,
-	UsageTokens
+	UsageTokens,
+	UsageTrailEntry,
+	UsageTrailRanking
 } from '$lib/api/types';
 
 export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummary {
@@ -1194,6 +1196,39 @@ export function mergeUsageAxes(days: UsageDay[]): UsageAxes {
 	return axes;
 }
 
+/** One row of the period's top-trails ranking. */
+export function usageTrailEntry(overrides: Partial<UsageTrailEntry> = {}): UsageTrailEntry {
+	return {
+		traceId: 'trace-01a1da38673703e4',
+		title: 'Currency in the usage report',
+		executions: 2,
+		reportedExecutions: 2,
+		tokens: {
+			inputTokens: 1200,
+			outputTokens: 300,
+			reasoningTokens: 40,
+			cacheReadTokens: 500,
+			cacheWriteTokens: 20,
+			totalTokens: 2060
+		},
+		recordedCostUsd: 0.25,
+		costReportedExecutions: 2,
+		...overrides
+	};
+}
+
+/** A top-trails ranking: one measured trail unless a test overrides it. */
+export function usageTrails(overrides: Partial<UsageTrailRanking> = {}): UsageTrailRanking {
+	const entries = overrides.entries ?? [usageTrailEntry()];
+	return {
+		entries,
+		measuredTrails: entries.length,
+		outsideTrails: 0,
+		outsideTokens: 0,
+		...overrides
+	};
+}
+
 /** One zero-filled day in a usage report, complete unless a test overrides it. */
 export function usageDay(overrides: Partial<UsageDay> = {}): UsageDay {
 	const day: UsageDay = {
@@ -1262,6 +1297,22 @@ export function usageReport(overrides: Partial<UsageReport> = {}): UsageReport {
 			costReportedExecutions: 0
 		}
 	);
+	// A fixture that names no trail still gets a ranking consistent with the
+	// period it computed, so a test never reads a table that disagrees with the
+	// headline. A period with no reported usage ranks no trail: a silent trail
+	// is a coverage gap, never a zero row.
+	const measuredTrails =
+		period.reportedExecutions > 0
+			? [
+					usageTrailEntry({
+						executions: period.executions,
+						reportedExecutions: period.reportedExecutions,
+						tokens: { ...period.tokens },
+						recordedCostUsd: period.recordedCostUsd,
+						costReportedExecutions: period.costReportedExecutions
+					})
+				]
+			: [];
 	return {
 		since: '2026-09-01T00:00:00Z',
 		until: '2026-10-01T00:00:00Z',
@@ -1270,6 +1321,7 @@ export function usageReport(overrides: Partial<UsageReport> = {}): UsageReport {
 		earliestRetainedAt: '2026-08-01T00:00:00Z',
 		period,
 		breakdown: mergeUsageAxes(days),
+		trails: usageTrails({ entries: measuredTrails }),
 		days,
 		excludedUndated: 0,
 		warnings: [],

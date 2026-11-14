@@ -312,6 +312,33 @@ export interface UsageAxes {
 	purpose: UsageAxisEntry[];
 }
 
+/**
+ * One trail's reported usage over the period. Mirrors `runs.UsageTrailEntry`.
+ * Only a trail with a reported execution is ranked; `title` is absent when the
+ * trail records none, and the page falls back to `traceId`.
+ */
+export interface UsageTrailEntry {
+	traceId: string;
+	title?: string;
+	executions: number;
+	reportedExecutions: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}
+
+/**
+ * The period's trails ranked by reported tokens. Mirrors `runs.UsageTrailRanking`;
+ * `sum(entries tokens) + outsideTokens` is the period total, and `outsideTrails`
+ * is how many measured trails the table leaves out.
+ */
+export interface UsageTrailRanking {
+	entries: UsageTrailEntry[];
+	measuredTrails: number;
+	outsideTrails: number;
+	outsideTokens: number;
+}
+
 /** One reason a usage report is partial. Mirrors `runs.UsageWarning`. */
 export interface UsageWarning {
 	group: string;
@@ -329,6 +356,8 @@ export interface UsageReport {
 	period: UsageTotals;
 	/** The period ranking per axis, derived from the day entries. */
 	breakdown: UsageAxes;
+	/** The period's top trails, aggregated from the same day records. */
+	trails: UsageTrailRanking;
 	days: UsageDay[];
 	excludedUndated: number;
 	warnings: UsageWarning[];

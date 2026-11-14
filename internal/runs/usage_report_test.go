@@ -3,6 +3,7 @@ package runs_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -897,5 +898,152 @@ func TestUsageReportLegacyPurposeIsUnknownNotWork(t *testing.T) {
 		if entry.Key == "work" {
 			t.Fatalf("legacy record was labelled work: %+v", entry)
 		}
+	}
+}
+
+// The top-trails table is a period ranking over reported tokens. A silent trail
+// is absent rather than a zero row, the remainder is stated so the shown rows
+// plus it are the period total, and only the shown rows pay for title reads.
+func TestUsageReportRanksTopTrailsByReportedTokens(t *testing.T) {
+	root := t.TempDir()
+	utc := time.UTC
+	base := usageDate(t, "2026-02-10 10:00", utc)
+
+	// A titled trail at the top, with two executions and a recorded cost.
+	titled := writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-top", agentID: "run-1", started: base,
+		usage: &protocol.Usage{InputTokens: 500, OutputTokens: 50, CostUSD: 1.25,
+			Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-top", agentID: "run-2", started: base.Add(time.Minute),
+		usage: &protocol.Usage{InputTokens: 250, CostUSD: 0.75,
+			Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	title, err := protocol.NewEvent("trace-top", "scout", 1, protocol.EventInsight, protocol.TraceTitlePayload{
+		Kind:  protocol.InsightTraceTitle,
+		Title: "Top spending trail",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := titled.AppendEvent(title); err != nil {
+		t.Fatal(err)
+	}
+
+	// Enough further measured trails to push past the carried rows.
+	for i := 1; i <= runs.UsageTrailLimit; i++ {
+		input := int64(100 - i)
+		writeUsageFixture(t, root, usageFixture{
+			traceID: fmt.Sprintf("trace-measured-%02d", i), agentID: "run",
+			started: base.Add(time.Duration(i+1) * time.Minute),
+			usage:   &protocol.Usage{InputTokens: input, Source: protocol.UsageSourceOpenCodeRunJSON},
+		})
+	}
+
+	// Neither of these may appear: a finished run without usage is a coverage
+	// gap, and an in-flight run is unfinished rather than free.
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-silent", agentID: "run", started: base.Add(30 * time.Minute),
+	})
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-inflight", agentID: "run", started: base.Add(31 * time.Minute),
+		state: protocol.StatusRunning,
+		usage: &protocol.Usage{InputTokens: 9999, Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+
+	report, err := runs.ReadUsage(root, runs.UsageQuery{
+		Since: "2026-02-10", Until: "2026-02-11", Timezone: "UTC",
+		Now: usageDate(t, "2026-02-11 12:00", utc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ranking := report.Trails
+	if ranking.MeasuredTrails != runs.UsageTrailLimit+1 {
+		t.Fatalf("measured trails = %d, want %d from a silent and an in-flight trail excluded",
+			ranking.MeasuredTrails, runs.UsageTrailLimit+1)
+	}
+	if len(ranking.Entries) != runs.UsageTrailLimit {
+		t.Fatalf("entries = %d, want the carried top %d", len(ranking.Entries), runs.UsageTrailLimit)
+	}
+	if ranking.OutsideTrails != 1 || ranking.OutsideTokens == 0 {
+		t.Fatalf("remainder = %d trails / %d tokens, want the one row outside the table",
+			ranking.OutsideTrails, ranking.OutsideTokens)
+	}
+
+	first := ranking.Entries[0]
+	if first.TraceID != "trace-top" || first.Title != "Top spending trail" {
+		t.Fatalf("top entry identity = %q/%q, want the titled top trail", first.TraceID, first.Title)
+	}
+	if first.Executions != 2 || first.ReportedExecutions != 2 || first.Tokens.TotalTokens != 800 {
+		t.Fatalf("top entry usage = %+v, want both executions summed", first)
+	}
+	if math.Abs(first.RecordedCost-2.0) > 1e-9 || first.CostReportedExecutions != 2 {
+		t.Fatalf("top entry cost = %v in %d", first.RecordedCost, first.CostReportedExecutions)
+	}
+
+	// The ranking is largest first, and the remainder reconciles with the
+	// period total the headline reports.
+	for i := 1; i < len(ranking.Entries); i++ {
+		if ranking.Entries[i-1].Tokens.TotalTokens < ranking.Entries[i].Tokens.TotalTokens {
+			t.Fatalf("entries are not ranked by reported tokens: %+v", ranking.Entries)
+		}
+	}
+	var shown int64
+	for _, entry := range ranking.Entries {
+		shown += entry.Tokens.TotalTokens
+		if entry.TraceID == "trace-silent" || entry.TraceID == "trace-inflight" {
+			t.Fatalf("a trail without reported usage was ranked: %+v", entry)
+		}
+	}
+	if shown+ranking.OutsideTokens != report.Period.Tokens.TotalTokens {
+		t.Fatalf("shown %d + outside %d != period %d", shown, ranking.OutsideTokens, report.Period.Tokens.TotalTokens)
+	}
+}
+
+func TestUsageReportTopTrailsHandleEmptyAndSingleTrailPeriods(t *testing.T) {
+	root := t.TempDir()
+	utc := time.UTC
+
+	empty, err := runs.ReadUsage(root, runs.UsageQuery{
+		Since: "2026-02-10", Until: "2026-02-11", Timezone: "UTC",
+		Now: usageDate(t, "2026-02-11 12:00", utc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.Trails.MeasuredTrails != 0 || empty.Trails.OutsideTrails != 0 ||
+		empty.Trails.OutsideTokens != 0 || len(empty.Trails.Entries) != 0 {
+		t.Fatalf("empty ranking = %+v, want no rows and no remainder", empty.Trails)
+	}
+	if empty.Trails.Entries == nil {
+		t.Fatal("empty ranking encodes entries as null instead of an empty list")
+	}
+
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-only", agentID: "run", started: usageDate(t, "2026-02-10 09:00", utc),
+		usage: &protocol.Usage{InputTokens: 40, Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	single, err := runs.ReadUsage(root, runs.UsageQuery{
+		Since: "2026-02-10", Until: "2026-02-11", Timezone: "UTC",
+		Now: usageDate(t, "2026-02-11 12:00", utc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(single.Trails.Entries) != 1 || single.Trails.OutsideTrails != 0 ||
+		single.Trails.MeasuredTrails != 1 {
+		t.Fatalf("single-trail ranking = %+v", single.Trails)
+	}
+	row := single.Trails.Entries[0]
+	// No title is recorded, so the report leaves Title empty and the caller
+	// falls back to the id rather than inventing a name.
+	if row.TraceID != "trace-only" || row.Title != "" {
+		t.Fatalf("single row = %+v", row)
+	}
+	if row.Tokens.TotalTokens != 40 || row.Executions != 1 || row.ReportedExecutions != 1 {
+		t.Fatalf("single row usage = %+v", row)
 	}
 }

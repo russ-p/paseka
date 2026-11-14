@@ -103,6 +103,16 @@ func TestUsageAPIReturnsTheColonyReport(t *testing.T) {
 	if report.Period.RecordedCost != 0.25 || report.Period.CostReportedExecutions != 1 {
 		t.Fatalf("recorded cost = %v in %d executions", report.Period.RecordedCost, report.Period.CostReportedExecutions)
 	}
+	// The period's top trails come from the same records as the days, so the
+	// page can link a trail without a second aggregation.
+	if report.Trails.MeasuredTrails != 1 || len(report.Trails.Entries) != 1 {
+		t.Fatalf("trail ranking = %+v, want the one measured trail", report.Trails)
+	}
+	if report.Trails.Entries[0].TraceID != "trace-usage" ||
+		report.Trails.Entries[0].Tokens.TotalTokens != 2060 ||
+		report.Trails.Entries[0].ReportedExecutions != 1 {
+		t.Fatalf("trail row = %+v", report.Trails.Entries[0])
+	}
 	// Every axis is in the same payload, so the page switches axes without a
 	// second read; each sums to the totals beside it.
 	day := report.Days[1]
