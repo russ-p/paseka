@@ -37,6 +37,10 @@ type api struct {
 	chrome   *chromeHub
 	beeRun   BeeRunFunc
 	probe    *adapterProber
+	// usage reuses a parsed usage report for a short interval, so the history
+	// page does not walk every run directory on every read. It persists
+	// nothing; an explicit refresh bypasses it.
+	usage *runs.UsageReader
 	// skillMutations lets one proposal decision run at a time. A second click
 	// while one is in flight is refused as busy rather than queued: the decision
 	// log is append-only and a queued refusal could land after the first action

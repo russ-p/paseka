@@ -36,11 +36,13 @@ export {
 	type UsageRangeChoice
 } from '$lib/usage-view';
 
-/** The query one read sends: the range, the zone, and the filter set. */
+/** The query one read sends: the range, the zone, the filter set, and whether
+ * the read is the explicit refresh that bypasses the reader's scan cache. */
 export type UsageFetchQuery = {
 	since: string;
 	until: string;
 	timezone: string;
+	refresh?: boolean;
 } & UsageFilters;
 
 interface UsageStoreOptions {
@@ -70,6 +72,11 @@ function errorMessage(error: unknown): string {
  * reads nothing — all four axes are already in the report. A failed read keeps
  * the last good report on screen, because the numbers an operator is reading are
  * still the last real ones.
+ *
+ * The server may answer from its short-lived scan cache; the report's
+ * `observedAt` says which scan produced the numbers, so a reused answer is
+ * explicit rather than hidden. `refresh()` is the one read that asks for a new
+ * scan, so a trail that finished since the last read appears on demand.
  *
  * The view lives in the URL: the store seeds itself from the address bar and
  * publishes each change with `replaceState`, so reload and a shared link restore
@@ -115,7 +122,7 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		return usageDayRange(day) ?? { since, until };
 	}
 
-	async function load(): Promise<void> {
+	async function load(refresh = false): Promise<void> {
 		const request = ++generation;
 		const range = queryRange();
 		loading = true;
@@ -127,7 +134,10 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 				adapter: filters.adapter,
 				model: filters.model,
 				bee: filters.bee,
-				purpose: filters.purpose
+				purpose: filters.purpose,
+				// Only the explicit refresh asks for a new scan; a range or
+				// filter read may reuse the report the server already parsed.
+				...(refresh ? { refresh: true } : {})
 			});
 			// A slow read for a view the operator already left must not replace
 			// the answer they are waiting for.
@@ -140,6 +150,15 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		} finally {
 			if (request === generation) loading = false;
 		}
+	}
+
+	/**
+	 * The refresh control: an explicit re-scan. It bypasses the server's
+	 * short-lived cache, so a run that finished since the last read appears
+	 * without a reload, and the returned report carries a new `observedAt`.
+	 */
+	function refresh(): Promise<void> {
+		return load(true);
 	}
 
 	function applyPreset(days: UsagePreset): void {
@@ -299,7 +318,7 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		toggleFilter,
 		removeFilter,
 		clearFilters,
-		refresh: load,
+		refresh,
 		start,
 		stop
 	};

@@ -475,7 +475,12 @@
 			<button class="btn btn-sm" onclick={applyCustom}>Apply</button>
 		</div>
 
-		<button class="btn btn-sm btn-outline ml-auto" onclick={() => store.refresh()} disabled={store.loading}>
+		<button
+			class="btn btn-sm btn-outline ml-auto"
+			onclick={() => store.refresh()}
+			disabled={store.loading}
+			title="Scan the retained runs again, bypassing the short-lived cache"
+		>
 			Refresh
 		</button>
 	</div>
@@ -573,7 +578,7 @@
 			<span class="skeleton block h-64 w-full"></span>
 		</div>
 	{:else if store.report && period}
-		<p class="text-xs text-base-content/60">
+		<p class="text-xs text-base-content/60" data-usage-observed-at={store.report.observedAt}>
 			{rangeLabel} · observed {formatTimestamp(store.report.observedAt)} · start-time buckets, so a
 			run crossing midnight stays on its start day
 		</p>

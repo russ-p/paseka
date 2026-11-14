@@ -74,6 +74,19 @@ func usageAPIRequest(t *testing.T, srv *console.Server, target string) *httptest
 	return rec
 }
 
+func usageAPIReport(t *testing.T, srv *console.Server, target string) runs.UsageReport {
+	t.Helper()
+	rec := usageAPIRequest(t, srv, target)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s: status = %d body=%s", target, rec.Code, rec.Body.String())
+	}
+	var report runs.UsageReport
+	if err := json.NewDecoder(rec.Body).Decode(&report); err != nil {
+		t.Fatal(err)
+	}
+	return report
+}
+
 func TestUsageAPIReturnsTheColonyReport(t *testing.T) {
 	repo := initConsoleRepo(t)
 	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
@@ -164,6 +177,12 @@ func TestUsageAPIReadChangesNoFile(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
+	// The explicit refresh is a second path through the same reader; neither
+	// may leave a cache file or an aggregate behind.
+	rec = usageAPIRequest(t, srv, "/api/usage?since=2026-03-01&until=2026-03-03&timezone=UTC&refresh=1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d body=%s", rec.Code, rec.Body.String())
+	}
 	after := snapshotTree(t, repo)
 
 	if strings.Join(before, "\n") != strings.Join(after, "\n") {
@@ -245,6 +264,44 @@ func TestUsageAPIMissingRunsDirectoryIsAnEmptyReport(t *testing.T) {
 	}
 	if len(report.Days) != 2 || report.Period.Executions != 0 {
 		t.Fatalf("report = %+v, want two zero-filled days and no executions", report)
+	}
+}
+
+func TestUsageAPIReusesTheScanUntilRefreshBypassesIt(t *testing.T) {
+	repo := initConsoleRepo(t)
+	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	writeUsageConsoleRun(t, repo, "trace-first", "run-1", started, &protocol.Usage{
+		InputTokens: 100, Source: protocol.UsageSourceOpenCodeRunJSON,
+	})
+	srv := console.NewServer(console.Options{Addr: "127.0.0.1:0", Colony: setupConsoleHome(t, repo)})
+	target := "/api/usage?since=2026-03-01&until=2026-03-03&timezone=UTC"
+
+	first := usageAPIReport(t, srv, target)
+	if first.Period.Executions != 1 {
+		t.Fatalf("first read = %+v, want the one run", first.Period)
+	}
+
+	// A run that finished since the scan does not appear inside the cache
+	// window; the repeated read is the earlier observation, observedAt included.
+	writeUsageConsoleRun(t, repo, "trace-second", "run-1", started.Add(time.Minute), &protocol.Usage{
+		InputTokens: 200, Source: protocol.UsageSourceOpenCodeRunJSON,
+	})
+	cached := usageAPIReport(t, srv, target)
+	if cached.Period.Executions != 1 || cached.Period.Tokens.InputTokens != 100 {
+		t.Fatalf("cached read = %+v, want the first scan", cached.Period)
+	}
+	if !cached.ObservedAt.Equal(first.ObservedAt) {
+		t.Fatalf("cached observedAt = %s, want %s", cached.ObservedAt, first.ObservedAt)
+	}
+
+	// The refresh control's query is the bypass: the new run is visible and the
+	// report says it was observed later.
+	fresh := usageAPIReport(t, srv, target+"&refresh=1")
+	if fresh.Period.Executions != 2 || fresh.Period.Tokens.InputTokens != 300 {
+		t.Fatalf("refreshed read = %+v, want both runs", fresh.Period)
+	}
+	if !fresh.ObservedAt.After(first.ObservedAt) {
+		t.Fatalf("refreshed observedAt = %s, want later than %s", fresh.ObservedAt, first.ObservedAt)
 	}
 }
 

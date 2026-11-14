@@ -443,6 +443,12 @@ export function fetchUsage(query: {
 	since: string;
 	until: string;
 	timezone: string;
+	/**
+	 * Bypass the server's short-lived scan cache. The Usage page's refresh
+	 * control sends this; a range or filter read does not, so a history view
+	 * does not walk every run directory on every change.
+	 */
+	refresh?: boolean;
 	adapter?: string[];
 	model?: string[];
 	bee?: string[];
@@ -453,6 +459,7 @@ export function fetchUsage(query: {
 		until: query.until,
 		timezone: query.timezone
 	});
+	if (query.refresh) params.set('refresh', '1');
 	for (const axis of ['adapter', 'model', 'bee', 'purpose'] as const) {
 		for (const value of query[axis] ?? []) params.append(axis, value);
 	}

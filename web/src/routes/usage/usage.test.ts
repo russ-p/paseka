@@ -159,6 +159,9 @@ describe('usage page', () => {
 
 		await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
 		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		// The refresh control is the bypass path: the server is asked to scan
+		// again rather than answer from its short-lived cache.
+		expect(fetchUsage.mock.calls[1][0]).toMatchObject({ refresh: true });
 
 		await userEvent.click(screen.getByRole('button', { name: '7 days' }));
 		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(3));
@@ -171,6 +174,20 @@ describe('usage page', () => {
 			bee: [],
 			purpose: []
 		});
+	});
+
+	it('shows the scan time the report came from', async () => {
+		const report = usageReport({ observedAt: '2026-09-30T18:00:00Z' });
+		const { store } = harness(report);
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		// A cached answer is explicit rather than hidden: the page names the
+		// scan behind the numbers it is showing.
+		const observed = container.querySelector('[data-usage-observed-at]');
+		expect(observed).not.toBeNull();
+		expect(observed).toHaveAttribute('data-usage-observed-at', '2026-09-30T18:00:00Z');
+		expect(observed?.textContent).toContain('observed');
 	});
 
 	it('shows the server refusal and keeps the last good report', async () => {

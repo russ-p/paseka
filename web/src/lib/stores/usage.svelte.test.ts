@@ -12,6 +12,7 @@ type UsageQuery = {
 	since: string;
 	until: string;
 	timezone: string;
+	refresh?: boolean;
 	adapter: string[];
 	model: string[];
 	bee: string[];
@@ -86,6 +87,24 @@ describe('createUsageStore', () => {
 		await store.refresh();
 		expect(store.report).toStrictEqual(good);
 		expect(store.lastError).toBe('server is busy');
+	});
+
+	it('bypasses the scan cache only for the explicit refresh', async () => {
+		const fetchUsage = vi.fn(async (_query: UsageQuery) => usageReport());
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		store.start();
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+		// Mounting and a range change may reuse the server's parsed scan.
+		expect(fetchUsage.mock.calls[0][0]).not.toHaveProperty('refresh');
+
+		store.applyPreset(7);
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage.mock.calls[1][0]).not.toHaveProperty('refresh');
+
+		// The refresh control is the one read that asks for a new scan.
+		await store.refresh();
+		expect(fetchUsage).toHaveBeenCalledTimes(3);
+		expect(fetchUsage.mock.calls[2][0]).toMatchObject({ refresh: true });
 	});
 
 	it('never starts a timer: a history read happens only when asked', async () => {

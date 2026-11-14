@@ -400,11 +400,19 @@ repeating that report here.
 The range, the drilled day, the selected breakdown axis, and every filter **live in the URL** (`?since=&until=&day=&axis=&adapter=&model=&bee=&purpose=`), written with `replaceState`. `since`/`until` keep the chosen range even while `day` narrows it, so a link carries both the narrowing and the context it was read from. Reload restores the view, a copied link shows the same days and filters, and Back does not walk backwards through the values that were added. Changing a filter, the range, or the day issues one read; changing the breakdown axis reads nothing, because all four axes are already on the report.
 
 This page deliberately has **no poller**: the report walks run directories, so it
-reads on mount, on a range or filter change, and when you press **Refresh**. A failed
+reads on mount, on a range or filter change, and when you press **Refresh**. The
+server may reuse the report it parsed for a short window (30 seconds), so a
+range or filter change does not walk every run directory twice; the page names
+the scan behind the numbers as **observed** with the report's `observedAt`, so a
+reused answer is explicit rather than hidden. **Refresh** is the one read that
+bypasses that window, scans again, and can show a trail that finished since the
+last read; the cache is in process only and nothing is written to disk. A failed
 refresh keeps the last good report on screen with its error above it.
 
 The JSON endpoint is `GET /api/usage?since=YYYY-MM-DD&until=YYYY-MM-DD&timezone=IANA/Zone`,
 with each filter axis repeated once per value (`&adapter=opencode&adapter=cursor`).
+`&refresh=1` is the refresh control's path: it bypasses the short-lived scan
+cache and returns a report with a new `observedAt`.
 It is read-only: it changes no file, publishes no event, and needs no bus. An
 invalid date, an unknown zone, a reversed range, or a range over 366 days is a
 `400` with a plain-text reason; a colony with no `.paseka/runs` returns an empty
