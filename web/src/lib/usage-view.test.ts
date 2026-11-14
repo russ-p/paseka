@@ -3,6 +3,8 @@ import {
 	clearUsageFilters,
 	hasUsageFilters,
 	readUsageView,
+	toggleUsageFilter,
+	usageDayRange,
 	usageFilterCount,
 	usageFilterValues,
 	usagePresetRange,
@@ -36,6 +38,7 @@ describe('usage view URL', () => {
 		expect(view).toEqual({
 			preset: 30,
 			...usagePresetRange(30, now),
+			day: null,
 			axis: 'components',
 			filters: filters()
 		});
@@ -47,6 +50,7 @@ describe('usage view URL', () => {
 		const written = {
 			since: '2026-09-01',
 			until: '2026-09-15',
+			day: null,
 			axis: 'model' as const,
 			filters: filters({
 				adapter: ['opencode', 'cursor'],
@@ -65,6 +69,41 @@ describe('usage view URL', () => {
 				'&purpose=work&purpose=closing'
 		);
 		expect(readUsageView(now)).toEqual({ preset: 'custom', ...written });
+	});
+
+	it('round-trips a drilled day beside the range it was narrowed from', () => {
+		at('');
+		writeUsageView({
+			since: '2026-09-01',
+			until: '2026-10-01',
+			day: '2026-09-25',
+			axis: 'components',
+			filters: filters()
+		});
+
+		expect(new URLSearchParams(window.location.search).get('day')).toBe('2026-09-25');
+		const view = readUsageView(now);
+		// The range stays the context; the day is a second, reversible narrowing.
+		expect(view).toMatchObject({ since: '2026-09-01', until: '2026-10-01', day: '2026-09-25' });
+
+		writeUsageView({ since: '2026-09-01', until: '2026-10-01', day: null, axis: 'components', filters: filters() });
+		expect(new URLSearchParams(window.location.search).has('day')).toBe(false);
+		expect(readUsageView(now).day).toBeNull();
+	});
+
+	it('drops a day the calendar cannot hold rather than narrowing to it', () => {
+		at('?since=2026-09-01&until=2026-10-01&day=2026-02-30');
+
+		expect(readUsageView(now).day).toBeNull();
+	});
+
+	it('narrows a drill-down to one whole local day', () => {
+		expect(usageDayRange('2026-09-25')).toEqual({
+			since: '2026-09-25',
+			until: '2026-09-26'
+		});
+		expect(usageDayRange('2026-02-30')).toBeNull();
+		expect(usageDayRange('yesterday')).toBeNull();
 	});
 
 	it('names a preset range it recognises and treats any other as custom', () => {
@@ -110,6 +149,7 @@ describe('usage view URL', () => {
 		writeUsageView({
 			since: '2026-09-01',
 			until: '2026-09-15',
+			day: null,
 			axis: 'bee',
 			filters: filters({ bee: ['builder'] })
 		});
@@ -126,6 +166,7 @@ describe('usage view URL', () => {
 		writeUsageView({
 			since: '2026-09-01',
 			until: '2026-09-15',
+			day: null,
 			axis: 'components',
 			filters: filters()
 		});
@@ -153,6 +194,16 @@ describe('usage filter set', () => {
 			'anthropic/claude-sonnet'
 		]);
 		expect(withoutUsageFilter(two, 'bee', 'builder')).toBe(two);
+
+		// A breakdown row's click is the same control in two directions: one
+		// click adds the key, the next removes it, and a blank key is no click.
+		expect(toggleUsageFilter(one, 'model', 'openai/gpt-5')).toEqual(filters());
+		expect(toggleUsageFilter(one, 'model', '  openai/gpt-5  ')).toEqual(filters());
+		expect(toggleUsageFilter(one, 'model', 'anthropic/claude-sonnet').model).toEqual([
+			'openai/gpt-5',
+			'anthropic/claude-sonnet'
+		]);
+		expect(toggleUsageFilter(one, 'model', '  ')).toBe(one);
 
 		expect(hasUsageFilters(empty)).toBe(false);
 		expect(usageFilterCount(two)).toBe(2);

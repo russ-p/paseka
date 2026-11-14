@@ -5,7 +5,9 @@ import {
 	clearUsageFilters,
 	hasUsageFilters,
 	readUsageView,
+	toggleUsageFilter,
 	usageCustomRange,
+	usageDayRange,
 	usageFilterCount,
 	usagePresetRange,
 	withUsageFilter,
@@ -25,6 +27,7 @@ export {
 	localDate,
 	parseLocalDate,
 	usageCustomRange,
+	usageDayRange,
 	usagePresetRange,
 	type UsageAxisChoice,
 	type UsageFilterAxis,
@@ -71,6 +74,11 @@ function errorMessage(error: unknown): string {
  * The view lives in the URL: the store seeds itself from the address bar and
  * publishes each change with `replaceState`, so reload and a shared link restore
  * the same view and Back does not step through the values the operator added.
+ *
+ * Drill-down is a second narrowing on top of the chosen range: a day is kept
+ * beside the range rather than replacing it, so the range the operator was
+ * reading is one chip removal away. Clicking the same day again, or removing the
+ * day chip, restores that range without a Back press.
  */
 export function createUsageStore(options: UsageStoreOptions = {}) {
 	const readUsage = options.fetchUsage ?? requestUsage;
@@ -87,6 +95,7 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 	let preset = $state(initial.preset);
 	let since = $state(initial.since);
 	let until = $state(initial.until);
+	let day = $state<string | null>(initial.day);
 	let axis = $state<UsageAxisChoice>(initial.axis);
 	let filters = $state<UsageFilters>(initial.filters);
 	let report = $state<UsageReport | null>(null);
@@ -97,16 +106,23 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 	let generation = 0;
 
 	function publish(): void {
-		writeUsageView({ since, until, axis, filters });
+		writeUsageView({ since, until, day, axis, filters });
+	}
+
+	/** The range one read sends: the drilled day when there is one. */
+	function queryRange(): { since: string; until: string } {
+		if (!day) return { since, until };
+		return usageDayRange(day) ?? { since, until };
 	}
 
 	async function load(): Promise<void> {
 		const request = ++generation;
+		const range = queryRange();
 		loading = true;
 		try {
 			const next = await readUsage({
-				since,
-				until,
+				since: range.since,
+				until: range.until,
 				timezone: zone,
 				adapter: filters.adapter,
 				model: filters.model,
@@ -131,6 +147,8 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		preset = days;
 		since = next.since;
 		until = next.until;
+		// Choosing a range leaves any drill-down: the new range is the view.
+		day = null;
 		publish();
 		void load();
 	}
@@ -142,9 +160,34 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		preset = 'custom';
 		since = next.since;
 		until = next.until;
+		day = null;
 		publish();
 		void load();
 		return true;
+	}
+
+	/**
+	 * Narrows the view to one local day, keeping the range, axis, and filters.
+	 * Asking for the day already in view undoes the narrowing, so the chart's
+	 * day control is a toggle and one control can reverse it.
+	 */
+	function selectDay(date: string): void {
+		if (date === day) {
+			clearDay();
+			return;
+		}
+		if (!usageDayRange(date)) return;
+		day = date;
+		publish();
+		void load();
+	}
+
+	/** Drops the drill-down and reads the range it was narrowed from. */
+	function clearDay(): void {
+		if (day === null) return;
+		day = null;
+		publish();
+		void load();
 	}
 
 	/** Changes the chart stack; all four axes are already loaded, so no read. */
@@ -157,6 +200,18 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 	/** Adds one filter value; the same value twice is one value and no read. */
 	function addFilter(axisName: UsageFilterAxis, value: string): void {
 		const next = withUsageFilter(filters, axisName, value);
+		if (next === filters) return;
+		filters = next;
+		publish();
+		void load();
+	}
+
+	/**
+	 * Adds a value the view does not filter by yet, or removes one it does: the
+	 * breakdown row's click, which is one control in two directions.
+	 */
+	function toggleFilter(axisName: UsageFilterAxis, value: string): void {
+		const next = toggleUsageFilter(filters, axisName, value);
 		if (next === filters) return;
 		filters = next;
 		publish();
@@ -206,6 +261,10 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		get until(): string {
 			return until;
 		},
+		/** The drill-down day in view, or `null` for the whole range. */
+		get day(): string | null {
+			return day;
+		},
 		get timezone(): string {
 			return zone;
 		},
@@ -233,8 +292,11 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		},
 		applyPreset,
 		applyCustom,
+		selectDay,
+		clearDay,
 		setAxis,
 		addFilter,
+		toggleFilter,
 		removeFilter,
 		clearFilters,
 		refresh: load,

@@ -22,6 +22,32 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 /**
+ * jsdom implements no Web Animations API, and Svelte's transitions call
+ * `element.animate`. LayerChart animates the mark a click lands on, so a suite
+ * that exercises the chart's day selection needs a stand-in: an animation that
+ * reports itself finished on the next microtask, because these tests assert the
+ * state a click produces, not the motion that led to it.
+ */
+if (typeof Element.prototype.animate !== 'function') {
+	Element.prototype.animate = (() => {
+		const animation = {
+			cancel(): void {},
+			finish(): void {},
+			play(): void {},
+			pause(): void {},
+			reverse(): void {},
+			currentTime: 0,
+			playState: 'finished' as const,
+			onfinish: null as (() => void) | null,
+			oncancel: null as (() => void) | null,
+			finished: Promise.resolve()
+		};
+		queueMicrotask(() => animation.onfinish?.());
+		return animation;
+	}) as unknown as Element['animate'];
+}
+
+/**
  * A test renderer has no router, so `$app/navigation`'s `replaceState` throws
  * "before router is initialized" — and a table that keeps its filter and page in the URL
  * calls it on every keystroke. The stand-in delegates to the History API, which is the

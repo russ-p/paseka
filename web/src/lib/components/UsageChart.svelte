@@ -301,8 +301,20 @@
 
 	let {
 		report,
-		axis = 'components'
-	}: { report: UsageReport; axis?: UsageChartAxis } = $props();
+		axis = 'components',
+		onSelectDay,
+		selectedDay = null
+	}: {
+		report: UsageReport;
+		axis?: UsageChartAxis;
+		/**
+		 * Narrows the view to one local day. Absent for a chart that is only read;
+		 * the column stays a mark rather than becoming a control.
+		 */
+		onSelectDay?: (date: string) => void;
+		/** The day the view is already narrowed to, so the control reports it. */
+		selectedDay?: string | null;
+	} = $props();
 
 	const chartId = $props.id();
 	const series = $derived(usageChartSeries(report, axis));
@@ -386,7 +398,12 @@
 						tickOcclusion
 					/>
 
-					<Bars stroke="none" tooltip />
+					<Bars
+						stroke="none"
+						tooltip
+						onBarClick={(_event: MouseEvent, { data }: { data: UsageChartRow }) =>
+							onSelectDay?.(data.date)}
+					/>
 
 					{#each flagged as day (day.date)}
 						<rect
@@ -398,6 +415,35 @@
 							fill={`url(#${chartId}-${usageDayState(day)})`}
 						/>
 					{/each}
+
+					{#if onSelectDay}
+						<!-- The pointer path is the library's click callback on the bars; this
+						     is the keyboard path. A transparent rect per day column is a real
+						     control with a name that states the action, and `pointer-events:
+						     none` keeps it from stealing the tooltip or the bar's own click. -->
+						{#each report.days as day (day.date)}
+							<rect
+								class="usage-day-target"
+								role="button"
+								tabindex="0"
+								aria-label={selectedDay === day.date
+									? `Show the wider range instead of ${day.date}`
+									: `Narrow the range to ${day.date}`}
+								aria-pressed={selectedDay === day.date}
+								x={context.xScale(day.date)}
+								y={0}
+								width={Math.max(context.xScale.bandwidth?.() ?? 0, 3)}
+								height={context.height}
+								fill="transparent"
+								style="pointer-events: none;"
+								onkeydown={(event) => {
+									if (event.key !== 'Enter' && event.key !== ' ') return;
+									event.preventDefault();
+									onSelectDay(day.date);
+								}}
+							/>
+						{/each}
+					{/if}
 				</Svg>
 
 				<Tooltip.Root>
@@ -451,5 +497,19 @@
 		A hatched strip marks a day whose executions reported no usage; a dotted strip marks a day
 		with an execution still in flight. The daily table below is the authoritative reading of the
 		same numbers.
+		{#if onSelectDay}
+			Select a day column to narrow the range to that day; the range you were reading comes back
+			when you remove the day chip.
+		{/if}
 	</p>
 </section>
+
+<style>
+	/* The day columns are transparent so the bars and the tooltip stay in front;
+	       a focused column needs a visible outline of its own. */
+	.usage-day-target:focus-visible {
+		outline: none;
+		stroke: var(--color-primary);
+		stroke-width: 2;
+	}
+</style>

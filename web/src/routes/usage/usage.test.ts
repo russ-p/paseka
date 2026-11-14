@@ -609,3 +609,211 @@ describe('usage page filters', () => {
 		).toBeInTheDocument();
 	});
 });
+
+/** Two days, so a day click has a day to choose that is not the only one. */
+function twoDays() {
+	const breakdown = () => ({
+		adapter: [usageAxisEntry({ key: 'opencode' })],
+		model: [
+			usageAxisEntry({ key: 'openai/gpt-5' }),
+			usageAxisEntry({ key: 'anthropic/claude-sonnet' })
+		],
+		bee: [usageAxisEntry({ key: 'builder' })],
+		purpose: [usageAxisEntry({ key: 'work' })]
+	});
+	return usageReport({
+		days: [
+			usageDay({ date: '2026-09-25', tokens: inputTokens(300), breakdown: breakdown() }),
+			usageDay({ date: '2026-09-26', tokens: inputTokens(700), breakdown: breakdown() })
+		]
+	});
+}
+
+describe('usage page drill-down', () => {
+	it('narrows the range to a clicked day and adds a removable day chip', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const { store, fetchUsage } = harness(twoDays());
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		const pathBefore = window.location.pathname;
+		const historyBefore = window.history.length;
+		// The chart's day selection is the library's click callback on the bar:
+		// the sixth bar of the component stack is the second day.
+		const bars = container.querySelectorAll('.lc-bar');
+		expect(bars.length).toBeGreaterThan(5);
+		await userEvent.click(bars[5]);
+
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage).toHaveBeenLastCalledWith({
+			since: '2026-09-26',
+			until: '2026-09-27',
+			timezone: 'UTC',
+			adapter: [],
+			model: [],
+			bee: [],
+			purpose: []
+		});
+
+		const chips = screen.getByRole('list', { name: 'Active filters' });
+		expect(chips.textContent).toContain('Day: 2026-09-26');
+		expect(
+			screen.getByRole('button', { name: 'Remove day filter 2026-09-26' })
+		).toBeInTheDocument();
+
+		// The narrowed view is in the URL, and nothing navigated.
+		expect(new URLSearchParams(window.location.search).get('day')).toBe('2026-09-26');
+		expect(new URLSearchParams(window.location.search).get('since')).toBe('2026-09-01');
+		expect(window.location.pathname).toBe(pathBefore);
+		expect(window.history.length).toBe(historyBefore);
+	});
+
+	it('narrows from the keyboard with a day control that names its action', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const { store, fetchUsage } = harness(twoDays());
+		render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		const day = screen.getByRole('button', { name: 'Narrow the range to 2026-09-25' });
+		day.focus();
+		await userEvent.keyboard('{Enter}');
+
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ since: '2026-09-25', until: '2026-09-26' })
+		);
+		// The control reports what a second activation would do.
+		expect(
+			screen.getByRole('button', { name: 'Show the wider range instead of 2026-09-25' })
+		).toBeInTheDocument();
+	});
+
+	it('removes the day chip to restore the range without a Back press', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const { store, fetchUsage } = harness(twoDays());
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		// Pick the second day from the chart's click callback.
+		await userEvent.click(container.querySelectorAll('.lc-bar')[5]);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+
+		const historyBefore = window.history.length;
+		await userEvent.click(
+			screen.getByRole('button', { name: 'Remove day filter 2026-09-26' })
+		);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(3));
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ since: '2026-09-01', until: '2026-10-01' })
+		);
+		expect(screen.queryByRole('button', { name: /Remove day filter/ })).not.toBeInTheDocument();
+		expect(new URLSearchParams(window.location.search).has('day')).toBe(false);
+		expect(window.history.length).toBe(historyBefore);
+	});
+
+	it('adds a breakdown row key to the filters and removes it on the next click', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const { store, fetchUsage } = harness(twoDays(), { axis: 'model' });
+		render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		await userEvent.click(
+			screen.getByRole('button', { name: 'Add model filter openai/gpt-5' })
+		);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		// The range is untouched: the row narrows the filter set, not the days.
+		expect(fetchUsage).toHaveBeenLastCalledWith({
+			since: '2026-09-01',
+			until: '2026-10-01',
+			timezone: 'UTC',
+			adapter: [],
+			model: ['openai/gpt-5'],
+			bee: [],
+			purpose: []
+		});
+		expect(
+			screen.getByRole('button', { name: 'Remove model filter openai/gpt-5' })
+		).toBeInTheDocument();
+		// The row itself now offers the other direction, and is a second control
+		// from the chip rather than a duplicate name for it.
+		const row = screen.getByRole('button', { name: 'Clear model filter openai/gpt-5' });
+		expect(row).toHaveAttribute('aria-pressed', 'true');
+
+		await userEvent.click(row);
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(3));
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ model: [], since: '2026-09-01', until: '2026-10-01' })
+		);
+	});
+
+	it('activates a breakdown row from the keyboard and filters by its recorded key', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const day = usageDay({
+			breakdown: {
+				adapter: [usageAxisEntry({ key: 'opencode', label: 'opencodev2' })],
+				model: [usageAxisEntry({ key: 'anthropic/claude-sonnet', label: 'sonnet' })],
+				bee: [usageAxisEntry({ key: 'builder' })],
+				purpose: [usageAxisEntry({ key: 'work' })]
+			}
+		});
+		const { store, fetchUsage } = harness(usageReport({ days: [day] }), { axis: 'adapter' });
+		render(Usage, { store });
+		await waitFor(() =>
+			expect(
+				screen.getByRole('button', { name: 'Add adapter filter opencode' })
+			).toBeInTheDocument()
+		);
+
+		// The display label carries the implementation; the filter is the key.
+		const row = screen.getByRole('button', { name: 'Add adapter filter opencode' });
+		row.focus();
+		await userEvent.keyboard('{Enter}');
+
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ adapter: ['opencode'] })
+		);
+	});
+
+	it('keeps a drilled view across a reload through the URL', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/usage?since=2026-09-01&until=2026-10-01&day=2026-09-26&axis=model'
+		);
+		const { store, fetchUsage } = harness(twoDays());
+		render(Usage, { store });
+		await waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		expect(fetchUsage).toHaveBeenCalledWith({
+			since: '2026-09-26',
+			until: '2026-09-27',
+			timezone: 'UTC',
+			adapter: [],
+			model: [],
+			bee: [],
+			purpose: []
+		});
+		expect(
+			screen.getByRole('button', { name: 'Remove day filter 2026-09-26' })
+		).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Model' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+	});
+
+	it('leaves the page only through a trail link', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const { store } = harness(twoDays(), { axis: 'model' });
+		render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		// Every drill-down control is a button. The trail link is the page's one
+		// anchor into another route, and it is outside the narrowed view.
+		const drillButtons = screen.getAllByRole('button', { name: /^(Add|Clear) (model|bee|adapter|purpose) filter/ });
+		expect(drillButtons.length).toBeGreaterThan(0);
+		const trail = screen.getByRole('link', { name: /Currency in the usage report/ });
+		expect(trail).toHaveAttribute('href');
+	});
+});

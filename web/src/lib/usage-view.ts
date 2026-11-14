@@ -1,11 +1,17 @@
 /**
- * The Usage page's view: its range, its axis, and its filters, as the URL
- * carries them.
+ * The Usage page's view: its range, its drill-down, its axis, and its filters,
+ * as the URL carries them.
  *
  * A Usage view is a link. `since` and `until` are the same local calendar dates
- * the API takes, `axis` names the breakdown the chart stacks, and each filter
- * axis is a repeated param (`?model=a&model=b`). The defaults spend no query for
- * the axis, so an ordinary view stays a short address.
+ * the API takes, `day` names a day the view is narrowed to, `axis` names the
+ * breakdown the chart stacks, and each filter axis is a repeated param
+ * (`?model=a&model=b`). The defaults spend no query for the axis, so an ordinary
+ * view stays a short address.
+ *
+ * `since`/`until` stay the range the operator chose even while `day` narrows it:
+ * the drill-down is a second, reversible narrowing, and dropping its chip
+ * restores the range it was read from without a Back press. Writing the range
+ * as the day would lose that context in the address bar.
  *
  * Writes use `replaceState`, never `pushState`: changing a filter is not
  * navigation, and Back must not walk an operator backwards through the values
@@ -36,10 +42,12 @@ export interface UsageFilters {
 	purpose: string[];
 }
 
-/** Everything the URL carries: dates, the selected axis, and the filters. */
+/** Everything the URL carries: dates, the drill-down day, the axis, and the filters. */
 export interface UsageViewState {
 	since: string;
 	until: string;
+	/** A local day the view is narrowed to, or `null` for the whole range. */
+	day: string | null;
 	axis: UsageAxisChoice;
 	filters: UsageFilters;
 }
@@ -91,6 +99,20 @@ export function inclusiveEnd(until: string): string {
 	const previous = new Date(date);
 	previous.setDate(previous.getDate() - 1);
 	return localDate(previous);
+}
+
+/**
+ * The range one local calendar day covers, in the API's inclusive/exclusive
+ * dates: the day itself and the midnight after it. Counting one whole day is
+ * what keeps the drill-down identical across a daylight-saving transition.
+ * `null` for a date the calendar cannot hold.
+ */
+export function usageDayRange(day: string): { since: string; until: string } | null {
+	const date = parseLocalDate(day);
+	if (!date) return null;
+	const next = new Date(date);
+	next.setDate(next.getDate() + 1);
+	return { since: day, until: localDate(next) };
 }
 
 /**
@@ -175,6 +197,23 @@ export function withoutUsageFilter(
 	return { ...filters, [axis]: filters[axis].filter((entry) => entry !== value) };
 }
 
+/**
+ * Applies a value the view does not filter by yet, or drops one it already
+ * does: the breakdown row's click is one control with two directions. A blank
+ * value changes nothing, so a click that names no key costs no read.
+ */
+export function toggleUsageFilter(
+	filters: UsageFilters,
+	axis: UsageFilterAxis,
+	value: string
+): UsageFilters {
+	const trimmed = value.trim();
+	if (trimmed === '') return filters;
+	return filters[axis].includes(trimmed)
+		? withoutUsageFilter(filters, axis, trimmed)
+		: withUsageFilter(filters, axis, trimmed);
+}
+
 /** Removes every value, returning the same object when there is nothing to clear. */
 export function clearUsageFilters(filters: UsageFilters): UsageFilters {
 	return hasUsageFilters(filters) ? emptyUsageFilters() : filters;
@@ -240,7 +279,8 @@ function detectPreset(
  * The view the address bar holds, falling back to `defaults` pieces the URL
  * does not carry. A half-written or impossible range is not trusted: an operator
  * editing a link by hand gets the default range rather than a view the server
- * would refuse.
+ * would refuse. A `day` the calendar cannot hold is dropped rather than
+ * narrowing the view to a date that does not exist.
  */
 export function readUsageView(now: Date, defaults: UsageViewDefaults = {}): UsageView {
 	const fallbackPreset = defaults.preset ?? 30;
@@ -255,6 +295,7 @@ export function readUsageView(now: Date, defaults: UsageViewDefaults = {}): Usag
 		return {
 			preset: fallbackPreset,
 			...usagePresetRange(fallbackPreset, now),
+			day: null,
 			axis: defaults.axis ?? 'components',
 			filters: fallbackFilters
 		};
@@ -265,6 +306,8 @@ export function readUsageView(now: Date, defaults: UsageViewDefaults = {}): Usag
 	const until = params.get('until');
 	const start = since ? parseLocalDate(since) : null;
 	const end = until ? parseLocalDate(until) : null;
+	const narrowed = params.get('day');
+	const day = narrowed && parseLocalDate(narrowed) ? narrowed : null;
 
 	let preset: UsageRangeChoice = fallbackPreset;
 	let range = usagePresetRange(fallbackPreset, now);
@@ -277,6 +320,7 @@ export function readUsageView(now: Date, defaults: UsageViewDefaults = {}): Usag
 		preset,
 		since: range.since,
 		until: range.until,
+		day,
 		axis: readAxis(params, defaults.axis ?? 'components'),
 		filters: {
 			adapter: readFilters(params, 'adapter', fallbackFilters.adapter),
@@ -293,13 +337,16 @@ export function readUsageView(now: Date, defaults: UsageViewDefaults = {}): Usag
  *
  * The range is written explicitly even when it happens to equal a preset: a
  * shared link names the days it showed, rather than depending on the day it is
- * opened.
+ * opened. The drill-down day rides beside the range rather than replacing it,
+ * so a link carries both the narrowing and the context it was read from.
  */
 export function writeUsageView(view: UsageViewState): void {
 	if (typeof window === 'undefined') return;
 	const url = new URL(window.location.href);
 	url.searchParams.set('since', view.since);
 	url.searchParams.set('until', view.until);
+	if (view.day) url.searchParams.set('day', view.day);
+	else url.searchParams.delete('day');
 	if (view.axis === 'components') url.searchParams.delete('axis');
 	else url.searchParams.set('axis', view.axis);
 

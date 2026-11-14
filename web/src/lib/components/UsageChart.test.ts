@@ -244,6 +244,26 @@ describe('usage chart', () => {
 		expect(screen.getByText(/hatched strip marks a day/i)).toBeInTheDocument();
 		expect(usageDayState(unmeasuredDay())).toBe('unmeasured');
 	});
+
+	it('offers one named day control per column only when a selection is accepted', () => {
+		const days = [usageDay(), usageDay({ date: '2026-09-26' })];
+
+		const readOnly = render(UsageChart, { report: usageReport({ days }) });
+		expect(screen.queryByRole('button', { name: /Narrow the range/ })).not.toBeInTheDocument();
+		readOnly.unmount();
+
+		render(UsageChart, {
+			report: usageReport({ days }),
+			onSelectDay: () => {},
+			selectedDay: '2026-09-26'
+		});
+		expect(
+			screen.getByRole('button', { name: 'Narrow the range to 2026-09-25' })
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole('button', { name: 'Show the wider range instead of 2026-09-26' })
+		).toHaveAttribute('aria-pressed', 'true');
+	});
 });
 
 describe('chart boundaries', () => {

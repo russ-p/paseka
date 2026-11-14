@@ -211,7 +211,10 @@
 	 * so those cells stay empty rather than claiming an attribution.
 	 */
 	interface BreakdownRow {
+		/** What the row shows: the key, with an adapter's implementation beside it. */
 		key: string;
+		/** The recorded key a filter takes, when the row can narrow the view. */
+		axisKey?: string;
 		executions?: number;
 		recordedCostUsd?: number;
 		costReportedExecutions?: number;
@@ -234,12 +237,44 @@
 		}
 		return (report.breakdown[chartAxis] ?? []).map((entry) => ({
 			key: usageAxisEntryLabel(chartAxis, entry),
+			// A model's alias and an adapter's implementation are labels, not
+			// grouping decisions: a click filters by the recorded key.
+			axisKey: entry.key,
 			executions: entry.executions,
 			recordedCostUsd: entry.recordedCostUsd,
 			costReportedExecutions: entry.costReportedExecutions,
 			tokens: entry.tokens.totalTokens
 		}));
 	});
+	const filterAxis = $derived<UsageFilterAxis | null>(
+		chartAxis === 'components' ? null : chartAxis
+	);
+
+	/**
+	 * A breakdown row narrows the view in place: the click adds the row's key
+	 * to the filters, and the same click removes it again. The row's name says
+	 * which direction it will take, and `pressed` says whether the key is
+	 * already applied, so a keyboard or screen-reader operator reads the same
+	 * state the chip below shows. Components are not filters, so that stack
+	 * leaves its rows as marks.
+	 */
+	const breakdownRowActivate = $derived(
+		filterAxis === null
+			? undefined
+			: {
+					label: (row: BreakdownRow): string => {
+						const key = row.axisKey ?? row.key;
+						const name = axisName(filterAxis).toLowerCase();
+						return store.filters[filterAxis].includes(key)
+							? `Clear ${name} filter ${key}`
+							: `Add ${name} filter ${key}`;
+					},
+					pressed: (row: BreakdownRow): boolean =>
+						store.filters[filterAxis].includes(row.axisKey ?? row.key),
+					onselect: (row: BreakdownRow): void =>
+						store.toggleFilter(filterAxis, row.axisKey ?? row.key)
+				}
+	);
 	const axisTotalTokens = $derived(store.report?.period.tokens.totalTokens ?? 0);
 	const breakdownTitle = $derived(
 		chartAxis === 'components'
@@ -490,8 +525,23 @@
 			{/if}
 		</div>
 
-		{#if activeFilters.length > 0}
+		{#if store.day || activeFilters.length > 0}
 			<ul class="flex flex-wrap gap-2" aria-label="Active filters">
+				{#if store.day}
+					<li class="badge badge-lg gap-1">
+						<span>
+							Day: <span class="font-mono">{store.day}</span>
+						</span>
+						<button
+							type="button"
+							class="btn btn-ghost btn-xs"
+							aria-label={`Remove day filter ${store.day}`}
+							onclick={() => store.clearDay()}
+						>
+							×
+						</button>
+					</li>
+				{/if}
 				{#each activeFilters as chip (`${chip.axis}:${chip.value}`)}
 					<li class="badge badge-lg gap-1">
 						<span>
@@ -630,7 +680,12 @@
 				</div>
 			</div>
 
-			<UsageChart report={store.report} axis={chartAxis} />
+			<UsageChart
+				report={store.report}
+				axis={chartAxis}
+				onSelectDay={(date) => store.selectDay(date)}
+				selectedDay={store.day}
+			/>
 
 			<section class="space-y-3" aria-labelledby="usage-breakdown">
 				<h2 id="usage-breakdown" class="text-xl font-semibold">{breakdownTitle}</h2>
@@ -644,6 +699,7 @@
 					filterPlaceholder="key"
 					pageSize={0}
 					stateKey="breakdown"
+					rowActivate={breakdownRowActivate}
 				/>
 				<p class="text-xs text-base-content/50">
 					Ranked by token volume. Share is the key's part of the {formatTokenCount(
@@ -652,6 +708,10 @@
 					other, while this table lists every key. A component has no execution count or cost of its
 					own, because a run reports every component at once. Recorded cost appears only where an
 					execution reported it, with the count that did.
+					{#if filterAxis}
+						Selecting a row adds its key to the filters without leaving the range, and selecting it
+						again removes it.
+					{/if}
 				</p>
 			</section>
 

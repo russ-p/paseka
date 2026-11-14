@@ -108,8 +108,7 @@ describe('createUsageStore', () => {
 	});
 });
 
-describe('createUsageStore filters and address bar', () => {
-	it('seeds the view from the address bar and sends the filters once', async () => {
+describe('createUsageStore filters and address bar', () => {	it('seeds the view from the address bar and sends the filters once', async () => {
 		window.history.replaceState(
 			null,
 			'',
@@ -192,5 +191,110 @@ describe('createUsageStore filters and address bar', () => {
 
 		// Replace, not push: the address bar never becomes a stack of values.
 		expect(window.history.length).toBe(before);
+	});
+});
+
+describe('createUsageStore drill-down', () => {
+	it('narrows to a selected day, keeps the filters and the range, and restores on clear', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const fetchUsage = vi.fn(async (_query: UsageQuery) => usageReport());
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		store.start();
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		store.addFilter('model', 'openai/gpt-5');
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+
+		store.selectDay('2026-09-25');
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(3));
+		expect(fetchUsage).toHaveBeenLastCalledWith({
+			since: '2026-09-25',
+			until: '2026-09-26',
+			timezone: 'UTC',
+			adapter: [],
+			model: ['openai/gpt-5'],
+			bee: [],
+			purpose: []
+		});
+		expect(store.day).toBe('2026-09-25');
+		// The chosen range is still the context; only the day narrows the read.
+		expect(store.since).toBe('2026-09-01');
+		expect(store.until).toBe('2026-10-01');
+		expect(new URLSearchParams(window.location.search).get('day')).toBe('2026-09-25');
+
+		// Asking for the day already in view undoes the narrowing, so one
+		// control can reverse it.
+		store.selectDay('2026-09-25');
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(4));
+		expect(store.day).toBeNull();
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				since: '2026-09-01',
+				until: '2026-10-01',
+				model: ['openai/gpt-5']
+			})
+		);
+		expect(new URLSearchParams(window.location.search).has('day')).toBe(false);
+
+		store.selectDay('2026-09-26');
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(5));
+		store.clearDay();
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(6));
+		expect(store.day).toBeNull();
+	});
+
+	it('seeds a drilled day from the address bar and reads just that day', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/usage?since=2026-09-01&until=2026-10-01&day=2026-09-25&model=openai%2Fgpt-5'
+		);
+		const fetchUsage = vi.fn(async (_query: UsageQuery) => usageReport());
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		store.start();
+
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+		expect(fetchUsage).toHaveBeenCalledWith({
+			since: '2026-09-25',
+			until: '2026-09-26',
+			timezone: 'UTC',
+			adapter: [],
+			model: ['openai/gpt-5'],
+			bee: [],
+			purpose: []
+		});
+		expect(store.day).toBe('2026-09-25');
+	});
+
+	it('leaves the day when a new range is chosen', async () => {
+		window.history.replaceState(null, '', '/usage?day=2026-09-25');
+		const fetchUsage = vi.fn(async (_query: UsageQuery) => usageReport());
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		store.start();
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		store.applyPreset(7);
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(store.day).toBeNull();
+		expect(fetchUsage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ since: '2026-09-24', until: '2026-10-01' })
+		);
+		expect(new URLSearchParams(window.location.search).has('day')).toBe(false);
+	});
+
+	it('toggles a breakdown key into and out of the filters', async () => {
+		window.history.replaceState(null, '', '/usage');
+		const fetchUsage = vi.fn(async (_query: UsageQuery) => usageReport());
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		store.start();
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		store.toggleFilter('model', 'openai/gpt-5');
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(2));
+		expect(store.filters.model).toEqual(['openai/gpt-5']);
+
+		store.toggleFilter('model', 'openai/gpt-5');
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(3));
+		expect(store.filters.model).toEqual([]);
 	});
 });
