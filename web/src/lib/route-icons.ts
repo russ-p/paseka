@@ -1,4 +1,5 @@
 import {
+	ChartColumn,
 	FolderGit2,
 	GitBranch,
 	GitFork,
@@ -41,6 +42,7 @@ export const routeGlyphs: Record<RouteGlyph, typeof LayoutDashboard> = {
 	skills: ScrollText,
 	worktrees: FolderGit2,
 	runs: Zap,
+	usage: ChartColumn,
 	git: GitBranch,
 	topology: Share2,
 	system: Server,

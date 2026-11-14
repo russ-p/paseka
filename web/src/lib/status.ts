@@ -60,6 +60,13 @@ const statusTones: Record<string, StatusTone> = {
 	planned: 'neutral',
 	standing: 'neutral',
 	staged: 'neutral',
+	// Usage-page measurement states. A finished run without usage is unmeasured,
+	// which is not a failure but is not a zero either; a day still holding an
+	// in-flight execution is incomplete. A day with no executions stays neutral.
+	unmeasured: 'warning',
+	incomplete: 'info',
+	noexecutions: 'neutral',
+	reported: 'success',
 	// A superseded allocation, not a failure, a cancellation, or a completion.
 	// It stays quiet beside `planned` rather than borrowing `failed`, `cancelled`,
 	// or `completed`, because it is none of them.

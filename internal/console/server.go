@@ -113,6 +113,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/invites/", apiHandler.handleInviteByID)
 	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
+	mux.HandleFunc("/api/usage", apiHandler.handleUsage)
 
 	// The JSON API owns its whole prefix, the bare form included. A path no
 	// endpoint claimed is answered as an API error instead of falling through to

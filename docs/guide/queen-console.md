@@ -50,8 +50,8 @@ for the container.
 The console ships the shell (top status panel, side menu, theme switcher), the
 **Dashboard**, **Traces** (both the list and a trail's own detail page),
 **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and detail),
-**Tasks** (board and task detail), **Reviews** (queue, proposal, and merge
-preview), **Sessions** (list and session detail), **Worktrees**, **Bees**,
+**Usage**, **Tasks** (board and task detail), **Reviews** (queue, proposal, and
+merge preview), **Sessions** (list and session detail), **Worktrees**, **Bees**,
 **Skills**, and **Settings**. The JSON API stays root-relative at `/api/*`; it
 does not move with the shell.
 
@@ -339,6 +339,43 @@ them.
 
 CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
+
+### Usage
+
+**Usage** answers "what did the colony spend per day in this range" from the
+retained run records. It reads the same projection as **Runs**, so the page and
+`paseka inspect usage` cannot disagree about what one execution reported.
+
+The range control offers **7**, **30**, and **90** days and a custom **From** /
+**To** pair. Dates are local calendar days in an explicit IANA zone: the page
+sends the browser's zone, and the report echoes it. `since` is inclusive and
+`until` exclusive, every day in the range is zero-filled, and a run is placed by
+its **start** time, so a run that crosses midnight lands entirely on its start
+day. The server defaults an omitted range to the last 30 days ending now and
+refuses a range longer than 366 days with a plain-text reason.
+
+The headline is **token volume**: input, output, reasoning, cache read, and
+cache write, their sum, executions, distinct trails, and coverage. Reasoning is
+never folded into output and cache kinds are never folded into input, because
+providers differ about what those fields already contain. The daily table below
+it is the authoritative reading of the same numbers, including recorded provider
+cost where an adapter reported it and the count of executions that did. **Token
+counts are labelled as volume, never as money**: the page never multiplies a
+token count by a rate, and recorded cost is shown only where the provider itself
+recorded one. A day with executions but no reported usage reads **unmeasured**
+rather than looking like a quiet day, and a day still holding an in-flight run
+reads **incomplete**. A warning names records the reader could not date or open;
+they are counted, never guessed.
+
+This page deliberately has **no poller**: the report walks run directories, so it
+reads on mount, on a range change, and when you press **Refresh**. A failed
+refresh keeps the last good report on screen with its error above it.
+
+The JSON endpoint is `GET /api/usage?since=YYYY-MM-DD&until=YYYY-MM-DD&timezone=IANA/Zone`.
+It is read-only: it changes no file, publishes no event, and needs no bus. An
+invalid date, an unknown zone, a reversed range, or a range over 366 days is a
+`400` with a plain-text reason; a colony with no `.paseka/runs` returns an empty
+report rather than an error.
 
 ### Sessions
 

@@ -41,7 +41,9 @@ import type {
 	TrailCollection,
 	TrailConfigApplyResult,
 	TraceSummary,
-	TranscriptEntry
+	TranscriptEntry,
+	UsageDay,
+	UsageReport
 } from '$lib/api/types';
 
 export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummary {
@@ -1111,6 +1113,78 @@ export function skillDecisionResult(
 		inventory: skillsInventory(),
 		proposal: skillProposal({ state: 'installed', destination: 'store' }),
 		message: 'Installed trace-01a0bd6963faa14f/paseka-release into the store. Nothing was committed.',
+		...overrides
+	};
+}
+
+/** One zero-filled day in a usage report, complete unless a test overrides it. */
+export function usageDay(overrides: Partial<UsageDay> = {}): UsageDay {
+	return {
+		date: '2026-09-25',
+		executions: 2,
+		reportedExecutions: 2,
+		distinctTrails: 1,
+		tokens: {
+			inputTokens: 1200,
+			outputTokens: 300,
+			reasoningTokens: 40,
+			cacheReadTokens: 500,
+			cacheWriteTokens: 20,
+			totalTokens: 2060
+		},
+		recordedCostUsd: 0.25,
+		costReportedExecutions: 2,
+		unmeasured: false,
+		incomplete: false,
+		...overrides
+	};
+}
+
+/** A usage report whose period is the sum of its days. */
+export function usageReport(overrides: Partial<UsageReport> = {}): UsageReport {
+	const days = overrides.days ?? [usageDay()];
+	const period = days.reduce(
+		(total, day) => ({
+			executions: total.executions + day.executions,
+			reportedExecutions: total.reportedExecutions + day.reportedExecutions,
+			distinctTrails: total.distinctTrails + day.distinctTrails,
+			tokens: {
+				inputTokens: total.tokens.inputTokens + day.tokens.inputTokens,
+				outputTokens: total.tokens.outputTokens + day.tokens.outputTokens,
+				reasoningTokens: total.tokens.reasoningTokens + day.tokens.reasoningTokens,
+				cacheReadTokens: total.tokens.cacheReadTokens + day.tokens.cacheReadTokens,
+				cacheWriteTokens: total.tokens.cacheWriteTokens + day.tokens.cacheWriteTokens,
+				totalTokens: total.tokens.totalTokens + day.tokens.totalTokens
+			},
+			recordedCostUsd: total.recordedCostUsd + day.recordedCostUsd,
+			costReportedExecutions: total.costReportedExecutions + day.costReportedExecutions
+		}),
+		{
+			executions: 0,
+			reportedExecutions: 0,
+			distinctTrails: 0,
+			tokens: {
+				inputTokens: 0,
+				outputTokens: 0,
+				reasoningTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				totalTokens: 0
+			},
+			recordedCostUsd: 0,
+			costReportedExecutions: 0
+		}
+	);
+	return {
+		since: '2026-09-01T00:00:00Z',
+		until: '2026-10-01T00:00:00Z',
+		timezone: 'UTC',
+		observedAt: '2026-09-30T18:00:00Z',
+		earliestRetainedAt: '2026-08-01T00:00:00Z',
+		period,
+		days,
+		excludedUndated: 0,
+		warnings: [],
 		...overrides
 	};
 }

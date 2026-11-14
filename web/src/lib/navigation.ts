@@ -16,6 +16,7 @@ export const consoleRoutes = [
 	{ path: '/skills', label: 'Skills', shortcut: 'c', group: 'Colony', glyph: 'skills' },
 	{ path: '/worktrees', label: 'Worktrees', shortcut: 'w', group: 'Colony', glyph: 'worktrees' },
 	{ path: '/runs', label: 'Runs', shortcut: 'u', group: 'Colony', glyph: 'runs' },
+	{ path: '/usage', label: 'Usage', shortcut: 'a', group: 'Colony', glyph: 'usage' },
 	{ path: '/git', label: 'Git', shortcut: 'o', group: 'Colony', glyph: 'git' },
 	{ path: '/topology', label: 'Topology', shortcut: 'p', group: 'Diagnostics', glyph: 'topology' },
 	{ path: '/system', label: 'System', shortcut: 'm', group: 'Diagnostics', glyph: 'system' },

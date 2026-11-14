@@ -247,6 +247,65 @@ export interface UsageAggregate {
 }
 
 /**
+ * The component split of one execution, a day, or a range. Mirrors
+ * `runs.UsageTokens`; `totalTokens` is the sum of the components the record
+ * reported, never a billable figure.
+ */
+export interface UsageTokens {
+	inputTokens: number;
+	outputTokens: number;
+	reasoningTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	totalTokens: number;
+}
+
+/** One zero-filled local calendar day. Mirrors `runs.UsageDay`. */
+export interface UsageDay {
+	date: string;
+	executions: number;
+	reportedExecutions: number;
+	distinctTrails: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+	/** Executions happened but none reported usage. Distinct from no executions. */
+	unmeasured: boolean;
+	/** At least one execution on this day is still in flight. */
+	incomplete: boolean;
+}
+
+/** A period total. Mirrors `runs.UsageTotals`. */
+export interface UsageTotals {
+	executions: number;
+	reportedExecutions: number;
+	distinctTrails: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}
+
+/** One reason a usage report is partial. Mirrors `runs.UsageWarning`. */
+export interface UsageWarning {
+	group: string;
+	kind: string;
+	detail: string;
+}
+
+/** The colony-wide usage report. Mirrors `runs.UsageReport`. */
+export interface UsageReport {
+	since: string;
+	until: string;
+	timezone: string;
+	observedAt: string;
+	earliestRetainedAt?: string;
+	period: UsageTotals;
+	days: UsageDay[];
+	excludedUndated: number;
+	warnings: UsageWarning[];
+}
+
+/**
  * The honey reserve a trail carries. A standing trail is capped by its stipend;
  * any other trail by whatever top-ups have been added. Mirrors the
  * `Energy*`/`LowEnergy`/`Standing` fields of `hiveview.TraceSummaryView`.
