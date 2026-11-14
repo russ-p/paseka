@@ -829,13 +829,13 @@
 					{#if store.report.earliestRetainedAt}
 						<p>
 							The report covers retained trails only: the retained record begins
-							{formatTimestamp(store.report.earliestRetainedAt)}. Spend whose records were pruned
-							is absent rather than counted as zero.
+							{formatTimestamp(store.report.earliestRetainedAt)}. Spend from trails whose records
+							were pruned is absent rather than counted as zero.
 						</p>
 					{:else}
 						<p>
 							The report covers retained trails only, and no retained execution record is dated.
-							Spend whose records were pruned is absent rather than counted as zero.
+							Spend from trails whose records were pruned is absent rather than counted as zero.
 						</p>
 					{/if}
 					{#if predatesRetained}
