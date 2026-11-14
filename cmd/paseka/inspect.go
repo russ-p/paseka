@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
 	"github.com/russ-p/paseka/internal/runs"
@@ -25,13 +29,45 @@ func newInspectUsageCmd() *cobra.Command {
 		startDir string
 		traceID  string
 		agentID  string
+		since    string
+		until    string
+		timezone string
+		jsonOut  bool
 	)
 	cmd := &cobra.Command{
 		Use:   "usage",
-		Short: "Show LLM token usage for a trace or run",
+		Short: "Show LLM token usage for a trail, a run, or the colony",
+		// A refused range is a one-line reason, not a reason followed by the flag
+		// help: the operator asked for numbers, not usage.
+		SilenceUsage: true,
+		Long: "Show recorded LLM token usage.\n\n" +
+			"With --trace the command prints one trail (or one run with --agent).\n" +
+			"Without --trace it prints the colony report for a date range, built by the\n" +
+			"same reader the Console Usage page uses.\n\n" +
+			"The range defaults to the last 30 days ending now and the zone defaults to\n" +
+			"the host's. Since is inclusive and until is exclusive; both are local\n" +
+			"midnights in the chosen zone, and a record lands on the day of its start\n" +
+			"time.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			rangeFlags := []string{"since", "until", "timezone", "json"}
 			if traceID == "" {
-				return fmt.Errorf("--trace is required")
+				if agentID != "" {
+					return fmt.Errorf("--agent requires --trace")
+				}
+				ctx, err := colony.ResolveContext(startDir)
+				if err != nil {
+					return err
+				}
+				return printUsageRange(cmd.OutOrStdout(), ctx.ColonyRoot, runs.UsageQuery{
+					Since:    since,
+					Until:    until,
+					Timezone: timezone,
+				}, jsonOut)
+			}
+			for _, name := range rangeFlags {
+				if flagChanged(cmd, name) {
+					return fmt.Errorf("--%s applies only without --trace", name)
+				}
 			}
 			ctx, err := colony.ResolveContext(startDir)
 			if err != nil {
@@ -44,10 +80,117 @@ func newInspectUsageCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&startDir, "path", "C", "", "directory inside the git repository")
-	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id")
-	cmd.Flags().StringVar(&agentID, "agent", "", "agent id (single run; default: trace aggregate)")
-	_ = cmd.MarkFlagRequired("trace")
+	cmd.Flags().StringVar(&traceID, "trace", "", "flight trail id (omit for the colony range report)")
+	cmd.Flags().StringVar(&agentID, "agent", "", "agent id (single run; requires --trace)")
+	cmd.Flags().StringVar(&since, "since", "", "first day of the range, YYYY-MM-DD (default: 30 days before today)")
+	cmd.Flags().StringVar(&until, "until", "", "day after the last day of the range, YYYY-MM-DD (default: now)")
+	cmd.Flags().StringVar(&timezone, "timezone", "", "IANA zone for the day boundaries (default: the host's)")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the report exactly as GET /api/usage returns it")
 	return cmd
+}
+
+// printUsageRange builds and prints the colony report for one query. It writes
+// nothing until the reader has accepted the range, so a typo cannot leave an
+// empty report behind on stdout.
+func printUsageRange(w io.Writer, colonyRoot string, query runs.UsageQuery, jsonOut bool) error {
+	report, err := runs.ReadUsage(colonyRoot, query)
+	if err != nil {
+		var usageErr *runs.UsageError
+		if errors.As(err, &usageErr) {
+			return usageErr
+		}
+		return err
+	}
+	if jsonOut {
+		// Same encoder settings as the console's writeJSON so a script can
+		// compare this document with the endpoint's byte for byte.
+		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
+		return enc.Encode(report)
+	}
+	return printUsageReport(w, report)
+}
+
+func printUsageReport(w io.Writer, report runs.UsageReport) error {
+	fmt.Fprintf(w, "Usage range: %s .. %s\n", report.Since, report.Until)
+	fmt.Fprintf(w, "Time zone:   %s\n", report.Timezone)
+	fmt.Fprintf(w, "Observed at: %s\n", report.ObservedAt.Format(time.RFC3339))
+	if report.EarliestRetainedAt != nil {
+		fmt.Fprintf(w, "Earliest retained: %s\n", report.EarliestRetainedAt.Format(time.RFC3339))
+	}
+	trailWord := usageWord(report.Period.DistinctTrails, "trail", "trails")
+	fmt.Fprintf(w, "Coverage: %d executions (%d reported, %d unmeasured) in %d %s\n",
+		report.Period.Executions, report.Period.ReportedExecutions,
+		report.Period.Executions-report.Period.ReportedExecutions, report.Period.DistinctTrails, trailWord)
+	fmt.Fprintln(w, "Period tokens:")
+	fmt.Fprintf(w, "  input:       %d\n", report.Period.Tokens.InputTokens)
+	fmt.Fprintf(w, "  output:      %d\n", report.Period.Tokens.OutputTokens)
+	fmt.Fprintf(w, "  reasoning:   %d\n", report.Period.Tokens.ReasoningTokens)
+	fmt.Fprintf(w, "  cache read:  %d\n", report.Period.Tokens.CacheReadTokens)
+	fmt.Fprintf(w, "  cache write: %d\n", report.Period.Tokens.CacheWriteTokens)
+	fmt.Fprintf(w, "  total:       %d\n", report.Period.Tokens.TotalTokens)
+	if report.Period.CostReportedExecutions > 0 {
+		fmt.Fprintf(w, "Period recorded cost: %.2f USD across %d %s\n",
+			report.Period.RecordedCost, report.Period.CostReportedExecutions,
+			usageWord(report.Period.CostReportedExecutions, "execution", "executions"))
+	}
+
+	fmt.Fprintf(w, "\nDays (%d):\n", len(report.Days))
+	fmt.Fprintf(w, "  %-10s  %6s  %8s  %6s  %12s  %12s  %11s  %12s  %12s  %14s  %s\n",
+		"date", "exec", "reported", "trails", "input", "output", "reasoning",
+		"cacheRead", "cacheWrite", "tokens", "state")
+	for _, day := range report.Days {
+		fmt.Fprintf(w, "  %-10s  %6d  %8d  %6d  %12d  %12d  %11d  %12d  %12d  %14d  %s\n",
+			day.Date, day.Executions, day.ReportedExecutions, day.DistinctTrails,
+			day.Tokens.InputTokens, day.Tokens.OutputTokens, day.Tokens.ReasoningTokens,
+			day.Tokens.CacheReadTokens, day.Tokens.CacheWriteTokens, day.Tokens.TotalTokens,
+			usageDayState(day))
+	}
+
+	if report.ExcludedUndated > 0 {
+		verb := "have"
+		if report.ExcludedUndated == 1 {
+			verb = "has"
+		}
+		fmt.Fprintf(w, "\nExcluded undated: %d %s %s no usable start time\n",
+			report.ExcludedUndated,
+			usageWord(report.ExcludedUndated, "execution", "executions"), verb)
+	}
+	if len(report.Warnings) > 0 {
+		fmt.Fprintln(w, "\nWarnings:")
+		for _, warning := range report.Warnings {
+			fmt.Fprintf(w, "  %s/%s: %s\n", warning.Group, warning.Kind, warning.Detail)
+		}
+	}
+	return nil
+}
+
+// usageWord pluralizes a count for a line an operator reads.
+func usageWord(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+// usageDayState names what a row cannot say in numbers: an empty day is a
+// genuine zero, while an unmeasured day has executions that reported nothing
+// and an incomplete day still has an execution in flight.
+func usageDayState(day runs.UsageDay) string {
+	if day.Executions == 0 {
+		return "no executions"
+	}
+	var states []string
+	if day.Unmeasured {
+		states = append(states, "unmeasured")
+	}
+	if day.Incomplete {
+		states = append(states, "incomplete")
+	}
+	if len(states) == 0 {
+		return "ok"
+	}
+	return strings.Join(states, ",")
 }
 
 func printTraceUsage(w io.Writer, colonyRoot, traceID string) error {
