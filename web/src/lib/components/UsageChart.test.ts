@@ -12,7 +12,8 @@ import UsageChart, {
 	usagePaletteIndex,
 	usageSeriesColor,
 	usageSeriesSwatch,
-	usageDayState
+	usageDayState,
+	usageDayStateLabel
 } from './UsageChart.svelte';
 import { usageAxisEntry, usageDay, usageReport } from '../../tests/fixtures';
 import type { UsageDay } from '$lib/api/types';
@@ -243,6 +244,39 @@ describe('usage chart', () => {
 		// A colour alone would not say which state the day is in; the note does.
 		expect(screen.getByText(/hatched strip marks a day/i)).toBeInTheDocument();
 		expect(usageDayState(unmeasuredDay())).toBe('unmeasured');
+
+		// The strip is a mark, not a name: the flagged days are also listed by
+		// date, with every state a day carries.
+		const flagged = container.querySelector('[data-usage-flagged-days]');
+		expect(flagged?.textContent).toContain('2026-09-26');
+		expect(flagged?.textContent).toContain('unmeasured');
+		expect(flagged?.textContent).toContain('2026-09-27');
+		expect(flagged?.textContent).toContain('incomplete');
+	});
+
+	it('names both states of a day that is unmeasured and still in flight', () => {
+		const both = usageDay({
+			date: '2026-09-28',
+			executions: 1,
+			reportedExecutions: 0,
+			unmeasured: true,
+			incomplete: true,
+			tokens: {
+				inputTokens: 0,
+				outputTokens: 0,
+				reasoningTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				totalTokens: 0
+			},
+			recordedCostUsd: 0,
+			costReportedExecutions: 0
+		});
+		const { container } = render(UsageChart, { report: usageReport({ days: [both] }) });
+		expect(usageDayStateLabel(both)).toBe('unmeasured, incomplete');
+		expect(container.querySelector('[data-usage-flagged-days]')?.textContent).toContain(
+			'unmeasured, incomplete'
+		);
 	});
 
 	it('offers one named day control per column only when a selection is accepted', () => {

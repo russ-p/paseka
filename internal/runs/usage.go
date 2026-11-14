@@ -933,9 +933,11 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		// earlier day to warn about.
 		if startOfLocalDay(earliest.In(loc), loc).After(since) {
 			report.Warnings = append(report.Warnings, UsageWarning{
-				Group:  "coverage",
-				Kind:   WarningMissing,
-				Detail: fmt.Sprintf("range begins before the earliest retained run (%s); earlier days are not measured", utc.Format(time.RFC3339)),
+				Group: "coverage",
+				Kind:  WarningMissing,
+				Detail: fmt.Sprintf(
+					"range begins before the earliest retained run (%s); days before it are unmeasured, not quiet",
+					utc.Format(time.RFC3339)),
 			})
 		}
 	}

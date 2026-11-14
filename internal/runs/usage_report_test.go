@@ -482,6 +482,11 @@ func TestUsageReportWarnsAboutUnreadableRunsInsteadOfDroppingThem(t *testing.T) 
 	if err := os.WriteFile(filepath.Join(broken, runs.RequestFileName), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A pruned trail leaves no run records behind: it is absent from the report
+	// rather than a zero-token row.
+	if err := os.MkdirAll(filepath.Join(root, ".paseka", "runs", "trace-pruned", "tasks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	report, err := runs.ReadUsage(root, runs.UsageQuery{
 		Since: "2026-05-01", Until: "2026-05-02", Timezone: "UTC",
@@ -490,17 +495,35 @@ func TestUsageReportWarnsAboutUnreadableRunsInsteadOfDroppingThem(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Period.Executions != 1 {
-		t.Fatalf("executions = %d, want the readable run still counted", report.Period.Executions)
+	// The unreadable record is outside the coverage count, and the rest of the
+	// report still renders: one readable execution, one trail, one day.
+	if report.Period.Executions != 1 || report.Period.ReportedExecutions != 1 ||
+		report.Period.DistinctTrails != 1 {
+		t.Fatalf("period = %+v, want the readable run still counted and the broken one excluded", report.Period)
+	}
+	day := dayByDate(t, report, "2026-05-01")
+	if day.Executions != 1 {
+		t.Fatalf("day = %+v, want the readable run", day)
 	}
 	found := false
 	for _, warning := range report.Warnings {
 		if warning.Group == "runs" && warning.Kind == runs.WarningUnreadable {
 			found = true
+			if !strings.Contains(warning.Detail, "broken") {
+				t.Fatalf("warning does not name the unreadable record: %+v", warning)
+			}
 		}
 	}
 	if !found {
 		t.Fatalf("warnings = %+v, want an unreadable-run warning", report.Warnings)
+	}
+	for _, entry := range report.Trails.Entries {
+		if entry.TraceID == "trace-pruned" {
+			t.Fatalf("a pruned trail was reported as a row: %+v", entry)
+		}
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("days = %d, want the requested range intact", len(report.Days))
 	}
 }
 
@@ -549,6 +572,10 @@ func TestUsageReportWarnsWhenRangePredatesRetainedRecords(t *testing.T) {
 	for _, warning := range early.Warnings {
 		if warning.Group == "coverage" {
 			coverage = true
+			// Earlier days are unmeasured, not claimed quiet.
+			if !strings.Contains(warning.Detail, "unmeasured, not quiet") {
+				t.Fatalf("coverage warning = %q, want earlier days named unmeasured rather than quiet", warning.Detail)
+			}
 		}
 	}
 	if !coverage {
@@ -556,6 +583,12 @@ func TestUsageReportWarnsWhenRangePredatesRetainedRecords(t *testing.T) {
 	}
 	if early.EarliestRetainedAt == nil {
 		t.Fatal("earliestRetainedAt missing")
+	}
+	// A day before the retained record is a zero-filled bucket, not an
+	// unmeasured day: the page still explains the range in its own state.
+	before := dayByDate(t, early, "2026-07-01")
+	if before.Executions != 0 || before.Unmeasured {
+		t.Fatalf("day before the retained record = %+v, want a genuine zero", before)
 	}
 
 	inside, err := runs.ReadUsage(root, runs.UsageQuery{

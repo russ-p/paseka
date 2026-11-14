@@ -364,8 +364,13 @@ counts are labelled as volume, never as money**: the page never multiplies a
 token count by a rate, and recorded cost is shown only where the provider itself
 recorded one. A day with executions but no reported usage reads **unmeasured**
 rather than looking like a quiet day, and a day still holding an in-flight run
-reads **incomplete**. A warning names records the reader could not date or open;
-they are counted, never guessed.
+reads **incomplete** — named by date under the chart and in the daily table's
+measurement column. The coverage area prints what the totals could not see:
+executions that reported usage, executions excluded because they have no usable
+start time, and run records the reader could not open. A warning names each
+unreadable record, a pruned trail is absent rather than a zero-token row, and a
+range that begins before the retained record warns that its earlier days are
+**unmeasured, not quiet**.
 
 The chart's **Breakdown** selector stacks the same days by adapter, model, Bee,
 or execution purpose instead of the token components. All four axes arrive in
@@ -407,7 +412,10 @@ the scan behind the numbers as **observed** with the report's `observedAt`, so a
 reused answer is explicit rather than hidden. **Refresh** is the one read that
 bypasses that window, scans again, and can show a trail that finished since the
 last read; the cache is in process only and nothing is written to disk. A failed
-refresh keeps the last good report on screen with its error above it.
+refresh keeps the last good report on screen with its error beside it. The page
+gives five degraded states distinct copy instead of one generic message: no
+executions in the range, executions that reported no usage, a range older than
+the retained record, a range longer than the 366-day cap, and a failed read.
 
 The JSON endpoint is `GET /api/usage?since=YYYY-MM-DD&until=YYYY-MM-DD&timezone=IANA/Zone`,
 with each filter axis repeated once per value (`&adapter=opencode&adapter=cursor`).

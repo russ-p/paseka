@@ -197,7 +197,7 @@ describe('usage page', () => {
 			.mockResolvedValueOnce(good)
 			.mockRejectedValueOnce(new Error('until 2026-10-01 must be after since 2026-10-02'));
 		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
-		render(Usage, { store });
+		const { container } = render(Usage, { store });
 		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
 
 		await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
@@ -205,6 +205,161 @@ describe('usage page', () => {
 			expect(screen.getByRole('alert')).toHaveTextContent('must be after since')
 		);
 		// The numbers an operator was reading are still real ones.
+		expect(screen.getByLabelText('Daily usage')).toBeInTheDocument();
+		// A failed read is its own state, and the error sits beside the report it
+		// could not replace rather than in a corner of the page.
+		const failed = container.querySelector('[data-usage-state="error"]');
+		expect(failed).not.toBeNull();
+		expect(failed?.textContent).toContain('the report below is the last good one');
+		expect(failed?.textContent).toContain('Observed');
+	});
+});
+
+describe('usage page honesty', () => {
+	it('prints the excluded-undated and unreadable counts beside the coverage number', async () => {
+		const { store } = harness(
+			usageReport({
+				excludedUndated: 2,
+				warnings: [
+					{
+						group: 'runs',
+						kind: 'unreadable',
+						detail: 'run trace-a/run-1: no request record'
+					}
+				]
+			})
+		);
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		const coverage = container.querySelector('[data-usage-coverage]');
+		expect(coverage).not.toBeNull();
+		expect(coverage?.textContent).toContain('2 of 2 executions reported usage');
+		expect(coverage?.textContent).toContain('2 executions excluded from the daily buckets');
+		expect(coverage?.textContent).toContain('1 run record could not be read, so coverage is reduced');
+		// The warning itself is still named, not replaced by the count.
+		expect(screen.getByText(/no request record/)).toBeInTheDocument();
+	});
+
+	it('names an incomplete day in the chart as well as the daily table', async () => {
+		const { store } = harness(
+			usageReport({
+				days: [
+					usageDay({
+						date: '2026-09-29',
+						executions: 1,
+						reportedExecutions: 0,
+						unmeasured: true,
+						incomplete: true,
+						tokens: inputTokens(0),
+						recordedCostUsd: 0,
+						costReportedExecutions: 0
+					})
+				]
+			})
+		);
+		const { container } = render(Usage, { store });
+		await waitFor(() =>
+			expect(container.querySelector('[data-usage-flagged-days]')).not.toBeNull()
+		);
+		const flagged = container.querySelector('[data-usage-flagged-days]');
+		expect(flagged?.textContent).toContain('2026-09-29');
+		expect(flagged?.textContent).toContain('unmeasured, incomplete');
+
+		const table = within(screen.getByLabelText('Daily usage')).getByRole('table');
+		expect(within(table).getByText('unmeasured, incomplete')).toBeInTheDocument();
+	});
+
+	it('renders a range with no executions differently from one whose executions reported nothing', async () => {
+		const empty = harness(
+			usageReport({
+				days: [
+					usageDay({
+						date: '2026-09-29',
+						executions: 0,
+						reportedExecutions: 0,
+						distinctTrails: 0,
+						tokens: inputTokens(0),
+						recordedCostUsd: 0,
+						costReportedExecutions: 0
+					})
+				]
+			})
+		);
+		const emptyRender = render(Usage, { store: empty.store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+		const none = emptyRender.container.querySelector('[data-usage-state="none"]');
+		expect(none).not.toBeNull();
+		expect(none?.textContent).toContain('No executions in this range');
+		expect(none?.textContent).toContain('genuine zero');
+		expect(emptyRender.container.querySelector('[data-usage-state="unmeasured"]')).toBeNull();
+		emptyRender.unmount();
+
+		const silent = harness(
+			usageReport({
+				days: [
+					usageDay({
+						date: '2026-09-29',
+						executions: 2,
+						reportedExecutions: 0,
+						distinctTrails: 1,
+						unmeasured: true,
+						tokens: inputTokens(0),
+						recordedCostUsd: 0,
+						costReportedExecutions: 0
+					})
+				]
+			})
+		);
+		const silentRender = render(Usage, { store: silent.store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+		const unmeasured = silentRender.container.querySelector('[data-usage-state="unmeasured"]');
+		expect(unmeasured).not.toBeNull();
+		expect(unmeasured?.textContent).toContain('Executions in this range reported no usage');
+		expect(unmeasured?.textContent).toContain('not an observed zero');
+		expect(silentRender.container.querySelector('[data-usage-state="none"]')).toBeNull();
+	});
+
+	it('warns that a range older than the retained record is unmeasured, not quiet', async () => {
+		const { store } = harness(
+			usageReport({
+				warnings: [
+					{
+						group: 'coverage',
+						kind: 'missing',
+						detail:
+							'range begins before the earliest retained run (2026-09-20T08:00:00Z); days before it are unmeasured, not quiet'
+					}
+				]
+			})
+		);
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		const predates = container.querySelector('[data-usage-state="predates"]');
+		expect(predates).not.toBeNull();
+		expect(predates?.textContent).toContain('This range begins before the retained record');
+		expect(predates?.textContent).toContain('not a quiet period');
+		// The boundary moves out of the generic warning list and into its state.
+		expect(container.querySelector('[data-usage-warnings]')).toBeNull();
+	});
+
+	it('refuses an over-long range without losing the last report', async () => {
+		const { store, fetchUsage } = harness();
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		store.applyCustom('2020-01-01', '2026-09-30');
+		await waitFor(() =>
+			expect(container.querySelector('[data-usage-state="overlong"]')).not.toBeNull()
+		);
+		const overlong = container.querySelector('[data-usage-state="overlong"]');
+		expect(overlong?.textContent).toContain('longer than the report');
+		expect(overlong?.textContent).toContain('366');
+		expect(overlong?.textContent).toContain('last successful report is still shown');
+
+		// The cap is refused before the reader is asked, so no directory walk.
+		expect(fetchUsage).toHaveBeenCalledTimes(1);
 		expect(screen.getByLabelText('Daily usage')).toBeInTheDocument();
 	});
 });

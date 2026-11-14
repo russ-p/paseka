@@ -148,9 +148,16 @@ func printUsageReport(w io.Writer, report runs.UsageReport, groupBy string) erro
 		fmt.Fprintf(w, "Earliest retained: %s\n", report.EarliestRetainedAt.Format(time.RFC3339))
 	}
 	trailWord := usageWord(report.Period.DistinctTrails, "trail", "trails")
-	fmt.Fprintf(w, "Coverage: %d executions (%d reported, %d unmeasured) in %d %s\n",
+	coverageLine := fmt.Sprintf("Coverage: %d executions (%d reported, %d unmeasured) in %d %s",
 		report.Period.Executions, report.Period.ReportedExecutions,
 		report.Period.Executions-report.Period.ReportedExecutions, report.Period.DistinctTrails, trailWord)
+	// An unreadable record is not in the execution count, so the line says how
+	// much coverage the warnings cost; otherwise the total looks complete.
+	if unreadable := usageUnreadableRecords(report.Warnings); unreadable > 0 {
+		coverageLine += fmt.Sprintf("; %d run %s unreadable, so coverage is reduced",
+			unreadable, usageWord(unreadable, "record", "records"))
+	}
+	fmt.Fprintln(w, coverageLine)
 	fmt.Fprintln(w, "Period tokens:")
 	fmt.Fprintf(w, "  input:       %d\n", report.Period.Tokens.InputTokens)
 	fmt.Fprintf(w, "  output:      %d\n", report.Period.Tokens.OutputTokens)
@@ -286,6 +293,19 @@ func usageWord(n int, singular, plural string) string {
 		return singular
 	}
 	return plural
+}
+
+// usageUnreadableRecords counts the run records a scan warned it could not
+// open. They are outside the execution count, so the coverage line states how
+// many the report is not covering.
+func usageUnreadableRecords(warnings []runs.UsageWarning) int {
+	count := 0
+	for _, warning := range warnings {
+		if warning.Group == "runs" && warning.Kind == runs.WarningUnreadable {
+			count++
+		}
+	}
+	return count
 }
 
 // usageDayState names what a row cannot say in numbers: an empty day is a

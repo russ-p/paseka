@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -500,6 +502,47 @@ func TestInspectUsageRangeRefusesFilterFlagsWithTrace(t *testing.T) {
 				t.Fatalf("refusal wrote a report:\n%s", stdout.String())
 			}
 		})
+	}
+}
+
+func TestInspectUsageRangeTextCarriesCoverageWarningsAndCounts(t *testing.T) {
+	root := t.TempDir()
+	writeInspectRun(t, root, "trace-gaps", "reported",
+		time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC), &protocol.Usage{
+			InputTokens: 100, Source: protocol.UsageSourceOpenCodeRunJSON,
+		})
+	writeInspectRun(t, root, "trace-gaps", "undated", time.Time{}, &protocol.Usage{
+		InputTokens: 7, Source: protocol.UsageSourceOpenCodeRunJSON,
+	})
+	// A retained execution directory the reader cannot open.
+	broken := filepath.Join(root, ".paseka", "runs", "trace-gaps", "broken")
+	if err := os.MkdirAll(broken, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(broken, runs.RequestFileName), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	err := printUsageRange(&buf, root, runs.UsageQuery{
+		Since: "2026-02-25", Until: "2026-03-03", Timezone: "UTC",
+	}, runs.UsageAxisAdapter, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+
+	for _, want := range []string{
+		"Coverage: 1 executions (1 reported, 0 unmeasured) in 1 trail; 1 run record unreadable, so coverage is reduced\n",
+		"Excluded undated: 1 execution has no usable start time\n",
+		"Warnings:\n",
+		"runs/unreadable:",
+		"coverage/missing:",
+		"unmeasured, not quiet",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
 	}
 }
 

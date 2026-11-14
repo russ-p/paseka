@@ -161,6 +161,44 @@ func TestUsageAPIReturnsTheColonyReport(t *testing.T) {
 	}
 }
 
+// The API carries the counts a page needs to say what its totals could not see:
+// the executions it could not date and the records it could not open.
+func TestUsageAPICarriesExcludedUndatedAndUnreadableCoverage(t *testing.T) {
+	repo := initConsoleRepo(t)
+	writeUsageConsoleRun(t, repo, "trace-dated", "run-1",
+		time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC),
+		&protocol.Usage{InputTokens: 5, Source: protocol.UsageSourceOpenCodeRunJSON})
+	writeUsageConsoleRun(t, repo, "trace-undated", "run-2", time.Time{},
+		&protocol.Usage{InputTokens: 7, Source: protocol.UsageSourceOpenCodeRunJSON})
+	broken := filepath.Join(repo, ".paseka", "runs", "trace-dated", "broken")
+	if err := os.MkdirAll(broken, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(broken, runs.RequestFileName), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := console.NewServer(console.Options{Addr: "127.0.0.1:0", Colony: setupConsoleHome(t, repo)})
+
+	report := usageAPIReport(t, srv, "/api/usage?since=2026-03-01&until=2026-03-03&timezone=UTC")
+	if report.ExcludedUndated != 1 {
+		t.Fatalf("excludedUndated = %d, want the undated execution counted", report.ExcludedUndated)
+	}
+	// The unreadable record is not in the execution count, and the rest of the
+	// report still renders.
+	if report.Period.Executions != 1 || report.Period.ReportedExecutions != 1 {
+		t.Fatalf("period = %+v, want only the readable execution covered", report.Period)
+	}
+	found := false
+	for _, warning := range report.Warnings {
+		if warning.Group == "runs" && warning.Kind == runs.WarningUnreadable {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("warnings = %+v, want the unreadable record named", report.Warnings)
+	}
+}
+
 // The API is read-only: it creates no file and appends no event. The snapshot
 // covers the whole repository so a read that materializes a cache beside the
 // runs fails here too.

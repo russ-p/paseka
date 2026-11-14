@@ -1,6 +1,12 @@
 import { fetchUsage as requestUsage } from '$lib/api/client';
 import type { UsageReport } from '$lib/api/types';
 import {
+	usageErrorKind,
+	usageRangeTooLong,
+	usageTooLongMessage,
+	type UsageReadErrorKind
+} from '$lib/usage-honesty';
+import {
 	browserTimezone,
 	clearUsageFilters,
 	hasUsageFilters,
@@ -108,6 +114,10 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 	let report = $state<UsageReport | null>(null);
 	let loading = $state(true);
 	let error = $state('');
+	// What the last failure was. A range over the cap is refused before it is
+	// sent; any other failure is a read the page could not complete. The page
+	// gives each its own copy rather than showing one generic error for both.
+	let errorKind = $state<UsageReadErrorKind | null>(null);
 
 	let started = false;
 	let generation = 0;
@@ -125,6 +135,15 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 	async function load(refresh = false): Promise<void> {
 		const request = ++generation;
 		const range = queryRange();
+		// The page refuses a range the reader would refuse, before walking run
+		// directories for it. The last good report stays on screen; only the
+		// state changes.
+		if (usageRangeTooLong(range.since, range.until)) {
+			error = usageTooLongMessage();
+			errorKind = 'range-too-long';
+			loading = false;
+			return;
+		}
 		loading = true;
 		try {
 			const next = await readUsage({
@@ -144,9 +163,13 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 			if (request !== generation) return;
 			report = next;
 			error = '';
+			errorKind = null;
 		} catch (cause) {
 			if (request !== generation) return;
 			error = errorMessage(cause);
+			// The reader's own refusal (a range over the cap) is not a failed
+			// read, and the page says so with different copy.
+			errorKind = usageErrorKind(cause);
 		} finally {
 			if (request === generation) loading = false;
 		}
@@ -308,6 +331,14 @@ export function createUsageStore(options: UsageStoreOptions = {}) {
 		},
 		get lastError(): string {
 			return error;
+		},
+		/**
+		 * Why the last read failed, or `null` when the report on screen is the
+		 * answer to the current view. `range-too-long` is a bound the page
+		 * refuses before sending; `read-failed` is a read that did not complete.
+		 */
+		get lastErrorKind(): UsageReadErrorKind | null {
+			return errorKind;
 		},
 		applyPreset,
 		applyCustom,

@@ -226,6 +226,19 @@
 		return null;
 	}
 
+	/**
+	 * Every state a flagged day carries, in one phrase. A day can be both
+	 * unmeasured and incomplete — an in-flight execution has no final usage
+	 * record yet — so a chart that named only the first state would hide the
+	 * other.
+	 */
+	export function usageDayStateLabel(day: UsageDay): string {
+		const states: string[] = [];
+		if (day.unmeasured) states.push('unmeasured');
+		if (day.incomplete) states.push('incomplete');
+		return states.join(', ');
+	}
+
 	/** The axis label a reader sees, or the default stack's own name. */
 	export function usageAxisTitle(axis: UsageChartAxis): string {
 		if (axis === 'components') return 'components';
@@ -492,6 +505,19 @@
 			</li>
 		{/each}
 	</ul>
+
+	{#if flagged.length > 0}
+		<!-- The strip marks a flagged day, but a mark is not a name: this line
+		     states the date and the state the daily table also carries. -->
+		<p class="text-xs text-base-content/70" data-usage-flagged-days>
+			Days needing attention:
+			{#each flagged as day, index (day.date)}
+				{#if index > 0}; {/if}
+				<span class="font-mono">{day.date}</span>
+				{usageDayStateLabel(day)}
+			{/each}.
+		</p>
+	{/if}
 
 	<p class="text-xs text-base-content/60">
 		A hatched strip marks a day whose executions reported no usage; a dotted strip marks a day

@@ -87,6 +87,36 @@ describe('createUsageStore', () => {
 		await store.refresh();
 		expect(store.report).toStrictEqual(good);
 		expect(store.lastError).toBe('server is busy');
+		expect(store.lastErrorKind).toBe('read-failed');
+	});
+
+	it('refuses a range over the cap before walking run directories', async () => {
+		const good = usageReport();
+		const fetchUsage = vi.fn(async (_query: UsageQuery) => good);
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		store.start();
+		await vi.waitFor(() => expect(fetchUsage).toHaveBeenCalledTimes(1));
+
+		store.applyCustom('2020-01-01', '2026-09-30');
+		// The cap is a bound the page refuses itself: no read is sent for it, and
+		// the last good report is still the report.
+		expect(fetchUsage).toHaveBeenCalledTimes(1);
+		expect(store.lastErrorKind).toBe('range-too-long');
+		expect(store.lastError).toContain('366');
+		expect(store.report).toStrictEqual(good);
+	});
+
+	it('reads a server refusal of an over-long range as the same state', async () => {
+		const fetchUsage = vi
+			.fn<() => Promise<UsageReport>>()
+			.mockResolvedValueOnce(usageReport())
+			.mockRejectedValueOnce(new Error('range is longer than 366 days'));
+		const store = createUsageStore({ fetchUsage, now: fixedNow, timezone: 'UTC' });
+		await store.refresh();
+		await store.refresh();
+
+		expect(store.lastErrorKind).toBe('range-too-long');
+		expect(store.report).not.toBeNull();
 	});
 
 	it('bypasses the scan cache only for the explicit refresh', async () => {

@@ -19,6 +19,13 @@
 		type UsageFilterAxis
 	} from '$lib/usage-view';
 	import {
+		USAGE_MAX_DAYS,
+		usageCoverageGaps,
+		usageOtherWarnings,
+		usagePredatesRetained,
+		usageRetainedWarning
+	} from '$lib/usage-honesty';
+	import {
 		createUsageStore,
 		usageCustomRange,
 		inclusiveEnd,
@@ -405,6 +412,25 @@
 	});
 
 	const period = $derived(store.report?.period);
+	const report = $derived(store.report);
+	/**
+	 * The five degraded states the page must not collapse into one another: a
+	 * range with no executions, a range whose executions reported nothing, a
+	 * range older than the retained record, a range longer than the cap, and a
+	 * read that failed. Each has its own copy and its own `data-usage-state`.
+	 */
+	const noExecutions = $derived(
+		period !== undefined && period.executions === 0 && !store.hasFilters
+	);
+	const onlyUnmeasured = $derived(
+		period !== undefined && period.executions > 0 && period.reportedExecutions === 0
+	);
+	const predatesRetained = $derived(report ? usagePredatesRetained(report) : false);
+	const retainedWarning = $derived(report ? usageRetainedWarning(report) : undefined);
+	const otherWarnings = $derived(report ? usageOtherWarnings(report) : []);
+	const gaps = $derived(report ? usageCoverageGaps(report) : { undated: 0, unreadable: 0 });
+	const readFailed = $derived(store.lastErrorKind === 'read-failed');
+	const rangeTooLong = $derived(store.lastErrorKind === 'range-too-long');
 	const components = $derived(
 		period
 			? [
@@ -419,9 +445,51 @@
 	const coverage = $derived(
 		period ? `${period.reportedExecutions} of ${period.executions} reported` : '—'
 	);
+	/** The coverage tile's full text, including the edges the reader excluded. */
+	const coverageHints = $derived.by((): string[] => {
+		if (!report || !period) return ['No report has been read yet'];
+		const hints = [`${period.reportedExecutions} of ${period.executions} executions reported usage`];
+		if (gaps.undated > 0) {
+			hints.push(
+				`${gaps.undated} execution${gaps.undated === 1 ? '' : 's'} excluded with no usable start time`
+			);
+		}
+		if (gaps.unreadable > 0) {
+			hints.push(
+				`${gaps.unreadable} run record${gaps.unreadable === 1 ? '' : 's'} unreadable, so coverage is reduced`
+			);
+		}
+		hints.push(
+			report.earliestRetainedAt
+				? `Retained record begins ${formatTimestamp(report.earliestRetainedAt)}`
+				: 'No retained execution record is dated'
+		);
+		return hints;
+	});
+	/**
+	 * The coverage area's visible sentence. A gap named only in a tooltip is a
+	 * gap an operator can miss, so the excluded-undated and unreadable counts are
+	 * printed beside the reported-of-executions number rather than hidden behind
+	 * a hover.
+	 */
+	const coverageSentence = $derived.by((): string => {
+		if (!report || !period) return '';
+		const clauses = [`${period.reportedExecutions} of ${period.executions} executions reported usage`];
+		if (gaps.undated > 0) {
+			clauses.push(
+				`${gaps.undated} execution${gaps.undated === 1 ? '' : 's'} excluded from the daily buckets because they have no usable start time`
+			);
+		}
+		if (gaps.unreadable > 0) {
+			clauses.push(
+				`${gaps.unreadable} run record${gaps.unreadable === 1 ? '' : 's'} could not be read, so coverage is reduced`
+			);
+		}
+		return `${clauses.join('; ')}.`;
+	});
 	const rangeLabel = $derived(
-		store.report
-			? `${store.report.since} to ${store.report.until} (${store.report.timezone})`
+		report
+			? `${report.since} to ${report.until} (${report.timezone})`
 			: `${store.since} to ${store.until} (${store.timezone})`
 	);
 </script>
@@ -489,10 +557,39 @@
 		<div class="alert alert-warning" role="alert"><span>{customError}</span></div>
 	{/if}
 
-	{#if store.lastError}
-		<div class="alert alert-error" role="alert">
-			<span>{store.lastError}</span>
-		</div>
+	{#if rangeTooLong}
+		<section
+			class="alert alert-warning"
+			role="alert"
+			data-usage-state="overlong"
+			aria-labelledby="usage-overlong-title"
+		>
+			<div class="space-y-1">
+				<h2 id="usage-overlong-title" class="text-lg font-semibold">
+					This range is longer than the report's cap
+				</h2>
+				<p class="text-sm">
+					The report covers at most {USAGE_MAX_DAYS} days at a time, so this range was not read.
+					{store.report
+						? 'The last successful report is still shown below.'
+						: 'Choose a shorter range to read one.'}
+				</p>
+			</div>
+		</section>
+	{:else if readFailed && !store.report}
+		<section
+			class="alert alert-error"
+			role="alert"
+			data-usage-state="error"
+			aria-labelledby="usage-read-failed-title"
+		>
+			<div class="space-y-1">
+				<h2 id="usage-read-failed-title" class="text-lg font-semibold">
+					The report could not be read
+				</h2>
+				<p class="text-sm">{store.lastError}</p>
+			</div>
+		</section>
 	{/if}
 
 	<section class="space-y-3" aria-labelledby="usage-filters">
@@ -583,14 +680,90 @@
 			run crossing midnight stays on its start day
 		</p>
 
-		{#if store.report.warnings.length > 0}
-			<div class="alert alert-warning" role="status">
+		{#if readFailed}
+			<!-- The last good report is still the numbers on screen, so the error
+			     sits beside it rather than replacing it. -->
+			<section
+				class="alert alert-error"
+				role="alert"
+				data-usage-state="error"
+				aria-labelledby="usage-stale-title"
+			>
+				<div class="space-y-1">
+					<h2 id="usage-stale-title" class="text-lg font-semibold">
+						This read failed; the report below is the last good one
+					</h2>
+					<p class="text-sm">{store.lastError}</p>
+					<p class="text-xs">
+						Observed {formatTimestamp(store.report.observedAt)}. Nothing below changed; press
+						Refresh to try again.
+					</p>
+				</div>
+			</section>
+		{/if}
+
+		{#if otherWarnings.length > 0}
+			<div class="alert alert-warning" role="status" data-usage-warnings>
 				<ul class="list-disc space-y-1 pl-5">
-					{#each store.report.warnings as warning, index (index)}
+					{#each otherWarnings as warning, index (index)}
 						<li>{warning.detail}</li>
 					{/each}
 				</ul>
 			</div>
+		{/if}
+
+		{#if predatesRetained}
+			<section
+				class="alert alert-warning"
+				role="status"
+				data-usage-state="predates"
+				aria-labelledby="usage-predates-title"
+			>
+				<div class="space-y-1">
+					<h2 id="usage-predates-title" class="text-lg font-semibold">
+						This range begins before the retained record
+					</h2>
+					<p class="text-sm">
+						{retainedWarning?.detail}. The gap is unmeasured, not a quiet period: nothing retained
+						says the colony had no executions then.
+					</p>
+				</div>
+			</section>
+		{/if}
+
+		{#if noExecutions}
+			<section
+				class="alert"
+				role="status"
+				data-usage-state="none"
+				aria-labelledby="usage-none-title"
+			>
+				<div class="space-y-1">
+					<h2 id="usage-none-title" class="text-lg font-semibold">No executions in this range</h2>
+					<p class="text-sm">
+						No retained run started on these days. The range is a genuine zero, not a failed read
+						and not an unmeasured one; the daily table lists every day zero-filled.
+					</p>
+				</div>
+			</section>
+		{:else if onlyUnmeasured}
+			<section
+				class="alert alert-warning"
+				role="status"
+				data-usage-state="unmeasured"
+				aria-labelledby="usage-unmeasured-title"
+			>
+				<div class="space-y-1">
+					<h2 id="usage-unmeasured-title" class="text-lg font-semibold">
+						Executions in this range reported no usage
+					</h2>
+					<p class="text-sm">
+						{period.executions} execution{period.executions === 1 ? '' : 's'} across
+						{period.distinctTrails} trail{period.distinctTrails === 1 ? '' : 's'} finished without a
+						usage record. The zero below is the absence of a measurement, not an observed zero.
+					</p>
+				</div>
+			</section>
 		{/if}
 
 		{#if store.hasFilters && period.executions === 0}
@@ -649,15 +822,28 @@
 						hint={[`${period.reportedExecutions} reported usage`, `${period.executions - period.reportedExecutions} did not`]}
 					/>
 					<StatTile label="Trails" value={String(period.distinctTrails)} />
-					<StatTile
-						label="Coverage"
-						value={coverage}
-						hint={[
-							store.report.earliestRetainedAt
-								? `Retained record begins ${formatTimestamp(store.report.earliestRetainedAt)}`
-								: 'No retained execution record is dated'
-						]}
-					/>
+					<StatTile label="Coverage" value={coverage} hint={coverageHints} />
+				</div>
+				<div class="space-y-1 text-xs text-base-content/60" data-usage-coverage>
+					<p>{coverageSentence}</p>
+					{#if store.report.earliestRetainedAt}
+						<p>
+							The report covers retained trails only: the retained record begins
+							{formatTimestamp(store.report.earliestRetainedAt)}. Spend whose records were pruned
+							is absent rather than counted as zero.
+						</p>
+					{:else}
+						<p>
+							The report covers retained trails only, and no retained execution record is dated.
+							Spend whose records were pruned is absent rather than counted as zero.
+						</p>
+					{/if}
+					{#if predatesRetained}
+						<p data-usage-gap="predates">
+							This range starts before that record, so its earlier days are unmeasured; they are
+							not days the colony was quiet.
+						</p>
+					{/if}
 				</div>
 			</section>
 
@@ -751,8 +937,8 @@
 				<h2 id="usage-daily" class="text-xl font-semibold">Daily volume</h2>
 				{#if period.executions === 0}
 					<p class="text-base-content/70">
-						No executions in this range. The days below are still listed, zero-filled, so two ranges
-						share the same axis.
+						Every day below is zero-filled, so two ranges share the same axis. A day with
+						executions but no reported usage reads <strong>unmeasured</strong> instead.
 					</p>
 				{/if}
 				<DataTable
