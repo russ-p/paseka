@@ -367,6 +367,21 @@ rather than looking like a quiet day, and a day still holding an in-flight run
 reads **incomplete**. A warning names records the reader could not date or open;
 they are counted, never guessed.
 
+The chart's **Breakdown** selector stacks the same days by adapter, model, Bee,
+or execution purpose instead of the token components. All four axes arrive in
+the one report, so switching axes redraws the chart from data already on screen
+and never issues a second read. The adapter key is the recorded adapter name
+with its implementation version beside it when the two differ, so an `opencode`
+proxy run and its `opencodev2` implementation stay separate groups; the model
+key is the resolved model id with the recorded alias as a secondary label, never
+the grouping key. A missing adapter, model, Bee, or purpose is an explicit
+**unknown** group, and a legacy record without a purpose is `unknown`, not
+`work`. The period breakdown table under the chart ranks every key of the
+selected axis by token volume and shows its executions, tokens, share of the
+period, and recorded cost with its own reporting count. The chart draws the top
+keys that fit the palette and groups the rest as **other**; the table still
+lists every key, so nothing is hidden, only the marks are bounded.
+
 This page deliberately has **no poller**: the report walks run directories, so it
 reads on mount, on a range change, and when you press **Refresh**. A failed
 refresh keeps the last good report on screen with its error above it.

@@ -42,8 +42,11 @@ import type {
 	TrailConfigApplyResult,
 	TraceSummary,
 	TranscriptEntry,
+	UsageAxisEntry,
+	UsageAxes,
 	UsageDay,
-	UsageReport
+	UsageReport,
+	UsageTokens
 } from '$lib/api/types';
 
 export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummary {
@@ -1117,9 +1120,83 @@ export function skillDecisionResult(
 	};
 }
 
+/** One group of one axis; the defaults are one adapter's whole volume. */
+export function usageAxisEntry(overrides: Partial<UsageAxisEntry> = {}): UsageAxisEntry {
+	return {
+		key: 'opencode',
+		executions: 2,
+		tokens: {
+			inputTokens: 1200,
+			outputTokens: 300,
+			reasoningTokens: 40,
+			cacheReadTokens: 500,
+			cacheWriteTokens: 20,
+			totalTokens: 2060
+		},
+		recordedCostUsd: 0.25,
+		costReportedExecutions: 2,
+		...overrides
+	};
+}
+
+/** The four axes of a day whose totals are given, one key each by default. */
+export function usageAxes(totals: {
+	executions: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}): UsageAxes {
+	const shared = {
+		executions: totals.executions,
+		tokens: { ...totals.tokens },
+		recordedCostUsd: totals.recordedCostUsd,
+		costReportedExecutions: totals.costReportedExecutions
+	};
+	return {
+		adapter: [{ key: 'opencode', ...shared }],
+		model: [{ key: 'anthropic/claude-sonnet', label: 'sonnet', ...shared }],
+		bee: [{ key: 'builder', ...shared }],
+		purpose: [{ key: 'work', ...shared }]
+	};
+}
+
+/** Sums axis entries by key and label, as the server's period ranking does. */
+export function mergeUsageAxes(days: UsageDay[]): UsageAxes {
+	const axes: UsageAxes = { adapter: [], model: [], bee: [], purpose: [] };
+	for (const axis of ['adapter', 'model', 'bee', 'purpose'] as const) {
+		const merged = new Map<string, UsageAxisEntry>();
+		for (const day of days) {
+			for (const entry of day.breakdown[axis]) {
+				const id = `${entry.key}\u0000${entry.label ?? ''}`;
+				const current = merged.get(id);
+				if (!current) {
+					merged.set(id, {
+						...entry,
+						tokens: { ...entry.tokens }
+					});
+					continue;
+				}
+				current.executions += entry.executions;
+				current.recordedCostUsd += entry.recordedCostUsd;
+				current.costReportedExecutions += entry.costReportedExecutions;
+				current.tokens.inputTokens += entry.tokens.inputTokens;
+				current.tokens.outputTokens += entry.tokens.outputTokens;
+				current.tokens.reasoningTokens += entry.tokens.reasoningTokens;
+				current.tokens.cacheReadTokens += entry.tokens.cacheReadTokens;
+				current.tokens.cacheWriteTokens += entry.tokens.cacheWriteTokens;
+				current.tokens.totalTokens += entry.tokens.totalTokens;
+			}
+		}
+		axes[axis] = [...merged.values()].sort(
+			(a, b) => b.tokens.totalTokens - a.tokens.totalTokens || a.key.localeCompare(b.key)
+		);
+	}
+	return axes;
+}
+
 /** One zero-filled day in a usage report, complete unless a test overrides it. */
 export function usageDay(overrides: Partial<UsageDay> = {}): UsageDay {
-	return {
+	const day: UsageDay = {
 		date: '2026-09-25',
 		executions: 2,
 		reportedExecutions: 2,
@@ -1134,10 +1211,20 @@ export function usageDay(overrides: Partial<UsageDay> = {}): UsageDay {
 		},
 		recordedCostUsd: 0.25,
 		costReportedExecutions: 2,
+		breakdown: {
+			adapter: [],
+			model: [],
+			bee: [],
+			purpose: []
+		},
 		unmeasured: false,
 		incomplete: false,
 		...overrides
 	};
+	// A fixture that overrides only the totals still gets axes that sum to them,
+	// so a test is never accidentally reading a day whose axes disagree.
+	if (!overrides.breakdown) day.breakdown = usageAxes(day);
+	return day;
 }
 
 /** A usage report whose period is the sum of its days. */
@@ -1182,6 +1269,7 @@ export function usageReport(overrides: Partial<UsageReport> = {}): UsageReport {
 		observedAt: '2026-09-30T18:00:00Z',
 		earliestRetainedAt: '2026-08-01T00:00:00Z',
 		period,
+		breakdown: mergeUsageAxes(days),
 		days,
 		excludedUndated: 0,
 		warnings: [],

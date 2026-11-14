@@ -4,14 +4,17 @@ import { render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import UsageChart, {
 	USAGE_COMPONENTS,
+	USAGE_OTHER_SERIES,
+	USAGE_PALETTE,
 	usageChartRows,
+	usageChartSeries,
 	usageChartSummary,
 	usagePaletteIndex,
 	usageSeriesColor,
 	usageSeriesSwatch,
 	usageDayState
 } from './UsageChart.svelte';
-import { usageDay, usageReport } from '../../tests/fixtures';
+import { usageAxisEntry, usageDay, usageReport } from '../../tests/fixtures';
 import type { UsageDay } from '$lib/api/types';
 
 /**
@@ -79,7 +82,7 @@ describe('usage chart data', () => {
 			unmeasuredDay()
 		];
 
-		const rows = usageChartRows(days);
+		const rows = usageChartRows(usageReport({ days }));
 		for (const day of days) {
 			const stacked = rows
 				.filter((row) => row.date === day.date)
@@ -101,6 +104,92 @@ describe('usage chart data', () => {
 		expect(usagePaletteIndex(model)).toBeLessThan(5);
 		expect(usageSeriesColor('cache-read')).toMatch(/^var\(--color-[a-z-]+\)$/);
 		expect(usageSeriesSwatch('cache-read')).toMatch(/^bg-[a-z]+$/);
+	});
+
+	it('stacks a breakdown axis the report already holds, with labels beside the keys', () => {
+		const axisTokens = (input: number) => ({
+			inputTokens: input,
+			outputTokens: 0,
+			reasoningTokens: 0,
+			cacheReadTokens: 0,
+			cacheWriteTokens: 0,
+			totalTokens: input
+		});
+		const days: UsageDay[] = [
+			usageDay({
+				date: '2026-09-25',
+				tokens: axisTokens(300),
+				breakdown: {
+					adapter: [
+						usageAxisEntry({ key: 'opencode', label: 'opencodev2', tokens: axisTokens(200) }),
+						usageAxisEntry({ key: 'cursor', tokens: axisTokens(100) })
+					],
+					model: [
+						usageAxisEntry({
+							key: 'anthropic/claude-sonnet',
+							label: 'sonnet',
+							tokens: axisTokens(300)
+						})
+					],
+					bee: [usageAxisEntry({ key: 'builder', tokens: axisTokens(300) })],
+					purpose: [usageAxisEntry({ key: 'work', tokens: axisTokens(300) })]
+				}
+			})
+		];
+		const report = usageReport({ days });
+
+		const adapters = usageChartSeries(report, 'adapter');
+		expect(adapters.map((entry) => entry.label)).toEqual(['opencode · opencodev2', 'cursor']);
+		const rows = usageChartRows(report, 'adapter');
+		expect(rows.reduce((sum, row) => sum + row.tokens, 0)).toBe(300);
+
+		const models = usageChartSeries(report, 'model');
+		expect(models[0].label).toBe('anthropic/claude-sonnet · sonnet');
+	});
+
+	it('bounds axis series by the palette and folds the rest into other', () => {
+		const tokens = (input: number) => ({
+			inputTokens: input,
+			outputTokens: 0,
+			reasoningTokens: 0,
+			cacheReadTokens: 0,
+			cacheWriteTokens: 0,
+			totalTokens: input
+		});
+		const bees = Array.from({ length: 7 }, (_, index) =>
+			usageAxisEntry({
+				key: `bee-${index}`,
+				executions: 1,
+				tokens: tokens(100 - index),
+				recordedCostUsd: 0,
+				costReportedExecutions: 0
+			})
+		);
+		const day = usageDay({
+			executions: 7,
+			reportedExecutions: 7,
+			tokens: tokens(7 * 100 - 21),
+			recordedCostUsd: 0,
+			costReportedExecutions: 0,
+			breakdown: {
+				adapter: bees.map((entry) => ({ ...entry, key: `adapter-${entry.key}` })),
+				model: bees.map((entry) => ({ ...entry, key: `model-${entry.key}` })),
+				bee: bees,
+				purpose: bees.map((entry) => ({ ...entry, key: `purpose-${entry.key}` }))
+			}
+		});
+		const report = usageReport({ days: [day] });
+
+		const series = usageChartSeries(report, 'bee');
+		expect(series).toHaveLength(USAGE_PALETTE.length);
+		expect(series.at(-1)?.id).toBe(USAGE_OTHER_SERIES);
+		expect(series.at(-1)?.label).toBe('Other (3)');
+		// The chart's stack is still the day's total; the table is what lists
+		// every key.
+		const rows = usageChartRows(report, 'bee', series);
+		expect(rows).toHaveLength(USAGE_PALETTE.length);
+		expect(rows.reduce((sum, row) => sum + row.tokens, 0)).toBe(day.tokens.totalTokens);
+		expect(report.breakdown.bee).toHaveLength(7);
 	});
 
 	it('summarises the period for assistive technology', () => {

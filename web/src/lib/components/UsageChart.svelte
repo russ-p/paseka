@@ -1,12 +1,12 @@
 <script module lang="ts">
 	import { formatTokenCount } from '$lib/format';
-	import type { UsageDay, UsageReport } from '$lib/api/types';
+	import type { UsageAxisEntry, UsageDay, UsageReport } from '$lib/api/types';
 
 	/**
-	 * The series the daily chart stacks, in stack order. The order is part of the
-	 * contract: the palette is fixed and both the chart and its legend read from
-	 * this one list, so a component cannot be coloured in the chart and named
-	 * differently in the legend.
+	 * The series the daily chart stacks by default, in stack order. The order is
+	 * part of the contract: the palette is fixed and both the chart and its
+	 * legend read from this one list, so a component cannot be coloured in the
+	 * chart and named differently in the legend.
 	 */
 	export const USAGE_COMPONENTS = [
 		{ key: 'input', label: 'Input' },
@@ -17,6 +17,25 @@
 	] as const;
 
 	export type UsageSeriesKey = (typeof USAGE_COMPONENTS)[number]['key'];
+
+	/** The breakdown axes the chart can stack instead of the components. */
+	export const USAGE_AXES = [
+		{ key: 'adapter', label: 'Adapter' },
+		{ key: 'model', label: 'Model' },
+		{ key: 'bee', label: 'Bee' },
+		{ key: 'purpose', label: 'Purpose' }
+	] as const;
+
+	export type UsageAxisName = (typeof USAGE_AXES)[number]['key'];
+
+	/**
+	 * What the chart stacks: the token components, or one breakdown axis. The
+	 * report already carries all four axes, so switching this costs no read.
+	 */
+	export type UsageChartAxis = 'components' | UsageAxisName;
+
+	/** The series id the chart gives the keys a palette cannot fit. */
+	export const USAGE_OTHER_SERIES = 'other';
 
 	/**
 	 * The fixed ordered palette. Every entry is a DaisyUI theme token, so a
@@ -38,8 +57,8 @@
 
 	/**
 	 * The palette slot for a series key. The five token components have a fixed
-	 * order; any other key (the later breakdown axes) hashes to a slot, so the
-	 * same key keeps its colour across reloads, ranges, and axes.
+	 * order; any other key (a breakdown axis key) hashes to a slot, so the same
+	 * key keeps its colour across reloads, ranges, and axes.
 	 */
 	export function usagePaletteIndex(key: string): number {
 		const known = USAGE_COMPONENTS.findIndex((component) => component.key === key);
@@ -63,10 +82,79 @@
 		return USAGE_PALETTE[usagePaletteIndex(key)].swatch;
 	}
 
-	/** One stack segment: a day, a component, and its reported volume. */
+	/** One stack series: its identity, its label, and its resolved theme slot. */
+	export interface UsageSeries {
+		id: string;
+		label: string;
+		/** A `--color-*` token name, never a colour value. */
+		token: string;
+		swatch: string;
+	}
+
+	/**
+	 * The identity of one axis entry. An adapter keeps its implementation beside
+	 * its name, because a proxy and its v2 implementation are two groups even
+	 * though the adapter name is one; every other axis is its key alone.
+	 */
+	export function usageAxisEntryId(axis: UsageChartAxis, entry: UsageAxisEntry): string {
+		if (axis === 'adapter' && entry.label) return `${entry.key} · ${entry.label}`;
+		return entry.key;
+	}
+
+	/** What a reader sees for one axis key, with its secondary label beside it. */
+	export function usageAxisEntryLabel(axis: UsageChartAxis, entry: UsageAxisEntry): string {
+		if (!entry.label) return entry.key;
+		return `${entry.key} · ${entry.label}`;
+	}
+
+	/**
+	 * The series the chart draws for the selected axis.
+	 *
+	 * The component stack is fixed. A breakdown axis is ranked by the report, and
+	 * the number of series is bounded by the palette: the top keys keep a slot and
+	 * the remainder become one `other` series. The table below still lists every
+	 * key, so nothing is hidden — only the marks are bounded.
+	 */
+	export function usageChartSeries(
+		report: UsageReport,
+		axis: UsageChartAxis = 'components'
+	): UsageSeries[] {
+		const named: { id: string; label: string }[] =
+			axis === 'components'
+				? USAGE_COMPONENTS.map((component) => ({ id: component.key, label: component.label }))
+				: (() => {
+						const entries = report.breakdown[axis] ?? [];
+						const top = entries.slice(0, USAGE_PALETTE.length - 1);
+						const rest = entries.slice(top.length);
+						const series = top.map((entry) => ({
+							id: usageAxisEntryId(axis, entry),
+							label: usageAxisEntryLabel(axis, entry)
+						}));
+						if (rest.length > 0) {
+							series.push({ id: USAGE_OTHER_SERIES, label: `Other (${rest.length})` });
+						}
+						return series;
+					})();
+
+		// Resolve slots with linear probing, so two keys that hash to the same
+		// slot stay two colours. A key's slot is still derived from the key, and
+		// the set of series is the report's own ranking, so the same view keeps
+		// the same colours.
+		const used = new Set<number>();
+		return named.map(({ id, label }) => {
+			let index = usagePaletteIndex(id);
+			for (let probe = 0; probe < USAGE_PALETTE.length && used.has(index); probe += 1) {
+				index = (index + 1) % USAGE_PALETTE.length;
+			}
+			used.add(index);
+			return { id, label, ...USAGE_PALETTE[index] };
+		});
+	}
+
+	/** One stack segment: a day, a series, and its reported volume. */
 	export interface UsageChartRow {
 		date: string;
-		series: UsageSeriesKey;
+		series: string;
 		label: string;
 		tokens: number;
 		/** The day's reported total, repeated so a tooltip can name it. */
@@ -76,29 +164,54 @@
 	}
 
 	/**
-	 * Long-form rows for the stacked chart, one per component per day. Everything
+	 * Long-form rows for the stacked chart, one per series per day. Everything
 	 * comes from the report the page already holds; the chart never reads usage
-	 * itself. A row is emitted even for a zero component, so the stack's sum is
-	 * the day's total exactly rather than the sum of its non-zero parts.
+	 * itself. A row is emitted even for a zero series, so the stack's sum is the
+	 * day's total exactly rather than the sum of its non-zero parts.
 	 */
-	export function usageChartRows(days: UsageDay[]): UsageChartRow[] {
-		return days.flatMap((day) =>
-			USAGE_COMPONENTS.map((component, index) => ({
+	export function usageChartRows(
+		report: UsageReport,
+		axis: UsageChartAxis = 'components',
+		series: UsageSeries[] = usageChartSeries(report, axis)
+	): UsageChartRow[] {
+		if (axis === 'components') {
+			return report.days.flatMap((day) =>
+				USAGE_COMPONENTS.map((component, index) => ({
+					date: day.date,
+					series: component.key,
+					label: component.label,
+					tokens: [
+						day.tokens.inputTokens,
+						day.tokens.outputTokens,
+						day.tokens.reasoningTokens,
+						day.tokens.cacheReadTokens,
+						day.tokens.cacheWriteTokens
+					][index],
+					dayTotal: day.tokens.totalTokens,
+					unmeasured: day.unmeasured,
+					incomplete: day.incomplete
+				}))
+			);
+		}
+
+		const seriesIds = new Set(series.map((entry) => entry.id));
+		return report.days.flatMap((day) => {
+			const totals = new Map<string, number>();
+			for (const entry of day.breakdown[axis] ?? []) {
+				const id = usageAxisEntryId(axis, entry);
+				const target = seriesIds.has(id) ? id : USAGE_OTHER_SERIES;
+				totals.set(target, (totals.get(target) ?? 0) + entry.tokens.totalTokens);
+			}
+			return series.map((entry) => ({
 				date: day.date,
-				series: component.key,
-				label: component.label,
-				tokens: [
-					day.tokens.inputTokens,
-					day.tokens.outputTokens,
-					day.tokens.reasoningTokens,
-					day.tokens.cacheReadTokens,
-					day.tokens.cacheWriteTokens
-				][index],
+				series: entry.id,
+				label: entry.label,
+				tokens: totals.get(entry.id) ?? 0,
 				dayTotal: day.tokens.totalTokens,
 				unmeasured: day.unmeasured,
 				incomplete: day.incomplete
-			}))
-		);
+			}));
+		});
 	}
 
 	/** A day is flagged when any of its executions is unmeasured or unfinished. */
@@ -113,13 +226,52 @@
 		return null;
 	}
 
+	/** The axis label a reader sees, or the default stack's own name. */
+	export function usageAxisTitle(axis: UsageChartAxis): string {
+		if (axis === 'components') return 'components';
+		return USAGE_AXES.find((option) => option.key === axis)?.label ?? axis;
+	}
+
 	/** The summary an assistive technology reads instead of the marks. */
-	export function usageChartSummary(report: UsageReport): string {
+	export function usageChartSummary(
+		report: UsageReport,
+		axis: UsageChartAxis = 'components'
+	): string {
 		const first = report.days.at(0)?.date ?? report.since;
 		const last = report.days.at(-1)?.date ?? report.until;
 		const period = report.period;
 		const unmeasured = report.days.filter((day) => day.unmeasured).length;
 		const incomplete = report.days.filter((day) => day.incomplete).length;
+		const states = [
+			unmeasured > 0 ? `${unmeasured} ${unmeasured === 1 ? 'day is' : 'days are'} unmeasured` : '',
+			incomplete > 0 ? `${incomplete} ${incomplete === 1 ? 'day is' : 'days are'} incomplete` : ''
+		]
+			.filter(Boolean)
+			.join(' and ');
+
+		if (axis !== 'components') {
+			const entries = report.breakdown[axis] ?? [];
+			const top = entries
+				.slice(0, USAGE_PALETTE.length)
+				.map((entry) => {
+					const share =
+						period.tokens.totalTokens > 0
+							? ` (${((entry.tokens.totalTokens / period.tokens.totalTokens) * 100).toFixed(1)}%)`
+							: '';
+					return `${usageAxisEntryLabel(axis, entry)} ${formatTokenCount(entry.tokens.totalTokens)}${share}`;
+				})
+				.join(', ');
+			return [
+				`Daily token volume by ${usageAxisTitle(axis).toLowerCase()} from ${first} to ${last} (${report.timezone}):`,
+				`${formatTokenCount(period.tokens.totalTokens)} tokens in total across ${entries.length} ${entries.length === 1 ? 'key' : 'keys'}.`,
+				top ? `Top keys: ${top}.` : '',
+				states ? `${states}.` : '',
+				'The breakdown table below lists every key and the daily table holds the same numbers.'
+			]
+				.filter(Boolean)
+				.join(' ');
+		}
+
 		const totals = USAGE_COMPONENTS.map(
 			(component, index) =>
 				`${component.label.toLowerCase()} ${formatTokenCount(
@@ -132,12 +284,6 @@
 					][index]
 				)}`
 		).join(', ');
-		const states = [
-			unmeasured > 0 ? `${unmeasured} ${unmeasured === 1 ? 'day is' : 'days are'} unmeasured` : '',
-			incomplete > 0 ? `${incomplete} ${incomplete === 1 ? 'day is' : 'days are'} incomplete` : ''
-		]
-			.filter(Boolean)
-			.join(' and ');
 		return [
 			`Daily token volume from ${first} to ${last} (${report.timezone}):`,
 			`${formatTokenCount(period.tokens.totalTokens)} tokens in total (${totals})`,
@@ -153,14 +299,18 @@
 <script lang="ts">
 	import { Axis, Bars, Chart, Svg, Tooltip } from 'layerchart';
 
-	let { report }: { report: UsageReport } = $props();
+	let {
+		report,
+		axis = 'components'
+	}: { report: UsageReport; axis?: UsageChartAxis } = $props();
 
 	const chartId = $props.id();
-	const rows = $derived(usageChartRows(report.days));
-	const seriesKeys = USAGE_COMPONENTS.map((component) => component.key);
-	const seriesColors = seriesKeys.map((key) => usageSeriesColor(key));
+	const series = $derived(usageChartSeries(report, axis));
+	const rows = $derived(usageChartRows(report, axis, series));
+	const seriesKeys = $derived(series.map((entry) => entry.id));
+	const seriesColors = $derived(series.map((entry) => `var(${entry.token})`));
 	const flagged = $derived(usageFlaggedDays(report.days));
-	const summary = $derived(usageChartSummary(report));
+	const summary = $derived(usageChartSummary(report, axis));
 	const rowsByDay = $derived.by(() => {
 		const grouped = new Map<string, UsageChartRow[]>();
 		for (const row of rows) {
@@ -180,13 +330,14 @@
 	<div class="flex flex-wrap items-baseline justify-between gap-2">
 		<h2 id={`${chartId}-title`} class="text-xl font-semibold">Token volume per day</h2>
 		<p class="text-xs text-base-content/60">
-			Stacked components · local days in {report.timezone}
+			Stacked {axis === 'components' ? 'components' : `by ${usageAxisTitle(axis).toLowerCase()}`} ·
+			local days in {report.timezone}
 		</p>
 	</div>
 
 	<p id={`${chartId}-summary`} class="sr-only">{summary}</p>
 
-	<div class="w-full" data-testid="usage-chart">
+	<div class="w-full" data-testid="usage-chart" data-usage-axis={axis}>
 		<Chart
 			data={rows}
 			x="date"
@@ -288,10 +439,10 @@
 	</div>
 
 	<ul class="flex flex-wrap gap-x-4 gap-y-2" aria-label="Chart series">
-		{#each USAGE_COMPONENTS as component (component.key)}
+		{#each series as entry (entry.id)}
 			<li class="flex items-center gap-2 text-sm">
-				<span class={`size-3 rounded-sm ${usageSeriesSwatch(component.key)}`}></span>
-				<span>{component.label}</span>
+				<span class={`size-3 rounded-sm ${entry.swatch}`}></span>
+				<span>{entry.label}</span>
 			</li>
 		{/each}
 	</ul>

@@ -269,6 +269,8 @@ export interface UsageDay {
 	tokens: UsageTokens;
 	recordedCostUsd: number;
 	costReportedExecutions: number;
+	/** The same day split along every axis; each sums to the day's totals. */
+	breakdown: UsageAxes;
 	/** Executions happened but none reported usage. Distinct from no executions. */
 	unmeasured: boolean;
 	/** At least one execution on this day is still in flight. */
@@ -283,6 +285,31 @@ export interface UsageTotals {
 	tokens: UsageTokens;
 	recordedCostUsd: number;
 	costReportedExecutions: number;
+}
+
+/**
+ * One group of one breakdown axis over a day or the period. Mirrors
+ * `runs.UsageAxisEntry`. `label` is a secondary name — an adapter's
+ * implementation version or a model's alias — and never the grouping key.
+ */
+export interface UsageAxisEntry {
+	key: string;
+	label?: string;
+	executions: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}
+
+/**
+ * The same executions seen four ways. Mirrors `runs.UsageAxes`; every axis sums
+ * to the totals beside it, so the page switches axes from one payload.
+ */
+export interface UsageAxes {
+	adapter: UsageAxisEntry[];
+	model: UsageAxisEntry[];
+	bee: UsageAxisEntry[];
+	purpose: UsageAxisEntry[];
 }
 
 /** One reason a usage report is partial. Mirrors `runs.UsageWarning`. */
@@ -300,6 +327,8 @@ export interface UsageReport {
 	observedAt: string;
 	earliestRetainedAt?: string;
 	period: UsageTotals;
+	/** The period ranking per axis, derived from the day entries. */
+	breakdown: UsageAxes;
 	days: UsageDay[];
 	excludedUndated: number;
 	warnings: UsageWarning[];

@@ -954,7 +954,7 @@ Show recorded LLM token usage from the same run projection the Queen Console use
 
 **Colony report.** Without `--trace` the command prints the colony report for a date range, built by the same reader as `GET /api/usage` (`internal/runs`), so the page is never the only way to read the numbers. The range defaults to the **last 30 days ending now** and the zone defaults to the **host's local zone**; the text form always states the resolved range and zone, so neither default is silent. `--since` is inclusive and `--until` is exclusive, both read as local midnights in the chosen IANA zone. A record lands on the day of its **start** time, entirely: a run crossing midnight is not split. The range is capped at 366 days.
 
-The text report carries the resolved range and zone, the observation time, the retained-record start when known, coverage (executions, how many reported usage, distinct trails), the period component totals with recorded cost and its own reporting count, one row per day with components and counts, the excluded-undated count when non-zero, and the report's warnings. A day with no executions, a day whose executions reported nothing (`unmeasured`), and a day with an execution still in flight (`incomplete`) read differently. `--json` prints exactly the document `GET /api/usage` returns for the same query — same fields, same zero-filled days, same echoed zone — so a script can check the page against its source.
+The text report carries the resolved range and zone, the observation time, the retained-record start when known, coverage (executions, how many reported usage, distinct trails), the period component totals with recorded cost and its own reporting count, one row per day with components and counts, the period ranking for the requested axis with each key's share, the excluded-undated count when non-zero, and the report's warnings. `--group-by` chooses that axis: `adapter` (the default), `model`, `bee`, or `purpose`. An adapter's implementation version appears beside its name and a model's recorded alias beside its id; a missing adapter, model, Bee, or purpose is an explicit `unknown` key rather than an excluded execution. Any other value is refused, and the flag applies only without `--trace`. A day with no executions, a day whose executions reported nothing (`unmeasured`), and a day with an execution still in flight (`incomplete`) read differently. `--json` prints exactly the document `GET /api/usage` returns for the same query — same fields, same zero-filled days, same echoed zone — so a script can check the page against its source.
 
 An unknown zone, an unparsable date, a reversed or empty range, and a range longer than 366 days exit non-zero with the reason and print no report.
 
@@ -965,7 +965,8 @@ An unknown zone, an unparsable date, a reversed or empty range, and a range long
 | `--since` | | | First day of the range, `YYYY-MM-DD` (default: 30 days before today) |
 | `--until` | | | Day after the last day of the range, `YYYY-MM-DD` (default: now) |
 | `--timezone` | | | IANA zone for the day boundaries (default: the host's) |
-| `--json` | | | Print the report exactly as `GET /api/usage` returns it |
+| `--group-by` | | | Axis ranked in the period breakdown: `adapter` (default), `model`, `bee`, or `purpose` |
+| `--json` | | | Print the report exactly as `GET /api/usage` returns it, all four axes included |
 | `--path` | `-C` | | Colony resolution start directory |
 
 ```bash
@@ -974,6 +975,7 @@ paseka inspect usage --trace trace-1 --agent agent-abc
 paseka inspect usage                                  # last 30 days, host zone
 paseka inspect usage --since 2026-10-01 --until 2026-11-01 --timezone Europe/Berlin
 paseka inspect usage --since 2026-10-01 --json | jq '.period.tokens'
+paseka inspect usage --since 2026-10-01 --group-by model
 ```
 
 ### `paseka inspect metrics`

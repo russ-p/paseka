@@ -3,6 +3,7 @@ package runs_test
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,20 +17,24 @@ import (
 // usageFixture is one execution directory. The zero value is a completed AFK
 // run with no usage; each test changes only the part it is about.
 type usageFixture struct {
-	traceID   string
-	agentID   string
-	started   time.Time
-	bee       string
-	adapter   string
-	model     string
-	alias     string
-	purpose   protocol.ExecutionPurpose
-	state     protocol.RunStatus
-	usage     *protocol.Usage
-	session   *protocol.Usage
-	sessionOn bool
-	noStart   bool
-	noRes     bool
+	traceID        string
+	agentID        string
+	started        time.Time
+	bee            string
+	adapter        string
+	implementation string
+	model          string
+	alias          string
+	purpose        protocol.ExecutionPurpose
+	state          protocol.RunStatus
+	usage          *protocol.Usage
+	session        *protocol.Usage
+	sessionOn      bool
+	noStart        bool
+	noRes          bool
+	// blankIdentity writes an empty Bee and Adapter, which is the legacy shape
+	// the report groups under `unknown` rather than dropping.
+	blankIdentity bool
 }
 
 func writeUsageFixture(t *testing.T, root string, f usageFixture) runs.Dir {
@@ -49,6 +54,10 @@ func writeUsageFixture(t *testing.T, root string, f usageFixture) runs.Dir {
 	adapter := f.adapter
 	if adapter == "" {
 		adapter = "opencode"
+	}
+	if f.blankIdentity {
+		bee = ""
+		adapter = ""
 	}
 
 	d := runs.Dir{ColonyRoot: root, TraceID: f.traceID, AgentID: f.agentID}
@@ -77,6 +86,18 @@ func writeUsageFixture(t *testing.T, root string, f usageFixture) runs.Dir {
 		FinishedAt:      finishOf(started, state),
 	}); err != nil {
 		t.Fatal(err)
+	}
+	// The implementation version is recorded by the legacy meta sidecar rather
+	// than by request.json, so the fixture writes it where the projection reads
+	// it.
+	if f.implementation != "" {
+		payload, err := json.Marshal(map[string]string{"implementation": f.implementation})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(d.MetaPath(), payload, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if f.sessionOn {
 		if err := d.WriteSession(runs.SessionMeta{
@@ -670,4 +691,211 @@ func TestUsageReportJSONCarriesNoPriceFields(t *testing.T) {
 		}
 	}
 	walk("", decoded)
+}
+
+// findAxisEntry returns the one entry matching key and label, or fails.
+func findAxisEntry(t *testing.T, entries []runs.UsageAxisEntry, key, label string) runs.UsageAxisEntry {
+	t.Helper()
+	for _, entry := range entries {
+		if entry.Key == key && entry.Label == label {
+			return entry
+		}
+	}
+	t.Fatalf("axis has no entry %q/%q: %+v", key, label, entries)
+	return runs.UsageAxisEntry{}
+}
+
+// assertAxisSums proves one axis is a complete view of the totals beside it.
+func assertAxisSums(t *testing.T, name string, entries []runs.UsageAxisEntry, totals runs.UsageTotals) {
+	t.Helper()
+	var (
+		tokens     runs.UsageTokens
+		executions int
+		cost       float64
+		costCount  int
+	)
+	for _, entry := range entries {
+		tokens.InputTokens += entry.Tokens.InputTokens
+		tokens.OutputTokens += entry.Tokens.OutputTokens
+		tokens.ReasoningTokens += entry.Tokens.ReasoningTokens
+		tokens.CacheReadTokens += entry.Tokens.CacheReadTokens
+		tokens.CacheWriteTokens += entry.Tokens.CacheWriteTokens
+		tokens.TotalTokens += entry.Tokens.TotalTokens
+		executions += entry.Executions
+		cost += entry.RecordedCost
+		costCount += entry.CostReportedExecutions
+	}
+	if tokens != totals.Tokens {
+		t.Fatalf("%s axis tokens = %+v, totals = %+v", name, tokens, totals.Tokens)
+	}
+	if executions != totals.Executions {
+		t.Fatalf("%s axis executions = %d, totals = %d", name, executions, totals.Executions)
+	}
+	if costCount != totals.CostReportedExecutions || math.Abs(cost-totals.RecordedCost) > 1e-9 {
+		t.Fatalf("%s axis cost = %v in %d, totals = %v in %d",
+			name, cost, costCount, totals.RecordedCost, totals.CostReportedExecutions)
+	}
+}
+
+func TestUsageReportBreaksEachDayIntoFourAxesThatSumToTheDay(t *testing.T) {
+	root := t.TempDir()
+	utc := time.UTC
+	base := usageDate(t, "2026-02-10 10:00", utc)
+
+	// A v1 proxy run: the adapter name, no implementation.
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-axes", agentID: "proxy-v1", started: base,
+		bee: "builder", adapter: "opencode",
+		model: "anthropic/claude-sonnet", alias: "sonnet", purpose: protocol.PurposeWork,
+		usage: &protocol.Usage{InputTokens: 100, OutputTokens: 10, CostUSD: 0.5,
+			Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	// The same adapter name on its v2 implementation: a second adapter group,
+	// not a merge into the first one.
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-axes", agentID: "proxy-v2", started: base.Add(time.Minute),
+		bee: "guard", adapter: "opencode", implementation: "opencodev2",
+		model: "anthropic/claude-sonnet", alias: "sonnet", purpose: protocol.PurposeClosing,
+		usage: &protocol.Usage{InputTokens: 50, CostUSD: 0.25,
+			Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	// An implementation equal to the name is not a second group.
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-axes", agentID: "same-version", started: base.Add(2 * time.Minute),
+		bee: "builder", adapter: "opencode", implementation: "opencode",
+		model: "openai/gpt-5", purpose: protocol.PurposeAnalysis,
+		usage: &protocol.Usage{InputTokens: 30, Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	// A legacy record with no adapter, Bee, model, or purpose: every axis names
+	// it rather than dropping it.
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-axes", agentID: "legacy", started: base.Add(3 * time.Minute),
+		blankIdentity: true,
+		usage:         &protocol.Usage{InputTokens: 7, Source: protocol.UsageSourceCursorStreamJSON},
+	})
+
+	report, err := runs.ReadUsage(root, runs.UsageQuery{
+		Since: "2026-02-10", Until: "2026-02-11", Timezone: "UTC",
+		Now: usageDate(t, "2026-02-11 12:00", utc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := dayByDate(t, report, "2026-02-10")
+
+	// The adapter axis keeps the implementation distinct from the name.
+	if len(day.Breakdown.Adapter) != 3 {
+		t.Fatalf("adapter entries = %+v, want three (v1, v2, unknown)", day.Breakdown.Adapter)
+	}
+	v1 := findAxisEntry(t, day.Breakdown.Adapter, "opencode", "")
+	if v1.Executions != 2 {
+		t.Fatalf("v1 adapter executions = %d, want the run whose implementation equals its name folded in", v1.Executions)
+	}
+	v2 := findAxisEntry(t, day.Breakdown.Adapter, "opencode", "opencodev2")
+	if v2.Tokens.InputTokens != 50 || v2.Executions != 1 {
+		t.Fatalf("v2 adapter entry = %+v", v2)
+	}
+	unknownAdapter := findAxisEntry(t, day.Breakdown.Adapter, runs.UsageUnknownKey, "")
+	if unknownAdapter.Tokens.InputTokens != 7 {
+		t.Fatalf("unknown adapter = %+v", unknownAdapter)
+	}
+	// The ranking puts the largest volume first.
+	if day.Breakdown.Adapter[0].Key != "opencode" || day.Breakdown.Adapter[0].Label != "" {
+		t.Fatalf("adapter ranking = %+v, want the v1 group first", day.Breakdown.Adapter)
+	}
+
+	// The model axis groups by the resolved id and shows the alias beside it.
+	if len(day.Breakdown.Model) != 3 {
+		t.Fatalf("model entries = %+v, want two models and unknown", day.Breakdown.Model)
+	}
+	sonnet := findAxisEntry(t, day.Breakdown.Model, "anthropic/claude-sonnet", "sonnet")
+	if sonnet.Executions != 2 || sonnet.Tokens.InputTokens != 150 {
+		t.Fatalf("sonnet model entry = %+v, want both aliased runs grouped by resolved id", sonnet)
+	}
+	findAxisEntry(t, day.Breakdown.Model, "openai/gpt-5", "")
+	findAxisEntry(t, day.Breakdown.Model, runs.UsageUnknownKey, "")
+
+	// Bee and purpose name their unknown groups too.
+	findAxisEntry(t, day.Breakdown.Bee, "builder", "")
+	findAxisEntry(t, day.Breakdown.Bee, "guard", "")
+	findAxisEntry(t, day.Breakdown.Bee, runs.UsageUnknownKey, "")
+	findAxisEntry(t, day.Breakdown.Purpose, "work", "")
+	findAxisEntry(t, day.Breakdown.Purpose, "closing", "")
+	findAxisEntry(t, day.Breakdown.Purpose, "analysis", "")
+	findAxisEntry(t, day.Breakdown.Purpose, runs.UsageUnknownKey, "")
+
+	assertAxisSums(t, "adapter", day.Breakdown.Adapter, day.UsageTotals)
+	assertAxisSums(t, "model", day.Breakdown.Model, day.UsageTotals)
+	assertAxisSums(t, "bee", day.Breakdown.Bee, day.UsageTotals)
+	assertAxisSums(t, "purpose", day.Breakdown.Purpose, day.UsageTotals)
+}
+
+func TestUsageReportPeriodRankingIsTheSumOfItsDays(t *testing.T) {
+	root := t.TempDir()
+	utc := time.UTC
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-period", agentID: "day-1", started: usageDate(t, "2026-02-10 10:00", utc),
+		bee: "builder", adapter: "opencode", model: "openai/gpt-5", purpose: protocol.PurposeWork,
+		usage: &protocol.Usage{InputTokens: 100, CostUSD: 0.1, Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-period", agentID: "day-2", started: usageDate(t, "2026-02-11 10:00", utc),
+		bee: "builder", adapter: "opencode", model: "openai/gpt-5", purpose: protocol.PurposeWork,
+		usage: &protocol.Usage{InputTokens: 40, CostUSD: 0.2, Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+
+	report, err := runs.ReadUsage(root, runs.UsageQuery{
+		Since: "2026-02-10", Until: "2026-02-12", Timezone: "UTC",
+		Now: usageDate(t, "2026-02-12 12:00", utc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	model := findAxisEntry(t, report.Breakdown.Model, "openai/gpt-5", "")
+	if model.Executions != 2 || model.Tokens.InputTokens != 140 {
+		t.Fatalf("period model entry = %+v, want both days summed", model)
+	}
+	if model.RecordedCost < 0.2999 || model.RecordedCost > 0.3001 || model.CostReportedExecutions != 2 {
+		t.Fatalf("period model cost = %v in %d", model.RecordedCost, model.CostReportedExecutions)
+	}
+	assertAxisSums(t, "adapter", report.Breakdown.Adapter, report.Period)
+	assertAxisSums(t, "model", report.Breakdown.Model, report.Period)
+	assertAxisSums(t, "bee", report.Breakdown.Bee, report.Period)
+	assertAxisSums(t, "purpose", report.Breakdown.Purpose, report.Period)
+
+	// And each period axis total is the sum of that axis over the days.
+	var periodTotal int64
+	for _, day := range report.Days {
+		for _, entry := range day.Breakdown.Model {
+			periodTotal += entry.Tokens.TotalTokens
+		}
+	}
+	if periodTotal != report.Period.Tokens.TotalTokens {
+		t.Fatalf("days sum to %d, period = %d", periodTotal, report.Period.Tokens.TotalTokens)
+	}
+}
+
+func TestUsageReportLegacyPurposeIsUnknownNotWork(t *testing.T) {
+	root := t.TempDir()
+	utc := time.UTC
+	writeUsageFixture(t, root, usageFixture{
+		traceID: "trace-legacy-purpose", agentID: "run",
+		started: usageDate(t, "2026-02-10 10:00", utc),
+		usage:   &protocol.Usage{InputTokens: 5, Source: protocol.UsageSourceOpenCodeRunJSON},
+	})
+	report, err := runs.ReadUsage(root, runs.UsageQuery{
+		Since: "2026-02-10", Until: "2026-02-11", Timezone: "UTC",
+		Now: usageDate(t, "2026-02-11 12:00", utc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := dayByDate(t, report, "2026-02-10")
+	findAxisEntry(t, day.Breakdown.Purpose, runs.UsageUnknownKey, "")
+	for _, entry := range day.Breakdown.Purpose {
+		if entry.Key == "work" {
+			t.Fatalf("legacy record was labelled work: %+v", entry)
+		}
+	}
 }

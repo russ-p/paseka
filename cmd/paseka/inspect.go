@@ -32,6 +32,7 @@ func newInspectUsageCmd() *cobra.Command {
 		since    string
 		until    string
 		timezone string
+		groupBy  string
 		jsonOut  bool
 	)
 	cmd := &cobra.Command{
@@ -47,9 +48,12 @@ func newInspectUsageCmd() *cobra.Command {
 			"The range defaults to the last 30 days ending now and the zone defaults to\n" +
 			"the host's. Since is inclusive and until is exclusive; both are local\n" +
 			"midnights in the chosen zone, and a record lands on the day of its start\n" +
-			"time.",
+			"time.\n\n" +
+			"--group-by names the axis whose period ranking is printed: adapter (the\n" +
+			"default), model, bee, or purpose. The JSON report always carries all four\n" +
+			"axes, exactly as GET /api/usage returns them.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rangeFlags := []string{"since", "until", "timezone", "json"}
+			rangeFlags := []string{"since", "until", "timezone", "group-by", "json"}
 			if traceID == "" {
 				if agentID != "" {
 					return fmt.Errorf("--agent requires --trace")
@@ -58,11 +62,14 @@ func newInspectUsageCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				if !runs.IsUsageAxis(groupBy) {
+					return fmt.Errorf("--group-by %q is not one of adapter, model, bee, purpose", groupBy)
+				}
 				return printUsageRange(cmd.OutOrStdout(), ctx.ColonyRoot, runs.UsageQuery{
 					Since:    since,
 					Until:    until,
 					Timezone: timezone,
-				}, jsonOut)
+				}, groupBy, jsonOut)
 			}
 			for _, name := range rangeFlags {
 				if flagChanged(cmd, name) {
@@ -85,6 +92,7 @@ func newInspectUsageCmd() *cobra.Command {
 	cmd.Flags().StringVar(&since, "since", "", "first day of the range, YYYY-MM-DD (default: 30 days before today)")
 	cmd.Flags().StringVar(&until, "until", "", "day after the last day of the range, YYYY-MM-DD (default: now)")
 	cmd.Flags().StringVar(&timezone, "timezone", "", "IANA zone for the day boundaries (default: the host's)")
+	cmd.Flags().StringVar(&groupBy, "group-by", runs.UsageAxisAdapter, "axis ranked in the period breakdown: adapter, model, bee, or purpose")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the report exactly as GET /api/usage returns it")
 	return cmd
 }
@@ -92,7 +100,7 @@ func newInspectUsageCmd() *cobra.Command {
 // printUsageRange builds and prints the colony report for one query. It writes
 // nothing until the reader has accepted the range, so a typo cannot leave an
 // empty report behind on stdout.
-func printUsageRange(w io.Writer, colonyRoot string, query runs.UsageQuery, jsonOut bool) error {
+func printUsageRange(w io.Writer, colonyRoot string, query runs.UsageQuery, groupBy string, jsonOut bool) error {
 	report, err := runs.ReadUsage(colonyRoot, query)
 	if err != nil {
 		var usageErr *runs.UsageError
@@ -108,10 +116,10 @@ func printUsageRange(w io.Writer, colonyRoot string, query runs.UsageQuery, json
 		enc.SetEscapeHTML(false)
 		return enc.Encode(report)
 	}
-	return printUsageReport(w, report)
+	return printUsageReport(w, report, groupBy)
 }
 
-func printUsageReport(w io.Writer, report runs.UsageReport) error {
+func printUsageReport(w io.Writer, report runs.UsageReport, groupBy string) error {
 	fmt.Fprintf(w, "Usage range: %s .. %s\n", report.Since, report.Until)
 	fmt.Fprintf(w, "Time zone:   %s\n", report.Timezone)
 	fmt.Fprintf(w, "Observed at: %s\n", report.ObservedAt.Format(time.RFC3339))
@@ -147,6 +155,10 @@ func printUsageReport(w io.Writer, report runs.UsageReport) error {
 			usageDayState(day))
 	}
 
+	if err := printUsageRanking(w, report, groupBy); err != nil {
+		return err
+	}
+
 	if report.ExcludedUndated > 0 {
 		verb := "have"
 		if report.ExcludedUndated == 1 {
@@ -163,6 +175,68 @@ func printUsageReport(w io.Writer, report runs.UsageReport) error {
 		}
 	}
 	return nil
+}
+
+// printUsageRanking prints the period breakdown of one axis, ranked by token
+// volume with each key's share of the period. The reader has already sorted it.
+func printUsageRanking(w io.Writer, report runs.UsageReport, axis string) error {
+	entries := usageAxisEntries(report, axis)
+	if !runs.IsUsageAxis(axis) {
+		return fmt.Errorf("unknown axis %q", axis)
+	}
+	fmt.Fprintf(w, "\nPeriod breakdown by %s (%d %s):\n", axis, len(entries), usageWord(len(entries), "key", "keys"))
+	if len(entries) == 0 {
+		fmt.Fprintln(w, "  (no executions reported usage in this range)")
+		return nil
+	}
+	fmt.Fprintf(w, "  %-34s  %10s  %14s  %7s  %18s\n", "key", "executions", "tokens", "share", "recorded cost")
+	for _, entry := range entries {
+		fmt.Fprintf(w, "  %-34s  %10d  %14d  %6.1f%%  %18s\n",
+			usageAxisLabel(entry), entry.Executions, entry.Tokens.TotalTokens,
+			usageShare(entry.Tokens.TotalTokens, report.Period.Tokens.TotalTokens),
+			usageCostCell(entry))
+	}
+	return nil
+}
+
+func usageAxisEntries(report runs.UsageReport, axis string) []runs.UsageAxisEntry {
+	switch axis {
+	case runs.UsageAxisAdapter:
+		return report.Breakdown.Adapter
+	case runs.UsageAxisModel:
+		return report.Breakdown.Model
+	case runs.UsageAxisBee:
+		return report.Breakdown.Bee
+	case runs.UsageAxisPurpose:
+		return report.Breakdown.Purpose
+	}
+	return nil
+}
+
+// usageAxisLabel is the key a reader sees: a name with its secondary label
+// beside it, never the label alone.
+func usageAxisLabel(entry runs.UsageAxisEntry) string {
+	if entry.Label == "" {
+		return entry.Key
+	}
+	return entry.Key + " (" + entry.Label + ")"
+}
+
+// usageShare is the key's percentage of the period's reported tokens.
+func usageShare(tokens, total int64) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return float64(tokens) / float64(total) * 100
+}
+
+// usageCostCell is the recorded cost and the number of executions that reported
+// it. A key whose executions recorded no cost says so rather than showing zero.
+func usageCostCell(entry runs.UsageAxisEntry) string {
+	if entry.CostReportedExecutions == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("$%.2f (%d)", entry.RecordedCost, entry.CostReportedExecutions)
 }
 
 // usageWord pluralizes a count for a line an operator reads.

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import Usage from './+page.svelte';
 import { createUsageStore, type UsageStore } from '$lib/stores/usage.svelte';
-import { usageDay, usageReport } from '../../tests/fixtures';
+import { usageAxisEntry, usageDay, usageReport } from '../../tests/fixtures';
 import type { UsageReport } from '$lib/api/types';
 
 const fixedNow = () => new Date(2026, 8, 30, 12, 0, 0);
@@ -38,7 +38,7 @@ describe('usage page', () => {
 		expect(within(headline).getByText('2 of 2 reported')).toBeInTheDocument();
 
 		// The daily table is still the authoritative place for recorded cost.
-		const table = screen.getByRole('table');
+		const table = within(screen.getByLabelText('Daily usage')).getByRole('table');
 		expect(within(table).getByText('$12.50')).toBeInTheDocument();
 		expect(within(table).getAllByText('2').length).toBeGreaterThan(0);
 	});
@@ -175,5 +175,141 @@ describe('usage page', () => {
 		);
 		// The numbers an operator was reading are still real ones.
 		expect(screen.getByLabelText('Daily usage')).toBeInTheDocument();
+	});
+});
+
+/** Token components for a total that is all input, so a share is easy to read. */
+function inputTokens(total: number) {
+	return {
+		inputTokens: total,
+		outputTokens: 0,
+		reasoningTokens: 0,
+		cacheReadTokens: 0,
+		cacheWriteTokens: 0,
+		totalTokens: total
+	};
+}
+
+describe('usage page breakdown', () => {
+	it('switches the chart stack from the loaded report without a second read', async () => {
+		const day = usageDay({
+			tokens: inputTokens(400),
+			breakdown: {
+				adapter: [usageAxisEntry({ key: 'opencode', tokens: inputTokens(400) })],
+				model: [
+					usageAxisEntry({ key: 'anthropic/claude-sonnet', label: 'sonnet', tokens: inputTokens(300) }),
+					usageAxisEntry({ key: 'openai/gpt-5', tokens: inputTokens(100) })
+				],
+				bee: [usageAxisEntry({ key: 'builder', tokens: inputTokens(400) })],
+				purpose: [usageAxisEntry({ key: 'work', tokens: inputTokens(400) })]
+			}
+		});
+		const { store, fetchUsage } = harness(usageReport({ days: [day] }));
+		const { container } = render(Usage, { store });
+		await waitFor(() => expect(container.querySelector('.lc-bar')).not.toBeNull());
+
+		// The component stack is the default: five series per day.
+		expect(container.querySelector('[data-testid="usage-chart"]')?.getAttribute('data-usage-axis')).toBe(
+			'components'
+		);
+		expect(container.querySelectorAll('.lc-bar')).toHaveLength(5);
+
+		await userEvent.click(screen.getByRole('button', { name: 'Model' }));
+		await waitFor(() =>
+			expect(container.querySelectorAll('.lc-bar')).toHaveLength(2)
+		);
+		expect(container.querySelector('[data-testid="usage-chart"]')?.getAttribute('data-usage-axis')).toBe(
+			'model'
+		);
+		const legend = screen.getByRole('list', { name: 'Chart series' });
+		expect(legend.textContent).toContain('anthropic/claude-sonnet · sonnet');
+		expect(legend.textContent).toContain('openai/gpt-5');
+
+		// The axis came out of the report already on screen.
+		expect(fetchUsage).toHaveBeenCalledTimes(1);
+	});
+
+	it('ranks the breakdown table by the selected axis and shows each share', async () => {
+		const day = usageDay({
+			tokens: inputTokens(1000),
+			breakdown: {
+				adapter: [usageAxisEntry({ key: 'opencode', tokens: inputTokens(1000) })],
+				model: [
+					usageAxisEntry({ key: 'big-model', tokens: inputTokens(750) }),
+					usageAxisEntry({ key: 'small-model', tokens: inputTokens(250) })
+				],
+				bee: [usageAxisEntry({ key: 'builder', tokens: inputTokens(1000) })],
+				purpose: [usageAxisEntry({ key: 'work', tokens: inputTokens(1000) })]
+			}
+		});
+		const { store } = harness(usageReport({ days: [day] }));
+		render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		await userEvent.click(screen.getByRole('button', { name: 'Model' }));
+		const breakdown = await screen.findByRole('region', { name: 'Period breakdown by model' });
+		const table = within(breakdown).getByRole('table');
+		const rows = within(table).getAllByRole('row').slice(1);
+		expect(rows[0].textContent).toContain('big-model');
+		expect(rows[0].textContent).toContain('750');
+		expect(rows[0].textContent).toContain('75.0%');
+		expect(rows[1].textContent).toContain('small-model');
+		expect(rows[1].textContent).toContain('25.0%');
+	});
+
+	it('draws the top keys and an other series while the table lists every key', async () => {
+		const bees = Array.from({ length: 7 }, (_, index) =>
+			usageAxisEntry({
+				key: `bee-${index}`,
+				executions: 1,
+				tokens: inputTokens(100 - index),
+				recordedCostUsd: 0,
+				costReportedExecutions: 0
+			})
+		);
+		const day = usageDay({
+			executions: 7,
+			reportedExecutions: 7,
+			tokens: inputTokens(7 * 100 - 21),
+			recordedCostUsd: 0,
+			costReportedExecutions: 0,
+			breakdown: {
+				adapter: [usageAxisEntry({ key: 'opencode', tokens: inputTokens(7 * 100 - 21) })],
+				model: [usageAxisEntry({ key: 'a-model', tokens: inputTokens(7 * 100 - 21) })],
+				bee: bees,
+				purpose: [usageAxisEntry({ key: 'work', tokens: inputTokens(7 * 100 - 21) })]
+			}
+		});
+		const { store } = harness(usageReport({ days: [day] }));
+		render(Usage, { store });
+		await waitFor(() => expect(screen.getByLabelText('Daily usage')).toBeInTheDocument());
+
+		await userEvent.click(screen.getByRole('button', { name: 'Bee' }));
+		const chart = await screen.findByTestId('usage-chart');
+		const legend = screen.getByRole('list', { name: 'Chart series' });
+		expect(chart).toBeInTheDocument();
+		expect(legend.textContent).toContain('Other (3)');
+
+		const breakdown = await screen.findByRole('region', { name: 'Period breakdown by bee' });
+		const table = within(breakdown).getByRole('table');
+		expect(within(table).getAllByRole('row')).toHaveLength(8); // header plus seven keys
+	});
+});
+
+describe('usage page component breakdown', () => {
+	it('ranks the default component stack with shares and no invented executions', async () => {
+		const { store } = harness();
+		render(Usage, { store });
+		const breakdown = await screen.findByRole('region', {
+			name: 'Period breakdown by component'
+		});
+		const table = within(breakdown).getByRole('table');
+		const rows = within(table).getAllByRole('row').slice(1);
+		expect(rows).toHaveLength(5);
+		// Input is the largest component in the fixture (1200 of 2060 tokens).
+		expect(rows[0].textContent).toContain('Input');
+		expect(rows[0].textContent).toContain('58.3%');
+		// A component has no execution count or recorded cost of its own.
+		expect(rows[0].textContent).toContain('—');
 	});
 });

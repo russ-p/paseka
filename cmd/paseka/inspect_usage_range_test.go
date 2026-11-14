@@ -33,7 +33,7 @@ func TestInspectUsageRangeTextStatesRangeZoneAndRows(t *testing.T) {
 	var buf bytes.Buffer
 	err := printUsageRange(&buf, root, runs.UsageQuery{
 		Since: "2026-03-01", Until: "2026-03-04", Timezone: "UTC",
-	}, false)
+	}, runs.UsageAxisAdapter, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,10 +189,10 @@ func TestInspectUsageRangeTimezoneMovesTheDay(t *testing.T) {
 	}
 
 	var utcText, nyText bytes.Buffer
-	if err := printUsageReport(&utcText, utcReport); err != nil {
+	if err := printUsageReport(&utcText, utcReport, runs.UsageAxisAdapter); err != nil {
 		t.Fatal(err)
 	}
-	if err := printUsageReport(&nyText, nyReport); err != nil {
+	if err := printUsageReport(&nyText, nyReport, runs.UsageAxisAdapter); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(utcText.String(), "Time zone:   UTC\n") {
@@ -246,6 +246,129 @@ func TestInspectUsageRangeRefusalsExitNonZeroAndPrintNoReport(t *testing.T) {
 				t.Fatalf("refusal wrote a report:\n%s", stdout.String())
 			}
 		})
+	}
+}
+
+func writeRankedInspectRun(t *testing.T, root, agentID string, started time.Time, bee, adapter, model string, input int64) {
+	t.Helper()
+	d := runs.Dir{ColonyRoot: root, TraceID: "trace-ranked", AgentID: agentID}
+	if err := d.Prepare(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteRequest(protocol.Request{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-ranked",
+		AgentID:         agentID,
+		Bee:             bee,
+		Adapter:         adapter,
+		Workspace:       root,
+		ColonyRoot:      root,
+		Model:           model,
+		Purpose:         protocol.PurposeWork,
+		CreatedAt:       started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteResult(protocol.Result{
+		ProtocolVersion: protocol.Version,
+		TraceID:         "trace-ranked",
+		AgentID:         agentID,
+		Status:          protocol.StatusCompleted,
+		Summary:         "ok",
+		Usage:           &protocol.Usage{InputTokens: input, CostUSD: 0.5, Source: protocol.UsageSourceOpenCodeRunJSON},
+		FinishedAt:      started.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInspectUsageRangeGroupByPrintsTheRankingWithShares(t *testing.T) {
+	root := initInspectFixtureRepo(t)
+	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	writeRankedInspectRun(t, root, "small", started, "guard", "cursor", "opencode/space-bunny-free", 100)
+	writeRankedInspectRun(t, root, "large", started.Add(time.Minute), "builder", "opencode", "anthropic/claude-sonnet", 300)
+
+	out, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--group-by", "model")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	if !strings.Contains(out, "Period breakdown by model (2 keys):") {
+		t.Fatalf("output has no model ranking:\n%s", out)
+	}
+	large := linePrefix(t, out, "  anthropic/claude-sonnet")
+	if !strings.Contains(large, "300") || !strings.Contains(large, "75.0%") {
+		t.Fatalf("largest model row = %q, want its volume and 75.0%% share", large)
+	}
+	small := linePrefix(t, out, "  opencode/space-bunny-free")
+	if !strings.Contains(small, "100") || !strings.Contains(small, "25.0%") {
+		t.Fatalf("second model row = %q, want 25.0%% share", small)
+	}
+	// The cost is the provider's own number, with the executions that reported it.
+	if !strings.Contains(large, "$0.50 (1)") {
+		t.Fatalf("row does not carry recorded cost and its count: %q", large)
+	}
+
+	// The ranking follows --group-by rather than being fixed to one axis.
+	byBee, err := runInspectUsageCLI(t, root, "--since", "2026-03-01", "--until", "2026-03-03",
+		"--timezone", "UTC", "--group-by", "bee")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	if !strings.Contains(byBee, "Period breakdown by bee (2 keys):") {
+		t.Fatalf("output has no bee ranking:\n%s", byBee)
+	}
+	if !strings.Contains(linePrefix(t, byBee, "  builder"), "75.0%") {
+		t.Fatalf("bee ranking is not the same ranking:\n%s", byBee)
+	}
+}
+
+func TestInspectUsageRangeJSONCarriesEveryAxis(t *testing.T) {
+	root := initInspectFixtureRepo(t)
+	started := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	writeRankedInspectRun(t, root, "run-1", started, "builder", "opencode", "anthropic/claude-sonnet", 100)
+
+	out, err := runInspectUsageCLI(t, root, "--since", "2026-03-02", "--until", "2026-03-03",
+		"--timezone", "UTC", "--group-by", "model", "--json")
+	if err != nil {
+		t.Fatalf("cli run: %v", err)
+	}
+	var decoded struct {
+		Breakdown map[string][]map[string]any `json:"breakdown"`
+		Days      []struct {
+			Breakdown map[string][]map[string]any `json:"breakdown"`
+		} `json:"days"`
+	}
+	if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+		t.Fatalf("decode report: %v\n%s", err, out)
+	}
+	for _, axis := range []string{"adapter", "model", "bee", "purpose"} {
+		if len(decoded.Breakdown[axis]) == 0 {
+			t.Fatalf("period report carries no %s axis: %v", axis, decoded.Breakdown)
+		}
+		if len(decoded.Days[0].Breakdown[axis]) == 0 {
+			t.Fatalf("day report carries no %s axis: %v", axis, decoded.Days[0].Breakdown)
+		}
+	}
+}
+
+func TestInspectUsageRangeRefusesAnUnknownGroupBy(t *testing.T) {
+	repo := initInspectFixtureRepo(t)
+	root := newRoot()
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"inspect", "usage", "-C", repo, "--group-by", "intent"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("execute succeeded, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "adapter, model, bee, purpose") {
+		t.Fatalf("refusal = %v, want the accepted values named", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("refusal wrote a report:\n%s", stdout.String())
 	}
 }
 

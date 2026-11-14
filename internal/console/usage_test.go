@@ -103,6 +103,32 @@ func TestUsageAPIReturnsTheColonyReport(t *testing.T) {
 	if report.Period.RecordedCost != 0.25 || report.Period.CostReportedExecutions != 1 {
 		t.Fatalf("recorded cost = %v in %d executions", report.Period.RecordedCost, report.Period.CostReportedExecutions)
 	}
+	// Every axis is in the same payload, so the page switches axes without a
+	// second read; each sums to the totals beside it.
+	day := report.Days[1]
+	for name, entries := range map[string][]runs.UsageAxisEntry{
+		"adapter": day.Breakdown.Adapter,
+		"model":   day.Breakdown.Model,
+		"bee":     day.Breakdown.Bee,
+		"purpose": day.Breakdown.Purpose,
+	} {
+		var tokens int64
+		var executions int
+		for _, entry := range entries {
+			tokens += entry.Tokens.TotalTokens
+			executions += entry.Executions
+		}
+		if tokens != day.Tokens.TotalTokens || executions != day.Executions {
+			t.Fatalf("%s axis = %d tokens / %d executions, day = %d / %d",
+				name, tokens, executions, day.Tokens.TotalTokens, day.Executions)
+		}
+	}
+	if len(report.Breakdown.Adapter) != 1 || report.Breakdown.Adapter[0].Key != "opencode" {
+		t.Fatalf("period adapter ranking = %+v", report.Breakdown.Adapter)
+	}
+	if len(report.Breakdown.Model) != 1 || report.Breakdown.Model[0].Label != "sonnet" {
+		t.Fatalf("period model ranking = %+v, want the alias beside the resolved id", report.Breakdown.Model)
+	}
 }
 
 // The API is read-only: it creates no file and appends no event. The snapshot

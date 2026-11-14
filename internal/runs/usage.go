@@ -33,9 +33,31 @@ const (
 	UsageUnknown = "unknown"
 )
 
-// usagePurposeUnknown is the reader-side bucket for an execution whose purpose
-// was never recorded. It is not work, closing, or analysis by inference.
-const usagePurposeUnknown = "unknown"
+// The axes a report breaks the same executions into. Each axis sums to the same
+// day total, so a caller can switch axes without a second read.
+const (
+	UsageAxisAdapter = "adapter"
+	UsageAxisModel   = "model"
+	UsageAxisBee     = "bee"
+	UsageAxisPurpose = "purpose"
+)
+
+// usageAxesNames lists the axes in report order.
+var usageAxesNames = []string{UsageAxisAdapter, UsageAxisModel, UsageAxisBee, UsageAxisPurpose}
+
+// UsageUnknownKey is the explicit group a record with no recorded value falls
+// into. It is a named group, never a dropped record.
+const UsageUnknownKey = "unknown"
+
+// IsUsageAxis reports whether name is one of the four breakdown axes.
+func IsUsageAxis(name string) bool {
+	for _, axis := range usageAxesNames {
+		if axis == name {
+			return true
+		}
+	}
+	return false
+}
 
 // UsageQuery selects one colony-wide usage report.
 //
@@ -153,10 +175,36 @@ type UsageTotals struct {
 	CostReportedExecutions int         `json:"costReportedExecutions"`
 }
 
+// UsageAxisEntry is one group of one axis over a day or a period: what its
+// executions reported, and how many of them it covers.
+type UsageAxisEntry struct {
+	Key string `json:"key"`
+	// Label is the secondary name of the key and never the grouping key: an
+	// adapter's implementation version when it differs from its name, or a
+	// model's recorded alias. Empty when the record carries nothing to add.
+	Label                  string      `json:"label,omitempty"`
+	Executions             int         `json:"executions"`
+	Tokens                 UsageTokens `json:"tokens"`
+	RecordedCost           float64     `json:"recordedCostUsd"`
+	CostReportedExecutions int         `json:"costReportedExecutions"`
+}
+
+// UsageAxes is the same executions seen four ways. Every axis sums to the
+// totals beside it, which is what lets a page switch axes from one payload.
+type UsageAxes struct {
+	Adapter []UsageAxisEntry `json:"adapter"`
+	Model   []UsageAxisEntry `json:"model"`
+	Bee     []UsageAxisEntry `json:"bee"`
+	Purpose []UsageAxisEntry `json:"purpose"`
+}
+
 // UsageDay is one zero-filled local calendar day in the requested range.
 type UsageDay struct {
 	Date string `json:"date"`
 	UsageTotals
+	// Breakdown is the same day's executions split along every axis, so the
+	// day's axes sum to the day's component totals.
+	Breakdown UsageAxes `json:"breakdown"`
 	// Unmeasured distinguishes "executions, none of which reported usage"
 	// from a day with no executions at all.
 	Unmeasured bool `json:"unmeasured"`
@@ -169,15 +217,18 @@ type UsageDay struct {
 // are derived from the same records, and the period is summed from the days so
 // a headline cannot disagree with the table under it.
 type UsageReport struct {
-	Since              string         `json:"since"`
-	Until              string         `json:"until"`
-	Timezone           string         `json:"timezone"`
-	ObservedAt         time.Time      `json:"observedAt"`
-	EarliestRetainedAt *time.Time     `json:"earliestRetainedAt,omitempty"`
-	Period             UsageTotals    `json:"period"`
-	Days               []UsageDay     `json:"days"`
-	ExcludedUndated    int            `json:"excludedUndated"`
-	Warnings           []UsageWarning `json:"warnings"`
+	Since              string      `json:"since"`
+	Until              string      `json:"until"`
+	Timezone           string      `json:"timezone"`
+	ObservedAt         time.Time   `json:"observedAt"`
+	EarliestRetainedAt *time.Time  `json:"earliestRetainedAt,omitempty"`
+	Period             UsageTotals `json:"period"`
+	// Breakdown is the period ranking for every axis, derived from the day
+	// entries rather than a second pass over the records.
+	Breakdown       UsageAxes      `json:"breakdown"`
+	Days            []UsageDay     `json:"days"`
+	ExcludedUndated int            `json:"excludedUndated"`
+	Warnings        []UsageWarning `json:"warnings"`
 }
 
 // ScanUsageRecords walks .paseka/runs and projects every retained execution
@@ -303,7 +354,198 @@ func usagePurposeKey(purpose protocol.ExecutionPurpose) string {
 	if protocol.IsKnownExecutionPurpose(purpose) {
 		return string(purpose)
 	}
-	return usagePurposeUnknown
+	return UsageUnknownKey
+}
+
+// usageAxisGroup is one key of one axis before it is sorted into a report.
+type usageAxisGroup struct {
+	entry  UsageAxisEntry
+	labels map[string]struct{}
+}
+
+// usageAxesAccumulator collects one axis while executions or days are folded
+// into it. The grouping identity is the caller's id, which is why an adapter
+// and its implementation can stay apart while an alias stays a label.
+type usageAxesAccumulator struct {
+	groups map[string]*usageAxisGroup
+}
+
+func newUsageAxesAccumulator() *usageAxesAccumulator {
+	return &usageAxesAccumulator{groups: map[string]*usageAxisGroup{}}
+}
+
+// usageAxisID is the identity of a group inside one axis. The adapter axis keeps
+// its implementation in the identity, because an opencode proxy run and its
+// opencodev2 implementation must not be added together; every other axis is
+// keyed by its key alone, with an alias or a label only beside it.
+func usageAxisID(axis, key, label string) string {
+	if axis == UsageAxisAdapter {
+		return key + "\x00" + label
+	}
+	return key
+}
+
+// add folds one execution into one axis. key is what a reader sees and label is
+// the secondary name shown beside it, never the grouping decision.
+func (a *usageAxesAccumulator) add(id, key, label string, rec UsageRecord) {
+	group := a.group(id, key)
+	group.entry.Executions++
+	group.labels[label] = struct{}{}
+	if rec.Measurement != UsageReported {
+		return
+	}
+	group.entry.Tokens.addTokens(rec.Tokens)
+	if rec.CostReported {
+		group.entry.RecordedCost += rec.RecordedCost
+		group.entry.CostReportedExecutions++
+	}
+}
+
+// addEntry folds one already-grouped day entry into this axis, so the period is
+// the sum of the days it sits above.
+func (a *usageAxesAccumulator) addEntry(axis string, entry UsageAxisEntry) {
+	group := a.group(usageAxisID(axis, entry.Key, entry.Label), entry.Key)
+	group.entry.Executions += entry.Executions
+	group.entry.Tokens.addTokens(entry.Tokens)
+	group.entry.RecordedCost += entry.RecordedCost
+	group.entry.CostReportedExecutions += entry.CostReportedExecutions
+	group.labels[entry.Label] = struct{}{}
+}
+
+func (a *usageAxesAccumulator) group(id, key string) *usageAxisGroup {
+	group := a.groups[id]
+	if group == nil {
+		group = &usageAxisGroup{
+			entry:  UsageAxisEntry{Key: key},
+			labels: map[string]struct{}{},
+		}
+		a.groups[id] = group
+	}
+	return group
+}
+
+// entries sorts the axis into its ranking. A label is kept only when every
+// grouped execution agreed on it: a model whose records carried two aliases is
+// still one model, and naming one of them would be a guess.
+func (a *usageAxesAccumulator) entries() []UsageAxisEntry {
+	entries := make([]UsageAxisEntry, 0, len(a.groups))
+	for _, group := range a.groups {
+		entry := group.entry
+		if len(group.labels) == 1 {
+			for label := range group.labels {
+				entry.Label = label
+			}
+		}
+		entries = append(entries, entry)
+	}
+	sortUsageAxisEntries(entries)
+	return entries
+}
+
+func sortUsageAxisEntries(entries []UsageAxisEntry) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		if a.Tokens.TotalTokens != b.Tokens.TotalTokens {
+			return a.Tokens.TotalTokens > b.Tokens.TotalTokens
+		}
+		if a.Key != b.Key {
+			return a.Key < b.Key
+		}
+		return a.Label < b.Label
+	})
+}
+
+// usageDayAxes collects one day's four axes as its records are placed.
+type usageDayAxes struct {
+	adapter *usageAxesAccumulator
+	model   *usageAxesAccumulator
+	bee     *usageAxesAccumulator
+	purpose *usageAxesAccumulator
+}
+
+func newUsageDayAxes() *usageDayAxes {
+	return &usageDayAxes{
+		adapter: newUsageAxesAccumulator(),
+		model:   newUsageAxesAccumulator(),
+		bee:     newUsageAxesAccumulator(),
+		purpose: newUsageAxesAccumulator(),
+	}
+}
+
+func (d *usageDayAxes) add(rec UsageRecord) {
+	adapterKey, adapterLabel := usageAdapterKey(rec)
+	modelKey, modelLabel := usageModelKey(rec)
+	beeKey := usageBeeKey(rec)
+	d.adapter.add(usageAxisID(UsageAxisAdapter, adapterKey, adapterLabel), adapterKey, adapterLabel, rec)
+	d.model.add(usageAxisID(UsageAxisModel, modelKey, ""), modelKey, modelLabel, rec)
+	d.bee.add(usageAxisID(UsageAxisBee, beeKey, ""), beeKey, "", rec)
+	d.purpose.add(usageAxisID(UsageAxisPurpose, rec.Purpose, ""), rec.Purpose, "", rec)
+}
+
+func (d *usageDayAxes) axes() UsageAxes {
+	return UsageAxes{
+		Adapter: d.adapter.entries(),
+		Model:   d.model.entries(),
+		Bee:     d.bee.entries(),
+		Purpose: d.purpose.entries(),
+	}
+}
+
+// usageAdapterKey groups a run by its recorded adapter name, keeping a recorded
+// implementation as part of the identity and showing it beside the name.
+func usageAdapterKey(rec UsageRecord) (key, label string) {
+	key = strings.TrimSpace(rec.Adapter)
+	if key == "" {
+		return UsageUnknownKey, ""
+	}
+	implementation := strings.TrimSpace(rec.Implementation)
+	if implementation != "" && implementation != key {
+		label = implementation
+	}
+	return key, label
+}
+
+// usageModelKey groups a run by the resolved model id. The alias is only a
+// secondary label: colony configuration changes it, the resolved id is what was
+// actually called.
+func usageModelKey(rec UsageRecord) (key, label string) {
+	key = strings.TrimSpace(rec.Model)
+	if key == "" {
+		return UsageUnknownKey, ""
+	}
+	alias := strings.TrimSpace(rec.ModelAlias)
+	if alias != "" && alias != key {
+		return key, alias
+	}
+	return key, ""
+}
+
+func usageBeeKey(rec UsageRecord) string {
+	if bee := strings.TrimSpace(rec.Bee); bee != "" {
+		return bee
+	}
+	return UsageUnknownKey
+}
+
+// mergeUsageAxes builds the period ranking from the day entries, so a period
+// figure cannot disagree with the days under it.
+func mergeUsageAxes(days []UsageDay) UsageAxes {
+	merged := newUsageDayAxes()
+	for _, day := range days {
+		for _, entry := range day.Breakdown.Adapter {
+			merged.adapter.addEntry(UsageAxisAdapter, entry)
+		}
+		for _, entry := range day.Breakdown.Model {
+			merged.model.addEntry(UsageAxisModel, entry)
+		}
+		for _, entry := range day.Breakdown.Bee {
+			merged.bee.addEntry(UsageAxisBee, entry)
+		}
+		for _, entry := range day.Breakdown.Purpose {
+			merged.purpose.addEntry(UsageAxisPurpose, entry)
+		}
+	}
+	return merged.axes()
 }
 
 // ReadUsage builds the colony-wide report for one range. It reads retained run
@@ -337,11 +579,13 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 	}
 	indexByDate := make(map[string]int, len(days))
 	dayTrails := make([]map[string]struct{}, len(days))
+	dayAxes := make([]*usageDayAxes, len(days))
 	for i, day := range days {
 		date := day.Format("2006-01-02")
 		indexByDate[date] = i
 		report.Days = append(report.Days, UsageDay{Date: date})
 		dayTrails[i] = map[string]struct{}{}
+		dayAxes[i] = newUsageDayAxes()
 	}
 
 	var earliest time.Time
@@ -364,6 +608,9 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		day := &report.Days[idx]
 		day.Executions++
 		dayTrails[idx][rec.TraceID] = struct{}{}
+		// The same execution lands in all four axes, so each axis sums to the
+		// day's totals rather than to a subset of them.
+		dayAxes[idx].add(rec)
 		switch rec.Measurement {
 		case UsageReported:
 			day.ReportedExecutions++
@@ -380,6 +627,7 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 	for i := range report.Days {
 		day := &report.Days[i]
 		day.DistinctTrails = len(dayTrails[i])
+		day.Breakdown = dayAxes[i].axes()
 		day.Unmeasured = day.Executions > 0 && day.ReportedExecutions == 0
 	}
 
@@ -398,6 +646,9 @@ func ReadUsage(colonyRoot string, q UsageQuery) (UsageReport, error) {
 		}
 	}
 	report.Period.DistinctTrails = len(periodTrails)
+	// The ranking is derived from the day entries, not from a second pass over
+	// the records, so a period figure and the days under it cannot drift.
+	report.Breakdown = mergeUsageAxes(report.Days)
 
 	if !earliest.IsZero() {
 		utc := earliest.UTC()

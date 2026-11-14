@@ -4,7 +4,13 @@
 	import type { DataColumn } from '$lib/components/DataTable.svelte';
 	import StatTile from '$lib/components/StatTile.svelte';
 	import UsageChart from '$lib/components/UsageChart.svelte';
-	import { formatTimestamp, formatTokenCount } from '$lib/format';
+	import {
+		USAGE_AXES,
+		usageAxisEntryLabel,
+		usageAxisTitle,
+		type UsageChartAxis
+	} from '$lib/components/UsageChart.svelte';
+	import { formatShare, formatTimestamp, formatTokenCount } from '$lib/format';
 	import {
 		createUsageStore,
 		usageCustomRange,
@@ -26,6 +32,9 @@
 	let from = $state('');
 	let to = $state('');
 	let customError = $state('');
+	// The component stack is the default; the four axes are already in the
+	// payload, so switching this never triggers a read.
+	let chartAxis = $state<UsageChartAxis>('components');
 	const presets: UsagePreset[] = [7, 30, 90];
 
 	// The inputs follow the range the report actually covers, so the control and
@@ -140,6 +149,88 @@
 			badge: dayBadge
 		}
 	];
+
+	/**
+	 * One period breakdown row, whether the selected stack is the token
+	 * components or one of the breakdown axes. A component has no execution
+	 * count or recorded cost of its own: a run reports every component at once,
+	 * so those cells stay empty rather than claiming an attribution.
+	 */
+	interface BreakdownRow {
+		key: string;
+		executions?: number;
+		recordedCostUsd?: number;
+		costReportedExecutions?: number;
+		tokens: number;
+	}
+
+	/** The rows of the table, ranked by the selected axis (the server's order). */
+	const breakdownRows = $derived.by((): BreakdownRow[] => {
+		const report = store.report;
+		if (!report) return [];
+		if (chartAxis === 'components') {
+			const tokens = report.period.tokens;
+			return [
+				{ key: 'Input', tokens: tokens.inputTokens },
+				{ key: 'Output', tokens: tokens.outputTokens },
+				{ key: 'Reasoning', tokens: tokens.reasoningTokens },
+				{ key: 'Cache read', tokens: tokens.cacheReadTokens },
+				{ key: 'Cache write', tokens: tokens.cacheWriteTokens }
+			].sort((a, b) => b.tokens - a.tokens);
+		}
+		return (report.breakdown[chartAxis] ?? []).map((entry) => ({
+			key: usageAxisEntryLabel(chartAxis, entry),
+			executions: entry.executions,
+			recordedCostUsd: entry.recordedCostUsd,
+			costReportedExecutions: entry.costReportedExecutions,
+			tokens: entry.tokens.totalTokens
+		}));
+	});
+	const axisTotalTokens = $derived(store.report?.period.tokens.totalTokens ?? 0);
+	const breakdownTitle = $derived(
+		chartAxis === 'components'
+			? 'Period breakdown by component'
+			: `Period breakdown by ${usageAxisTitle(chartAxis).toLowerCase()}`
+	);
+	const breakdownColumns = $derived.by((): DataColumn<BreakdownRow>[] => [
+		{
+			key: 'key',
+			label: 'Key',
+			// An adapter's implementation or a model's alias stays beside the key;
+			// it is a label, never the grouping decision.
+			text: (row) => row.key,
+			mono: true
+		},
+		{
+			key: 'executions',
+			label: 'Executions',
+			text: (row) => (row.executions === undefined ? '—' : String(row.executions)),
+			align: 'right'
+		},
+		{
+			key: 'tokens',
+			label: 'Tokens',
+			text: (row) => formatTokenCount(row.tokens),
+			align: 'right'
+		},
+		{
+			key: 'share',
+			label: 'Share',
+			text: (row) => formatShare(row.tokens, axisTotalTokens),
+			align: 'right'
+		},
+		{
+			key: 'cost',
+			// Recorded provider cost, only where an execution reported it, with
+			// the count of executions that did. Never derived from tokens.
+			label: 'Recorded cost',
+			text: (row) =>
+				row.costReportedExecutions && row.recordedCostUsd !== undefined
+					? `$${row.recordedCostUsd.toFixed(2)} (${row.costReportedExecutions})`
+					: '—',
+			align: 'right'
+		}
+	]);
 
 	const period = $derived(store.report?.period);
 	const components = $derived(
@@ -292,7 +383,54 @@
 			</div>
 		{/if}
 
-		<UsageChart report={store.report} />
+		<div class="flex flex-wrap items-center gap-3">
+			<span id="usage-axis-label" class="text-sm font-medium">Breakdown</span>
+			<div class="join" role="group" aria-labelledby="usage-axis-label">
+				<button
+					class="btn join-item btn-sm"
+					class:btn-active={chartAxis === 'components'}
+					aria-pressed={chartAxis === 'components'}
+					onclick={() => (chartAxis = 'components')}
+				>
+					Components
+				</button>
+				{#each USAGE_AXES as option (option.key)}
+					<button
+						class="btn join-item btn-sm"
+						class:btn-active={chartAxis === option.key}
+						aria-pressed={chartAxis === option.key}
+						onclick={() => (chartAxis = option.key)}
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<UsageChart report={store.report} axis={chartAxis} />
+
+		<section class="space-y-3" aria-labelledby="usage-breakdown">
+			<h2 id="usage-breakdown" class="text-xl font-semibold">{breakdownTitle}</h2>
+			<DataTable
+				label="Breakdown keys"
+				columns={breakdownColumns}
+				rows={breakdownRows}
+				rowKey={(row) => row.key}
+				emptyMessage="No executions reported usage in this range."
+				filterLabel="Filter keys"
+				filterPlaceholder="key"
+				pageSize={0}
+				stateKey="breakdown"
+			/>
+			<p class="text-xs text-base-content/50">
+				Ranked by token volume. Share is the key's part of the {formatTokenCount(
+					axisTotalTokens
+				)} tokens reported in this period; the chart draws the top keys and groups the rest as
+				other, while this table lists every key. A component has no execution count or cost of its
+				own, because a run reports every component at once. Recorded cost appears only where an
+				execution reported it, with the count that did.
+			</p>
+		</section>
 
 		<section class="space-y-3" aria-labelledby="usage-daily">
 			<h2 id="usage-daily" class="text-xl font-semibold">Daily volume</h2>
@@ -311,6 +449,7 @@
 				filterLabel="Filter days"
 				filterPlaceholder="day or measurement"
 				pageSize={0}
+				stateKey="daily"
 			/>
 			<p class="text-xs text-base-content/50">
 				Recorded cost is the provider's own number, shown only where an adapter reported it, with

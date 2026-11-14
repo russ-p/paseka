@@ -705,6 +705,15 @@ export function energyLowLabel(energy: HoneyReserve): string | null {
 	return energy.lowEnergy ? 'low' : null;
 }
 
+/**
+ * One item's share of a total, to one decimal. A zero total has no share, so it
+ * prints a dash rather than pretending every row is 0%.
+ */
+export function formatShare(part: number, total: number): string {
+	if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return '—';
+	return `${((part / total) * 100).toFixed(1)}%`;
+}
+
 /** Compacts a token count: `940`, `1.2k`, `3.4M`. */
 export function formatTokenCount(value: number | undefined): string {
 	if (value === undefined || !Number.isFinite(value)) return '—';
