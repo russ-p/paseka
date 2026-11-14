@@ -191,6 +191,7 @@ follow-ups". Do not claim a change the diff does not contain.
 
 ## Report results
 
-{{template "trail-guard-emit-insight" .}}
+{{template "emit-howto" .}}
+{{template "emit-insight" .}}
 
 Runtime writes a human-readable run log at {{.ResultFile}}.

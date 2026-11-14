@@ -1,21 +1,19 @@
 ## Publish events (intake only)
 
-Always emit `feature.classified` first. Then follow the decision branch below.
+Always emit `feature.classified` first, then follow the decision.
 
-| Event | `payload.kind` | When |
-| ----- | -------------- | ---- |
-| `SIGNAL` | `feature.classified` | Always (required) |
-| `INSIGHT` | `task.plan` | `decision=plan` or `decision=triage` (one builder task) |
-| `SIGNAL` | `task.ready` | Same slice, only when entry text asks to start now (`--defer` after `task.plan`) |
-| `INSIGHT` | `trace.title` | Short Flight Trail name for Console (emit on every intake) |
-| `INSIGHT` | `worktree.branch` | Git branch for isolated work (`plan` / `triage`; optional otherwise) |
-| `INSIGHT` | `run.summary` | Optional one-line summary |
+| `payload.kind` | When |
+| --- | --- |
+| `SIGNAL/feature.classified` | Always. `decision` is `grill`, `plan`, `triage`, `clarify`, or `reject`, with a `rationale`. Do not set `bee` or `intent`. |
+| `INSIGHT/task.plan` | `decision=plan` or `triage`: one builder task |
+| `SIGNAL/task.ready` | That task, only when the entry explicitly asks to start now |
+| `INSIGHT/trace.title` | Every intake with a usable short name |
+| `INSIGHT/worktree.branch` | `plan` or `triage` |
+| `INSIGHT/run.summary` | Optional one-line digest |
 
-Do **not** emit `task.plan` or `task.ready` when `decision=grill`, `clarify`, or `reject`. Still emit `trace.title` when the entry has a usable short name.
+Never publish `task.plan` or `task.ready` for `grill`, `clarify`, or `reject`.
 
-### `feature.classified` — classification decision
-
-Emit **one** `SIGNAL/feature.classified`. Set `decision` and `rationale`. Do **not** set `bee` / `intent`.
+### `feature.classified`
 
 ```bash
 paseka event emit --stdin <<'EOF'
@@ -23,64 +21,28 @@ paseka event emit --stdin <<'EOF'
 EOF
 ```
 
-When `decision=plan` (clear small feature):
+Change `decision` and `rationale`; the shape stays.
 
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"plan","rationale":"Single clear improvement; one builder slice is enough."}}
-EOF
+### `task.plan` — one builder slice
+
+One task in `payload.tasks`, deferred. Shape:
+
+```json
+{"kind":"task.plan","tasks":[{"taskId":"001-add-health-badge","title":"Add health badge to header","bee":"builder","intent":"feature","dependsOn":[],"body":"## What to build\n\n…\n\n## Acceptance criteria\n\n- [ ] …\n\n## Blocked by\n\nNone - can start immediately"}]}
 ```
 
-When `decision=triage` (bug):
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"triage","rationale":"Regression on Windows; one focused bugfix slice."}}
-EOF
-```
-
-When `decision=reject`:
-
-```bash
-paseka event emit --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"feature.classified","decision":"reject","rationale":"Duplicate of an existing spec; no new work."}}
-EOF
-```
-
-### `task.plan` — one builder slice (`plan` or `triage`)
-
-Emit **one** `INSIGHT/task.plan` with a single task in `payload.tasks`.
-
-Clear feature (`decision=plan`):
-
-```bash
-paseka event emit --defer --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-add-health-badge","title":"Add health badge to header","body":"## What to build\n\nShow colony health in the console header.\n\n## Acceptance criteria\n\n- [ ] Badge visible when NATS is connected\n- [ ] Badge shows disconnected state clearly\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"feature","dependsOn":[]}]}}
-EOF
-```
-
-Bug (`decision=triage`):
-
-```bash
-paseka event emit --defer --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-fix-windows-path","title":"Fix path handling on Windows","body":"## Symptom\n\nColony init fails on Windows when path contains spaces.\n\n## What to fix\n\nCorrect path normalization so init succeeds on Windows.\n\n## Acceptance criteria\n\n- [ ] Init succeeds on Windows with spaced paths\n- [ ] Regression test added when feasible\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"bugfix","dependsOn":[]}]}}
-EOF
-```
+`intent` is `feature` for a plan and `bugfix` for a triage. The body is the slice
+contract: what to build or fix, acceptance criteria as a checklist, and what
+blocks it.
 
 ### `task.ready` — start now only
 
-Emit **only** when title/body/task text explicitly requests immediate start. Use **`--defer` immediately after** the `task.plan` above (same flush, FIFO). Payload: `kind` + `taskId` only — do not copy title/body from plan.
+Only when the entry text explicitly asks to start immediately. Emit it directly
+after the plan, also deferred, so both flush in order; `taskId` only — the ledger
+already has the title and body from the plan.
 
-```bash
-paseka event emit --defer --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-fix-windows-path"}}
-EOF
-```
+### Trail identity
 
-Emit **one** `INSIGHT/trace.title` on every intake when the entry has a usable short name (from `feature.requested` title/body or your refined label). Update when you sharpen the name during `plan` / `triage`.
-
-When `decision=plan` or `decision=triage`, also emit **one** `INSIGHT/worktree.branch` with a conventional git branch name for the isolated worktree.
-
-{{template "insight-kind-trace-title" .}}
-{{template "insight-kind-worktree-branch" .}}
-{{template "insight-kind-run-summary" .}}
+`trace.title` names the trail in the Console; `worktree.branch` chooses the
+branch for isolated work (`feature/<slug>` for a plan, `fix/<slug>` for a
+triage). Payloads: skill `paseka-event-emit` → `references/insight.md`.

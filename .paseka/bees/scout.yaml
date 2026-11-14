@@ -7,6 +7,8 @@ params:
   yolo: true
   plan: false
 worktree: false
+skills:
+  - paseka-event-emit
 subscribes:
   - type: SIGNAL
     kind: feature.requested

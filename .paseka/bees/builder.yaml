@@ -5,6 +5,8 @@ params:
   model: builder
   yolo: true
 worktree: true
+skills:
+  - paseka-event-emit
 # Runtime-owned mechanical gate (spec 046). The script is executed from the colony
 # checkout, not from the worktree under review, so a diff cannot weaken the gate
 # that judges it; the working directory stays the worktree, so the checks apply

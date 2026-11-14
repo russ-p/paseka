@@ -6,3 +6,5 @@ params:
   model: thinker
   yolo: true
 worktree: false
+skills:
+  - paseka-event-emit

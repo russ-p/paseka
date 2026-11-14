@@ -6,6 +6,8 @@ params:
   model: thinker
   yolo: true
 worktree: false
+skills:
+  - paseka-event-emit
 publishes:
   - type: MUTATION
     kind: code.proposal.root

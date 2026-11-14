@@ -10,6 +10,8 @@ params:
 # The closing round reviews the accumulated trail worktree, so the adapter cwd
 # must be the trace worktree rather than the colony checkout.
 worktree: true
+skills:
+  - paseka-event-emit
 subscribes:
   - type: SIGNAL
     kind: task.ready

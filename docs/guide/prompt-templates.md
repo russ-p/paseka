@@ -11,11 +11,11 @@ Implementation: [`internal/prompts`](../../internal/prompts/prompts.go).
 ```
 .paseka/prompts/
 ├── _partials/           # shared snippets (not used as top-level bee templates)
-│   ├── emit-howto.md
-│   ├── emit-insight.md
-│   ├── emit-signal.md
+│   ├── emit-howto.md        # publish mechanics, all bees that emit
+│   ├── emit-insight.md      # shared INSIGHT rules
 │   ├── emit-verification.md
-│   └── emit-task-completed.md
+│   ├── emit-task-completed.md
+│   └── <role>-emit-insight.md   # the kinds one role publishes
 ├── default.md           # colony-wide fallback
 ├── scout.md
 └── builder.md
@@ -110,7 +110,7 @@ Variables **not** available in templates today:
 - Bee adapter params (`model`, `yolo`, etc.) — configured in `bees/*.yaml`, not exposed to templates.
 - Arbitrary bus event fields — only `Task`, `Intent`, and `Insights` are surfaced in MVP.
 
-Bus event publishing is instructed through emit partials: `emit-howto` (safe CLI mechanics for all bees) plus type-scoped partials (`emit-insight`, `emit-signal`, `emit-verification`, `emit-task-completed`) included only by bees that may publish those types.
+Bus event publishing is instructed through emit partials. `emit-howto` carries the mechanics every publishing bee needs (the envelope, this run's ids, live versus `--defer`, validate-before-emit, failure handling) and points at the colony skill `paseka-event-emit` for the full procedure — envelope, delivery defaults, proof commands, and per-kind payloads. A role then includes only the partials for the kinds it may publish: `emit-insight` for the shared INSIGHT rules, and one `<role>-emit-insight` listing the kinds that role publishes. The skill is offered by listing it in the role's `skills` in bee YAML; a prompt that references it must ensure the list includes it.
 
 ---
 
@@ -154,9 +154,9 @@ Partials live in `.paseka/prompts/_partials/`. The file name without `.md` is th
 ```
 _partials/emit-howto.md  →  {{template "emit-howto" .}}
 _partials/emit-insight.md  →  {{template "emit-insight" .}}
-_partials/emit-signal.md  →  {{template "emit-signal" .}}
 _partials/emit-verification.md  →  {{template "emit-verification" .}}
 _partials/emit-task-completed.md  →  {{template "emit-task-completed" .}}
+_partials/builder-emit-insight.md  →  {{template "builder-emit-insight" .}}
 _partials/builder-intent-feature.md  →  {{template "builder-intent-feature" .}}
 _partials/standing-checkpoint.md  →  {{template "standing-checkpoint" .}} (included from emit-howto)
 _partials/watch-intent-tick.md  →  {{template "watch-intent-tick" .}} (Watch/Medic standing ticks)
@@ -284,8 +284,6 @@ Intent: {{.Intent}}
 {{end}}
 
 {{template "emit-howto" .}}
-{{template "emit-insight" .}}
-{{template "emit-signal" .}}
 ```
 
 ### Inline one-shot prompt
@@ -324,28 +322,33 @@ Core partials shipped by `paseka init` under `.paseka/prompts/_partials/`:
 
 | Partial | Role |
 | ------- | ---- |
-| `emit-howto` | Safe CLI publish contract via `paseka event emit --stdin` (live default, `--defer` for handoffs including `task.plan` + post-plan `task.ready`; no type enumeration) |
-| `emit-insight` | `INSIGHT` kinds for narrative and prompt memory (`run.summary`, `review.note`, `context.note`, `human.feedback`, `task.plan`) plus operational `trace.title` / `trace.summary` / `pr.body` / `worktree.branch` |
-| `emit-signal` | `SIGNAL` kinds (`task.ready` — defer after plan, `taskId` only) |
-| `scout-emit-intake` | `SIGNAL/feature.classified`, deferred `INSIGHT/task.plan`, deferred `SIGNAL/task.ready` (Scout `intake` intent only) |
-| `drone-emit-grilling` | `SIGNAL/spec.ready` + optional `context.note` (Drone `grilling` intent only) |
-| `drone-emit-breakdown` | deferred `INSIGHT/task.plan`, deferred `SIGNAL/task.ready`, optional `context.note` (Drone `breakdown` intent only) |
-| `emit-verification` | Review-gate `VERIFICATION` kinds (`verification.success`, `verification.failed`) |
-| `emit-task-completed` | Commit-gate `VERIFICATION/task.completed` (receiver only) |
+| `emit-howto` | Publish mechanics: envelope, this run's ids, live versus `--defer`, validate-before-emit, failure handling. Points at the `paseka-event-emit` skill for the procedure; no kind catalog. |
+| `emit-insight` | Shared `INSIGHT` rules: narrative versus operational, prompt-memory scoping by `taskId`, the closed `review.note.severity` set, and the `trace.summary` obligation on `{{.IsLastWorkTask}}`. |
+| `<role>-emit-insight` | The `payload.kind` values one role publishes, one row each (`builder-emit-insight`, `guard-emit-insight`, `hivewright-emit-insight`, `archivist-emit-insight`). |
+| `emit-verification` | Review-gate `VERIFICATION` decision (`verification.success`, `verification.failed`) |
+| `emit-task-completed` | Commit-gate `VERIFICATION/task.completed` |
+| `scout-emit-intake` | `SIGNAL/feature.classified`, conditional `INSIGHT/task.plan`, `SIGNAL/task.ready`, `trace.title`, `worktree.branch` (Scout `intake` intent only) |
+| `scout-emit-survey` | Survey report kinds — `run.summary`, `context.note`, `review.note`, optional `task.plan` (Scout `survey` intent only) |
+| `drone-emit-grilling` | `SIGNAL/spec.ready` plus an optional `context.note` (Drone `grilling` intent only) |
+| `drone-emit-breakdown` | `INSIGHT/task.plan`, interactive-only `SIGNAL/task.ready`, `trace.title`, `worktree.branch` (Drone `breakdown` intent only) |
 | `cursor-interactive-kickoff` | Brief greet-and-wait footer for interactive Cursor chat (`hivewright-task`, `drone-task`) |
 
 Bees include only the type partials they may publish. For example:
 
 | Bee | Emit partials |
 | --- | ------------- |
-| `builder` | `emit-howto`, `emit-insight` |
-| `scout` | `emit-howto`, `emit-insight`, `emit-signal`; on `intake` also `scout-emit-intake` |
-| `drone` | `emit-howto`; on `grilling` also `drone-emit-grilling`; on `breakdown` also `drone-emit-breakdown` |
-| `guard` | `emit-howto`, `emit-verification`, `emit-insight` |
-| `main-guard` | `emit-howto`, `emit-verification`, `emit-insight` |
+| `builder` | `emit-howto`, `emit-insight`, `builder-emit-insight` |
+| `scout` | `emit-howto`; on `intake` also `scout-emit-intake`, on `survey` also `scout-emit-survey` |
+| `drone` | `emit-howto`; on `grilling` also `drone-emit-grilling`, on `breakdown` also `drone-emit-breakdown` |
+| `guard` | `emit-howto`, `emit-verification`, `emit-insight`, `guard-emit-insight` |
+| `main-guard` | `emit-howto`, `emit-verification`, `emit-insight`, `guard-emit-insight` |
 | `receiver` | `emit-howto`, `emit-task-completed` |
-| `hivewright` | `emit-howto`, `emit-insight` |
-| `archivist` | `emit-howto`, `insight-intro`, `archivist-emit-insight`; on `task` also `archivist-intent-task`, on `chronicle` also `archivist-intent-chronicle` |
+| `hivewright` | `emit-howto`, `emit-insight`, `hivewright-emit-insight` |
+| `trail-guard` | `emit-howto`, `emit-insight` |
+| `archivist` | `emit-howto`, `archivist-emit-insight`; on `task` also `archivist-intent-task`, on `chronicle` also `archivist-intent-chronicle`, on `skill` also `archivist-intent-skill` |
+| `probe` | `emit-howto` |
+
+Those roles list `paseka-event-emit` under `skills` in their bee YAML, so the full procedure — envelope, delivery choice, proof commands, and per-kind payloads — reaches the run as a skill instead of as prompt text. The prompt names the kinds; the skill carries the mechanics.
 
 `MUTATION` is not taught in prompts — runtime auto-publishes `code.proposal.isolated` or `code.proposal.root` from **baseline-attributed workspace diffs** (tracked changes in the adapter cwd; review truth is working-tree `git diff`, not staged-only). Guard and main-guard prompts instruct disk review via `git diff`.
 

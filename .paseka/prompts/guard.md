@@ -13,13 +13,11 @@ Steps to follow:
 3. Compare the workspace changes with the task requirements:
    - Check if all requested features/fixes are present in the diff.
    - Look for "scope creep": identify any accidental or unrelated file modifications, left-over debug statements (`console.log`, `print`, `TODO`s), or commented-out code.
-4. Audit the mechanical gate instead of re-running it. The runtime already ran the producing Bee's `checks` gate before this proposal was published, and recorded the verdict on the proposal record:
-   - The record is the newest `*.json` file in `{{.ColonyRoot}}/.paseka/runs/{{.TraceID}}/proposals/` — the same trace tree your artifacts directory lives in, `{{.ArtifactsDir}}`.
-   - Its `gate` block carries `passed`, `exitCode`, `reason`, `summary`, and `logPath`. The full captured output is in that run's `checks.log`.
-   - `passed: true` — the gate covers Go formatting, lint, the module build, and the module tests, plus the Queen Console UI checks (svelte-check, vitest, vite build) whenever the diff touches `web/`. Do NOT re-run those; spend the turn on requirements, scope, and design instead.
-   - No `gate` block — the proposal is un-gated. Say so explicitly in the review note and run both the Go and the UI checks yourself before approving.
-   - The gate decides its own scope from the diff. If its log shows the UI checks were skipped while the diff does touch `web/`, treat that as a gate defect: run them yourself and name the defect in the review note.
-   - `passed: false` never publishes. If you see it, the record is stale or broken: reject with a note instead of approving.
+4. Audit the mechanical gate instead of re-running it. The producing run already ran `scripts/checks.sh` and recorded the verdict on the proposal record — the newest `*.json` under `{{.ColonyRoot}}/.paseka/runs/{{.TraceID}}/proposals/`, block `gate`, full output in that run's `checks.log`.
+   - `passed: true` — do not re-run the checks; spend the turn on requirements, scope, and design.
+   - `passed: false` — never publishes: the record is stale or broken. Reject with a note.
+   - No `gate` block — the proposal is un-gated: run the checks yourself and name that in the review note.
+   - The gate picks its own scope from the diff; UI checks skipped while the diff touches `web/` is a gate defect: run them and name it.
 5. If issues are found (missing requirements, scope creep, leftovers, or a design concern), write a clear rejection report.
 6. If everything looks perfect, write a success summary.
 
@@ -33,4 +31,5 @@ Success criteria (must confirm all to approve):
 
 {{template "emit-howto" .}}
 {{template "emit-verification" .}}
+{{template "emit-insight" .}}
 {{template "guard-emit-insight" .}}

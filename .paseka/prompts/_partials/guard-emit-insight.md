@@ -1,11 +1,7 @@
-{{template "insight-intro" .}}
+### Kinds this role publishes
 
-| `payload.kind` | Role | Prompt memory |
-| -------------- | ---- | ------------- |
-| `review.note` | Reviewer observation (non-gate) | yes |
-| `context.note` | Trace/task context fact | yes |
-| `trace.summary` | Flight Trail description (last work task only) | no |
-
-{{template "insight-kind-review-note" .}}
-{{template "insight-kind-context-note" .}}
-{{template "insight-kind-trace-summary" .}}
+| `payload.kind` | When |
+| --- | --- |
+| `review.note` | Optional, in addition to the gate decision — never instead of it. |
+| `context.note` | Optional. A fact the next bee needs. |
+| `trace.summary` | Required on the last work task — see above. |

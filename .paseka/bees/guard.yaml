@@ -5,6 +5,8 @@ params:
   model: reviewer
   yolo: true
 worktree: true
+skills:
+  - paseka-event-emit
 subscribes:
   - type: MUTATION
     kind: code.proposal.isolated

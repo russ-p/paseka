@@ -142,6 +142,5 @@ Nothing else belongs in the bundle, and the bundle is the only file the skill in
 {{end}}
 
 {{template "emit-howto" .}}
-{{template "insight-intro" .}}
 {{template "archivist-emit-insight" .}}
 Runtime also writes a human-readable log to {{.ResultFile}}.

@@ -8,6 +8,8 @@ params:
   model: builder
   timeout: 3m
 worktree: false
+skills:
+  - paseka-event-emit
 subscribes:
   - type: SIGNAL
     kind: task.ready

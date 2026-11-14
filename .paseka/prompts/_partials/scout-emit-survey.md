@@ -1,13 +1,13 @@
-{{template "insight-intro" .}}
+## Publish events (survey only)
 
-| `payload.kind` | Role | Prompt memory |
-| -------------- | ---- | ------------- |
-| `context.note` | Finding or scope fact | yes |
-| `review.note` | Finding with severity (non-gate) | yes |
-| `run.summary` | Short ranked digest | yes |
-| `task.plan` | Optional builder slices when findings are queue-ready | no |
+A survey reports; it does not start work. No `task.ready`, and no `task.plan`
+unless the findings are ready to queue as builder slices.
 
-{{template "insight-kind-context-note" .}}
-{{template "insight-kind-review-note" .}}
-{{template "insight-kind-run-summary" .}}
-{{template "insight-kind-task-plan" .}}
+| `payload.kind` | When |
+| --- | --- |
+| `run.summary` | Short ranked digest of the findings |
+| `context.note` | One finding or scope fact the next bee needs |
+| `review.note` | A finding carrying a `severity` |
+| `task.plan` | Optional builder slices, queue-ready findings only |
+
+Payloads and severities: skill `paseka-event-emit` → `references/insight.md`.

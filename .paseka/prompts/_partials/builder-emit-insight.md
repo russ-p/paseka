@@ -1,11 +1,7 @@
-{{template "insight-intro" .}}
+### Kinds this role publishes
 
-| `payload.kind` | Role | Prompt memory |
-| -------------- | ---- | ------------- |
-| `run.summary` | Short run outcome for the next bee | yes |
-| `context.note` | Trace/task context fact | yes |
-| `trace.summary` | Flight Trail description (last work task only) | no |
-
-{{template "insight-kind-run-summary" .}}
-{{template "insight-kind-context-note" .}}
-{{template "insight-kind-trace-summary" .}}
+| `payload.kind` | When |
+| --- | --- |
+| `run.summary` | Optional. The runtime synthesizes one after a successful run; publish only when its text would lose what must be remembered. |
+| `context.note` | Optional. A fact the next bee needs; prefer `--defer`. |
+| `trace.summary` | Required on the last work task — see above. |

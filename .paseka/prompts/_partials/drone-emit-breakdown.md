@@ -1,64 +1,57 @@
 ## Publish events (breakdown only)
 
-For breakdown, publish **only** these kinds. Do not emit `run.summary`, `review.note`, or `human.feedback`.
+| `payload.kind` | When |
+| --- | --- |
+| `INSIGHT/task.plan` | The full task ledger — one event, dependency order, blockers first |
+| `SIGNAL/task.ready` | Interactive only: the first runnable task, after explicit confirmation |
+| `INSIGHT/trace.title` | The Flight Trail name |
+| `INSIGHT/worktree.branch` | When the breakdown includes isolated builder slices |
+| `INSIGHT/context.note` | Optional short trace fact for later bees |
 
-| Event | `payload.kind` | Role |
-| ----- | -------------- | ---- |
-| `INSIGHT` | `task.plan` | Register the full task ledger |
-| `SIGNAL` | `task.ready` | Interactive only: kick the first runnable task after explicit confirmation |
-| `INSIGHT` | `trace.title` | Flight Trail name (emit with breakdown) |
-| `INSIGHT` | `worktree.branch` | Git branch for isolated builder work (when breakdown includes builder slices) |
-| `INSIGHT` | `context.note` | Short trace fact for later bees (optional) |
+Nothing else: no `run.summary`, `review.note`, or `human.feedback`.
 
 ### Planning is the deliverable
 
 Breakdown registers work; it does not review it and does not start it.
 
-- **Never author a standalone review or merge task.** Do not add a `review: final` / `phase: merge` card or a
-  "human review and merge" task. The colony `closing` policy seeds trail review (trail-guard) and the runtime
-  ensures the `_review` merge gate; a breakdown-authored review card preempts both. A HITL work slice may
-  still carry `review: required` when the spec calls for human approval of that slice.
-- **Never start implementation on an AFK run.** An AFK breakdown ends with `task.plan`. Do not emit
-  `task.ready`, do not wake a builder yourself, and do not ask whether to start — there is no Beekeeper in
-  the session. A human or a follow-up cue kicks the first unblocked slice later.
+- **Never author a standalone review or merge task.** The colony `closing` policy
+  seeds trail review and the runtime ensures the merge gate; a breakdown-authored
+  review card preempts both. A HITL work slice may still carry `review: required`
+  when the spec calls for human approval of that slice.
+- **Never start implementation on an AFK run.** An AFK breakdown ends with
+  `task.plan`: no `task.ready`, no builder woken by you, no question about
+  starting — there is no Beekeeper in the session. A human or a cue kicks the
+  first unblocked slice later.
 
-### `task.plan` — full breakdown (one event, many tasks)
+### `task.plan` — full breakdown
 
-Emit **one** `INSIGHT/task.plan` after approval in an interactive session, or after drafting from the spec in
-an AFK run. Put every task in `payload.tasks` (dependency order: blockers first). Use `taskId` format
-`nnn-short-description`.
+One event after approval in an interactive session, or after drafting from the
+spec in an AFK run. Ids are `nnn-short-description`; each task lists its
+dependencies in `dependsOn`; `--defer` because the ledger consumes the plan after
+this run ends.
 
-```bash
-paseka event emit --defer --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"INSIGHT","payload":{"kind":"task.plan","tasks":[{"taskId":"001-live-status-api","title":"Live bee status API slice","body":"## Parent\n\ndocs/specs/004-live-bees-indicator.md\n\n## What to build\n\nEnd-to-end path that exposes current bee run status over the API and is verifiable with a focused test.\n\n## Acceptance criteria\n\n- [ ] Status endpoint returns active bee runs for a trace\n- [ ] Focused test covers the happy path\n\n## Blocked by\n\nNone - can start immediately","bee":"builder","intent":"feature","dependsOn":[]},{"taskId":"002-live-status-ui","title":"Live bee status UI slice","body":"## Parent\n\ndocs/specs/004-live-bees-indicator.md\n\n## What to build\n\nUI indicator that consumes the status API and shows live bee activity.\n\n## Acceptance criteria\n\n- [ ] Indicator reflects running vs idle bees\n- [ ] Works against the API from 001-live-status-api\n\n## Blocked by\n\n- 001-live-status-api","bee":"builder","intent":"feature","dependsOn":["001-live-status-api"]}]}}
-EOF
+```json
+{"kind":"task.plan","tasks":[
+ {"taskId":"001-live-status-api","title":"Live bee status API slice","bee":"builder","intent":"feature","dependsOn":[],
+  "body":"## Parent\n\ndocs/specs/004-live-bees-indicator.md\n\n## What to build\n\n…\n\n## Acceptance criteria\n\n- [ ] …\n\n## Blocked by\n\nNone - can start immediately"},
+ {"taskId":"002-live-status-ui","title":"Live bee status UI slice","bee":"builder","intent":"feature","dependsOn":["001-live-status-api"],
+  "body":"## Parent\n\n…\n\n## What to build\n\n…\n\n## Acceptance criteria\n\n- [ ] …\n\n## Blocked by\n\n- 001-live-status-api"}]}
 ```
 
-### `task.ready` — interactive only, first task only, only when the Beekeeper confirms
+The body is the slice contract: parent spec, what to build, acceptance criteria as
+a checklist, and what blocks it.
 
-Skip this event entirely on an AFK run. In an interactive session, emit `SIGNAL/task.ready` **only if**
-both are true:
+### `task.ready` — interactive only
 
-1. The Beekeeper explicitly confirmed starting the first task now (not merely approved the plan).
-2. You emit it for **exactly one** task: the first approved slice with no blockers (`dependsOn` empty / "can start immediately").
+Emit it **only** when both hold: the Beekeeper explicitly confirmed starting the
+first task now, and you name exactly one task — the first approved slice with no
+blockers. Directly after the plan, also deferred, so both flush in order;
+`taskId` only, no title or body copy. Later tasks are unlocked by the ledger as
+their dependencies complete.
 
-Do **not** emit `task.ready` for later tasks — the ledger/reactor unlocks them after prior tasks complete.
+If the plan was approved without "start now", publish the plan and stop.
 
-Use **`--defer` immediately after** the `task.plan` above (same flush, FIFO). Payload: `kind` + `taskId` only — do not copy title/body from plan.
+### Trail identity
 
-```bash
-paseka event emit --defer --stdin <<'EOF'
-{"traceId":"{{.TraceID}}","agentId":"{{.AgentID}}","type":"SIGNAL","payload":{"kind":"task.ready","taskId":"001-live-status-api"}}
-EOF
-```
-
-If the Beekeeper approved the plan but did **not** ask to start immediately, publish `task.plan` only and stop.
-On an AFK run this is always the case: `task.plan` only, then stop.
-
-Emit **one** `INSIGHT/trace.title` when publishing the breakdown (use spec title or a clearer short name for the whole trail).
-
-When the breakdown includes isolated builder slices, emit **one** `INSIGHT/worktree.branch` with a conventional git branch name.
-
-{{template "insight-kind-trace-title" .}}
-{{template "insight-kind-worktree-branch" .}}
-{{template "insight-kind-context-note" .}}
+`trace.title` names the trail; `worktree.branch` chooses the branch for isolated
+builder work. Payloads: skill `paseka-event-emit` → `references/insight.md`.

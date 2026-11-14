@@ -5,6 +5,8 @@ params:
   model: builder
   yolo: true
 worktree: true
+skills:
+  - paseka-event-emit
 subscribes:
   - type: VERIFICATION
     kind: verification.success

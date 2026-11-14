@@ -40,6 +40,7 @@ Success criteria (must confirm all):
 - No new compiler errors or warnings that are not explicitly accepted
 
 {{template "emit-howto" .}}
+{{template "emit-insight" .}}
 {{template "builder-emit-insight" .}}
 
-Runtime persists a human-readable run log at {{.ResultFile}}. If you do not emit `run.summary`, runtime will synthesize one from the normalized run outcome when possible.
+Runtime persists a human-readable run log at {{.ResultFile}}.

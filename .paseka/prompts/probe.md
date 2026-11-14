@@ -60,4 +60,3 @@ Run log: {{.ResultFile}}
 - Report a broken adapter honestly: never invent a value for a field you could not collect, and never skip step 4 even when steps 2 or 3 failed.
 
 {{template "emit-howto" .}}
-{{template "probe-emit-insight" .}}
