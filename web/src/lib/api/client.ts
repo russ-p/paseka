@@ -56,7 +56,8 @@ import type {
 	TraceExportFormat,
 	TraceExportInclude,
 	TraceSummary,
-	TranscriptPage
+	TranscriptPage,
+	UsageReport
 } from '$lib/api/types';
 
 /**
@@ -426,6 +427,43 @@ export function listRuns(): Promise<RunSummary[]> {
 /** One run by its trail and agent ids, for a run too old to be in the recent list. */
 export function getRun(traceId: string, agentId: string): Promise<RunSummary> {
 	return request<RunSummary>(`/runs/${encodeURIComponent(traceId)}/${encodeURIComponent(agentId)}`);
+}
+
+/**
+ * The colony-wide usage report for one local date range.
+ *
+ * `since` is inclusive and `until` exclusive, both local midnights in
+ * `timezone`; the server caps the range and answers an invalid one with a
+ * plain-text 400. Each filter axis is appended one value at a time, which is the
+ * repeated form the endpoint parses; an empty list sends nothing. This is a
+ * history read, not a live stream: callers refresh it explicitly rather than
+ * polling it.
+ */
+export function fetchUsage(query: {
+	since: string;
+	until: string;
+	timezone: string;
+	/**
+	 * Bypass the server's short-lived scan cache. The Usage page's refresh
+	 * control sends this; a range or filter read does not, so a history view
+	 * does not walk every run directory on every change.
+	 */
+	refresh?: boolean;
+	adapter?: string[];
+	model?: string[];
+	bee?: string[];
+	purpose?: string[];
+}): Promise<UsageReport> {
+	const params = new URLSearchParams({
+		since: query.since,
+		until: query.until,
+		timezone: query.timezone
+	});
+	if (query.refresh) params.set('refresh', '1');
+	for (const axis of ['adapter', 'model', 'bee', 'purpose'] as const) {
+		for (const value of query[axis] ?? []) params.append(axis, value);
+	}
+	return request<UsageReport>(`/usage?${params.toString()}`);
 }
 
 /**

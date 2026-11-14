@@ -41,7 +41,14 @@ import type {
 	TrailCollection,
 	TrailConfigApplyResult,
 	TraceSummary,
-	TranscriptEntry
+	TranscriptEntry,
+	UsageAxisEntry,
+	UsageAxes,
+	UsageDay,
+	UsageReport,
+	UsageTokens,
+	UsageTrailEntry,
+	UsageTrailRanking
 } from '$lib/api/types';
 
 export function traceSummary(overrides: Partial<TraceSummary> = {}): TraceSummary {
@@ -1111,6 +1118,214 @@ export function skillDecisionResult(
 		inventory: skillsInventory(),
 		proposal: skillProposal({ state: 'installed', destination: 'store' }),
 		message: 'Installed trace-01a0bd6963faa14f/paseka-release into the store. Nothing was committed.',
+		...overrides
+	};
+}
+
+/** One group of one axis; the defaults are one adapter's whole volume. */
+export function usageAxisEntry(overrides: Partial<UsageAxisEntry> = {}): UsageAxisEntry {
+	return {
+		key: 'opencode',
+		executions: 2,
+		tokens: {
+			inputTokens: 1200,
+			outputTokens: 300,
+			reasoningTokens: 40,
+			cacheReadTokens: 500,
+			cacheWriteTokens: 20,
+			totalTokens: 2060
+		},
+		recordedCostUsd: 0.25,
+		costReportedExecutions: 2,
+		...overrides
+	};
+}
+
+/** The four axes of a day whose totals are given, one key each by default. */
+export function usageAxes(totals: {
+	executions: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}): UsageAxes {
+	const shared = {
+		executions: totals.executions,
+		tokens: { ...totals.tokens },
+		recordedCostUsd: totals.recordedCostUsd,
+		costReportedExecutions: totals.costReportedExecutions
+	};
+	return {
+		adapter: [{ key: 'opencode', ...shared }],
+		model: [{ key: 'anthropic/claude-sonnet', label: 'sonnet', ...shared }],
+		bee: [{ key: 'builder', ...shared }],
+		purpose: [{ key: 'work', ...shared }]
+	};
+}
+
+/** Sums axis entries by key and label, as the server's period ranking does. */
+export function mergeUsageAxes(days: UsageDay[]): UsageAxes {
+	const axes: UsageAxes = { adapter: [], model: [], bee: [], purpose: [] };
+	for (const axis of ['adapter', 'model', 'bee', 'purpose'] as const) {
+		const merged = new Map<string, UsageAxisEntry>();
+		for (const day of days) {
+			for (const entry of day.breakdown[axis]) {
+				const id = `${entry.key}\u0000${entry.label ?? ''}`;
+				const current = merged.get(id);
+				if (!current) {
+					merged.set(id, {
+						...entry,
+						tokens: { ...entry.tokens }
+					});
+					continue;
+				}
+				current.executions += entry.executions;
+				current.recordedCostUsd += entry.recordedCostUsd;
+				current.costReportedExecutions += entry.costReportedExecutions;
+				current.tokens.inputTokens += entry.tokens.inputTokens;
+				current.tokens.outputTokens += entry.tokens.outputTokens;
+				current.tokens.reasoningTokens += entry.tokens.reasoningTokens;
+				current.tokens.cacheReadTokens += entry.tokens.cacheReadTokens;
+				current.tokens.cacheWriteTokens += entry.tokens.cacheWriteTokens;
+				current.tokens.totalTokens += entry.tokens.totalTokens;
+			}
+		}
+		axes[axis] = [...merged.values()].sort(
+			(a, b) => b.tokens.totalTokens - a.tokens.totalTokens || a.key.localeCompare(b.key)
+		);
+	}
+	return axes;
+}
+
+/** One row of the period's top-trails ranking. */
+export function usageTrailEntry(overrides: Partial<UsageTrailEntry> = {}): UsageTrailEntry {
+	return {
+		traceId: 'trace-01a1da38673703e4',
+		title: 'Currency in the usage report',
+		executions: 2,
+		reportedExecutions: 2,
+		tokens: {
+			inputTokens: 1200,
+			outputTokens: 300,
+			reasoningTokens: 40,
+			cacheReadTokens: 500,
+			cacheWriteTokens: 20,
+			totalTokens: 2060
+		},
+		recordedCostUsd: 0.25,
+		costReportedExecutions: 2,
+		...overrides
+	};
+}
+
+/** A top-trails ranking: one measured trail unless a test overrides it. */
+export function usageTrails(overrides: Partial<UsageTrailRanking> = {}): UsageTrailRanking {
+	const entries = overrides.entries ?? [usageTrailEntry()];
+	return {
+		entries,
+		measuredTrails: entries.length,
+		outsideTrails: 0,
+		outsideTokens: 0,
+		...overrides
+	};
+}
+
+/** One zero-filled day in a usage report, complete unless a test overrides it. */
+export function usageDay(overrides: Partial<UsageDay> = {}): UsageDay {
+	const day: UsageDay = {
+		date: '2026-09-25',
+		executions: 2,
+		reportedExecutions: 2,
+		distinctTrails: 1,
+		tokens: {
+			inputTokens: 1200,
+			outputTokens: 300,
+			reasoningTokens: 40,
+			cacheReadTokens: 500,
+			cacheWriteTokens: 20,
+			totalTokens: 2060
+		},
+		recordedCostUsd: 0.25,
+		costReportedExecutions: 2,
+		breakdown: {
+			adapter: [],
+			model: [],
+			bee: [],
+			purpose: []
+		},
+		unmeasured: false,
+		incomplete: false,
+		...overrides
+	};
+	// A fixture that overrides only the totals still gets axes that sum to them,
+	// so a test is never accidentally reading a day whose axes disagree.
+	if (!overrides.breakdown) day.breakdown = usageAxes(day);
+	return day;
+}
+
+/** A usage report whose period is the sum of its days. */
+export function usageReport(overrides: Partial<UsageReport> = {}): UsageReport {
+	const days = overrides.days ?? [usageDay()];
+	const period = days.reduce(
+		(total, day) => ({
+			executions: total.executions + day.executions,
+			reportedExecutions: total.reportedExecutions + day.reportedExecutions,
+			distinctTrails: total.distinctTrails + day.distinctTrails,
+			tokens: {
+				inputTokens: total.tokens.inputTokens + day.tokens.inputTokens,
+				outputTokens: total.tokens.outputTokens + day.tokens.outputTokens,
+				reasoningTokens: total.tokens.reasoningTokens + day.tokens.reasoningTokens,
+				cacheReadTokens: total.tokens.cacheReadTokens + day.tokens.cacheReadTokens,
+				cacheWriteTokens: total.tokens.cacheWriteTokens + day.tokens.cacheWriteTokens,
+				totalTokens: total.tokens.totalTokens + day.tokens.totalTokens
+			},
+			recordedCostUsd: total.recordedCostUsd + day.recordedCostUsd,
+			costReportedExecutions: total.costReportedExecutions + day.costReportedExecutions
+		}),
+		{
+			executions: 0,
+			reportedExecutions: 0,
+			distinctTrails: 0,
+			tokens: {
+				inputTokens: 0,
+				outputTokens: 0,
+				reasoningTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				totalTokens: 0
+			},
+			recordedCostUsd: 0,
+			costReportedExecutions: 0
+		}
+	);
+	// A fixture that names no trail still gets a ranking consistent with the
+	// period it computed, so a test never reads a table that disagrees with the
+	// headline. A period with no reported usage ranks no trail: a silent trail
+	// is a coverage gap, never a zero row.
+	const measuredTrails =
+		period.reportedExecutions > 0
+			? [
+					usageTrailEntry({
+						executions: period.executions,
+						reportedExecutions: period.reportedExecutions,
+						tokens: { ...period.tokens },
+						recordedCostUsd: period.recordedCostUsd,
+						costReportedExecutions: period.costReportedExecutions
+					})
+				]
+			: [];
+	return {
+		since: '2026-09-01T00:00:00Z',
+		until: '2026-10-01T00:00:00Z',
+		timezone: 'UTC',
+		filters: { adapter: [], model: [], bee: [], purpose: [] },
+		observedAt: '2026-09-30T18:00:00Z',
+		earliestRetainedAt: '2026-08-01T00:00:00Z',
+		period,
+		breakdown: mergeUsageAxes(days),
+		trails: usageTrails({ entries: measuredTrails }),
+		days,
+		excludedUndated: 0,
+		warnings: [],
 		...overrides
 	};
 }

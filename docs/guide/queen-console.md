@@ -50,8 +50,8 @@ for the container.
 The console ships the shell (top status panel, side menu, theme switcher), the
 **Dashboard**, **Traces** (both the list and a trail's own detail page),
 **Git**, **System**, **Timeline**, **Topology**, **Runs** (list and detail),
-**Tasks** (board and task detail), **Reviews** (queue, proposal, and merge
-preview), **Sessions** (list and session detail), **Worktrees**, **Bees**,
+**Usage**, **Tasks** (board and task detail), **Reviews** (queue, proposal, and
+merge preview), **Sessions** (list and session detail), **Worktrees**, **Bees**,
 **Skills**, and **Settings**. The JSON API stays root-relative at `/api/*`; it
 does not move with the shell.
 
@@ -339,6 +339,92 @@ them.
 
 CLI equivalents are `paseka bee chat`, `paseka session resume`, `paseka session ...`, and
 `paseka inspect usage`.
+
+### Usage
+
+**Usage** answers "what did the colony spend per day in this range" from the
+retained run records. It reads the same projection as **Runs**, so the page and
+`paseka inspect usage` cannot disagree about what one execution reported.
+
+The range control offers **7**, **30**, and **90** days and a custom **From** /
+**To** pair. Dates are local calendar days in an explicit IANA zone: the page
+sends the browser's zone, and the report echoes it. `since` is inclusive and
+`until` exclusive, every day in the range is zero-filled, and a run is placed by
+its **start** time, so a run that crosses midnight lands entirely on its start
+day. The server defaults an omitted range to the last 30 days ending now and
+refuses a range longer than 366 days with a plain-text reason.
+
+The headline is **token volume**: input, output, reasoning, cache read, and
+cache write, their sum, executions, distinct trails, and coverage. Reasoning is
+never folded into output and cache kinds are never folded into input, because
+providers differ about what those fields already contain. The daily table below
+it is the authoritative reading of the same numbers, including recorded provider
+cost where an adapter reported it and the count of executions that did. **Token
+counts are labelled as volume, never as money**: the page never multiplies a
+token count by a rate, and recorded cost is shown only where the provider itself
+recorded one. A day with executions but no reported usage reads **unmeasured**
+rather than looking like a quiet day, and a day still holding an in-flight run
+reads **incomplete** — named by date under the chart and in the daily table's
+measurement column. The coverage area prints what the totals could not see:
+executions that reported usage, executions excluded because they have no usable
+start time, and run records the reader could not open. A warning names each
+unreadable record, a pruned trail is absent rather than a zero-token row, and a
+range that begins before the retained record warns that its earlier days are
+**unmeasured, not quiet**.
+
+The chart's **Breakdown** selector stacks the same days by adapter, model, Bee,
+or execution purpose instead of the token components. All four axes arrive in
+the one report, so switching axes redraws the chart from data already on screen
+and never issues a second read. The adapter key is the recorded adapter name
+with its implementation version beside it when the two differ, so an `opencode`
+proxy run and its `opencodev2` implementation stay separate groups; the model
+key is the resolved model id with the recorded alias as a secondary label, never
+the grouping key. A missing adapter, model, Bee, or purpose is an explicit
+**unknown** group, and a legacy record without a purpose is `unknown`, not
+`work`. The period breakdown table under the chart ranks every key of the
+selected axis by token volume and shows its executions, tokens, share of the
+period, and recorded cost with its own reporting count. The chart draws the top
+keys that fit the palette and groups the rest as **other**; the table still
+lists every key, so nothing is hidden, only the marks are bounded.
+
+A **Top trails** table ranks the period's trails by reported tokens. Each row
+names the trail by its recorded title, or by its id when no title exists, and
+carries its executions (with the number that reported usage), its component
+total, and recorded provider cost with the count that reported it. Only trails
+with reported usage are ranked: a trail whose runs reported nothing is a
+coverage gap, not a zero-token row. The table carries the top ten and states how
+many measured trails sit outside it and what token volume they account for, so
+the rows on screen plus that remainder are the period total. The trail name is
+the table's only link, and it opens the existing trail detail instead of
+repeating that report here.
+
+**Filters** narrow the same records before aggregation. Four pickers offer the adapter, model, Bee, and purpose values present in the current view, and each applied value becomes a **removable chip**: a filter that matches nothing is still a chip with an ×, so no view is a dead end. Values within one axis are alternatives, the axes combine, and the chips read the same key the breakdown does — filtering an adapter by name keeps every implementation of it, and `unknown` is a selectable value rather than a hidden one. A filter never moves the range or the day boundaries: the day table stays zero-filled across the same dates, every section (headline, chart, breakdown, top trails, coverage) counts only matching records, and the report echoes the filter set it applied. When the active filters match nothing, the page says so in its own empty state — distinct from a quiet range — and offers to clear them.
+
+**Drill-down happens in place.** Selecting a day column in the chart narrows the range to that local day, and selecting a row in the period breakdown adds that row's key to the filters; selecting the same day or row again undoes it. Neither leaves the page: the axis, the filters, and the chosen range stay as they were, so the operator follows a suspicion without losing the view they were reading. The narrowed view is a **removable chip** beside the filters (`Day: 2026-09-25`), and removing it restores the range it was narrowed from in one click — no Back press, and the original context is one chip away. The chart's day columns and the table rows are real controls: they are keyboard reachable, their names state the action (`Narrow the range to …`, `Add model filter …`, `Clear model filter …`), and the breakdown row's key button reports `aria-pressed` for a key already applied. The only click that leaves the page is a trail link in **Top trails**.
+
+The range, the drilled day, the selected breakdown axis, and every filter **live in the URL** (`?since=&until=&day=&axis=&adapter=&model=&bee=&purpose=`), written with `replaceState`. `since`/`until` keep the chosen range even while `day` narrows it, so a link carries both the narrowing and the context it was read from. Reload restores the view, a copied link shows the same days and filters, and Back does not walk backwards through the values that were added. Changing a filter, the range, or the day issues one read; changing the breakdown axis reads nothing, because all four axes are already on the report.
+
+This page deliberately has **no poller**: the report walks run directories, so it
+reads on mount, on a range or filter change, and when you press **Refresh**. The
+server may reuse the report it parsed for a short window (30 seconds), so a
+range or filter change does not walk every run directory twice; the page names
+the scan behind the numbers as **observed** with the report's `observedAt`, so a
+reused answer is explicit rather than hidden. **Refresh** is the one read that
+bypasses that window, scans again, and can show a trail that finished since the
+last read; the cache is in process only and nothing is written to disk. A failed
+refresh keeps the last good report on screen with its error beside it. The page
+gives five degraded states distinct copy instead of one generic message: no
+executions in the range, executions that reported no usage, a range older than
+the retained record, a range longer than the 366-day cap, and a failed read.
+
+The JSON endpoint is `GET /api/usage?since=YYYY-MM-DD&until=YYYY-MM-DD&timezone=IANA/Zone`,
+with each filter axis repeated once per value (`&adapter=opencode&adapter=cursor`).
+`&refresh=1` is the refresh control's path: it bypasses the short-lived scan
+cache and returns a report with a new `observedAt`.
+It is read-only: it changes no file, publishes no event, and needs no bus. An
+invalid date, an unknown zone, a reversed range, or a range over 366 days is a
+`400` with a plain-text reason; a colony with no `.paseka/runs` returns an empty
+report rather than an error.
 
 ### Sessions
 

@@ -11,6 +11,7 @@ import {
 	matchShortcut,
 	owningListPath,
 	rememberRoute,
+	routeForShortcut,
 	traceDetailPath,
 	traceTimelinePath,
 	type RouteStorage
@@ -64,6 +65,14 @@ describe('console navigation', () => {
 
 		expect(new Set(shortcuts).size).toBe(shortcuts.length);
 		expect(changes).toHaveLength(new Set(groups).size - 1);
+	});
+
+	it('registers Usage in the Colony group with its own glyph and chord', () => {
+		const usage = consoleRoutes.find((route) => route.path === '/usage');
+		expect(usage).toMatchObject({ label: 'Usage', group: 'Colony', glyph: 'usage' });
+		expect(routeForShortcut(usage!.shortcut)).toBe('/usage');
+		// A usage page is not a detail of another route, so Escape has nowhere to go.
+		expect(owningListPath('', '/usage')).toBeNull();
 	});
 });
 

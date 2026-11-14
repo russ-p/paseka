@@ -34,7 +34,8 @@ import {
 	listTraces,
 	traceCursor,
 	listReviews,
-	getMergeDiff
+	getMergeDiff,
+	fetchUsage
 } from './client';
 import { traceSummary } from '../../tests/fixtures';
 
@@ -365,6 +366,33 @@ describe('topology endpoint', () => {
 		await getTopology();
 
 		expect(mock).toHaveBeenCalledWith('/api/colony/topology', undefined);
+	});
+});
+
+describe('usage endpoint', () => {
+	it('sends the range, zone, and repeated filters, and asks for a scan only on refresh', async () => {
+		const mock = stubFetch(() => new Response('{}'));
+
+		await fetchUsage({
+			since: '2026-09-01',
+			until: '2026-10-01',
+			timezone: 'UTC',
+			adapter: ['opencode'],
+			model: ['openai/gpt-5'],
+			bee: ['builder'],
+			purpose: ['work']
+		});
+		await fetchUsage({ since: '2026-09-01', until: '2026-10-01', timezone: 'UTC', refresh: true });
+
+		expect(String(mock.mock.calls[0][0])).toBe(
+			'/api/usage?since=2026-09-01&until=2026-10-01&timezone=UTC' +
+				'&adapter=opencode&model=openai%2Fgpt-5&bee=builder&purpose=work'
+		);
+		// The refresh control is the explicit bypass; a plain read leaves the
+		// parameter out so the server may reuse its short-lived scan.
+		expect(String(mock.mock.calls[1][0])).toBe(
+			'/api/usage?since=2026-09-01&until=2026-10-01&timezone=UTC&refresh=1'
+		);
 	});
 });
 

@@ -67,6 +67,7 @@ type RunMeta struct {
 	Task              string          `json:"task,omitempty"`
 	Intent            string          `json:"intent,omitempty"`
 	Model             string          `json:"model,omitempty"`
+	ModelAlias        string          `json:"modelAlias,omitempty"`
 	Profile           string          `json:"profile,omitempty"`
 	State             string          `json:"state"`
 	Summary           string          `json:"summary,omitempty"`
@@ -115,6 +116,7 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		Task:       req.Task,
 		Intent:     req.Intent,
 		Model:      req.Model,
+		ModelAlias: req.ModelAlias,
 		Profile:    req.Profile,
 		Purpose:    req.Purpose,
 		AnalysisOf: req.AnalysisOf,

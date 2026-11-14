@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/russ-p/paseka/internal/colony"
+	"github.com/russ-p/paseka/internal/runs"
 	"github.com/russ-p/paseka/internal/runtime"
 	"github.com/russ-p/paseka/internal/sessions"
 	"golang.org/x/term"
@@ -67,6 +68,7 @@ func NewServer(opts Options) *Server {
 	}
 	mux := http.NewServeMux()
 	apiHandler := &api{ctx: opts.Colony, sessions: mgr, runtime: runtimeSup, sampler: newCPUSampler()}
+	apiHandler.usage = runs.NewUsageReader(opts.Colony.ColonyRoot)
 	apiHandler.chrome = newChromeHub(apiHandler)
 	apiHandler.probe = newAdapterProber(opts.Colony, opts.ProbeAdapters, opts.AdapterProbeTimeout)
 	apiHandler.beeRun = opts.BeeRun
@@ -113,6 +115,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/api/invites/", apiHandler.handleInviteByID)
 	mux.HandleFunc("/api/runs", apiHandler.handleRuns)
 	mux.HandleFunc("/api/runs/", apiHandler.handleRunByID)
+	mux.HandleFunc("/api/usage", apiHandler.handleUsage)
 
 	// The JSON API owns its whole prefix, the bare form included. A path no
 	// endpoint claimed is answered as an API error instead of falling through to

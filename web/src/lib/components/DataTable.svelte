@@ -67,7 +67,8 @@
 		filterPlaceholder = 'Filter',
 		pageSize = 10,
 		loading = false,
-		stateKey
+		stateKey,
+		rowActivate
 	}: {
 		columns: DataColumn<T>[];
 		rows: T[];
@@ -90,6 +91,23 @@
 		 * table sets it.
 		 */
 		stateKey?: string;
+		/**
+		 * Makes every row a control that narrows the view it belongs to — the Usage
+		 * page's breakdown rows. A `<tr>` cannot be a button without taking the table's
+		 * semantics with it, so the first cell's text becomes a real `<button>` and the
+		 * rest of the row is a pointer target that defers to it. The name states the
+		 * action ("Add model filter …", "Clear model filter …"), never the bare key,
+		 * and the button reports `pressed` for a value already applied — the same
+		 * click removes it.
+		 *
+		 * A link or a control inside the row keeps its own click, so a row that also
+		 * carries an action never fires both.
+		 */
+		rowActivate?: {
+			label: (row: T) => string;
+			pressed?: (row: T) => boolean;
+			onselect: (row: T) => void;
+		};
 	} = $props();
 
 	/**
@@ -196,6 +214,17 @@
 			.filter(Boolean)
 			.join(' ');
 	}
+
+	/**
+	 * A row is a pointer target when it narrows the view, but a control inside it
+	 * — the key button, a link, a row action — owns its own click. Without that
+	 * guard the key's keyboard activation would fire the narrowing twice.
+	 */
+	function activateRow(event: MouseEvent, row: T): void {
+		const target = event.target as Element | null;
+		if (target?.closest('a, button, input, select, textarea')) return;
+		rowActivate?.onselect(row);
+	}
 </script>
 
 <section class="space-y-3" aria-label={label}>
@@ -270,8 +299,11 @@
 					</tr>
 				{:else}
 						{#each visible as row (rowKey(row))}
-							<tr>
-								{#each columns as column (column.key)}
+							<tr
+								class={rowActivate ? 'cursor-pointer hover:bg-base-200/60' : ''}
+								onclick={rowActivate ? (event) => activateRow(event, row) : undefined}
+							>
+								{#each columns as column, columnIndex (column.key)}
 									{@const cellBadge = column.badge?.(row) ?? null}
 									{@const cellHref = column.href?.(row) ?? null}
 									{@const cellAction = column.action?.(row) ?? null}
@@ -299,7 +331,22 @@
 											{/if}
 										{:else if !column.badge || column.badgeWithText}
 											{#if cellText}
-												<span class={textClass(column)}>{cellText}</span>
+												{#if rowActivate && columnIndex === 0}
+													<!-- The row's control. It is a button rather than a clickable
+													     `<tr>`, because a table row that claims `role="button"`
+													     stops being a row for assistive technology. -->
+													<button
+														type="button"
+														class="w-full cursor-pointer text-left {column.mono ? 'font-mono' : ''}"
+														aria-label={rowActivate.label(row)}
+														aria-pressed={rowActivate.pressed ? rowActivate.pressed(row) : undefined}
+														onclick={() => rowActivate.onselect(row)}
+													>
+														{cellText}
+													</button>
+												{:else}
+													<span class={textClass(column)}>{cellText}</span>
+												{/if}
 											{/if}
 										{/if}{#if cellAction}
 											<!-- `aria-label` names the row, because "Delete" alone in a

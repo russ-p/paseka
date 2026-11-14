@@ -247,6 +247,137 @@ export interface UsageAggregate {
 }
 
 /**
+ * The component split of one execution, a day, or a range. Mirrors
+ * `runs.UsageTokens`; `totalTokens` is the sum of the components the record
+ * reported, never a billable figure.
+ */
+export interface UsageTokens {
+	inputTokens: number;
+	outputTokens: number;
+	reasoningTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	totalTokens: number;
+}
+
+/** One zero-filled local calendar day. Mirrors `runs.UsageDay`. */
+export interface UsageDay {
+	date: string;
+	executions: number;
+	reportedExecutions: number;
+	distinctTrails: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+	/** The same day split along every axis; each sums to the day's totals. */
+	breakdown: UsageAxes;
+	/** Executions happened but none reported usage. Distinct from no executions. */
+	unmeasured: boolean;
+	/** At least one execution on this day is still in flight. */
+	incomplete: boolean;
+}
+
+/** A period total. Mirrors `runs.UsageTotals`. */
+export interface UsageTotals {
+	executions: number;
+	reportedExecutions: number;
+	distinctTrails: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}
+
+/**
+ * One group of one breakdown axis over a day or the period. Mirrors
+ * `runs.UsageAxisEntry`. `label` is a secondary name — an adapter's
+ * implementation version or a model's alias — and never the grouping key.
+ */
+export interface UsageAxisEntry {
+	key: string;
+	label?: string;
+	executions: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}
+
+/**
+ * The same executions seen four ways. Mirrors `runs.UsageAxes`; every axis sums
+ * to the totals beside it, so the page switches axes from one payload.
+ */
+export interface UsageAxes {
+	adapter: UsageAxisEntry[];
+	model: UsageAxisEntry[];
+	bee: UsageAxisEntry[];
+	purpose: UsageAxisEntry[];
+}
+
+/**
+ * One trail's reported usage over the period. Mirrors `runs.UsageTrailEntry`.
+ * Only a trail with a reported execution is ranked; `title` is absent when the
+ * trail records none, and the page falls back to `traceId`.
+ */
+export interface UsageTrailEntry {
+	traceId: string;
+	title?: string;
+	executions: number;
+	reportedExecutions: number;
+	tokens: UsageTokens;
+	recordedCostUsd: number;
+	costReportedExecutions: number;
+}
+
+/**
+ * The period's trails ranked by reported tokens. Mirrors `runs.UsageTrailRanking`;
+ * `sum(entries tokens) + outsideTokens` is the period total, and `outsideTrails`
+ * is how many measured trails the table leaves out.
+ */
+export interface UsageTrailRanking {
+	entries: UsageTrailEntry[];
+	measuredTrails: number;
+	outsideTrails: number;
+	outsideTokens: number;
+}
+
+/** One reason a usage report is partial. Mirrors `runs.UsageWarning`. */
+export interface UsageWarning {
+	group: string;
+	kind: string;
+	detail: string;
+}
+
+/**
+ * The record restriction a usage report was built with and echoes back. Mirrors
+ * `runs.UsageFilters`: values within one axis are alternatives, the axes
+ * combine, and an empty list is the empty set.
+ */
+export interface UsageFilters {
+	adapter: string[];
+	model: string[];
+	bee: string[];
+	purpose: string[];
+}
+
+/** The colony-wide usage report. Mirrors `runs.UsageReport`. */
+export interface UsageReport {
+	since: string;
+	until: string;
+	timezone: string;
+	/** The filter set the report applied; empty lists mean every record. */
+	filters: UsageFilters;
+	observedAt: string;
+	earliestRetainedAt?: string;
+	period: UsageTotals;
+	/** The period ranking per axis, derived from the day entries. */
+	breakdown: UsageAxes;
+	/** The period's top trails, aggregated from the same day records. */
+	trails: UsageTrailRanking;
+	days: UsageDay[];
+	excludedUndated: number;
+	warnings: UsageWarning[];
+}
+
+/**
  * The honey reserve a trail carries. A standing trail is capped by its stipend;
  * any other trail by whatever top-ups have been added. Mirrors the
  * `Energy*`/`LowEnergy`/`Standing` fields of `hiveview.TraceSummaryView`.

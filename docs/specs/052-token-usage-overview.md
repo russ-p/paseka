@@ -2,8 +2,10 @@
 
 ## Status
 
-**(Approved)**
+**(Implemented)**
 Colony-wide, time-bucketed LLM token usage over retained trail records: one read model, a Console page with daily charts, and a `paseka inspect usage` range mode. The four product choices left open in the draft — recorded cost placement, default range, the Bee axis, and drill-down behaviour — were settled by the Beekeeper and are recorded under Further Notes.
+
+Shipped in trail `trace-01a1da38673703e4` as one read model with three readers and no stored aggregate. `runs.ReadUsage` derives the report from the existing run projection; `GET /api/usage` serves it read-only and refuses an invalid range with a plain-text 400 rather than an empty report; a 30-second scan cache keeps repeat reads cheap while `?refresh=1` bypasses it for the page's refresh control; `paseka inspect usage` without `--trace` prints the same report as text or `--json`, with `--group-by` choosing the ranked axis and repeatable `--adapter`/`--model`/`--bee`/`--purpose` filters that never move the range; and the Console Usage page shows the daily chart, the axis breakdown, the top trails, filters, and drill-down from a chart column or breakdown row into the URL state, so a narrowed view is a link. Coverage and honesty are stated rather than implied: absent usage reads as missing instead of zero, an in-flight run marks its day incomplete, a range older than the retained record warns, and a pruned trail is absent instead of reported as zero spend.
 
 ## Problem Statement
 

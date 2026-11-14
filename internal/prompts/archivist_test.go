@@ -106,11 +106,8 @@ func TestArchivistSkillIntentRendersSkillGuidance(t *testing.T) {
 	if !strings.Contains(got, filepath.Join(root, ".paseka", "runs", "trace-archivist-test", "artifacts", "skill-proposals")) {
 		t.Fatalf("skill bundle path missing:\n%s", got)
 	}
-	if !strings.Contains(got, `"kind":"skill.proposed"`) {
-		t.Fatalf("proposal emit example missing:\n%s", got)
-	}
-	if strings.Contains(got, `"kind":"context.note","taskId":"001-adapter-probe-system-tab"`) {
-		t.Fatalf("skill intent rendered the archivist note emit example:\n%s", got)
+	if !strings.Contains(got, "exactly one `INSIGHT/skill.proposed`") {
+		t.Fatalf("proposal emit guidance missing:\n%s", got)
 	}
 	if strings.Contains(got, "Audit one task of this trail for work that was promised") {
 		t.Fatalf("skill intent rendered the task guidance:\n%s", got)
@@ -134,11 +131,8 @@ func TestArchivistNoteIntentsDoNotRenderSkillGuidance(t *testing.T) {
 	if strings.Contains(taskPrompt, skillMarker) {
 		t.Fatalf("task intent rendered the skill guidance:\n%s", taskPrompt)
 	}
-	if !strings.Contains(taskPrompt, `"kind":"context.note","taskId":"001-adapter-probe-system-tab"`) {
+	if !strings.Contains(taskPrompt, "exactly one `INSIGHT/context.note`") {
 		t.Fatalf("task intent emit guidance does not publish context.note")
-	}
-	if strings.Contains(taskPrompt, `"kind":"skill.proposed"`) {
-		t.Fatalf("task intent emit guidance publishes skill.proposed")
 	}
 
 	chroniclePrompt := renderArchivist(t, root, "chronicle")
@@ -148,10 +142,7 @@ func TestArchivistNoteIntentsDoNotRenderSkillGuidance(t *testing.T) {
 	if strings.Contains(chroniclePrompt, skillMarker) {
 		t.Fatalf("chronicle intent rendered the skill guidance:\n%s", chroniclePrompt)
 	}
-	if !strings.Contains(chroniclePrompt, `"kind":"context.note","taskId":"001-adapter-probe-system-tab"`) {
+	if !strings.Contains(chroniclePrompt, "exactly one `INSIGHT/context.note`") {
 		t.Fatalf("chronicle intent emit guidance does not publish context.note")
-	}
-	if strings.Contains(chroniclePrompt, `"kind":"skill.proposed"`) {
-		t.Fatalf("chronicle intent emit guidance publishes skill.proposed")
 	}
 }

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Component } from 'svelte';
 import DataTable from './DataTable.svelte';
 import type { DataColumn } from './DataTable.svelte';
@@ -538,5 +538,88 @@ describe('DataTable row actions', () => {
 		// keeps the markup the empty-cell contract depends on.
 		expect(quiet.className).not.toContain('flex');
 		expect(container.querySelectorAll('tbody td').length).toBe(2);
+	});
+});
+
+describe('DataTable row activation', () => {
+	interface Row {
+		key: string;
+		volume: string;
+	}
+
+	const rows: Row[] = [
+		{ key: 'input', volume: '1.2k' },
+		{ key: 'output', volume: '300' }
+	];
+
+	const activateColumns: DataColumn<Row>[] = [
+		{ key: 'key', label: 'Key', text: (row) => row.key, mono: true },
+		{ key: 'volume', label: 'Volume', text: (row) => row.volume, align: 'right' }
+	];
+
+	function renderActivation(overrides: Record<string, unknown> = {}) {
+		const selected = vi.fn();
+		const view = render(Table as unknown as Component<Record<string, unknown>>, {
+			columns: activateColumns,
+			rows,
+			rowKey: (row: Row) => row.key,
+			label: 'Keys',
+			pageSize: 0,
+			rowActivate: {
+				label: (row: Row) => `Add key filter ${row.key}`,
+				pressed: (row: Row) => row.key === 'input',
+				onselect: selected
+			},
+			...overrides
+		});
+		return { ...view, selected };
+	}
+
+	it('makes the first cell a real control with a name that states the action', async () => {
+		const user = userEvent.setup();
+		const { selected } = renderActivation();
+
+		const control = screen.getByRole('button', { name: 'Add key filter output' });
+		control.focus();
+		await user.keyboard('{Enter}');
+
+		expect(selected).toHaveBeenCalledTimes(1);
+		expect(selected).toHaveBeenCalledWith(rows[1]);
+	});
+
+	it('reports a value already applied through aria-pressed', () => {
+		renderActivation();
+
+		expect(screen.getByRole('button', { name: 'Add key filter input' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+		expect(screen.getByRole('button', { name: 'Add key filter output' })).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
+	});
+
+	it('activates once per click, whether the row or its control is clicked', async () => {
+		const user = userEvent.setup();
+		const { selected } = renderActivation();
+
+		// A click on the row outside the control is a click on the row.
+		const secondRow = screen.getByText('300').closest('tr') as HTMLElement;
+		await user.click(within(secondRow).getAllByRole('cell')[1]);
+		expect(selected).toHaveBeenCalledTimes(1);
+
+		// The control owns its own click; the row handler must not fire it twice.
+		await user.click(screen.getByRole('button', { name: 'Add key filter output' }));
+		expect(selected).toHaveBeenCalledTimes(2);
+	});
+
+	it('leaves a row plain when no activation is offered', () => {
+		const { container } = renderActivation({ rowActivate: undefined });
+
+		expect(screen.queryByRole('button', { name: /Add key filter/ })).not.toBeInTheDocument();
+		for (const row of container.querySelectorAll('tbody tr')) {
+			expect(row.className).not.toContain('cursor-pointer');
+		}
 	});
 });
