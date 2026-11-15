@@ -248,8 +248,8 @@ func TestApplyActivatesValidCandidateWithSkills(t *testing.T) {
 		t.Fatalf("revision = %d, want 2", result.Manifest.ConfigRevision)
 	}
 	// The activated snapshot is the one dispatch will later resolve against.
-	active := filepath.Join(root, ".paseka", "runs", "trace-valid-skills", "config", "snapshots",
-		result.Manifest.ActiveConfigRef, "tree", ".paseka", "skills", "paseka-release", "SKILL.md")
+	active := filepath.Join(snapshotDirForTest(t, root, "trace-valid-skills", result.Manifest.ActiveConfigRef),
+		"tree", ".paseka", "skills", "paseka-release", "SKILL.md")
 	if _, err := os.Stat(active); err != nil {
 		t.Fatalf("active snapshot is missing the skill: %v", err)
 	}

@@ -73,7 +73,7 @@ func TestApplyColonyAdvancesConfigurationAndPreservesWork(t *testing.T) {
 	if data, err := os.ReadFile(taskPath); err != nil || string(data) != string(taskBefore) {
 		t.Fatalf("task progress changed: %q %v", data, err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".paseka", "runs", "trace-apply", "config", "snapshots", result.NewRef, "tree", ".paseka", "prompts", "builder.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(snapshotDirForTest(t, root, "trace-apply", result.NewRef), "tree", ".paseka", "prompts", "builder.md")); err != nil {
 		t.Fatalf("candidate snapshot missing: %v", err)
 	}
 }
@@ -352,7 +352,7 @@ func TestApplySnapshotRollbackKeepsFutureOnly(t *testing.T) {
 	if len(rolled.EffectiveDiff) == 0 {
 		t.Fatal("rollback preview did not report the effective change")
 	}
-	prompt, err := os.ReadFile(filepath.Join(root, ".paseka", "runs", "trace-rollback", "config", "snapshots", rolled.Manifest.ActiveConfigRef, "tree", ".paseka", "prompts", "builder.md"))
+	prompt, err := os.ReadFile(filepath.Join(snapshotDirForTest(t, root, "trace-rollback", rolled.Manifest.ActiveConfigRef), "tree", ".paseka", "prompts", "builder.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +432,7 @@ func TestApplyOverridesCandidateKeepsCodeAndIdentity(t *testing.T) {
 	if result.Manifest.InitialConfigRef != manifest.InitialConfigRef {
 		t.Fatalf("initial ref changed to %s", result.Manifest.InitialConfigRef)
 	}
-	data, err := os.ReadFile(filepath.Join(root, ".paseka", "runs", "trace-overrides", "config", "snapshots", result.NewRef, "tree", ".paseka", "bees", "builder.yaml"))
+	data, err := os.ReadFile(filepath.Join(snapshotDirForTest(t, root, "trace-overrides", result.NewRef), "tree", ".paseka", "bees", "builder.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

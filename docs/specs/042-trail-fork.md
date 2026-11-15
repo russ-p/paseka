@@ -56,11 +56,15 @@ Source and fork records remain under the colony's `.paseka/runs/<traceId>/`, whi
   config/
     manifest.json       # initial/active references, revision, policy, and change history
     snapshots/
-      <ConfigRef>/      # complete immutable inputs, resolved settings, and inventory
-      <anotherRef>/     # later applied version or a fork's candidate
+      0001/             # complete immutable inputs, resolved settings, and inventory
+      0002/             # later applied version or a fork's candidate
 ```
 
 An ordinary trail starts with one snapshot and retains additional versions when the operator applies a change. A fork owns both its source and candidate configuration; base and effective are roles in its records rather than mutable directories. Deleting the source trail does not break fork execution or configuration comparison. Equal references, including a control arm's base and candidate, use one copy within the owning trail. These are runtime-owned records, not operator-editable overrides.
+
+Snapshot directory names are short per-trail ordinals, not content identities: the manifest records each snapshot's relative path and `ConfigRef`, and a rollback reuses the retained directory. Keeping location out of the name means a frozen path advertised to a client stays readable and avoids characters that are invalid on some platforms; trails captured with the older `<ConfigRef>` names keep resolving through their recorded path.
+
+The manifest path is the read contract, so a binary that predates it and resolves `snapshots/<ConfigRef>` directly cannot read a trail whose snapshot this version rewrote or added. That is an intentional upgrade boundary: downgrading over such a trail reports the configuration as unavailable rather than guessing a location. A crashed capture leaves at most an unowned ordinal directory; the next capture adopts it when the content verifies as the candidate and removes other unowned ordinal directories, while an existing `<ConfigRef>` directory is adopted in place.
 
 `ConfigRef` identifies content independently of storage location. Two trails can have the same reference while retaining separate physical copies. V1 deliberately accepts that duplication to keep trail backup, inspection, and deletion self-contained.
 

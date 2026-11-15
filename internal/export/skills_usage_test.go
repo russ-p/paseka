@@ -16,9 +16,20 @@ import (
 	"github.com/russ-p/paseka/internal/trailconfig"
 )
 
-func exportFrozenSkillDir(repo, traceID, ref, name string) string {
-	return filepath.Join(repo, ".paseka", "runs", traceID, "config", "snapshots", ref,
-		trailconfig.SnapshotTreeDirName, ".paseka", "skills", name)
+func exportFrozenSkillDir(t *testing.T, repo, traceID, ref, name string) string {
+	t.Helper()
+	manifest, err := trailconfig.Load(repo, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == ref {
+			dir := filepath.Join(trailconfig.ConfigDir(repo, traceID), filepath.FromSlash(snapshot.Path))
+			return filepath.Join(dir, trailconfig.SnapshotTreeDirName, ".paseka", "skills", name)
+		}
+	}
+	t.Fatalf("snapshot %s is not retained by %s", ref, traceID)
+	return ""
 }
 
 // usageTranscriptResolver resolves a different transcript per provider session,
@@ -77,7 +88,7 @@ func TestExportSkillsUsedFromTranscript(t *testing.T) {
 		ProviderSessionID: "sess-none",
 	})
 
-	frozen := exportFrozenSkillDir(repo, traceID, manifest.InitialConfigRef, "alpha")
+	frozen := exportFrozenSkillDir(t, repo, traceID, manifest.InitialConfigRef, "alpha")
 	lookup := usageLookup(map[string]adapters.Transcript{
 		"sess-read": toolCallTranscript(
 			adapters.ToolCall{Name: "Read", CallID: "call-skill", Args: `{"path":"` + filepath.Join(frozen, skills.ManifestName) + `"}`},
@@ -231,7 +242,7 @@ func TestExportSkillsUsedUnionDeduplicatesAndFirstLoadWins(t *testing.T) {
 		ProviderSessionID: "sess-union",
 	})
 
-	frozen := exportFrozenSkillDir(repo, traceID, manifest.InitialConfigRef, "alpha")
+	frozen := exportFrozenSkillDir(t, repo, traceID, manifest.InitialConfigRef, "alpha")
 	lookup := usageLookup(map[string]adapters.Transcript{
 		"sess-union": toolCallTranscript(
 			adapters.ToolCall{Name: "Read", CallID: "call-alpha", Args: `{"path":"` + filepath.Join(frozen, skills.ManifestName) + `"}`},
@@ -334,8 +345,8 @@ func TestExportSkillsUsedDoesNotLeakBetweenRuns(t *testing.T) {
 		})
 	}
 
-	alphaDir := exportFrozenSkillDir(repo, traceID, manifest.InitialConfigRef, "alpha")
-	betaDir := exportFrozenSkillDir(repo, traceID, manifest.InitialConfigRef, "beta")
+	alphaDir := exportFrozenSkillDir(t, repo, traceID, manifest.InitialConfigRef, "alpha")
+	betaDir := exportFrozenSkillDir(t, repo, traceID, manifest.InitialConfigRef, "beta")
 	lookup := usageLookup(map[string]adapters.Transcript{
 		"sess-agent-alpha": toolCallTranscript(
 			adapters.ToolCall{Name: "Read", CallID: "call-alpha", Args: `{"path":"` + filepath.Join(alphaDir, skills.ManifestName) + `"}`},

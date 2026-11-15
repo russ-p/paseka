@@ -171,8 +171,8 @@ func TestTryActivateRejectsCandidateLosingCapturedTemplate(t *testing.T) {
 
 	// The prepared content is durable, but its files can still disappear or be
 	// damaged between preparation and the safe boundary.
-	prompt := filepath.Join(root, ".paseka", "runs", traceID, "config", "snapshots",
-		pending.NewRef, "tree", ".paseka", "prompts", "builder.md")
+	prompt := filepath.Join(snapshotDirForTest(t, root, traceID, pending.NewRef),
+		"tree", ".paseka", "prompts", "builder.md")
 	if err := os.Remove(prompt); err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func assertBindingUnchanged(t *testing.T, root, traceID string, initial trailcon
 			dirs = append(dirs, entry.Name())
 		}
 	}
-	if len(dirs) != 1 || dirs[0] != initial.ActiveConfigRef {
+	if len(dirs) != len(initial.Snapshots) || dirs[0] != filepath.Base(filepath.FromSlash(initial.Snapshots[0].Path)) {
 		t.Fatalf("refused candidate retained snapshots: %v", dirs)
 	}
 }

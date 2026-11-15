@@ -37,7 +37,7 @@ func TestCaptureFollowsFileAndDirectorySymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot := filepath.Join(root, ".paseka", "runs", "trace-symlink", "config", "snapshots", manifest.InitialConfigRef, "tree")
+	snapshot := filepath.Join(snapshotDirForTest(t, root, "trace-symlink", manifest.InitialConfigRef), "tree")
 
 	for rel, want := range map[string]string{
 		".paseka/prompts/linked.md":      "linked prompt\n",
@@ -91,7 +91,7 @@ func TestCaptureFollowsSymlinkedTreeRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot := filepath.Join(root, ".paseka", "runs", "trace-symlink-root", "config", "snapshots", manifest.InitialConfigRef, "tree")
+	snapshot := filepath.Join(snapshotDirForTest(t, root, "trace-symlink-root", manifest.InitialConfigRef), "tree")
 	for rel, want := range map[string]string{
 		".paseka/prompts/builder.md":          "external builder\n",
 		".paseka/prompts/_partials/shared.md": "external partial\n",

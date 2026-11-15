@@ -2,6 +2,19 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — Configuration snapshots use short ordinal directories
+
+A trail's frozen configuration now lives under `snapshots/0001`, `snapshots/0002`, and so on instead of a directory named after its 71-character `sha256:<hex>` content identity. The identity itself is unchanged: `ConfigRef` stays in the manifest, attempt records, run records, and history. Only the physical location moved, and the manifest records it per snapshot.
+
+- **Readable frozen paths.** A `skills_delivery: path` prompt no longer carries `sha256:<64 hex>` on every skill line, and no snapshot directory contains `:`, which is invalid in Windows path names. A frozen skill path reads `.../config/snapshots/0002/tree/.paseka/skills/<name>/SKILL.md`.
+- **Rollback reuses content.** Applying a retained version again reactivates the directory that already holds it instead of storing a duplicate under a fresh ordinal.
+- **Old trails keep reading.** A manifest written by the previous layout already records `snapshots/<ConfigRef>`, and the resolver follows that path, so existing trails bind, export, and fork without a migration.
+- **Crash leftovers are reclaimed.** If a process dies after materializing a snapshot but before writing the manifest, the next capture adopts an unowned ordinal directory whose content verifies as the candidate and removes other unowned ordinal directories. A legacy directory that already verifies as the candidate is adopted in place rather than copied a second time.
+- **Breaking downgrade after upgrade.** An older binary resolves a snapshot as `snapshots/<ConfigRef>` directly and cannot read a manifest that points at `snapshots/0001`; it reports the configuration as unavailable. Do not roll the binary back over trails captured or rewritten by this version unless those trails are restored with it from backup. Trails this version never touched still read under the old binary.
+
+- Spec: [042-trail-fork](../specs/042-trail-fork.md)
+- Canonical: [Colony layout](../guide/colony-layout.md), [Self-improving colonies](../guide/self-improving-colonies.md), [Skills](../guide/skills.md#6-delivery-the-system-prompt-advertisement)
+
 ## 2026-11 — The Queen Console is served at the root, and the legacy console is gone
 
 `paseka console` now opens the modern console at `http://127.0.0.1:8787/` — the address the legacy vanilla-JS console used to answer — so there is one interface to learn, one set of links to share, and no preview URL that means "not yet". The second console is deleted rather than retired behind a flag, and every route, asset, and link is a root path: `/dashboard`, `/traces`, `/traces/<traceId>`, `/timeline`, `/reviews`, `/settings`.

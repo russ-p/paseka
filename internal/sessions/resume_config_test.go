@@ -155,7 +155,8 @@ func TestManagerResumeRefusesUnavailableConfiguration(t *testing.T) {
 	applySessionColonyConfig(t, repo, traceID)
 
 	// The retained snapshot disappears while the source session still claims it.
-	if err := os.RemoveAll(filepath.Join(trailconfig.SnapshotDir(repo, traceID), initial.ActiveConfigRef)); err != nil {
+	snapshotDir := filepath.Join(trailconfig.ConfigDir(repo, traceID), filepath.FromSlash(initial.Snapshots[0].Path))
+	if err := os.RemoveAll(snapshotDir); err != nil {
 		t.Fatal(err)
 	}
 	before := sessionRunDirs(t, repo, traceID)

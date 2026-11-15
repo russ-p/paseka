@@ -36,6 +36,9 @@ func TestEnsureCapturesCompleteBinding(t *testing.T) {
 	if manifest.Snapshots[0].ConfigRef != manifest.InitialConfigRef {
 		t.Fatalf("snapshot ref = %q", manifest.Snapshots[0].ConfigRef)
 	}
+	if got := manifest.Snapshots[0].Path; got != "snapshots/0001" {
+		t.Fatalf("snapshot path = %q, want snapshots/0001", got)
+	}
 
 	binding, err := trailconfig.Read(root, "trace-one")
 	if err != nil {
@@ -47,7 +50,7 @@ func TestEnsureCapturesCompleteBinding(t *testing.T) {
 		t.Fatalf("binding = %+v", binding)
 	}
 
-	snapshot := filepath.Join(root, ".paseka", "runs", "trace-one", "config", "snapshots", manifest.InitialConfigRef)
+	snapshot := snapshotDirForTest(t, root, "trace-one", manifest.InitialConfigRef)
 	tree := filepath.Join(snapshot, "tree")
 	for _, rel := range []string{
 		".paseka/colony.yaml",
@@ -90,7 +93,7 @@ func TestEnsureCapturesSkillLedgerAndHomeProfileConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tree := filepath.Join(root, ".paseka", "runs", "trace-skills", "config", "snapshots", manifest.InitialConfigRef, "tree")
+	tree := filepath.Join(snapshotDirForTest(t, root, "trace-skills", manifest.InitialConfigRef), "tree")
 
 	ledgerPath := filepath.Join(tree, ".paseka", "skills.index.json")
 	ledger, err := os.ReadFile(ledgerPath)
@@ -224,7 +227,7 @@ func TestSnapshotExcludesSecretsAndRuntimeData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot := filepath.Join(root, ".paseka", "runs", "trace-secret", "config", "snapshots", manifest.InitialConfigRef, "tree")
+	snapshot := filepath.Join(snapshotDirForTest(t, root, "trace-secret", manifest.InitialConfigRef), "tree")
 	err = filepath.WalkDir(snapshot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -304,7 +307,7 @@ func TestConcurrentEnsureConvergesOnOneBinding(t *testing.T) {
 			dirs = append(dirs, entry.Name())
 		}
 	}
-	if len(dirs) != 1 || dirs[0] != manifest.InitialConfigRef {
+	if len(dirs) != 1 || dirs[0] != filepath.Base(filepath.FromSlash(manifest.Snapshots[0].Path)) {
 		t.Fatalf("snapshots = %v", dirs)
 	}
 }
@@ -381,6 +384,24 @@ func writeColony(t *testing.T, manifest string) string {
 	return root
 }
 
+// snapshotDirForTest resolves a retained snapshot the way the runtime does:
+// through the manifest's recorded path, never by assuming the directory name is
+// the ConfigRef.
+func snapshotDirForTest(t *testing.T, root, traceID, ref string) string {
+	t.Helper()
+	manifest, err := trailconfig.Load(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == ref {
+			return filepath.Join(trailconfig.ConfigDir(root, traceID), filepath.FromSlash(snapshot.Path))
+		}
+	}
+	t.Fatalf("snapshot %s is not retained by %s", ref, traceID)
+	return ""
+}
+
 func TestBindReturnsImmutableExecutionContext(t *testing.T) {
 	root := writeColony(t, "slug: test\nmodel_aliases:\n  builder: vendor/builder\n")
 	setupHome(t, "test")
@@ -403,7 +424,7 @@ func TestBindReturnsImmutableExecutionContext(t *testing.T) {
 	if bound.ConfigRef != manifest.InitialConfigRef || bound.ConfigRevision != 1 {
 		t.Fatalf("binding = %q rev %d, want %q rev 1", bound.ConfigRef, bound.ConfigRevision, manifest.InitialConfigRef)
 	}
-	if want := filepath.Join(root, ".paseka", "runs", "trace-bind", "config", "snapshots", bound.ConfigRef, "tree"); bound.ConfigRoot != want {
+	if want := filepath.Join(snapshotDirForTest(t, root, "trace-bind", bound.ConfigRef), "tree"); bound.ConfigRoot != want {
 		t.Fatalf("config root = %q, want %q", bound.ConfigRoot, want)
 	}
 	if bound.WorkspaceRoot != root {
@@ -457,6 +478,202 @@ func TestBindBlocksMissingSnapshotContent(t *testing.T) {
 	}
 	if _, _, err := trailconfig.Bind(ctx, "trace-corrupt"); err == nil {
 		t.Fatal("expected binding to fail when snapshot content is missing")
+	}
+}
+
+func TestSnapshotDirectoriesStayShortAndReuseContent(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-short-paths"
+
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(manifest.InitialConfigRef, "sha256:") {
+		t.Fatalf("ConfigRef = %q, want a content identity", manifest.InitialConfigRef)
+	}
+	initialDir := snapshotDirForTest(t, root, traceID, manifest.InitialConfigRef)
+	if base := filepath.Base(initialDir); base != "0001" || strings.Contains(base, ":") {
+		t.Fatalf("snapshot directory = %q, want a short ordinal name", base)
+	}
+
+	writeFile(t, root, ".paseka/prompts/builder.md", "changed\n")
+	expected := manifest.ConfigRevision
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: traceID, Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied.Manifest.Snapshots) != 2 || applied.Manifest.Snapshots[1].Path != "snapshots/0002" {
+		t.Fatalf("snapshots after apply = %+v", applied.Manifest.Snapshots)
+	}
+
+	rollbackExpected := applied.Manifest.ConfigRevision
+	rolled, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: traceID, Source: trailconfig.SourceSnapshot,
+		SnapshotRef: manifest.InitialConfigRef, Actor: "operator", ExpectedRevision: &rollbackExpected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rolled.Manifest.Snapshots) != 2 {
+		t.Fatalf("rollback stored a duplicate snapshot: %+v", rolled.Manifest.Snapshots)
+	}
+	activeDir := snapshotDirForTest(t, root, traceID, rolled.Manifest.ActiveConfigRef)
+	if base := filepath.Base(activeDir); base != "0001" {
+		t.Fatalf("rollback activated %q, want the retained 0001", base)
+	}
+	entries, err := os.ReadDir(filepath.Join(trailconfig.SnapshotDir(root, traceID)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("snapshot directories = %d, want 2", len(entries))
+	}
+}
+
+func TestLegacySnapshotDirectoryKeepsResolving(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-legacy-layout"
+
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDir := filepath.Join(trailconfig.SnapshotDir(root, traceID), manifest.InitialConfigRef)
+	if err := os.Rename(snapshotDirForTest(t, root, traceID, manifest.InitialConfigRef), legacyDir); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Snapshots[0].Path = "snapshots/" + manifest.InitialConfigRef
+	if err := writeManifestForTest(root, traceID, manifest); err != nil {
+		t.Fatal(err)
+	}
+
+	bound, _, err := trailconfig.Bind(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(legacyDir, "tree"); bound.ConfigRoot != want {
+		t.Fatalf("legacy config root = %q, want %q", bound.ConfigRoot, want)
+	}
+	if _, _, err := trailconfig.ReadSnapshot(root, traceID, manifest.InitialConfigRef); err != nil {
+		t.Fatalf("legacy snapshot is unreadable: %v", err)
+	}
+
+	writeFile(t, root, ".paseka/prompts/builder.md", "new layout\n")
+	expected := manifest.ConfigRevision
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: traceID, Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied.Manifest.Snapshots) != 2 || applied.Manifest.Snapshots[1].Path != "snapshots/0001" {
+		t.Fatalf("new snapshot after a legacy capture = %+v", applied.Manifest.Snapshots)
+	}
+	if err := trailconfig.VerifySnapshot(root, traceID, manifest.InitialConfigRef); err != nil {
+		t.Fatalf("legacy snapshot stopped resolving after a new capture: %v", err)
+	}
+}
+
+func TestApplyAdoptsSnapshotLeftByCrash(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-orphan"
+	first, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, ".paseka/prompts/builder.md", "candidate after the crash\n")
+	// Capture the same content in another trail to learn the candidate ref,
+	// then place that complete directory where a crash would have left it.
+	other, err := trailconfig.Ensure(ctx, "trace-orphan-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphan := filepath.Join(trailconfig.SnapshotDir(root, traceID), "0002")
+	if err := os.Rename(snapshotDirForTest(t, root, "trace-orphan-source", other.InitialConfigRef), orphan); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := first.ConfigRevision
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: traceID, Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.NewRef != other.InitialConfigRef {
+		t.Fatalf("candidate ref = %s, want %s", applied.NewRef, other.InitialConfigRef)
+	}
+	if len(applied.Manifest.Snapshots) != 2 || applied.Manifest.Snapshots[1].Path != "snapshots/0002" {
+		t.Fatalf("crash orphan was not adopted: %+v", applied.Manifest.Snapshots)
+	}
+	if _, err := os.Stat(filepath.Join(trailconfig.SnapshotDir(root, traceID), "0003")); !os.IsNotExist(err) {
+		t.Fatalf("adoption allocated another directory: %v", err)
+	}
+}
+
+func TestApplyRemovesUnownedOrdinalSnapshot(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-orphan-garbage"
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stray := filepath.Join(trailconfig.SnapshotDir(root, traceID), "0002")
+	if err := os.MkdirAll(filepath.Join(stray, "tree"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stray, "tree", "garbage"), []byte("not a snapshot"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, ".paseka/prompts/builder.md", "new content\n")
+	expected := manifest.ConfigRevision
+	applied, err := trailconfig.Apply(trailconfig.ApplyOptions{
+		Context: ctx, TraceID: traceID, Source: trailconfig.SourceColony,
+		Actor: "operator", ExpectedRevision: &expected,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied.Manifest.Snapshots) != 2 || applied.Manifest.Snapshots[1].Path != "snapshots/0002" {
+		t.Fatalf("snapshot after pruning = %+v", applied.Manifest.Snapshots)
+	}
+	if _, err := os.Stat(filepath.Join(stray, "tree", "garbage")); !os.IsNotExist(err) {
+		t.Fatalf("unowned directory survived: %v", err)
+	}
+}
+
+func TestSnapshotPathCannotEscapeTheSnapshotRoot(t *testing.T) {
+	root := writeColony(t, "slug: test\n")
+	setupHome(t, "test")
+	ctx := testContext(root)
+	traceID := "trace-escape"
+
+	manifest, err := trailconfig.Ensure(ctx, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Snapshots[0].Path = "snapshots/../../escape"
+	if err := writeManifestForTest(root, traceID, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := trailconfig.Bind(ctx, traceID); err == nil || !strings.Contains(err.Error(), "invalid location") {
+		t.Fatalf("err = %v, want an invalid-location refusal", err)
 	}
 }
 
@@ -586,8 +803,7 @@ func TestPrivateInputsAreClassifiedRestrictedAndReadable(t *testing.T) {
 
 	// The private subtree is not world-traversable, so classification also
 	// carries an access restriction on disk.
-	privateDir := filepath.Join(root, ".paseka", "runs", "trace-private", "config", "snapshots",
-		manifest.InitialConfigRef, "tree", "home")
+	privateDir := filepath.Join(snapshotDirForTest(t, root, "trace-private", manifest.InitialConfigRef), "tree", "home")
 	info, err := os.Stat(privateDir)
 	if err != nil {
 		t.Fatal(err)

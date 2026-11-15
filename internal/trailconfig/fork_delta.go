@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -77,7 +78,17 @@ func PrepareForkDelta(opts ForkDeltaOptions) (ForkDelta, error) {
 		return ForkDelta{}, fmt.Errorf("trailconfig: delta patch is empty")
 	}
 
-	sourceDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.SourceTraceID), opts.SourceConfigRef)
+	sourceManifest, err := Load(opts.Context.ColonyRoot, opts.SourceTraceID)
+	if err != nil {
+		if errors.Is(err, ErrNoBinding) {
+			return ForkDelta{}, fmt.Errorf("trailconfig: source trail %s has no configuration binding", opts.SourceTraceID)
+		}
+		return ForkDelta{}, err
+	}
+	sourceDir, err := snapshotDirFromManifest(opts.Context.ColonyRoot, opts.SourceTraceID, sourceManifest, opts.SourceConfigRef)
+	if err != nil {
+		return ForkDelta{}, err
+	}
 	inventory, err := loadVerifiedSnapshot(sourceDir, opts.SourceConfigRef)
 	if err != nil {
 		return ForkDelta{}, err

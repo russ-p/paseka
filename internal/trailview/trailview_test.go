@@ -142,8 +142,8 @@ func TestLoadTrailReportsMissingBindingAndPinnedLineageHonestly(t *testing.T) {
 		t.Fatalf("pinned evidence = %v", pinnedTrail.Evidence)
 	}
 
-	if err := os.Remove(filepath.Join(
-		trailconfig.SnapshotDir(root, pinned), manifest.ActiveConfigRef, trailconfig.InventoryFileName)); err != nil {
+	snapshotDir := filepath.Join(trailconfig.ConfigDir(root, pinned), filepath.FromSlash(manifest.Snapshots[0].Path))
+	if err := os.Remove(filepath.Join(snapshotDir, trailconfig.InventoryFileName)); err != nil {
 		t.Fatal(err)
 	}
 	pinnedTrail, _, err = trailview.LoadTrail(ctx, pinned)

@@ -276,8 +276,14 @@ func TestExportSkillsOfferedCorruptSnapshotOmission(t *testing.T) {
 	// every captured file matching its hash (trailconfig.BindRef succeeds) while
 	// skills.ResolveRun rejects the corrupt ledger. That is the second omission
 	// branch, which the unknown-ConfigRef case in the test above never reaches.
-	ledger := filepath.Join(trailconfig.SnapshotDir(repo, traceID), manifest.InitialConfigRef,
-		trailconfig.SnapshotTreeDirName, ".paseka", skills.LedgerName)
+	snapshotDir := trailconfig.SnapshotDir(repo, traceID)
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == manifest.InitialConfigRef {
+			snapshotDir = filepath.Join(trailconfig.ConfigDir(repo, traceID), filepath.FromSlash(snapshot.Path))
+			break
+		}
+	}
+	ledger := filepath.Join(snapshotDir, trailconfig.SnapshotTreeDirName, ".paseka", skills.LedgerName)
 	if err := os.WriteFile(ledger, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}

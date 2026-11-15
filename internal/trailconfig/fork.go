@@ -90,7 +90,10 @@ func CreateForkBinding(opts ForkBindingOptions) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("trailconfig: source trail %s does not retain configuration %s", opts.SourceTraceID, baseRef)
 	}
 
-	sourceDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.SourceTraceID), baseRef)
+	sourceDir, err := snapshotDirFromManifest(opts.Context.ColonyRoot, opts.SourceTraceID, sourceManifest, baseRef)
+	if err != nil {
+		return Manifest{}, err
+	}
 	baseInventory, err := loadVerifiedSnapshot(sourceDir, baseRef)
 	if err != nil {
 		return Manifest{}, err
@@ -127,33 +130,40 @@ func CreateForkBinding(opts ForkBindingOptions) (Manifest, error) {
 		return Manifest{}, err
 	}
 
-	if err := materializeSnapshot(dir, baseRef, baseContents, baseInventory); err != nil {
+	snapshotsDir := filepath.Join(dir, SnapshotsDirName)
+	baseName, err := snapshotNameForCandidate(snapshotsDir, nil, baseRef)
+	if err != nil {
 		return Manifest{}, err
 	}
-	if err := verifySnapshot(filepath.Join(dir, SnapshotsDirName, baseRef), baseRef); err != nil {
+	if err := materializeSnapshot(snapshotsDir, baseName, baseRef, baseContents, baseInventory); err != nil {
 		return Manifest{}, err
 	}
-	if opts.ConfigRef != baseRef {
-		if err := materializeSnapshot(dir, opts.ConfigRef, candidateContents, candidateInventory); err != nil {
-			return Manifest{}, err
-		}
-		if err := verifySnapshot(filepath.Join(dir, SnapshotsDirName, opts.ConfigRef), opts.ConfigRef); err != nil {
-			return Manifest{}, err
-		}
+	if err := verifySnapshot(filepath.Join(snapshotsDir, baseName), baseRef); err != nil {
+		return Manifest{}, err
 	}
 
 	now := time.Now().UTC()
 	snapshots := []Snapshot{{
 		ConfigRef: baseRef,
-		Path:      filepath.ToSlash(filepath.Join(SnapshotsDirName, baseRef)),
+		Path:      snapshotRelPath(baseName),
 		Source:    "fork-base",
 		CreatedAt: now,
 		Files:     len(baseInventory.Entries),
 	}}
 	if opts.ConfigRef != baseRef {
+		candidateName, err := snapshotNameForCandidate(snapshotsDir, snapshots, opts.ConfigRef)
+		if err != nil {
+			return Manifest{}, err
+		}
+		if err := materializeSnapshot(snapshotsDir, candidateName, opts.ConfigRef, candidateContents, candidateInventory); err != nil {
+			return Manifest{}, err
+		}
+		if err := verifySnapshot(filepath.Join(snapshotsDir, candidateName), opts.ConfigRef); err != nil {
+			return Manifest{}, err
+		}
 		snapshots = append(snapshots, Snapshot{
 			ConfigRef: opts.ConfigRef,
-			Path:      filepath.ToSlash(filepath.Join(SnapshotsDirName, opts.ConfigRef)),
+			Path:      snapshotRelPath(candidateName),
 			Source:    "fork-delta",
 			CreatedAt: now,
 			Files:     len(candidateInventory.Entries),

@@ -7,7 +7,9 @@
 // model aliases, and available skills. Machine-local secrets and runtime data are
 // deliberately excluded. The content identity (ConfigRef) is derived from the
 // captured bytes and executable modes only, never from the trail identity or its
-// physical location.
+// physical location. Snapshot directories use short per-trail ordinals; the
+// manifest records which directory holds each ConfigRef, so identity and
+// location stay independent and a frozen path stays readable.
 package trailconfig
 
 import (
@@ -19,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,7 +110,10 @@ type Inventory struct {
 	Resolved Resolved `json:"resolved"`
 }
 
-// Snapshot records one immutable version retained by the trail.
+// Snapshot records one immutable version retained by the trail. Path is the
+// stored location relative to the trail's config directory; it is the source of
+// truth for location and need not contain ConfigRef. Older trails recorded the
+// ref itself as the directory name, and their manifests keep resolving.
 type Snapshot struct {
 	ConfigRef string    `json:"configRef"`
 	Path      string    `json:"path"`
@@ -241,6 +247,149 @@ func SnapshotDir(colonyRoot, traceID string) string {
 	return filepath.Join(ConfigDir(colonyRoot, traceID), SnapshotsDirName)
 }
 
+// snapshotRelPath returns the manifest location of one snapshot directory.
+func snapshotRelPath(name string) string {
+	return filepath.ToSlash(filepath.Join(SnapshotsDirName, name))
+}
+
+// snapshotNameForCandidate picks the directory for a snapshot about to be
+// materialized. It adopts a complete ordinal directory left by a crash when
+// that directory already verifies as the candidate, and removes other
+// unreferenced ordinal directories: the manifest can never reach them, so they
+// would otherwise accumulate as unowned copies. A legacy ref-named directory
+// that verifies as the candidate is adopted in place instead of duplicating the
+// content under a new ordinal.
+func snapshotNameForCandidate(snapshotsDir string, retained []Snapshot, ref string) (string, error) {
+	referenced := make(map[string]struct{}, len(retained))
+	for _, snapshot := range retained {
+		referenced[filepath.Base(filepath.FromSlash(strings.TrimSpace(snapshot.Path)))] = struct{}{}
+	}
+
+	entries, err := os.ReadDir(snapshotsDir)
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("trailconfig: read snapshots: %w", err)
+	}
+	orphans := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !isSnapshotOrdinal(entry.Name()) {
+			continue
+		}
+		if _, ok := referenced[entry.Name()]; ok {
+			continue
+		}
+		orphans = append(orphans, entry.Name())
+	}
+	sort.Strings(orphans)
+
+	adopted := ""
+	for _, name := range orphans {
+		dir := filepath.Join(snapshotsDir, name)
+		if err := verifySnapshot(dir, ref); err == nil {
+			if adopted == "" {
+				adopted = name
+				continue
+			}
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return "", fmt.Errorf("trailconfig: remove unowned snapshot %s: %w", name, err)
+		}
+	}
+	if adopted != "" {
+		return adopted, nil
+	}
+
+	// A degraded manifest may list no snapshots while the old layout still
+	// holds the candidate's directory. Adopt it in place rather than storing a
+	// second physical copy; its recorded path keeps the legacy spelling.
+	legacy := filepath.Join(snapshotsDir, ref)
+	if err := verifySnapshot(legacy, ref); err == nil {
+		return ref, nil
+	}
+	return nextSnapshotDirName(snapshotsDir, retained), nil
+}
+
+// isSnapshotOrdinal reports whether a directory name is one this version
+// allocates for a snapshot. Legacy content-addressed names are not ordinals.
+func isSnapshotOrdinal(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// nextSnapshotDirName allocates the next ordinal directory name for a trail.
+// Names are short and platform-safe so a frozen path carried by a prompt stays
+// readable; ConfigRef remains the content identity and is recorded separately.
+func nextSnapshotDirName(snapshotsDir string, retained []Snapshot) string {
+	highest := 0
+	consider := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		ordinal, err := strconv.Atoi(name)
+		if err != nil || ordinal <= highest {
+			return
+		}
+		highest = ordinal
+	}
+	if entries, err := os.ReadDir(snapshotsDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				consider(entry.Name())
+			}
+		}
+	}
+	for _, snapshot := range retained {
+		consider(filepath.Base(filepath.FromSlash(strings.TrimSpace(snapshot.Path))))
+	}
+	return fmt.Sprintf("%04d", highest+1)
+}
+
+// retainedSnapshot returns the manifest entry for one retained content identity.
+func retainedSnapshot(manifest Manifest, ref string) (Snapshot, bool) {
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == ref {
+			return snapshot, true
+		}
+	}
+	return Snapshot{}, false
+}
+
+// snapshotDirFromManifest resolves the directory of one retained snapshot. The
+// manifest's recorded path wins, so a trail captured with the old
+// content-addressed layout keeps reading its own directory. A ref the manifest
+// does not list falls back to that legacy layout, which is also where a corrupt
+// or incomplete manifest leaves an otherwise readable snapshot.
+func snapshotDirFromManifest(colonyRoot, traceID string, manifest Manifest, ref string) (string, error) {
+	if snapshot, ok := retainedSnapshot(manifest, ref); ok {
+		return snapshotDirFromPath(colonyRoot, traceID, snapshot.Path, ref)
+	}
+	return filepath.Join(SnapshotDir(colonyRoot, traceID), ref), nil
+}
+
+// snapshotDirFromPath turns a manifest-relative snapshot location into a
+// directory, refusing anything outside the trail's snapshot root.
+func snapshotDirFromPath(colonyRoot, traceID, rel, ref string) (string, error) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return filepath.Join(SnapshotDir(colonyRoot, traceID), ref), nil
+	}
+	snapshotRoot := SnapshotDir(colonyRoot, traceID)
+	dir := filepath.Join(ConfigDir(colonyRoot, traceID), filepath.FromSlash(rel))
+	within, err := filepath.Rel(snapshotRoot, dir)
+	if err != nil || within == "." || within == ".." ||
+		filepath.IsAbs(within) || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("trailconfig: snapshot %s has an invalid location %q", ref, rel)
+	}
+	return dir, nil
+}
+
 // EnsureForRoot captures the initial binding for traceID from colonyRoot.
 //
 // It is intended for entry points that only have a colony root in hand. The
@@ -360,7 +509,12 @@ func captureInitialLocked(ctx colony.Context, traceID, dir string) (Manifest, er
 	if err != nil {
 		return Manifest{}, err
 	}
-	if err := materializeSnapshot(dir, ref, contents, inventory); err != nil {
+	snapshotsDir := filepath.Join(dir, SnapshotsDirName)
+	snapshotName, err := snapshotNameForCandidate(snapshotsDir, nil, ref)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err := materializeSnapshot(snapshotsDir, snapshotName, ref, contents, inventory); err != nil {
 		return Manifest{}, err
 	}
 
@@ -382,7 +536,7 @@ func captureInitialLocked(ctx colony.Context, traceID, dir string) (Manifest, er
 		Merge:                     resolved.Merge,
 		Snapshots: []Snapshot{{
 			ConfigRef: ref,
-			Path:      filepath.ToSlash(filepath.Join(SnapshotsDirName, ref)),
+			Path:      snapshotRelPath(snapshotName),
 			Source:    "colony",
 			CreatedAt: now,
 			Files:     len(contents),
@@ -542,18 +696,28 @@ func BindRef(ctx colony.Context, traceID, ref string, revision int) (colony.Cont
 	if err := validateConfigRef(ref); err != nil {
 		return ctx, err
 	}
+	manifest, loadErr := Load(ctx.ColonyRoot, traceID)
+	hasManifest := loadErr == nil
+	if loadErr != nil && !errors.Is(loadErr, ErrNoBinding) {
+		return ctx, loadErr
+	}
 	snapshotDir := filepath.Join(SnapshotDir(ctx.ColonyRoot, traceID), ref)
+	if hasManifest {
+		var dirErr error
+		snapshotDir, dirErr = snapshotDirFromManifest(ctx.ColonyRoot, traceID, manifest, ref)
+		if dirErr != nil {
+			return ctx, dirErr
+		}
+	}
 	inventory, err := loadVerifiedSnapshot(snapshotDir, ref)
 	if err != nil {
 		return ctx, err
 	}
 	workspaceRoot := strings.TrimSpace(ctx.WorkspaceRoot)
-	if manifest, loadErr := Load(ctx.ColonyRoot, traceID); loadErr == nil {
+	if hasManifest {
 		if trailRoot := strings.TrimSpace(manifest.WorkspaceRoot); trailRoot != "" {
 			workspaceRoot = trailRoot
 		}
-	} else if !errors.Is(loadErr, ErrNoBinding) {
-		return ctx, loadErr
 	}
 	if workspaceRoot == "" {
 		workspaceRoot = ctx.ColonyRoot
@@ -627,7 +791,17 @@ func VerifySnapshot(colonyRoot, traceID, ref string) error {
 	if err := validateConfigRef(ref); err != nil {
 		return err
 	}
+	manifest, err := Load(colonyRoot, traceID)
+	if err != nil && !errors.Is(err, ErrNoBinding) {
+		return err
+	}
 	snapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), ref)
+	if err == nil {
+		snapshotDir, err = snapshotDirFromManifest(colonyRoot, traceID, manifest, ref)
+		if err != nil {
+			return err
+		}
+	}
 	if _, err := loadVerifiedSnapshot(snapshotDir, ref); err != nil {
 		return err
 	}
@@ -1052,12 +1226,11 @@ func configRef(inventory Inventory) (string, error) {
 	return configRefPrefix + hex.EncodeToString(sum[:]), nil
 }
 
-func materializeSnapshot(configDir, ref string, contents []capturedFile, inventory Inventory) error {
-	snapshotsDir := filepath.Join(configDir, SnapshotsDirName)
+func materializeSnapshot(snapshotsDir, name, ref string, contents []capturedFile, inventory Inventory) error {
 	if err := os.MkdirAll(snapshotsDir, 0o755); err != nil {
 		return fmt.Errorf("trailconfig: mkdir snapshots: %w", err)
 	}
-	target := filepath.Join(snapshotsDir, ref)
+	target := filepath.Join(snapshotsDir, name)
 	if _, err := os.Stat(target); err == nil {
 		if verifyErr := verifySnapshot(target, ref); verifyErr != nil {
 			return verifyErr
@@ -1139,7 +1312,17 @@ func ReadSnapshot(colonyRoot, traceID, ref string) (Inventory, []FileContent, er
 	if err := validateConfigRef(ref); err != nil {
 		return Inventory{}, nil, err
 	}
+	manifest, err := Load(colonyRoot, traceID)
+	if err != nil && !errors.Is(err, ErrNoBinding) {
+		return Inventory{}, nil, err
+	}
 	snapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), ref)
+	if err == nil {
+		snapshotDir, err = snapshotDirFromManifest(colonyRoot, traceID, manifest, ref)
+		if err != nil {
+			return Inventory{}, nil, err
+		}
+	}
 	inventory, err := loadVerifiedSnapshot(snapshotDir, ref)
 	if err != nil {
 		return Inventory{}, nil, err

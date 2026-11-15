@@ -168,7 +168,7 @@ The export is a report, not the archive. The primary evidence stays under the tr
 ├── origin.json                      # which cue started the trail, if any
 ├── config/
 │   ├── manifest.json                # initial/active ConfigRef, revision, history
-│   └── snapshots/<ConfigRef>/       # the exact procedure the trail ran
+│   └── snapshots/<snapshot>/        # the exact procedure the trail ran (0001, 0002, ...)
 ├── <agentId>/
 │   ├── prompt.txt  system.txt       # what the Bee was told
 │   ├── request.json                 # model, profile, skills offered, task join

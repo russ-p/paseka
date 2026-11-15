@@ -39,7 +39,13 @@ func trialSnapshotTree(t *testing.T, repo string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(trailconfig.SnapshotDir(repo, "trace-target"), manifest.ActiveConfigRef, "tree")
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == manifest.ActiveConfigRef {
+			return filepath.Join(trailconfig.ConfigDir(repo, "trace-target"), filepath.FromSlash(snapshot.Path), "tree")
+		}
+	}
+	t.Fatalf("active snapshot %s is not retained", manifest.ActiveConfigRef)
+	return ""
 }
 
 func TestSkillsApproveTrialWritesOneConfigurationRevision(t *testing.T) {

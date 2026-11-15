@@ -134,7 +134,7 @@ func TestCreateMintsIndependentForkWithEvidenceAndReserve(t *testing.T) {
 	if bound.WorkspaceRoot != result.Worktree.Path {
 		t.Fatalf("bound workspace root = %q, want %q", bound.WorkspaceRoot, result.Worktree.Path)
 	}
-	snapshot := filepath.Join(root, ".paseka", "runs", plan.TraceID, "config", "snapshots", plan.ConfigRef, "tree", ".paseka", "colony.yaml")
+	snapshot := filepath.Join(forkSnapshotDir(t, root, plan.TraceID, plan.ConfigRef), "tree", ".paseka", "colony.yaml")
 	if _, err := os.Stat(snapshot); err != nil {
 		t.Fatalf("fork snapshot missing: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestForkRefusesUnsupportedSources(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.RemoveAll(filepath.Join(root, ".paseka", "runs", "trace-source", "config", "snapshots", manifest.ActiveConfigRef)); err != nil {
+		if err := os.RemoveAll(forkSnapshotDir(t, root, "trace-source", manifest.ActiveConfigRef)); err != nil {
 			t.Fatal(err)
 		}
 		_, err = trailfork.Preview(trailfork.Options{Context: ctx, SourceTraceID: "trace-source"})
@@ -612,6 +612,21 @@ func writeColonyFiles(t *testing.T, root string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func forkSnapshotDir(t *testing.T, root, traceID, ref string) string {
+	t.Helper()
+	manifest, err := trailconfig.Load(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, snapshot := range manifest.Snapshots {
+		if snapshot.ConfigRef == ref {
+			return filepath.Join(trailconfig.ConfigDir(root, traceID), filepath.FromSlash(snapshot.Path))
+		}
+	}
+	t.Fatalf("snapshot %s is not retained by %s", ref, traceID)
+	return ""
 }
 
 func testContext(root string) colony.Context {
@@ -770,7 +785,7 @@ func TestPatchDeltaProducesValidatedCandidateAndOwnEvidence(t *testing.T) {
 		t.Fatalf("binding snapshots = %+v", binding.Snapshots)
 	}
 
-	candidateTree := filepath.Join(trailconfig.SnapshotDir(root, created.TraceID), created.ConfigRef, trailconfig.SnapshotTreeDirName)
+	candidateTree := filepath.Join(forkSnapshotDir(t, root, created.TraceID, created.ConfigRef), trailconfig.SnapshotTreeDirName)
 	if data := readFile(t, candidateTree, ".paseka/prompts/builder.md"); data != "build it differently\n" {
 		t.Fatalf("candidate prompt = %q", data)
 	}
@@ -780,7 +795,7 @@ func TestPatchDeltaProducesValidatedCandidateAndOwnEvidence(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(candidateTree, ".paseka", "prompts", "obsolete.md")); !os.IsNotExist(err) {
 		t.Fatalf("deleted prompt survived in candidate: %v", err)
 	}
-	baseTree := filepath.Join(trailconfig.SnapshotDir(root, created.TraceID), sourceRef, trailconfig.SnapshotTreeDirName)
+	baseTree := filepath.Join(forkSnapshotDir(t, root, created.TraceID, sourceRef), trailconfig.SnapshotTreeDirName)
 	if data := readFile(t, baseTree, ".paseka/prompts/builder.md"); data != "build the thing\n" {
 		t.Fatalf("base prompt was rewritten = %q", data)
 	}
@@ -1103,7 +1118,7 @@ func sourceSnapshotTree(t *testing.T, root, traceID string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(trailconfig.SnapshotDir(root, traceID), manifest.ActiveConfigRef, trailconfig.SnapshotTreeDirName)
+	return filepath.Join(forkSnapshotDir(t, root, traceID, manifest.ActiveConfigRef), trailconfig.SnapshotTreeDirName)
 }
 
 func writePatchRecord(t *testing.T, root, traceID, agentID string, body []byte) {

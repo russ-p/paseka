@@ -36,7 +36,7 @@ func trialCandidateRoot(t *testing.T, root, traceID string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(trailconfig.SnapshotDir(root, traceID), manifest.ActiveConfigRef, "tree")
+	return filepath.Join(snapshotDirForTest(t, root, traceID, manifest.ActiveConfigRef), "tree")
 }
 
 func TestSkillTrialAddsBundleAndRoleSelectionInOneRevision(t *testing.T) {

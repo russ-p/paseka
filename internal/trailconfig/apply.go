@@ -220,7 +220,7 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 		)
 	}
 
-	candidate, err := prepareCandidate(opts, manifest.ActiveConfigRef)
+	candidate, err := prepareCandidate(opts, manifest)
 	if err != nil {
 		return ApplyResult{}, err
 	}
@@ -232,7 +232,10 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("trailconfig: load remaining tasks: %w", err)
 	}
-	baseSnapshotDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), manifest.ActiveConfigRef)
+	baseSnapshotDir, err := snapshotDirFromManifest(opts.Context.ColonyRoot, opts.TraceID, manifest, manifest.ActiveConfigRef)
+	if err != nil {
+		return ApplyResult{}, err
+	}
 	baseInventory, err := loadVerifiedSnapshot(baseSnapshotDir, manifest.ActiveConfigRef)
 	if err != nil {
 		return ApplyResult{}, err
@@ -302,21 +305,38 @@ func Apply(opts ApplyOptions) (ApplyResult, error) {
 		return result, nil
 	}
 
-	if candidate.contents != nil {
-		if err := materializeSnapshot(dir, candidate.ref, candidate.contents, candidate.inventory); err != nil {
+	snapshotsDir := filepath.Join(dir, SnapshotsDirName)
+	if _, retained := retainedSnapshot(manifest, candidate.ref); retained {
+		// A rollback reactivates content this trail already retains. Reuse its
+		// directory instead of storing a second copy under a new name.
+		snapshotDir, err := snapshotDirFromManifest(opts.Context.ColonyRoot, opts.TraceID, manifest, candidate.ref)
+		if err != nil {
 			return ApplyResult{}, err
 		}
+		if err := verifySnapshot(snapshotDir, candidate.ref); err != nil {
+			return ApplyResult{}, err
+		}
+	} else {
+		name, err := snapshotNameForCandidate(snapshotsDir, manifest.Snapshots, candidate.ref)
+		if err != nil {
+			return ApplyResult{}, err
+		}
+		if candidate.contents != nil {
+			if err := materializeSnapshot(snapshotsDir, name, candidate.ref, candidate.contents, candidate.inventory); err != nil {
+				return ApplyResult{}, err
+			}
+		}
+		if err := verifySnapshot(filepath.Join(snapshotsDir, name), candidate.ref); err != nil {
+			return ApplyResult{}, err
+		}
+		addSnapshot(&manifest, Snapshot{
+			ConfigRef: candidate.ref,
+			Path:      snapshotRelPath(name),
+			Source:    opts.Source,
+			CreatedAt: time.Now().UTC(),
+			Files:     len(candidate.inventory.Entries),
+		})
 	}
-	if err := verifySnapshot(filepath.Join(dir, SnapshotsDirName, candidate.ref), candidate.ref); err != nil {
-		return ApplyResult{}, err
-	}
-	addSnapshot(&manifest, Snapshot{
-		ConfigRef: candidate.ref,
-		Path:      filepath.ToSlash(filepath.Join(SnapshotsDirName, candidate.ref)),
-		Source:    opts.Source,
-		CreatedAt: time.Now().UTC(),
-		Files:     len(candidate.inventory.Entries),
-	})
 
 	change := newChange(opts, manifest, candidate.ref)
 	if len(blockers) > 0 {
@@ -382,7 +402,7 @@ func validateApplySource(opts ApplyOptions) error {
 	return nil
 }
 
-func prepareCandidate(opts ApplyOptions, activeRef string) (preparedCandidate, error) {
+func prepareCandidate(opts ApplyOptions, manifest Manifest) (preparedCandidate, error) {
 	switch opts.Source {
 	case SourceColony:
 		contents, resolved, err := capture(opts.Context)
@@ -400,7 +420,10 @@ func prepareCandidate(opts ApplyOptions, activeRef string) (preparedCandidate, e
 		}
 		return preparedCandidate{ref: ref, inventory: inventory, contents: contents, tree: tree, cleanup: cleanup}, nil
 	case SourceSnapshot:
-		snapshotPath := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), opts.SnapshotRef)
+		snapshotPath, err := snapshotDirFromManifest(opts.Context.ColonyRoot, opts.TraceID, manifest, opts.SnapshotRef)
+		if err != nil {
+			return preparedCandidate{}, err
+		}
 		inventory, err := loadVerifiedSnapshot(snapshotPath, opts.SnapshotRef)
 		if err != nil {
 			return preparedCandidate{}, err
@@ -411,11 +434,11 @@ func prepareCandidate(opts ApplyOptions, activeRef string) (preparedCandidate, e
 			tree:      filepath.Join(snapshotPath, SnapshotTreeDirName),
 		}, nil
 	case SourceOverrides:
-		return prepareCandidateFromActive(opts, activeRef, func(tree string, _ Inventory) error {
+		return prepareCandidateFromActive(opts, manifest, func(tree string, _ Inventory) error {
 			return applyOverrides(tree, opts.Overrides)
 		})
 	case SourceSkillTrial:
-		return prepareCandidateFromActive(opts, activeRef, func(tree string, inventory Inventory) error {
+		return prepareCandidateFromActive(opts, manifest, func(tree string, inventory Inventory) error {
 			return applySkillTrial(tree, inventory.Resolved.Profile, opts.SkillTrial)
 		})
 	default:
@@ -427,8 +450,12 @@ func prepareCandidate(opts ApplyOptions, activeRef string) (preparedCandidate, e
 // applies a tree mutation. The active snapshot stays immutable: the mutation
 // writes into a temporary materialization, which the caller records as a new
 // snapshot only after the whole candidate validates.
-func prepareCandidateFromActive(opts ApplyOptions, activeRef string, mutate func(tree string, inventory Inventory) error) (preparedCandidate, error) {
-	baseDir := filepath.Join(SnapshotDir(opts.Context.ColonyRoot, opts.TraceID), activeRef)
+func prepareCandidateFromActive(opts ApplyOptions, manifest Manifest, mutate func(tree string, inventory Inventory) error) (preparedCandidate, error) {
+	activeRef := manifest.ActiveConfigRef
+	baseDir, err := snapshotDirFromManifest(opts.Context.ColonyRoot, opts.TraceID, manifest, activeRef)
+	if err != nil {
+		return preparedCandidate{}, err
+	}
 	inventory, err := loadVerifiedSnapshot(baseDir, activeRef)
 	if err != nil {
 		return preparedCandidate{}, err
@@ -442,11 +469,12 @@ func prepareCandidateFromActive(opts ApplyOptions, activeRef string, mutate func
 		return preparedCandidate{}, fmt.Errorf("trailconfig: create candidate temp: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(tmpDir) }
-	if err := materializeSnapshot(tmpDir, activeRef, contents, inventory); err != nil {
+	snapshotsDir := filepath.Join(tmpDir, SnapshotsDirName)
+	if err := materializeSnapshot(snapshotsDir, "candidate", activeRef, contents, inventory); err != nil {
 		cleanup()
 		return preparedCandidate{}, err
 	}
-	tree := filepath.Join(tmpDir, SnapshotsDirName, activeRef, SnapshotTreeDirName)
+	tree := filepath.Join(snapshotsDir, "candidate", SnapshotTreeDirName)
 	if err := mutate(tree, inventory); err != nil {
 		cleanup()
 		return preparedCandidate{}, err
@@ -471,11 +499,12 @@ func materializeCandidateTree(ref string, contents []capturedFile, inventory Inv
 		return "", nil, fmt.Errorf("trailconfig: create candidate temp: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(tmpDir) }
-	if err := materializeSnapshot(tmpDir, ref, contents, inventory); err != nil {
+	snapshotsDir := filepath.Join(tmpDir, SnapshotsDirName)
+	if err := materializeSnapshot(snapshotsDir, "candidate", ref, contents, inventory); err != nil {
 		cleanup()
 		return "", nil, err
 	}
-	return filepath.Join(tmpDir, SnapshotsDirName, ref, SnapshotTreeDirName), cleanup, nil
+	return filepath.Join(snapshotsDir, "candidate", SnapshotTreeDirName), cleanup, nil
 }
 
 // ValidateRemaining checks that a candidate still satisfies every unstarted
@@ -810,7 +839,10 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 	if err != nil {
 		return Manifest{}, false, err
 	}
-	activeSnapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), manifest.ActiveConfigRef)
+	activeSnapshotDir, err := snapshotDirFromManifest(colonyRoot, traceID, manifest, manifest.ActiveConfigRef)
+	if err != nil {
+		return Manifest{}, false, err
+	}
 	if _, err := loadVerifiedSnapshot(activeSnapshotDir, manifest.ActiveConfigRef); err != nil {
 		return Manifest{}, false, err
 	}
@@ -818,7 +850,10 @@ func TryActivate(colonyRoot, traceID string, blockers []string) (Manifest, bool,
 	if err != nil {
 		return Manifest{}, false, fmt.Errorf("trailconfig: active configuration is unreadable: %w", err)
 	}
-	snapshotDir := filepath.Join(SnapshotDir(colonyRoot, traceID), change.NewConfigRef)
+	snapshotDir, err := snapshotDirFromManifest(colonyRoot, traceID, manifest, change.NewConfigRef)
+	if err != nil {
+		return Manifest{}, false, err
+	}
 	tree := filepath.Join(snapshotDir, SnapshotTreeDirName)
 	// The profile normally comes from the verified resolved view, but validation
 	// must still describe a candidate whose snapshot has lost a file, so the

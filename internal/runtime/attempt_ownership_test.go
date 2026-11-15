@@ -338,7 +338,7 @@ func activateNewTrailConfig(t *testing.T, root, traceID string) trailconfig.Mani
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldDir := filepath.Join(trailconfig.SnapshotDir(root, traceID), manifest.ActiveConfigRef)
+	oldDir := filepath.Join(trailconfig.ConfigDir(root, traceID), filepath.FromSlash(manifest.Snapshots[0].Path))
 	var inventory trailconfig.Inventory
 	data, err := os.ReadFile(filepath.Join(oldDir, trailconfig.InventoryFileName))
 	if err != nil {
@@ -370,7 +370,7 @@ func activateNewTrailConfig(t *testing.T, root, traceID string) trailconfig.Mani
 	}
 	refSum := sha256.Sum256(encoded)
 	ref := "sha256:" + hex.EncodeToString(refSum[:])
-	newDir := filepath.Join(trailconfig.SnapshotDir(root, traceID), ref)
+	newDir := filepath.Join(trailconfig.SnapshotDir(root, traceID), "0002")
 	if err := copyDir(oldDir, newDir); err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func activateNewTrailConfig(t *testing.T, root, traceID string) trailconfig.Mani
 	manifest.UpdatedAt = manifest.UpdatedAt.Add(1)
 	manifest.Snapshots = append(manifest.Snapshots, trailconfig.Snapshot{
 		ConfigRef: ref,
-		Path:      filepath.ToSlash(filepath.Join("snapshots", ref)),
+		Path:      "snapshots/0002",
 		Files:     len(inventory.Entries),
 	})
 	manifest.History = append(manifest.History, trailconfig.Revision{

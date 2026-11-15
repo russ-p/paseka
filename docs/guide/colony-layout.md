@@ -81,7 +81,9 @@ Version-controlled colony definition. Safe to commit; no secrets.
 │       ├── config/              # immutable trail configuration (runtime-owned)
 │       │   ├── manifest.json    # initial/active ConfigRef, revision, policy, history, pending action
 │       │   └── snapshots/
-│       │       └── <ConfigRef>/ # complete inputs, resolved settings, and inventory
+│       │       └── <snapshot>/  # complete inputs, resolved settings, and inventory
+│       │                        # names are short ordinals (0001, 0002); manifest.json
+│       │                        # maps each ConfigRef to its path
 │       └── fork-requests/       # pending and decided fork requests (not a trail)
 │           └── <requestId>.json
 └── worktrees/           # gitignored — isolated mutation workspaces
