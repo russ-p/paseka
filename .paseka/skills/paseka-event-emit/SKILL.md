@@ -1,12 +1,12 @@
 ---
 name: paseka-event-emit
-description: Publish one Paseka bus event and prove it landed. Use when a bee's prompt names a SIGNAL, INSIGHT, or VERIFICATION to publish — address the envelope from the run, choose live or deferred delivery, and run the command that shows the record accepted it.
+description: Publish one Paseka bus event and prove it landed. Use when a bee's prompt names a SIGNAL, INSIGHT, or VERIFICATION to publish — address the envelope from the run, pick live or deferred delivery by what the event is, and run the command that shows the record accepted it.
 metadata:
-    approved_at: "2026-11-14T07:13:17Z"
-    procedure_hash: 13578f72e5fcbf86016e028facf24e9f7590436b762ce11ceec64a48fd4f6aa2
+    approved_at: "2026-11-15T07:38:06Z"
+    procedure_hash: cb2b9430792ac306bba742fcd06bc88882d78abb35c81379f5da2711ccb74c36
     role: archivist
     source: proposal
-    trail: trace-01a1d62ac0c152e7
+    trail: trace-01a1da38673703e4
 ---
 
 # Publish a Paseka event
@@ -16,24 +16,33 @@ one event per decision, prove it landed, then write the summary.
 
 The procedure travels: it names no role and no documentation path, so the same
 file serves a bee in any colony. What differs between colonies is which kinds a
-bee may publish, and that comes from the bee, not from here.
+bee publishes, and that comes from the bee's prompt, not from here.
 
 ## Which kind, and who decides
 
-The bee's prompt names the events its run must publish, and its configuration
-(`.paseka/bees/<role>.yaml` → `publishes`) declares what it may publish at all.
-Those two are the authority. This skill decides nothing about policy; it is the
-mechanics that get the chosen event recorded.
+The bee's prompt names the events its run must publish, and — when the role
+declares one — its completion contract fails the run when a required event is
+missing. Those two are the authority.
+
+A role's `publishes` list is **advisory**. It decides what the runtime
+auto-publishes on the run's behalf (a `MUTATION` proposal, a synthesized
+`run.summary`) and which undeclared domain kind raises a warning. It does not
+refuse a kind the prompt names, and a role that declares nothing still publishes
+what its prompt requires. Read it to know what will be published *for* you, never
+to decide whether you may publish what the prompt named. When the two disagree,
+the prompt wins, and the disagreement is a note for the Beekeeper — not a reason
+to drop the event.
 
 `references/` covers the shared platform kinds a bee usually publishes. Open
 only the file for the kind you are about to publish:
 
 | Kind | Reference |
 | --- | --- |
-| `context.note`, `run.summary`, `review.note`, `trace.title`, `trace.summary`, `worktree.branch`, `pr.body` | `references/insight.md` |
+| `context.note`, `run.summary` | `references/insight-run.md` |
+| `trace.title`, `trace.summary`, `worktree.branch`, `pr.body` | `references/insight-trail.md` |
 | `task.plan` | `references/task-plan.md` |
 | `task.ready` | `references/task-ready.md` |
-| `verification.success`, `verification.failed` | `references/verification.md` |
+| `verification.success`, `verification.failed`, `review.note` | `references/verification.md` |
 | `task.completed` | `references/task-completed.md` |
 | `skill.proposed` | `references/skill-proposed.md` |
 
@@ -63,8 +72,10 @@ SKILL_DIR=…          # the directory holding this SKILL.md
 ```
 
 `SKILL_DIR` is the path the run's skill advertisement printed for this file,
-minus `/SKILL.md`. Every `references/…` and `scripts/…` path below is relative
-to it.
+minus `/SKILL.md`, or the `dir:` line that `paseka skills load` printed. Every
+`references/…` and `scripts/…` path below is relative to it. That advertisement
+is the route to this procedure; a client's own skill tool is not guaranteed to
+resolve a colony skill, so read the advertised path when it cannot.
 
 The same three ids are what the prompt header already prints. Fill `TRACE` and
 `AGENT` from it before running anything below.
@@ -93,6 +104,12 @@ paseka -C "$ROOT" event validate --stdin <<EOF
 EOF
 ```
 
+`event validate --stdin` reads the **whole envelope**. `scripts/emit.sh` reads
+the **payload only** and validates the envelope it builds. Piping a payload-only
+object into `validate` fails on the missing envelope fields; that is a
+copy-paste, not a payload defect — either wrap it in the envelope or let
+`emit.sh` do both.
+
 `scripts/emit.sh` does both, builds the envelope, and prints proof:
 
 ```bash
@@ -106,11 +123,27 @@ else is added by hand.
 
 ## 3. Live or deferred
 
+The choice follows what the event *is*, not which bee publishes it. The same
+kind takes the same mode in every run of a colony.
+
 | Use `--defer` | Use live |
 | --- | --- |
-| A handoff consumed after this run succeeds: `task.plan`, `context.note`, `skill.proposed`, explicit `artifact.written` | Something must react before this run ends: `session.invite`, energy, `system.kill` |
-| The event is a record, not a trigger | The event is a trigger, not a record |
+| A record the trail reads after this run succeeds: `context.note`, `run.summary`, `trace.summary`, `pr.body`, `worktree.branch`, `task.plan`, `task.ready` (when the kick belongs after exit), `skill.proposed`, explicit `artifact.written` | A gate decision, or a fact already true however this run exits: `verification.success`, `verification.failed`, `task.completed`, `review.note` beside a live gate |
+| The event is a record, not a trigger | The event is a trigger or a commit record, not prose |
 | Runtime flushes FIFO on successful exit; a failed or cancelled run leaves it queued | Published immediately, even if the run later fails |
+
+Why the two live exceptions:
+
+- `task.completed` records a commit that already exists. A run that fails after
+  the commit must not take the commit record with it, so do not queue it behind
+  the run's exit.
+- `verification.*` is the review's outcome: the rework or approval is dispatched
+  as part of this run, and a decision left queued looks like an unanswered
+  review.
+
+The merge copy is the other way round: `trace.summary` and `pr.body` say the
+trail is ready, so a run that fails after publishing them must not leave that
+claim behind. Defer them.
 
 Live-only platform kinds refuse `--defer` with `defer_denied`: `system.kill`,
 the `energy.*` family, `cue.ingress`, `session.invite`, `beekeeper.ready`, and
@@ -126,6 +159,16 @@ A trail-level run with no run directory publishes live.
 | deferred | `paseka -C "$ROOT" event pending --trace "$TRACE" --agent "$AGENT"` | `{"ok":true,…,"count":1,"kinds":["context.note"]}` |
 | live | `jq -r 'select(.payload.kind=="context.note")|.createdAt' "$ROOT/.paseka/runs/$TRACE/$AGENT/events.ndjson" \| tail -1` | a timestamp, not empty |
 | live, bus up | `paseka -C "$ROOT" verify "$TRACE"` | the event in both record and stream |
+
+A deferred emit's `ok:true` proves the event is **queued**, not delivered. The
+flush is proven after the run exits, by the kind appearing in the trail record:
+
+```bash
+jq -r 'select(.payload.kind=="context.note")|.createdAt' \
+  "$ROOT/.paseka/runs/$TRACE/trail-events.ndjson" | tail -1
+```
+
+Say "queued for flush" — never "broadcast" — until that line shows a timestamp.
 
 `ok:true` without `subject` means the event was recorded locally and never
 broadcast: the colony is still correct and the bus was down. Say that; never

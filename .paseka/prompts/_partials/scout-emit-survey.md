@@ -10,4 +10,4 @@ unless the findings are ready to queue as builder slices.
 | `review.note` | A finding carrying a `severity` |
 | `task.plan` | Optional builder slices, queue-ready findings only |
 
-Payloads and severities: skill `paseka-event-emit` → `references/insight.md`.
+Payloads and severities: skill `paseka-event-emit` — its index names the reference for each kind.

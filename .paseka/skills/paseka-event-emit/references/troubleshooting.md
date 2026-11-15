@@ -3,6 +3,7 @@
 | `error` | Cause | Fix |
 | --- | --- | --- |
 | `schema_validation_failed` + `details[].path` | A field is missing or outside its vocabulary | Fix that exact path: `task.completed` needs `status`; `review.note.severity` is a closed set; `skill.proposed` needs all five fields |
+| `schema_validation_failed` naming `traceId`, `agentId`, or `type` | A payload-only object was piped into `event validate`, which reads the whole envelope | Either wrap it in the envelope or pipe the payload to `scripts/emit.sh`, which builds and validates one |
 | `invalid_json` | stdin was not exactly one JSON object | Pipe one object, no trailing prose, no comments |
 | `defer_denied` | The kind is live-only | Drop `--defer` |
 | `run_required` | Deferred emit with no resolvable colony root | Pass `-C "$PASEKA_COLONY_ROOT"` |

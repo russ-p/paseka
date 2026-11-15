@@ -19,4 +19,4 @@ EOF
 Without the spec file on disk **and** this event, breakdown must not start.
 
 Optional: one `INSIGHT/context.note` for a fact the breakdown needs — payload and
-delivery in the skill `paseka-event-emit` → `references/insight.md`.
+delivery in the skill `paseka-event-emit` → `references/insight-run.md`.

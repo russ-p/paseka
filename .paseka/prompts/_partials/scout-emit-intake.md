@@ -45,4 +45,4 @@ already has the title and body from the plan.
 
 `trace.title` names the trail in the Console; `worktree.branch` chooses the
 branch for isolated work (`feature/<slug>` for a plan, `fix/<slug>` for a
-triage). Payloads: skill `paseka-event-emit` → `references/insight.md`.
+triage). Payloads: skill `paseka-event-emit` → `references/insight-trail.md`.

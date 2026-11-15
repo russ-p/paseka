@@ -54,4 +54,4 @@ If the plan was approved without "start now", publish the plan and stop.
 ### Trail identity
 
 `trace.title` names the trail; `worktree.branch` chooses the branch for isolated
-builder work. Payloads: skill `paseka-event-emit` → `references/insight.md`.
+builder work. Payloads: skill `paseka-event-emit` → `references/insight-trail.md`.

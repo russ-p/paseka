@@ -8,6 +8,11 @@ platform catalog lists only `taskId`: validation refuses the payload without it
 Publishing `verification.success` or `verification.failed` here is wrong: those
 are review decisions and re-trigger the review. One gate owns each kind.
 
+Publish it **live**. The commit already exists in the worktree, so the record
+must not depend on this run's exit status: a run that commits and then fails
+still leaves a commit, and a deferred event would be left queued with it. Do not
+wrap it in `--defer`.
+
 `ROOT`, `TRACE`, `AGENT`, and `SKILL_DIR` are defined in `SKILL.md` § *The three
 values every emit needs*. Take the SHA from the worktree that holds the commit;
 publish from the colony root.

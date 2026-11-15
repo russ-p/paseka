@@ -1,4 +1,4 @@
-# `verification.success` / `verification.failed` — the gate decision
+# The review's output — `verification.success`, `verification.failed`, `review.note`
 
 One decision per reviewed task, carrying `taskId`. On success the task leaves
 `waiting_review`; on failure it returns to `ready` for rework. This is what
@@ -38,6 +38,21 @@ jq -r 'select(.payload.kind|test("^verification\\."))|[.payload.kind,(.payload.t
       1	verification.success	007-build-output-root-guard
 ```
 
-A review note is not a decision: publish it in addition, never instead (see
-`insight.md`). `task.completed` is the other gate's kind — see
-`task-completed.md`.
+## `review.note` — the observation beside the decision
+
+A review note is not a decision: publish it in addition to the `VERIFICATION`,
+never instead of one. Publish it live in the same run, so the note and the
+decision it qualifies land together.
+
+`severity` is optional and closed: `info`, `low`, `medium`, `high`, `critical`.
+It is trimmed and lowercased, so `" Medium "` is stored as `medium`. A value
+outside the set fails emit with `payload.severity: must be one of …`.
+
+```bash
+printf '%s' '{"kind":"review.note","taskId":"001-mount-console-at-root","severity":"info","summary":"fallback.html still says Queen Console Next; a later slice owns that copy change"}' \
+| sh "$SKILL_DIR/scripts/emit.sh" --root "$ROOT" --trace "$TRACE" --agent "$AGENT" \
+    --type INSIGHT
+```
+
+`task.completed` is the other gate's kind — see `task-completed.md`. Run memory
+and trail metadata are in `insight-run.md` and `insight-trail.md`.
