@@ -53,6 +53,27 @@ else
 fi
 say "golangci-lint clean"
 
+# Architecture limits are advisory for now (spec-in-waiting: refactoring is a
+# separate effort). The thresholds live in .golangci.yml; this pass reports the
+# existing complexity debt without failing the gate, which is why the exit code
+# for issues is 0 — a real tool or config failure still returns non-zero and
+# still stops the run.
+# --enable-only replaces the linters.enable section, so the blocking linters do
+# not run twice, while their settings stay untouched.
+# --uniq-by-line=false is required: cyclop, gocognit, funlen and maintidx all
+# report on the function declaration line, so the default dedup would hide a
+# function's other violations behind whichever linter happened to report first.
+if [ -f "$lint_config" ]; then
+	golangci-lint run --timeout 10m --config "$lint_config" \
+		--enable-only cyclop,gocognit,funlen,maintidx,interfacebloat \
+		--uniq-by-line=false --issues-exit-code 0 || exit 1
+else
+	golangci-lint run --timeout 10m \
+		--enable-only cyclop,gocognit,funlen,maintidx,interfacebloat \
+		--uniq-by-line=false --issues-exit-code 0 || exit 1
+fi
+say "golangci-lint architecture limits reported (advisory, non-blocking)"
+
 go build ./... || exit 1
 say "go build clean"
 

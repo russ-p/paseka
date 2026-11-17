@@ -58,6 +58,15 @@ Format the repository's Go files rather than running `gofmt -w .`: the root hold
 
 Config: [`.golangci.yml`](.golangci.yml) (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`). Fix compilation errors from `go build` and issues reported by `golangci-lint`.
 
+The same file also carries architecture limits — `cyclop` (10), `gocognit` (15), `funlen` (60 lines / 40 statements), `maintidx` (20) and `interfacebloat` (10) — but those linters are not in `enable`. They run as a **warn-only** pass, so existing complexity debt does not fail the build while it is paid down:
+
+```bash
+golangci-lint run --enable-only cyclop,gocognit,funlen,maintidx,interfacebloat \
+  --uniq-by-line=false --issues-exit-code 0
+```
+
+`--uniq-by-line=false` matters: all five linters report on the function declaration line, so the default dedup hides a function's other violations. The limits skip `_test.go` via a `linters.exclusions.rules` entry in `.golangci.yml` — table-driven tests are legitimately long and branchy; delete that rule if you want them measured too. New code should stay inside the limits; as hotspots are refactored, tighten the thresholds and eventually move the linters into `enable`.
+
 The AFK builder's runtime gate ([`.paseka/bees/builder.yaml`](.paseka/bees/builder.yaml) → [`scripts/checks.sh`](scripts/checks.sh)) runs the same checks after every run — formatting, lint, module build, module tests, plus the console checks when the diff touches `web/`. When these commands change, update that script; it is the single source both this section and the gate read.
 
 ## After frontend changes

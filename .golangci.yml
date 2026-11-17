@@ -1,4 +1,12 @@
 # Practical minimum: bug-finding linters, no style bikeshedding.
+#
+# Architecture limits (cyclop, gocognit, funlen, maintidx, interfacebloat) are
+# configured here but deliberately kept out of `enable`: `golangci-lint run` and
+# the AFK gate must fail only on real defects. `scripts/checks.sh` runs them in a
+# separate warn-only pass (`--enable-only ... --issues-exit-code 0`), so the
+# current complexity debt is visible without blocking work. Paying that debt
+# down is a separate effort: as numbers drop, tighten the thresholds here and,
+# once the tree is clean, move the linters into `enable`.
 version: "2"
 
 linters:
@@ -13,8 +21,56 @@ linters:
     govet:
       disable:
         - inline
+
+    # --- Architecture limits -------------------------------------------------
+    # Thresholds follow the wider Go/static-analysis community rather than the
+    # golangci-lint defaults, which are lenient enough to catch only the
+    # pathological.
+
+    # Cyclomatic complexity (McCabe). 10 is the classic limit and the value
+    # `cyclop` was designed around; the linter default of 30 is a ceiling, not a
+    # target.
+    cyclop:
+      max-complexity: 10
+
+    # Cognitive complexity, which penalises nesting and non-linear flow that
+    # cyclomatic complexity counts as cheap. 15 is the SonarSource default.
+    gocognit:
+      min-complexity: 15
+
+    # Function length. 60 lines / 40 statements are the linter defaults and the
+    # usual community pick: long enough for a switch-heavy mapping function,
+    # short enough to read on one screen.
+    funlen:
+      lines: 60
+      statements: 40
+
+    # Maintainability index per function; below 20 is "hard to maintain".
+    maintidx:
+      under: 20
+
+    # Method count per interface. Past 10 methods an interface almost always
+    # serves several roles and forces implementations to depend on more than
+    # they use (interface segregation).
+    interfacebloat:
+      max: 10
+
   exclusions:
     generated: lax
+    rules:
+      # Complexity limits target shipped code. Table-driven tests legitimately
+      # grow long and branchy, and their debt is a different axis (fixtures,
+      # naming, assertions), so the architecture linters skip _test.go. The
+      # linters are listed explicitly: an exclusion rule without them would also
+      # stop errcheck/govet from looking at test files. Delete this rule to see
+      # test complexity in the advisory report.
+      - path: _test\.go
+        linters:
+          - cyclop
+          - gocognit
+          - funlen
+          - maintidx
+          - interfacebloat
     presets:
       - comments
       - common-false-positives
