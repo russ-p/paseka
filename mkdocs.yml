@@ -86,6 +86,7 @@ nav:
       - Forage Cues: guide/cues.md
       - Colony skills: guide/skills.md
       - Self-improving colonies in practice: guide/self-improving-colonies.md
+      - "Use cases: the reference colony": guide/use-cases.md
       - Telegram gateway: guide/telegram-gateway.md
       - Nuc packs: guide/nuc.md
       - Homelab deployment: guide/homelab-deployment.md

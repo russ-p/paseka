@@ -33,6 +33,7 @@ Follow the shortest path from the model to a running colony:
 | [Forage Cues](guide/cues.md) | Named ingress shortcuts (`.paseka/cues/`); optional Standing Trail identity; CLI, Console, Telegram; timers/webhooks call `cue run` |
 | [Colony skills](guide/skills.md) | Agent Skills store (`.paseka/skills/`): layout, `SKILL.md` rules, references, budgets, and the `paseka skills` command group |
 | [Self-improving colonies in practice](guide/self-improving-colonies.md) | The applied loop: notice a trail, understand it, probe a change in a fork, and promote or refuse it |
+| [Use cases: the reference colony](guide/use-cases.md) | Four worked flows from this repo's own colony: hotfix cycle, full feature (grilling, breakdown, closing), the refactor Standing Trail, and skill proposals |
 | [Telegram gateway](guide/telegram-gateway.md) | Setup and run `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Export/import portable bee + prompt packs |
 | [Homelab deployment](guide/homelab-deployment.md) | Server/apiary container, Queen Console, reuse NATS |

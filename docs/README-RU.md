@@ -33,6 +33,7 @@
 | [Forage Cues](guide/cues.md) | Именованные точки входа (`.paseka/cues/`); опциональная Standing Trail; CLI, Console, Telegram; таймеры/webhook вызывают `cue run` |
 | [Colony skills](guide/skills.md) | Хранилище Agent Skills (`.paseka/skills/`): раскладка, правила `SKILL.md`, ссылки, бюджеты, группа команд `paseka skills` |
 | [Self-improving colonies in practice](guide/self-improving-colonies.md) | Прикладной цикл: заметить trail, разобраться, проверить изменение в fork, принять или отклонить |
+| [Use cases: the reference colony](guide/use-cases.md) (EN) | Четыре сквозных сценария из колонии этого же репозитория: hotfix-цикл, полная фича (grilling, breakdown, closing), Standing Trail рефакторинга и предложение skills |
 | [Telegram gateway](guide/telegram-gateway.md) | Настройка и запуск `paseka gate telegram` |
 | [Nuc packs](guide/nuc.md) | Переносимые пакеты bees + prompts |
 | [Homelab deployment](guide/homelab-deployment.md) | Сервер/apiary в контейнере, Queen Console, внешний NATS |

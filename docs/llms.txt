@@ -25,6 +25,7 @@ Colony work lives in a git repo under `.paseka/`. Machine secrets stay in `~/.co
 
 - [Principles](https://russ-p.github.io/paseka/idea/principles/): choreography model overview
 - [Self-improving colonies in practice](https://russ-p.github.io/paseka/guide/self-improving-colonies/): metrics, analysis, skill proposals, fork probes, and the promote-or-refuse loop
+- [Use cases: the reference colony](https://russ-p.github.io/paseka/guide/use-cases/): four worked flows from this repo's own colony — hotfix cycle, full feature, refactor Standing Trail, skill proposals
 - [Glossary](https://russ-p.github.io/paseka/idea/glossary/): bee-language vocabulary
 - [CLI](https://russ-p.github.io/paseka/guide/cli/): dispatch, status, export, kill, invites, event emit, troubleshooting
 - [Queen Console](https://russ-p.github.io/paseka/guide/queen-console/): operator UI, reviews, sessions, topology, system, Git
