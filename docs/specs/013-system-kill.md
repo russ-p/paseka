@@ -77,4 +77,4 @@ Publish `SIGNAL/system.kill` for a `traceId`. The reactor marks the trace killed
 ## Further Notes
 
 - Complements honey: honey = soft stop (block next dispatch); kill = hard stop (cancel in-flight + gate)
-- See [Backlog](../plans/backlog.md) § New trace from interrupted worktree for continuing good work after kill
+- See [Backlog — New trace from interrupted worktree](../plans/backlog.md#new-trace-from-interrupted-worktree) for continuing good work after kill

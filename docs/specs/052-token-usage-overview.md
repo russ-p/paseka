@@ -145,7 +145,7 @@ The report is an observation over **retained** records: it says which days it ca
 ### 8. Naming
 
 1. The surface is called **Usage**, matching `paseka inspect usage` and the protocol's `usage` object. It is not called "billing", "spend", or "cost": those name money, and this report is token volume with an optional recorded cost.
-2. Honey is not part of this report. Honey is a separate reserve with its own ledger semantics ([043b](043b-trail-metrics-and-work-completion.md), [044b](044b-standing-supersession-and-energy-observations.md)); relating the two is a separate design ([Backlog](../plans/backlog.md)).
+2. Honey is not part of this report. Honey is a separate reserve with its own ledger semantics ([043b](043b-trail-metrics-and-work-completion.md), [044b](044b-standing-supersession-and-energy-observations.md)); relating the two is a separate design ([Ideas](../plans/backlog-ideas.md)).
 
 ## Testing Decisions
 
@@ -165,7 +165,7 @@ Prior art: run and trace-scan projection tests, `inspect usage` and `inspect met
 ## Out of Scope
 
 - **Price tables, rate cards, currency conversion, cost estimates.** Token counts are recorded; recorded provider cost is shown where it exists and nowhere invented.
-- **Honey spending and the honey↔token relation.** A separate ledger and a separate design ([Backlog](../plans/backlog.md), *Honey ↔ LLM token billing*).
+- **Honey spending and the honey↔token relation.** A separate ledger and a separate design ([Ideas](../plans/backlog-ideas.md), *Honey ↔ LLM token billing*).
 - **Billing, quotas, budgets, and alerts.** This is an observation, not an enforcement surface.
 - **Live per-token telemetry.** Usage arrives at the end of an execution; the page is history with an explicit refresh.
 - **Filling the Cursor HITL gap.** Cursor interactive sessions still report no usage; the page counts them as unmeasured ([Backlog](../plans/backlog.md), *Interactive session usage (Cursor)*).

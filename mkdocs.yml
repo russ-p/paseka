@@ -105,4 +105,6 @@ nav:
       - Changelog: plans/changelog.md
       - Specs index: plans/specs-index.md
       - Backlog: plans/backlog.md
+      - Backlog ideas: plans/backlog-ideas.md
+      - Backlog bugs: plans/backlog-bugs.md
       - UI migration backlog: plans/ui-migration-backlog.md

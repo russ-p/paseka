@@ -17,7 +17,7 @@ Paseka is a local, event-driven runtime for AI coding agents (bees) that work in
 ## Budget and stability
 
 - Each trace has a shared **honey reserve** (`energyToken`). Every adapter dispatch consumes energy so runaway LLM loops burn out instead of looping forever.
-- **`system.kill`** hard-stops a trace (cancel in-flight AFK, block further dispatch). Confidence filtering remains a backlog follow-up — see [Backlog](../plans/backlog.md).
+- **`system.kill`** hard-stops a trace (cancel in-flight AFK, block further dispatch). Confidence filtering remains a deferred idea — see [Ideas](../plans/backlog-ideas.md#confidence-pollen-quality).
 
 ## Human in the loop
 

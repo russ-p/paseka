@@ -63,7 +63,9 @@
 | -------- | -------- |
 | [Changelog](plans/changelog.md) | Сделанное: ссылки на specs и канонические docs |
 | [Specs index](plans/specs-index.md) | Краткая карта `docs/specs/` (тела только в репо) |
-| [Backlog](plans/backlog.md) | Отложенная работа и допущения реализации |
+| [Backlog](plans/backlog.md) | Отложенные доработки и допущения реализации |
+| [Ideas backlog](plans/backlog-ideas.md) | Отложенные продуктовые и платформенные идеи |
+| [Bugs backlog](plans/backlog-bugs.md) | Отложенные известные дефекты |
 | [UI migration backlog](plans/ui-migration-backlog.md) | Отложенные решения по редизайну консоли: битые ссылки, непереходы, неготовые разделы |
 
 Английский индекс: [README.md](README.md).

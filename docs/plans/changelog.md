@@ -77,7 +77,7 @@ A trail that failed an attempt and then completed the same task still read `fail
 - Spec: [050-trail-attention-state](../specs/050-trail-attention-state.md)
 - Canonical: [Queen Console](../guide/queen-console.md), [Console design system](../architecture/queen-console-design-system.md), [Telegram gateway](../guide/telegram-gateway.md), [Specs index](specs-index.md)
 
-Not in this ship: there is no migration, backfill, or new endpoint — the projection is computed on read in the walk that already visits the run directories. The closing/merge stage is unchanged, `paseka status` attention stays task-based, and a resolved failure is never resurfaced as a notification; that policy remains an operator decision, recorded in [Backlog](backlog.md).
+Not in this ship: there is no migration, backfill, or new endpoint — the projection is computed on read in the walk that already visits the run directories. The closing/merge stage is unchanged, `paseka status` attention stays task-based, and a resolved failure is never resurfaced as a notification; that policy remains an operator decision, recorded in [Ideas](backlog-ideas.md#resurfacing-a-resolved-failure-as-a-notification-is-an-operator-decision).
 
 ## 2026-11 — The colony owns its procedures, and one rule set says what a skill is
 
@@ -322,7 +322,7 @@ A Flight Trail's history used to be assembled from one file per Bee run, and onl
 - Spec: [040-trail-event-log](../specs/040-trail-event-log.md)
 - Canonical: [Architecture overview](../architecture/overview.md), [event contracts](../reference/event-contracts.md), [colony layout](../guide/colony-layout.md), [CLI](../guide/cli.md)
 
-Deferred from that work: the duplicate `trace.summary` still cannot be explained, and a trail-list index that would carry last activity and event count instead of walking every trail — see [Backlog](backlog.md).
+Deferred from that work: the duplicate `trace.summary` still cannot be explained, and a trail-list index that would carry last activity and event count instead of walking every trail — see [Bugs](backlog-bugs.md#two-tracesummary-events-for-one-trail-step) and [Backlog](backlog.md#an-index-over-trail-summaries-so-a-page-costs-a-page).
 
 ## 2026-10 — A run records the model it answered on
 
@@ -485,7 +485,7 @@ Isolated final-gate approve can **publish a pull request** instead of merging in
 - Spec: [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
 - Canonical: [Pull-request delivery](../guide/pull-request-delivery.md), [Colony layout](../guide/colony-layout.md), [Queen Console](../guide/queen-console.md), [CLI](../guide/cli.md) (`paseka proposal approve`), [INSIGHT kinds](../reference/insight-kinds.md) (`pr.body`)
 
-Deferred from that work: per-cue delivery, auto-detect forge, a dedicated `pr_open` task status — see [Backlog](backlog.md).
+Deferred from that work: per-cue delivery, auto-detect forge, a dedicated `pr_open` task status — see [Backlog](backlog.md#per-cue-delivery) and [Ideas](backlog-ideas.md#auto-detect-forge-from-origin).
 
 ## 2026-09 — Config profiles
 

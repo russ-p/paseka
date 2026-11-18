@@ -41,7 +41,7 @@ Order for readers: **idea → guide → reference → architecture → plans**.
 | `docs/architecture/` | Contributors | Runtime internals and package map. |
 | `docs/plans/changelog.md` | Humans | Shipped features; link to specs in repo + canonical docs. |
 | `docs/plans/specs-index.md` | Humans | Short status table for `docs/specs/` (bodies stay in git only). |
-| `docs/plans/backlog.md` | Humans + agents | Deferred ideas only (not shipped notes). |
+| `docs/plans/backlog.md` (+ `backlog-ideas.md`, `backlog-bugs.md`) | Humans + agents | Deferred work by kind — follow-ups and assumptions, ideas, bugs (not shipped notes). |
 | `docs/specs/` | Humans + agents | Feature specs; **excluded from MkDocs**; do not list full bodies in indexes. |
 | `AGENTS.md` | Coding agents | Minimal: what the project is, build/run, hard restrictions, links to key docs. |
 

@@ -49,7 +49,7 @@ Optional bullets for multi-surface changes (CLI, Console, protocol):
 2. **Body** — what an operator/Beekeeper gained or must change; skip internal file paths and package tours.
 3. **Spec** — required when the ship came from a `docs/specs/` design; omit only for small cross-cutting renames with no dedicated spec.
 4. **Canonical** — links to the durable guide/reference/architecture docs that now describe the behavior (create/update those in the same change per documentation skill). Prefer links over restating the full design.
-5. **Deferred leftovers** — one line pointing at [Backlog](backlog.md), not a second backlog dump:
+5. **Deferred leftovers** — one line pointing at the backlog file that holds them ([Backlog](backlog.md) for follow-ups, [Ideas](backlog-ideas.md), [Bugs](backlog-bugs.md)), not a second backlog dump:
 
    ```markdown
    Deferred from that work: … — see [Backlog](backlog.md).

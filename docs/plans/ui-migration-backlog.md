@@ -1,6 +1,6 @@
 # UI Migration Backlog
 
-Deferred UI decisions for the Queen Console redesign ([spec 035](../specs/035-queen-console-redesign.md)) — the dead ends, unbuilt transitions, and placeheld sections to return to from the console at `/`. Product and platform ideas belong in [Backlog](backlog.md); shipped work in [Changelog](changelog.md).
+Deferred UI decisions for the Queen Console redesign ([spec 035](../specs/035-queen-console-redesign.md)) — the dead ends, unbuilt transitions, and placeheld sections to return to from the console at `/`. Product and platform ideas belong in [Ideas](backlog-ideas.md); other deferred work in [Backlog](backlog.md); shipped work in [Changelog](changelog.md).
 
 Each item carries a **Kind**, a **Source**, what is pending, why it was set aside, and when to pick it up. Strike an item when the decision lands, not when it is discussed — a stale entry is worse than none. An item whose decision has landed but whose work has not goes to **Decided, not yet built**, which trades *what is pending* for the decision and what it was chosen over.
 
@@ -11,7 +11,7 @@ Entries below were taken one at a time and settled; the work has not landed, so 
 The section is empty: every entry taken in this pass has shipped and moved to
 [Changelog](changelog.md). What is left of the redesign's unfinished work is in
 [Transitions](#transitions) and [Polish on landed routes](#polish-on-landed-routes)
-below, and anything still only an idea is in [Backlog](backlog.md).
+below, and anything still only an idea is in [Ideas](backlog-ideas.md).
 
 ## Dead ends
 

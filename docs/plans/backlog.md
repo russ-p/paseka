@@ -1,26 +1,16 @@
 # Backlog
 
-Deferred ideas, follow-ups, bugs, and implementation assumptions outside the active change.
+Deferred follow-ups of shipped work and durable caveats that are useful soon but not part
+of the active change. New ideas live in [Ideas](backlog-ideas.md) and deferred bugs in
+[Bugs](backlog-bugs.md) — the `Kind` field decides the file.
 Shipped work: [Changelog](changelog.md). Design drafts: [Specs index](specs-index.md).
 Console redesign navigation debt lives in [UI migration backlog](ui-migration-backlog.md) — dead links, unbuilt transitions, and placeheld sections.
 
 ## Deferred work
 
-### Trail export and replay
-
-Found by auditing a shipped trail (`paseka export trace-01a10d602db8d6f6`, cross-checked against `paseka replay`). The trail's own record now answers "what happened" in full; what is left here is the reading ergonomics and one unverified anomaly from the same audit.
-
-#### Two `trace.summary` events for one trail step
-
-- **Kind:** bug
-- **Source:** trail analysis (`trace-01a10d602db8d6f6`)
-- **Summary:** JetStream held bus sequence 10 and 11 as consecutive `INSIGHT/trace.summary` with the same synthetic agent id `agent-<traceId>`, between `task.ready` and `task.status` — a summary that looks hand-published twice, since no Go code in the tree mints that agent id. `paseka verify <traceId>` now settles whether the two are one event seen twice or two events, by identity; it cannot yet compare their payloads, which is what "duplicate" actually turns on.
-- **Why deferred:** Unverified and harmless on its own: `runs.ResolveTraceSummary` takes the last non-empty summary, so a duplicate changes nothing downstream.
-- **Revisit when:** A trail shows a summary that disagrees with what actually happened, or trail tooling needs to diff two bus payloads rather than match them.
-
 ### Trail metrics and provenance
 
-Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The runtime records and the CLI projects; what is left is a Console surface and one recovery case in the analysis admission ledger.
+Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The runtime records and the CLI projects; what is left here is the Console surface. The analysis-admission recovery case from the same spec is now [Bugs](backlog-bugs.md#an-analysis-admission-left-running-after-a-crash-is-never-reconciled).
 
 #### Console does not show a trail's origin or its metrics
 
@@ -30,25 +20,9 @@ Follow-ups from [043b](../specs/043b-trail-metrics-and-work-completion.md). The 
 - **Why deferred:** 043b ships the recorder and the offline read surface; the Console work is a separate UI slice with its own layout decisions, and no runtime data is missing for it.
 - **Revisit when:** An operator compares two trails of the same kind, or asks why a trail looked expensive, without leaving the Console.
 
-#### An analysis admission left `running` after a crash is never reconciled
-
-- **Kind:** bug
-- **Source:** [043b-trail-metrics-and-work-completion](../specs/043b-trail-metrics-and-work-completion.md) § 4.3; `internal/runtime/dispatch_direct.go` (`prepareAnalysisAdmission`)
-- **Summary:** A configured analysis reaction writes `.paseka/runs/<traceId>/analysis/<admissionId>.json` as `running` before the adapter starts and finishes it as `completed`/`failed` afterwards. If the reactor dies mid-run, the record stays `running` forever; restart treats it as already taken and never redelivers, so the analysis silently never happens. Only an explicit operator action recovers it, and there is no surface that names the stuck admission. Add a startup reconciliation that marks an abandoned `running` admission `failed` with a diagnostic (or records it as retryable), so the trail does not hide an analysis it never finished.
-- **Why deferred:** The at-most-once choice is deliberate — redelivering on every restart would duplicate expensive analysis — and the failure mode loses one retrospective, not work. Changing it needs a policy for when a `running` record is stale and a test that pins restart behavior.
-- **Revisit when:** An operator expects an analysis that never appears, or reactor restarts mid-analysis become routine (homelab redeploy, laptop sleep).
-
 ### Trail attention state
 
-Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.md). The projection and every read surface shipped; what is left is notification policy and one semantic edge on damaged analysis records.
-
-#### Resurfacing a resolved failure as a notification is an operator decision
-
-- **Kind:** idea
-- **Source:** [050-trail-attention-state](../specs/050-trail-attention-state.md) § Further Notes; implementation trail `trace-01a1b9851c0161f5`
-- **Summary:** A healed trail's badge goes quiet, and its detail keeps a plain `resolved failures` hint. Nothing tells the operator that a previously failing task recovered, and the spec deliberately leaves that out: whether a recovery should ever be a push, for which surfaces, and at what threshold is an operator decision rather than a badge rule. Implementing it needs a notification policy (per failure, per trail, first recovery only, quiet mode) and a way to distinguish "resolved since the last notification" from "resolved long ago" — the current `hasFailures`/`openFailures` pair says what is open now, not what changed since a prior poll.
-- **Why deferred:** Spec 050 puts notification rules beyond the badge out of scope. The quieter badge is the shipped behavior, and adding a recovery push before anyone asks for it would recreate the noise the change removed.
-- **Revisit when:** An operator asks to be told when a trail recovers, or a failed task's recovery is missed because the trail row simply went quiet.
+Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.md). The projection and every read surface shipped; what is left here is one semantic edge on damaged analysis records. The notification-policy question from the same spec is now an [idea](backlog-ideas.md#resurfacing-a-resolved-failure-as-a-notification-is-an-operator-decision).
 
 #### A record-damaged analysis run still paints the trail
 
@@ -88,33 +62,7 @@ Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.m
 - **Why deferred:** The resolved id is what an operator acts on; a second, near-duplicate model value on every run row and export is noise until the alias tables change often enough that "which key was it" becomes a real question.
 - **Revisit when:** An alias's target has been edited at least once and a run has been read after that edit, i.e. the resolution genuinely cannot be explained by the current config.
 
-### Colony roles
-
-#### `archivist` bee — audit a finished trail
-
-- **Kind:** idea
-- **Source:** planning (trail audit of `trace-01a10d602db8d6f6`)
-- **Summary:** A read-only bee that audits a trail the agents have already finished and writes down what should be remembered. Named from the glossary's **Archivist Bee / Knowledge Agent** (`docs/idea/glossary.md:46`), next to Honeycomb and Wax Storage — it builds nothing and repairs nothing, it curates what survives into the archive. Kept distinct from `scout` by direction: scout looks forward at what to build, archivist looks back at what happened and what is owed. Settled shape — `worktree: false` (reads `.paseka/runs/` at colony root, and with no `code.proposal*` in `publishes` the runtime skips auto-mutation, so it cannot trigger a guard in response to itself), **no `subscribes`** (manual launch only, which is also the safety property), `params.model: medium`, publishes exactly one `INSIGHT/context.note` under a `completion_contract` so a silent no-op run fails loudly instead of reading as a clean audit. Two intents: **`task`** — per task, catch work that was deferred and draft it into the backlog; **`chronicle`** — per trail, find Return Flights and Bees Flying in Circles and propose skills. Writes its backlog entries to `{{.ArtifactsDir}}/backlog-draft.md`, never to `docs/plans/backlog.md` itself — an LLM rewriting a hand-maintained file unsupervised can drop existing items and will violate the backlog field rules, and `hivewright` is already the only root-editing bee and is scoped to `.paseka/`.
-- **Why deferred:** No spec — this adds colony config and prompts, not platform code. `chronicle` ships offline first, with "not measurable without NATS" stated plainly in its report rather than papered over; the NATS-backed version (`paseka replay`, `energy show`) is a later pass. Offline, the collector reads `meta.json` (bee, adapter, profile, startedAt), `status.json` (finishedAt, state), `result.json` (`usage.*`, `summary`) and `request.json` (taskId) — no NATS, no git.
-- **Revisit when:** Someone runs the bee by hand and the draft is good enough to paste, or the offline report's blind spots stop being acceptable.
-
-#### `receiver.md` calls `rtk`, a machine-local binary
-
-- **Kind:** bug
-- **Source:** trail audit of `trace-01a10d602db8d6f6`
-- **Summary:** `.paseka/prompts/receiver.md:11` instructs every Receiver Bee to read the staged diff with `rtk git diff --staged`, while line 13 tells it to commit with plain `git commit`. `rtk` is not a Paseka dependency: it appears nowhere in `docs/`, `bee-config.md`, `cli.md`, or any bee YAML, and on this machine it is `~/.local/bin/rtk`, a third-party LLM-output proxy. On any machine without it the Receiver cannot read what it is about to commit — and it is the bee that writes the merge commit.
-- **Why deferred:** Fixing it is a one-word prompt edit, but it belongs with whoever next touches the receiver prompt; nothing about the trail audit depends on it.
-- **Revisit when:** The receiver prompt is edited for any other reason.
-
 ### Task ledger
-
-#### `autorun` flag on `task.plan`
-
-- **Kind:** idea
-- **Source:** `task.ready` race fix planning
-- **Summary:** Single `INSIGHT/task.plan` payload field (e.g. `autorun: true`) that runtime translates into a follow-up `SIGNAL/task.ready` on the bus after plan apply — instead of bees emitting two deferred events.
-- **Why deferred:** CLI/cues/Telegram already use plan+ready as two events; deferred FIFO pair matches `task create --autorun` without new protocol surface. Ledger `pendingReady` covers out-of-order emits.
-- **Revisit when:** Product wants one-event autostart from bees without relying on prompt discipline, with explicit bus observability for the synthesized ready.
 
 #### Task retry with edit
 
@@ -132,25 +80,9 @@ Follow-ups from [050-trail-attention-state](../specs/050-trail-attention-state.m
 - **Why deferred:** Spec 028 accepted ledger growth for MVP; boards stay usable in the first weeks without a rolling window.
 - **Revisit when:** Operators keep a year of ticks and Console/task list becomes noisy.
 
-#### `paseka doctor` cannot tell a paused trail with pending work from an idle one
-
-- **Kind:** idea
-- **Source:** Trail audit `trace-01a1982659da17c2`, guard `01a198494399dd29` (task 003) — “hiveview/diagnose operator surfaces deferred to later staged slice per 044b breakdown”; [044b](../specs/044b-standing-supersession-and-energy-observations.md) §7
-- **Summary:** 005 and 006 delivered the `hiveview` half of that deferral — the shared `taskledger.AdmissionOf` projection, trail badges, board counts, `energy show`, and export — and no task on the trail touched a `diagnose` surface, so `paseka doctor` has no finding on the admission axis. A paused trail whose pending queue is waiting on honey therefore reads exactly like a trail that has nothing to run. Add a doctor finding that walks the ledger and reports each paused trail with its `pauseReason`, `pendingCount`, and remaining/budget, distinct from an idle trail with no pending work, reading `taskledger.AdmissionOf` rather than growing a second scheduler. This is the diagnose surface the 044b breakdown named, not a duplicate of `paseka status` attention (which lists paused trails but does not explain one quiet trail) or `energy show` (which needs the trace id).
-- **Why deferred:** 003 staged diagnose out of the supersession slice, then 005 and 006 scoped themselves to `hiveview`, CLI, and export. The admission projection they shipped is the missing input, but a doctor finding still needs its own copy and a decision on how a paused trail groups beside the existing stuck-dependency and closing-round findings.
-- **Revisit when:** An operator asks `paseka doctor` why a trail is idle, or a support case needs “paused with pending work” distinguished from “nothing planned”.
-
 ### Energy and honey
 
-MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion: an exhausted reserve defers a task or direct dispatch and keeps the task's lifecycle status, and the trail publishes one `energy.paused` / `energy.resumed` episode instead of writing a fake task `blocked`. The admission/pending separation is [spec 044a](../specs/044a-direct-pending-dispatch.md) (direct) and [spec 044b](../specs/044b-standing-supersession-and-energy-observations.md) (task and standing), both implemented; legacy honey-blocked tasks stay readable until purged. These remaining items need separate design or evidence before expanding the MVP.
-
-#### `confidence` (Pollen Quality)
-
-- **Kind:** idea
-- **Source:** [Brief](../idea/brief.md); planning (energyToken)
-- **Summary:** Filter or weight events by confidence level alongside honey.
-- **Why deferred:** Needs protocol and UX design (event shapes, CLI/Console) beyond the anti-loop MVP.
-- **Revisit when:** Product brief item is specified with event shapes and operator surfaces, or eval scenarios require confidence filtering.
+MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.consume`, reactor gating, `paseka energy show|add`). Loop protection is energy depletion: an exhausted reserve defers a task or direct dispatch and keeps the task's lifecycle status, and the trail publishes one `energy.paused` / `energy.resumed` episode instead of writing a fake task `blocked`. The admission/pending separation is [spec 044a](../specs/044a-direct-pending-dispatch.md) (direct) and [spec 044b](../specs/044b-standing-supersession-and-energy-observations.md) (task and standing), both implemented; legacy honey-blocked tasks stay readable until purged. Follow-ups stay here; the ideas that would expand the MVP live in [Ideas](backlog-ideas.md#energy-and-honey) and its known defects in [Bugs](backlog-bugs.md).
 
 #### New trace from interrupted worktree
 
@@ -168,38 +100,6 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Why deferred:** Requires adapter-layer changes without a running reactor.
 - **Revisit when:** Operators need honey accounting for one-shot/interactive launches, or eval/product rules demand it.
 
-#### Global concurrent invocation cap
-
-- **Kind:** idea
-- **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Deferred for v1 (active-fork cap); planning (runtime concurrency)
-- **Summary:** Add a colony-wide limit on concurrent agent invocations rather than counting active trails or forks. Acquire the slot before `gateDispatchEnergy` so queued work does not spend honey, release it on every terminal path including kill and restart, and add a per-trail fairness limit so one long trail cannot occupy the whole colony budget. Adapter-specific or provider limits can layer on top. A future fork-specific cap in spec 042, when added, is a secondary experimental admission/fairness control, not a provider or monetary ceiling. Today the Reactor has an `inflight` map for dedup and kill only; there is no concurrency semaphore.
-- **Why deferred:** Orthogonal to spec 042 and cross-cutting: dispatch, task and direct paths, HITL, retry, kill, recovery, and Console/runtime status need one queueing and fairness policy; introducing it inside fork admission would leave ordinary trails uncontrolled.
-- **Revisit when:** Concurrent ordinary trails or forks produce provider rate limits, CPU or memory pressure, or an operator needs a predictable queue instead of unbounded parallel dispatch; or spec 042 fork admission is implemented and needs the colony-wide guard underneath it.
-
-#### Fork admission caps and cumulative experiment allowance
-
-- **Kind:** idea
-- **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Deferred for v1
-- **Summary:** Decide and implement experimental admission limits for forks: an optional colony-wide cap on active forks, an optional per-source fan-out limit, and an optional cumulative allowance across repeated experiments. V1 deliberately enforces none: human approval gates agent-originated requests, and each fork has its own capped honey reserve. When added, an active fork should mean an approved fork trail with a reserved execution slot and unfinished work; pending and terminal forks hold no slot, and a paused fork releases its slot until resume or top-up. The cap is an admission and fairness control, not a provider or monetary ceiling.
-- **Why deferred:** There is no v1 need and no data for a default: human approval prevents agent-initiated self-spending, while automatic campaigns and pre-authorized requests are out of scope. A fork cap would not bound provider load, which the colony-wide invocation cap owns instead.
-- **Revisit when:** Policy pre-authorizes bounded agent requests, automatic campaigns are enabled, or concurrent experiments produce provider rate limits, worktree pressure, or starvation of ordinary work.
-
-#### Per-bee cost multipliers
-
-- **Kind:** idea
-- **Source:** planning (energyToken)
-- **Summary:** Charge more than flat `1` per adapter dispatch (per-role or per-intent pricing in bee YAML or routing rules).
-- **Why deferred:** Extra configuration surface before evidence that flat cost is too coarse.
-- **Revisit when:** Operators report false positives/negatives from flat `1`-token cost or traces that block incorrectly.
-
-#### Honey ↔ LLM token billing
-
-- **Kind:** idea
-- **Source:** planning (energyToken)
-- **Summary:** Optionally relate honey spend to LLM `usage` on AFK `result.json`. Do not price honey from model tokens without a separate design.
-- **Why deferred:** Orthogonal to anti-loop honey; mixing billing models needs an explicit decision.
-- **Revisit when:** Product wants cost visibility tied to model usage, with a written design.
-
 #### Interactive session usage (Cursor)
 
 - **Kind:** follow-up
@@ -207,22 +107,6 @@ MVP shipped per-trace honey (`defaults.energy_budget`, `energy.add` / `energy.co
 - **Summary:** Surface Cursor token `usage` from `bee chat`. Pi and OpenCode already report interactive usage through the `SessionUsageResolver` seam on `session.json`; Cursor has no equivalent read — its stream-json usage only exists on the AFK path.
 - **Why deferred:** Cursor's TUI keeps no provider-side token store to read after exit, so it needs its own capture approach rather than the post-exit accounting the other adapters use.
 - **Revisit when:** Console/CLI need Cursor session token usage, or billing/observability work starts.
-
-#### Barrier-held direct work is not resumed at startup
-
-- **Kind:** bug
-- **Source:** [044a-direct-pending-dispatch](../specs/044a-direct-pending-dispatch.md) review, follow-up to its startup resume
-- **Summary:** A direct reaction held by a pending configuration change is deliberately excluded from the energy drain (`resumableDirectDispatch`) and is released only by `tryActivateConfig` → `resumeBarrierHeldDispatches`, which runs when an event reaches that trail. `RecoverPendingConfigs` on startup walks only manifests that still have a pending change, so when the change is activated or cancelled while the reactor is down, the held entry has no drainer: it stays `pending` until the trail's next event, and a trail that goes quiet never runs it. The entry stays visible in the ledger, so nothing is lost silently, but a restart alone does not resume it.
-- **Why deferred:** Not part of 044a's direct-energy scope, and the barrier path already resumes on the next event, so it is a quiet-trail startup gap rather than a lost-ship defect. Closing it needs a startup enumeration of barrier-held work plus a decision on what a cancelled change does with it after a restart.
-- **Revisit when:** A resolved configuration change on a quiet trail leaves a guard or receiver unrun, or reactor restarts become routine (homelab redeploy, laptop sleep) while operators apply configuration mid-trail.
-
-#### `energy.resumed` can be lost after the pause episode closes
-
-- **Kind:** bug
-- **Source:** Trail audit `trace-01a1982659da17c2`, finding 7; guard `01a19857812aacf6` `summary.md` (task 004); [044b](../specs/044b-standing-supersession-and-energy-observations.md) §6.6
-- **Summary:** Observed on the branch: a stipend applies, supersedes the previous tick's work, and clears `EnergyPause` in the same ledger mutation (`internal/taskledger/apply.go`, `SignalEnergyStipend` → `CloseEnergyPause`). The runtime publishes `energy.resumed` from the returned `PauseClose` after that write (`internal/runtime/reactor.go` → `publishResumeObservation`). A crash in the gap leaves no episode to settle — startup republishes only an open unpublished pause and closes only an episode that is still open — so the resume is **lost**, not misattributed. The audit's original claim (source `energy.add` instead of `energy.stipend`, with exactly one card still delivered) was never reproduced and is recorded here as **unverified**; it does not match the reducer. Test-first design: (1) a memory-ledger characterization test applies a stipend and stops before the publish, then runs startup settlement and asserts the current outcome for the episode; (2) a durable pending-resume record on `TraceSnapshot` (episode id, source, remaining/budget, pending before/after, dispatched, abandoned, claimed flag) is written in the same mutation that closes the episode; (3) startup claims the record through the ledger CAS and publishes it once with the original source, clearing the claim after the send, and keeps the existing at-most-once trade-off rather than adding a retry loop.
-- **Why deferred:** Low severity: one notification can be lost, the episode still closes, and no work is stranded. The existing design deliberately trades at most one notification for no duplicates; changing it needs a durable outbox and a test that pins the actual behavior, and this is a decision record, not permission to start a ledger-shape change before 044b merges.
-- **Revisit when:** A restart between a stipend or `energy.add` close and its resume publish is observed, or an operator relies on the resume card's source/`abandoned` count to account for a standing tick's work; or the platform moves from at-most-once to at-least-once notifications.
 
 ### Queen Console
 
@@ -235,30 +119,6 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Summary:** The trace comb modal reports `file too large for inline preview` for anything over 512 KiB, with no way to read the rest. A byte-range or line-range read, or a download link beside the omission, would make a large `checkpoint.json` inspectable without raising the inline cap.
 - **Why deferred:** The cap is the server's and predates the redesign; the legacy console had the same dead end. Trail comb files are usually small, and raising the cap trades memory for a case that is rare.
 - **Revisit when:** An operator hits an unreadable comb file in a real trail, or comb files start growing past a few hundred KiB.
-
-#### No mutation queue while NATS is down
-
-- **Kind:** idea
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #12)
-- **Summary:** User story #12 asked the console to queue mutations locally when NATS disconnects. The banner half shipped — the topbar names `reconnecting` and then `unavailable`, and the transport icon reads the same fact — and the queue did not, deliberately: a queued approve or delete that fires minutes later is not the action the operator took, and the console's store contract already answers `busy` rather than queueing a second mutation. The open question is narrower than the story was: a *draft* the operator was typing (a review comment, a task form) is worth keeping across a reconnect, and a *committed* mutation is not.
-- **Why deferred:** The console has no offline story to preserve, so the cost is a lost draft rather than a lost action, and the page already says the stream is down.
-- **Revisit when:** An operator loses real typing to a reconnect, or a hive restart becomes routine enough to matter.
-
-#### No form to create a bee or a worktree
-
-- **Kind:** idea
-- **Source:** [035-queen-console-redesign](../specs/035-queen-console-redesign.md) (user story #17)
-- **Summary:** User story #17 asked for forms to open in a drawer rather than a column, and named four: new task, new bee, new worktree, settings edits. The task form and the session launch form both shipped and proved the primitive; the new-bee and new-worktree forms never existed. Both write committed colony YAML (`bees/*.yaml`) and the worktree case also creates a git checkout, which is the same class of risk [036-console-config-write](../specs/036-console-config-write.md) refuses for project config — a browser writing a tracked file is a different decision from a browser writing this machine's configuration.
-- **Why deferred:** The routes that display both lists shipped read-only, and starting work has two supported paths today: a launch session, and **Run bee** on `/bees` for a headless run.
-- **Revisit when:** An operator hand-edits `bees/*.yaml` often enough to want a form for it, or the worktrees route needs a create path for work that has no trail yet.
-
-#### Bee local overlay is invisible and unwritable in Console
-
-- **Kind:** idea
-- **Source:** [036-console-config-write](../specs/036-console-config-write.md) (Out of Scope — per-bee editing)
-- **Summary:** `.paseka/bees/<role>.local.yaml` is the machine-local overlay (`prompt_template` and `system_template` only, prompt-only by design) that wins over the committed `<role>.yaml` at resolve time, and the console neither reads nor writes it. `BeeView` has no overlay field, so a bee whose prompt is overridden on this machine renders the committed value with no hint that an override exists — the same missing-`source` half that `/settings` reports for configuration values. Reporting it is a per-bee `{value, source}` pair on `GET /api/bees`; writing it is the 036 writer (merge one key, temp+rename, preserve mode) pointed at a two-key gitignored file, which is a smaller surface than a full bee form.
-- **Why deferred:** 036 puts per-bee editing out of scope on the rule that the console writes what is this machine's and nothing the repository shares, and it never names `*.local.yaml` — so the overlay was left undecided rather than refused. It sits in the repository directory, only its `.gitignore` entry makes it machine-local, so making it writable needs that distinction argued rather than assumed. Until then the overlay is invisible in the product: `LoadAllBees` skips it, and export `--include bees` and Nuc omit it.
-- **Revisit when:** Per-bee or per-cue editing is reconsidered, or an operator is surprised by a prompt that is not the one `/bees` shows.
 
 #### Console redesign parity sweep
 
@@ -291,14 +151,6 @@ API fields for energy and merge-diff exist; per-run proposal preview is still th
 - **Why deferred:** Nothing is slow yet — this colony keeps 61 trail directories and a page assembles in single-digit milliseconds — and the walk is also what makes the projection honest, since a summary is derived from files a bee may still be writing. It is orthogonal to cursor-versus-rank and was **not** a reason to prefer either: a rank buys the same walk, and the cursor's old `limit * 10` cap bought nothing at all, which is why the cap went and the cursor stayed. Writing a manifest is a new on-disk artifact that a `paseka init`, a worktree move, or a hand-deleted trail directory can desynchronize, and that class of bug is worse than a slow page.
 - **Revisit when:** Trail directories reach the low hundreds — the `getTrace` fallback and `defaultTraceScanLimit` are the two places that start guessing, and the daily standing-tick habit in "Compact standing-trail task history" is what will get there — or when a Console read is measurably slow, which is the only signal that distinguishes this from every other scan in the codebase.
 
-#### Flow of one trail's activity
-
-- **Kind:** idea
-- **Source:** planning (LayerChart graph primitives evaluated for [052-token-usage-overview](../specs/052-token-usage-overview.md))
-- **Summary:** A trail view that draws what happened **inside one trail** as a flow rather than a list: each task and the Bee dispatched for it, the events that Bee published, verification failures and returns, closing rounds and analysis, with edge weight taken from observed counts (executions, retries, tokens, honey). LayerChart ships `Sankey`, `Chord`/`Ribbon`, `Link`, and a `Dagre` layout helper, so the shape could be a sankey of `task → bee → event kind → task` for that trail, or a node-link of the ledger's task dependencies plus who produced what. It is neither a colony-wide "who talks to whom" screen nor a Topology replacement: Topology stays on cytoscape with pan/zoom and saved positions, because it answers what is wired, not what happened.
-- **Why deferred:** The raw material is already trail-local — the trail event log and the task ledger — but the axes and labels need a question first. Timeline gives chronology, trail detail gives stages, tasks and runs, and the metrics projection gives totals, so a flow view earns its place only when a real trail is unreadable from those: a long rework chain, many Bees on one task, a standing trail's ticks. 052 is about token volume and does not own this.
-- **Revisit when:** An operator cannot explain a trail's shape from the timeline and task list — "why did this trail take 40 runs", "which step spawned this Bee" — and the retained event log is shown to carry those edges cheaply.
-
 ### Pull-request delivery
 
 Leftovers from [024-pull-request-delivery](../specs/024-pull-request-delivery.md). v1 is colony-wide `defaults.delivery`, an explicit home `forge.command`, and reconcile via forge `get`. Delivery outcomes — the trail-owned episode, closed-without-merge, and the badge that distinguishes a published PR from an un-reviewed gate — are designed in [047-delivery-outcomes](../specs/047-delivery-outcomes.md), not here.
@@ -310,14 +162,6 @@ Leftovers from [024-pull-request-delivery](../specs/024-pull-request-delivery.md
 - **Summary:** Let a Forage Cue override `defaults.delivery` so one trail can publish a PR while the rest of the colony stays on `local_merge`.
 - **Why deferred:** Colony-wide policy was enough for homelab vs laptop; per-cue mixing needs cue schema and review UX.
 - **Revisit when:** Operators want a single colony that both merges locally and opens PRs depending on the cue.
-
-#### Auto-detect forge from origin
-
-- **Kind:** idea
-- **Source:** [024-pull-request-delivery](../specs/024-pull-request-delivery.md)
-- **Summary:** Infer `tea` vs `gh` (or a bundled wrapper) from the `origin` host instead of requiring explicit `forge.command`.
-- **Why deferred:** Fail-closed explicit argv avoids guessing the wrong CLI or a missing login; v1 wants a visible home-config choice.
-- **Revisit when:** Beekeepers routinely have `tea`/`gh` on PATH and trip over the commented init example.
 
 ### Console Git
 
@@ -419,27 +263,7 @@ Follow-ups from [046-bee-check-gate](../specs/046-bee-check-gate.md), shipped as
 - **Why deferred:** The runtime stage and the colony rollout came first; both remaining pieces are read-only surfaces.
 - **Revisit when:** An operator has to read `runs/<agentId>/status.json` to say why a proposal never appeared, or a colony ships a gate command that is missing on the runtime host.
 
-### Releases
-
-#### Windows release builds
-
-- **Kind:** idea
-- **Source:** planning (GoReleaser / cross-compile)
-- **Summary:** Make `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/paseka` work (Unix-only PTY/HITL today: e.g. `SIGWINCH`, review `Setsid`), then add `windows` to GoReleaser `builds.goos` so release assets include `.exe` archives.
-- **Why deferred:** Pipeline already ships linux/darwin from Ubuntu with `CGO_ENABLED=0`; Windows needs build tags/stubs before CI/release changes.
-- **Revisit when:** Local/CI Windows cross-build succeeds and release should publish `windows/amd64` (optionally `windows/arm64`).
-
 ### NATS / hive substrate
-
-Laptop onboarding still requires an external JetStream (`nats.url` in home config, or `PASEKA_NATS_URL`). Homelab already assumes a shared server ([homelab deployment](../guide/homelab-deployment.md)).
-
-#### Optional embedded NATS
-
-- **Kind:** idea
-- **Source:** planning (laptop `paseka init` / `paseka run` DX)
-- **Summary:** Opt-in in-process NATS+JetStream for a single-machine hive so first `paseka run` does not need Docker or a separately installed broker. Keep `PASEKA_NATS_URL` / home `nats.url` as the override for shared LAN/homelab JetStream. Store embedded server files under machine-local state (not `.paseka/` in the repo). Choreography contracts stay unchanged.
-- **Why deferred:** Orthogonal to bee contracts; needs a written split (embedded vs external, bind address, data dir, one-consumer-per-prefix, shutdown) before changing `paseka init` defaults.
-- **Revisit when:** Operators bounce on NATS as the first-run blocker, or we want a zero-dependency laptop path without weakening the homelab “bring your own JetStream” story.
 
 #### Dispatches still run inside the bus callback
 
@@ -449,18 +273,11 @@ Laptop onboarding still requires an external JetStream (`nats.url` in home confi
 - **Why deferred:** The reported closing-phase failure is fixed by the echo and seed changes; the remaining paths are rarer (human rejection, energy top-up) and the energy drain's ordering needs its own test before it can move off the callback.
 - **Revisit when:** A rework or energy-unblock run is observed blocking the reactor, or another task is found stuck `running`/`waiting_review` with no owner after a long run.
 
-#### Fork marker on shared-bus events
-- **Kind:** idea
-- **Source:** [042-trail-fork](../specs/042-trail-fork.md) § Consumer decision
-- **Summary:** Add an optional NATS message header such as `Paseka-Trail-Kind: fork` and `Paseka-Fork-Of: <sourceTrace>` so an external side-effecting subscriber can filter experimental trails without querying trail lineage. Keep the event envelope and payload unchanged. Persist the header in the trail event record only if replay or audit needs that provenance. V1 has no confirmed external consumers and uses lineage lookup by `traceId` instead.
-- **Why deferred:** Headers are not part of the persisted event record and existing subscribers ignore them; adding durable provenance and a cross-language contract costs more than the current unknown risk. Fork events are ordinary trail events by design, with no separate subject prefix.
-- **Revisit when:** A concrete external subscriber cannot query lineage but must avoid side effects from fork trails, or broker-level filtering of experimental events becomes a requirement.
-
 ## Assumptions and gotchas
 
 ### Reading trail data from the filesystem
 
-Trail audit tooling has exactly one reliable join and three traps. Verified against `trace-01a10d602db8d6f6`; see "Colony roles" for the collector that uses it.
+Trail audit tooling has exactly one reliable join and three traps. Verified against `trace-01a10d602db8d6f6`; see [Ideas — Colony roles](backlog-ideas.md#colony-roles) for the collector that uses it.
 
 - **A run's `taskId` lives only in `request.json`** — it has no `taskId` key in `meta.json`, `status.json`, or `result.json`. Do not grep `prompt.txt` for it: rendered templates embed literal JSON examples, and the first `"taskId":"…"` match in a scout's prompt is a sample task from a partial, not the trail's.
 - **`tasks/<taskId>/runs.ndjson` is not a complete task→run join** — on that trail it held only the first builder run. Rework dispatches (`dispatch: direct`, i.e. `verification.failed` fix-ups), guard inspections, and the receiver's commit run are absent from it. Join on `request.json.taskId`, not on this file.

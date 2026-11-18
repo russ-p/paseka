@@ -146,7 +146,7 @@ Current release targets (see [`.goreleaser.yaml`](../../../.goreleaser.yaml)):
 - `linux/amd64`, `linux/arm64`
 - `darwin/amd64`, `darwin/arm64`
 
-Windows is deferred — see backlog item in [`docs/plans/backlog.md`](../../../docs/plans/backlog.md).
+Windows is deferred — see backlog item in [`docs/plans/backlog-ideas.md`](../../../docs/plans/backlog-ideas.md).
 
 ## Local dry-run
 
