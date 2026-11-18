@@ -83,7 +83,7 @@ func findTranscriptPath(workspace, id string) string {
 	}
 	if slug := projectSlug(workspace); slug != "" && !strings.Contains(slug, "..") {
 		preferred := filepath.Join(root, "projects", slug, transcriptRel(id))
-		if st, err := os.Stat(preferred); err == nil && !st.IsDir() {
+		if fileExists(preferred) {
 			return preferred
 		}
 	}
@@ -92,11 +92,17 @@ func findTranscriptPath(workspace, id string) string {
 		return ""
 	}
 	for _, p := range matches {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+		if fileExists(p) {
 			return p
 		}
 	}
 	return ""
+}
+
+// fileExists reports whether path exists and is not a directory.
+func fileExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
 }
 
 // parseTranscript turns the JSONL into ordered turns with typed parts. A tool

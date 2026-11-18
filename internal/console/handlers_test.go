@@ -3,6 +3,7 @@ package console_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1400,7 +1401,10 @@ func TestEnergyAddAPIHandler(t *testing.T) {
 		}
 		defer client.Close()
 
-		traceID := "trace-console-energy-" + time.Now().Format("150405")
+		// Trail gates share one NATS server and the console-test slug, so the
+		// trace id must be unique per process: a second-granular suffix let a
+		// concurrent run top up the same ledger entry and skew the assertions.
+		traceID := fmt.Sprintf("trace-console-energy-%d", time.Now().UnixNano())
 		kv, err := client.JetStream().KeyValue(bus.TaskLedgerBucket(ctxColony.Slug))
 		if err != nil {
 			t.Fatalf("kv: %v", err)
