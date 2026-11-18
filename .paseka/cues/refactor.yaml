@@ -1,0 +1,35 @@
+# One focused complexity refactor on a fresh bloom trail.
+#
+# Dispatched by the `refactor-tick` standing procedure, or by hand:
+#
+#   paseka cue run refactor "internal/x.go:42 Foo — cyclop 11 > 10"
+#
+# Builder works in an isolated worktree, the runtime gate (scripts/checks.sh)
+# judges the diff, and the trail's merge gate turns approval into one commit.
+description: One focused complexity refactor on a fresh bloom trail
+emit: task
+bee: builder
+intent: refactor
+review: none
+autorun: true
+# One dispatch, one rework round, and one retry after an adapter hiccup.
+energy_budget: 4
+title: "Refactor {{.Title}}"
+body: |
+  {{.Body}}
+
+  ## Contract for this trail
+
+  - Change exactly the finding named above: one function, or one interface.
+    Do not tidy, rename, or reformat anything else in the file.
+  - The finding must be gone from the advisory report after the change, and any
+    helper you extract must stay under the limits: cyclop 10, gocognit 15,
+    funlen 60 lines / 40 statements, maintidx 20.
+  - Behaviour is unchanged: no new lint findings, no new failing test, no public
+    API change beyond what the extraction requires.
+  - This trail must land as one commit. If the finding cannot be cleared in one
+    focused change set, stop and report why instead of widening the diff.
+
+  The advisory report is the warn-only pass described in `.golangci.yml` and
+  `AGENTS.md` ("After Go changes"); `python3 scripts/refactor-targets.py` prints
+  it as JSON when you want the machine view.

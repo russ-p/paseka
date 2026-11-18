@@ -10,6 +10,9 @@ bees:
     params:
       model: thinker
       reasoning: max
+  nurse:
+    params:
+      model: opencode-go/glm-5.3
   receiver:
     params:
       model: builder

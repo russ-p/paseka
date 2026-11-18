@@ -1,0 +1,35 @@
+# One hygiene tick of the complexity-refactor procedure (cue `refactor-tick`).
+#
+# The tick selects exactly one architecture-limit finding and dispatches one
+# focused refactor bloom (cue `refactor`). It runs on the colony root because a
+# Standing Trail observes and records: the change belongs to the bloom trail,
+# whose Builder owns the worktree, the mechanical gate, and the merge. The
+# report it reads is the same warn-only pass `scripts/checks.sh` runs.
+role: nurse
+adapter: cursor
+prompt_template: nurse.md
+intents:
+  - refactor-tick
+default_intent: refactor-tick
+params:
+  model: builder
+  yolo: true
+  # A cold advisory pass builds the package graph before it can answer.
+  timeout: 15m
+worktree: false
+skills:
+  - paseka-event-emit
+subscribes:
+  - type: SIGNAL
+    kind: task.ready
+    dispatch: task
+publishes:
+  - type: INSIGHT
+    kind: context.note
+# A tick that does not record itself is a tick nobody can audit.
+completion_contract:
+  required:
+    - type: INSIGHT
+      kind_one_of:
+        - context.note
+      count: 1

@@ -1,0 +1,30 @@
+# Standing Trail that pays down the architecture-limit report in .golangci.yml.
+#
+# One tick = one target = one bloom. Nurse Bee reads the warn-only lint report
+# and its checkpoint, picks the cheapest eligible finding, and dispatches the
+# `refactor` cue on a fresh bloom trail. The refactor, the mechanical gate, and
+# the merge gate live on that bloom trail, so a tick can never turn this
+# standing identity into a merge candidate (spec 028).
+#
+# Paseka ships no scheduler: tick it from systemd, cron, or by hand.
+#
+#   paseka cue run refactor-tick "tick $(date -I)" -C /path/to/colony
+#
+# A second tick is refused while the previous one is still open, so an
+# overlapping timer cannot dispatch two refactors at once.
+description: Pay down one architecture-limit finding per tick
+emit: task
+bee: nurse
+intent: refactor-tick
+review: none
+autorun: true
+standing:
+  trace: trail-complexity
+  # One dispatch per tick plus room for a retried tick; the spawned bloom has
+  # its own budget and never spends this ration.
+  stipend: 3
+title: "Refactor tick: {{.Title}}"
+body: |
+  {{.Body}}
+
+  Select one target and dispatch one bloom. Never edit code on this trail.

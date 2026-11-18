@@ -347,6 +347,7 @@ Bees include only the type partials they may publish. For example:
 | `trail-guard` | `emit-howto`, `emit-insight` |
 | `archivist` | `emit-howto`, `archivist-emit-insight`; on `task` also `archivist-intent-task`, on `chronicle` also `archivist-intent-chronicle`, on `skill` also `archivist-intent-skill` |
 | `probe` | `emit-howto` |
+| `nurse` | `emit-howto` |
 
 Those roles list `paseka-event-emit` under `skills` in their bee YAML, so the full procedure — envelope, delivery choice, proof commands, and per-kind payloads — reaches the run as a skill instead of as prompt text. The prompt names the kinds; the skill carries the mechanics.
 
