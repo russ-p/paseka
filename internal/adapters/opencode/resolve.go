@@ -71,34 +71,45 @@ func resolve(binaryOverride string, params adapters.RunParams) (resolution, erro
 
 	switch s.version {
 	case "1", "2":
-		major := 1
-		if s.version == "2" {
-			major = 2
-		}
-		binary := pinnedBinary(base, s, major)
-		if _, err := exec.LookPath(binary); err != nil {
-			return resolution{}, missingBinaryError(binary, major)
-		}
-		// A pin is trusted when the binary cannot answer, but a clear answer
-		// that disagrees is a one-line configuration fix, not a flag mystery.
-		if detected, ok, err := detectCached(binary, s.detectTimeout); err == nil && ok && detected != major {
-			return resolution{}, fmt.Errorf(
-				"opencode: %q reports OpenCode %d but version is pinned to %d (fix the version pin or the binary path)",
-				binary, detected, major)
-		}
-		return resolution{implementation: implementationFor(major), binary: binary, major: major, pinned: true}, nil
+		return resolvePinned(base, s)
 	case "", "auto":
-		if _, err := exec.LookPath(base); err != nil {
-			return resolution{}, missingBinaryError(base, 0)
-		}
-		major, _, err := detectCached(base, s.detectTimeout)
-		if err != nil {
-			return resolution{}, err
-		}
-		return resolution{implementation: implementationFor(major), binary: base, major: major}, nil
+		return resolveAuto(base, s)
 	default:
 		return resolution{}, fmt.Errorf("opencode: unsupported version pin %q (use auto, 1, or 2)", s.version)
 	}
+}
+
+// resolvePinned honours an explicit version pin: the binary must be on PATH, and
+// its own answer must agree unless it cannot be asked.
+func resolvePinned(base string, s settings) (resolution, error) {
+	major := 1
+	if s.version == "2" {
+		major = 2
+	}
+	binary := pinnedBinary(base, s, major)
+	if _, err := exec.LookPath(binary); err != nil {
+		return resolution{}, missingBinaryError(binary, major)
+	}
+	// A pin is trusted when the binary cannot answer, but a clear answer
+	// that disagrees is a one-line configuration fix, not a flag mystery.
+	if detected, ok, err := detectCached(binary, s.detectTimeout); err == nil && ok && detected != major {
+		return resolution{}, fmt.Errorf(
+			"opencode: %q reports OpenCode %d but version is pinned to %d (fix the version pin or the binary path)",
+			binary, detected, major)
+	}
+	return resolution{implementation: implementationFor(major), binary: binary, major: major, pinned: true}, nil
+}
+
+// resolveAuto detects the installed major and dispatches with it.
+func resolveAuto(base string, s settings) (resolution, error) {
+	if _, err := exec.LookPath(base); err != nil {
+		return resolution{}, missingBinaryError(base, 0)
+	}
+	major, _, err := detectCached(base, s.detectTimeout)
+	if err != nil {
+		return resolution{}, err
+	}
+	return resolution{implementation: implementationFor(major), binary: base, major: major}, nil
 }
 
 func pinnedBinary(base string, s settings, major int) string {
