@@ -86,10 +86,11 @@ Add `GET /api/chrome/stream` as Server-Sent Events. A process-wide hub ticks whi
 - `schemaVersion` is `1`.
 - `runtime`: existing runtime view.
 - `agents`: existing live-bees view.
-- `host`: host snapshot without `processes`.
+- `host`: host snapshot without `processes`. Always present: the host collector cannot hard-fail, and degradation rides inside the view as `host.error`.
 - `git`: plaque fields only (`branch`, SHAs, dirty, default branch, origin, ahead/behind, last fetch age, `note`). Omit worktrees, branches, unpublished lists.
 - `attention.reviews` and `attention.sessions`: pending review count and pending invite count.
 - Per-block error strings (`runtimeError`, `agentsError`, `hostError`, `gitError`, `attentionError`) so one collector failure does not drop the frame.
+- A failed block is omitted from the frame rather than sent zeroed: absent means "keep the last known value", so a transient or persistent read failure (an unparsable `state.json`, a JetStream hiccup on attention) never blanks the Hive runtime status line or the Live bees list. A half-failed attention read ships the half that answered with `attentionError` naming the other.
 
 ### 4. Hub
 

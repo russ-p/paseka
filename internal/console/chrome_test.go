@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -90,6 +92,67 @@ func TestChromeStreamRejectsPost(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d", rec.Code)
+	}
+}
+
+// A failed read must omit its section rather than zero it: the client keeps its
+// last known runtime and bee list while a section is absent, but a zero-valued
+// runtime reads as real data and blanks the panels until the read recovers.
+func TestChromeStreamOmitsFailedSections(t *testing.T) {
+	repo := initConsoleRepo(t)
+	ctxColony := setupConsoleHome(t, repo)
+
+	// Both GetRuntime and GetAgents resolve through homestate's state.json, so
+	// an unparsable file fails the two sections at once — the same pairing the
+	// header shows (Hive runtime beside Live bees).
+	home := os.Getenv("XDG_CONFIG_HOME")
+	statePath := filepath.Join(home, "paseka", ctxColony.Slug, "state.json")
+	if err := os.WriteFile(statePath, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   ctxColony,
+		Sessions: sessions.NewManager(),
+	})
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/chrome/stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	raw := readSSEData(t, resp.Body, "chrome")
+	cancel()
+
+	var env map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("chrome json: %v body=%s", err, raw)
+	}
+	for _, key := range []string{"runtime", "agents"} {
+		if _, ok := env[key]; ok {
+			t.Fatalf("%s must be omitted when the read behind it fails", key)
+		}
+	}
+	for _, key := range []string{"runtimeError", "agentsError"} {
+		var msg string
+		if err := json.Unmarshal(env[key], &msg); err != nil || msg == "" {
+			t.Fatalf("%s must name the failed read, got %s", key, env[key])
+		}
+	}
+	// The host plaque cannot hard-fail and stays present beside the omissions.
+	var host map[string]json.RawMessage
+	if err := json.Unmarshal(env["host"], &host); err != nil {
+		t.Fatalf("host: %v", err)
 	}
 }
 

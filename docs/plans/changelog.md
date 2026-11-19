@@ -2,6 +2,15 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — Chrome stream keeps the last known plaques when a read fails
+
+A failed read behind a Queen Console header plaque no longer blanks it. When `state.json` becomes unparsable or an attention source hiccups, the chrome SSE frame now omits the failed section and names the error, and the header keeps showing the last known Hive runtime status, heartbeat line, and Live bees list until the read recovers — instead of the panels momentarily (or, for a persistently broken file, indefinitely) clearing to an empty status word and a zero bee count. The Git plaque already worked this way; runtime, agents, and attention now share its contract, and a half-failed attention read ships the half that answered with the error named beside it.
+
+- **Fixes:** the `heartbeat · pid · started` line under Hive runtime and the bee list line under Live bees disappearing ("as if cleared") in the header, both at once — the two reads resolve through the same machine-local `state.json`, so they fail together.
+- **Diagnosis is on the surface.** The paired `runtimeError`/`agentsError`/`attentionError` fields drive the existing topbar error alert, so a dead snapshot is readable instead of looking like an empty colony.
+
+- Spec: [029-console-chrome-stream](../specs/029-console-chrome-stream.md)
+
 ## 2026-11 — Configuration snapshots use short ordinal directories
 
 A trail's frozen configuration now lives under `snapshots/0001`, `snapshots/0002`, and so on instead of a directory named after its 71-character `sha256:<hex>` content identity. The identity itself is unchanged: `ConfigRef` stays in the manifest, attempt records, run records, and history. Only the physical location moved, and the manifest records it per snapshot.

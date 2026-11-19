@@ -115,6 +115,68 @@ describe('consoleStatusStore', () => {
 		expect(store.gitError).toBe('git failed');
 	});
 
+	it('keeps the last known sections when a frame reports read errors', () => {
+		const store = createConsoleStatusStore({ pollIntervalMs: 0 });
+
+		store.applyChromeFrame({
+			schemaVersion: 1,
+			runtime: {
+				status: 'running',
+				alive: true,
+				pid: 42,
+				slug: 'demo',
+				startedAt: '2026-11-20T08:00:00Z',
+				lastHeartbeatAt: '2026-11-20T08:30:00Z'
+			},
+			agents: {
+				count: 2,
+				afk: 1,
+				sessions: 1,
+				items: [
+					{
+						kind: 'afk',
+						bee: 'builder',
+						pid: 7,
+						traceId: 'trace-1',
+						agentId: 'agent-1',
+						startedAt: '2026-11-20T08:00:00Z',
+						runDir: '.paseka/runs/trace-1/agent-1'
+					},
+					{
+						kind: 'session',
+						bee: 'nurse',
+						pid: 8,
+						traceId: 'trace-2',
+						agentId: 'agent-2',
+						sessionId: 'ses-1',
+						startedAt: '2026-11-20T08:10:00Z',
+						runDir: '.paseka/runs/trace-2/agent-2'
+					}
+				]
+			},
+			attention: { reviews: 3, sessions: 1 }
+		});
+		expect(store.runtimeStatus).toBe('running');
+
+		// A server-side read failure omits the section and names the error. The
+		// panels keep showing the last known values instead of clearing, which
+		// is the whole point of the omission contract.
+		store.applyChromeFrame({
+			schemaVersion: 1,
+			runtimeError: 'homestate: parse state: unexpected end of JSON input',
+			agentsError: 'homestate: parse state: unexpected end of JSON input'
+		});
+
+		expect(store.runtimeStatus).toBe('running');
+		expect(store.runtime?.pid).toBe(42);
+		expect(store.runtime?.lastHeartbeatAt).toBe('2026-11-20T08:30:00Z');
+		expect(store.liveBees).toBe(2);
+		expect(store.agents?.items?.length).toBe(2);
+		expect(store.reviews).toBe(3);
+		expect(store.pendingSessions).toBe(1);
+		expect(store.lastError).toContain('homestate: parse state');
+	});
+
 	it('starts and stops the runtime through the injected calls', async () => {
 		const start = vi.fn(async () => ({ status: 'running', alive: true, pid: 7, slug: 'demo' }));
 		const stop = vi.fn(async () => ({ status: 'stopped', alive: false, slug: 'demo' }));

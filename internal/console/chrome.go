@@ -27,18 +27,24 @@ type ChromeAttentionView struct {
 }
 
 // ChromeView is one SSE chrome frame for always-visible Queen Console chrome.
+//
+// Every projection is a pointer set only when the read behind it succeeded:
+// an absent section means "this tick failed", and the client keeps its last
+// known value while the paired *Error field names the failure. A zero value
+// would instead read as real data — an empty status word, a zero bee count —
+// and blank the panels until the read recovered.
 type ChromeView struct {
-	SchemaVersion  int                  `json:"schemaVersion"`
-	Runtime        hiveview.RuntimeView `json:"runtime"`
-	RuntimeError   string               `json:"runtimeError,omitempty"`
-	Agents         hiveview.AgentsView  `json:"agents"`
-	AgentsError    string               `json:"agentsError,omitempty"`
-	Host           SystemView           `json:"host"`
-	HostError      string               `json:"hostError,omitempty"`
-	Git            *GitPlaqueView       `json:"git,omitempty"`
-	GitError       string               `json:"gitError,omitempty"`
-	Attention      ChromeAttentionView  `json:"attention"`
-	AttentionError string               `json:"attentionError,omitempty"`
+	SchemaVersion  int                   `json:"schemaVersion"`
+	Runtime        *hiveview.RuntimeView `json:"runtime,omitempty"`
+	RuntimeError   string                `json:"runtimeError,omitempty"`
+	Agents         *hiveview.AgentsView  `json:"agents,omitempty"`
+	AgentsError    string                `json:"agentsError,omitempty"`
+	Host           SystemView            `json:"host"`
+	HostError      string                `json:"hostError,omitempty"`
+	Git            *GitPlaqueView        `json:"git,omitempty"`
+	GitError       string                `json:"gitError,omitempty"`
+	Attention      *ChromeAttentionView  `json:"attention,omitempty"`
+	AttentionError string                `json:"attentionError,omitempty"`
 }
 
 type chromeHub struct {
@@ -144,13 +150,13 @@ func (h *chromeHub) buildView() ChromeView {
 	if rt, err := hiveview.GetRuntime(a.ctx, a.runtime); err != nil {
 		view.RuntimeError = err.Error()
 	} else {
-		view.Runtime = rt
+		view.Runtime = &rt
 	}
 
 	if agents, err := hiveview.GetAgents(a.ctx, a.sessions); err != nil {
 		view.AgentsError = err.Error()
 	} else {
-		view.Agents = agents
+		view.Agents = &agents
 	}
 
 	sampler := a.sampler
@@ -158,6 +164,8 @@ func (h *chromeHub) buildView() ChromeView {
 		sampler = newCPUSampler()
 		a.sampler = sampler
 	}
+	// The host collector cannot hard-fail: degradation rides inside the view
+	// as `host.error`, so the plaque is always present and never a zero stand-in.
 	host := snapshotHostPlaque(sampler, a.ctx.ColonyRoot)
 	view.Host = host
 	if host.Error != "" {
@@ -168,16 +176,23 @@ func (h *chromeHub) buildView() ChromeView {
 	view.Git = git
 	view.GitError = gitErr
 
+	attention := ChromeAttentionView{}
 	var attErrs []string
 	if queue, err := ListReviewQueue(a.ctx); err != nil {
 		attErrs = append(attErrs, err.Error())
 	} else {
-		view.Attention.Reviews = queue.Count
+		attention.Reviews = queue.Count
 	}
 	if invites, err := hiveview.ListInvites(a.ctx, protocol.InviteStatusPending); err != nil {
 		attErrs = append(attErrs, err.Error())
 	} else {
-		view.Attention.Sessions = len(invites)
+		attention.Sessions = len(invites)
+	}
+	// A half-failed attention read still ships the half that answered, with the
+	// failure named beside it; both reads failing leaves the section absent so
+	// the badges keep their last counts.
+	if len(attErrs) < 2 {
+		view.Attention = &attention
 	}
 	if len(attErrs) > 0 {
 		view.AttentionError = strings.Join(attErrs, "; ")
