@@ -129,6 +129,22 @@ func (c *Client) purgeTraceEvents(traceID string, res *PurgeTraceResult) error {
 	defer func() { _ = sub.Unsubscribe() }()
 
 	stream := streamName(c.cfg.Slug)
+	seqs, err := collectTraceEventSeqs(sub, traceID)
+	if err != nil {
+		return err
+	}
+	for _, seq := range seqs {
+		if err := c.js.DeleteMsg(stream, seq); err != nil {
+			return fmt.Errorf("bus: purge event seq %d: %w", seq, err)
+		}
+		res.EventsRemoved++
+	}
+	return nil
+}
+
+// collectTraceEventSeqs drains sub until it goes quiet, returning stream
+// sequences of the domain events that belong to traceID.
+func collectTraceEventSeqs(sub *nats.Subscription, traceID string) ([]uint64, error) {
 	var seqs []uint64
 	for {
 		msg, err := sub.NextMsg(200 * time.Millisecond)
@@ -136,7 +152,7 @@ func (c *Client) purgeTraceEvents(traceID string, res *PurgeTraceResult) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("bus: purge events next: %w", err)
+			return nil, fmt.Errorf("bus: purge events next: %w", err)
 		}
 		var ev protocol.Event
 		if err := json.Unmarshal(msg.Data, &ev); err != nil {
@@ -151,13 +167,7 @@ func (c *Client) purgeTraceEvents(traceID string, res *PurgeTraceResult) error {
 		}
 		seqs = append(seqs, meta.Sequence.Stream)
 	}
-	for _, seq := range seqs {
-		if err := c.js.DeleteMsg(stream, seq); err != nil {
-			return fmt.Errorf("bus: purge event seq %d: %w", seq, err)
-		}
-		res.EventsRemoved++
-	}
-	return nil
+	return seqs, nil
 }
 
 func (c *Client) purgeTraceArtifacts(traceID string, res *PurgeTraceResult) error {
