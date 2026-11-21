@@ -49,21 +49,29 @@ func (w *ClosingWhen) UnmarshalYAML(node *yaml.Node) error {
 	}
 	for i := 0; i < len(node.Content); i += 2 {
 		key := strings.TrimSpace(node.Content[i].Value)
-		value := node.Content[i+1]
-		switch key {
-		case "min_work_tasks":
-			if err := value.Decode(&w.MinWorkTasks); err != nil {
-				return fmt.Errorf("colony: closing.when.min_work_tasks: %w", err)
-			}
-		case "has_isolated_proposal":
-			if err := value.Decode(&w.HasIsolatedProposal); err != nil {
-				return fmt.Errorf("colony: closing.when.has_isolated_proposal: %w", err)
-			}
-		case "":
-			return fmt.Errorf("colony: closing.when: predicate name is required")
-		default:
-			return fmt.Errorf("colony: closing.when: unknown predicate %q (supported: min_work_tasks, has_isolated_proposal)", key)
+		if err := w.decodePredicate(key, node.Content[i+1]); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// decodePredicate decodes one named predicate, rejecting an unknown or empty
+// name so a typo fails colony load instead of silently broadening the policy.
+func (w *ClosingWhen) decodePredicate(key string, value *yaml.Node) error {
+	switch key {
+	case "min_work_tasks":
+		if err := value.Decode(&w.MinWorkTasks); err != nil {
+			return fmt.Errorf("colony: closing.when.min_work_tasks: %w", err)
+		}
+	case "has_isolated_proposal":
+		if err := value.Decode(&w.HasIsolatedProposal); err != nil {
+			return fmt.Errorf("colony: closing.when.has_isolated_proposal: %w", err)
+		}
+	case "":
+		return fmt.Errorf("colony: closing.when: predicate name is required")
+	default:
+		return fmt.Errorf("colony: closing.when: unknown predicate %q (supported: min_work_tasks, has_isolated_proposal)", key)
 	}
 	return nil
 }
