@@ -86,25 +86,36 @@ func (c *Command) UnmarshalYAML(value *yaml.Node) error {
 		c.argv = parts
 		return nil
 	case yaml.SequenceNode:
-		parts := make([]string, 0, len(value.Content))
-		for _, node := range value.Content {
-			if node.Kind != yaml.ScalarNode {
-				return fmt.Errorf("command: sequence entries must be strings")
-			}
-			part := strings.TrimSpace(node.Value)
-			if part == "" {
-				return fmt.Errorf("command: sequence entries must not be empty")
-			}
-			parts = append(parts, part)
-		}
-		if len(parts) == 0 {
-			return fmt.Errorf("command: must not be empty")
+		parts, err := decodeCommandSequence(value.Content)
+		if err != nil {
+			return err
 		}
 		c.argv = parts
 		return nil
 	default:
 		return fmt.Errorf("command: must be a string or list of strings")
 	}
+}
+
+// decodeCommandSequence turns a YAML sequence into argv, rejecting a non-string
+// or blank entry and an empty list so an authored command fails colony load
+// instead of dispatching a truncated one.
+func decodeCommandSequence(nodes []*yaml.Node) ([]string, error) {
+	parts := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		if node.Kind != yaml.ScalarNode {
+			return nil, fmt.Errorf("command: sequence entries must be strings")
+		}
+		part := strings.TrimSpace(node.Value)
+		if part == "" {
+			return nil, fmt.Errorf("command: sequence entries must not be empty")
+		}
+		parts = append(parts, part)
+	}
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("command: must not be empty")
+	}
+	return parts, nil
 }
 
 // RenderCommand substitutes variables and returns the full process argv.
