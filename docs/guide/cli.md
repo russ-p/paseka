@@ -61,8 +61,8 @@ Non-empty **`PASEKA_PROFILE`** selects a profile when the flags are omitted (fla
 | `paseka init`, `bee run --no-bus`, `bee chat`, `session`, `status`, `colony topology`, `nuc`, `console`, `purge` (filesystem only), `export`, `inspect usage`, `inspect metrics`, `skills` | No |
 | `paseka purge --bus` | Yes — requires `nats.url` and `--trace` |
 | `paseka bee run` (default) | Optional — publishes domain events when `nats.url` is configured |
-| `paseka run`, `doctor`, `replay`, `verify`, `signal`, `cue`, `proposal`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
-| `paseka task list`, `paseka task show`, `export` | Optional — prefers JetStream KV, falls back to filesystem projection |
+| `paseka run`, `doctor`, `replay`, `verify`, `signal`, `cue`, `proposal approve\|reject\|discard`, `energy`, `task create`, `task start`, `task retry`, `gate telegram` | Yes |
+| `paseka task list`, `paseka task show`, `paseka proposal list`, `export` | Optional — prefers JetStream KV, falls back to filesystem projection |
 
 Default NATS URL after `paseka init`: `nats://127.0.0.1:4222` (see `docker-compose.yml`).
 
@@ -118,6 +118,7 @@ paseka
 │   └── remove <name> [--force] [--dry-run]
 ├── signal
 ├── proposal
+│   ├── list
 │   ├── approve
 │   ├── reject
 │   └── discard
@@ -489,7 +490,7 @@ ignore unknown fields.
 | Runtime not alive | Beekeeper starts `paseka run` (status never starts it) |
 | Live `session` | `paseka session list` / `attach` / `stop` / `resume` |
 | Live `afk` | `paseka task show`, `paseka kill` |
-| `waitingReview` | `paseka task show`, `paseka proposal approve\|reject` |
+| `waitingReview` | `paseka proposal list`, then `paseka task show` / `paseka proposal approve\|reject` |
 | `pendingInvites` | `paseka invite list` / `accept` / `reject` |
 | `failedTasks` | `paseka task retry` |
 | `lowEnergyTraces` | `paseka energy add --trace` |
@@ -1206,6 +1207,46 @@ Open the printed URL in a browser. Queen Console does not enforce authentication
 ## `paseka proposal`
 
 Human-in-the-loop actions for code proposals (`MUTATION` with `kind: code.proposal.isolated`, `code.proposal.root`, or legacy alias `code.proposal`).
+
+### `paseka proposal list`
+
+List what `proposal approve|reject|discard` can act on right now: every task in
+`waiting_review` that carries a review gate (`review: required`, or a `final`
+merge gate). The queue is Queen Console's **Reviews** projection, read through
+the same code (`internal/console.ListReviewQueue`), so the CLI and the Console
+cannot disagree about membership or order.
+
+```text
+TRACE/TASK              PHASE  REVIEW    TITLE
+trace-1/_review         merge  final     Merge the live-bees work
+trace-1/task-cfg-1      work   required  Update colony config
+```
+
+`TRACE/TASK` is `<traceId>/<taskId>` — the exact pair the decision verbs take,
+so a row is copied verbatim into `--trace` and `--task`. Rows sort by last task
+activity, newest first. An empty queue prints `No reviews waiting.`
+
+| Flag | Short | Required | Default | Description |
+| ---- | ----- | -------- | ------- | ----------- |
+| `--trace` | | | | Narrow the queue to one flight trail id |
+| `--json` | | | off | Print the queue as a JSON array of the shared review item (`traceId`, `taskId`, `title`, `phase`, `review`, `bee`, `delivery`, `updatedAt`, …); empty prints `[]` |
+| `--path` | `-C` | | | Colony resolution start directory |
+
+```bash
+paseka proposal list
+paseka proposal list --trace trace-1
+paseka proposal list --json
+```
+
+**Scope.** Like Console Reviews, the command scans the 30 most recently active
+trails (`hiveview.TaskBoardTraceLimit`) and nothing older. A gate on an older
+trail does not appear, with or without `--trace` — `--trace` narrows the rows
+the projection returned, it does not widen the window. Inspect such a trail
+directly with `paseka task show --trace <id>`.
+
+The command is read-only: it publishes no event and writes no ledger entry. It
+reads the ledger the same way `paseka task list` does, so it works from the
+filesystem projection when NATS is not configured.
 
 ### `paseka proposal approve`
 
