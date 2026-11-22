@@ -288,6 +288,7 @@ func newProposalCmd() *cobra.Command {
 		Use:   "proposal",
 		Short: "Human-in-the-loop code proposal actions",
 	}
+	cmd.AddCommand(newProposalListCmd())
 	cmd.AddCommand(newProposalApproveCmd())
 	cmd.AddCommand(newProposalRejectCmd())
 	cmd.AddCommand(newProposalDiscardCmd())

@@ -237,8 +237,10 @@ with per-file diffs and line-anchored comments.
   reason. It merges nothing, publishes nothing, sends no feedback, and plans no
   rework; the worktree is left in place so the result can be revived later.
 
-CLI equivalents are `paseka proposal approve`, `paseka proposal reject`, and
-`paseka proposal discard`.
+CLI equivalents are `paseka proposal list` (this queue), `paseka proposal approve`,
+`paseka proposal reject`, and `paseka proposal discard`. `proposal list` prints
+the same rows — the same filter, order, and 30-recent-trail scope — so a terminal
+operator can find the `--trace`/`--task` pair a decision needs.
 Review approval does not push the default branch to its remote. The Git tab
 never pushes the worktree head; PR publish does.
 
@@ -703,7 +705,7 @@ rather than polling. Nothing here needs the Hive Runtime.
 | ---- | ------- | ----------- |
 | Check colony health | Dashboard | `paseka status` |
 | Diagnose NATS or wiring | Runtime notices | `paseka doctor` |
-| Review a proposal | Reviews | `paseka proposal approve\|reject\|discard` |
+| Review a proposal | Reviews | `paseka proposal list`, then `paseka proposal approve\|reject\|discard` |
 | Add honey | Trace detail | `paseka energy add --trace ...` |
 | Stop AFK work on a trail | Trace/task context | `paseka kill --trace ...` |
 | Work with an interactive bee | Sessions | `paseka bee chat`, `paseka session ...` |
