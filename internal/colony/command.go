@@ -223,25 +223,30 @@ func splitCommandLine(s string) ([]string, error) {
 	}
 
 	for i := 0; i < len(s); i++ {
-		ch := rune(s[i])
-		switch {
-		case quote != 0:
-			if ch == quote {
-				quote = 0
-				continue
-			}
-			cur.WriteRune(ch)
-		case ch == '\'' || ch == '"':
-			quote = ch
-		case unicode.IsSpace(ch):
-			flush()
-		default:
-			cur.WriteRune(ch)
-		}
+		quote = splitCommandLineChar(rune(s[i]), quote, &cur, flush)
 	}
 	if quote != 0 {
 		return nil, fmt.Errorf("unclosed quote")
 	}
 	flush()
 	return args, nil
+}
+
+// splitCommandLineChar feeds one character into cur, calling flush at an
+// unquoted separator, and returns the quote state after the character.
+func splitCommandLineChar(ch, quote rune, cur *strings.Builder, flush func()) rune {
+	switch {
+	case quote != 0:
+		if ch == quote {
+			return 0
+		}
+		cur.WriteRune(ch)
+	case ch == '\'' || ch == '"':
+		quote = ch
+	case unicode.IsSpace(ch):
+		flush()
+	default:
+		cur.WriteRune(ch)
+	}
+	return quote
 }
