@@ -90,7 +90,14 @@ type RunMeta struct {
 	// Reason is the recorded classifier for a terminal state, e.g. "timeout"
 	// for a cancelled run or "checks_failed" for a gate rejection. A legacy
 	// record may carry no reason; absence stays distinguishable from a reason.
+	// A run projected as failed because its process is gone carries
+	// protocol.ReasonProcessGone here even though status.json never recorded a
+	// terminal state.
 	Reason string `json:"reason,omitempty"`
+	// Interruption explains a non-terminal status record that the read path
+	// projected as failed because the process it recorded is not running on
+	// this host. It is absent when the state comes from the records themselves.
+	Interruption *RunInterruption `json:"interruption,omitempty"`
 	// Purpose is the admission-time execution purpose. It is empty for legacy
 	// records that never recorded one; such a run is unknown, not work.
 	Purpose    protocol.ExecutionPurpose `json:"purpose,omitempty"`
@@ -204,6 +211,17 @@ func LoadRunMeta(d Dir) (RunMeta, error) {
 		// outcome pair, so absence is expected rather than an interruption.
 		Session: meta.HasSession,
 	})
+
+	// A non-terminal pair is only in flight while its recorded process lives.
+	// A dead owner is projected as failed with a visible reason, without
+	// rewriting the record: the read path reports what is on disk plus what the
+	// pid check observed. The automatic pass and `paseka runs reconcile` are
+	// what persist the terminal outcome.
+	if interruption, interrupted := projectInterruptedRun(meta.State, snap.PID, meta.HasSession); interrupted {
+		meta.State = string(protocol.StatusFailed)
+		meta.Reason = interruption.Reason
+		meta.Interruption = &interruption
+	}
 
 	// Interactive sessions write no result.json; their provider accounting lands
 	// in session.json instead.

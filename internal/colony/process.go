@@ -1,20 +1,11 @@
 package colony
 
-import (
-	"os"
-	"syscall"
-)
+import "github.com/russ-p/paseka/internal/runs"
 
 // ProcessAlive reports whether pid refers to a running process on this machine.
+// The check itself lives in runs, because the run projection must decide
+// whether an in-flight status record still has an owner without importing this
+// package; this name stays colony's vocabulary for it.
 func ProcessAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	// Signal 0 does not deliver a signal; on Unix it checks existence.
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil
+	return runs.PIDAlive(pid)
 }

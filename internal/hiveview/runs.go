@@ -38,6 +38,9 @@ type RunView struct {
 	Contract runs.ContractEvidence `json:"contract"`
 	// Records marks a conflicting or incomplete outcome-record pair.
 	Records *runs.RecordIntegrity `json:"records,omitempty"`
+	// Interruption explains a run projected as failed because its recorded
+	// process is gone; absent when the state came from the outcome records.
+	Interruption *runs.RunInterruption `json:"interruption,omitempty"`
 }
 
 // ListRuns returns recent headless adapter runs from the filesystem.
@@ -96,6 +99,7 @@ func runViewFromMeta(meta runs.RunMeta) RunView {
 		HasSession:        meta.HasSession,
 		Contract:          meta.Contract,
 		Records:           meta.Records,
+		Interruption:      meta.Interruption,
 	}
 	if !meta.FinishedAt.IsZero() {
 		finished := meta.FinishedAt
