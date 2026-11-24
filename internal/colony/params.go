@@ -172,7 +172,17 @@ func ValidateRunParamKeys(params map[string]any) error {
 	if len(params) == 0 {
 		return nil
 	}
-	var removed, unknown []string
+	removed, unknown := partitionRunParamKeys(params)
+	if len(removed) == 0 && len(unknown) == 0 {
+		return nil
+	}
+	return runParamKeyError(removed, unknown)
+}
+
+// partitionRunParamKeys splits declared params into the retired keys and the
+// keys outside the valid set. Accepted keys name nothing, so the caller can
+// treat two empty slices as "nothing to report".
+func partitionRunParamKeys(params map[string]any) (removed, unknown []string) {
 	for key := range params {
 		switch {
 		case isRunParamKey(key):
@@ -182,9 +192,13 @@ func ValidateRunParamKeys(params map[string]any) error {
 			unknown = append(unknown, key)
 		}
 	}
-	if len(removed) == 0 && len(unknown) == 0 {
-		return nil
-	}
+	return removed, unknown
+}
+
+// runParamKeyError renders the load-time rejection for the keys found: the
+// migration sentences for retired keys first, then the unknown keys, followed by
+// the valid set so the operator has the one-edit fix in the same message.
+func runParamKeyError(removed, unknown []string) error {
 	sort.Strings(removed)
 	sort.Strings(unknown)
 	var parts []string
