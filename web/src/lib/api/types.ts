@@ -568,6 +568,17 @@ export interface TraceSummary extends HoneyReserve {
 	evidence?: string[];
 }
 
+/**
+ * Mirrors `runs.RunInterruption`: why a run still recorded as in flight was
+ * projected as failed. The pid is what was checked; `detail` is the sentence an
+ * operator reads.
+ */
+export interface RunInterruption {
+	reason: string;
+	pid?: number;
+	detail?: string;
+}
+
 /** Mirrors `hiveview.RunView`. */
 export interface RunSummary {
 	traceId: string;
@@ -594,6 +605,12 @@ export interface RunSummary {
 	finishedAt?: string;
 	hasEvents: boolean;
 	hasSession: boolean;
+	/**
+	 * Present when an in-flight status record was projected as failed because
+	 * its recorded process is gone. The state is `failed` either way; this
+	 * field is the reason, so the badge is never a silent failure.
+	 */
+	interruption?: RunInterruption;
 }
 
 /** Mirrors `console.EventsPage`, one page of a run's recorded events. */

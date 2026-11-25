@@ -63,6 +63,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newSessionCmd())
 	root.AddCommand(newInviteCmd())
 	root.AddCommand(newRunCmd())
+	root.AddCommand(newRunsCmd())
 	root.AddCommand(newTaskCmd())
 	root.AddCommand(newTrailCmd())
 	root.AddCommand(newStatusCmd())

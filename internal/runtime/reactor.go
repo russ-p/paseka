@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -139,6 +140,16 @@ func (r *Reactor) Run(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = sub.Unsubscribe() }()
+
+	// A run whose status record still says in flight while its process is gone
+	// would otherwise read as active forever, because no writer is left to
+	// close it. Reconcile those orphans once at startup: one status.json read
+	// and a pid check per run, a write only for the runs that need it.
+	if orphans, err := runs.ReconcileOrphanedRuns(r.colony.ColonyRoot); err != nil {
+		runtimeLog.Warn("reconcile orphaned runs failed", logging.F("error", err.Error()))
+	} else if len(orphans) > 0 {
+		runtimeLog.Info("reconciled orphaned runs", logging.F("count", strconv.Itoa(len(orphans))))
+	}
 
 	// A pending configuration transition and its admission barrier survive a
 	// restart. Recover them before any new event can be admitted.

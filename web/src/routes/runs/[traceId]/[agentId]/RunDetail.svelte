@@ -125,6 +125,14 @@
 	{/if}
 
 	{#if run}
+		{#if run.interruption}
+			<!-- A run whose record still says in flight but whose process is gone
+			     projects failed. Saying why keeps the red badge from being a
+			     silent verdict; the record itself stays as the adapter left it. -->
+			<div class="alert alert-warning" id="run-interruption" role="status">
+				<span>{run.interruption.detail ?? `Projected failed: ${run.interruption.reason}`}</span>
+			</div>
+		{/if}
 		<Section id="run-identity" title="Run">
 			<MetaList rows={identityRows} label="Run identity" columns={2} />
 		</Section>

@@ -54,6 +54,10 @@ const (
 	// not emit one. It is a runtime check in its own right: a missing summary
 	// is never reported as a completion-contract failure.
 	ReasonRunSummaryMissing = "run_summary_missing"
+	// ReasonProcessGone classifies a run whose status record still says it is
+	// in flight while the process it recorded is no longer running on this
+	// host. The run is projected, and when reconciled recorded, as failed.
+	ReasonProcessGone = "process_gone"
 )
 
 // Provenance identifies the durable execution ownership and configuration a

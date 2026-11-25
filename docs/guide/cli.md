@@ -84,6 +84,8 @@ paseka
 │   ├── stop <sessionId>
 │   └── run <role>          (hidden — Ghostty launcher)
 ├── run
+├── runs
+│   └── reconcile --trace <traceId> [--agent <agentId>] [--reason <why>] [--force]
 ├── task
 │   ├── create
 │   ├── list
@@ -324,6 +326,31 @@ paseka run
 paseka signal --type SIGNAL --trace trace-1 \
   --payload '{"kind":"task.ready","taskId":"task-1","title":"Add endpoint","bee":"builder"}'
 ```
+
+---
+
+## `paseka runs reconcile`
+
+Record a terminal failed outcome for a run whose `status.json` still says `running` (or `queued` with a pid) while the process it recorded is gone. This is the manual escape hatch for a run that died without writing `result.json`: the Console and `paseka trail list` otherwise show it as active forever.
+
+The runtime also does this automatically once at startup, and detection is part of the read projection, so a stuck bee reads as failed even before anything is rewritten.
+
+| Flag | Description |
+| ---- | ----------- |
+| `--trace` | Flight trail id (required) |
+| `--agent` | Run id. Omitted: reconcile every orphaned run in the trail |
+| `--reason` | Machine-readable reason; defaults to `process_gone`, or `operator_failed` with `--force` |
+| `--force` | Reconcile even when the recorded pid is still running; requires `--reason` |
+| `--path` / `-C` | Colony resolution start directory |
+
+Both `status.json` and `result.json` are written (`result.json` is created when the adapter never wrote one) through the same reconciliation path finalization uses. A run that is already terminal is untouched, so repeating the command changes nothing.
+
+```bash
+paseka runs reconcile --trace trace-1 --agent 01a20d76b1f665d9
+paseka runs reconcile --trace trace-1
+```
+
+**Limit:** pid liveness proves absence on this host only. A run recorded in another pid namespace, or a pid reused by an unrelated process, can be misread. That is why the manual per-run path refuses a live pid unless `--force` is passed, and why a run is never failed merely because its record carries no pid.
 
 ---
 
