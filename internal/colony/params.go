@@ -289,50 +289,61 @@ func LayerFromBee(b Bee) adapters.RunParamsLayer {
 		layer.Params = p
 		return layer
 	}
-	declared := layer.Declared
-	if v, ok := stringParam(b.Params, "model"); ok {
+	applyLaunchParams(b.Params, &p, layer.Declared)
+	applyProcessParams(b.Params, &p, layer.Declared)
+	layer.Params = p
+	return layer
+}
+
+// applyLaunchParams copies the launch flags the bee declared onto p and records
+// them in the declared set.
+func applyLaunchParams(params map[string]any, p *adapters.RunParams, declared map[string]bool) {
+	if v, ok := stringParam(params, "model"); ok {
 		p.Model = v
 		declared["model"] = true
 	}
 	// yolo drives both the trust and force flags the adapters still take, and
 	// the declared set records trust/force, which is the pair the merge and
 	// attribution work in.
-	if v, ok := boolParam(b.Params, "yolo"); ok {
+	if v, ok := boolParam(params, "yolo"); ok {
 		p.Trust = v
 		p.Force = v
 		declared["trust"] = true
 		declared["force"] = true
 	}
-	if v, ok := boolParam(b.Params, "plan"); ok {
+	if v, ok := boolParam(params, "plan"); ok {
 		p.Plan = v
 		declared["plan"] = true
 	}
-	if v, ok := stringParam(b.Params, "binary"); ok {
+	if v, ok := stringParam(params, "binary"); ok {
 		p.Binary = v
 		declared["binary"] = true
 	}
-	if v, ok := stringParam(b.Params, "reasoning"); ok {
+	if v, ok := stringParam(params, "reasoning"); ok {
 		p.Reasoning = v
 		declared["reasoning"] = true
 	}
-	if v, ok := envParam(b.Params, "env"); ok {
-		p.Env = v
-		declared["env"] = true
-	}
-	if v, ok := optionsParam(b.Params, "options"); ok {
+	if v, ok := optionsParam(params, "options"); ok {
 		p.Options = v
 		declared["options"] = true
 	}
-	if v, ok := stringParam(b.Params, "env_mode"); ok {
+}
+
+// applyProcessParams copies the environment and process-bound params the bee
+// declared onto p and records them in the declared set.
+func applyProcessParams(params map[string]any, p *adapters.RunParams, declared map[string]bool) {
+	if v, ok := envParam(params, "env"); ok {
+		p.Env = v
+		declared["env"] = true
+	}
+	if v, ok := stringParam(params, "env_mode"); ok {
 		p.EnvMode = strings.TrimSpace(v)
 		declared["env_mode"] = true
 	}
-	if v, ok := durationParam(b.Params, "timeout"); ok {
+	if v, ok := durationParam(params, "timeout"); ok {
 		p.Timeout = v
 		declared["timeout"] = true
 	}
-	layer.Params = p
-	return layer
 }
 
 // MergeRunParamsLayers overlays the keys `over` declared onto `base` with
