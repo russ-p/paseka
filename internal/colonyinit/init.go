@@ -150,24 +150,7 @@ func (r *InitResult) scaffoldProject(slug string, manifest colony.Colony, adapte
 func (r *InitResult) writeColonyManifest(root, slug string, manifest colony.Colony) error {
 	path := colony.PasekaPath(root, "colony.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		c := colony.Colony{
-			Slug: slug,
-			Defaults: colony.Defaults{
-				PromptTemplate: "default.md",
-				EnergyBudget:   protocol.DefaultEnergyBudget,
-				DefaultBee:     protocol.DefaultBee,
-			},
-			AutoInvites: colony.DefaultAutoInviteRules(),
-		}
-		data, err := yaml.Marshal(c)
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return err
-		}
-		r.Created = append(r.Created, relProject(root, path))
-		return nil
+		return r.writeFreshColonyManifest(root, slug, path)
 	}
 
 	if strings.TrimSpace(manifest.Slug) != "" {
@@ -176,6 +159,40 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest colony.Colo
 	}
 
 	manifest.Slug = slug
+	fillManifestDefaults(&manifest)
+	data, err := yaml.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+	r.Created = append(r.Created, relProject(root, path)+" (updated slug)")
+	return nil
+}
+
+func (r *InitResult) writeFreshColonyManifest(root, slug, path string) error {
+	c := colony.Colony{
+		Slug: slug,
+		Defaults: colony.Defaults{
+			PromptTemplate: "default.md",
+			EnergyBudget:   protocol.DefaultEnergyBudget,
+			DefaultBee:     protocol.DefaultBee,
+		},
+		AutoInvites: colony.DefaultAutoInviteRules(),
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+	r.Created = append(r.Created, relProject(root, path))
+	return nil
+}
+
+func fillManifestDefaults(manifest *colony.Colony) {
 	if manifest.Defaults.PromptTemplate == "" {
 		manifest.Defaults.PromptTemplate = "default.md"
 	}
@@ -188,15 +205,6 @@ func (r *InitResult) writeColonyManifest(root, slug string, manifest colony.Colo
 	if len(manifest.AutoInvites) == 0 {
 		manifest.AutoInvites = colony.DefaultAutoInviteRules()
 	}
-	data, err := yaml.Marshal(manifest)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return err
-	}
-	r.Created = append(r.Created, relProject(root, path)+" (updated slug)")
-	return nil
 }
 
 func (r *InitResult) scaffoldHome(slug, repoRoot, adapter string) error {
