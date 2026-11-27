@@ -254,14 +254,6 @@ func (a *api) handleChromeStream(w http.ResponseWriter, r *http.Request) {
 	ping := time.NewTicker(chromeHeartbeat)
 	defer ping.Stop()
 
-	writeChrome := func(payload []byte) error {
-		if _, err := fmt.Fprintf(w, "event: chrome\ndata: %s\n\n", payload); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
-	}
-
 	for {
 		select {
 		case <-r.Context().Done():
@@ -270,7 +262,7 @@ func (a *api) handleChromeStream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if err := writeChrome(payload); err != nil {
+			if err := writeChromeFrame(w, flusher, payload); err != nil {
 				return
 			}
 		case <-ping.C:
@@ -280,4 +272,14 @@ func (a *api) handleChromeStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// writeChromeFrame sends one chrome payload as an SSE event and flushes it, so
+// the client sees the frame without waiting for the stream to fill.
+func writeChromeFrame(w http.ResponseWriter, flusher http.Flusher, payload []byte) error {
+	if _, err := fmt.Fprintf(w, "event: chrome\ndata: %s\n\n", payload); err != nil {
+		return err
+	}
+	flusher.Flush()
+	return nil
 }
