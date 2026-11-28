@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/russ-p/paseka/internal/colony"
@@ -132,6 +133,44 @@ func TestTraceArtifactsKeepsAnUnannouncedBundleApart(t *testing.T) {
 		if !item.Staged {
 			t.Fatalf("a file no event announces reads staged: %+v", item)
 		}
+	}
+}
+
+// The console's Mermaid hydration reads goldmark's fenced output, so the class
+// on the code element is a contract: if the renderer stops emitting
+// `language-mermaid`, diagrams silently fall back to source with no Go change.
+func TestTraceArtifactMarkdownKeepsMermaidFence(t *testing.T) {
+	repo := initConsoleRepo(t)
+	traceID := "trace-artifacts-mermaid"
+	comb := filepath.Join(repo, ".paseka", "runs", traceID, "artifacts")
+	writeCombFile(t, filepath.Join(comb, "diagram.md"), "# Diagram\n\n```mermaid\ngraph TD\n  A --> B\n```\n")
+
+	srv := console.NewServer(console.Options{
+		Addr:     "127.0.0.1:0",
+		Colony:   colony.Context{ColonyRoot: repo, Slug: "console-test"},
+		Sessions: sessions.NewManager(),
+	})
+
+	items := listArtifacts(t, repo, traceID)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want the diagram note", items)
+	}
+	q := url.Values{"ref": {items[0].Ref}}
+	req := httptest.NewRequest(http.MethodGet, "/api/traces/"+traceID+"/artifacts?"+q.Encode(), nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("content status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view hiveview.ArtifactContentView
+	if err := json.NewDecoder(rec.Body).Decode(&view); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(view.ContentHTML, `<code class="language-mermaid">`) {
+		t.Fatalf("contentHtml lost the Mermaid fence:\n%s", view.ContentHTML)
+	}
+	if !strings.Contains(view.ContentHTML, "graph TD") {
+		t.Fatalf("contentHtml lost the fence source:\n%s", view.ContentHTML)
 	}
 }
 
