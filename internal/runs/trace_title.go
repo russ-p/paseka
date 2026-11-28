@@ -5,13 +5,17 @@ import (
 	"strings"
 
 	"github.com/russ-p/paseka/internal/protocol"
+	"github.com/russ-p/paseka/internal/taskledger"
 )
 
 const featureRequestedKind = "feature.requested"
 
 // ResolveTraceTitle returns the human-readable title for a flight trail.
 // Priority: latest INSIGHT/trace.title, latest SIGNAL/feature.requested title,
-// first non-empty task title from the filesystem projection, then empty string.
+// first non-empty work task title from the filesystem projection, then empty
+// string. Closing rounds and the merge gate are skipped: their titles are
+// rendered from {{.TraceTitle}}, so using one as the fallback would rename the
+// trail to the gate that closes it.
 func ResolveTraceTitle(colonyRoot, traceID string) (string, error) {
 	if colonyRoot == "" || traceID == "" {
 		return "", nil
@@ -63,11 +67,32 @@ func ResolveTraceTitle(colonyRoot, traceID string) (string, error) {
 		if err != nil {
 			continue
 		}
+		if isTrailClosingTask(taskID, fm) {
+			continue
+		}
 		if title := strings.TrimSpace(fm.Title); title != "" {
 			return title, nil
 		}
 	}
 	return "", nil
+}
+
+// isTrailClosingTask reports whether a projected task is a runtime closing
+// round or the merge gate rather than trail work. Their ids sort ahead of
+// generated work ids (closing-1, _review before task-…), so without this check
+// the fallback would flip to the gate title as soon as the gate is planned.
+func isTrailClosingTask(taskID string, fm TaskFrontmatter) bool {
+	if taskID == taskledger.FinalReviewTaskID {
+		return true
+	}
+	if _, ok := taskledger.ClosingRoundNumber(taskID); ok {
+		return true
+	}
+	switch protocol.DeriveTaskPhase(fm.Phase, fm.Review) {
+	case protocol.TaskPhaseClosing, protocol.TaskPhaseMerge:
+		return true
+	}
+	return false
 }
 
 // HasInsightTraceTitle reports whether an INSIGHT/trace.title event exists on the trail.

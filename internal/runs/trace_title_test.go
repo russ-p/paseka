@@ -101,6 +101,64 @@ func TestResolveTraceTitleFromTaskMarkdown(t *testing.T) {
 	}
 }
 
+// The fallback used to pick the merge gate, whose id sorts ahead of generated
+// work ids, so the trail appeared to rename itself to "Review and merge: …".
+func TestResolveTraceTitleSkipsMergeGate(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-title-merge-gate"
+	writeProjectedTask(t, root, traceID, "_review", "title: 'Review and merge: Add endpoint'\nreview: final\nphase: merge\nstatus: waiting_review", "Review the accumulated changes.")
+	writeProjectedTask(t, root, traceID, "task-01a22100b7992862", "title: Add endpoint\nstatus: completed", "Body")
+
+	got, err := ResolveTraceTitle(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Add endpoint" {
+		t.Fatalf("title = %q, want Add endpoint (merge gate must not name the trail)", got)
+	}
+}
+
+func TestResolveTraceTitleSkipsClosingRound(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-title-closing"
+	writeProjectedTask(t, root, traceID, "closing-1", "title: Closing review\nphase: closing\nstatus: completed", "Body")
+	writeProjectedTask(t, root, traceID, "task-01a22100b7992862", "title: Add endpoint\nstatus: completed", "Body")
+
+	got, err := ResolveTraceTitle(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Add endpoint" {
+		t.Fatalf("title = %q, want Add endpoint (closing round must not name the trail)", got)
+	}
+}
+
+func TestResolveTraceTitleOnlyGateIsEmpty(t *testing.T) {
+	root := t.TempDir()
+	traceID := "trace-title-gate-only"
+	writeProjectedTask(t, root, traceID, "_review", "title: 'Review and merge: Add endpoint'\nreview: final\nphase: merge\nstatus: waiting_review", "Body")
+
+	got, err := ResolveTraceTitle(root, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("title = %q, want empty (a gate alone is not a trail name)", got)
+	}
+}
+
+func writeProjectedTask(t *testing.T, root, traceID, taskID, frontmatter, body string) {
+	t.Helper()
+	taskDir := filepath.Join(root, ".paseka", "runs", traceID, "tasks", taskID)
+	if err := os.MkdirAll(taskDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\ntraceId: " + traceID + "\ntaskId: " + taskID + "\n" + frontmatter + "\n---\n\n" + body + "\n"
+	if err := os.WriteFile(filepath.Join(taskDir, "task.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestResolveTraceTitleEmpty(t *testing.T) {
 	root := t.TempDir()
 	got, err := ResolveTraceTitle(root, "trace-missing")
