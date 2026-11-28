@@ -94,6 +94,27 @@ describe('ArtifactHtmlBody', () => {
 		expect(container.querySelector('details pre code.language-mermaid')).toHaveTextContent('graph TD');
 	});
 
+	it('shows the plain sentence once when the failure carries no message', async () => {
+		mountDiagram.mockResolvedValue(handle(''));
+		const { container } = render(ArtifactHtmlBody, { html: fence('graph TD') });
+
+		await waitFor(() => expect(container.querySelector('.alert-warning')).toBeVisible());
+		// `''` means failed-without-detail, so the source still opens and the
+		// notice is the sentence once, not the sentence twice.
+		expect(container.querySelector('details')?.open).toBe(true);
+		expect(container.querySelector('.alert-warning')?.textContent).toBe('Diagram failed to render.');
+	});
+
+	it('shows the plain sentence once when the mount rejects with an empty message', async () => {
+		mountDiagram.mockRejectedValue(new Error('  \n\t '));
+		const { container } = render(ArtifactHtmlBody, { html: fence('graph TD') });
+
+		await waitFor(() => expect(container.querySelector('.alert-warning')).toBeVisible());
+		expect(container.querySelector('details')?.open).toBe(true);
+		expect(container.querySelector('.alert-warning')?.textContent).toBe('Diagram failed to render.');
+		expect(container.querySelector('details pre code.language-mermaid')).toHaveTextContent('graph TD');
+	});
+
 	it('does not retry a failed mount in a loop', async () => {
 		mountDiagram.mockRejectedValue(new Error('failed to load diagram chunk'));
 		const { container } = render(ArtifactHtmlBody, { html: fence('graph TD') });

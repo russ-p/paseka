@@ -84,6 +84,16 @@ describe('mountDiagram', () => {
 		expect(diagram.error).toBe('syntax error');
 	});
 
+	it('reports an empty failure instead of the notice sentence when no line is readable', async () => {
+		pele.mountAsync.mockResolvedValue(mounted(new Error(' \n\t ')));
+
+		const diagram = await mountDiagram(document.createElement('pre'), 'graph TD');
+
+		// The component owns the "Diagram failed to render." sentence; a copy here
+		// would show it twice in the notice.
+		expect(diagram.error).toBe('');
+	});
+
 	it('turns a rejected engine call into an error handle', async () => {
 		pele.mountAsync.mockRejectedValue(new Error('failed to load diagram chunk'));
 
@@ -91,5 +101,13 @@ describe('mountDiagram', () => {
 
 		expect(diagram.error).toBe('failed to load diagram chunk');
 		expect(diagram.destroy).not.toThrow();
+	});
+
+	it('reports an empty failure for a rejected engine call with no message', async () => {
+		pele.mountAsync.mockRejectedValue(new Error(''));
+
+		const diagram = await mountDiagram(document.createElement('pre'), 'graph TD');
+
+		expect(diagram.error).toBe('');
 	});
 });

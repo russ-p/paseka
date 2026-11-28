@@ -9,7 +9,12 @@
 export interface MermaidHandle {
 	/** The source the diagram was mounted from, kept for a fallback surface. */
 	readonly source: string;
-	/** A short, operator-readable failure, or `null` when it rendered. */
+	/**
+	 * `null` when the diagram rendered; otherwise the raw first line of the
+	 * failure, or `''` when it failed without a message the UI can show. The
+	 * failure notice adds its own sentence once, so a raw prefix here would
+	 * read twice.
+	 */
 	readonly error: string | null;
 	destroy(): void;
 }
@@ -113,9 +118,14 @@ export async function mountDiagram(host: HTMLElement, source: string): Promise<M
 	}
 }
 
-/** Pele reports through `Error`s and thrown records; neither reaches the UI raw. */
+/**
+ * Pele reports through `Error`s and thrown records; neither reaches the UI raw.
+ * No readable line is `''`, not the notice's sentence: the component owns that
+ * sentence and must be able to add it exactly once.
+ */
 function describeError(cause: unknown): string {
 	const message = cause instanceof Error ? cause.message : String(cause);
-	const firstLine = message.split('\n').find((line) => line.trim() !== '') ?? 'Diagram failed to render.';
+	const firstLine = message.split('\n').find((line) => line.trim() !== '');
+	if (!firstLine) return '';
 	return firstLine.length > 200 ? `${firstLine.slice(0, 197)}…` : firstLine;
 }

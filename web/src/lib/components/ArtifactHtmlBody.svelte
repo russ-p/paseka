@@ -104,7 +104,8 @@
 					return;
 				}
 				handles.push(handle);
-				if (handle.error) {
+				// `''` is a failure with no detail, so only `null` means it rendered.
+				if (handle.error !== null) {
 					// A successful mount keeps the source folded; a failure opens it
 					// so the operator can read or copy what did not render.
 					details.open = true;
