@@ -122,8 +122,12 @@ export async function mountDiagram(host: HTMLElement, source: string): Promise<M
  * Pele reports through `Error`s and thrown records; neither reaches the UI raw.
  * No readable line is `''`, not the notice's sentence: the component owns that
  * sentence and must be able to add it exactly once.
+ *
+ * Exported because the mount is not the only source of a failure: the
+ * component's catch has to describe a rejected `mountDiagram` the same way, and
+ * two copies of this scan drifted apart before. There is one contract.
  */
-function describeError(cause: unknown): string {
+export function describeError(cause: unknown): string {
 	const message = cause instanceof Error ? cause.message : String(cause);
 	const firstLine = message.split('\n').find((line) => line.trim() !== '');
 	if (!firstLine) return '';

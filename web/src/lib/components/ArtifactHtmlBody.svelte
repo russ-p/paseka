@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		describeError,
 		findMermaidBlocks,
 		MAX_DIAGRAMS,
 		mountDiagram,
@@ -40,14 +41,6 @@
 		details.append(summary, pre);
 		wrapper.append(host, notice, details);
 		return { host, details, notice };
-	}
-
-	/** The raw first line of a failure; the notice adds the prefix exactly once. */
-	function firstLine(cause: unknown): string {
-		const message = cause instanceof Error ? cause.message : String(cause);
-		const line = message.split('\n').find((candidate) => candidate.trim() !== '');
-		if (!line) return '';
-		return line.length > 200 ? `${line.slice(0, 197)}…` : line;
 	}
 
 	function noticeFor(error: string): string {
@@ -95,7 +88,7 @@
 				try {
 					handle = await mountDiagram(host, source);
 				} catch (cause) {
-					handle = { source, error: firstLine(cause), destroy: () => {} };
+					handle = { source, error: describeError(cause), destroy: () => {} };
 				}
 				// A mount that resolves after the modal closed destroys itself
 				// rather than writing into detached DOM.
