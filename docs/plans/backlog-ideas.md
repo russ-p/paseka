@@ -170,14 +170,6 @@ Console ideas beyond the shipped routes; feature follow-ups stay in [Backlog](ba
 - **Why deferred:** The raw material is already trail-local — the trail event log and the task ledger — but the axes and labels need a question first. Timeline gives chronology, trail detail gives stages, tasks and runs, and the metrics projection gives totals, so a flow view earns its place only when a real trail is unreadable from those: a long rework chain, many Bees on one task, a standing trail's ticks. 052 is about token volume and does not own this.
 - **Revisit when:** An operator cannot explain a trail's shape from the timeline and task list — "why did this trail take 40 runs", "which step spawned this Bee" — and the retained event log is shown to carry those edges cheaply.
 
-#### Mermaid fences in artifact previews
-
-- **Kind:** idea
-- **Source:** planning (artifact preview; Pele evaluation)
-- **Summary:** The artifact modal renders `.md` bodies from the server's goldmark HTML, so a fenced Mermaid block arrives as `<pre><code class="language-mermaid">` and stays source. Hydrate those blocks in the browser with [Pele](https://github.com/obsidianmd/pele), an MIT-licensed Mermaid-syntax renderer that emits themeable SVG, has no runtime dependencies, and is ~230 kB gzip for the full entry point with per-type lazy chunks. No production API or Go change is needed; the existing HTML already carries the block. Keep the source behind a `<details>` fallback, isolate the engine behind a small wrapper, and start with links/images disabled because a comb artifact can contain model-generated text. Exports and other Markdown surfaces would still show the fence as source and are out of scope.
-- **Why deferred:** Pele is a young 1.x library (1.13.0 today) and diagram rendering is a reading convenience, not a trail-correctness or review-gate need. It needs an exact version pin and a small security test for the SVG insertion path; neither is large, but neither belongs in the current change.
-- **Revisit when:** An operator opens a trail artifact whose diagram is unreadable as Mermaid source, or diagrams are wanted in review notes/exports as well as the artifact modal.
-
 ### Pull-request delivery
 
 One delivery idea from [024-pull-request-delivery](../specs/024-pull-request-delivery.md); the

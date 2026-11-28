@@ -2,6 +2,16 @@
 
 Shipped features worth calling out. Design records live under `docs/specs/` in the repo (not published on the docs site) — see [Specs index](specs-index.md).
 
+## 2026-11 — Mermaid diagrams in Queen Console artifact previews
+
+A Markdown artifact in the Queen Console can now draw its Mermaid fences. The server still sends the goldmark HTML; the artifact dialog hydrates each `language-mermaid` block in the browser with Pele, keeps the fenced source behind a folded **Mermaid source** disclosure, and themes the SVG from the active DaisyUI tokens so a theme switch repaints it in place.
+
+- **Reading a diagram.** The picture replaces nothing: the fence stays under **Mermaid source**, opens by itself when the diagram fails, and remains the text you copy or read aloud.
+- **Bounds for model-written text.** Links and images are disabled, one artifact renders at most twenty diagrams, and source size, SVG output, and edge count are capped; a block past a limit stays readable as source beside its error.
+- **Not every Markdown surface yet.** Exports and Markdown outside the artifact dialog still show the fence as source.
+
+- Canonical: [Queen Console](../guide/queen-console.md), [Console design system](../architecture/queen-console-design-system.md#diagrams)
+
 ## 2026-11 — Chrome stream keeps the last known plaques when a read fails
 
 A failed read behind a Queen Console header plaque no longer blanks it. When `state.json` becomes unparsable or an attention source hiccups, the chrome SSE frame now omits the failed section and names the error, and the header keeps showing the last known Hive runtime status, heartbeat line, and Live bees list until the read recovers — instead of the panels momentarily (or, for a persistently broken file, indefinitely) clearing to an empty status word and a zero bee count. The Git plaque already worked this way; runtime, agents, and attention now share its contract, and a half-failed attention read ships the half that answered with the error named beside it.

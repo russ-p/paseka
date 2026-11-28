@@ -221,6 +221,15 @@ carries its size on disk, and a file the dialog will not render — too large, o
 not text — says so *and* says how large it is, so you can tell a file worth
 raising a limit for from one that is simply not a page of text.
 
+A Markdown artifact can draw its diagrams. The dialog still shows the server's
+Markdown, and a `mermaid` fence is then rendered into a diagram in place, with
+the fenced source folded under **Mermaid source** below the picture; a diagram
+that cannot render opens that source by itself and names the failure, so the
+text is always one click away. Links and images inside a diagram are disabled in
+v1 because a comb artifact can carry model-generated text. Only the artifact
+dialog does this: exports and every other Markdown surface still show the fence
+as source, and diagrams there are out of scope for this change.
+
 ### Reviews
 
 Lists tasks in `waiting_review`. Final isolated gates can open a merge preview
