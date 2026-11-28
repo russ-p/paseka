@@ -96,12 +96,16 @@ describe('ArtifactViewModal', () => {
 		await waitFor(() =>
 			expect(container.querySelector('[data-testid="mermaid-diagram"]')).toBeInTheDocument()
 		);
-		expect(pele.mountAsync).toHaveBeenCalledWith(expect.any(HTMLPreElement), 'graph TD\n  A --> B', {
-			links: false,
-			images: false,
-			zoom: 'auto',
-			fontSize: 14
-		});
+		expect(pele.mountAsync).toHaveBeenCalledWith(
+			container.querySelector('.artifact-diagram-host'),
+			'graph TD\n  A --> B',
+			{
+				links: false,
+				images: false,
+				zoom: 'auto',
+				fontSize: 14
+			}
+		);
 
 		unmount();
 		await waitFor(() => expect(destroy).toHaveBeenCalledTimes(1));

@@ -82,35 +82,6 @@ export async function mountDiagram(host: HTMLElement, source: string): Promise<M
 	}
 }
 
-/**
- * A Svelte action for the artifact body: hydrate every fenced block while the
- * element is on screen and destroy the mounted diagrams when it leaves. A
- * mount that resolves after the action is destroyed tears itself down instead
- * of writing into detached DOM.
- */
-export function hydrateMermaid(node: HTMLElement): { destroy(): void } {
-	let disposed = false;
-	const handles: MermaidHandle[] = [];
-	for (const code of findMermaidBlocks(node)) {
-		const host = code.parentElement;
-		if (!host) continue;
-		void mountDiagram(host, code.textContent ?? '').then((handle) => {
-			if (disposed) {
-				handle.destroy();
-				return;
-			}
-			handles.push(handle);
-		});
-	}
-	return {
-		destroy() {
-			disposed = true;
-			for (const handle of handles) handle.destroy();
-			handles.length = 0;
-		}
-	};
-}
-
 /** Pele reports through `Error`s and thrown records; neither reaches the UI raw. */
 function describeError(cause: unknown): string {
 	const message = cause instanceof Error ? cause.message : String(cause);

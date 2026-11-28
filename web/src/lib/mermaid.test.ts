@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findMermaidBlocks, hydrateMermaid, mountDiagram } from './mermaid';
+import { findMermaidBlocks, mountDiagram } from './mermaid';
 
 const pele = vi.hoisted(() => ({ mountAsync: vi.fn() }));
 
@@ -86,42 +86,5 @@ describe('mountDiagram', () => {
 
 		expect(diagram.error).toBe('failed to load diagram chunk');
 		expect(diagram.destroy).not.toThrow();
-	});
-});
-
-describe('hydrateMermaid', () => {
-	it('mounts every fenced block in place and destroys its handles', async () => {
-		document.body.innerHTML =
-			'<pre><code class="language-mermaid">graph TD</code></pre>' +
-			'<pre><code class="language-mermaid">pie</code></pre>';
-		const handles = [mounted(), mounted()];
-		pele.mountAsync
-			.mockResolvedValueOnce(handles[0])
-			.mockResolvedValueOnce(handles[1]);
-
-		const action = hydrateMermaid(document.body);
-
-		const hosts: HTMLElement[] = [];
-		await vi.waitFor(() => expect(pele.mountAsync).toHaveBeenCalledTimes(2));
-		for (const call of pele.mountAsync.mock.calls) hosts.push(call[0]);
-		expect(hosts.map((host) => host.tagName)).toEqual(['PRE', 'PRE']);
-		expect(pele.mountAsync.mock.calls.map((call) => call[1])).toEqual(['graph TD', 'pie']);
-
-		action.destroy();
-
-		await vi.waitFor(() => {
-			for (const handle of handles) expect(handle.destroy).toHaveBeenCalledTimes(1);
-		});
-	});
-
-	it('tears down a mount that resolves after the action is destroyed', async () => {
-		document.body.innerHTML = '<pre><code class="language-mermaid">graph TD</code></pre>';
-		const handle = mounted();
-		pele.mountAsync.mockResolvedValue(handle);
-
-		const action = hydrateMermaid(document.body);
-		action.destroy();
-
-		await vi.waitFor(() => expect(handle.destroy).toHaveBeenCalledTimes(1));
 	});
 });
