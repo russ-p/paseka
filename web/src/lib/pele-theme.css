@@ -1,0 +1,36 @@
+/*
+ * Pele diagram theme bridge (Queen Console → artifact previews).
+ *
+ * Pele paints its SVG from `--pele-*` custom properties. Mapping them onto the
+ * active DaisyUI theme tokens means a theme switch repaints every mounted
+ * diagram in place: `data-theme` changes the token values, the SVG's own
+ * `var(--pele-…)` references follow, and nothing is re-rendered or remounted.
+ *
+ * Scoped to the artifact body, the one surface that mounts Pele today; a
+ * global bridge would silently restyle a future diagram surface that may want
+ * its own palette.
+ *
+ * Only theme tokens and `color-mix()` are used here — no colour literals — so
+ * every curated theme, and any theme added later, gets a readable diagram.
+ *
+ * Series palette: `--pele-series-1…8` are deliberately left at Pele's defaults
+ * in v1. They are a fixed categorical palette chosen by the library for
+ * contrast on both light and dark surfaces, and the console's themes all share
+ * the same Catppuccin hue family. Mapping them onto the Usage chart's
+ * five-token palette would repeat a hue in a diagram that can need eight
+ * distinct series. Revisit only if a real diagram's series become
+ * indistinguishable on a supported theme.
+ */
+.artifact-body {
+	--pele-bg: var(--color-base-100);
+	--pele-fg: var(--color-base-content);
+	--pele-muted: color-mix(in oklab, var(--color-base-content) 85%, transparent);
+	--pele-border: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+	--pele-line: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+	--pele-surface: var(--color-base-200);
+	--pele-surface-alt: var(--color-base-300);
+	--pele-accent: var(--color-primary);
+	--pele-critical: var(--color-error);
+	--pele-error: var(--color-error);
+	--pele-radius: var(--radius-field);
+}

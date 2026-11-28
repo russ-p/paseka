@@ -18,7 +18,11 @@
 		const wrapper = document.createElement('div');
 		wrapper.className = 'artifact-diagram my-2 space-y-1';
 		const host = document.createElement('div');
-		host.className = 'artifact-diagram-host flex justify-center overflow-x-auto';
+		// `relative` anchors Pele's absolutely positioned zoom controls to this
+		// box. The host must not itself scroll: a scroll container carries those
+		// controls away with the diagram. Pele fits the SVG to the host and zooms
+		// from there, so a wide diagram stays readable without horizontal scroll.
+		host.className = 'artifact-diagram-host relative flex w-full justify-center';
 		const notice = document.createElement('div');
 		notice.className = 'alert alert-warning py-1 text-xs';
 		notice.setAttribute('role', 'alert');
@@ -33,12 +37,16 @@
 		return { host, details, notice };
 	}
 
-	function describe(cause: unknown): string {
+	/** The raw first line of a failure; the notice adds the prefix exactly once. */
+	function firstLine(cause: unknown): string {
 		const message = cause instanceof Error ? cause.message : String(cause);
-		const firstLine = message.split('\n').find((line) => line.trim() !== '');
-		if (!firstLine) return 'Diagram failed to render.';
-		const short = firstLine.length > 200 ? `${firstLine.slice(0, 197)}…` : firstLine;
-		return `Diagram failed to render: ${short}`;
+		const line = message.split('\n').find((candidate) => candidate.trim() !== '');
+		if (!line) return '';
+		return line.length > 200 ? `${line.slice(0, 197)}…` : line;
+	}
+
+	function noticeFor(error: string): string {
+		return error === '' ? 'Diagram failed to render.' : `Diagram failed to render: ${error}`;
 	}
 
 	$effect(() => {
@@ -65,7 +73,7 @@
 				try {
 					handle = await mountDiagram(host, source);
 				} catch (cause) {
-					handle = { source, error: describe(cause), destroy: () => {} };
+					handle = { source, error: firstLine(cause), destroy: () => {} };
 				}
 				// A mount that resolves after the modal closed destroys itself
 				// rather than writing into detached DOM.
@@ -78,7 +86,7 @@
 					// A successful mount keeps the source folded; a failure opens it
 					// so the operator can read or copy what did not render.
 					details.open = true;
-					notice.textContent = describe(handle.error);
+					notice.textContent = noticeFor(handle.error);
 					notice.hidden = false;
 				}
 			}

@@ -28,6 +28,8 @@ type MountAsync = (
 		images: boolean;
 		zoom: 'auto';
 		fontSize: number;
+		responsive: boolean;
+		autoDirection: boolean;
 	}
 ) => Promise<Mounted>;
 
@@ -71,7 +73,13 @@ export async function mountDiagram(host: HTMLElement, source: string): Promise<M
 			links: false,
 			images: false,
 			zoom: 'auto',
-			fontSize: 14
+			fontSize: 14,
+			// The artifact modal is narrow on a phone. Pele fits the SVG to its
+			// host and flips a wide flowchart at its 640px breakpoint, so a
+			// diagram stays legible without the modal scrolling sideways; the
+			// zoom controls cover the detail that fitting shrinks.
+			responsive: true,
+			autoDirection: true
 		});
 		if (mounted.error) {
 			return { source, error: describeError(mounted.error), destroy: () => mounted.destroy() };

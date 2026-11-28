@@ -103,7 +103,9 @@ describe('ArtifactViewModal', () => {
 				links: false,
 				images: false,
 				zoom: 'auto',
-				fontSize: 14
+				fontSize: 14,
+				responsive: true,
+				autoDirection: true
 			}
 		);
 

@@ -45,7 +45,7 @@ describe('findMermaidBlocks', () => {
 });
 
 describe('mountDiagram', () => {
-	it('mounts with links and images off, at the artifact preview size', async () => {
+	it('mounts with links and images off, fitted to the narrow artifact preview', async () => {
 		const handle = mounted();
 		pele.mountAsync.mockResolvedValue(handle);
 		const host = document.createElement('pre');
@@ -57,7 +57,9 @@ describe('mountDiagram', () => {
 			links: false,
 			images: false,
 			zoom: 'auto',
-			fontSize: 14
+			fontSize: 14,
+			responsive: true,
+			autoDirection: true
 		});
 		expect(diagram).toMatchObject({ source, error: null });
 		diagram.destroy();

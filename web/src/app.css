@@ -4,6 +4,10 @@
    chart and its tooltip with no theme object and no re-render (design system,
    Charts section). Imported once, here, and nowhere else. */
 @import "layerchart/daisyui-5.css";
+/* Pele's diagram palette bridge: `--pele-*` to the active DaisyUI theme tokens,
+   scoped to the artifact body (design system, Diagrams section). Imported once,
+   here, and nowhere else. */
+@import "./lib/pele-theme.css";
 
 @plugin "daisyui" {
 	themes:

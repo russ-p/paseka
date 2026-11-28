@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { render, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,12 +21,18 @@ function handle(error: string | null = null): MermaidHandle {
 	return { source: '', error, destroy: vi.fn() };
 }
 
+/** A source file under `web/src`, for the stylesheet and literal contracts. */
+function sourceOf(file: string): string {
+	return readFileSync(join(process.cwd(), 'src', file), 'utf8');
+}
+
 beforeEach(() => {
 	mountDiagram.mockReset();
 });
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	delete document.documentElement.dataset.theme;
 });
 
 describe('ArtifactHtmlBody', () => {
@@ -65,7 +73,8 @@ describe('ArtifactHtmlBody', () => {
 
 		await waitFor(() => expect(container.querySelector('.alert-warning')).toBeVisible());
 		expect(container.querySelector('details')?.open).toBe(true);
-		expect(container.querySelector('.alert-warning')).toHaveTextContent(
+		// Exact, not substring: the notice must not stack its prefix twice.
+		expect(container.querySelector('.alert-warning')?.textContent).toBe(
 			'Diagram failed to render: Diagram type "flowchart" is not supported yet.'
 		);
 		expect(container.querySelector('details pre code.language-mermaid')).toHaveTextContent(
@@ -79,7 +88,7 @@ describe('ArtifactHtmlBody', () => {
 
 		await waitFor(() => expect(container.querySelector('.alert-warning')).toBeVisible());
 		expect(container.querySelector('details')?.open).toBe(true);
-		expect(container.querySelector('.alert-warning')).toHaveTextContent(
+		expect(container.querySelector('.alert-warning')?.textContent).toBe(
 			'Diagram failed to render: failed to load diagram chunk'
 		);
 		expect(container.querySelector('details pre code.language-mermaid')).toHaveTextContent('graph TD');
@@ -133,5 +142,58 @@ describe('ArtifactHtmlBody', () => {
 		resolveMount(late);
 
 		await waitFor(() => expect(late.destroy).toHaveBeenCalledTimes(1));
+	});
+
+	it('keeps the mounted diagram when the document theme changes', async () => {
+		mountDiagram.mockResolvedValue(handle());
+		render(ArtifactHtmlBody, { html: fence('graph TD') });
+
+		await waitFor(() => expect(mountDiagram).toHaveBeenCalledTimes(1));
+
+		document.documentElement.dataset.theme = 'catppuccin-mocha';
+		await tick();
+
+		// Pele paints from CSS variables, so a theme switch repaints the live
+		// SVG; remounting would lose the operator's zoom and pan.
+		expect(mountDiagram).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('Pele theme bridge', () => {
+	it('maps the core Pele palette onto DaisyUI theme tokens', () => {
+		const css = sourceOf('lib/pele-theme.css');
+		const tokens: Record<string, string> = {
+			'--pele-bg': 'var(--color-base-100)',
+			'--pele-fg': 'var(--color-base-content)',
+			'--pele-surface': 'var(--color-base-200)',
+			'--pele-surface-alt': 'var(--color-base-300)',
+			'--pele-accent': 'var(--color-primary)',
+			'--pele-critical': 'var(--color-error)',
+			'--pele-error': 'var(--color-error)',
+			'--pele-radius': 'var(--radius-field)'
+		};
+		for (const [variable, value] of Object.entries(tokens)) {
+			expect(css).toContain(`${variable}: ${value};`);
+		}
+		for (const variable of ['--pele-muted', '--pele-border', '--pele-line']) {
+			expect(css).toMatch(
+				new RegExp(`${variable}:\\s*color-mix\\([^;]*var\\(--color-base-content\\)`)
+			);
+		}
+	});
+
+	it('is scoped to the artifact body and imported once from the global stylesheet', () => {
+		const css = sourceOf('lib/pele-theme.css');
+		expect(css).toMatch(/^\.artifact-body\s*\{/m);
+		expect(sourceOf('app.css').match(/@import\s+["']\.\/lib\/pele-theme\.css["']/g)).toHaveLength(1);
+	});
+
+	it('adds no raw colour literals to the theme file or the Svelte body', () => {
+		const literals = [/#[0-9a-fA-F]{3,8}\b/, /\brgba?\(/, /\bhsla?\(/, /\boklch\(/];
+		for (const file of ['lib/pele-theme.css', 'lib/components/ArtifactHtmlBody.svelte']) {
+			for (const pattern of literals) {
+				expect(sourceOf(file)).not.toMatch(pattern);
+			}
+		}
 	});
 });
