@@ -328,19 +328,29 @@ func parseLoadavg(data []byte) (l1, l5, l15 float64, ok bool) {
 	return l1, l5, l15, true
 }
 
+// parseMeminfoLine extracts the key and kilobyte value from one /proc/meminfo
+// line. found is false for lines without a colon, a value, or a numeric value.
+func parseMeminfoLine(line string) (key string, kb uint64, found bool) {
+	key, rest, found := strings.Cut(line, ":")
+	if !found {
+		return "", 0, false
+	}
+	fields := strings.Fields(rest)
+	if len(fields) < 1 {
+		return "", 0, false
+	}
+	kb, err := strconv.ParseUint(fields[0], 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return key, kb, true
+}
+
 func parseMeminfo(data []byte) (used, total, avail uint64, ok bool) {
 	var haveTotal, haveAvail bool
 	for _, line := range strings.Split(string(data), "\n") {
-		key, rest, found := strings.Cut(line, ":")
+		key, kb, found := parseMeminfoLine(line)
 		if !found {
-			continue
-		}
-		fields := strings.Fields(rest)
-		if len(fields) < 1 {
-			continue
-		}
-		kb, err := strconv.ParseUint(fields[0], 10, 64)
-		if err != nil {
 			continue
 		}
 		switch key {
