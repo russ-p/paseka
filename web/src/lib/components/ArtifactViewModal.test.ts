@@ -6,6 +6,10 @@ import ArtifactViewModalHarness from './ArtifactViewModalHarness.svelte';
 import { artifactView } from '../../tests/fixtures';
 import type { ArtifactContent } from '$lib/api/types';
 
+const pele = vi.hoisted(() => ({ mountAsync: vi.fn() }));
+
+vi.mock('pele/lazy', () => pele);
+
 function stubContent(content: ArtifactContent | Response): ReturnType<typeof vi.fn> {
 	const mock = vi.fn(async () =>
 		content instanceof Response ? content : new Response(JSON.stringify(content))
@@ -16,6 +20,7 @@ function stubContent(content: ArtifactContent | Response): ReturnType<typeof vi.
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	pele.mountAsync.mockReset();
 });
 
 describe('ArtifactViewModal', () => {
@@ -68,6 +73,47 @@ describe('ArtifactViewModal', () => {
 		await waitFor(() => expect(container.querySelector('.artifact-body h1')).toBeInTheDocument());
 		expect(container.querySelector('.artifact-body h1')).toHaveTextContent('Seam');
 		expect(container.querySelector('.artifact-body')).toHaveTextContent('Body text');
+	});
+
+	it('hydrates a Mermaid fence instead of leaving its source on screen', async () => {
+		const destroy = vi.fn();
+		pele.mountAsync.mockImplementation(async (host: HTMLElement) => {
+			host.innerHTML = '<svg data-testid="mermaid-diagram"></svg>';
+			return { error: undefined, source: '', destroy };
+		});
+		stubContent({
+			ref: 'notes.md',
+			content: '```mermaid\ngraph TD\n  A --> B\n```',
+			contentHtml: '<pre><code class="language-mermaid">graph TD\n  A --&gt; B</code></pre>'
+		});
+		const { container, unmount } = render(ArtifactViewModal, {
+			open: true,
+			traceId: 'trace-1',
+			artifact: artifactView(),
+			onclose: vi.fn()
+		});
+
+		await waitFor(() =>
+			expect(container.querySelector('[data-testid="mermaid-diagram"]')).toBeInTheDocument()
+		);
+		expect(pele.mountAsync).toHaveBeenCalledWith(
+			container.querySelector('.artifact-diagram-host'),
+			'graph TD\n  A --> B',
+			{
+				links: false,
+				images: false,
+				limit: 20_000,
+				outputLimit: 1_000_000,
+				maxEdges: 500,
+				zoom: 'auto',
+				fontSize: 14,
+				responsive: true,
+				autoDirection: true
+			}
+		);
+
+		unmount();
+		await waitFor(() => expect(destroy).toHaveBeenCalledTimes(1));
 	});
 
 	it('falls back to a preformatted block for plain text', async () => {

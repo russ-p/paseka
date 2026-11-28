@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Modal from '$lib/components/Modal.svelte';
+	import ArtifactHtmlBody from '$lib/components/ArtifactHtmlBody.svelte';
 	import { getTraceArtifactContent } from '$lib/api/client';
 	import { artifactLabel, formatSize } from '$lib/format';
 	import type { ArtifactContent, ArtifactView } from '$lib/api/types';
@@ -84,12 +85,11 @@
 	{:else if body === 'empty'}
 		<p class="text-sm text-base-content/60">Empty file.</p>
 	{:else if body === 'html'}
-		<div
-			class="artifact-body text-sm [&_a]:link [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:mt-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:mt-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_ol>li]:list-decimal [&_p]:my-2 [&_p]:leading-relaxed [&_pre]:overflow-x-auto [&_pre]:rounded-box [&_pre]:bg-base-200 [&_pre]:p-2 [&_table]:mt-2 [&_table]:text-xs [&_td]:border [&_td]:border-base-300 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-base-300 [&_th]:px-2 [&_th]:py-1"
-		>
-			<!-- `contentHtml` is goldmark output rendered by this binary from the trail's own comb, not operator input. -->
-			{@html content?.contentHtml}
-		</div>
+		<!-- Keyed by ref so a second artifact gets a fresh body element and the
+		     previous one's diagrams are torn down before the new body hydrates. -->
+		{#key content?.ref}
+			<ArtifactHtmlBody html={content?.contentHtml ?? ''} />
+		{/key}
 	{:else}
 		<pre class="overflow-x-auto rounded-box bg-base-200 p-2 font-mono text-xs whitespace-pre-wrap">{content?.content}</pre>
 	{/if}
