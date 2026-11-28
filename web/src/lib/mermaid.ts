@@ -20,12 +20,36 @@ type Mounted = {
 	destroy(): void;
 };
 
+/**
+ * One artifact is a modal, not a document editor. Pele 1.13.0 defaults are
+ * sized for the latter (`limit` 50 000 source chars, `outputLimit` 4 000 000
+ * SVG chars, `maxEdges` 5 000); the console lowers all three so a model-written
+ * fence cannot spend the modal's time on a pathological diagram. A block over
+ * one of these limits reports the engine's limit error and stays readable as
+ * source beside it.
+ */
+export const diagramOptions = {
+	// A comb artifact can carry model-generated text, so nothing in a diagram
+	// may navigate or fetch. Icons and math are left unset for the same reason.
+	links: false,
+	images: false,
+	limit: 20_000,
+	outputLimit: 1_000_000,
+	maxEdges: 500
+} as const;
+
+/**
+ * A document with more fences than this is read as text: the remaining blocks
+ * stay source, and the first skipped block explains why. Twenty diagrams is
+ * already more than one artifact needs; an unbounded loop over a generated
+ * document would hold the modal open for no reading benefit.
+ */
+export const MAX_DIAGRAMS = 20;
+
 type MountAsync = (
 	element: HTMLElement,
 	source: string,
-	options: {
-		links: boolean;
-		images: boolean;
+	options: typeof diagramOptions & {
 		zoom: 'auto';
 		fontSize: number;
 		responsive: boolean;
@@ -70,8 +94,7 @@ export async function mountDiagram(host: HTMLElement, source: string): Promise<M
 	try {
 		const mountAsync = await loadEngine();
 		const mounted = await mountAsync(host, source, {
-			links: false,
-			images: false,
+			...diagramOptions,
 			zoom: 'auto',
 			fontSize: 14,
 			// The artifact modal is narrow on a phone. Pele fits the SVG to its

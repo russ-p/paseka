@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { findMermaidBlocks, mountDiagram, type MermaidHandle } from '$lib/mermaid';
+	import {
+		findMermaidBlocks,
+		MAX_DIAGRAMS,
+		mountDiagram,
+		type MermaidHandle
+	} from '$lib/mermaid';
 
 	let { html }: { html: string } = $props();
 
@@ -49,6 +54,18 @@
 		return error === '' ? 'Diagram failed to render.' : `Diagram failed to render: ${error}`;
 	}
 
+	/**
+	 * Blocks past the cap stay in place as source. The note is beside the first
+	 * skipped block rather than repeated for every one, so a generated document
+	 * does not turn into a wall of identical warnings.
+	 */
+	function explainCap(skipped: HTMLElement): void {
+		const note = document.createElement('p');
+		note.className = 'artifact-diagram-limit my-1 text-xs text-base-content/60';
+		note.textContent = `Only the first ${MAX_DIAGRAMS} diagrams in this artifact are rendered; the rest stay as source.`;
+		skipped.before(note);
+	}
+
 	$effect(() => {
 		// The HTML is read here so a new artifact tears down the previous mounts
 		// before this effect hydrates the new body.
@@ -58,11 +75,16 @@
 
 		let disposed = false;
 		const handles: MermaidHandle[] = [];
+		const blocks = findMermaidBlocks(container);
+		const renderable = blocks.slice(0, MAX_DIAGRAMS);
+		const skipped = blocks.slice(MAX_DIAGRAMS);
+		const firstSkippedPre = skipped[0]?.parentElement;
+		if (firstSkippedPre) explainCap(firstSkippedPre);
 
 		async function hydrate(): Promise<void> {
 			// One chart at a time: a document with several diagrams is read in
 			// source order, and a slow mount does not race the one below it.
-			for (const code of findMermaidBlocks(container)) {
+			for (const code of renderable) {
 				if (disposed) return;
 				const pre = code.parentElement;
 				if (!pre) continue;

@@ -45,7 +45,7 @@ describe('findMermaidBlocks', () => {
 });
 
 describe('mountDiagram', () => {
-	it('mounts with links and images off, fitted to the narrow artifact preview', async () => {
+	it('mounts with links and images off, fitted to the narrow artifact preview, with bounded work', async () => {
 		const handle = mounted();
 		pele.mountAsync.mockResolvedValue(handle);
 		const host = document.createElement('pre');
@@ -56,6 +56,9 @@ describe('mountDiagram', () => {
 		expect(pele.mountAsync).toHaveBeenCalledWith(host, source, {
 			links: false,
 			images: false,
+			limit: 20_000,
+			outputLimit: 1_000_000,
+			maxEdges: 500,
 			zoom: 'auto',
 			fontSize: 14,
 			responsive: true,

@@ -102,6 +102,9 @@ describe('ArtifactViewModal', () => {
 			{
 				links: false,
 				images: false,
+				limit: 20_000,
+				outputLimit: 1_000_000,
+				maxEdges: 500,
 				zoom: 'auto',
 				fontSize: 14,
 				responsive: true,

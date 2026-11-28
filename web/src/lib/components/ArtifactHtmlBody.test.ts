@@ -4,7 +4,7 @@ import { render, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ArtifactHtmlBody from './ArtifactHtmlBody.svelte';
-import type { MermaidHandle } from '$lib/mermaid';
+import { MAX_DIAGRAMS, type MermaidHandle } from '$lib/mermaid';
 
 const mountDiagram = vi.hoisted(() => vi.fn());
 
@@ -92,6 +92,48 @@ describe('ArtifactHtmlBody', () => {
 			'Diagram failed to render: failed to load diagram chunk'
 		);
 		expect(container.querySelector('details pre code.language-mermaid')).toHaveTextContent('graph TD');
+	});
+
+	it('does not retry a failed mount in a loop', async () => {
+		mountDiagram.mockRejectedValue(new Error('failed to load diagram chunk'));
+		const { container } = render(ArtifactHtmlBody, { html: fence('graph TD') });
+
+		await waitFor(() => expect(container.querySelector('.alert-warning')).toBeVisible());
+		// A failing chunk or render is a result, not a transient state: the source
+		// stays readable and the modal issues no second attempt on its own.
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(mountDiagram).toHaveBeenCalledTimes(1);
+		expect(container.querySelector('details pre code.language-mermaid')).toHaveTextContent('graph TD');
+	});
+
+	it('leaves blocks past the cap as source with one explanation', async () => {
+		mountDiagram.mockResolvedValue(handle());
+		const sources = Array.from(
+			{ length: MAX_DIAGRAMS + 1 },
+			(_, index) => `graph TD\n  n${index} --> n${index + 1}`
+		);
+		const { container } = render(ArtifactHtmlBody, {
+			html: sources.map((source) => fence(source)).join('')
+		});
+
+		await waitFor(() => expect(mountDiagram).toHaveBeenCalledTimes(MAX_DIAGRAMS));
+
+		expect(container.querySelectorAll('.artifact-diagram')).toHaveLength(MAX_DIAGRAMS);
+		expect(container.querySelectorAll('.artifact-diagram-limit')).toHaveLength(1);
+		const note = container.querySelector('.artifact-diagram-limit');
+		expect(note).toHaveTextContent(
+			`Only the first ${MAX_DIAGRAMS} diagrams in this artifact are rendered; the rest stay as source.`
+		);
+
+		// The skipped fence keeps its source, is not wrapped in a mount host, and
+		// was never handed to the engine.
+		const skipped = note?.nextElementSibling;
+		expect(skipped?.tagName).toBe('PRE');
+		expect(skipped).toHaveTextContent(`n${MAX_DIAGRAMS} --> n${MAX_DIAGRAMS + 1}`);
+		expect(skipped?.querySelector('.artifact-diagram-host')).toBeNull();
+		expect(mountDiagram.mock.calls.map((call) => call[1])).not.toContain(
+			sources[MAX_DIAGRAMS]
+		);
 	});
 
 	it('mounts several fences one after another, in source order', async () => {

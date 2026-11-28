@@ -2,7 +2,9 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { installMatchMedia, setViewportNarrow } from './viewport';
 
-installMatchMedia();
+const hasDom = typeof window !== 'undefined' && typeof document !== 'undefined';
+
+if (hasDom) installMatchMedia();
 
 /**
  * jsdom implements no `ResizeObserver`, and Svelte's `clientWidth` binding and
@@ -17,7 +19,7 @@ class ResizeObserverStub implements ResizeObserver {
 	disconnect(): void {}
 }
 
-if (typeof globalThis.ResizeObserver === 'undefined') {
+if (hasDom && typeof globalThis.ResizeObserver === 'undefined') {
 	globalThis.ResizeObserver = ResizeObserverStub;
 }
 
@@ -28,7 +30,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
  * reports itself finished on the next microtask, because these tests assert the
  * state a click produces, not the motion that led to it.
  */
-if (typeof Element.prototype.animate !== 'function') {
+if (hasDom && typeof Element.prototype.animate !== 'function') {
 	Element.prototype.animate = (() => {
 		const animation = {
 			cancel(): void {},
@@ -74,6 +76,7 @@ vi.mock('$app/navigation', async (importOriginal) => ({
  * one a side menu in its sheet state.
  */
 afterEach(() => {
+	if (!hasDom) return;
 	window.history.replaceState(null, '', '/');
 	setViewportNarrow(false);
 });
